@@ -120,14 +120,18 @@ describe("oauth-client router", () => {
       await mockAuthWithSession(createOtherOrgAdminSession());
       const client = createTestClient();
 
-      await expect(client.oauthClient.list()).rejects.toThrow();
+      await expect(client.oauthClient.list()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
     });
 
     it("rejects list for a session with no permissions", async () => {
       await mockAuthWithSession(createNoPermissionSession());
       const client = createTestClient();
 
-      await expect(client.oauthClient.list()).rejects.toThrow();
+      await expect(client.oauthClient.list()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
     });
 
     it("rejects update for a non-nation-admin", async () => {
@@ -140,7 +144,7 @@ describe("oauth-client router", () => {
 
       await expect(
         client.oauthClient.update({ clientId, disabled: true }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
   });
 
@@ -216,7 +220,7 @@ describe("oauth-client router", () => {
           clientId: `nonexistent-${uniqueId()}`,
           disabled: true,
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
 
     it("requires at least one field to update", async () => {
@@ -227,7 +231,9 @@ describe("oauth-client router", () => {
       await mockAuthWithSession(createNationAdminSession());
       const client = createTestClient();
 
-      await expect(client.oauthClient.update({ clientId })).rejects.toThrow();
+      await expect(
+        client.oauthClient.update({ clientId }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
 
     it.each([
@@ -245,7 +251,7 @@ describe("oauth-client router", () => {
 
       await expect(
         client.oauthClient.update({ clientId, redirectUris: [redirectUri] }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
 
     it("accepts a loopback http redirect URI for local development", async () => {

@@ -28,11 +28,10 @@ import { Spinner } from "@acme/ui/spinner";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 
+import { logError } from "~/lib/logging";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
-
-const BASE_SCOPES = ["openid", "profile", "email"];
 
 const OauthClientFormSchema = z.object({
   name: z.string().trim().min(1, { error: "Name is required" }),
@@ -43,11 +42,11 @@ const OauthClientFormSchema = z.object({
   offlineAccess: z.boolean(),
 });
 
-// oauth-provider validates each entry as a URL — this app additionally
-// requires a reverse-domain custom scheme with no authority for public
-// clients (RFC 8252 §7.1), matching apps/auth/scripts/add-client.ts's
-// isValidRedirectUri, so a native app's redirect URI still parses even
-// though it isn't https.
+// One URI per line, trimmed, blanks dropped. No validation here — the
+// server's SafeUrlSchema (packages/api/src/router/oauth-client.ts) is the
+// actual gate: it rejects dangerous schemes, fragments, and non-loopback
+// http, while still allowing a custom scheme for native/mobile clients
+// (RFC 8252 §7.1).
 function parseRedirectUris(value: string): string[] {
   return value
     .split("\n")
@@ -101,9 +100,18 @@ export default function AdminOauthClientsModal({
 
   const updateClient = useMutation(
     orpc.oauthClient.update.mutationOptions({
+      // invalidateQueries/closeModal run inside the same try react-query
+      // wraps around onSuccess itself (unlike onError/onSettled, which get
+      // their own), so an unrelated throw here — e.g. closeModal's Zustand
+      // persist middleware hitting a disabled/full localStorage — would
+      // otherwise land in onError even though the update already succeeded.
       onSuccess: async () => {
         toast.success("OAuth client updated");
-        await invalidateQueries("oauthClient");
+        try {
+          await invalidateQueries("oauthClient");
+        } catch (err) {
+          logError("admin.oauth_client.invalidate_failed", { clientId }, err);
+        }
         closeModal();
       },
       onError: () => {
@@ -149,17 +157,22 @@ export default function AdminOauthClientsModal({
                 className="space-y-4"
                 onSubmit={form.handleSubmit(
                   async (values) => {
-                    // Preserve any scopes beyond the ones this form exposes
-                    // (e.g. granted directly via apps/auth's CLI script)
-                    // instead of clobbering them on every edit.
-                    const customScopes = (existing?.scopes ?? []).filter(
-                      (scope) =>
-                        !BASE_SCOPES.includes(scope) &&
-                        scope !== "offline_access",
+                    // Preserve the client's actual scopes rather than
+                    // assuming BASE_SCOPES — a client registered with a
+                    // narrower set (e.g. apps/auth/scripts/add-client.ts's
+                    // free-text prompt, or carried over by
+                    // migrate-oauth-clients-to-better-auth.ts) shouldn't
+                    // silently gain "profile"/"email" from an unrelated
+                    // edit. openid is the one scope this form guarantees.
+                    const preserved = (existing?.scopes ?? []).filter(
+                      (scope) => scope !== "offline_access",
                     );
+                    const base = preserved.includes("openid")
+                      ? preserved
+                      : ["openid", ...preserved];
                     const scopes = values.offlineAccess
-                      ? [...BASE_SCOPES, ...customScopes, "offline_access"]
-                      : [...BASE_SCOPES, ...customScopes];
+                      ? [...base, "offline_access"]
+                      : base;
                     await updateClient.mutateAsync({
                       clientId,
                       name: values.name,
@@ -222,8 +235,8 @@ export default function AdminOauthClientsModal({
                       <div className="space-y-1 leading-none">
                         <FormLabel>offline_access scope</FormLabel>
                         <FormDescription>
-                          Grants refresh tokens. openid, profile, and email are
-                          always included.
+                          Grants refresh tokens. Any other scopes this client
+                          already has are kept as-is.
                         </FormDescription>
                       </div>
                     </FormItem>

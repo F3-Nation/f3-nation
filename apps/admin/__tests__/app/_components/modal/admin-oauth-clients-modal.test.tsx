@@ -257,4 +257,35 @@ describe("AdminOauthClientsModal", () => {
     });
     expect(closeModalMock).toHaveBeenCalled();
   });
+
+  it("does not add profile/email scopes for a client narrower than those defaults", async () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Paxvault",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: ["openid"],
+            isPublic: false,
+          },
+        ],
+      },
+    });
+    updateMutateAsync.mockResolvedValue({});
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    fireEvent.click(screen.getByText("Save changes"));
+
+    await waitFor(() => {
+      expect(updateMutateAsync).toHaveBeenCalledWith({
+        clientId: "paxvault-client",
+        name: "Paxvault",
+        redirectUris: ["https://paxvault.example.com/callback"],
+        scopes: ["openid"],
+      });
+    });
+    expect(closeModalMock).toHaveBeenCalled();
+  });
 });

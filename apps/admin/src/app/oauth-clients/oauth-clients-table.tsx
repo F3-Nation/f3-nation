@@ -25,6 +25,7 @@ import {
 } from "@acme/ui/table";
 import { toast } from "@acme/ui/toast";
 
+import { logError } from "~/lib/logging";
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
 import { ModalType, openModal } from "~/utils/store/modal";
 
@@ -41,8 +42,20 @@ export const OauthClientsTable = () => {
 
   const updateClient = useMutation(
     orpc.oauthClient.update.mutationOptions({
+      // See admin-oauth-clients-modal.tsx's onSuccess for why the invalidate
+      // is guarded separately: react-query has no catch around onSuccess
+      // itself, so an invalidate failure would otherwise land in onError
+      // even though the PATCH already succeeded.
       onSuccess: async (_result, variables) => {
-        await invalidateQueries("oauthClient");
+        try {
+          await invalidateQueries("oauthClient");
+        } catch (err) {
+          logError(
+            "admin.oauth_client.invalidate_failed",
+            { clientId: variables.clientId },
+            err,
+          );
+        }
         toast.success(
           variables.disabled ? "Client disabled" : "Client re-enabled",
         );
