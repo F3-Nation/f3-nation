@@ -434,6 +434,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+        with:
+          enable-turbo-cache: "true"
       # GCS_CREDENTIALS must exist with client_email/private_key fields, but
       # nothing real is needed. Built here from plainly fake JSON — a committed
       # base64 blob trips generic high-entropy secret scanners.

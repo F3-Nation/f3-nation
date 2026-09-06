@@ -22,13 +22,24 @@ const outDir = join(appDir, "dist");
  * Left to Node's own resolution at runtime rather than inlined.
  *
  * `pino`/`pino-pretty` because pino-pretty drives a `thread-stream` worker,
- * which spawns from a real file path a bundle cannot provide, and `@sentry/node`
+ * which spawns from a real file path a bundle cannot provide; `@sentry/node`
  * because its OpenTelemetry auto-instrumentation patches modules through
- * `import-in-the-middle`, which only works on modules Node resolves itself.
+ * `import-in-the-middle`, which only works on modules Node resolves itself;
+ * and `postgres` for the same reason as `@sentry/node` — its dedicated
+ * `postgresJsIntegration` only fires if `postgres` is still a real module
+ * resolution Node performs, not code inlined into the bundle. Without this,
+ * DB spans silently stop appearing in Sentry (queries still work; only the
+ * tracing data is lost).
  * `thread-stream` never appears in the graph once pino is external; it is listed
  * so a future direct import cannot silently get inlined.
  */
-const EXTERNAL = ["pino", "pino-pretty", "thread-stream", "@sentry/node"];
+const EXTERNAL = [
+  "pino",
+  "pino-pretty",
+  "thread-stream",
+  "@sentry/node",
+  "postgres",
+];
 
 /**
  * Shipped in the generated runtime package.json, resolved from the workspace
@@ -41,6 +52,7 @@ const RUNTIME_DEPS = {
   pino: join(repoRoot, "packages/logger"),
   "pino-pretty": join(repoRoot, "packages/logger"),
   "@sentry/node": appDir,
+  postgres: join(repoRoot, "packages/db"),
 };
 
 /**
