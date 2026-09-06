@@ -149,9 +149,17 @@ export default function AdminOauthClientsModal({
                 className="space-y-4"
                 onSubmit={form.handleSubmit(
                   async (values) => {
+                    // Preserve any scopes beyond the ones this form exposes
+                    // (e.g. granted directly via apps/auth's CLI script)
+                    // instead of clobbering them on every edit.
+                    const customScopes = (existing?.scopes ?? []).filter(
+                      (scope) =>
+                        !BASE_SCOPES.includes(scope) &&
+                        scope !== "offline_access",
+                    );
                     const scopes = values.offlineAccess
-                      ? [...BASE_SCOPES, "offline_access"]
-                      : BASE_SCOPES;
+                      ? [...BASE_SCOPES, ...customScopes, "offline_access"]
+                      : [...BASE_SCOPES, ...customScopes];
                     await updateClient.mutateAsync({
                       clientId,
                       name: values.name,
