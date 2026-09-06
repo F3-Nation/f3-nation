@@ -122,7 +122,7 @@ vi.mock("@acme/ui/select", async () => {
     }: {
       value: string;
       onValueChange: (value: string) => void;
-      children: React.ReactNode;
+      children: ReactModule.ReactNode;
     }) => (
       <SelectContext.Provider value={{ onValueChange }}>
         <div data-testid="org-level-select" data-value={value}>
@@ -130,11 +130,11 @@ vi.mock("@acme/ui/select", async () => {
         </div>
       </SelectContext.Provider>
     ),
-    SelectTrigger: ({ children }: { children: React.ReactNode }) => (
+    SelectTrigger: ({ children }: { children: ReactModule.ReactNode }) => (
       <>{children}</>
     ),
     SelectValue: () => null,
-    SelectContent: ({ children }: { children: React.ReactNode }) => (
+    SelectContent: ({ children }: { children: ReactModule.ReactNode }) => (
       <>{children}</>
     ),
     SelectItem: ({
@@ -142,7 +142,7 @@ vi.mock("@acme/ui/select", async () => {
       children,
     }: {
       value: string;
-      children: React.ReactNode;
+      children: ReactModule.ReactNode;
     }) => {
       const ctx = React.useContext(SelectContext);
       return (
@@ -175,9 +175,9 @@ vi.mock("@acme/ui/md-table", async () => {
         accessorKey?: string;
         cell?: (context: {
           row: { original: TestPosition };
-        }) => React.ReactNode;
+        }) => ReactModule.ReactNode;
       }[];
-      filterComponent: React.ReactNode;
+      filterComponent: ReactModule.ReactNode;
     }) => {
       const orgTypeColumn = columns.find(
         (column) => column.accessorKey === "orgType",
