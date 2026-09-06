@@ -25,7 +25,21 @@ export const getDbUrl = () => {
 export const createDbClient = () => {
   const { databaseUrl, useSsl } = getDbUrl();
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
-  const client = postgres(databaseUrl, sslOptions);
+  const client = postgres(databaseUrl, {
+    ...sslOptions,
+    // Cloud Run scales to many instances, each holding its own pool (see
+    // client.ts) — an untuned client defaults to `max: 10` per instance,
+    // which exhausts Postgres/PgBouncer's connection ceiling under
+    // autoscaling. Without connect_timeout, a saturated pooler makes
+    // requests hang instead of failing fast.
+    max: 5,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    max_lifetime: 60 * 30,
+    // `prepare` (extended-protocol prepared statements) is left on its
+    // postgres-js default deliberately: whether that's safe depends on
+    // PgBouncer's pool mode, which isn't documented yet (#176).
+  });
   return { db: drizzle(client, { schema }), close: () => client.end() };
 };
 
