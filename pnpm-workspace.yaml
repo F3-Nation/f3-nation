@@ -101,7 +101,7 @@ catalog:
   lefthook: ^2.1.10
   libphonenumber-js: ^1.13.12
   lodash: ^4.18.1
-  lottie-react: ^2.4.2
+  lottie-react: ^3.1.1
   lucide-react: ^1.34.0
   next: ^16.3.3
   next-auth: 5.0.0-beta.32
