@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.3.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.2...slackbot@2.3.3) (2026-09-06)
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#861](https://github.com/F3-Nation/f3-nation/issues/861)) ([419ac1e](https://github.com/F3-Nation/f3-nation/commit/419ac1eb5c93c8d472f1f03362e1440d8278594e))
+
 ## [2.3.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.1...slackbot@2.3.2) (2026-08-27)
 
 

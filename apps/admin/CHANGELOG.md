@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.3.1...admin@2.4.0) (2026-09-06)
+
+
+### Features
+
+* **auth,db,admin,api:** better auth config for [#876](https://github.com/F3-Nation/f3-nation/issues/876) phase 3 ([#914](https://github.com/F3-Nation/f3-nation/issues/914)) ([4c77b90](https://github.com/F3-Nation/f3-nation/commit/4c77b904dab9a9864d1c9d98f6356e6f211bb086))
+
+
+### Bug Fixes
+
+* **admin:** make region filters depth-agnostic ([#951](https://github.com/F3-Nation/f3-nation/issues/951)) ([c61e4ca](https://github.com/F3-Nation/f3-nation/commit/c61e4cae21fa27cb43dd256763ce694f063fe9fe))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.1
+    * @acme/validators bumped to 0.3.2
+
 ## [2.3.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.3.0...admin@2.3.1) (2026-08-18)
 
 

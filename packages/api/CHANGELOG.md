@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.1](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.7.0...pkg-api@0.7.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* **api:** stop crupdate resetting isActive/highlight/isPrivate on partial updates ([#900](https://github.com/F3-Nation/f3-nation/issues/900)) ([f89b7f7](https://github.com/F3-Nation/f3-nation/commit/f89b7f7e8c0ccb3341ee98c644d7d98836180a4a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.3
+    * @acme/db bumped to 0.5.0
+    * @acme/validators bumped to 0.3.2
+
 ## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.6.0...pkg-api@0.7.0) (2026-08-18)
 
 
