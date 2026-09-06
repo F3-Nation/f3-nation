@@ -13,6 +13,7 @@
     "test": "pnpm with-env vitest --run --coverage",
     "typecheck": "tsc --noEmit",
     "add-client": "tsx scripts/add-client.ts",
+    "migrate-oauth-clients-to-better-auth": "tsx scripts/migrate-oauth-clients-to-better-auth.ts",
     "with-env": "dotenv -e .env --"
   },
   "dependencies": {
@@ -20,7 +21,11 @@
     "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:*",
     "@auth/core": "catalog:",
+    "@better-auth/core": "^1.7.2",
+    "@better-auth/drizzle-adapter": "^1.7.2",
+    "@better-auth/oauth-provider": "^1.7.2",
     "@t3-oss/env-nextjs": "catalog:",
+    "better-auth": "^1.7.2",
     "drizzle-orm": "catalog:",
     "jose": "catalog:",
     "libphonenumber-js": "catalog:",
@@ -40,6 +45,7 @@
     "@acme/tailwind-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "@acme/vitest-config": "workspace:*",
+    "@f3nation/sso": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
     "@types/node": "catalog:",
     "@types/nodemailer": "catalog:",
