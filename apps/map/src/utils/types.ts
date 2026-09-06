@@ -6,6 +6,8 @@ export type F3Marker = NonNullable<
   RouterOutputs["map"]["location"]["locationWorkout"]
 >;
 
+export type MapStatus =
+  "closed" | "different-time" | "miscellaneous" | "event-instance" | null;
 export interface SparseF3Marker {
   id: number;
   lat: number | null;
@@ -21,6 +23,9 @@ export interface SparseF3Marker {
     eventTypes: { id: number; name: string }[];
     aoName: string | null;
     aoLogo: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    mapStatus: MapStatus;
   }[];
 }
 

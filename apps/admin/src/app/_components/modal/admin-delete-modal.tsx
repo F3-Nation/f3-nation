@@ -33,6 +33,7 @@ export default function AdminDeleteModal({
     eventId?: number;
     locationId?: number;
     userId?: number;
+    eventInstanceId?: number;
   } | void>;
 
   switch (data.type) {
@@ -57,6 +58,9 @@ export default function AdminDeleteModal({
       break;
     case DeleteType.POSITION:
       mutation = orpc.position.delete.call;
+      break;
+    case DeleteType.EVENT_INSTANCE:
+      mutation = orpc.eventInstance.delete.call;
       break;
     default:
       throw new Error(`Invalid delete type: ${data.type}`);
@@ -99,6 +103,10 @@ export default function AdminDeleteModal({
           break;
         case DeleteType.POSITION:
           await invalidateQueries("position");
+          break;
+        case DeleteType.EVENT_INSTANCE:
+          await invalidateQueries("eventInstance");
+          await invalidateQueries("map");
           break;
         default:
           throw new Error(`Invalid deactivate type: ${data.type}`);
@@ -185,6 +193,8 @@ const dataTypeToName = (
       return "Location";
     case DeleteType.POSITION:
       return "Position";
+    case DeleteType.EVENT_INSTANCE:
+      return "Event Instance";
     default:
       throw new Error(`Invalid deactivate type: ${dataType}`);
   }

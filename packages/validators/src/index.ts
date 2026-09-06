@@ -74,9 +74,7 @@ export const EventTagSelectSchema = createSelectSchema(eventTags);
 export const EventInsertSchema = createInsertSchema(events, {
   name: (s: z.ZodString) => s.min(1, { error: "Name is required" }),
   locationId: (s: z.ZodNumber) =>
-    s
-      .min(1, { error: "Please select an location" })
-      .refine((value) => value !== -1, { error: "Invalid selection" }),
+    s.positive({ error: "Please select a location" }).nullable(),
   email: (s: z.ZodString) =>
     s.email({ error: "Invalid email format" }).or(z.literal("")),
   startTime: (s: z.ZodString) =>
@@ -468,6 +466,8 @@ export const LowBandwidthF3Marker = z.tuple([
       z.array(z.object({ id: z.number(), name: z.string() })), // event types
       z.string().nullable(), // ao org name
       z.string().nullable(), // ao org logo
+      z.string(), // event start date
+      z.string().nullable(), // event end date
     ])
     .array(),
 ]);

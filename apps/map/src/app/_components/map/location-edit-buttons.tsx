@@ -15,6 +15,7 @@ import {
 import { orpc, useQuery } from "~/orpc/react";
 import { openRequestModal } from "~/utils/open-request-modal";
 import { appStore } from "~/utils/store/app";
+import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
 
 interface LocationEditButtonsProps {
   locationId: number;
@@ -278,6 +279,62 @@ export const LocationEditButtons = ({
       </DropdownMenu>
     </div>
   );
+};
+
+export const resolveAoId = ({
+  selectedEventAoId,
+  eventAoIds,
+}: {
+  selectedEventAoId?: number | null;
+  eventAoIds?: (number | null)[];
+}): number | null => selectedEventAoId ?? eventAoIds?.[0] ?? null;
+
+export const isInstanceEventId = (
+  eventId: number | null | undefined,
+): boolean => eventId != null && eventId < 0;
+
+// Which event the edit forms should act on for a given selection, shared by the
+// desktop panel and the workout details modal so both agree on what "editable"
+// means for a temporary change. A synthetic instance id resolves back to its
+// parent series; null hides the workout menu while leaving AO actions.
+export const resolveEditableEventId = ({
+  selectedEventId,
+  upcomingInstances,
+  events,
+}: {
+  selectedEventId: number | null | undefined;
+  upcomingInstances: { id: number; seriesId: number | null }[] | undefined;
+  events: { id: number }[] | undefined;
+}): number | null => {
+  if (selectedEventId == null) return null;
+  if (!isInstanceEventId(selectedEventId)) return selectedEventId;
+  const seriesId =
+    upcomingInstances?.find((instance) => instance.id === -selectedEventId)
+      ?.seriesId ?? null;
+  if (seriesId == null) return null;
+  // The forms act on the parent series, so pointing them at an event this
+  // location does not own would edit an unrelated workout.
+  return events?.some((event) => event.id === seriesId) ? seriesId : null;
+};
+
+// The single entry point both edit surfaces use: owns the instance lookup as
+// well as the resolution, so the desktop panel and the workout details modal
+// cannot drift on what "editable" means or on when the instances are fetched.
+export const useEditableEventId = ({
+  selectedEventId,
+  events,
+}: {
+  selectedEventId: number | null | undefined;
+  events: { id: number }[] | undefined;
+}): number | null => {
+  const mode = appStore.use.mode();
+  const { instances: upcomingInstances } = useUpcomingInstances({
+    enabled: mode === "edit" && isInstanceEventId(selectedEventId),
+  });
+
+  // No useMemo: the result is a primitive, so memoizing it buys no referential
+  // stability, and the lookup is a find over the upcoming instances.
+  return resolveEditableEventId({ selectedEventId, upcomingInstances, events });
 };
 
 export const getShortDayOfWeek = (day: string | null | undefined) => {

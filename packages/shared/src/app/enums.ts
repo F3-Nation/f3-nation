@@ -131,3 +131,16 @@ export const SeriesException = [
   "miscellaneous",
 ] as const;
 export type SeriesException = (typeof SeriesException)[number];
+
+/**
+ * The exception types users may choose when editing an instance. `miscellaneous`
+ * stays in `SeriesException` — existing rows carry it and every consumer still
+ * renders it — but it surfaces no meaningful change anywhere, so it is not
+ * offered as a new choice.
+ */
+export const SelectableSeriesException = [
+  "closed",
+  "different-time",
+] as const satisfies readonly SeriesException[];
+export type SelectableSeriesException =
+  (typeof SelectableSeriesException)[number];

@@ -25,6 +25,7 @@ import { MobileSearchResultsAndNearbyLocations } from "./map/mobile-search-resul
 import { MobileSelectedItem } from "./map/mobile-selected-item";
 import { NearbyLocationUpdateButton } from "./map/nearby-location-update-button";
 import { Projection } from "./map/projection";
+import { ScheduleChangesNotice } from "./map/schedule-changes-notice";
 import { SettingsButton } from "./map/settings-button";
 import { StagingWatermark } from "./map/staging-watermark";
 import { UserLocationIcon } from "./map/user-location-icon";
@@ -55,6 +56,11 @@ export const MapLayoutItems = () => {
         position={isMobileWidth ? ControlPosition.TOP : ControlPosition.BOTTOM}
       >
         <StagingWatermark />
+      </MapControl>
+      <MapControl
+        position={isMobileWidth ? ControlPosition.TOP : ControlPosition.BOTTOM}
+      >
+        <ScheduleChangesNotice />
       </MapControl>
       {isDesktopWidth ? (
         <>

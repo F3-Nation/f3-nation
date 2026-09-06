@@ -7,6 +7,7 @@ export enum ModalType {
   ADMIN_MANAGE_ACCESS = "ADMIN_MANAGE_ACCESS",
   ADMIN_REQUESTS = "ADMIN_REQUESTS",
   ADMIN_EVENTS = "ADMIN_EVENTS",
+  ADMIN_EVENT_INSTANCES = "ADMIN_EVENT_INSTANCES",
   ADMIN_LOCATIONS = "ADMIN_LOCATIONS",
   ADMIN_NATIONS = "ADMIN_NATIONS",
   ADMIN_SECTORS = "ADMIN_SECTORS",
@@ -35,6 +36,7 @@ export enum DeleteType {
   NATION = "NATION",
   POSITION = "POSITION",
   ASSIGNMENT = "ASSIGNMENT",
+  EVENT_INSTANCE = "EVENT_INSTANCE",
 }
 
 export interface DataType {
@@ -48,6 +50,9 @@ export interface DataType {
     id: string;
   };
   [ModalType.ADMIN_EVENTS]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_EVENT_INSTANCES]: {
     id?: number | null;
   };
   [ModalType.ADMIN_LOCATIONS]: {
