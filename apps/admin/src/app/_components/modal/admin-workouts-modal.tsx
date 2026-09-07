@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 
 import { EVENT_CATEGORY_LABEL_MAP, Z_INDEX } from "@acme/shared/app/constants";
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 import {
   convertHH_mmToHHmm,
   convertHHmmToHH_mm,
@@ -31,6 +31,7 @@ import {
   useForm,
 } from "@acme/ui/form";
 import { Input } from "@acme/ui/input";
+import { ScheduleFields } from "@acme/ui/schedule-select";
 import {
   ControlledSelect,
   Select,
@@ -78,6 +79,26 @@ const EventInsertForm = EventInsertSchema.extend({
   dayOfWeek: z.enum(DayOfWeek, {
     error: "Day of week is required",
   }),
+  recurrencePattern: z.enum(EventCadence).optional().nullable(),
+  recurrenceInterval: z.coerce.number().int().min(1).optional().nullable(),
+  indexWithinInterval: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(4)
+    .optional()
+    .nullable(),
+}).superRefine((data, ctx) => {
+  if (
+    data.recurrencePattern === "monthly" &&
+    data.indexWithinInterval == null
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["indexWithinInterval"],
+      message: "Select which occurrence of the month",
+    });
+  }
 });
 type EventInsertFormType = z.infer<typeof EventInsertForm>;
 
@@ -150,6 +171,9 @@ export default function AdminWorkoutsModal({
       },
       description: event?.description ?? "",
       isPrivate: event?.isPrivate ?? false,
+      recurrencePattern: event?.recurrencePattern ?? null,
+      recurrenceInterval: event?.recurrenceInterval ?? null,
+      indexWithinInterval: event?.indexWithinInterval ?? null,
     });
   }, [form, event]);
 
@@ -489,6 +513,13 @@ export default function AdminWorkoutsModal({
                     placeholder="Select a day of the week"
                   />
                 </div>
+                <ScheduleFields
+                  control={form.control}
+                  recurrencePatternName="recurrencePattern"
+                  recurrenceIntervalName="recurrenceInterval"
+                  indexWithinIntervalName="indexWithinInterval"
+                  wrapperClassName="mb-4 w-1/2 px-2"
+                />
                 <div className="mb-4 w-1/2 px-2">
                   <FormField
                     control={form.control}

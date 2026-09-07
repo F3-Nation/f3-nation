@@ -371,7 +371,9 @@ export const handleCreateLocationAndEvent = async (
       eventStartTime: request.eventStartTime,
       eventEndTime: request.eventEndTime,
       eventStartDate: request.eventStartDate,
-      eventRecurrencePattern: "weekly",
+      eventRecurrencePattern: request.eventRecurrencePattern ?? "weekly",
+      eventRecurrenceInterval: request.eventRecurrenceInterval,
+      eventIndexWithinInterval: request.eventIndexWithinInterval,
     });
     const eventId = event.id;
 
@@ -399,6 +401,9 @@ export const handleCreateEvent = async (
       eventStartTime: request.eventStartTime,
       eventEndTime: request.eventEndTime,
       eventStartDate: request.eventStartDate,
+      eventRecurrencePattern: request.eventRecurrencePattern,
+      eventRecurrenceInterval: request.eventRecurrenceInterval,
+      eventIndexWithinInterval: request.eventIndexWithinInterval,
     });
 
     await updateEventTypes(txCtx, {
@@ -426,6 +431,9 @@ export const handleEditEvent = async (ctx: Context, request: EditEventType) => {
     eventStartTime: request.eventStartTime,
     eventEndTime: request.eventEndTime,
     eventStartDate: request.eventStartDate,
+    eventRecurrencePattern: request.eventRecurrencePattern,
+    eventRecurrenceInterval: request.eventRecurrenceInterval,
+    eventIndexWithinInterval: request.eventIndexWithinInterval,
   };
 
   await withTxCtx(ctx, async (txCtx) => {

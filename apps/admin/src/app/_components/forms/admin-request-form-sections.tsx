@@ -9,6 +9,7 @@ import { Case } from "@acme/shared/common/enums";
 import { convertCase, isTruthy } from "@acme/shared/common/functions";
 import { Input } from "@acme/ui/input";
 import { MultiSelect } from "@acme/ui/multi-select";
+import { ScheduleFields } from "@acme/ui/schedule-select";
 import { ControlledSelect } from "@acme/ui/select";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
@@ -73,6 +74,14 @@ export const EventDetailsFields = () => {
             {form.formState.errors.eventDayOfWeek?.message}
           </p>
         </div>
+
+        <ScheduleFields
+          control={form.control}
+          recurrencePatternName="eventRecurrencePattern"
+          recurrenceIntervalName="eventRecurrenceInterval"
+          indexWithinIntervalName="eventIndexWithinInterval"
+          wrapperClassName="space-y-2"
+        />
 
         <div className="space-y-2">
           <ControlledTimeInput

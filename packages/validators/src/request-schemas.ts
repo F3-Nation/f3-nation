@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 
 import { RequestInsertSchema } from ".";
 
@@ -19,6 +19,11 @@ export const EventFields = z.object({
   eventTypeIds: z
     .array(z.number())
     .min(1, "At least one event type is required"),
+  // Recurrence: "weekly" with an interval of 2 is "biweekly"; "monthly" pairs
+  // with eventIndexWithinInterval to mean "the Nth <day> of each month".
+  eventRecurrencePattern: z.enum(EventCadence).nullish(),
+  eventRecurrenceInterval: z.coerce.number().int().min(1).nullish(),
+  eventIndexWithinInterval: z.coerce.number().int().min(1).max(4).nullish(),
 });
 
 export type EventFieldsType = z.infer<typeof EventFields>;
@@ -44,6 +49,28 @@ const checkEventTimeOrder = (
       code: "custom",
       message: "End time must be after start time",
       path: ["eventEndTime"],
+    });
+  }
+};
+
+// Chained alongside checkEventTimeOrder on each concrete schema (see comment
+// above). A "monthly" recurrence is meaningless without knowing which
+// occurrence of the month it lands on.
+const checkEventRecurrence = (
+  data: {
+    eventRecurrencePattern?: unknown;
+    eventIndexWithinInterval?: unknown;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  if (
+    data.eventRecurrencePattern === "monthly" &&
+    data.eventIndexWithinInterval == null
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Select which occurrence of the month",
+      path: ["eventIndexWithinInterval"],
     });
   }
 };
@@ -144,7 +171,8 @@ export const CreateAOAndLocationAndEventSchema = BaseSchema.extend({
   .extend(AOFields.shape)
   .extend(LocationFields.shape)
   .extend(RegionFields.shape)
-  .superRefine(checkEventTimeOrder);
+  .superRefine(checkEventTimeOrder)
+  .superRefine(checkEventRecurrence);
 
 export type CreateAOAndLocationAndEventType = z.infer<
   typeof CreateAOAndLocationAndEventSchema
@@ -158,7 +186,8 @@ export const CreateEventSchema = BaseSchema.extend({
   originalRegionId: z.number().positive("Region ID is required"),
 })
   .extend(EventFields.shape)
-  .superRefine(checkEventTimeOrder);
+  .superRefine(checkEventTimeOrder)
+  .superRefine(checkEventRecurrence);
 
 export type CreateEventType = z.infer<typeof CreateEventSchema>;
 
@@ -174,7 +203,8 @@ export const EditEventSchema = BaseSchema.extend({
   // UI only (stripped before persistence). Optional so the admin normalizer no
   // longer has to fabricate an empty object just to satisfy the union. (#13)
   .extend({ currentValues: makeSchemaLoose(EventFields).optional() })
-  .superRefine(checkEventTimeOrder);
+  .superRefine(checkEventTimeOrder)
+  .superRefine(checkEventRecurrence);
 
 export type EditEventType = z.infer<typeof EditEventSchema>;
 
