@@ -18,6 +18,26 @@ vi.mock("@acme/auth", () => ({
   auth: vi.fn(),
 }));
 
+// jsdom does not implement matchMedia; lottie-react checks
+// `prefers-reduced-motion` on every load, so any component rendering it needs
+// this stubbed out. Guarded because some tests opt out of the jsdom
+// environment (`// @vitest-environment node`), where `window` is undefined.
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 // const mockedORPC = createORPCReact<AppRouter>({
 //   overrides: {
 //     useMutation: {
