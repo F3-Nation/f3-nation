@@ -13,6 +13,9 @@ npm-debug.log
 *Dockerfile*
 docker-compose*
 README.md
+!apps/slackbot/README.md
+!apps/analytics/README.md
+!packages/db-python/README.md
 LICENSE
 
 *.swp
@@ -25,3 +28,10 @@ LICENSE
 
 .flaskenv*
 !.env.project
+
+# Generated Python artifacts
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.pytest_cache
+**/.ruff_cache
