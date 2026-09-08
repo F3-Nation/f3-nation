@@ -393,7 +393,7 @@ export const mapEventRouter = {
       const query = ctx.db
         .select(select)
         .from(schema.events)
-        .innerJoin(
+        .leftJoin(
           schema.locations,
           eq(schema.locations.id, schema.events.locationId),
         )
