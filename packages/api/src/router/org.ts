@@ -107,19 +107,19 @@ async function resolveEditableOrgIds(params: {
   }
 
   const result = await getEditableOrgIdsForUser(ctx);
-  const { editableOrgs, isNationAdmin } = result;
+  const { editableRootOrgIds, isNationAdmin } = result;
 
-  if (!isNationAdmin && editableOrgs.length > 0) {
-    const editableOrgIdsList = editableOrgs.map((o) => o.id);
+  if (!isNationAdmin && editableRootOrgIds.length > 0) {
     const editableOrgIds = await getDescendantOrgIds(
       ctx.db,
-      editableOrgIdsList,
+      editableRootOrgIds,
     );
-    return { editableOrgIds, isNationAdmin };
+    // Defensively fail closed if roots disappear between scope lookup and traversal.
+    return editableOrgIds.length > 0 ? { editableOrgIds, isNationAdmin } : null;
   }
 
-  // If user has no editable orgs and is not a nation admin, return null
-  if (editableOrgs.length === 0 && !isNationAdmin) {
+  // No direct editable roots means the scoped result must be empty.
+  if (editableRootOrgIds.length === 0 && !isNationAdmin) {
     return null;
   }
 
@@ -517,15 +517,12 @@ export const orgRouter = {
         directRolesMap.set(key, existing);
       }
 
-      // Get all editable orgs (includes descendants via hierarchy traversal)
-      const { editableOrgs } = await getEditableOrgIdsForUser(ctx);
-      const directEditableIds = editableOrgs
-        .map((o) => o.id)
-        .filter((id): id is number => id !== null);
+      // Get direct editable roots, then expand their descendants once.
+      const { editableRootOrgIds } = await getEditableOrgIdsForUser(ctx);
 
       const editableOrgIds =
-        directEditableIds.length > 0
-          ? await getDescendantOrgIds(ctx.db, directEditableIds)
+        editableRootOrgIds.length > 0
+          ? await getDescendantOrgIds(ctx.db, editableRootOrgIds)
           : [];
 
       // Query full org details for all editable orgs

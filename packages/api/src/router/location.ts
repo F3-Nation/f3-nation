@@ -133,15 +133,13 @@ export const locationRouter = {
 
       if (input?.onlyMine) {
         const result = await getEditableOrgIdsForUser(ctx);
-        const editableOrgs = result.editableOrgs;
         isNationAdmin = result.isNationAdmin;
 
-        if (!isNationAdmin && editableOrgs.length > 0) {
-          // Get all descendant org IDs (including regions) for the editable orgs
-          const editableOrgIdsList = editableOrgs.map((org) => org.id);
+        if (!isNationAdmin && result.editableRootOrgIds.length > 0) {
+          // Expand all descendants from the user's direct editable roots.
           editableOrgIds = await getDescendantOrgIds(
             ctx.db,
-            editableOrgIdsList,
+            result.editableRootOrgIds,
           );
         }
 
