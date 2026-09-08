@@ -68,7 +68,15 @@ export const EventTypeSelectSchema = createSelectSchema(eventTypes);
 
 // EVENT TAG SCHEMA
 export const EventTagInsertSchema = createInsertSchema(eventTags);
-export const EventTagSelectSchema = createSelectSchema(eventTags);
+export const EventTagSelectSchema = createSelectSchema(eventTags, {
+  id: (s: z.ZodNumber) => s.describe("Event tag ID"),
+  name: (s: z.ZodString) => s.describe("Event tag name"),
+  description: (s: z.ZodString) => s.describe("Event tag description"),
+  color: (s: z.ZodString) => s.describe("Event tag color"),
+  specificOrgId: (s: z.ZodNumber) =>
+    s.describe("Org this tag is specific to, if any"),
+  isActive: (s: z.ZodBoolean) => s.describe("Whether the event tag is active"),
+});
 
 // EVENT SCHEMA
 export const EventInsertSchema = createInsertSchema(events, {
