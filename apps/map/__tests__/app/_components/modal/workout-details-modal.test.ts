@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
 import {
   isInstanceEventId,
