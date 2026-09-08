@@ -4875,12 +4875,94 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTags": {
+                      "items": {
+                        "properties": {
+                          "color": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag color",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag description",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "description": "Event tag ID",
+                            "maximum": 2147483647,
+                            "minimum": -2147483648,
+                            "type": "integer"
+                          },
+                          "isActive": {
+                            "description": "Whether the event tag is active",
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "description": "Event tag name",
+                            "type": "string"
+                          },
+                          "specificOrgId": {
+                            "anyOf": [
+                              {
+                                "description": "Org this tag is specific to, if any",
+                                "maximum": 2147483647,
+                                "minimum": -2147483648,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "specificOrgName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of the org this tag is specific to, if any"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "color",
+                          "specificOrgId",
+                          "isActive",
+                          "specificOrgName"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "totalCount": {
+                      "description": "Total number of event tags matching the filter",
+                      "type": "number"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTags",
+                    "totalCount"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -4969,12 +5051,85 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTag": {
+                      "items": {
+                        "properties": {
+                          "color": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag color",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "created": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag description",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "description": "Event tag ID",
+                            "maximum": 2147483647,
+                            "minimum": -2147483648,
+                            "type": "integer"
+                          },
+                          "isActive": {
+                            "description": "Whether the event tag is active",
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "description": "Event tag name",
+                            "type": "string"
+                          },
+                          "specificOrgId": {
+                            "anyOf": [
+                              {
+                                "description": "Org this tag is specific to, if any",
+                                "maximum": 2147483647,
+                                "minimum": -2147483648,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "updated": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "color",
+                          "created",
+                          "updated",
+                          "specificOrgId",
+                          "isActive"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTag"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5009,12 +5164,16 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTagId": {
+                      "description": "The unique identifier of the event tag that was deleted",
+                      "type": "number"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTagId"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5047,12 +5206,82 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTag": {
+                      "properties": {
+                        "color": {
+                          "anyOf": [
+                            {
+                              "description": "Event tag color",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "created": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "anyOf": [
+                            {
+                              "description": "Event tag description",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "description": "Event tag ID",
+                          "maximum": 2147483647,
+                          "minimum": -2147483648,
+                          "type": "integer"
+                        },
+                        "isActive": {
+                          "description": "Whether the event tag is active",
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "description": "Event tag name",
+                          "type": "string"
+                        },
+                        "specificOrgId": {
+                          "anyOf": [
+                            {
+                              "description": "Org this tag is specific to, if any",
+                              "maximum": 2147483647,
+                              "minimum": -2147483648,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "updated": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "description",
+                        "color",
+                        "created",
+                        "updated",
+                        "specificOrgId",
+                        "isActive"
+                      ],
+                      "type": "object"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTag"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5096,12 +5325,85 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTags": {
+                      "items": {
+                        "properties": {
+                          "color": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag color",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "created": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag description",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "description": "Event tag ID",
+                            "maximum": 2147483647,
+                            "minimum": -2147483648,
+                            "type": "integer"
+                          },
+                          "isActive": {
+                            "description": "Whether the event tag is active",
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "description": "Event tag name",
+                            "type": "string"
+                          },
+                          "specificOrgId": {
+                            "anyOf": [
+                              {
+                                "description": "Org this tag is specific to, if any",
+                                "maximum": 2147483647,
+                                "minimum": -2147483648,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "updated": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "color",
+                          "created",
+                          "updated",
+                          "specificOrgId",
+                          "isActive"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTags"
+                  ],
+                  "type": "object"
                 }
               }
             },
