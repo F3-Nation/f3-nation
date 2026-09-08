@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   AppWindow,
   BadgeCheck,
+  CalendarClock,
   Earth,
   CircleSmall,
   CirclePile,
@@ -99,6 +100,12 @@ export const AdminNavLinks = ({
       href: routes.admin.positions.__path,
       icon: BadgeCheck,
       label: "Positions",
+      type: "link",
+    },
+    {
+      href: routes.admin.eventInstances.__path,
+      icon: CalendarClock,
+      label: "Event instances",
       type: "link",
     },
     {

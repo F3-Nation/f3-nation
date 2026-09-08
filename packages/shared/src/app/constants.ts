@@ -213,6 +213,10 @@ export const routes = {
       __path: "/positions",
       __auth: "editor",
     },
+    eventInstances: {
+      __path: "/event-instances",
+      __auth: "editor",
+    },
     emailTest: {
       __path: "/email-test",
       __auth: "admin",

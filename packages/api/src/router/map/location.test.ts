@@ -6,7 +6,7 @@
  * - Test database to be seeded with test data
  */
 
-import { schema, sql } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -21,6 +21,9 @@ import {
 describe("Map Location Router", () => {
   // Track created entities for cleanup
   const createdEventIds: number[] = [];
+  // Standalone instances (no seriesId) are not reached by cleanup.event's
+  // cascade, and their location/org FKs would block the deletions below.
+  const createdEventInstanceIds: number[] = [];
   const createdLocationIds: number[] = [];
   const createdOrgIds: number[] = [];
 
@@ -33,6 +36,15 @@ describe("Map Location Router", () => {
     for (const eventId of createdEventIds.reverse()) {
       try {
         await cleanup.event(eventId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    for (const instanceId of createdEventInstanceIds.reverse()) {
+      try {
+        await db
+          .delete(schema.eventInstances)
+          .where(eq(schema.eventInstances.id, instanceId));
       } catch {
         // Ignore errors during cleanup
       }
@@ -53,15 +65,37 @@ describe("Map Location Router", () => {
     }
   });
 
+  // Helper to create test area (sits between the nation and a region)
+  const createTestArea = async () => {
+    const nationOrg = await getOrCreateF3NationOrg();
+    const [area] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `Test Area ${uniqueId()}`,
+        orgType: "area",
+        parentId: nationOrg.id,
+        isActive: true,
+      })
+      .returning();
+
+    if (area) {
+      createdOrgIds.push(area.id);
+    }
+    return area;
+  };
+
   // Helper to create test region
-  const createTestRegion = async (opts?: { logoUrl?: string | null }) => {
+  const createTestRegion = async (opts?: {
+    logoUrl?: string | null;
+    parentId?: number;
+  }) => {
     const nationOrg = await getOrCreateF3NationOrg();
     const [region] = await db
       .insert(schema.orgs)
       .values({
         name: `Test Region ${uniqueId()}`,
         orgType: "region",
-        parentId: nationOrg.id,
+        parentId: opts?.parentId ?? nationOrg.id,
         isActive: true,
         ...(opts?.logoUrl !== undefined ? { logoUrl: opts.logoUrl } : {}),
       })
@@ -143,6 +177,14 @@ describe("Map Location Router", () => {
       .toISOString()
       .split("T")[0]!;
   };
+
+  /**
+   * Tomorrow as the *database* reports it, so inclusion fixtures land inside
+   * the `CURRENT_DATE`..`CURRENT_DATE + 30 days` window the router filters on
+   * regardless of the test process's timezone.
+   */
+  const getDbTomorrow = async (): Promise<string> =>
+    shiftDays(await getDbCurrentDate(), 1);
 
   // Helper to create a test event with explicit start/end dates
   const createDatedEvent = async (opts: {
@@ -725,6 +767,670 @@ describe("Map Location Router", () => {
     });
   });
 
+  describe("upcomingInstances", () => {
+    it("should include a series-linked instance when the parent event has no location", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const instanceLocation = await createTestLocation(region.id);
+      if (!instanceLocation) throw new Error("Failed to create test location");
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Roving Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!event) throw new Error("Failed to create roving series event");
+      createdEventIds.push(event.id);
+
+      const startDate = await getDbTomorrow();
+
+      await db.insert(schema.eventInstances).values({
+        name: `Roving Instance ${uniqueId()}`,
+        orgId: ao.id,
+        seriesId: event.id,
+        locationId: instanceLocation.id,
+        startDate,
+        startTime: "0600",
+        endTime: "0700",
+        isActive: true,
+        highlight: false,
+        isPrivate: false,
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      const rovingInstance = result.find(
+        (instance) => instance.seriesId === event.id,
+      );
+
+      expect(rovingInstance).toEqual(
+        expect.objectContaining({
+          seriesId: event.id,
+          locationId: instanceLocation.id,
+          lat: instanceLocation.latitude,
+          lon: instanceLocation.longitude,
+          aoName: ao.name,
+        }),
+      );
+    });
+
+    it("should include a series-linked instance whose location differs from its parent event's location", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const parentLocation = await createTestLocation(region.id);
+      const awayLocation = await createTestLocation(region.id);
+      if (!parentLocation || !awayLocation)
+        throw new Error("Failed to create test locations");
+
+      // Parent series has a concrete location, so neither the exception branch
+      // nor the null-parent-location branch of the predicate applies here.
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Anchored Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: parentLocation.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!event) throw new Error("Failed to create anchored series event");
+      createdEventIds.push(event.id);
+
+      const startDate = await getDbTomorrow();
+
+      await db.insert(schema.eventInstances).values({
+        name: `Away Instance ${uniqueId()}`,
+        orgId: ao.id,
+        seriesId: event.id,
+        locationId: awayLocation.id,
+        startDate,
+        startTime: "0600",
+        endTime: "0700",
+        isActive: true,
+        highlight: false,
+        isPrivate: false,
+        // No seriesException — the location difference alone must qualify it.
+        seriesException: null,
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      const awayInstance = result.find(
+        (instance) =>
+          instance.seriesId === event.id &&
+          instance.locationId === awayLocation.id,
+      );
+
+      expect(awayInstance).toEqual(
+        expect.objectContaining({
+          seriesId: event.id,
+          locationId: awayLocation.id,
+          lat: awayLocation.latitude,
+          lon: awayLocation.longitude,
+          seriesException: null,
+        }),
+      );
+    });
+
+    it("should exclude a series-linked instance sitting at its parent event's location", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const parentLocation = await createTestLocation(region.id);
+      if (!parentLocation) throw new Error("Failed to create test location");
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Same Location Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: parentLocation.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!event) throw new Error("Failed to create series event");
+      createdEventIds.push(event.id);
+
+      const startDate = await getDbTomorrow();
+
+      await db.insert(schema.eventInstances).values({
+        name: `Ordinary Instance ${uniqueId()}`,
+        orgId: ao.id,
+        seriesId: event.id,
+        locationId: parentLocation.id,
+        startDate,
+        startTime: "0530",
+        isActive: true,
+        highlight: false,
+        isPrivate: false,
+        seriesException: null,
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      // An unremarkable occurrence at the series' own location is already drawn
+      // from the series itself, so widening the predicate must not start
+      // returning every instance in the window.
+      const ordinary = result.find(
+        (instance) =>
+          instance.seriesId === event.id &&
+          instance.locationId === parentLocation.id,
+      );
+
+      expect(ordinary).toBeUndefined();
+    });
+
+    it("should include a locationless series exception so it can flag its parent's status", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const parentLocation = await createTestLocation(region.id);
+      if (!parentLocation) throw new Error("Failed to create test location");
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Cancelled Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: parentLocation.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!event) throw new Error("Failed to create series event");
+      createdEventIds.push(event.id);
+
+      const startDate = await getDbTomorrow();
+
+      // A closure carries no location of its own — there is nowhere for it to
+      // happen. It still has to reach the client, which uses it to mark the
+      // parent series closed without drawing a pin.
+      await db.insert(schema.eventInstances).values({
+        name: `Cancelled Instance ${uniqueId()}`,
+        orgId: ao.id,
+        seriesId: event.id,
+        locationId: null,
+        startDate,
+        isActive: true,
+        highlight: false,
+        isPrivate: false,
+        seriesException: "closed",
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      const closure = result.find((instance) => instance.seriesId === event.id);
+
+      expect(closure).toEqual(
+        expect.objectContaining({
+          seriesId: event.id,
+          seriesException: "closed",
+          locationId: null,
+          // No coordinates, so the client's merge step skips marker creation.
+          lat: null,
+          lon: null,
+          fullAddress: null,
+        }),
+      );
+    });
+
+    // Regression: the sibling "locationless series exception" test above passes
+    // on the seriesException arm of the predicate and never reaches the location
+    // comparison. This case has NO exception and a *located* parent, so it lands
+    // squarely on that comparison — where `ne(NULL, parentLocationId)` yields SQL
+    // NULL rather than true, silently dropping the row until an explicit
+    // isNull(eventInstances.locationId) arm was added.
+    it("should include a locationless instance of a located series when no exception applies", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const parentLocation = await createTestLocation(region.id);
+      if (!parentLocation) throw new Error("Failed to create test location");
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Located Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: parentLocation.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!event) throw new Error("Failed to create located series event");
+      createdEventIds.push(event.id);
+
+      const startDate = await getDbTomorrow();
+
+      await db.insert(schema.eventInstances).values({
+        name: `Locationless Instance ${uniqueId()}`,
+        orgId: ao.id,
+        seriesId: event.id,
+        // The occurrence itself has no location — this is the NULL side that
+        // made the parent-location comparison unknown.
+        locationId: null,
+        startDate,
+        startTime: "0600",
+        endTime: "0700",
+        isActive: true,
+        highlight: false,
+        isPrivate: false,
+        seriesException: null,
+      });
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      const locationless = result.find(
+        (instance) => instance.seriesId === event.id,
+      );
+
+      expect(locationless).toEqual(
+        expect.objectContaining({
+          seriesId: event.id,
+          locationId: null,
+          seriesException: null,
+          // No coordinates, so the client's merge step skips marker creation —
+          // same contract as the locationless exception case above.
+          lat: null,
+          lon: null,
+        }),
+      );
+    });
+
+    it("should exclude an instance whose location is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const [inactiveLocation] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Retired Location ${uniqueId()}`,
+          orgId: region.id,
+          isActive: false,
+          latitude: 35.5,
+          longitude: -80.5,
+        })
+        .returning();
+
+      if (!inactiveLocation)
+        throw new Error("Failed to create inactive location");
+      createdLocationIds.push(inactiveLocation.id);
+
+      const startDate = await getDbTomorrow();
+
+      // Standalone (no seriesId) so it clears the outer predicate, and flagged
+      // as an exception too — the only reason to exclude it is the inactive
+      // location, which the LEFT JOIN must not have stopped enforcing.
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance At Retired Location ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: inactiveLocation.id,
+          startDate,
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+          seriesException: "closed",
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeUndefined();
+    });
+
+    // A one-off instance is the row admins soft-delete (`eventInstance.delete`
+    // flips isActive) or hide, so these two flags carry the whole weight of
+    // "this occurrence is gone" — nothing upstream is also false to catch it.
+    // Both cases are standalone, which clears the outer predicate on the
+    // seriesId-is-null arm and leaves the instance's own flag as the sole
+    // disqualifier.
+    describe.each([
+      { label: "deactivated", flags: { isActive: false, isPrivate: false } },
+      { label: "private", flags: { isActive: true, isPrivate: true } },
+    ])("instance is $label", ({ label, flags }) => {
+      it("should exclude it from upcoming instances", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create test region");
+
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create test AO");
+
+        const location = await createTestLocation(region.id);
+        if (!location) throw new Error("Failed to create test location");
+
+        const startDate = await getDbTomorrow();
+
+        // Active AO, active region, active location, in-window date, no parent
+        // series to inherit anything from.
+        const [instance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Hidden One-Off ${label} ${uniqueId()}`,
+            orgId: ao.id,
+            seriesId: null,
+            locationId: location.id,
+            startDate,
+            startTime: "0600",
+            endTime: "0700",
+            highlight: false,
+            ...flags,
+          })
+          .returning();
+
+        if (!instance) throw new Error("Failed to create event instance");
+        createdEventInstanceIds.push(instance.id);
+
+        const client = createTestClient();
+        const result = await client.map.location.upcomingInstances();
+
+        expect(
+          result.find((returned) => returned.id === instance.id),
+        ).toBeUndefined();
+      });
+    });
+
+    // Guards the pair above: without it, a fixture that failed some *other*
+    // predicate would make them pass for the wrong reason.
+    it("should include the same one-off when it is active and public", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const startDate = await getDbTomorrow();
+
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Visible One-Off ${uniqueId()}`,
+          orgId: ao.id,
+          seriesId: null,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          endTime: "0700",
+          highlight: false,
+          isActive: true,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(result.find((returned) => returned.id === instance.id)).toEqual(
+        expect.objectContaining({
+          id: instance.id,
+          seriesId: null,
+          locationId: location.id,
+        }),
+      );
+    });
+    // A series' visibility and retirement are not copied down onto its
+    // instances, so an instance can stay active and public after its parent is
+    // hidden. It must still inherit the parent's state here, or a hidden
+    // workout reappears through markers, details, and pin statuses.
+    describe.each([
+      { label: "private", parent: { isPrivate: true, isActive: true } },
+      { label: "inactive", parent: { isPrivate: false, isActive: false } },
+    ])("parent series is $label", ({ label, parent }) => {
+      it("should exclude an active public instance of that series", async () => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+
+        const region = await createTestRegion();
+        if (!region) throw new Error("Failed to create test region");
+
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create test AO");
+
+        const parentLocation = await createTestLocation(region.id);
+        if (!parentLocation) throw new Error("Failed to create test location");
+
+        const [event] = await db
+          .insert(schema.events)
+          .values({
+            name: `Hidden Series ${label} ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: parentLocation.id,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            highlight: false,
+            startDate: "2026-01-01",
+            ...parent,
+          })
+          .returning();
+
+        if (!event) throw new Error("Failed to create hidden series event");
+        createdEventIds.push(event.id);
+
+        const startDate = await getDbTomorrow();
+
+        // The instance's own flags say "show me", and the exception clears the
+        // outer predicate — the parent's state is the only disqualifier.
+        const [instance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Orphaned Instance ${label} ${uniqueId()}`,
+            orgId: ao.id,
+            seriesId: event.id,
+            locationId: parentLocation.id,
+            startDate,
+            startTime: "0600",
+            endTime: "0700",
+            isActive: true,
+            highlight: false,
+            isPrivate: false,
+            seriesException: "closed",
+          })
+          .returning();
+
+        if (!instance) throw new Error("Failed to create event instance");
+
+        const client = createTestClient();
+        const result = await client.map.location.upcomingInstances();
+
+        expect(
+          result.find((returned) => returned.id === instance.id),
+        ).toBeUndefined();
+      });
+    });
+
+    it("should exclude a qualifying instance whose region is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const startDate = await getDbTomorrow();
+
+      // Standalone and public, AO still active — the retired region is the
+      // only reason this must not become a public marker or pin status.
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance In Retired Region ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, region.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeUndefined();
+    });
+
+    it("should exclude a qualifying instance whose area is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const area = await createTestArea();
+      if (!area) throw new Error("Failed to create test area");
+
+      const region = await createTestRegion({ parentId: area.id });
+      if (!region) throw new Error("Failed to create test region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const startDate = await getDbTomorrow();
+
+      // Deleting an area does not cascade below it, so the AO and its region
+      // both stay active — the retired grandparent is the only reason this
+      // instance must not surface as a public marker or pin status.
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance In Retired Area ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, area.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeUndefined();
+    });
+  });
+
   /**
    * The date window (`withinCurrentEventDateWindow` in location.ts) gates both
    * eventsAndLocations and locationWorkout. These cases pin its boundaries so a
@@ -898,6 +1604,89 @@ describe("Map Location Router", () => {
       expect(workout.location).toBeNull();
       expect(workout.message).toBe("This workout is no longer scheduled.");
       expect(workout.message).not.toContain("Lat/lng");
+    });
+
+    it("should hide markers and workout details when the region is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const today = await getDbCurrentDate();
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      await createDatedEvent({
+        aoId: ao.id,
+        locationId: location.id,
+        label: "Event In Retired Region",
+        dayOfWeek: "monday",
+        startDate: shiftDays(today, -1),
+      });
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, region.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      expect(
+        result.find((loc: [number, ...unknown[]]) => loc[0] === location.id),
+      ).toBeUndefined();
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+      expect(workout.location).toBeNull();
+      expect(workout.message).toBe("This workout is no longer scheduled.");
+    });
+
+    it("should hide markers and workout details when the area is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const today = await getDbCurrentDate();
+
+      const area = await createTestArea();
+      if (!area) throw new Error("Failed to create test area");
+      const region = await createTestRegion({ parentId: area.id });
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      await createDatedEvent({
+        aoId: ao.id,
+        locationId: location.id,
+        label: "Event In Retired Area",
+        dayOfWeek: "monday",
+        startDate: shiftDays(today, -1),
+      });
+
+      // Only the area is retired; its region and AO stay active.
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, area.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      expect(
+        result.find((loc: [number, ...unknown[]]) => loc[0] === location.id),
+      ).toBeUndefined();
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+      expect(workout.location).toBeNull();
+      expect(workout.message).toBe("This workout is no longer scheduled.");
     });
   });
 });
