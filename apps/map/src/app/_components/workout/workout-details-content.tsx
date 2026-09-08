@@ -466,7 +466,7 @@ export const WorkoutDetailsContent = ({
           {displayedEvents.map((locEvent) => (
             <EventChip
               key={locEvent.id}
-              selected={selectedEventId === locEvent.id}
+              selected={(event?.id ?? selectedEventId) === locEvent.id}
               mapStatus={eventStatusMap.get(locEvent.id) ?? null}
               event={{
                 id: locEvent.id,

@@ -93,7 +93,7 @@ describe("Event Instance Router", () => {
     }
     // After the instances above (which reference events via seriesId) and
     // before the orgs below (which events reference via orgId).
-    for (const eventId of createdEventIds.reverse()) {
+    for (const eventId of [...createdEventIds].reverse()) {
       try {
         await cleanup.event(eventId);
       } catch {
