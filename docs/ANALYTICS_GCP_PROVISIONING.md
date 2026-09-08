@@ -68,8 +68,8 @@ Prefer separate deployment identities. Names are operator choices; they are not
 runtime or Scheduler identities.
 
 ```bash
-NONPROD_DEPLOY_NAME="<NONPROD_DEPLOYER_SA>"
-PROD_DEPLOY_NAME="<PROD_DEPLOYER_SA>"
+NONPROD_DEPLOY_NAME="ANALYTICS-NONPROD-DEPLOY"
+PROD_DEPLOY_NAME="ANALYTICS-PROD-DEPLOY"
 NONPROD_DEPLOY_SA="${NONPROD_DEPLOY_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 PROD_DEPLOY_SA="${PROD_DEPLOY_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 gcloud iam service-accounts create "$NONPROD_DEPLOY_NAME" --display-name='Analytics nonprod GitHub deployer' --project="$PROJECT_ID"
@@ -207,10 +207,18 @@ The publisher needs reviewed `storage.objects.get`, `list`, `create`, and
 create an approved custom project role omitting `storage.objects.delete`.
 
 ```bash
-GCS_PUBLISHER_ROLE_ID="<APPROVED_CUSTOM_ROLE_ID>"
+GCS_PUBLISHER_ROLE_ID="analyticsBucketAccess"
 PUBLISHER_ROLE="projects/${PROJECT_ID}/roles/${GCS_PUBLISHER_ROLE_ID}"
-gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" --member="serviceAccount:${NONPROD_RUNTIME_SA}" --role="$PUBLISHER_ROLE" --condition-title='Analytics nonprod parquet prefix' --condition-expression="resource.name.startsWith('projects/_/buckets/${NONPROD_BUCKET}/objects/parquets/')"
-gcloud storage buckets add-iam-policy-binding "gs://$PROD_BUCKET" --member="serviceAccount:${PROD_RUNTIME_SA}" --role="$PUBLISHER_ROLE" --condition-title='Analytics production parquet prefix' --condition-expression="resource.name.startsWith('projects/_/buckets/${PROD_BUCKET}/objects/parquets/')"
+gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" \
+  --project="$PROJECT_ID" \
+  --member="serviceAccount:${NONPROD_RUNTIME_SA}" \
+  --role="$PUBLISHER_ROLE" \
+  --condition='title=Analytics nonprod parquet prefix,expression=resource.name.startsWith("projects/_/buckets/f3-analytics-nonprod/objects/parquets/")'
+gcloud storage buckets add-iam-policy-binding "gs://$PROD_BUCKET" \
+  --project="$PROJECT_ID" \
+  --member="serviceAccount:${PROD_RUNTIME_SA}" \
+  --role="$PUBLISHER_ROLE" \
+  --condition='title=Analytics production parquet prefix,expression=resource.name.startsWith("projects/_/buckets/f3-analytics/objects/parquets/")'
 ```
 
 Grant approved consumers `roles/storage.objectViewer` with an equivalent prefix
