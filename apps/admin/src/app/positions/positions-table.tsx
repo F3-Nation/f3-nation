@@ -5,6 +5,8 @@ import type { TableOptions } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
+import { OrgType } from "@acme/shared/app/enums";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import { Button } from "@acme/ui/button";
 import {
   Select,
@@ -35,14 +37,13 @@ type Position = RouterOutputs["position"]["all"]["positions"][number];
 
 const ORG_LEVEL_OPTIONS = [
   { label: "All Levels", value: "" },
-  { label: "AO", value: "ao" },
-  { label: "Region", value: "region" },
-  { label: "Area", value: "area" },
-  { label: "Sector", value: "sector" },
-  { label: "Nation", value: "nation" },
+  ...OrgType.map((orgType) => ({
+    label: orgTypeDisplay[orgType].label,
+    value: orgType,
+  })),
 ] as const;
 
-type OrgLevel = "" | "ao" | "region" | "area" | "sector" | "nation";
+type OrgLevel = "" | OrgType;
 
 export const PositionsTable = () => {
   const { isNationAdmin } = useAuth();
@@ -127,13 +128,7 @@ export const PositionsTable = () => {
       header: Header,
       cell: ({ row }) => {
         const orgType = row.original.orgType;
-        return (
-          <Cell>
-            {orgType
-              ? orgType.charAt(0).toUpperCase() + orgType.slice(1)
-              : "All"}
-          </Cell>
-        );
+        return <Cell>{orgType ? orgTypeDisplay[orgType].label : "All"}</Cell>;
       },
     },
     {
