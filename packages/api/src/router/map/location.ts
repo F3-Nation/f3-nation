@@ -24,7 +24,10 @@ import { isTruthy } from "@acme/shared/common/functions";
 import type { LowBandwidthF3Marker } from "@acme/validators";
 import { LowBandwidthF3Marker as LowBandwidthF3MarkerSchema } from "@acme/validators";
 
-import { ORG_TREE_MAX_DEPTH } from "../../org-tree";
+import {
+  logIfOrgTreeExceedsMaxDepth,
+  ORG_TREE_MAX_DEPTH,
+} from "../../org-tree";
 import { protectedProcedure } from "../../shared";
 
 /**
@@ -57,11 +60,14 @@ const withinCurrentEventDateWindow = () =>
  * to stay an inline SQL subquery — not a `db.execute` call like
  * `checkHasRoleOnOrg` and `getDescendantOrgIds` — because it's embedded via
  * `notExists(...)` inside bulk selects that return many rows per call; a
- * per-row round trip would be an N+1. That also means it can't log
- * `api.org_tree.depth_limit_reached` the way those two do: there's no
- * materialized result in JS to inspect after the query returns.
- * `ORG_TREE_MAX_DEPTH` still bounds the recursion so a cycle or corrupt data
- * can't run away.
+ * per-row round trip would be an N+1. `ORG_TREE_MAX_DEPTH` still bounds the
+ * recursion so a cycle or corrupt data can't run away, and rows beyond the
+ * cap are excluded from the active check below so this stays consistent with
+ * `checkHasRoleOnOrg`/`getDescendantOrgIds`, which discard the same boundary
+ * row. Because there's no materialized per-call result to inspect, callers
+ * pair this with `logIfOrgTreeExceedsMaxDepth` (packages/api/src/org-tree.ts)
+ * — a single unanchored scan of the whole `orgs` table — for
+ * `api.org_tree.depth_limit_reached` telemetry instead of a per-row check.
  *
  * Callers keep their own predicate on the org the column points at; a null
  * `orgIdColumn`, or one with no matching org row, passes here.
@@ -99,7 +105,9 @@ const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
         AND NOT parent.${orgId} = ANY(ancestors.path)
     )
     SELECT 1 FROM ancestors
-    WHERE ancestors.depth > 0 AND ancestors.is_active = false
+    WHERE ancestors.depth > 0
+      AND ancestors.depth <= ${ORG_TREE_MAX_DEPTH}
+      AND ancestors.is_active = false
   )`);
 };
 
@@ -119,6 +127,8 @@ export const mapLocationRouter = os.router({
         .describe("Low-bandwidth array of events and locations"),
     )
     .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const locationsAndEvents = await ctx.db
@@ -351,6 +361,8 @@ export const mapLocationRouter = os.router({
         .describe("Upcoming event instances for map pin status flagging"),
     )
     .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const seriesEvent = aliasedTable(schema.events, "series_event");
 
@@ -600,6 +612,8 @@ export const mapLocationRouter = os.router({
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 

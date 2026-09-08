@@ -17,6 +17,7 @@ import {
   mockAuthWithSession,
   uniqueId,
 } from "../../__tests__/test-utils";
+import { ORG_TREE_MAX_DEPTH } from "../../org-tree";
 
 describe("Map Location Router", () => {
   // Track created entities for cleanup
@@ -1507,6 +1508,139 @@ describe("Map Location Router", () => {
       expect(
         result.find((returned) => returned.id === instance.id),
       ).toBeUndefined();
+    });
+
+    /**
+     * Chain of `count` synthetic org levels from `startParentId` down to a
+     * leaf: chain[0]'s parent is startParentId, chain[i + 1]'s parent is
+     * chain[i]. Lets the two boundary tests below place a deactivated
+     * ancestor at an exact depth relative to the ao that appends below
+     * chain[chain.length - 1].
+     */
+    const createOrgLevelChain = async (
+      startParentId: number,
+      count: number,
+    ) => {
+      const chain: NonNullable<
+        Awaited<ReturnType<typeof createTestOrgLevel>>
+      >[] = [];
+      let parentId = startParentId;
+      for (let i = 0; i < count; i++) {
+        const level = await createTestOrgLevel(parentId);
+        if (!level) throw new Error("Failed to create test org level");
+        chain.push(level);
+        parentId = level.id;
+      }
+      return chain;
+    };
+
+    it("excludes an instance whose inactive ancestor sits exactly at ORG_TREE_MAX_DEPTH", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      // ao (depth 0) -> region (depth 1) -> chain[18..0] (depth 2..20), so
+      // chain[0] is deactivated exactly at the cap the fix keeps checking --
+      // matching checkHasRoleOnOrg/getDescendantOrgIds, which keep the same
+      // boundary row.
+      const nationOrg = await getOrCreateF3NationOrg();
+      const chain = await createOrgLevelChain(
+        nationOrg.id,
+        ORG_TREE_MAX_DEPTH - 1,
+      );
+      const atCapOrg = chain[0];
+      const nearestToRegion = chain[chain.length - 1];
+      if (!atCapOrg || !nearestToRegion) {
+        throw new Error("Failed to build at-cap org chain");
+      }
+      const region = await createTestRegion({ parentId: nearestToRegion.id });
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const startDate = await getDbTomorrow();
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance At Depth Cap ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, atCapOrg.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeUndefined();
+    });
+
+    it("does not exclude an instance whose only inactive ancestor sits beyond ORG_TREE_MAX_DEPTH", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      // Same shape as the at-cap test, one level deeper: chain[0] sits at
+      // depth (ORG_TREE_MAX_DEPTH + 1), the boundary row the fix now
+      // excludes from the active check (logIfOrgTreeExceedsMaxDepth,
+      // org-tree.ts, is how this case gets production visibility instead).
+      const nationOrg = await getOrCreateF3NationOrg();
+      const chain = await createOrgLevelChain(nationOrg.id, ORG_TREE_MAX_DEPTH);
+      const beyondCapOrg = chain[0];
+      const nearestToRegion = chain[chain.length - 1];
+      if (!beyondCapOrg || !nearestToRegion) {
+        throw new Error("Failed to build beyond-cap org chain");
+      }
+      const region = await createTestRegion({ parentId: nearestToRegion.id });
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const startDate = await getDbTomorrow();
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance Beyond Depth Cap ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, beyondCapOrg.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeDefined();
     });
   });
 
