@@ -5,8 +5,7 @@ import { z } from "zod";
  * endpoint in this API.
  *
  * Supplying EITHER `pageSize` or `pageIndex` opts into pagination — both are
- * equally a request to paginate; requiring both meant a caller who asked
- * for a specific page (pageIndex alone) silently received every row.
+ * equally a request to paginate..
  *
  * `pageSize=0` is clamped up to `defaultPageSize` rather than producing a
  * silent `LIMIT 0`: `z.coerce.number()` turns an empty query param
@@ -79,6 +78,7 @@ export function paginationFields(
     pageSize: z.coerce
       .number()
       .int()
+      .min(0)
       .max(MAX_PAGE_SIZE)
       .optional()
       .describe(
