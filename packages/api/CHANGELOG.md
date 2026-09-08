@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.8.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.7.0...pkg-api@0.8.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+
+
+### Bug Fixes
+
+* **api:** add .output() schemas to event-tag router ([#902](https://github.com/F3-Nation/f3-nation/issues/902)) ([6aa08ca](https://github.com/F3-Nation/f3-nation/commit/6aa08caf611d8731483916561a27a728975b1ec8))
+* **api:** stop crupdate resetting isActive/highlight/isPrivate on partial updates ([#900](https://github.com/F3-Nation/f3-nation/issues/900)) ([f89b7f7](https://github.com/F3-Nation/f3-nation/commit/f89b7f7e8c0ccb3341ee98c644d7d98836180a4a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.3
+    * @acme/db bumped to 0.5.0
+    * @acme/shared bumped to 0.2.0
+    * @acme/validators bumped to 0.4.0
+
 ## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.6.0...pkg-api@0.7.0) (2026-08-18)
 
 
