@@ -79,6 +79,12 @@
       "matchDatasources": ["npm"],
       "matchDepNames": ["brace-expansion@<1.1.16"],
       "allowedVersions": "<3.0.0"
+    },
+    {
+      "description": "Hold the fast-uri@<3.1.5 override at <4.0.0: its sole consumer, ajv@8.20.0, declares `fast-uri: ^3.0.1` and has never adopted fast-uri 4.x. Forcing the override past ajv's own declared range risks the same class of break as the brace-expansion@<1.1.16 rule above (an unverified major-version jump on a transitive dep the direct dependent never opted into). See pnpm-workspace.yaml's matching override comment. Remove this rule only once ajv (or whatever supersedes it here) adopts fast-uri 4.x.",
+      "matchDatasources": ["npm"],
+      "matchDepNames": ["fast-uri@<3.1.5"],
+      "allowedVersions": "<4.0.0"
     }
   ]
 }

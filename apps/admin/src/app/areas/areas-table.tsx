@@ -4,7 +4,7 @@ import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import type { TableOptions } from "@tanstack/react-table";
 import { useCallback, useMemo, useState } from "react";
 
-import type { IsActiveStatus } from "@acme/shared/app/enums";
+import { IsActiveStatus } from "@acme/shared/app/enums";
 import type { SortingSchema } from "@acme/validators";
 import { Button } from "@acme/ui/button";
 import {
@@ -22,6 +22,14 @@ import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { ResetFilter } from "../_components/reset-filter";
 import { StatusFilter } from "../_components/status-filter";
+import {
+  AdminAreaAncestorOrgTypes,
+  findAncestorByType,
+  getOrgById,
+  getParentOrgIdsForFilter,
+  isDescendantOfAny,
+  isOrgSelected,
+} from "../regions/org-ancestry";
 import { SectorFilter } from "../regions/sector-filter";
 
 type Org = NonNullable<RouterOutputs["org"]["all"]>["orgs"][number];
@@ -36,23 +44,47 @@ export const AreasTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sorting, setSorting] = useState<SortingSchema>([]);
 
-  const { data: sectorsData } = useQuery(
+  const { data: hierarchyData } = useQuery(
     orpc.org.all.queryOptions({
       input: {
-        orgTypes: ["sector"],
+        // This must remain complete: a truncated hierarchy can make valid
+        // descendants disappear. Fetch only possible ancestors of an area.
+        orgTypes: AdminAreaAncestorOrgTypes,
+        statuses: IsActiveStatus,
       },
     }),
   );
 
-  const sectors = sectorsData?.orgs;
+  const hierarchyOrgs = hierarchyData?.orgs;
+  const sectors = useMemo(
+    () =>
+      hierarchyOrgs?.filter((org) => org.orgType === "sector" && org.isActive),
+    [hierarchyOrgs],
+  );
+  const orgById = useMemo(
+    () => getOrgById(hierarchyOrgs ?? []),
+    [hierarchyOrgs],
+  );
 
   // Compute parentOrgIds for filtering areas by selected sectors
   const parentOrgIds = useMemo(() => {
-    if (selectedSectors.length > 0) {
-      return selectedSectors.map((sector) => sector.id);
-    }
-    return [];
-  }, [selectedSectors]);
+    const selectedSectorIds = new Set(
+      selectedSectors.map((sector) => sector.id),
+    );
+    const matchingParentIds = hierarchyOrgs
+      ?.filter(
+        (org) =>
+          selectedSectorIds.has(org.id) ||
+          isDescendantOfAny(org, selectedSectorIds, orgById),
+      )
+      .map((org) => org.id);
+
+    return getParentOrgIdsForFilter(
+      [],
+      selectedSectors.length > 0,
+      matchingParentIds,
+    );
+  }, [hierarchyOrgs, orgById, selectedSectors]);
 
   const { data: areasData } = useQuery(
     orpc.org.all.queryOptions({
@@ -63,7 +95,7 @@ export const AreasTable = () => {
         statuses: selectedStatuses,
         onlyMine: onlyMine || undefined,
         searchTerm: searchTerm || undefined,
-        parentOrgIds: parentOrgIds.length > 0 ? parentOrgIds : undefined,
+        parentOrgIds,
         sorting,
       },
     }),
@@ -71,28 +103,23 @@ export const AreasTable = () => {
 
   const areas = areasData?.orgs;
 
-  const idToSectorMap = useMemo(() => {
-    return sectors?.reduce<Record<number, Org>>((acc, sector) => {
-      acc[sector.id] = sector;
-      return acc;
-    }, {});
-  }, [sectors]);
-
   const areasWithSectorNames = useMemo(() => {
     return areas?.map((area) => {
-      const sector = area.parentId ? idToSectorMap?.[area.parentId] : null;
+      const sector = findAncestorByType(area, "sector", orgById);
       return {
         ...area,
         sector: sector?.name,
       };
     });
-  }, [areas, idToSectorMap]);
+  }, [areas, orgById]);
 
   const handleSectorSelect = useCallback(
     (sector: Org) => {
       setSelectedSectors((prev) => {
-        if (prev.includes(sector)) {
-          return prev.filter((s) => s !== sector);
+        if (isOrgSelected(prev, sector)) {
+          return prev.filter(
+            (selectedSector) => selectedSector.id !== sector.id,
+          );
         }
         return [...prev, sector];
       });
@@ -143,6 +170,7 @@ export const AreasTable = () => {
             <SectorFilter
               onSectorSelect={handleSectorSelect}
               selectedSectors={selectedSectors}
+              sectors={sectors}
             />
             <ResetFilter onClick={handleResetFilters} />
           </div>
@@ -168,6 +196,7 @@ export const AreasTable = () => {
               <SectorFilter
                 onSectorSelect={handleSectorSelect}
                 selectedSectors={selectedSectors}
+                sectors={sectors}
               />
             </div>
           </MobileFilterSheet>

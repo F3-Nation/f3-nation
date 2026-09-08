@@ -3,8 +3,6 @@
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import RootLayout from "../../src/app/layout";
-
 // RootLayout mounts RuntimeConfigProvider, which fetches /api/runtime-config on
 // mount. Stub it so the suite doesn't hit an unmocked (and unresolvable)
 // relative URL, and so the bootstrap path is exercised with real config shape.
@@ -14,6 +12,10 @@ const runtimeConfigFetchMock = vi.fn().mockResolvedValue({
     Promise.resolve({ channel: "local", googleApiKey: "", adminUrl: "" }),
 });
 vi.stubGlobal("fetch", runtimeConfigFetchMock);
+
+// This test cold-imports the full layout provider tree. Give coverage
+// instrumentation and parallel workspace transforms enough headroom.
+const layoutImportTimeout = 30_000;
 
 vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue(new Headers()),
@@ -82,31 +84,75 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
-// Re-stub fetch before every test so afterEach's vi.unstubAllGlobals() (which
-// clears the module-scope stub above) doesn't leave later tests hitting the
-// real /api/runtime-config request.
+// Re-stub fetch and environment validation before every test so the suite is
+// independent of ambient process settings. Reset modules so layout reads the
+// environment only after these stubs are installed.
 beforeEach(() => {
+  vi.resetModules();
+  vi.stubEnv("CI", "");
+  vi.stubEnv("SKIP_ENV_VALIDATION", "1");
+  vi.stubEnv("npm_lifecycle_event", "");
   vi.stubGlobal("fetch", runtimeConfigFetchMock);
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+describe("layout metadata base URL", () => {
+  it("uses the configured map URL", async () => {
+    vi.stubEnv("F3_MAP_BASE_URL", "https://map.example.com");
+
+    const { mapMetadata } = await import("../../src/app/map-metadata");
+
+    expect(mapMetadata.metadataBase).toEqual(
+      new URL("https://map.example.com"),
+    );
+    expect(mapMetadata.openGraph?.url).toEqual(
+      new URL("https://map.example.com"),
+    );
+  });
+
+  it("falls back to localhost when the map URL is unavailable", async () => {
+    vi.stubEnv("F3_MAP_BASE_URL", "");
+
+    const { mapMetadata } = await import("../../src/app/map-metadata");
+
+    expect(mapMetadata.metadataBase).toEqual(new URL("http://localhost:3000"));
+    expect(mapMetadata.openGraph?.url).toEqual(
+      new URL("http://localhost:3000"),
+    );
+  });
+
+  it("rejects a malformed configured map URL", async () => {
+    vi.stubEnv("F3_MAP_BASE_URL", "not-a-url");
+
+    await expect(import("../../src/app/map-metadata")).rejects.toThrow(
+      /Invalid URL/,
+    );
+  });
 });
 
 describe("layout app router", () => {
-  it("should render layout", async () => {
-    const layoutResult = RootLayout({ children: <div /> });
-    render(layoutResult);
-    // React 19 treats <html>/<body> as singleton host components and applies
-    // their props to the real document elements instead of nesting them inside
-    // the render container, so assert against document.body.
-    expect(document.querySelector("body")).toHaveClass(
-      "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",
-    );
-    await waitFor(() =>
-      expect(runtimeConfigFetchMock).toHaveBeenCalledWith(
-        "/api/runtime-config",
-      ),
-    );
-  });
+  it(
+    "should render layout",
+    async () => {
+      const { default: RootLayout } = await import("../../src/app/layout");
+      const layoutResult = RootLayout({ children: <div /> });
+      render(layoutResult);
+      // React 19 treats <html>/<body> as singleton host components and applies
+      // their props to the real document elements instead of nesting them inside
+      // the render container, so assert against document.body.
+      expect(document.querySelector("body")).toHaveClass(
+        "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",
+      );
+      await waitFor(() =>
+        expect(runtimeConfigFetchMock).toHaveBeenCalledWith(
+          "/api/runtime-config",
+        ),
+      );
+    },
+    layoutImportTimeout,
+  );
 });

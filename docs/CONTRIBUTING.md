@@ -19,7 +19,8 @@ All the apps in this monorepo can be developed and tested locally. See [LOCAL_DE
 1. Mark the PR as **Ready for review**. At this point, a number of AI bots will run and provide feedback (see "Use of AI" below).
 1. Address all review comments. Reply to each comment stating what you did to fix it or why you're not going to fix it.
 1. If AI suggests something that is out of the scope of the PR, create an Issue to track it, add the Issue number to the comment reply, and resolve it.
-1. Once all comments are resolved, add the `ready for human review` label. A Codeowner will review.
+1. Once all comments are resolved, add the `ready for human review` label if you have `write` access to the repo. A Codeowner will review.
+   - Don't have `write` access, or forgot to add it? A scheduled workflow ([`ready-for-human-review-label.yml`](../.github/workflows/ready-for-human-review-label.yml)) applies the label automatically once your PR is out of draft, all required checks are green, and the AI review bots' threads are resolved — it runs daily, so there can be up to a day's delay. The same workflow also removes the label if any of those stop being true (e.g. a new commit resets checks to pending), even if you added it by hand. A maintainer can trigger it manually for a fresher check.
 
 ## Use of AI
 
