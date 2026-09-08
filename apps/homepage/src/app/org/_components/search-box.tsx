@@ -14,11 +14,18 @@ export function SearchBox({ onSelect, getResults, disabled }: SearchBoxProps) {
   const [results, setResults] = useState<Org[]>([]);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Set when a result is chosen: the resulting setQuery(name) must not reopen
+  // the list on the next effect run.
+  const justSelectedRef = useRef(false);
 
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
       setOpen(false);
+      return;
+    }
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
       return;
     }
     const hits = getResults(query);
@@ -39,6 +46,7 @@ export function SearchBox({ onSelect, getResults, disabled }: SearchBoxProps) {
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && results.length > 0) {
       const first = results[0]!;
+      justSelectedRef.current = true;
       setQuery(first.name);
       setOpen(false);
       onSelect(first);
@@ -50,6 +58,7 @@ export function SearchBox({ onSelect, getResults, disabled }: SearchBoxProps) {
   }
 
   function handleSelect(org: Org) {
+    justSelectedRef.current = true;
     setQuery(org.name);
     setOpen(false);
     onSelect(org);

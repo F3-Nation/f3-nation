@@ -78,9 +78,9 @@ describe("getApiBase (via fetch URL)", () => {
     expect(url).toContain("localhost:3001");
   });
 
-  it("falls back to api.f3nation.com with no env vars", async () => {
-    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
-    vi.stubEnv("NEXT_PUBLIC_LOCAL_DEV", "");
+  it("falls back to api.f3nation.com when the env vars are unset", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", undefined);
+    vi.stubEnv("NEXT_PUBLIC_LOCAL_DEV", undefined);
     mockFetch(200, { orgs: [] });
     await fetchOrgChart();
     const url = (fetch as ReturnType<typeof vi.fn>).mock

@@ -4,6 +4,7 @@ import {
   convexHull,
   createCircleBuffer,
   createStarPolygon,
+  dedupePoints,
   polygonAreaSqMi,
 } from "./geo-utils";
 import type { Point } from "./types";
@@ -203,5 +204,41 @@ describe("polygonAreaSqMi", () => {
     const area = polygonAreaSqMi(pts);
     expect(area).toBeGreaterThan(0);
     expect(area).toBeLessThan(1_000);
+  });
+});
+
+describe("dedupePoints", () => {
+  it("returns the same points when all are distinct", () => {
+    const pts: Point[] = [
+      { lat: 1, lng: 1 },
+      { lat: 2, lng: 2 },
+      { lat: 3, lng: 3 },
+    ];
+    expect(dedupePoints(pts)).toEqual(pts);
+  });
+
+  it("collapses coincident points to their distinct set", () => {
+    const pts: Point[] = [
+      { lat: 1, lng: 1 },
+      { lat: 1, lng: 1 },
+      { lat: 2, lng: 2 },
+    ];
+    expect(dedupePoints(pts)).toEqual([
+      { lat: 1, lng: 1 },
+      { lat: 2, lng: 2 },
+    ]);
+  });
+
+  it("treats differing lat or lng as distinct", () => {
+    const pts: Point[] = [
+      { lat: 1, lng: 1 },
+      { lat: 1, lng: 2 },
+      { lat: 2, lng: 1 },
+    ];
+    expect(dedupePoints(pts)).toHaveLength(3);
+  });
+
+  it("returns an empty array for no points", () => {
+    expect(dedupePoints([])).toEqual([]);
   });
 });

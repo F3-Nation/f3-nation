@@ -5,12 +5,15 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+
 import type { Org, OrgDetail, OrgMetrics, OrgType, Point } from "../_lib/types";
 import { buildOrgHierarchy, LAYER_TYPES, orgTypeRank } from "../_lib/org-chart";
 import {
   convexHull,
   createCircleBuffer,
   createStarPolygon,
+  dedupePoints,
   fuzzyScore,
   polygonAreaSqMi,
 } from "../_lib/geo-utils";
@@ -126,18 +129,34 @@ function getLatLngsForOrg(
   }
   const pts = getOrgPoints(org, childrenByParent, pointsById, descendantCache);
   if (pts.length === 0) return null;
-  if (pts.length < 3) {
+
+  // Branch on the count of *distinct* coordinates, not raw points: convexHull
+  // collapses duplicate/collinear points, so 3+ points spanning only 1–2
+  // distinct spots would otherwise yield a <3-vertex hull and no polygon.
+  const distinct = dedupePoints(pts);
+  const circleFrom = (center: { lat: number; lng: number }) =>
+    createCircleBuffer(center, 0.15).map((p) => L.latLng(p.lat, p.lng));
+
+  if (distinct.length < 3) {
     const center =
-      pts.length === 2
+      distinct.length === 2
         ? {
-            lat: (pts[0]!.lat + pts[1]!.lat) / 2,
-            lng: (pts[0]!.lng + pts[1]!.lng) / 2,
+            lat: (distinct[0]!.lat + distinct[1]!.lat) / 2,
+            lng: (distinct[0]!.lng + distinct[1]!.lng) / 2,
           }
-        : { lat: pts[0]!.lat, lng: pts[0]!.lng };
-    return createCircleBuffer(center, 0.15).map((p) => L.latLng(p.lat, p.lng));
+        : { lat: distinct[0]!.lat, lng: distinct[0]!.lng };
+    return circleFrom(center);
   }
-  const hull = convexHull(pts);
-  if (hull.length < 3) return null;
+  const hull = convexHull(distinct);
+  if (hull.length < 3) {
+    // Distinct points were collinear — fall back to a circle at their centroid
+    // so the org still renders instead of vanishing.
+    const center = {
+      lat: distinct.reduce((s, p) => s + p.lat, 0) / distinct.length,
+      lng: distinct.reduce((s, p) => s + p.lng, 0) / distinct.length,
+    };
+    return circleFrom(center);
+  }
   return hull.map((p) => L.latLng(p.lat, p.lng));
 }
 
@@ -256,6 +275,9 @@ export default function OrgMap() {
   const descendantCacheRef = useRef(new Map<number, number[]>());
   const orgInfoCacheRef = useRef(new Map<number, OrgDetail>());
   const activeInfoOrgIdRef = useRef<number | null>(null);
+  // Debounces hover-driven info loads so sweeping the cursor across a dense
+  // layer doesn't fire a fetch (plus ancestor climbs) per polygon.
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentLevel, setCurrentLevel] = useState<OrgType>("sector");
@@ -284,29 +306,32 @@ export default function OrgMap() {
         const typesPresent = new Set<OrgType>();
         for (const org of orgById.values()) typesPresent.add(org.orgType);
         const layers = LAYER_TYPES.filter((t) => typesPresent.has(t));
-        setPresentLayers(layers.length > 0 ? layers : LAYER_TYPES);
+        const navigableLayers = layers.length > 0 ? layers : LAYER_TYPES;
+        setPresentLayers(navigableLayers);
 
         // Restore URL state
         const urlLevel = readLevelFromUrl();
         const urlOrgId = readOrgIdFromUrl();
 
         // Broadest layer = last in LAYER_TYPES (leaf→root order)
-        let startLevel: OrgType = layers[layers.length - 1] ?? "sector";
+        let startLevel: OrgType =
+          navigableLayers[navigableLayers.length - 1] ?? "sector";
         let startPath: Org[] = [];
 
         if (urlOrgId) {
           const urlOrg = orgById.get(urlOrgId);
           if (urlOrg) {
             const { path, level } = pathForNavigatingTo(urlOrg, orgById);
-            // If URL specified a level override, use it if valid
+            // Only honor a URL level override that names a navigable layer;
+            // ao/nation (e.g. from a legacy ?level= link) aren't selectable.
             const overrideLevel =
-              urlLevel && typesPresent.has(urlLevel) ? urlLevel : null;
+              urlLevel && navigableLayers.includes(urlLevel) ? urlLevel : null;
             startLevel = overrideLevel ?? level;
             startPath = path;
             // Queue info load after render
             void loadOrgInfo(urlOrg);
           }
-        } else if (urlLevel && typesPresent.has(urlLevel)) {
+        } else if (urlLevel && navigableLayers.includes(urlLevel)) {
           startLevel = urlLevel;
         }
 
@@ -392,9 +417,10 @@ export default function OrgMap() {
       setCurrentLevel(level);
       setSelectedPath(path);
 
-      const orgId =
-        path.length > 0 ? (path[path.length - 1]?.id ?? org.id) : org.id;
-      writeUrlState(level, orgId);
+      // Always record the selected org itself, not the last breadcrumb entry:
+      // for a view-only leaf (region) the breadcrumb excludes the org, so
+      // path[last] would be the parent area and break the deep-link.
+      writeUrlState(level, org.id);
 
       const bounds = getFocusBounds(
         org,
@@ -494,12 +520,19 @@ export default function OrgMap() {
 
       polygon.on("mouseover", () => {
         polygon.setStyle({ weight: 3, fillOpacity: 0.28 });
-        void loadOrgInfo(org);
         if (org.orgType === "region") writeUrlState(currentLevel, org.id);
+        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = setTimeout(() => {
+          void loadOrgInfo(org);
+        }, 200);
       });
 
       polygon.on("mouseout", () => {
         polygon.setStyle({ weight: 2, fillOpacity: 0.18 });
+        if (hoverTimerRef.current) {
+          clearTimeout(hoverTimerRef.current);
+          hoverTimerRef.current = null;
+        }
       });
 
       polygon.on("click", () => {
@@ -514,12 +547,22 @@ export default function OrgMap() {
     if (allLatLngs.length > 0) {
       map.fitBounds(L.latLngBounds(allLatLngs), { padding: [24, 24] });
     }
+
+    return () => {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
+    };
   }, [isLoaded, currentLevel, selectedPath, loadOrgInfo, navigateToOrg]);
 
   // ── nearest parent admin lookup (for empty-roles message) ───────────────
 
   useEffect(() => {
-    if (infoState.status !== "loaded" || infoState.detail.roles.length > 0) {
+    if (
+      infoState.status !== "loaded" ||
+      (infoState.detail.roles?.length ?? 0) > 0
+    ) {
       setNearestAdminOrg(null);
       return;
     }
@@ -527,8 +570,10 @@ export default function OrgMap() {
     const { org } = infoState;
     let cancelled = false;
 
+    // Climb every ancestor, nation included: if the nation is the only level
+    // with admins we still want to surface it rather than "No admins listed".
     const ancestors = getOrgPath(org.id, orgByIdRef.current)
-      .filter((o) => o.id !== org.id && o.orgType !== "nation")
+      .filter((o) => o.id !== org.id)
       .reverse(); // nearest first
 
     async function climb() {
@@ -540,15 +585,21 @@ export default function OrgMap() {
           try {
             detail = await fetchOrgById(ancestor.id);
             if (!cancelled) orgInfoCacheRef.current.set(ancestor.id, detail);
-          } catch {
-            continue; // fetch failed — try the next ancestor
+          } catch (err) {
+            // A failed lookup ("couldn't check") is not the same as "no admins".
+            // Warn so it's debuggable, then try the next ancestor.
+            console.warn(
+              `[org-chart] nearest-admin lookup failed for org ${ancestor.id}`,
+              err,
+            );
+            continue;
           }
         }
 
         if (cancelled) return;
 
-        const admins = detail.roles.filter((r) =>
-          r.title.toLowerCase().includes("admin"),
+        const admins = (detail.roles ?? []).filter(
+          (r) => r.title?.toLowerCase().includes("admin") ?? false,
         );
         if (admins.length > 0) {
           setNearestAdminOrg({
@@ -564,7 +615,12 @@ export default function OrgMap() {
       if (!cancelled) setNearestAdminOrg(null);
     }
 
-    void climb();
+    void climb().catch((err: unknown) => {
+      // An unexpected shape (e.g. a null title slipping past the guards) must
+      // not become a silent unhandled rejection.
+      console.warn("[org-chart] nearest-admin climb failed", err);
+      if (!cancelled) setNearestAdminOrg(null);
+    });
 
     return () => {
       cancelled = true;
@@ -649,9 +705,9 @@ export default function OrgMap() {
             {presentLayers
               .slice()
               .reverse()
-              .map((t) => t.charAt(0).toUpperCase() + t.slice(1) + "s")
+              .map((t) => orgTypeDisplay[t].pluralLabel)
               .join(" → ")}{" "}
-            → AOs
+            → {orgTypeDisplay.ao.pluralLabel}
           </div>
         </div>
 
@@ -671,7 +727,7 @@ export default function OrgMap() {
                     : "border-[#2c3648] bg-[#151a24] text-[#f8f4ea] hover:border-[#3b4a62] hover:bg-[#233046]"
                 }`}
               >
-                {layer.charAt(0).toUpperCase() + layer.slice(1)}s
+                {orgTypeDisplay[layer].pluralLabel}
               </button>
             ))}
         </nav>

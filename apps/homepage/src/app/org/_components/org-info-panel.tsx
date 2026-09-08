@@ -1,3 +1,5 @@
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+
 import type {
   Org,
   OrgDetail,
@@ -5,6 +7,7 @@ import type {
   OrgMetrics,
   OrgType,
 } from "../_lib/types";
+import { LAYER_TYPES, orgTypeRank } from "../_lib/org-chart";
 
 export interface NearestAdminOrg {
   name: string;
@@ -87,17 +90,21 @@ function Counts({
   const countOf = (type: OrgType) =>
     descendantOrgs.filter((o) => o.orgType === type).length;
 
+  // Depth-agnostic: one row per navigable layer strictly below this org,
+  // ordered root→leaf. Adding a tier to @acme/shared adds its row here with
+  // no change to this component.
+  const currentRank = orgTypeRank(orgType);
+  const descendantLayers = LAYER_TYPES.filter(
+    (t) => orgTypeRank(t) < currentRank,
+  ).sort((a, b) => orgTypeRank(b) - orgTypeRank(a));
+
   return (
     <div className="space-y-0.5 text-sm text-foreground">
-      {orgType === "nation" && (
-        <div>Sectors: {formatNumber(countOf("sector"))}</div>
-      )}
-      {(orgType === "nation" || orgType === "sector") && (
-        <div>Areas: {formatNumber(countOf("area"))}</div>
-      )}
-      {(orgType === "nation" || orgType === "sector" || orgType === "area") && (
-        <div>Regions: {formatNumber(countOf("region"))}</div>
-      )}
+      {descendantLayers.map((t) => (
+        <div key={t}>
+          {orgTypeDisplay[t].pluralLabel}: {formatNumber(countOf(t))}
+        </div>
+      ))}
       <div>Events: {formatNumber(metrics.events)}</div>
       <div>AOs: {formatNumber(metrics.aos)}</div>
       <div>Locations: {formatNumber(metrics.locations)}</div>

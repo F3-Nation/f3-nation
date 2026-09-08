@@ -24,6 +24,19 @@ export function fuzzyScore(query: string, target: string): number | null {
   return qIndex < trimmedQuery.length ? null : score - haystack.length * 0.01;
 }
 
+/** Distinct points by lat/lng — used to decide circle-buffer vs convex-hull. */
+export function dedupePoints(points: Point[]): Point[] {
+  const seen = new Set<string>();
+  const out: Point[] = [];
+  for (const p of points) {
+    const key = `${p.lat},${p.lng}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
 function cross(o: Point, a: Point, b: Point): number {
   return (a.lng - o.lng) * (b.lat - o.lat) - (a.lat - o.lat) * (b.lng - o.lng);
 }

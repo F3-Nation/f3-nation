@@ -190,6 +190,52 @@ describe("OrgInfoPanel", () => {
     expect(html).toContain("Sectors:");
   });
 
+  it("shows only descendant-layer counts (areas, regions) for a sector", () => {
+    const sectorOrg: Org = {
+      id: 5,
+      parentId: 1,
+      name: "Mid Atlantic",
+      orgType: "sector",
+    };
+    const html = renderToStaticMarkup(
+      <OrgInfoPanel
+        status="loaded"
+        org={sectorOrg}
+        detail={{ ...baseDetail, id: 5, orgType: "sector" }}
+        descendantOrgs={[
+          { id: 6, parentId: 5, name: "A1", orgType: "area" },
+          { id: 7, parentId: 6, name: "R1", orgType: "region" },
+        ]}
+        aggregatedMetrics={baseMetrics}
+      />,
+    );
+    expect(html).toContain("Areas:");
+    expect(html).toContain("Regions:");
+    // A sector is not its own descendant, so no Sectors row.
+    expect(html).not.toContain("Sectors:");
+  });
+
+  it("shows no descendant-layer counts for a region (leaf layer)", () => {
+    const regionOrg: Org = {
+      id: 7,
+      parentId: 6,
+      name: "Charlotte",
+      orgType: "region",
+    };
+    const html = renderToStaticMarkup(
+      <OrgInfoPanel
+        status="loaded"
+        org={regionOrg}
+        detail={{ ...baseDetail, id: 7, orgType: "region" }}
+        aggregatedMetrics={baseMetrics}
+      />,
+    );
+    expect(html).not.toContain("Sectors:");
+    expect(html).not.toContain("Areas:");
+    expect(html).not.toContain("Regions:");
+    expect(html).toContain("Events:");
+  });
+
   it("renders footprint for region", () => {
     const regionOrg: Org = {
       id: 10,

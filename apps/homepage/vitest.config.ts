@@ -17,8 +17,9 @@ export default defineConfig({
       include: coverageInclude,
       exclude: [
         ...coverageExclude,
-        // Browser-only Leaflet map component — requires full DOM + Leaflet APIs,
-        // not testable in Node. Covered by E2E tests instead.
+        // Browser-only Leaflet map components — require full DOM + Leaflet
+        // APIs that aren't available in the Node test environment, so they're
+        // excluded from coverage rather than unit-tested.
         "**/org-map.tsx",
         "**/org-map-loader.tsx",
         // Pure TypeScript type declarations — no executable runtime code.
@@ -26,10 +27,10 @@ export default defineConfig({
       ],
       thresholds: {
         autoUpdate: true,
-        statements: 75.66,
-        branches: 75,
-        functions: 66.66,
-        lines: 76.33,
+        statements: 86.27,
+        branches: 80,
+        functions: 81.01,
+        lines: 87.77,
       },
     },
   },
