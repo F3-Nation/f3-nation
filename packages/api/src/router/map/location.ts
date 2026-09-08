@@ -24,7 +24,7 @@ import { isTruthy } from "@acme/shared/common/functions";
 import type { LowBandwidthF3Marker } from "@acme/validators";
 import { LowBandwidthF3Marker as LowBandwidthF3MarkerSchema } from "@acme/validators";
 
-import type { Context } from "../../shared";
+import { ORG_TREE_MAX_DEPTH } from "../../org-tree";
 import { protectedProcedure } from "../../shared";
 
 /**
@@ -49,42 +49,58 @@ const withinCurrentEventDateWindow = () =>
  * region, area, sector, or nation leaves every descendant org, event, and
  * instance active. Public read paths therefore have to walk the chain
  * themselves or they keep serving pins, pin statuses, and workout details for a
- * retired part of the tree. Four ancestor levels cover the deepest chain
- * (AO -> region -> area -> sector -> nation), the same depth
- * `checkHasRoleOnOrg` walks.
+ * retired part of the tree.
+ *
+ * Implemented as a `WITH RECURSIVE` CTE (mirroring `checkHasRoleOnOrg`) rather
+ * than a fixed number of self-joins, so it doesn't silently stop climbing once
+ * the hierarchy grows a level deeper than whatever depth was hardcoded. It has
+ * to stay an inline SQL subquery — not a `db.execute` call like
+ * `checkHasRoleOnOrg` and `getDescendantOrgIds` — because it's embedded via
+ * `notExists(...)` inside bulk selects that return many rows per call; a
+ * per-row round trip would be an N+1. That also means it can't log
+ * `api.org_tree.depth_limit_reached` the way those two do: there's no
+ * materialized result in JS to inspect after the query returns.
+ * `ORG_TREE_MAX_DEPTH` still bounds the recursion so a cycle or corrupt data
+ * can't run away.
  *
  * Callers keep their own predicate on the org the column points at; a null
  * `orgIdColumn`, or one with no matching org row, passes here.
  */
-const ancestorOrgsAreActive = (db: Context["db"], orgIdColumn: AnyColumn) => {
-  const level1 = aliasedTable(schema.orgs, "ancestor_level_1");
-  const level2 = aliasedTable(schema.orgs, "ancestor_level_2");
-  const level3 = aliasedTable(schema.orgs, "ancestor_level_3");
-  const level4 = aliasedTable(schema.orgs, "ancestor_level_4");
-  const level5 = aliasedTable(schema.orgs, "ancestor_level_5");
+const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
+  const orgId = sql.identifier(schema.orgs.id.name);
+  const parentId = sql.identifier(schema.orgs.parentId.name);
+  const isActive = sql.identifier(schema.orgs.isActive.name);
 
-  return notExists(
-    db
-      .select({ inactive: sql`1` })
-      .from(level1)
-      .leftJoin(level2, eq(level2.id, level1.parentId))
-      .leftJoin(level3, eq(level3.id, level2.parentId))
-      .leftJoin(level4, eq(level4.id, level3.parentId))
-      .leftJoin(level5, eq(level5.id, level4.parentId))
-      .where(
-        and(
-          eq(level1.id, orgIdColumn),
-          // A level that does not exist joins to NULL, and `eq(..., false)` is
-          // NULL (not true) for it, so unresolved levels can't match.
-          or(
-            eq(level2.isActive, false),
-            eq(level3.isActive, false),
-            eq(level4.isActive, false),
-            eq(level5.isActive, false),
-          ),
-        ),
-      ),
-  );
+  // notExists() splices its argument in as-is (`sql\`not exists ${subquery}\``)
+  // without adding parens the way a query-builder subquery would, so the
+  // WITH clause needs its own explicit parens to parse as a subquery.
+  return notExists(sql`(
+    WITH RECURSIVE ancestors(id, parent_id, depth, path, is_active) AS (
+      SELECT
+        ${schema.orgs.id},
+        ${schema.orgs.parentId},
+        0,
+        ARRAY[${schema.orgs.id}],
+        ${schema.orgs.isActive}
+      FROM ${schema.orgs}
+      WHERE ${schema.orgs.id} = ${orgIdColumn}
+
+      UNION ALL
+
+      SELECT
+        parent.${orgId},
+        parent.${parentId},
+        ancestors.depth + 1,
+        ancestors.path || parent.${orgId},
+        parent.${isActive}
+      FROM ${schema.orgs} AS parent
+      INNER JOIN ancestors ON parent.${orgId} = ancestors.parent_id
+      WHERE ancestors.depth <= ${ORG_TREE_MAX_DEPTH}
+        AND NOT parent.${orgId} = ANY(ancestors.path)
+    )
+    SELECT 1 FROM ancestors
+    WHERE ancestors.depth > 0 AND ancestors.is_active = false
+  )`);
 };
 
 export const mapLocationRouter = os.router({
@@ -179,7 +195,7 @@ export const mapLocationRouter = os.router({
             // the public map must hide them here: the event's own org, plus
             // every level above it (region, area, sector, nation).
             or(isNull(aoOrg.id), eq(aoOrg.isActive, true)),
-            ancestorOrgsAreActive(ctx.db, schema.events.orgId),
+            ancestorOrgsAreActive(schema.events.orgId),
           ),
         )
         .groupBy(
@@ -406,7 +422,7 @@ export const mapLocationRouter = os.router({
             // Descendants stay active when a region, area, sector, or nation is
             // retired; exclude their instances from public markers and pin
             // statuses.
-            ancestorOrgsAreActive(ctx.db, schema.eventInstances.orgId),
+            ancestorOrgsAreActive(schema.eventInstances.orgId),
             or(
               isNull(schema.eventInstances.seriesId),
               and(
@@ -699,7 +715,7 @@ export const mapLocationRouter = os.router({
               isNull(schema.events.id),
               and(
                 or(isNull(parentOrg.id), eq(parentOrg.isActive, true)),
-                ancestorOrgsAreActive(ctx.db, schema.events.orgId),
+                ancestorOrgsAreActive(schema.events.orgId),
               ),
             ),
           ),
