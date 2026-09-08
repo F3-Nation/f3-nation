@@ -13,6 +13,8 @@ import {
   schema,
   sql,
 } from "@acme/db";
+import { OrgType } from "@acme/shared/app/enums";
+import { arrayOrSingle } from "@acme/shared/app/functions";
 import {
   AddPositionAssignmentSchema,
   GetAllPositionAssignmentsSchema,
@@ -25,7 +27,6 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { editorProcedure, protectedProcedure } from "../shared";
-import { arrayOrSingle } from "@acme/shared/app/functions";
 
 export const positionRouter = {
   /**
@@ -49,7 +50,7 @@ export const positionRouter = {
             ),
           /** Filter by org type level (ao, region, etc.) */
           orgType: z
-            .enum(["ao", "region", "area", "sector", "nation"])
+            .enum(OrgType)
             .optional()
             .describe("Filter by org type level (ao, region, etc.)"),
           /** Only get org-specific positions (exclude nation-wide) */
@@ -114,7 +115,7 @@ export const positionRouter = {
                 .nullable()
                 .describe("Organization name (null for national positions)"),
               orgType: z
-                .enum(["ao", "region", "area", "sector", "nation"])
+                .enum(OrgType)
                 .nullable()
                 .describe("Organization type level"),
               isActive: z.boolean().describe("Whether the position is active"),
@@ -138,10 +139,15 @@ export const positionRouter = {
         const result = await getEditableOrgIdsForUser(ctx);
         isNationAdmin = result.isNationAdmin;
 
-        if (!isNationAdmin && result.editableOrgs.length > 0) {
-          const editableIds = result.editableOrgs.map((o) => o.id);
-          const descendantIds = await getDescendantOrgIds(ctx.db, editableIds);
-          editableOrgIds = [...new Set([...editableIds, ...descendantIds])];
+        if (!isNationAdmin && result.editableRootOrgIds.length > 0) {
+          editableOrgIds = await getDescendantOrgIds(
+            ctx.db,
+            result.editableRootOrgIds,
+          );
+        }
+
+        if (!isNationAdmin && editableOrgIds.length === 0) {
+          return { positions: [], totalCount: 0 };
         }
       }
 
@@ -257,7 +263,7 @@ export const positionRouter = {
                 .describe("Position description"),
               orgId: z.number().nullable().describe("Organization ID"),
               orgType: z
-                .enum(["ao", "region", "area", "sector", "nation"])
+                .enum(OrgType)
                 .nullable()
                 .describe("Organization type level"),
               isActive: z.boolean().describe("Whether the position is active"),
@@ -316,7 +322,7 @@ export const positionRouter = {
               .nullable()
               .describe("Organization name (resolved from orgId)"),
             orgType: z
-              .enum(["ao", "region", "area", "sector", "nation"])
+              .enum(OrgType)
               .nullable()
               .describe("Organization type level"),
             isActive: z.boolean().describe("Whether the position is active"),
@@ -394,7 +400,7 @@ export const positionRouter = {
                 .describe("Position description"),
               orgId: z.number().nullable().describe("Organization ID"),
               orgType: z
-                .enum(["ao", "region", "area", "sector", "nation"])
+                .enum(OrgType)
                 .nullable()
                 .describe("Organization type level"),
               isActive: z.boolean().describe("Whether the position is active"),
@@ -533,7 +539,7 @@ export const positionRouter = {
             description: z.string().nullable().describe("Position description"),
             orgId: z.number().nullable().describe("Organization ID"),
             orgType: z
-              .enum(["ao", "region", "area", "sector", "nation"])
+              .enum(OrgType)
               .nullable()
               .describe("Organization type level"),
             isActive: z.boolean().describe("Whether the position is active"),
@@ -1009,10 +1015,10 @@ export const positionRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const { editableOrgs, isNationAdmin } =
+      const { editableRootOrgIds, isNationAdmin } =
         await getEditableOrgIdsForUser(ctx);
 
-      if (!isNationAdmin && editableOrgs.length === 0) {
+      if (!isNationAdmin && editableRootOrgIds.length === 0) {
         return { assignments: [] };
       }
 
@@ -1020,14 +1026,10 @@ export const positionRouter = {
 
       // Scope to editable orgs (unless nation admin)
       if (!isNationAdmin) {
-        const editableOrgIds = editableOrgs.map((o) => o.id);
-        const descendantOrgIds = await getDescendantOrgIds(
-          ctx.db,
-          editableOrgIds,
-        );
-        const allOrgIds = [
-          ...new Set([...editableOrgIds, ...descendantOrgIds]),
-        ];
+        const allOrgIds = await getDescendantOrgIds(ctx.db, editableRootOrgIds);
+        if (allOrgIds.length === 0) {
+          return { assignments: [] };
+        }
         conditions.push(inArray(schema.positionsXOrgsXUsers.orgId, allOrgIds));
       }
 
