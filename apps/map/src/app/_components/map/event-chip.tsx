@@ -6,10 +6,14 @@
 
 import { useCallback } from "react";
 
+import { Ban } from "lucide-react";
+
 import type { DayOfWeek } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 
-import { getWhenFromWorkout } from "~/utils/get-when-from-workout";
+import type { MapStatus } from "~/utils/types";
+import { getWhenFromWorkout } from "~/utils/date";
+import { getSelectedChipBg } from "~/utils/map-status-colors";
 import { setView } from "~/utils/set-view";
 import { setSelectedItem } from "~/utils/store/selected-item";
 import BootSvgComponent from "../SVGs/boot-camp";
@@ -20,6 +24,7 @@ export const EventChip = (props: {
   variant?: "interactive" | "non-interactive";
   size?: "small" | "medium" | "large";
   selected?: boolean;
+  mapStatus?: MapStatus;
   onClick?: (e?: React.MouseEvent<HTMLButtonElement>) => void;
   event: {
     name?: string;
@@ -104,8 +109,8 @@ export const EventChip = (props: {
         "px-2 shadow-sm",
         "cursor-pointer",
         { "pointer-events-none bg-muted": !isInteractive },
-        { "bg-red-600": isInteractive && selected },
-        { "bg-muted": isInteractive && !selected },
+        isInteractive && !selected && "bg-muted",
+        isInteractive && selected && getSelectedChipBg(props.mapStatus ?? null),
         { "gap-1 py-[1px]": size === "small" },
         { "gap-1 py-[2px]": size === "medium" },
         { "gap-2 py-[3px]": size === "large" },
@@ -130,6 +135,16 @@ export const EventChip = (props: {
           {when || "No time"}
         </div>
       </div>
+      {props.mapStatus === "closed" && (
+        <Ban
+          className={cn("flex-shrink-0 text-foreground", {
+            "text-background": selected && isInteractive,
+            "h-3 w-3": size === "small",
+            "h-4 w-4": size === "medium",
+            "h-5 w-5": size === "large",
+          })}
+        />
+      )}
       <div>
         {event.eventTypes.some((et) => et.name === "Bootcamp") ? (
           <BootSvgComponent
