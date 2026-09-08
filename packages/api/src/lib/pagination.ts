@@ -78,7 +78,6 @@ export function paginationFields(
     pageSize: z.coerce
       .number()
       .int()
-      .min(0)
       .max(MAX_PAGE_SIZE)
       .optional()
       .describe(
