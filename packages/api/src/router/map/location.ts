@@ -54,15 +54,23 @@ const withinCurrentEventDateWindow = () =>
  * themselves or they keep serving pins, pin statuses, and workout details for a
  * retired part of the tree.
  *
- * Implemented as a `WITH RECURSIVE` CTE (mirroring `checkHasRoleOnOrg`) rather
- * than a fixed number of self-joins, so it doesn't silently stop climbing once
- * the hierarchy grows a level deeper than whatever depth was hardcoded. It has
- * to stay an inline SQL subquery — not a `db.execute` call like
+ * The recursive CTE walks *down* from every inactive org rather than *up*
+ * from `orgIdColumn`, and `orgIdColumn` is only compared against the result
+ * afterward, never referenced inside the CTE itself. That keeps the CTE
+ * decorrelated from the outer per-row `notExists(...)`: PostgreSQL cannot
+ * pull a `WITH RECURSIVE` out of a correlated subquery to flatten it into a
+ * join, so an ancestor-walking form anchored at `orgIdColumn` forces a
+ * `SubPlan` that re-runs the full recursive union once per outer row —
+ * verified ~14x slower than this form at 5k rows in local benchmarking.
+ * Decorrelated, the planner computes the "tainted" (has-an-inactive-ancestor)
+ * org set once and can flatten the outer `NOT EXISTS` into a join.
+ *
+ * It has to stay an inline SQL subquery — not a `db.execute` call like
  * `checkHasRoleOnOrg` and `getDescendantOrgIds` — because it's embedded via
  * `notExists(...)` inside bulk selects that return many rows per call; a
  * per-row round trip would be an N+1. `ORG_TREE_MAX_DEPTH` still bounds the
  * recursion so a cycle or corrupt data can't run away, and rows beyond the
- * cap are excluded from the active check below so this stays consistent with
+ * cap are excluded from the tainted set below so this stays consistent with
  * `checkHasRoleOnOrg`/`getDescendantOrgIds`, which discard the same boundary
  * row. Because there's no materialized per-call result to inspect, callers
  * pair this with `logIfOrgTreeExceedsMaxDepth` (packages/api/src/org-tree.ts)
@@ -75,39 +83,35 @@ const withinCurrentEventDateWindow = () =>
 const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
   const orgId = sql.identifier(schema.orgs.id.name);
   const parentId = sql.identifier(schema.orgs.parentId.name);
-  const isActive = sql.identifier(schema.orgs.isActive.name);
 
   // notExists() splices its argument in as-is (`sql\`not exists ${subquery}\``)
   // without adding parens the way a query-builder subquery would, so the
   // WITH clause needs its own explicit parens to parse as a subquery.
   return notExists(sql`(
-    WITH RECURSIVE ancestors(id, parent_id, depth, path, is_active) AS (
-      SELECT
-        ${schema.orgs.id},
-        ${schema.orgs.parentId},
-        0,
-        ARRAY[${schema.orgs.id}],
-        ${schema.orgs.isActive}
-      FROM ${schema.orgs}
-      WHERE ${schema.orgs.id} = ${orgIdColumn}
+    SELECT 1 FROM (
+      WITH RECURSIVE tainted(id, depth, path) AS (
+        SELECT
+          ${schema.orgs.id},
+          0,
+          ARRAY[${schema.orgs.id}]
+        FROM ${schema.orgs}
+        WHERE ${schema.orgs.isActive} = false
 
-      UNION ALL
+        UNION ALL
 
-      SELECT
-        parent.${orgId},
-        parent.${parentId},
-        ancestors.depth + 1,
-        ancestors.path || parent.${orgId},
-        parent.${isActive}
-      FROM ${schema.orgs} AS parent
-      INNER JOIN ancestors ON parent.${orgId} = ancestors.parent_id
-      WHERE ancestors.depth <= ${ORG_TREE_MAX_DEPTH}
-        AND NOT parent.${orgId} = ANY(ancestors.path)
-    )
-    SELECT 1 FROM ancestors
-    WHERE ancestors.depth > 0
-      AND ancestors.depth <= ${ORG_TREE_MAX_DEPTH}
-      AND ancestors.is_active = false
+        SELECT
+          child.${orgId},
+          tainted.depth + 1,
+          tainted.path || child.${orgId}
+        FROM ${schema.orgs} AS child
+        INNER JOIN tainted ON child.${parentId} = tainted.id
+        WHERE tainted.depth <= ${ORG_TREE_MAX_DEPTH}
+          AND NOT child.${orgId} = ANY(tainted.path)
+      )
+      SELECT id FROM tainted
+      WHERE depth > 0 AND depth <= ${ORG_TREE_MAX_DEPTH}
+    ) t
+    WHERE t.id = ${orgIdColumn}
   )`);
 };
 

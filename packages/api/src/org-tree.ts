@@ -13,6 +13,22 @@ import type { Context } from "./shared";
 export const ORG_TREE_MAX_DEPTH = 20;
 
 /**
+ * The org tree changes rarely, so re-running the table-wide scan on every
+ * request is wasted work under concurrent map traffic. One scan per interval
+ * gives the same telemetry at a fraction of the database and logging cost.
+ */
+const DEPTH_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+let lastDepthScanAt = 0;
+
+/**
+ * Resets the throttle window. Test-only: production code never needs to
+ * force a rescan.
+ */
+export const resetDepthScanThrottleForTests = (): void => {
+  lastDepthScanAt = 0;
+};
+
+/**
  * Scans the whole `orgs` table for any org whose ancestor chain exceeds
  * `ORG_TREE_MAX_DEPTH`, logging `api.org_tree.depth_limit_reached` if one is
  * found. Unlike `checkHasRoleOnOrg` and `getDescendantOrgIds`, this isn't
@@ -23,6 +39,9 @@ export const ORG_TREE_MAX_DEPTH = 20;
  * returns. A single unanchored table-wide scan gives it the same
  * observability at a fraction of the cost of checking per row.
  *
+ * Throttled to once per `DEPTH_SCAN_INTERVAL_MS`: three hot public handlers
+ * call this on every request, but the underlying data changes slowly.
+ *
  * Never throws — errors are logged and swallowed, matching the
  * fire-and-forget contract of `notifyMapDataChange`
  * (packages/api/src/lib/webhook-events.ts) so a scan failure can't affect the
@@ -32,6 +51,10 @@ export const ORG_TREE_MAX_DEPTH = 20;
 export const logIfOrgTreeExceedsMaxDepth = async (
   db: Context["db"],
 ): Promise<void> => {
+  const now = Date.now();
+  if (now - lastDepthScanAt < DEPTH_SCAN_INTERVAL_MS) return;
+  lastDepthScanAt = now;
+
   try {
     const rows = await db.execute<{ hit: number }>(sql`
       WITH RECURSIVE ancestors(id, parent_id, depth, path) AS (
@@ -65,6 +88,10 @@ export const logIfOrgTreeExceedsMaxDepth = async (
       });
     }
   } catch (error) {
-    logError("api.org_tree.depth_scan_failed", {}, error);
+    try {
+      logError("api.org_tree.depth_scan_failed", {}, error);
+    } catch {
+      // Logging must never be able to take the process down.
+    }
   }
 };

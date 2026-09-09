@@ -5,12 +5,17 @@ vi.mock("./logger", { spy: true });
 
 const mockLogError = vi.mocked(loggerModule.logError);
 
-import { logIfOrgTreeExceedsMaxDepth, ORG_TREE_MAX_DEPTH } from "./org-tree";
+import {
+  logIfOrgTreeExceedsMaxDepth,
+  ORG_TREE_MAX_DEPTH,
+  resetDepthScanThrottleForTests,
+} from "./org-tree";
 import type { Context } from "./shared";
 
 describe("logIfOrgTreeExceedsMaxDepth", () => {
   beforeEach(() => {
     mockLogError.mockClear();
+    resetDepthScanThrottleForTests();
   });
 
   const dbReturning = (rows: unknown[]) =>

@@ -1642,6 +1642,63 @@ describe("Map Location Router", () => {
         result.find((returned) => returned.id === instance.id),
       ).toBeDefined();
     });
+
+    it("terminates when the org hierarchy contains a cycle", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nationOrg = await getOrCreateF3NationOrg();
+      const levelA = await createTestOrgLevel(nationOrg.id);
+      if (!levelA) throw new Error("Failed to create test org level");
+      const levelB = await createTestOrgLevel(levelA.id);
+      if (!levelB) throw new Error("Failed to create test org level");
+
+      // Rewire levelA's parent to levelB, its own descendant, so the
+      // ancestor-active check's recursive walk hits a cycle: levelA ->
+      // levelB -> levelA -> ... . A broken cycle guard would hang or error
+      // here instead of resolving.
+      await db
+        .update(schema.orgs)
+        .set({ parentId: levelB.id })
+        .where(eq(schema.orgs.id, levelA.id));
+
+      const region = await createTestRegion({ parentId: levelB.id });
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const startDate = await getDbTomorrow();
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance In Cyclic Hierarchy ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, levelA.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeUndefined();
+    });
   });
 
   /**
