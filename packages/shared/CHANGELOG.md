@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.1.3...pkg-shared@0.2.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+
 ## [0.1.3](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.1.2...pkg-shared@0.1.3) (2026-07-14)
 
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.3.1...pkg-validators@0.4.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+
+
+### Bug Fixes
+
+* **api:** add .output() schemas to event-tag router ([#902](https://github.com/F3-Nation/f3-nation/issues/902)) ([6aa08ca](https://github.com/F3-Nation/f3-nation/commit/6aa08caf611d8731483916561a27a728975b1ec8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.5.0
+    * @acme/shared bumped to 0.2.0
+
 ## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.3.0...pkg-validators@0.3.1) (2026-08-18)
 
 

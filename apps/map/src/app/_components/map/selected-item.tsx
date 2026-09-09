@@ -7,6 +7,7 @@ import { RERENDER_LOGS } from "@acme/shared/common/constants";
 import { TestId } from "@acme/shared/common/enums";
 import { cn } from "@acme/ui";
 
+import type { ExceptionNotice as Notice } from "~/utils/event-status-map";
 import type { F3Marker } from "~/utils/types";
 import {
   clearSelectedItem,
@@ -15,17 +16,25 @@ import {
 import textLink from "~/utils/text-link";
 import { isTouchDevice } from "~/utils/touch-device-provider";
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
+import { ExceptionNotice } from "../workout/exception-notice";
 import { EventChip } from "./event-chip";
 
 export const SelectedItem = (props: {
   device: "mobile" | "desktop";
   selectedLocation: NonNullable<F3Marker["location"]>;
   selectedEvent: NonNullable<F3Marker["location"]>["events"][number];
+  nextException?: Notice;
   hideCloseButton?: boolean;
 }) => {
   RERENDER_LOGS && console.log("SelectedItem rerender");
 
-  const { device, hideCloseButton, selectedLocation, selectedEvent } = props;
+  const {
+    device,
+    hideCloseButton,
+    selectedLocation,
+    selectedEvent,
+    nextException,
+  } = props;
 
   // TODO: Styles need to be cleaned up a little and I need to come back as a perfectionist to make sure everything looks beautiful
 
@@ -99,6 +108,9 @@ export const SelectedItem = (props: {
                 />
               </div>
             </div>
+            {nextException ? (
+              <ExceptionNotice notice={nextException} className="mt-[2px]" />
+            ) : null}
             <Link
               href={`https://www.google.com/maps/search/?api=1&query=${selectedLocation.lat},${selectedLocation.lon}`}
               target="_blank"

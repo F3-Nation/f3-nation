@@ -12,6 +12,7 @@ export default {
         "map",
         "me",
         "slackbot",
+        "analytics",
 
         // apps & packages (exist in both apps/ and packages/)
         "api",
