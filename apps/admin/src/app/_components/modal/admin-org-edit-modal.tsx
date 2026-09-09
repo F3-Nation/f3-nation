@@ -116,6 +116,10 @@ export default function AdminOrgEditModal({
   });
 
   useEffect(() => {
+    // Preserve the original editors' reset contract: missing metadata becomes
+    // null, even where the initial default is {}. React Hook Form creates an
+    // object when a nested metadata field is edited. Logo editors omit
+    // badImage here; their schema supplies false on submission when absent.
     form.reset({
       ...(config.retainLoadedFields ? org : {}),
       id: org?.id ?? undefined,

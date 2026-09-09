@@ -79,6 +79,11 @@ export const orgEditorConfig: Record<OrgType, OrgEditorConfig> = {
 
 export type EditableOrgType = keyof typeof orgEditorConfig;
 
+/**
+ * Preserve each editor's parent validation and submitted preview state.
+ * Logo editors default missing badImage to false after form resets; other
+ * editors leave it absent so sharing a schema does not expand their payloads.
+ */
 export function orgEditorSchema(config: OrgEditorConfig) {
   return SectorInsertSchema.extend({
     parentId: config.parentType

@@ -278,6 +278,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   clients.splice(0).forEach((client) => client.clear());
+  vi.unstubAllGlobals();
 });
 
 describe.each([
@@ -504,6 +505,15 @@ describe.each(["nation", "region", "ao"] as const)(
 
 describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
   const label = type === "region" ? "Region" : "AO";
+  const originalURL = URL;
+  const originalCreateObjectURL = Object.getOwnPropertyDescriptor(
+    URL,
+    "createObjectURL",
+  );
+  const originalRevokeObjectURL = Object.getOwnPropertyDescriptor(
+    URL,
+    "revokeObjectURL",
+  );
   beforeEach(() => {
     mocks.all.mockResolvedValue({
       orgs: parents.map((parent) => ({
@@ -512,12 +522,24 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
       })),
     });
     mocks.upload.mockResolvedValue("https://example.com/new-logo.png");
-    vi.stubGlobal(
-      "URL",
-      Object.assign(URL, {
-        createObjectURL: vi.fn(() => "blob:preview"),
-        revokeObjectURL: vi.fn(),
-      }),
+    class TestURL extends originalURL {
+      static createObjectURL = vi.fn(() => "blob:preview");
+      static revokeObjectURL = vi.fn();
+    }
+    vi.stubGlobal("URL", TestURL);
+  });
+  it("preserves URL construction and restores the original global methods", () => {
+    expect(new URL("/logo.png", "https://example.com").href).toBe(
+      "https://example.com/logo.png",
+    );
+    expect(URL.createObjectURL(new Blob())).toBe("blob:preview");
+    vi.unstubAllGlobals();
+    expect(URL).toBe(originalURL);
+    expect(Object.getOwnPropertyDescriptor(URL, "createObjectURL")).toEqual(
+      originalCreateObjectURL,
+    );
+    expect(Object.getOwnPropertyDescriptor(URL, "revokeObjectURL")).toEqual(
+      originalRevokeObjectURL,
     );
   });
   it("preserves contact fields, metadata and stored logo on rename", async () => {
@@ -612,6 +634,26 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
     expect(mocks.save.mock.calls[0]![0].badImage).toBe(true);
   });
 });
+
+it.each([null, undefined])(
+  "saves a Region location description when loaded metadata is %s",
+  async (meta) => {
+    mocks.byId.mockResolvedValue({ org: { ...record, meta } });
+    mount("region", 40);
+    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    fireEvent.change(field("Short Location Description"), {
+      target: { value: "Synthetic City" },
+    });
+    save();
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+      id: 40,
+      orgType: "region",
+      meta: { region_location_short_description: "Synthetic City" },
+      badImage: false,
+    });
+  },
+);
 
 it("changes Region location description without losing other metadata", async () => {
   mocks.byId.mockResolvedValue({
