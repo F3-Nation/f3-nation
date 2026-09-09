@@ -87,9 +87,9 @@ describe("Map Location Router", () => {
 
   /**
    * Generic org level with an explicit parent, for building ancestor chains
-   * deeper than the real hierarchy currently goes (standing in for the
-   * not-yet-added Territory tier from #923). The recursive ancestor-active
-   * check only walks `parentId`, so the `orgType` label here is arbitrary.
+   * deeper than the real hierarchy currently goes (standing in for a
+   * not-yet-added tier above region). The recursive ancestor-active check
+   * only walks `parentId`, so the `orgType` label here is arbitrary.
    */
   const createTestOrgLevel = async (parentId: number) => {
     const [org] = await db
@@ -1459,9 +1459,9 @@ describe("Map Location Router", () => {
       await mockAuthWithSession(session);
 
       // Depth-6 chain (ao + 5 ancestors), matching the shape the hierarchy
-      // takes once Territory is inserted (#923). The old fixed-depth join
-      // only checked 4 ancestor levels above the AO, so a deactivation this
-      // far up would have been missed.
+      // takes once an additional tier is inserted above region. The old
+      // fixed-depth join only checked 4 ancestor levels above the AO, so a
+      // deactivation this far up would have been missed.
       const nationOrg = await getOrCreateF3NationOrg();
       const topLevel = await createTestOrgLevel(nationOrg.id);
       if (!topLevel) throw new Error("Failed to create test org level");
