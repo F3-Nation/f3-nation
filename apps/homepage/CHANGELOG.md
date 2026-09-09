@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.0...homepage@1.4.1) (2026-09-08)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/ui bumped to 0.1.4
+
 ## [1.4.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.3.0...homepage@1.4.0) (2026-08-12)
 
 

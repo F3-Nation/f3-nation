@@ -1,5 +1,28 @@
 # Changelog
 
+## [7.3.0](https://github.com/F3-Nation/f3-nation/compare/map@7.2.1...map@7.3.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+
+
+### Bug Fixes
+
+* **map:** add an endpoint allowlist to the /api/orpc proxy ([#948](https://github.com/F3-Nation/f3-nation/issues/948)) ([5a4b0b7](https://github.com/F3-Nation/f3-nation/commit/5a4b0b721215f3055fa84b522d9e6aeb2ccaaf7a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.8.0
+    * @acme/auth bumped to 0.2.3
+    * @acme/shared bumped to 0.2.0
+    * @acme/ui bumped to 0.1.4
+    * @acme/validators bumped to 0.4.0
+
 ## [7.2.1](https://github.com/F3-Nation/f3-nation/compare/map@7.2.0...map@7.2.1) (2026-08-18)
 
 

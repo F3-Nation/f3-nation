@@ -13,6 +13,7 @@ permissions:
   contents: read
   id-token: write
   checks: read
+  issues: write
 
 jobs:
   deploy:
