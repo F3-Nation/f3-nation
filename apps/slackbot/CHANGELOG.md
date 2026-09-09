@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.2...slackbot@2.4.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+* **repo:** added analytics app ([#800](https://github.com/F3-Nation/f3-nation/issues/800)) ([f7c5123](https://github.com/F3-Nation/f3-nation/commit/f7c512377d93f051495a1ab8ca793af13f3667ec))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#861](https://github.com/F3-Nation/f3-nation/issues/861)) ([419ac1e](https://github.com/F3-Nation/f3-nation/commit/419ac1eb5c93c8d472f1f03362e1440d8278594e))
+
 ## [2.3.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.1...slackbot@2.3.2) (2026-08-27)
 
 
