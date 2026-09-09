@@ -1662,42 +1662,53 @@ describe("Map Location Router", () => {
         .set({ parentId: levelB.id })
         .where(eq(schema.orgs.id, levelA.id));
 
-      const region = await createTestRegion({ parentId: levelB.id });
-      if (!region) throw new Error("Failed to create test region");
-      const ao = await createTestAO(region.id);
-      if (!ao) throw new Error("Failed to create test AO");
-      const location = await createTestLocation(region.id);
-      if (!location) throw new Error("Failed to create test location");
+      try {
+        const region = await createTestRegion({ parentId: levelB.id });
+        if (!region) throw new Error("Failed to create test region");
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create test AO");
+        const location = await createTestLocation(region.id);
+        if (!location) throw new Error("Failed to create test location");
 
-      const startDate = await getDbTomorrow();
-      const [instance] = await db
-        .insert(schema.eventInstances)
-        .values({
-          name: `Instance In Cyclic Hierarchy ${uniqueId()}`,
-          orgId: ao.id,
-          locationId: location.id,
-          startDate,
-          startTime: "0600",
-          isActive: true,
-          highlight: false,
-          isPrivate: false,
-        })
-        .returning();
+        const startDate = await getDbTomorrow();
+        const [instance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Instance In Cyclic Hierarchy ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            startDate,
+            startTime: "0600",
+            isActive: true,
+            highlight: false,
+            isPrivate: false,
+          })
+          .returning();
 
-      if (!instance) throw new Error("Failed to create event instance");
-      createdEventInstanceIds.push(instance.id);
+        if (!instance) throw new Error("Failed to create event instance");
+        createdEventInstanceIds.push(instance.id);
 
-      await db
-        .update(schema.orgs)
-        .set({ isActive: false })
-        .where(eq(schema.orgs.id, levelA.id));
+        await db
+          .update(schema.orgs)
+          .set({ isActive: false })
+          .where(eq(schema.orgs.id, levelA.id));
 
-      const client = createTestClient();
-      const result = await client.map.location.upcomingInstances();
+        const client = createTestClient();
+        const result = await client.map.location.upcomingInstances();
 
-      expect(
-        result.find((returned) => returned.id === instance.id),
-      ).toBeUndefined();
+        expect(
+          result.find((returned) => returned.id === instance.id),
+        ).toBeUndefined();
+      } finally {
+        // orgs.parentId has no ON DELETE action, so afterAll's cleanup can't
+        // delete levelA and levelB while they still reference each other.
+        // Break the cycle here (even on assertion failure) so cleanup doesn't
+        // silently leak these rows into the next test run.
+        await db
+          .update(schema.orgs)
+          .set({ parentId: nationOrg.id })
+          .where(eq(schema.orgs.id, levelA.id));
+      }
     });
   });
 

@@ -36,6 +36,16 @@ describe("logIfOrgTreeExceedsMaxDepth", () => {
     expect(mockLogError).not.toHaveBeenCalled();
   });
 
+  it("skips the scan when called again inside the throttle window", async () => {
+    const execute = vi.fn().mockResolvedValue([]);
+    const db = { execute } as unknown as Context["db"];
+
+    await logIfOrgTreeExceedsMaxDepth(db);
+    await logIfOrgTreeExceedsMaxDepth(db);
+
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it("logs api.org_tree.depth_scan_failed and never rejects when the query itself fails", async () => {
     const db = {
       execute: vi.fn().mockRejectedValue(new Error("connection reset")),
