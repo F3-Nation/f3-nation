@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.0.3,<10.0.0", "ruff>=0.14.0,<1.0.0", "mypy>=1.14.0,<2.0.0"]
+dev = ["pytest>=9.0.3,<10.0.0", "ruff>=0.14.0,<1.0.0", "mypy>=2.3.1,<2.4.0"]
 
 [project.scripts]
 analytics-etl = "analytics.cli:main"
