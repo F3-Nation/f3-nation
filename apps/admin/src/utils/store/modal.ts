@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { OrgType } from "@acme/shared/app/enums";
 
 import { ZustandStore } from "@acme/shared/common/classes";
 
@@ -9,11 +10,7 @@ export enum ModalType {
   ADMIN_EVENTS = "ADMIN_EVENTS",
   ADMIN_EVENT_INSTANCES = "ADMIN_EVENT_INSTANCES",
   ADMIN_LOCATIONS = "ADMIN_LOCATIONS",
-  ADMIN_NATIONS = "ADMIN_NATIONS",
-  ADMIN_SECTORS = "ADMIN_SECTORS",
-  ADMIN_AREAS = "ADMIN_AREAS",
-  ADMIN_REGIONS = "ADMIN_REGIONS",
-  ADMIN_AOS = "ADMIN_AOS",
+  ADMIN_ORG = "ADMIN_ORG",
   ADMIN_POSITIONS = "ADMIN_POSITIONS",
   ADMIN_API_KEYS = "ADMIN_API_KEYS",
   ADMIN_EVENT_TYPES = "ADMIN_EVENT_TYPES",
@@ -26,14 +23,10 @@ export enum ModalType {
 
 export enum DeleteType {
   USER = "USER",
-  AREA = "AREA",
+  ORG = "ORG",
   LOCATION = "LOCATION",
-  AO = "AO",
   EVENT = "EVENT",
   EVENT_TYPE = "EVENT_TYPE",
-  REGION = "REGION",
-  SECTOR = "SECTOR",
-  NATION = "NATION",
   POSITION = "POSITION",
   ASSIGNMENT = "ASSIGNMENT",
   EVENT_INSTANCE = "EVENT_INSTANCE",
@@ -58,19 +51,8 @@ export interface DataType {
   [ModalType.ADMIN_LOCATIONS]: {
     id?: number | null;
   };
-  [ModalType.ADMIN_NATIONS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_SECTORS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_AREAS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_REGIONS]: {
-    id?: number | null;
-  };
-  [ModalType.ADMIN_AOS]: {
+  [ModalType.ADMIN_ORG]: {
+    orgType: OrgType;
     id?: number | null;
   };
   [ModalType.ADMIN_POSITIONS]: {
@@ -80,8 +62,10 @@ export interface DataType {
   [ModalType.ADMIN_API_KEYS]: null;
   [ModalType.ADMIN_DELETE_CONFIRMATION]: {
     id: number;
-    type: DeleteType;
-  };
+  } & (
+    | { type: DeleteType.ORG; orgType: OrgType }
+    | { type: Exclude<DeleteType, DeleteType.ORG> }
+  );
   [ModalType.DELETE_CONFIRMATION]: {
     type: DeleteType;
     onConfirm: () => void;
@@ -132,7 +116,13 @@ export const openModal = <T extends ModalType>(type: T, data?: DataType[T]) => {
 
   modalStore.setState({
     modals: [
-      ...existingModals.filter((m) => m.type !== type),
+      ...existingModals.filter(
+        (m) =>
+          m.type !== type ||
+          (type === ModalType.ADMIN_ORG &&
+            (m.data as DataType[ModalType.ADMIN_ORG] | undefined)?.orgType !==
+              (data as DataType[ModalType.ADMIN_ORG] | undefined)?.orgType),
+      ),
       { open: true, type, data },
     ],
   });
@@ -143,12 +133,24 @@ export const useOpenModal = () => {
   return modals[modals.length - 1];
 };
 
-export const closeModal = (open?: boolean, type?: ModalType | "all") => {
+export const closeModal = (
+  open?: boolean,
+  type?:
+    | Exclude<ModalType, ModalType.ADMIN_ORG>
+    | "all"
+    | { type: ModalType.ADMIN_ORG; orgType: OrgType },
+) => {
   const modals = modalStore.get("modals");
   if (type === "all") {
     modalStore.setState({ modals: [] });
   } else if (type) {
-    const lessModals = modals.filter((m) => m.type !== type);
+    const lessModals = modals.filter((m) =>
+      typeof type === "object"
+        ? m.type !== type.type ||
+          (m.data as DataType[ModalType.ADMIN_ORG] | undefined)?.orgType !==
+            type.orgType
+        : m.type !== type,
+    );
     modalStore.setState({
       modals: lessModals,
     });

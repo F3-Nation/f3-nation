@@ -174,3 +174,22 @@ describe("proxy middleware", () => {
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 });
+
+describe("organization and unknown route authentication", () => {
+  it.each([
+    "/the-nation",
+    "/sectors",
+    "/areas",
+    "/regions",
+    "/aos",
+    "/unknown-org",
+    "/arbitrary-path",
+    "/positions",
+  ])("retains login redirect for %s without credentials", async (path) => {
+    const response = await proxy(makeRequest(path));
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/api/auth/login");
+    expect(location.searchParams.get("returnTo")).toBe(path);
+  });
+});
