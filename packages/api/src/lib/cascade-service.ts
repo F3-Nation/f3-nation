@@ -30,7 +30,7 @@ export interface SeriesData {
   highlight: boolean;
   meta: Record<string, unknown> | null;
   eventTypeIds?: number[];
-  // eventTagId?: number; // TODO: event tag support
+  eventTagIds?: number[];
 }
 
 // Structural fields that require recreating instances
@@ -336,15 +336,16 @@ export async function createEventInstancesForSeries(
   }
 
   // Handle event tag join table
-  // TODO: event tag support - need to add eventTagId to SeriesData and handle in event router
-  // if (series.eventTagId && created.length > 0) {
-  //   await db.insert(schema.eventTagsXEventInstances).values(
-  //     created.map((instance) => ({
-  //       eventInstanceId: instance.id,
-  //       eventTagId: series.eventTagId!,
-  //     })),
-  //   );
-  // }
+  if (series.eventTagIds?.length && created.length > 0) {
+    await db.insert(schema.eventTagsXEventInstances).values(
+      created.flatMap((instance) =>
+        series.eventTagIds!.map((eventTagId) => ({
+          eventInstanceId: instance.id,
+          eventTagId,
+        })),
+      ),
+    );
+  }
 
   return created.length;
 }
@@ -414,26 +415,25 @@ export async function updateFutureInstances(
     }
   }
 
-  // Update event tags if provided
-  // TODO: event tag support - need to add eventTagId to SeriesData and handle in event router
-  // if (series.eventTagId !== undefined) {
-  //   // Delete existing event tag associations
-  //   await db
-  //     .delete(schema.eventTagsXEventInstances)
-  //     .where(
-  //       inArray(schema.eventTagsXEventInstances.eventInstanceId, instanceIds),
-  //     );
+  // Update event tags if provided (an empty array intentionally clears them).
+  if (series.eventTagIds !== undefined) {
+    await db
+      .delete(schema.eventTagsXEventInstances)
+      .where(
+        inArray(schema.eventTagsXEventInstances.eventInstanceId, instanceIds),
+      );
 
-  //   // Add new associations
-  //   if (series.eventTagId) {
-  //     await db.insert(schema.eventTagsXEventInstances).values(
-  //       instanceIds.map((id) => ({
-  //         eventInstanceId: id,
-  //         eventTagId: series.eventTagId!,
-  //       })),
-  //     );
-  //   }
-  // }
+    if (series.eventTagIds.length > 0) {
+      await db.insert(schema.eventTagsXEventInstances).values(
+        instanceIds.flatMap((id) =>
+          series.eventTagIds!.map((eventTagId) => ({
+            eventInstanceId: id,
+            eventTagId,
+          })),
+        ),
+      );
+    }
+  }
 
   return futureInstances.length;
 } /**

@@ -301,6 +301,7 @@ export const eventRouter = {
                 }),
               )
               .describe("Event types"),
+            eventTagIds: z.array(z.number()).describe("Event tag IDs"),
             location: z.string().nullable().describe("Location"),
           }),
         ),
@@ -414,6 +415,12 @@ export const eventRouter = {
             ),
             '[]'
           )`,
+        eventTagIds: sql<number[]>`COALESCE(
+          ARRAY(SELECT ${schema.eventTagsXEvents.eventTagId}
+            FROM ${schema.eventTagsXEvents}
+            WHERE ${schema.eventTagsXEvents.eventId} = ${schema.events.id}),
+          ARRAY[]::integer[]
+        )`,
       };
 
       const totalCount = await getEventCount({ db: ctx.db, where });
@@ -580,6 +587,7 @@ export const eventRouter = {
                 }),
               )
               .describe("Event types"),
+            eventTagIds: z.array(z.number()).describe("Event tag IDs"),
           })
           .nullable()
           .describe("The event"),
@@ -643,6 +651,12 @@ export const eventRouter = {
               WHERE ${schema.eventTypes.id} IS NOT NULL
             ),
             '[]'
+          )`,
+          eventTagIds: sql<number[]>`COALESCE(
+            ARRAY(SELECT ${schema.eventTagsXEvents.eventTagId}
+              FROM ${schema.eventTagsXEvents}
+              WHERE ${schema.eventTagsXEvents.eventId} = ${schema.events.id}),
+            ARRAY[]::integer[]
           )`,
         })
         .from(schema.events)
@@ -756,7 +770,7 @@ export const eventRouter = {
         });
       }
 
-      const { eventTypeIds, meta, ...eventData } = input;
+      const { eventTypeIds, eventTagIds, meta, ...eventData } = input;
       const mapSeed =
         typeof meta?.mapSeed === "boolean" ? meta.mapSeed : undefined;
       const eventToUpdate: typeof schema.events.$inferInsert = {
@@ -800,6 +814,20 @@ export const eventRouter = {
         );
       }
 
+      if (eventTagIds !== undefined) {
+        await ctx.db
+          .delete(schema.eventTagsXEvents)
+          .where(eq(schema.eventTagsXEvents.eventId, result.id));
+        if (eventTagIds.length > 0) {
+          await ctx.db.insert(schema.eventTagsXEvents).values(
+            eventTagIds.map((eventTagId) => ({
+              eventId: result.id,
+              eventTagId,
+            })),
+          );
+        }
+      }
+
       // Handle event instance cascade operations for series (events with recurrence patterns).
       // null recurrencePattern defaults to weekly in createEventInstancesForSeries.
       if (result.dayOfWeek) {
@@ -830,7 +858,7 @@ export const eventRouter = {
           highlight: result.highlight,
           meta: result.meta,
           eventTypeIds: eventTypeIds,
-          // eventTagId: eventTagIds?.[0], // TODO: event tag support
+          eventTagIds,
         };
 
         if (!existingEvent) {
