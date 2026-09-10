@@ -24,7 +24,10 @@ import { isTruthy } from "@acme/shared/common/functions";
 import type { LowBandwidthF3Marker } from "@acme/validators";
 import { LowBandwidthF3Marker as LowBandwidthF3MarkerSchema } from "@acme/validators";
 
-import type { Context } from "../../shared";
+import {
+  logIfOrgTreeExceedsMaxDepth,
+  ORG_TREE_MAX_DEPTH,
+} from "../../org-tree";
 import { protectedProcedure } from "../../shared";
 
 /**
@@ -49,42 +52,67 @@ const withinCurrentEventDateWindow = () =>
  * region, area, sector, or nation leaves every descendant org, event, and
  * instance active. Public read paths therefore have to walk the chain
  * themselves or they keep serving pins, pin statuses, and workout details for a
- * retired part of the tree. Four ancestor levels cover the deepest chain
- * (AO -> region -> area -> sector -> nation), the same depth
- * `checkHasRoleOnOrg` walks.
+ * retired part of the tree.
+ *
+ * The recursive CTE walks *down* from every inactive org rather than *up*
+ * from `orgIdColumn`, and `orgIdColumn` is only compared against the result
+ * afterward, never referenced inside the CTE itself. That keeps the CTE
+ * decorrelated from the outer per-row `notExists(...)`: PostgreSQL cannot
+ * pull a `WITH RECURSIVE` out of a correlated subquery to flatten it into a
+ * join, so an ancestor-walking form anchored at `orgIdColumn` forces a
+ * `SubPlan` that re-runs the full recursive union once per outer row —
+ * verified ~14x slower than this form at 5k rows in local benchmarking.
+ * Decorrelated, the planner computes the "tainted" (has-an-inactive-ancestor)
+ * org set once and can flatten the outer `NOT EXISTS` into a join.
+ *
+ * It has to stay an inline SQL subquery — not a `db.execute` call like
+ * `checkHasRoleOnOrg` and `getDescendantOrgIds` — because it's embedded via
+ * `notExists(...)` inside bulk selects that return many rows per call; a
+ * per-row round trip would be an N+1. `ORG_TREE_MAX_DEPTH` still bounds the
+ * recursion so a cycle or corrupt data can't run away, and rows beyond the
+ * cap are excluded from the tainted set below so this stays consistent with
+ * `checkHasRoleOnOrg`/`getDescendantOrgIds`, which discard the same boundary
+ * row. Because there's no materialized per-call result to inspect, callers
+ * pair this with `logIfOrgTreeExceedsMaxDepth` (packages/api/src/org-tree.ts)
+ * — a single unanchored scan of the whole `orgs` table — for
+ * `api.org_tree.depth_limit_reached` telemetry instead of a per-row check.
  *
  * Callers keep their own predicate on the org the column points at; a null
  * `orgIdColumn`, or one with no matching org row, passes here.
  */
-const ancestorOrgsAreActive = (db: Context["db"], orgIdColumn: AnyColumn) => {
-  const level1 = aliasedTable(schema.orgs, "ancestor_level_1");
-  const level2 = aliasedTable(schema.orgs, "ancestor_level_2");
-  const level3 = aliasedTable(schema.orgs, "ancestor_level_3");
-  const level4 = aliasedTable(schema.orgs, "ancestor_level_4");
-  const level5 = aliasedTable(schema.orgs, "ancestor_level_5");
+const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
+  const orgId = sql.identifier(schema.orgs.id.name);
+  const parentId = sql.identifier(schema.orgs.parentId.name);
 
-  return notExists(
-    db
-      .select({ inactive: sql`1` })
-      .from(level1)
-      .leftJoin(level2, eq(level2.id, level1.parentId))
-      .leftJoin(level3, eq(level3.id, level2.parentId))
-      .leftJoin(level4, eq(level4.id, level3.parentId))
-      .leftJoin(level5, eq(level5.id, level4.parentId))
-      .where(
-        and(
-          eq(level1.id, orgIdColumn),
-          // A level that does not exist joins to NULL, and `eq(..., false)` is
-          // NULL (not true) for it, so unresolved levels can't match.
-          or(
-            eq(level2.isActive, false),
-            eq(level3.isActive, false),
-            eq(level4.isActive, false),
-            eq(level5.isActive, false),
-          ),
-        ),
-      ),
-  );
+  // notExists() splices its argument in as-is (`sql\`not exists ${subquery}\``)
+  // without adding parens the way a query-builder subquery would, so the
+  // WITH clause needs its own explicit parens to parse as a subquery.
+  return notExists(sql`(
+    SELECT 1 FROM (
+      WITH RECURSIVE tainted(id, depth, path) AS (
+        SELECT
+          ${schema.orgs.id},
+          0,
+          ARRAY[${schema.orgs.id}]
+        FROM ${schema.orgs}
+        WHERE ${schema.orgs.isActive} = false
+
+        UNION ALL
+
+        SELECT
+          child.${orgId},
+          tainted.depth + 1,
+          tainted.path || child.${orgId}
+        FROM ${schema.orgs} AS child
+        INNER JOIN tainted ON child.${parentId} = tainted.id
+        WHERE tainted.depth <= ${ORG_TREE_MAX_DEPTH}
+          AND NOT child.${orgId} = ANY(tainted.path)
+      )
+      SELECT id FROM tainted
+      WHERE depth > 0 AND depth <= ${ORG_TREE_MAX_DEPTH}
+    ) t
+    WHERE t.id = ${orgIdColumn}
+  )`);
 };
 
 export const mapLocationRouter = os.router({
@@ -103,6 +131,8 @@ export const mapLocationRouter = os.router({
         .describe("Low-bandwidth array of events and locations"),
     )
     .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const locationsAndEvents = await ctx.db
@@ -179,7 +209,7 @@ export const mapLocationRouter = os.router({
             // the public map must hide them here: the event's own org, plus
             // every level above it (region, area, sector, nation).
             or(isNull(aoOrg.id), eq(aoOrg.isActive, true)),
-            ancestorOrgsAreActive(ctx.db, schema.events.orgId),
+            ancestorOrgsAreActive(schema.events.orgId),
           ),
         )
         .groupBy(
@@ -335,6 +365,8 @@ export const mapLocationRouter = os.router({
         .describe("Upcoming event instances for map pin status flagging"),
     )
     .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const seriesEvent = aliasedTable(schema.events, "series_event");
 
@@ -406,7 +438,7 @@ export const mapLocationRouter = os.router({
             // Descendants stay active when a region, area, sector, or nation is
             // retired; exclude their instances from public markers and pin
             // statuses.
-            ancestorOrgsAreActive(ctx.db, schema.eventInstances.orgId),
+            ancestorOrgsAreActive(schema.eventInstances.orgId),
             or(
               isNull(schema.eventInstances.seriesId),
               and(
@@ -584,6 +616,8 @@ export const mapLocationRouter = os.router({
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 
@@ -699,7 +733,7 @@ export const mapLocationRouter = os.router({
               isNull(schema.events.id),
               and(
                 or(isNull(parentOrg.id), eq(parentOrg.isActive, true)),
-                ancestorOrgsAreActive(ctx.db, schema.events.orgId),
+                ancestorOrgsAreActive(schema.events.orgId),
               ),
             ),
           ),

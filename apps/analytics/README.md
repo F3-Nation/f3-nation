@@ -74,7 +74,7 @@ reads the approved nonprod database and publishes to the approved nonprod GCS
 prefix. Run it only with explicit approval from
 the responsible security/platform and analytics operators. It requires real
 read-only PostgreSQL credentials, approved database connectivity, a real signed
-DuckDB 1.4.3 `postgres_scanner` extension at the configured version/platform
+DuckDB 1.5.5 `postgres_scanner` extension at the configured version/platform
 path, and Google Application Default Credentials (ADC) with the narrowly
 scoped nonprod permissions. An empty extension placeholder is not valid. Never
 use production targets or put credentials in logs or source control.
@@ -93,12 +93,12 @@ gcloud auth application-default login
 
 ### Obtain and verify the local DuckDB extension
 
-Use DuckDB **1.4.3** and the architecture of the runtime that will execute the
+Use DuckDB **1.5.5** and the architecture of the runtime that will execute the
 local CLI. Use an isolated extension directory; never copy an extension across
 operating systems or architectures. The Docker image's extension artifact is
 Linux amd64 only and is not suitable for a Mac/ARM local runtime.
 
-The commands below are Bash-specific; run them in Bash, not Fish. DuckDB 1.4.3
+The commands below are Bash-specific; run them in Bash, not Fish. DuckDB 1.5.5
 does not reliably expose usable `extension_path` metadata in
 `duckdb_extensions()`, so discovery deliberately searches the isolated
 directory instead.
@@ -106,15 +106,15 @@ directory instead.
 The following is a one-time preparation step, not an ETL runtime operation:
 
 ```bash
-EXT_DIR="$(cd "$HOME" && pwd)/.cache/f3-analytics/duckdb-1.4.3-$(uname -s)-$(uname -m)"
+EXT_DIR="$(cd "$HOME" && pwd)/.cache/f3-analytics/duckdb-1.5.5-$(uname -s)-$(uname -m)"
 mkdir -p "$EXT_DIR"
 export EXT_DIR
 uv --directory apps/analytics run python -c '
 import os
 import duckdb
 
-if duckdb.__version__ != "1.4.3":
-    raise SystemExit(f"expected DuckDB 1.4.3, got {duckdb.__version__}")
+if duckdb.__version__ != "1.5.5":
+    raise SystemExit(f"expected DuckDB 1.5.5, got {duckdb.__version__}")
 connection = duckdb.connect()
 extension_dir = os.environ["EXT_DIR"].replace(chr(39), chr(39) * 2)
 connection.execute(f"SET extension_directory = {chr(39)}{extension_dir}{chr(39)}")
@@ -134,8 +134,8 @@ import os
 from pathlib import Path
 import duckdb
 
-if duckdb.__version__ != "1.4.3":
-    raise SystemExit(f"expected DuckDB 1.4.3, got {duckdb.__version__}")
+if duckdb.__version__ != "1.5.5":
+    raise SystemExit(f"expected DuckDB 1.5.5, got {duckdb.__version__}")
 extension_dir = Path(os.environ["EXT_DIR"]).resolve()
 candidates = sorted(extension_dir.rglob("postgres*.duckdb_extension"))
 if len(candidates) != 1:
@@ -148,8 +148,8 @@ uv --directory apps/analytics run python -c '
 import os
 import duckdb
 
-if duckdb.__version__ != "1.4.3":
-    raise SystemExit(f"expected DuckDB 1.4.3, got {duckdb.__version__}")
+if duckdb.__version__ != "1.5.5":
+    raise SystemExit(f"expected DuckDB 1.5.5, got {duckdb.__version__}")
 connection = duckdb.connect()
 extension_path = os.environ["DUCKDB_POSTGRES_EXTENSION_PATH"]
 connection.load_extension(extension_path)
@@ -264,6 +264,8 @@ docker run --rm f3-analytics
 
 The image resolves the exact DuckDB version from `uv.lock` and uses DuckDB's
 signed extension repository to download/install the matching platform-specific
-`postgres_scanner` extension only during the image build. That DuckDB 1.4.3 /
-Linux x86_64 pairing is the image-build-tested target; cross-platform deploy
-builds must select the corresponding build platform.
+`postgres_scanner` extension only during the image build. That DuckDB 1.5.5 /
+Linux x86_64 pairing is the image-build-tested target. The prebundled
+`linux_amd64` extension SHA-256 is
+`b1ced4cfc6311313e117c2afb3eac76508718778dde0716421503c7dbfb5605c`;
+cross-platform deploy builds must select the corresponding build platform.
