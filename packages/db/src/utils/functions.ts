@@ -36,9 +36,14 @@ export const createDbClient = () => {
     idle_timeout: 20,
     connect_timeout: 10,
     max_lifetime: 60 * 30,
-    // `prepare` (extended-protocol prepared statements) is left on its
-    // postgres-js default deliberately: whether that's safe depends on
-    // PgBouncer's pool mode, which isn't documented yet (#176).
+    // PgBouncer runs in `pool_mode = transaction` (verified on the
+    // f3data-pgbouncer-vm config, 2026-09 — see #176), which does not
+    // support named prepared statements. Drizzle queries happen to survive
+    // today because its postgres-js session issues everything through
+    // `client.unsafe()`, which skips preparation — but direct tagged-template
+    // usage (e.g. the seed/reset scripts) prepares by default and would fail
+    // intermittently through the pooler. Disable explicitly.
+    prepare: false,
   });
   return { db: drizzle(client, { schema }), close: () => client.end() };
 };
