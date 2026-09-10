@@ -393,7 +393,7 @@ def build_series_list_form(
             filter_org = safe_convert(safe_get(filter_values, actions.CALENDAR_MANAGE_SERIES_AO), int)
 
     title_text = "Delete or Edit a Series"
-    confirm_text = "Are you sure you want to edit / delete this series? This cannot be undone. Also, editing or deleting a series will also edit or delete all future events associated with the series."  # noqa
+    # confirm_text = "Are you sure you want to edit / delete this series? This cannot be undone. Also, editing or deleting a series will also edit or delete all future events associated with the series."  # noqa
 
     series_service = _build_series_service()
     ao_service = _build_ao_service()
@@ -430,12 +430,13 @@ def build_series_list_form(
                 element=orm.StaticSelectElement(
                     placeholder="Edit or Delete",
                     options=orm.as_selector_options(names=["Edit", "Delete"]),
-                    confirm=orm.ConfirmObject(
-                        title="Are you sure?",
-                        text=confirm_text,
-                        confirm="Yes, I'm sure",
-                        deny="Whups, never mind",
-                    ),
+                    # Temporarily disabled: Slack confirmation dialogs dismiss the parent modal (#984).
+                    # confirm=orm.ConfirmObject(
+                    #     title="Are you sure?",
+                    #     text=confirm_text,
+                    #     confirm="Yes, I'm sure",
+                    #     deny="Whups, never mind",
+                    # ),
                 ),
             )
         )

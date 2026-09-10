@@ -115,12 +115,13 @@ class PositionViews:
                         element=orm.StaticSelectElement(
                             placeholder="Edit or Delete",
                             options=orm.as_selector_options(names=["Edit", "Delete"]),
-                            confirm=orm.ConfirmObject(
-                                title="Are you sure?",
-                                text="Are you sure you want to edit / delete this Position? This cannot be undone.",
-                                confirm="Yes, I am sure",
-                                deny="Whups, never mind",
-                            ),
+                            # Temporarily disabled: Slack confirmation dialogs dismiss the parent modal (#984).
+                            # confirm=orm.ConfirmObject(
+                            #     title="Are you sure?",
+                            #     text="Are you sure you want to edit / delete this Position? This cannot be undone.",
+                            #     confirm="Yes, I am sure",
+                            #     deny="Whups, never mind",
+                            # ),
                         ),
                     )
                 )
