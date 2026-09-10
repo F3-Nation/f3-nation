@@ -46,6 +46,11 @@ on:
         description: "Tag prefix to strip for the image version (e.g. slackbot@)"
         required: true
         type: string
+      ref:
+        description: "Release tag to deploy. Empty means the ref that triggered the run (tag push)."
+        required: false
+        type: string
+        default: ""
       dockerfile:
         description: "Path to the Dockerfile"
         required: true
@@ -109,14 +114,36 @@ jobs:
       contents: read
       checks: read
     steps:
+      - name: Validate deploy ref is an existing release tag
+        if: inputs.ref != ''
+        env:
+          REF: ${{ inputs.ref }}
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${REF}" != "${TAG_PREFIX}"* ]]; then
+            echo "::error::ref '${REF}' does not start with expected tag prefix '${TAG_PREFIX}'"
+            exit 1
+          fi
+          if ! gh api "repos/${{ github.repository }}/git/refs/tags/${REF}" >/dev/null 2>&1; then
+            echo "::error::ref '${REF}' is not an existing release tag"
+            exit 1
+          fi
+
       # lint-title is deliberately excluded: it only runs on `pull_request`
       # (pr-title.yml has no `push` trigger), so it never has a check-run
       # against a commit reached via tag push -- waiting on it here would
       # hang until timeout, not deploy.
+      #
+      # NOTE: wait-on-check-action only fails when the filtered check list is
+      # completely empty (fail-on-no-checks). Redeploying a tag older than the
+      # newest required check (e.g. db-schema-sync, added 2026-08-18) passes
+      # ci-gate using only the checks that existed at that tag's commit --
+      # newer required checks are silently skipped, not failed.
       - name: Wait for CI to pass
         uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994 # v1.9.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.ref || github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           check-regexp: "^(build|lint|typecheck|format-check|test-coverage|test-coverage-hono|security-audit|db-schema-sync)$"
           wait-interval: 15
@@ -136,6 +163,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Authenticate to GCP (staging project for AR)
@@ -154,12 +182,13 @@ jobs:
         id: meta
         env:
           TAG_PREFIX: ${{ inputs.tag_prefix }}
+          DEPLOY_REF: ${{ inputs.ref }}
           REGION: ${{ inputs.region }}
           STAGING_PROJECT: ${{ inputs.staging_project }}
           AR_REPO: ${{ inputs.ar_repo }}
           IMAGE_NAME: ${{ inputs.image_name }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${DEPLOY_REF:-$GITHUB_REF_NAME}"
           VERSION="${TAG#"${TAG_PREFIX}"}"
           IMAGE="${REGION}-docker.pkg.dev/${STAGING_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
@@ -169,6 +198,7 @@ jobs:
         env:
           DOCKERFILE: ${{ inputs.dockerfile }}
           BUILD_CONTEXT: ${{ inputs.build_context }}
+          IMAGE: ${{ steps.meta.outputs.image }}
         run: |
           TURBO_VERSION=$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')
           # Cloud Run only runs linux/amd64. The Dockerfile FROM lines no longer
@@ -177,9 +207,9 @@ jobs:
             --platform=linux/amd64 \
             --file "${DOCKERFILE}" \
             --build-arg TURBO_VERSION="${TURBO_VERSION}" \
-            --tag "${{ steps.meta.outputs.image }}" \
+            --tag "${IMAGE}" \
             "${BUILD_CONTEXT}"
-          docker push "${{ steps.meta.outputs.image }}"
+          docker push "${IMAGE}"
 
       - name: Resolve immutable image digest
         id: digest
@@ -270,6 +300,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - uses: ./.github/actions/staging-smoke-test-issue
@@ -305,8 +336,10 @@ jobs:
           AR_REPO: ${{ inputs.ar_repo }}
           IMAGE_NAME: ${{ inputs.image_name }}
           VERSION: ${{ needs.build.outputs.version }}
+          IMAGE: ${{ needs.build.outputs.image }}
+          DIGEST: ${{ needs.build.outputs.digest }}
         run: |
-          STAGING_IMAGE="${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}"
+          STAGING_IMAGE="${IMAGE}@${DIGEST}"
           PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
           if [[ "${PROD_PROJECT}" == "${{ inputs.staging_project }}" ]]; then
             echo "prod_image=${STAGING_IMAGE}" >> "$GITHUB_ENV"
