@@ -194,12 +194,12 @@ describe("withQueryTimeout (timer/canceller bookkeeping, faked client)", () => {
     try {
       withQueryTimeout(client, 1_000);
       const wrapped = client.unsafe("select pg_sleep(10)");
-      const settled = (
-        wrapped.then(
+      const settled = wrapped
+        .then(
           () => undefined,
           (e: unknown) => e,
         )
-      ).then((e) => e);
+        .then((e) => e);
       vi.advanceTimersByTime(1_000);
       await expect(settled).resolves.toBeInstanceOf(Error);
       // cancel()'s fire-once semantics are preserved by nulling canceller.
