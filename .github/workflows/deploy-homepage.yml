@@ -27,10 +27,31 @@ jobs:
   ci-check:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate deploy tag is an existing release tag
+        if: inputs.tag != ''
+        env:
+          REF: ${{ inputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${REF}" != "homepage@"* ]]; then
+            echo "::error::tag '${REF}' does not start with expected prefix 'homepage@'"
+            exit 1
+          fi
+          if ! gh api "repos/${{ github.repository }}/git/refs/tags/${REF}" >/dev/null 2>&1; then
+            echo "::error::tag '${REF}' is not an existing release tag"
+            exit 1
+          fi
+
       # lint-title is deliberately excluded: it only runs on `pull_request`
       # (pr-title.yml has no `push` trigger), so it never has a check-run
       # against a commit reached via tag push -- waiting on it here would
       # hang until timeout, not deploy.
+      #
+      # NOTE: wait-on-check-action only fails when the filtered check list is
+      # completely empty (fail-on-no-checks). Redeploying a tag older than the
+      # newest required check (e.g. db-schema-sync, added 2026-08-18) passes
+      # ci-check using only the checks that existed at that tag's commit --
+      # newer required checks are silently skipped, not failed.
       - name: Wait for CI to pass
         uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994 # v1.9.1
         with:
