@@ -189,7 +189,11 @@ jobs:
           TAG: ${{ steps.meta.outputs.version }}
         run: |
           IMAGE_PATH="${IMAGE%:*}"
-          DIGESTS="$(gcloud artifacts docker images list "${IMAGE_PATH}" --project "${PROJECT_ID}" --include-tags --filter="tags=${TAG}" --format='value(digest)')"
+          DIGESTS="$(gcloud artifacts docker images list "${IMAGE_PATH}" \
+            --project "${PROJECT_ID}" \
+            --include-tags \
+            --format=json \
+            | jq -r --arg tag "${TAG}" '[.[] | select(.tags[]? == $tag) | .version] | unique[]')"
 
           if [[ -z "${DIGESTS}" ]]; then
             echo "No image found for exact tag ${TAG}" >&2
@@ -311,7 +315,11 @@ jobs:
             docker pull "${STAGING_IMAGE}"
             docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
             docker push "${PROD_IMAGE}"
-            PROD_DIGEST="$(gcloud artifacts docker images describe "${PROD_IMAGE}" --project "${PROD_PROJECT}" --format='value(image_summary.digest)')"
+            PROD_DIGEST="$(gcloud artifacts docker images list "${PROD_IMAGE%:*}" \
+              --project "${PROD_PROJECT}" \
+              --include-tags \
+              --format=json \
+              | jq -r --arg tag "${VERSION}" '[.[] | select(.tags[]? == $tag) | .version] | unique[]')"
             test -n "${PROD_DIGEST}"
             echo "prod_image=${PROD_IMAGE}@${PROD_DIGEST}" >> "$GITHUB_ENV"
           fi
