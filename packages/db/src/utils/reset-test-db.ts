@@ -6,6 +6,10 @@ import { testSeed } from "../test-seed";
 import { createDatabaseIfNotExists, getDb, getDbUrl } from "./functions";
 
 export { createDbClient } from "./functions";
+// Exported for integration tests (packages/api), which run against a real
+// Postgres — the wrapper's behavior depends on postgres-js internals (lazy
+// dispatch, out-of-band CancelRequest) that mocks cannot meaningfully pin.
+export { withQueryTimeout } from "./query-timeout";
 
 const shouldSkipReset = () => {
   if (
