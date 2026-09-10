@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.4.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.1...slackbot@2.4.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **ci:** resolve Cloud Run job image digest using exact tag match via jq ([#982](https://github.com/F3-Nation/f3-nation/issues/982)) ([c884180](https://github.com/F3-Nation/f3-nation/commit/c884180e6d9f52dfe822a1a74e5e569d25fe44ce))
+
 ## [2.4.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.0...slackbot@2.4.1) (2026-09-10)
 
 
