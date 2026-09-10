@@ -186,10 +186,23 @@ jobs:
         env:
           IMAGE: ${{ steps.meta.outputs.image }}
           PROJECT_ID: ${{ inputs.staging_project }}
+          TAG: ${{ steps.meta.outputs.version }}
         run: |
-          DIGEST="$(gcloud artifacts docker images describe "${IMAGE}" --project "${PROJECT_ID}" --format='value(image_summary.digest)')"
-          test -n "${DIGEST}"
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          IMAGE_PATH="${IMAGE%:*}"
+          DIGESTS="$(gcloud artifacts docker images list "${IMAGE_PATH}" --project "${PROJECT_ID}" --include-tags --filter="tags=${TAG}" --format='value(digest)')"
+
+          if [[ -z "${DIGESTS}" ]]; then
+            echo "No image found for exact tag ${TAG}" >&2
+            exit 1
+          fi
+
+          mapfile -t DIGESTS <<< "${DIGESTS}"
+          if [[ "${#DIGESTS[@]}" -ne 1 ]] || [[ ! "${DIGESTS[0]}" =~ ^sha256: ]]; then
+            echo "Expected one valid digest for tag ${TAG}, got ${#DIGESTS[@]}" >&2
+            exit 1
+          fi
+
+          echo "digest=${DIGESTS[0]}" >> "$GITHUB_OUTPUT"
 
   deploy-staging:
     needs: build
