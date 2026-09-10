@@ -7,8 +7,13 @@ import { SelectedItemSkeleton } from "./selected-item-skeleton";
 import { useSelectedItem } from "./use-selected-item";
 
 export const MobileSelectedItem = () => {
-  const { selectedLocation, selectedEvent, locationId, eventId } =
-    useSelectedItem();
+  const {
+    selectedLocation,
+    selectedEvent,
+    nextException,
+    locationId,
+    eventId,
+  } = useSelectedItem();
 
   // Timer that will alternate true and false for a state variable every second
 
@@ -24,6 +29,7 @@ export const MobileSelectedItem = () => {
           device="mobile"
           selectedLocation={selectedLocation}
           selectedEvent={selectedEvent}
+          nextException={nextException}
           hideCloseButton
         />
       )}
