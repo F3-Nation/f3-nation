@@ -10,6 +10,7 @@ import AdminEventInstancesModal from "./admin-event-instances-modal";
 import AdminEventTypesModal from "./admin-event-types-modal";
 import AdminLocationsModal from "./admin-locations-modal";
 import AdminManageAccessModal from "./admin-manage-access-modal";
+import AdminOauthClientsModal from "./admin-oauth-clients-modal";
 import AdminRequestsModal from "./admin-requests-modal";
 import AdminUsersModal from "./admin-users-modal";
 import AdminWorkoutsModal from "./admin-workouts-modal";
@@ -64,6 +65,12 @@ export const ModalSwitcher = ({
       );
     case ModalType.ADMIN_API_KEYS:
       return <AdminApiKeysModal />;
+    case ModalType.ADMIN_OAUTH_CLIENTS:
+      return (
+        <AdminOauthClientsModal
+          data={data as DataType[ModalType.ADMIN_OAUTH_CLIENTS]}
+        />
+      );
     case ModalType.ADMIN_LOCATIONS:
       return (
         <AdminLocationsModal

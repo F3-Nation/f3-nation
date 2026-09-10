@@ -36,7 +36,7 @@ the approved nonprod PostgreSQL database and publishes to
 `gs://f3-analytics-nonprod/parquets/pv_regions`.
 It requires explicit human approval,
 real read-only database credentials, access to
-`/cloudsql/f3data:us-central1:f3data-nonprod`, a real signed DuckDB 1.4.3
+`/cloudsql/f3data:us-central1:f3data-nonprod`, a real signed DuckDB 1.5.5
 `postgres_scanner` extension in the configured absolute version/platform path,
 and Google ADC with the narrowly scoped nonprod IAM grants. Do not use
 production targets, database write credentials, unsigned or placeholder
