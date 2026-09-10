@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.2.4](https://github.com/F3-Nation/f3-nation/compare/me@2.2.3...me@2.2.4) (2026-09-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/shared bumped to 0.3.0
+    * @acme/ui bumped to 0.1.5
+
 ## [2.2.3](https://github.com/F3-Nation/f3-nation/compare/me@2.2.2...me@2.2.3) (2026-09-08)
 
 
