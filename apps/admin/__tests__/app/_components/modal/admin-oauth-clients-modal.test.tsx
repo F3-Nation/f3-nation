@@ -408,6 +408,52 @@ describe("AdminOauthClientsModal", () => {
     ).toBe("false");
   });
 
+  it("does not clobber an in-progress edit when the client list background-refetches with changed data", () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Paxvault",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: ["openid"],
+            isPublic: false,
+          },
+        ],
+      },
+    });
+
+    const { rerender } = render(
+      <AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Unsaved Edit" },
+    });
+
+    // A background refetch that legitimately changed this client server-side
+    // (e.g. another admin's concurrent edit) gives `existing` a new object
+    // reference. The form must keep the unsaved local edit rather than
+    // silently resetting to the freshly-fetched value.
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Renamed By Someone Else",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: ["openid"],
+            isPublic: false,
+          },
+        ],
+      },
+    });
+    rerender(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    expect(screen.getByDisplayValue("Unsaved Edit")).toBeTruthy();
+    expect(screen.queryByDisplayValue("Renamed By Someone Else")).toBeNull();
+  });
+
   it("shows a failure toast and leaves the modal open when the update mutation rejects", async () => {
     useQueryMock.mockReturnValue({
       data: {

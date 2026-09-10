@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
@@ -87,8 +87,17 @@ export default function AdminOauthClientsModal({
     },
   });
 
+  // Populate the form once, the first time the client's data becomes
+  // available. A plain `[existing, form]` dependency re-runs this on every
+  // reference change of `existing` — including a background refetch that
+  // reflects a *legitimate* server-side change (e.g. another admin editing
+  // the same client concurrently) — which would silently overwrite whatever
+  // this admin is mid-typing. Once the form has been seeded, later refetches
+  // should never blow away unsaved local edits.
+  const hasInitializedFormRef = useRef(false);
   useEffect(() => {
-    if (existing) {
+    if (existing && !hasInitializedFormRef.current) {
+      hasInitializedFormRef.current = true;
       form.reset({
         name: existing.name ?? "",
         redirectUris: existing.redirectUris.join("\n"),
