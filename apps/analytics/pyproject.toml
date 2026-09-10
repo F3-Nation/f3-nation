@@ -1,17 +1,17 @@
 [project]
 name = "f3-nation-analytics"
-version = "0.1.0"
+version = "0.3.0"
 description = "Foundation for the F3 Nation analytics Parquet ETL"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "duckdb==1.4.3",
+    "duckdb==1.5.5",
     "google-cloud-storage>=2.18.0,<3.0.0",
     "pytz>=2024.1,<2027.0",
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.0.3,<10.0.0", "ruff>=0.14.0,<1.0.0", "mypy>=1.14.0,<2.0.0"]
+dev = ["pytest>=9.0.3,<10.0.0", "ruff>=0.14.0,<1.0.0", "mypy>=2.3.1,<2.4.0"]
 
 [project.scripts]
 analytics-etl = "analytics.cli:main"
@@ -33,7 +33,7 @@ ignore = ["C901"]
 testpaths = ["tests"]
 
 [build-system]
-requires = ["setuptools==75.8.0", "wheel==0.45.1"]
+requires = ["setuptools==83.0.0", "wheel==0.46.2"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

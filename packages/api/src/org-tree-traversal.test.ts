@@ -20,7 +20,7 @@ import { db, getOrCreateRoles, uniqueId } from "./__tests__/test-utils";
 import { checkHasRoleOnOrg } from "./check-has-role-on-org";
 import { getDescendantOrgIds } from "./get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "./get-editable-org-ids";
-import { ORG_TREE_MAX_DEPTH } from "./org-tree";
+import { logIfOrgTreeExceedsMaxDepth, ORG_TREE_MAX_DEPTH } from "./org-tree";
 import type { Context } from "./shared";
 
 describe("organization tree traversal", () => {
@@ -524,6 +524,25 @@ describe("organization tree traversal", () => {
       overlappingEditableResult.editableOrgs.map((org) => org.id),
     ).toContain(beyondGuard.id);
     expect(mockLogError).not.toHaveBeenCalled();
+  });
+
+  it("logIfOrgTreeExceedsMaxDepth detects a real chain beyond the cap against Postgres", async () => {
+    // Whole-table scan (packages/api/src/org-tree.ts), not anchored to one
+    // org like checkHasRoleOnOrg/getDescendantOrgIds above -- exercised here
+    // against real Postgres to prove the raw SQL is valid; the branch logic
+    // (log vs. no-log vs. swallowed query failure) is unit-tested with a
+    // mocked db in org-tree.test.ts, since asserting "no log" here would
+    // depend on no other test in this file having left a deep chain behind.
+    await createOrgChain(
+      Array.from({ length: ORG_TREE_MAX_DEPTH + 2 }, () => "region" as const),
+    );
+
+    await logIfOrgTreeExceedsMaxDepth(db);
+
+    expect(mockLogError).toHaveBeenCalledWith(
+      "api.org_tree.depth_limit_reached",
+      { maxDepth: ORG_TREE_MAX_DEPTH, source: "map_ancestor_active_check" },
+    );
   });
 
   it("does not warn when a hierarchy ends exactly at the depth boundary", async () => {

@@ -7,6 +7,7 @@ export enum ModalType {
   ADMIN_MANAGE_ACCESS = "ADMIN_MANAGE_ACCESS",
   ADMIN_REQUESTS = "ADMIN_REQUESTS",
   ADMIN_EVENTS = "ADMIN_EVENTS",
+  ADMIN_EVENT_INSTANCES = "ADMIN_EVENT_INSTANCES",
   ADMIN_LOCATIONS = "ADMIN_LOCATIONS",
   ADMIN_NATIONS = "ADMIN_NATIONS",
   ADMIN_SECTORS = "ADMIN_SECTORS",
@@ -15,6 +16,7 @@ export enum ModalType {
   ADMIN_AOS = "ADMIN_AOS",
   ADMIN_POSITIONS = "ADMIN_POSITIONS",
   ADMIN_API_KEYS = "ADMIN_API_KEYS",
+  ADMIN_OAUTH_CLIENTS = "ADMIN_OAUTH_CLIENTS",
   ADMIN_EVENT_TYPES = "ADMIN_EVENT_TYPES",
   ADMIN_DELETE_CONFIRMATION = "ADMIN_DELETE_CONFIRMATION",
   DELETE_CONFIRMATION = "DELETE_CONFIRMATION",
@@ -35,6 +37,7 @@ export enum DeleteType {
   NATION = "NATION",
   POSITION = "POSITION",
   ASSIGNMENT = "ASSIGNMENT",
+  EVENT_INSTANCE = "EVENT_INSTANCE",
 }
 
 export interface DataType {
@@ -48,6 +51,9 @@ export interface DataType {
     id: string;
   };
   [ModalType.ADMIN_EVENTS]: {
+    id?: number | null;
+  };
+  [ModalType.ADMIN_EVENT_INSTANCES]: {
     id?: number | null;
   };
   [ModalType.ADMIN_LOCATIONS]: {
@@ -73,6 +79,11 @@ export interface DataType {
     defaultOrgId?: number | null;
   };
   [ModalType.ADMIN_API_KEYS]: null;
+  // Edit-only — creation stays on apps/auth's CLI script (see #949), so
+  // there's no "open with no clientId" case like the other admin modals.
+  [ModalType.ADMIN_OAUTH_CLIENTS]: {
+    clientId: string;
+  };
   [ModalType.ADMIN_DELETE_CONFIRMATION]: {
     id: number;
     type: DeleteType;

@@ -20,6 +20,7 @@ export const MAP_KEY_PATHS = new Set([
   "/v1/map/location/locationIdToRegionNameLookup",
   "/v1/map/location/locationWorkout",
   "/v1/map/location/regionsWithLocation",
+  "/v1/map/location/upcomingInstances",
   "/v1/map/location/workoutCount",
   "/v1/map/submitFeedback",
   "/v1/event/eventIdToRegionNameLookup",
