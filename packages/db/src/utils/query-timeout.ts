@@ -3,10 +3,10 @@ import type postgres from "postgres";
 /**
  * postgres-js has no option for how long a query may wait behind a
  * saturated connection pool -- `connect_timeout` only bounds opening a new
- * physical connection (see #905). This wraps `client.unsafe()`, the single
- * chokepoint every drizzle-orm postgres-js query goes through (verified
- * against drizzle-orm's postgres-js/session.js: `execute`, `all`, `query`,
- * and `queryObjects` all call `client.unsafe()`), so a query that hasn't
+ * physical connection. This wraps `client.unsafe()`, the single chokepoint
+ * every drizzle-orm postgres-js query goes through (verified against
+ * drizzle-orm's postgres-js/session.js: `execute`, `all`, `query`, and
+ * `queryObjects` all call `client.unsafe()`), so a query that hasn't
  * settled within `timeoutMs` rejects the caller instead of hanging the
  * request indefinitely.
  *
@@ -15,34 +15,47 @@ import type postgres from "postgres";
  * `.then()`/`.handle()` runs, so starting earlier would burn timeout budget
  * before the query ever reaches the pool.
  *
- * `query.cancel()` (postgres-js's own API) is still called as a best effort
- * so the connection is eventually freed and the server stops working on the
- * query, but the caller's promise does NOT wait on it: verified against
- * postgres-js's connection.js, a query still pipelined behind an earlier one
- * on the *same* connection (`max_pipeline` defaults to 100) has its actual
- * CancelRequest deferred until that connection's `ReadyForQuery` -- i.e.
- * until the earlier query finishes -- so relying on `cancel()`'s own promise
- * to settle the caller would defeat the timeout entirely in that case. A
- * failed cancellation attempt (the out-of-band cancel connection itself
- * couldn't connect) is swallowed rather than left as an unhandled rejection;
- * not logged, since this low-level package has no existing `@acme/logger`
- * wiring and adding one departs from that package's one-per-service pattern
- * for a rare edge case.
+ * Transaction entrypoints are deliberately NOT wrapped: postgres-js's own
+ * `begin()` issues its BEGIN through this same `unsafe()` chokepoint
+ * (index.js: `sql.unsafe('begin ...', [], { onexecute })`), and `onexecute`
+ * reserves the connection the moment BEGIN is dispatched -- before any
+ * response arrives. `begin()` has no unwind path for a rejected BEGIN, so
+ * timing it out would strand the reservation with no COMMIT/ROLLBACK ever
+ * issued, pinning the connection until max_lifetime tears the socket down
+ * -- self-amplifying the very pool exhaustion this wrapper exists to bound.
+ * `begin()` is the only unsafe() caller that passes `onexecute`, which
+ * makes it a precise discriminator. Statements inside `db.transaction()`
+ * (issued via the transaction-scoped client `begin()` hands its callback)
+ * are likewise not wrapped here; both are bounded server-side instead by
+ * the role-level statement_timeout on the app database users, which
+ * applies at backend start regardless of PgBouncer's transaction pooling.
+ * (The server-side bound cannot be set from this client: postgres-js sends
+ * `connection` options as startup parameters, which PgBouncer rejects
+ * unless ignored -- its ignore_startup_parameters only lists
+ * extra_float_digits -- and per-session SET does not survive transaction
+ * pooling.)
  *
- * Known gap: only wraps the top-level client passed in. Queries run inside
- * `db.transaction()` execute against a separately-scoped client postgres-js
- * hands to the transaction callback, which isn't wrapped here. That gap is
- * covered server-side instead: a role-level statement_timeout on the app
- * database users (`ALTER ROLE <user> SET statement_timeout`), which applies
- * at backend start regardless of PgBouncer's transaction pooling. Note the
- * server-side setting canNOT be set from this client: postgres-js would send
- * `connection` options as startup parameters, which PgBouncer rejects unless
- * ignored (its ignore_startup_parameters only lists extra_float_digits), and
- * per-session SET does not survive transaction pooling.
+ * On timeout the query is cancelled best-effort, via the pool's canceller
+ * directly rather than `query.cancel()`: `cancel()` returns its
+ * `this.canceller = null` comma-expression assignment (query.js) -- i.e.
+ * `null` -- and discards the pool's actual cancellation promise, whose
+ * rejection (the out-of-band CancelRequest connection failing, most likely
+ * under the very saturation that caused the timeout) would then be an
+ * unhandled rejection. The caller's promise does NOT wait on cancellation:
+ * a query pipelined behind an earlier one on the same connection
+ * (`max_pipeline` defaults to 100) has its CancelRequest deferred until
+ * that connection's ReadyForQuery, so awaiting it would defeat the timeout.
  */
 export function withQueryTimeout(client: postgres.Sql, timeoutMs: number) {
   const originalUnsafe = client.unsafe.bind(client);
   client.unsafe = ((...args: Parameters<typeof originalUnsafe>) => {
+    // Transaction BEGIN -- see the docstring. `begin()` is the only caller
+    // that passes an `onexecute` option through unsafe().
+    const queryOptions = args[2] as { onexecute?: unknown } | undefined;
+    if (typeof queryOptions?.onexecute === "function") {
+      return originalUnsafe(...args);
+    }
+
     const query = originalUnsafe(...args);
     const originalThen = query.then.bind(query);
     let bounded: Promise<unknown> | undefined;
@@ -58,11 +71,26 @@ export function withQueryTimeout(client: postgres.Sql, timeoutMs: number) {
               `Query exceeded ${timeoutMs}ms pool-wait/execution timeout`,
             ),
           );
-          (query.cancel() as Promise<unknown> | undefined)?.catch(() => {
-            // Best-effort cancellation failed (e.g. the out-of-band cancel
-            // connection couldn't connect); the caller has already been
-            // rejected above, nothing else to settle.
-          });
+          // Best-effort cancellation via the pool's canceller (see the
+          // docstring for why not query.cancel()). Fire-once semantics of
+          // cancel() are preserved by nulling the canceller ourselves.
+          const cancellable = query as unknown as {
+            canceller?: ((query: unknown) => Promise<unknown>) | null;
+          };
+          const canceller = cancellable.canceller;
+          if (canceller) {
+            cancellable.canceller = null;
+            canceller(query).catch((error: unknown) => {
+              // A cancel failure means the timed-out query may keep holding
+              // its connection and server-side locks while the caller only
+              // saw a generic timeout -- a real operational signal. This
+              // package has no logger wiring; console.error beats silence.
+              console.error(
+                "[db] cancelling a timed-out query failed; it may still hold a connection",
+                error,
+              );
+            });
+          }
         }, timeoutMs);
         void originalThen(
           (value: unknown) => {
