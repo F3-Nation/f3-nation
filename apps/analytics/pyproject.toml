@@ -1,6 +1,6 @@
 [project]
 name = "f3-nation-analytics"
-version = "0.2.0"
+version = "0.3.0"
 description = "Foundation for the F3 Nation analytics Parquet ETL"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"

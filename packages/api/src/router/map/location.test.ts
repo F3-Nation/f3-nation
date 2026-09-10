@@ -17,6 +17,7 @@ import {
   mockAuthWithSession,
   uniqueId,
 } from "../../__tests__/test-utils";
+import { ORG_TREE_MAX_DEPTH } from "../../org-tree";
 
 describe("Map Location Router", () => {
   // Track created entities for cleanup
@@ -82,6 +83,29 @@ describe("Map Location Router", () => {
       createdOrgIds.push(area.id);
     }
     return area;
+  };
+
+  /**
+   * Generic org level with an explicit parent, for building ancestor chains
+   * deeper than the real hierarchy currently goes (standing in for a
+   * not-yet-added tier above region). The recursive ancestor-active check
+   * only walks `parentId`, so the `orgType` label here is arbitrary.
+   */
+  const createTestOrgLevel = async (parentId: number) => {
+    const [org] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `Test Org Level ${uniqueId()}`,
+        orgType: "sector",
+        parentId,
+        isActive: true,
+      })
+      .returning();
+
+    if (org) {
+      createdOrgIds.push(org.id);
+    }
+    return org;
   };
 
   // Helper to create test region
@@ -1429,6 +1453,263 @@ describe("Map Location Router", () => {
         result.find((returned) => returned.id === instance.id),
       ).toBeUndefined();
     });
+
+    it("should exclude a qualifying instance whose ancestor five levels up is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      // Depth-6 chain (ao + 5 ancestors), matching the shape the hierarchy
+      // takes once an additional tier is inserted above region. The old
+      // fixed-depth join only checked 4 ancestor levels above the AO, so a
+      // deactivation this far up would have been missed.
+      const nationOrg = await getOrCreateF3NationOrg();
+      const topLevel = await createTestOrgLevel(nationOrg.id);
+      if (!topLevel) throw new Error("Failed to create test org level");
+      const levelFour = await createTestOrgLevel(topLevel.id);
+      if (!levelFour) throw new Error("Failed to create test org level");
+      const levelThree = await createTestOrgLevel(levelFour.id);
+      if (!levelThree) throw new Error("Failed to create test org level");
+      const area = await createTestOrgLevel(levelThree.id);
+      if (!area) throw new Error("Failed to create test org level");
+      const region = await createTestRegion({ parentId: area.id });
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const startDate = await getDbTomorrow();
+
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance Five Levels Below Retired Org ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, topLevel.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeUndefined();
+    });
+
+    /**
+     * Chain of `count` synthetic org levels from `startParentId` down to a
+     * leaf: chain[0]'s parent is startParentId, chain[i + 1]'s parent is
+     * chain[i]. Lets the two boundary tests below place a deactivated
+     * ancestor at an exact depth relative to the ao that appends below
+     * chain[chain.length - 1].
+     */
+    const createOrgLevelChain = async (
+      startParentId: number,
+      count: number,
+    ) => {
+      const chain: NonNullable<
+        Awaited<ReturnType<typeof createTestOrgLevel>>
+      >[] = [];
+      let parentId = startParentId;
+      for (let i = 0; i < count; i++) {
+        const level = await createTestOrgLevel(parentId);
+        if (!level) throw new Error("Failed to create test org level");
+        chain.push(level);
+        parentId = level.id;
+      }
+      return chain;
+    };
+
+    it("excludes an instance whose inactive ancestor sits exactly at ORG_TREE_MAX_DEPTH", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      // ao (depth 0) -> region (depth 1) -> chain[18..0] (depth 2..20), so
+      // chain[0] is deactivated exactly at the cap the fix keeps checking --
+      // matching checkHasRoleOnOrg/getDescendantOrgIds, which keep the same
+      // boundary row.
+      const nationOrg = await getOrCreateF3NationOrg();
+      const chain = await createOrgLevelChain(
+        nationOrg.id,
+        ORG_TREE_MAX_DEPTH - 1,
+      );
+      const atCapOrg = chain[0];
+      const nearestToRegion = chain[chain.length - 1];
+      if (!atCapOrg || !nearestToRegion) {
+        throw new Error("Failed to build at-cap org chain");
+      }
+      const region = await createTestRegion({ parentId: nearestToRegion.id });
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const startDate = await getDbTomorrow();
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance At Depth Cap ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, atCapOrg.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeUndefined();
+    });
+
+    it("does not exclude an instance whose only inactive ancestor sits beyond ORG_TREE_MAX_DEPTH", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      // Same shape as the at-cap test, one level deeper: chain[0] sits at
+      // depth (ORG_TREE_MAX_DEPTH + 1), the boundary row the fix now
+      // excludes from the active check (logIfOrgTreeExceedsMaxDepth,
+      // org-tree.ts, is how this case gets production visibility instead).
+      const nationOrg = await getOrCreateF3NationOrg();
+      const chain = await createOrgLevelChain(nationOrg.id, ORG_TREE_MAX_DEPTH);
+      const beyondCapOrg = chain[0];
+      const nearestToRegion = chain[chain.length - 1];
+      if (!beyondCapOrg || !nearestToRegion) {
+        throw new Error("Failed to build beyond-cap org chain");
+      }
+      const region = await createTestRegion({ parentId: nearestToRegion.id });
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const startDate = await getDbTomorrow();
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance Beyond Depth Cap ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          startDate,
+          startTime: "0600",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, beyondCapOrg.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.upcomingInstances();
+
+      expect(
+        result.find((returned) => returned.id === instance.id),
+      ).toBeDefined();
+    });
+
+    it("terminates when the org hierarchy contains a cycle", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nationOrg = await getOrCreateF3NationOrg();
+      const levelA = await createTestOrgLevel(nationOrg.id);
+      if (!levelA) throw new Error("Failed to create test org level");
+      const levelB = await createTestOrgLevel(levelA.id);
+      if (!levelB) throw new Error("Failed to create test org level");
+
+      // Rewire levelA's parent to levelB, its own descendant, so the
+      // ancestor-active check's recursive walk hits a cycle: levelA ->
+      // levelB -> levelA -> ... . A broken cycle guard would hang or error
+      // here instead of resolving.
+      await db
+        .update(schema.orgs)
+        .set({ parentId: levelB.id })
+        .where(eq(schema.orgs.id, levelA.id));
+
+      try {
+        const region = await createTestRegion({ parentId: levelB.id });
+        if (!region) throw new Error("Failed to create test region");
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create test AO");
+        const location = await createTestLocation(region.id);
+        if (!location) throw new Error("Failed to create test location");
+
+        const startDate = await getDbTomorrow();
+        const [instance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Instance In Cyclic Hierarchy ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: location.id,
+            startDate,
+            startTime: "0600",
+            isActive: true,
+            highlight: false,
+            isPrivate: false,
+          })
+          .returning();
+
+        if (!instance) throw new Error("Failed to create event instance");
+        createdEventInstanceIds.push(instance.id);
+
+        await db
+          .update(schema.orgs)
+          .set({ isActive: false })
+          .where(eq(schema.orgs.id, levelA.id));
+
+        const client = createTestClient();
+        const result = await client.map.location.upcomingInstances();
+
+        expect(
+          result.find((returned) => returned.id === instance.id),
+        ).toBeUndefined();
+      } finally {
+        // orgs.parentId has no ON DELETE action, so afterAll's cleanup can't
+        // delete levelA and levelB while they still reference each other.
+        // Break the cycle here (even on assertion failure) so cleanup doesn't
+        // silently leak these rows into the next test run.
+        await db
+          .update(schema.orgs)
+          .set({ parentId: nationOrg.id })
+          .where(eq(schema.orgs.id, levelA.id));
+      }
+    });
   });
 
   /**
@@ -1674,6 +1955,58 @@ describe("Map Location Router", () => {
         .update(schema.orgs)
         .set({ isActive: false })
         .where(eq(schema.orgs.id, area.id));
+
+      const client = createTestClient();
+      const result = await client.map.location.eventsAndLocations();
+
+      expect(
+        result.find((loc: [number, ...unknown[]]) => loc[0] === location.id),
+      ).toBeUndefined();
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+      expect(workout.location).toBeNull();
+      expect(workout.message).toBe("This workout is no longer scheduled.");
+    });
+
+    it("should hide markers and workout details when an ancestor five levels up is inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const today = await getDbCurrentDate();
+
+      // Same depth-6 shape as the upcomingInstances case above.
+      const nationOrg = await getOrCreateF3NationOrg();
+      const topLevel = await createTestOrgLevel(nationOrg.id);
+      if (!topLevel) throw new Error("Failed to create test org level");
+      const levelFour = await createTestOrgLevel(topLevel.id);
+      if (!levelFour) throw new Error("Failed to create test org level");
+      const levelThree = await createTestOrgLevel(levelFour.id);
+      if (!levelThree) throw new Error("Failed to create test org level");
+      const area = await createTestOrgLevel(levelThree.id);
+      if (!area) throw new Error("Failed to create test org level");
+      const region = await createTestRegion({ parentId: area.id });
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      await createDatedEvent({
+        aoId: ao.id,
+        locationId: location.id,
+        label: "Event Five Levels Below Retired Org",
+        dayOfWeek: "monday",
+        startDate: shiftDays(today, -1),
+      });
+
+      // Only the topmost synthetic level is retired; everything below it,
+      // including the real nation org, stays active.
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, topLevel.id));
 
       const client = createTestClient();
       const result = await client.map.location.eventsAndLocations();

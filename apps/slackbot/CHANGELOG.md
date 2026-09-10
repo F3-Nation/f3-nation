@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.4.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.0...slackbot@2.4.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **slackbot, analytics:** hotfix for a couple of build steps ([#975](https://github.com/F3-Nation/f3-nation/issues/975)) ([46eebb7](https://github.com/F3-Nation/f3-nation/commit/46eebb711aad369dff38dad208da813fb3c6c9cd))
+
 ## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.2...slackbot@2.4.0) (2026-09-08)
 
 
