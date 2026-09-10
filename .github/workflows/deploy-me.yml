@@ -35,3 +35,8 @@ jobs:
       prod_url: https://me.f3nation.com
       smoke_test_app: me
       app_label: "app: me"
+      # Bound instances x db-pool: each instance holds max 5 Postgres
+      # connections (packages/db), and PgBouncer accepts max_client_conn=1000.
+      # Unset, Cloud Run defaults to 100 instances per service; 4 services
+      # x 100 x 5 = 2000 potential clients. 25 each bounds the fleet at 500.
+      flags: "--max-instances=25"
