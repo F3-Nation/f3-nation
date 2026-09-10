@@ -31,7 +31,14 @@ import type postgres from "postgres";
  *
  * Known gap: only wraps the top-level client passed in. Queries run inside
  * `db.transaction()` execute against a separately-scoped client postgres-js
- * hands to the transaction callback, which isn't wrapped here.
+ * hands to the transaction callback, which isn't wrapped here. That gap is
+ * covered server-side instead: a role-level statement_timeout on the app
+ * database users (`ALTER ROLE <user> SET statement_timeout`), which applies
+ * at backend start regardless of PgBouncer's transaction pooling. Note the
+ * server-side setting canNOT be set from this client: postgres-js would send
+ * `connection` options as startup parameters, which PgBouncer rejects unless
+ * ignored (its ignore_startup_parameters only lists extra_float_digits), and
+ * per-session SET does not survive transaction pooling.
  */
 export function withQueryTimeout(client: postgres.Sql, timeoutMs: number) {
   const originalUnsafe = client.unsafe.bind(client);

@@ -10,7 +10,29 @@ import { withQueryTimeout } from "./query-timeout";
 
 // postgres-js has no bound on how long a query waits behind a saturated
 // connection pool -- see withQueryTimeout's docstring and #905.
-const QUERY_TIMEOUT_MS = 5_000;
+//
+// 60s is a hang backstop, NOT a latency budget. The production database
+// already logs statements over 5s (log_min_duration_statement=5000), and
+// those logs show the api and map users routinely running 5-31s statements
+// (~180/week, mostly count() on list endpoints) -- a materially lower value
+// here would convert real, succeeding queries into failures. PgBouncer's
+// query_wait_timeout (default 120s) already bounds the wait for a *server*
+// connection; this covers the postgres-js client-side queue, which
+// PgBouncer cannot see.
+//
+// Overridable via QUERY_TIMEOUT_MS; 0 disables the wrapper entirely (set
+// on the migrate/seed/reset scripts in package.json, where long-running
+// statements are expected and a cancelled half-applied run is worse than a
+// slow one). Read via process.env (like packages/shared's constants), not
+// @acme/env: skipValidation short-circuits schema defaults in CI, which
+// would silently disable the timeout exactly where the integration tests
+// exercise it.
+const DEFAULT_QUERY_TIMEOUT_MS = 60_000;
+const parsedQueryTimeoutMs = Number(process.env.QUERY_TIMEOUT_MS);
+const QUERY_TIMEOUT_MS =
+  Number.isFinite(parsedQueryTimeoutMs) && parsedQueryTimeoutMs >= 0
+    ? parsedQueryTimeoutMs
+    : DEFAULT_QUERY_TIMEOUT_MS;
 
 const getDatabaseNameFromUri = (uri: string) => {
   const databaseNameRegex = /\/([^/?]+)(\?|$)/;
@@ -31,7 +53,7 @@ export const createDbClient = () => {
   const { databaseUrl, useSsl } = getDbUrl();
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
   const client = postgres(databaseUrl, sslOptions);
-  withQueryTimeout(client, QUERY_TIMEOUT_MS);
+  if (QUERY_TIMEOUT_MS > 0) withQueryTimeout(client, QUERY_TIMEOUT_MS);
   return { db: drizzle(client, { schema }), close: () => client.end() };
 };
 
