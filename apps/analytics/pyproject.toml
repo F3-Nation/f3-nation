@@ -5,7 +5,7 @@ description = "Foundation for the F3 Nation analytics Parquet ETL"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "duckdb==1.4.3",
+    "duckdb==1.5.5",
     "google-cloud-storage>=2.18.0,<3.0.0",
     "pytz>=2024.1,<2027.0",
 ]
