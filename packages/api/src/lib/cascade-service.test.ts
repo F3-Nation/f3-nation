@@ -490,6 +490,26 @@ describe("Cascade Service", () => {
       expect(joinInstanceIds.length).toBe(instances.length);
     });
 
+    it("should roll back instances when tag associations fail", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const series = await createTestSeries(ao.id, null, {
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+        eventTagIds: [999999999],
+      });
+
+      await expect(
+        createEventInstancesForSeries(db, series, 4, "2026-04-01"),
+      ).rejects.toThrow();
+
+      const instances = await db
+        .select()
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      expect(instances).toEqual([]);
+    });
+
     it("should not create instances past the endDate", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);

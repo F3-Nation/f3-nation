@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, inArray, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -1547,7 +1547,6 @@ describe("Event Router", () => {
 
         if (!seriesEvent) return;
         createdEventIds.push(seriesEvent.id);
-
         // Create some instances
         const [instance1] = await db
           .insert(schema.eventInstances)
@@ -1627,6 +1626,9 @@ describe("Event Router", () => {
         const eventType = await createTestEventType();
         if (!eventType) return;
 
+        const eventTag = await createTestEventTag();
+        if (!eventTag) return;
+
         // Use dynamic dates so the series is always active relative to today
         const seriesStartDate = nextFutureMonday(1);
         const seriesEndDate = nextFutureMonday(12);
@@ -1653,6 +1655,10 @@ describe("Event Router", () => {
 
         if (!seriesEvent) return;
         createdEventIds.push(seriesEvent.id);
+        await db.insert(schema.eventTagsXEvents).values({
+          eventId: seriesEvent.id,
+          eventTagId: eventTag.id,
+        });
 
         // Create initial instance on Monday
         const [instance1] = await db
@@ -1719,6 +1725,27 @@ describe("Event Router", () => {
           .where(eq(schema.eventInstances.seriesId, seriesEvent.id));
 
         expect(newInstances.length).toBeGreaterThan(0);
+        const recreatedInstanceIds = newInstances.map(
+          (instance) => instance.id,
+        );
+        const recreatedTags = await db
+          .select()
+          .from(schema.eventTagsXEventInstances)
+          .where(
+            inArray(
+              schema.eventTagsXEventInstances.eventInstanceId,
+              recreatedInstanceIds,
+            ),
+          );
+        expect(
+          recreatedTags.every((tag) => tag.eventTagId === eventTag.id),
+        ).toBe(true);
+        expect(recreatedTags).toHaveLength(recreatedInstanceIds.length);
+        for (const instanceId of recreatedInstanceIds) {
+          expect(
+            recreatedTags.filter((tag) => tag.eventInstanceId === instanceId),
+          ).toHaveLength(1);
+        }
       });
 
       it("should create weekly instances when recurrencePattern is null (defaults to weekly)", async () => {

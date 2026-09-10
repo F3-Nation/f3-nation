@@ -224,6 +224,22 @@ export async function createEventInstancesForSeries(
   yearsAhead = 4,
   fromDate?: string,
 ): Promise<number> {
+  return db.transaction((tx) =>
+    createEventInstancesForSeriesInTransaction(
+      tx as unknown as AppDb,
+      series,
+      yearsAhead,
+      fromDate,
+    ),
+  );
+}
+
+async function createEventInstancesForSeriesInTransaction(
+  db: AppDb,
+  series: SeriesData,
+  yearsAhead: number,
+  fromDate?: string,
+): Promise<number> {
   if (!series.dayOfWeek) {
     // Not a valid recurring series
     return 0;
@@ -358,6 +374,20 @@ export async function updateFutureInstances(
   series: SeriesData,
   startDate?: string,
 ): Promise<number> {
+  return db.transaction((tx) =>
+    updateFutureInstancesInTransaction(
+      tx as unknown as AppDb,
+      series,
+      startDate,
+    ),
+  );
+}
+
+async function updateFutureInstancesInTransaction(
+  db: AppDb,
+  series: SeriesData,
+  startDate?: string,
+): Promise<number> {
   const fromDate = startDate ?? getCurrentDate();
 
   // Get IDs of future instances
@@ -446,13 +476,29 @@ export async function recreateFutureInstances(
   startDate?: string,
   yearsAhead = 4,
 ): Promise<{ deleted: number; created: number }> {
+  return db.transaction((tx) =>
+    recreateFutureInstancesInTransaction(
+      tx as unknown as AppDb,
+      series,
+      startDate,
+      yearsAhead,
+    ),
+  );
+}
+
+async function recreateFutureInstancesInTransaction(
+  db: AppDb,
+  series: SeriesData,
+  startDate: string | undefined,
+  yearsAhead: number,
+): Promise<{ deleted: number; created: number }> {
   const fromDate = startDate ?? getCurrentDate();
 
   // Delete existing future instances
   const deleted = await deleteFutureInstancesForSeries(db, series.id, fromDate);
 
   // Create new instances
-  const created = await createEventInstancesForSeries(
+  const created = await createEventInstancesForSeriesInTransaction(
     db,
     series,
     yearsAhead,
