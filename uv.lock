@@ -574,7 +574,7 @@ dev = [
 
 [[package]]
 name = "f3-nation-analytics"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "apps/analytics" }
 dependencies = [
     { name = "duckdb" },
@@ -610,7 +610,7 @@ source = { virtual = "." }
 
 [[package]]
 name = "f3-nation-slack-bot"
-version = "2.4.0"
+version = "2.5.0"
 source = { editable = "apps/slackbot" }
 dependencies = [
     { name = "cloud-sql-python-connector" },
