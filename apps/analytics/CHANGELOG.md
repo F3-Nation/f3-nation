@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.2.0...analytics@0.3.0) (2026-09-10)
+
+
+### Features
+
+* **analytics:** upgrade duckdb to 1.5.5 ([#978](https://github.com/F3-Nation/f3-nation/issues/978)) ([a58f0cb](https://github.com/F3-Nation/f3-nation/commit/a58f0cb5215afc25bcf090053af0f28169e32736))
+
 ## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.1.0...analytics@0.2.0) (2026-09-08)
 
 
