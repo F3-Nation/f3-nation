@@ -187,7 +187,9 @@ jobs:
           IMAGE: ${{ steps.meta.outputs.image }}
           PROJECT_ID: ${{ inputs.staging_project }}
         run: |
-          DIGEST="$(gcloud artifacts docker images describe "${IMAGE}" --project "${PROJECT_ID}" --format='value(image_summary.digest)')"
+          IMAGE_PATH="${IMAGE%:*}"
+          TAG="${IMAGE##*:}"
+          DIGEST="$(gcloud artifacts docker images list "${IMAGE_PATH}" --project "${PROJECT_ID}" --include-tags --filter="tags:${TAG}" --format='value(digest)')"
           test -n "${DIGEST}"
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
