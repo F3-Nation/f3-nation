@@ -28,6 +28,11 @@ on:
         description: "Tag prefix to strip for the image version (e.g. me@)"
         required: true
         type: string
+      ref:
+        description: "Release tag to deploy. Empty means the ref that triggered the run (tag push)."
+        required: false
+        type: string
+        default: ""
       dockerfile:
         description: "Path to the app Dockerfile"
         required: true
@@ -119,7 +124,7 @@ jobs:
       - name: Wait for CI to pass
         uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994 # v1.9.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.ref || github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           check-regexp: "^(build|lint|typecheck|format-check|test-coverage|test-coverage-hono|security-audit|db-schema-sync)$"
           wait-interval: 15
@@ -139,6 +144,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Authenticate to GCP (staging project for AR)
@@ -157,13 +163,14 @@ jobs:
         id: meta
         env:
           TAG_PREFIX: ${{ inputs.tag_prefix }}
+          DEPLOY_REF: ${{ inputs.ref }}
           REGION: ${{ inputs.region }}
           STAGING_PROJECT: ${{ inputs.staging_project }}
           AR_REPO: ${{ inputs.ar_repo }}
           IMAGE_NAME: ${{ inputs.image_name }}
         run: |
-          TAG="${GITHUB_REF_NAME}"          # e.g. me@1.2.3
-          VERSION="${TAG#"${TAG_PREFIX}"}"  # e.g. 1.2.3
+          TAG="${DEPLOY_REF:-$GITHUB_REF_NAME}"  # e.g. me@1.2.3
+          VERSION="${TAG#"${TAG_PREFIX}"}"       # e.g. 1.2.3
           IMAGE="${REGION}-docker.pkg.dev/${STAGING_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -255,6 +262,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - uses: ./.github/actions/staging-smoke-test-issue
