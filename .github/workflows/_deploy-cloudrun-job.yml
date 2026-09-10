@@ -186,10 +186,27 @@ jobs:
         env:
           IMAGE: ${{ steps.meta.outputs.image }}
           PROJECT_ID: ${{ inputs.staging_project }}
+          TAG: ${{ steps.meta.outputs.version }}
         run: |
-          DIGEST="$(gcloud artifacts docker images describe "${IMAGE}" --project "${PROJECT_ID}" --format='value(image_summary.digest)')"
-          test -n "${DIGEST}"
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          IMAGE_PATH="${IMAGE%:*}"
+          DIGESTS="$(gcloud artifacts docker images list "${IMAGE_PATH}" \
+            --project "${PROJECT_ID}" \
+            --include-tags \
+            --format=json \
+            | jq -r --arg tag "${TAG}" '[.[] | select(any(.tags[]?; . == $tag)) | .version] | unique[]')"
+
+          if [[ -z "${DIGESTS}" ]]; then
+            echo "No image found for exact tag ${TAG}" >&2
+            exit 1
+          fi
+
+          mapfile -t DIGESTS <<< "${DIGESTS}"
+          if [[ "${#DIGESTS[@]}" -ne 1 ]] || [[ ! "${DIGESTS[0]}" =~ ^sha256: ]]; then
+            echo "Expected one valid digest for tag ${TAG}, got ${#DIGESTS[@]}" >&2
+            exit 1
+          fi
+
+          echo "digest=${DIGESTS[0]}" >> "$GITHUB_OUTPUT"
 
   deploy-staging:
     needs: build
@@ -298,9 +315,25 @@ jobs:
             docker pull "${STAGING_IMAGE}"
             docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
             docker push "${PROD_IMAGE}"
-            PROD_DIGEST="$(gcloud artifacts docker images describe "${PROD_IMAGE}" --project "${PROD_PROJECT}" --format='value(image_summary.digest)')"
-            test -n "${PROD_DIGEST}"
-            echo "prod_image=${PROD_IMAGE}@${PROD_DIGEST}" >> "$GITHUB_ENV"
+            IMAGE_PATH="${PROD_IMAGE%:*}"
+            PROD_DIGESTS="$(gcloud artifacts docker images list "${IMAGE_PATH}" \
+              --project "${PROD_PROJECT}" \
+              --include-tags \
+              --format=json \
+              | jq -r --arg tag "${VERSION}" '[.[] | select(any(.tags[]?; . == $tag)) | .version] | unique[]')"
+
+            if [[ -z "${PROD_DIGESTS}" ]]; then
+              echo "No image found in production Artifact Registry for exact tag ${VERSION}" >&2
+              exit 1
+            fi
+
+            mapfile -t PROD_DIGESTS <<< "${PROD_DIGESTS}"
+            if [[ "${#PROD_DIGESTS[@]}" -ne 1 ]] || [[ ! "${PROD_DIGESTS[0]}" =~ ^sha256: ]]; then
+              echo "Expected one valid digest for tag ${VERSION} in production, got ${#PROD_DIGESTS[@]}" >&2
+              exit 1
+            fi
+
+            echo "prod_image=${PROD_IMAGE}@${PROD_DIGESTS[0]}" >> "$GITHUB_ENV"
           fi
 
       - name: Deploy Cloud Run Job (prod)

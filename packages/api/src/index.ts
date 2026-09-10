@@ -12,6 +12,7 @@ import { locationRouter } from "./router/location";
 import { mailRouter } from "./router/mail";
 import { mapRouter } from "./router/map/index";
 import { meRouter } from "./router/me";
+import { oauthClientRouter } from "./router/oauth-client";
 import { orgChartRouter } from "./router/org-chart";
 import { orgRouter } from "./router/org";
 import { pingRouter } from "./router/ping";
@@ -37,6 +38,7 @@ export const router = os.prefix(API_PREFIX_V1).router({
   location: os.prefix("/location").router(locationRouter),
   map: os.prefix("/map").router(mapRouter),
   me: os.prefix("/me").router(meRouter),
+  oauthClient: os.prefix("/oauth-client").router(oauthClientRouter),
   orgChart: os.prefix("/org-chart").router(orgChartRouter),
   org: os.prefix("/org").router(orgRouter),
   position: os.prefix("/position").router(positionRouter),
