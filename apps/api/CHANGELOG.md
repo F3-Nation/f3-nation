@@ -1,5 +1,38 @@
 # Changelog
 
+## [6.6.0](https://github.com/F3-Nation/f3-nation/compare/api@6.5.0...api@6.6.0) (2026-09-10)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+* **api,ci:** add Hono server entry hosting the existing oRPC handlers ([#890](https://github.com/F3-Nation/f3-nation/issues/890)) ([636aaaa](https://github.com/F3-Nation/f3-nation/commit/636aaaa5ce05f9b7def89719d1cb26202c9a5517))
+* **api:** adding routes for slack settings and channels ([#693](https://github.com/F3-Nation/f3-nation/issues/693)) ([d6d43e4](https://github.com/F3-Nation/f3-nation/commit/d6d43e47503cf7d65cfcae4b5c6877d5f1a994a8))
+* **api:** adding slack messaging API routes ([#542](https://github.com/F3-Nation/f3-nation/issues/542)) ([951e126](https://github.com/F3-Nation/f3-nation/commit/951e12600a4a49d6c0cc87e30c9648a227f777f1))
+* **auth:** issue an id_token on the authorization_code and refresh_token grants ([#749](https://github.com/F3-Nation/f3-nation/issues/749)) ([0a8a25d](https://github.com/F3-Nation/f3-nation/commit/0a8a25d635d618383d57669eff4415b32b6e3fef))
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+* **map:** add start date column to workouts table ([#807](https://github.com/F3-Nation/f3-nation/issues/807)) ([c49b48d](https://github.com/F3-Nation/f3-nation/commit/c49b48d6131e13454425d3ce0660e02093bba175))
+
+
+### Bug Fixes
+
+* **api:** add .output() schemas to event-tag router ([#902](https://github.com/F3-Nation/f3-nation/issues/902)) ([6aa08ca](https://github.com/F3-Nation/f3-nation/commit/6aa08caf611d8731483916561a27a728975b1ec8))
+* **api:** raise per-IP rate limit to 500 ([#850](https://github.com/F3-Nation/f3-nation/issues/850)) ([b8e320a](https://github.com/F3-Nation/f3-nation/commit/b8e320a30a6be2f8f79c912a6ae3cf3dedf86c91))
+* **api:** stop crupdate resetting isActive/highlight/isPrivate on partial updates ([#900](https://github.com/F3-Nation/f3-nation/issues/900)) ([f89b7f7](https://github.com/F3-Nation/f3-nation/commit/f89b7f7e8c0ccb3341ee98c644d7d98836180a4a))
+* **deps:** pin internal @acme/* refs to workspace:* to prevent release-please version drift ([#587](https://github.com/F3-Nation/f3-nation/issues/587)) ([21ded4b](https://github.com/F3-Nation/f3-nation/commit/21ded4bef25dbdd00b2e66e5d8abda516b7dd0b1))
+* **map:** mask session replay text and media ([#593](https://github.com/F3-Nation/f3-nation/issues/593)) ([a705d76](https://github.com/F3-Nation/f3-nation/commit/a705d767d4091566f8ed8224f968bc997694205e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/shared bumped to 0.3.0
+  * devDependencies
+    * @acme/auth bumped to 0.3.0
+    * @acme/db bumped to 0.6.0
+
 ## [6.5.0](https://github.com/F3-Nation/f3-nation/compare/api@6.4.0...api@6.5.0) (2026-09-08)
 
 

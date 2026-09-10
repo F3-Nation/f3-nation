@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.3.0](https://github.com/F3-Nation/f3-nation/compare/me@2.2.3...me@2.3.0) (2026-09-10)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+* **me:** adding version, env, and changelog ([#790](https://github.com/F3-Nation/f3-nation/issues/790)) ([dfb9956](https://github.com/F3-Nation/f3-nation/commit/dfb99560fa1a4109884f0261910d4398a0531732))
+* **sso,me,admin:** consolidating auth code ([#579](https://github.com/F3-Nation/f3-nation/issues/579)) ([bfae7a9](https://github.com/F3-Nation/f3-nation/commit/bfae7a9ed5e9ea06516edb996dd625252659d1b1))
+* **sso:** new next wrapper for sso, partially completed ([#688](https://github.com/F3-Nation/f3-nation/issues/688)) ([8555b36](https://github.com/F3-Nation/f3-nation/commit/8555b3687808c26713f9b7b524e65296756d4504))
+
+
+### Bug Fixes
+
+* **api,me:** require filters and cap results on me.users ([#662](https://github.com/F3-Nation/f3-nation/issues/662)) ([70375fc](https://github.com/F3-Nation/f3-nation/commit/70375fc0b396b9f8f0aefd74b407a4ba9aae3b7f))
+* **deps:** pin internal @acme/* refs to workspace:* to prevent release-please version drift ([#587](https://github.com/F3-Nation/f3-nation/issues/587)) ([21ded4b](https://github.com/F3-Nation/f3-nation/commit/21ded4bef25dbdd00b2e66e5d8abda516b7dd0b1))
+* **me:** move proxy.ts to src/ so Next.js actually loads it ([#866](https://github.com/F3-Nation/f3-nation/issues/866)) ([531bdd0](https://github.com/F3-Nation/f3-nation/commit/531bdd097e65abe6d583ae4e73dfe9495e5abb59))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/shared bumped to 0.3.0
+    * @acme/ui bumped to 0.1.5
+
 ## [2.2.3](https://github.com/F3-Nation/f3-nation/compare/me@2.2.2...me@2.2.3) (2026-09-08)
 
 

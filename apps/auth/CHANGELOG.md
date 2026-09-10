@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.0...auth@2.4.0) (2026-09-10)
+
+
+### Features
+
+* **auth,db,admin,api:** better auth config for [#876](https://github.com/F3-Nation/f3-nation/issues/876) phase 3 ([#914](https://github.com/F3-Nation/f3-nation/issues/914)) ([4c77b90](https://github.com/F3-Nation/f3-nation/commit/4c77b904dab9a9864d1c9d98f6356e6f211bb086))
+* **auth:** issue an id_token on the authorization_code and refresh_token grants ([#749](https://github.com/F3-Nation/f3-nation/issues/749)) ([0a8a25d](https://github.com/F3-Nation/f3-nation/commit/0a8a25d635d618383d57669eff4415b32b6e3fef))
+* **auth:** support public OAuth clients (PKCE-only, RFC 8252) for native apps ([#692](https://github.com/F3-Nation/f3-nation/issues/692)) ([a19a9df](https://github.com/F3-Nation/f3-nation/commit/a19a9df5ce8ec14732825d4aaf84ce8c81292722))
+
+
+### Bug Fixes
+
+* **auth:** persist nonce, auth_time, and refresh-token scopes on OAuth id_tokens ([#845](https://github.com/F3-Nation/f3-nation/issues/845)) ([4703c9b](https://github.com/F3-Nation/f3-nation/commit/4703c9baa135b043f94e2c4d4752d76966fd3f09))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.6.0
+    * @acme/shared bumped to 0.3.0
+
 ## [2.3.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.2.0...auth@2.3.0) (2026-09-08)
 
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.4.0...pkg-validators@0.5.0) (2026-09-10)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+* **map:** add start date column to workouts table ([#807](https://github.com/F3-Nation/f3-nation/issues/807)) ([c49b48d](https://github.com/F3-Nation/f3-nation/commit/c49b48d6131e13454425d3ce0660e02093bba175))
+* **map:** add validation to ensure event end time is after start time ([f62b213](https://github.com/F3-Nation/f3-nation/commit/f62b21340ac395b563ec5f44d97d3a165191da4c))
+* **map:** surface selector load errors and remove dead newEventId ([fb6084c](https://github.com/F3-Nation/f3-nation/commit/fb6084c746ae6173be258d192ca980d78c7f7a57))
+* **validators:** enhance event time handling in AdminRequestsModal ([8d407de](https://github.com/F3-Nation/f3-nation/commit/8d407defc1e92a5b32b82c2aa1fe78bc8aa5a7b5))
+
+
+### Bug Fixes
+
+* **admin:** enhance error handling and logging for request details ([2629175](https://github.com/F3-Nation/f3-nation/commit/262917536a32715fff8e709e41a3a96d6e4e1a1e))
+* **api:** add .output() schemas to event-tag router ([#902](https://github.com/F3-Nation/f3-nation/issues/902)) ([6aa08ca](https://github.com/F3-Nation/f3-nation/commit/6aa08caf611d8731483916561a27a728975b1ec8))
+* **map:** update uuid dependency and refine map contribution guidelines ([aba0ae9](https://github.com/F3-Nation/f3-nation/commit/aba0ae9e83d92db666de871b7311917efb2910c0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.6.0
+    * @acme/shared bumped to 0.3.0
+
 ## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.3.1...pkg-validators@0.4.0) (2026-09-08)
 
 

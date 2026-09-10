@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.5.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.1...homepage@1.5.0) (2026-09-10)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+* **homepage:** adding syncbot to the admin section ([#630](https://github.com/F3-Nation/f3-nation/issues/630)) ([755ebb9](https://github.com/F3-Nation/f3-nation/commit/755ebb9429659839c3ad6e869435a638247343bc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/ui bumped to 0.1.5
+
 ## [1.4.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.0...homepage@1.4.1) (2026-09-08)
 
 

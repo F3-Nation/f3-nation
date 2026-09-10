@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.0...slackbot@2.5.0) (2026-09-10)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+* **repo:** added analytics app ([#800](https://github.com/F3-Nation/f3-nation/issues/800)) ([f7c5123](https://github.com/F3-Nation/f3-nation/commit/f7c512377d93f051495a1ab8ca793af13f3667ec))
+* **slackbot, api:** preblast feature refactor + some extras ([#599](https://github.com/F3-Nation/f3-nation/issues/599)) ([f5766df](https://github.com/F3-Nation/f3-nation/commit/f5766dfc3972759a3641221d8cadaca916a911b4))
+* **slackbot:** adding kotter reports ([#703](https://github.com/F3-Nation/f3-nation/issues/703)) ([4b4c9bb](https://github.com/F3-Nation/f3-nation/commit/4b4c9bbe6d5896482aec199cdd8adc98a0785d03))
+* **slackbot:** upgrade to python 3.13 and many dependencies ([#847](https://github.com/F3-Nation/f3-nation/issues/847)) ([9d1d13a](https://github.com/F3-Nation/f3-nation/commit/9d1d13a840b74380d7aca6742ff363a5baf7bc0b))
+
+
+### Bug Fixes
+
+* **api:** raise per-IP rate limit to 500 ([#850](https://github.com/F3-Nation/f3-nation/issues/850)) ([b8e320a](https://github.com/F3-Nation/f3-nation/commit/b8e320a30a6be2f8f79c912a6ae3cf3dedf86c91))
+* **deps:** update dependency pillow-heif to v1 [security] ([#773](https://github.com/F3-Nation/f3-nation/issues/773)) ([6cf133d](https://github.com/F3-Nation/f3-nation/commit/6cf133dddc8c1b5e232c94917ed637d016fa47a1))
+* **deps:** update python dependencies (non-major) ([#861](https://github.com/F3-Nation/f3-nation/issues/861)) ([419ac1e](https://github.com/F3-Nation/f3-nation/commit/419ac1eb5c93c8d472f1f03362e1440d8278594e))
+* **slackbot, analytics:** hotfix for a couple of build steps ([#975](https://github.com/F3-Nation/f3-nation/issues/975)) ([46eebb7](https://github.com/F3-Nation/f3-nation/commit/46eebb711aad369dff38dad208da813fb3c6c9cd))
+* **slackbot,repo:** make python checks skip cleanly and fix macOS lint bug ([#828](https://github.com/F3-Nation/f3-nation/issues/828)) ([1deaba1](https://github.com/F3-Nation/f3-nation/commit/1deaba1eb57f44e19e9bec8c2883bfbade782069))
+* **slackbot,tailwind,sso:** fixing local lint issues ([#659](https://github.com/F3-Nation/f3-nation/issues/659)) ([030cb9b](https://github.com/F3-Nation/f3-nation/commit/030cb9becb28159e32f6340201dc5bf9149f0124))
+* **slackbot:** acknowledging requests prior to sending loading modal ([#846](https://github.com/F3-Nation/f3-nation/issues/846)) ([8daf80f](https://github.com/F3-Nation/f3-nation/commit/8daf80f8a0a5610216978a3e6c718447ad41b19a))
+* **slackbot:** another hotfix for auto preblasts ([#722](https://github.com/F3-Nation/f3-nation/issues/722)) ([ee0581c](https://github.com/F3-Nation/f3-nation/commit/ee0581c97158102aa6a51d374b84267838423dea))
+* **slackbot:** fixed the 'no preblast text entered' bug ([#724](https://github.com/F3-Nation/f3-nation/issues/724)) ([1ffdce7](https://github.com/F3-Nation/f3-nation/commit/1ffdce7825b1e31dbc215d141eb3cbc18f82c9f5))
+* **slackbot:** fixing HC button on non-default channel posting ([#895](https://github.com/F3-Nation/f3-nation/issues/895)) ([aa3fac7](https://github.com/F3-Nation/f3-nation/commit/aa3fac7eebacfe764cb035a9d37ecb516cd798f1))
+* **slackbot:** preblast hotfixes ([#716](https://github.com/F3-Nation/f3-nation/issues/716)) ([1db0567](https://github.com/F3-Nation/f3-nation/commit/1db0567e0bd7811072a5a92d72b7a64cc05e426b))
+* **slackbot:** prevent calendar modal block overflow ([#881](https://github.com/F3-Nation/f3-nation/issues/881)) ([faf7807](https://github.com/F3-Nation/f3-nation/commit/faf7807e8bd41fa6392f40787e4b5059899c470a))
+* **slackbot:** read selected_time/selected_date for picker elements ([#816](https://github.com/F3-Nation/f3-nation/issues/816)) ([8f3d6fc](https://github.com/F3-Nation/f3-nation/commit/8f3d6fc9610fa839df64b66434d7d929b3355bd9))
+* **slackbot:** skip deactivated Slack accounts during user sync/bootstrap ([#596](https://github.com/F3-Nation/f3-nation/issues/596)) ([7a198f7](https://github.com/F3-Nation/f3-nation/commit/7a198f75149138ffd3ce301b4bb5a0d5a4952cfa))
+* **slackbot:** truncate long Strava activity button labels ([#810](https://github.com/F3-Nation/f3-nation/issues/810)) ([e6d6f84](https://github.com/F3-Nation/f3-nation/commit/e6d6f84841f299bf283adb65ccc307a63e41dc4b))
+
 ## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.2...slackbot@2.4.0) (2026-09-08)
 
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.5](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.1.4...pkg-ui@0.1.5) (2026-09-10)
+
+
+### Bug Fixes
+
+* **deps:** pin internal @acme/* refs to workspace:* to prevent release-please version drift ([#587](https://github.com/F3-Nation/f3-nation/issues/587)) ([21ded4b](https://github.com/F3-Nation/f3-nation/commit/21ded4bef25dbdd00b2e66e5d8abda516b7dd0b1))
+* **map:** streamline form inputs and fix map update pane ([f1a09fe](https://github.com/F3-Nation/f3-nation/commit/f1a09fe1b3126e697e6a3299f3aa4952f12d1267))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.3.0
+
 ## [0.1.4](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.1.3...pkg-ui@0.1.4) (2026-09-08)
 
 
