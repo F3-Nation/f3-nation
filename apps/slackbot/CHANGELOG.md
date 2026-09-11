@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.3...slackbot@2.5.0) (2026-09-11)
+
+
+### Features
+
+* **slackbot:** configurable 2 or 3 week calendar display ([#829](https://github.com/F3-Nation/f3-nation/issues/829)) ([1ba2dd5](https://github.com/F3-Nation/f3-nation/commit/1ba2dd52d06996a9bece59c777b491d1d613005e))
+* **slackbot:** now setting `seriesException=different-time` on time change ([#989](https://github.com/F3-Nation/f3-nation/issues/989)) ([cd5008e](https://github.com/F3-Nation/f3-nation/commit/cd5008e3275d1e44194b22f35a37e0a7a5217960))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#959](https://github.com/F3-Nation/f3-nation/issues/959)) ([7f45d87](https://github.com/F3-Nation/f3-nation/commit/7f45d876ab3c2d587feb84098d9d7ed2436527e3))
+
 ## [2.4.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.2...slackbot@2.4.3) (2026-09-10)
 
 
