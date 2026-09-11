@@ -33,7 +33,7 @@ def test_invalid_lead_days_do_not_save(monkeypatch, lead_days):
         lambda body: selected_values(**{actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS: lead_days}),
     )
     monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", update_view)
-    monkeypatch.setattr(f3versary_announcements.DbManager, "update_records", update_db)
+    monkeypatch.setattr(f3versary_announcements, "_patch_f3versary_settings", update_db)
 
     f3versary_announcements.handle_f3versary_announcements_edit(
         {"view": {"id": "V1"}}, MagicMock(), MagicMock(), {}, region_record
@@ -54,7 +54,7 @@ def test_enabled_form_requires_a_channel(monkeypatch):
         lambda body: selected_values(**{actions.F3VERSARY_ANNOUNCEMENTS_CHANNEL: None}),
     )
     monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", update_view)
-    monkeypatch.setattr(f3versary_announcements.DbManager, "update_records", update_db)
+    monkeypatch.setattr(f3versary_announcements, "_patch_f3versary_settings", update_db)
 
     f3versary_announcements.handle_f3versary_announcements_edit(
         {"view": {"id": "V1"}}, MagicMock(), MagicMock(), {}, region_record
@@ -79,7 +79,7 @@ def test_valid_settings_save_and_preserve_last_processed_date(monkeypatch):
         lambda body: selected_values(**{actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS: "30"}),
     )
     monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", update_view)
-    monkeypatch.setattr(f3versary_announcements.DbManager, "update_records", update_db)
+    monkeypatch.setattr(f3versary_announcements, "_patch_f3versary_settings", update_db)
     monkeypatch.setattr(f3versary_announcements, "update_local_region_records", refresh)
 
     f3versary_announcements.handle_f3versary_announcements_edit(
@@ -87,6 +87,14 @@ def test_valid_settings_save_and_preserve_last_processed_date(monkeypatch):
     )
 
     update_db.assert_called_once()
+    assert update_db.call_args.args == (
+        "T1",
+        {
+            "f3versary_announcements_enabled": True,
+            "f3versary_announcements_channel": "C1",
+            "f3versary_announcements_lead_days": 30,
+        },
+    )
     refresh.assert_called_once()
     assert region_record.f3versary_announcements_enabled is True
     assert region_record.f3versary_announcements_channel == "C1"
@@ -110,7 +118,7 @@ def test_disabled_settings_can_save_without_a_channel(monkeypatch):
         ),
     )
     monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", MagicMock())
-    monkeypatch.setattr(f3versary_announcements.DbManager, "update_records", update_db)
+    monkeypatch.setattr(f3versary_announcements, "_patch_f3versary_settings", update_db)
     monkeypatch.setattr(f3versary_announcements, "update_local_region_records", MagicMock())
 
     f3versary_announcements.handle_f3versary_announcements_edit(
@@ -135,3 +143,7 @@ def test_form_defaults_lead_days_to_fourteen(monkeypatch):
     initial_values = form.set_initial_values.call_args.args[0]
     assert initial_values[actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS] == "14"
     form.post_modal.assert_called_once()
+
+
+def test_enable_checkbox_is_optional_so_it_can_be_cleared():
+    assert f3versary_announcements.F3VERSARY_ANNOUNCEMENTS_FORM.blocks[0].optional is True

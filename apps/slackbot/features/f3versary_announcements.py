@@ -2,8 +2,10 @@ import copy
 from logging import Logger
 
 from f3_data_models.models import SlackSpace
-from f3_data_models.utils import DbManager
+from f3_data_models.utils import get_session
 from slack_sdk.web import WebClient
+from sqlalchemy import cast, func, update
+from sqlalchemy.dialects.postgresql import JSONB
 
 from utilities import constants
 from utilities.builders import update_submission_wait_view
@@ -14,6 +16,14 @@ from utilities.slack import actions, orm
 DEFAULT_LEAD_DAYS = 14
 MIN_LEAD_DAYS = 0
 MAX_LEAD_DAYS = 30
+
+
+def _patch_f3versary_settings(team_id: str, values: dict) -> None:
+    """Atomically merge only this feature's keys into SlackSpace.settings."""
+    with get_session() as session:
+        settings = func.coalesce(SlackSpace.settings, cast({}, JSONB)).op("||")(cast(values, JSONB))
+        session.execute(update(SlackSpace).where(SlackSpace.team_id == team_id).values(settings=settings))
+        session.commit()
 
 
 def build_f3versary_announcements_form(
@@ -91,10 +101,13 @@ def handle_f3versary_announcements_edit(
     region_record.f3versary_announcements_channel = channel
     region_record.f3versary_announcements_lead_days = lead_days
 
-    DbManager.update_records(
-        cls=SlackSpace,
-        filters=[SlackSpace.team_id == region_record.team_id],
-        fields={SlackSpace.settings: region_record.__dict__},
+    _patch_f3versary_settings(
+        region_record.team_id,
+        {
+            "f3versary_announcements_enabled": enabled,
+            "f3versary_announcements_channel": channel,
+            "f3versary_announcements_lead_days": lead_days,
+        },
     )
     update_local_region_records()
     update_submission_wait_view(
@@ -113,7 +126,7 @@ F3VERSARY_ANNOUNCEMENTS_FORM = orm.BlockView(
             label="Enable F3versary Announcements",
             action=actions.F3VERSARY_ANNOUNCEMENTS_ENABLED,
             element=orm.CheckboxInputElement(options=orm.as_selector_options(["Enable"], ["enable"])),
-            optional=False,
+            optional=True,
         ),
         orm.InputBlock(
             label="Announcement Channel",

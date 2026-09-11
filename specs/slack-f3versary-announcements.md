@@ -4,7 +4,7 @@
 
 ## 1. Summary
 
-Provide each F3 region with an optional daily Slack announcement recognizing PAX whose anniversary of their first recorded F3 attendance falls on a configurable date. The announcement states how many years each PAX has been with F3 and encourages them to celebrate by grabbing a Q slot.
+Provide each F3 region with an optional daily Slack announcement recognizing PAX whose F3 start-date anniversary falls on a configurable date. A valid profile start-date override is authoritative; otherwise, the earliest recorded actual attendance is used. The announcement states how many years each PAX has been with F3 and encourages them to celebrate by grabbing a Q slot.
 
 ## 2. Context & links
 
@@ -17,7 +17,7 @@ Provide each F3 region with an optional daily Slack announcement recognizing PAX
   - `apps/slackbot/utilities/routing.py`
   - `apps/slackbot/utilities/slack/actions.py`
   - `apps/slackbot/utilities/slack/forms.py`
-- Attendance source: existing PostgreSQL attendance, event-instance, user, organization, and Slack-mapping models.
+- Start-date sources: the existing PostgreSQL user profile metadata and attendance/event-instance records.
 
 ## 3. User stories
 
@@ -39,15 +39,15 @@ Provide each F3 region with an optional daily Slack announcement recognizing PAX
 
 - **AC-6 — Target date:** GIVEN a processing date and configured lead time, WHEN candidates are selected, THEN a candidate qualifies only when the observed anniversary date equals `processing date + lead days`. A lead time of 0 recognizes anniversaries occurring that day.
 
-- **AC-7 — First actual attendance:** GIVEN a user with attendance records, WHEN their F3versary is calculated, THEN the source date is their earliest attendance for which `attendance.is_planned` is false. Planned attendance does not establish or change the F3versary date.
+- **AC-7 — Start-date precedence:** GIVEN a user with a valid ISO date in `users.meta.start_date_override`, WHEN their F3versary is calculated, THEN that override is the effective start date, including when the user has no actual-attendance record. If the override is missing, blank, or invalid, the effective start date falls back to the earliest attendance for which `attendance.is_planned` is false. Planned attendance does not establish or change the F3versary date, and a user with neither a valid override nor an actual-attendance date is excluded.
 
 - **AC-8 — Region scope:** GIVEN an opted-in region, WHEN candidates are selected, THEN only users whose current `home_region_id` matches that region’s organization ID are considered.
 
-- **AC-9 — Completed years:** GIVEN a qualifying first-attendance date, WHEN the announcement is created, THEN the user must have completed at least one full year and the correct completed-year count is included.
+- **AC-9 — Completed years:** GIVEN a qualifying effective start date, WHEN the announcement is created, THEN the user must have completed at least one full year and the correct completed-year count is included.
 
-- **AC-10 — Leap day:** GIVEN a February 29 first-attendance date and a non-leap target year, WHEN the F3versary is evaluated, THEN it is recognized on February 28.
+- **AC-10 — Leap day:** GIVEN a February 29 effective start date and a non-leap target year, WHEN the F3versary is evaluated, THEN it is recognized on February 28.
 
-- **AC-11 — Slack identity:** GIVEN a qualifying user with an associated Slack user mapping, WHEN the message is built, THEN the user is represented by a Slack mention. If no Slack mapping exists, the user’s F3 name is displayed instead. A record with neither usable identity is omitted.
+- **AC-11 — Slack identity:** GIVEN a qualifying user with an associated Slack user mapping, WHEN the message is built, THEN the user is represented by a Slack mention. If no Slack mapping exists, the user’s F3 name is safely escaped for Slack mrkdwn and displayed instead. A record with neither usable identity is omitted.
 
 - **AC-12 — Message:** GIVEN one or more qualifying users, WHEN the task posts,
   THEN it sends one combined message to the configured regional channel. The
@@ -56,16 +56,20 @@ Provide each F3 region with an optional daily Slack announcement recognizing PAX
   `*• <Slack mention or F3 name> celebrates <N year/years> with F3 on
 <Month Day> — be sure to celebrate by grabbing a Q slot!*`. For a lead time
   of zero, the date phrase is replaced with `TODAY`. The message uses “year”
-  for exactly one year and “years” otherwise.
+  for exactly one year and “years” otherwise. Candidate lines are split across
+  section blocks as needed so that no section exceeds Slack’s 3,000-character
+  limit.
 - **AC-13 — No empty post:** GIVEN no qualifying users for an opted-in region, WHEN the task processes that region, THEN no Slack message is sent and that region is recorded as successfully processed for the date.
 
-- **AC-14 — Duplicate prevention:** GIVEN a region that was successfully processed for the current date, WHEN the hourly runner executes again that day, THEN no duplicate announcement is sent. The successful processing date is stored in shared database settings rather than process memory.
+- **AC-14 — Duplicate prevention:** GIVEN a region that was successfully processed for the current date, WHEN the hourly runner executes again that day, THEN no duplicate announcement is sent. Concurrent invocations serialize on the region’s database row, re-read the latest processing marker after obtaining the lock, and use a deterministic Slack `client_msg_id` for that region, channel, and processing date.
 
-- **AC-15 — Failure and retry:** GIVEN a database or Slack failure, WHEN the task runs, THEN the failure is logged without sensitive information, the other hourly jobs continue, and the affected region remains eligible for a later hourly retry.
+- **AC-15 — Failure and retry:** GIVEN a database or Slack failure, WHEN the task runs, THEN the failure is logged without sensitive information, the other hourly jobs continue, and the affected region remains eligible for a later hourly retry. A retry after a successful Slack call and failed database commit reuses the same deterministic Slack message ID.
 
-- **AC-16 — Forced local execution:** GIVEN a local or automated test invocation with forced execution enabled, WHEN the task runs outside its normal time, THEN it bypasses only the time gate and still observes regional enablement and duplicate protection.
+- **AC-16 — Concurrent settings safety:** GIVEN an administrator saves F3versary settings while the job is processing, WHEN both database writes complete, THEN the administrator’s enabled, channel, and lead-time values and the job’s processing marker are all preserved.
 
-- **AC-17 — Dry run:** GIVEN a local invocation in dry-run mode, WHEN the task runs, THEN it displays the proposed message without contacting Slack or recording the region as processed.
+- **AC-17 — Forced local execution:** GIVEN a local or automated test invocation with forced execution enabled, WHEN the task runs outside its normal time, THEN it bypasses only the time gate and still observes regional enablement and duplicate protection.
+
+- **AC-18 — Dry run:** GIVEN a local invocation in dry-run mode, WHEN the task runs, THEN it displays the proposed message without contacting Slack or recording the region as processed.
 
 ## 5. Roles & authorization
 
@@ -83,7 +87,7 @@ No new API endpoint or authorization tier is introduced.
 - BigQuery access or a BigQuery client dependency.
 - Direct messages to individual PAX.
 - Automatically assigning or reserving Q slots.
-- Editing a user’s inferred first-attendance date.
+- Editing a user’s profile start-date override or inferred first-attendance date.
 - Announcements for regions that have not explicitly enabled the feature.
 - Lead times longer than 30 days.
 - Database schema migrations.
@@ -95,11 +99,17 @@ No new API endpoint or authorization tier is introduced.
 - An opted-in region processes once after 5:00 PM Central.
 - Lead times of 0, 14, and 30 days identify the correct target date.
 - Invalid lead times are rejected.
-- Planned attendance is excluded from the first-attendance calculation.
+- A valid profile start-date override takes precedence over first actual attendance.
+- A missing, blank, or invalid override falls back to first actual attendance.
+- A valid override works when the user has no actual-attendance record.
+- Planned attendance is excluded from the first-attendance fallback calculation.
 - The correct completed-year count and singular/plural wording are produced.
 - A Slack mention is used when available, with an F3-name fallback.
+- Slack mrkdwn control characters in an F3-name fallback are escaped.
+- Large candidate lists are split into section blocks of at most 3,000 characters.
 - A February 29 anniversary is recognized on February 28 in a non-leap year.
-- A repeated hourly run does not duplicate a successful announcement.
+- Concurrent hourly runs serialize and do not duplicate a successful announcement.
+- A settings save updates only the F3versary keys and preserves the job marker.
 - A simulated Slack failure remains eligible for retry.
 - Dry-run mode neither contacts Slack nor records successful processing.
 - A non-admin cannot change the settings.
