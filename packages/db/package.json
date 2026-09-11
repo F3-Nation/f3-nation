@@ -1,6 +1,6 @@
 {
   "name": "@acme/db",
-  "version": "0.5.0",
+  "version": "0.6.1",
   "private": true,
   "exports": {
     ".": "./src/index.ts",
@@ -18,16 +18,16 @@
     "pull": "pnpm with-env drizzle-kit pull",
     "generate": "pnpm with-env drizzle-kit generate",
     "generate:empty": "pnpm with-env drizzle-kit generate --custom",
-    "migrate": "pnpm with-env node -r esbuild-register src/migrate.ts",
-    "reset": "pnpm with-env tsx ./src/reset.ts",
-    "seed": "pnpm with-env node -r esbuild-register src/seed.ts",
+    "migrate": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/migrate.ts",
+    "reset": "QUERY_TIMEOUT_MS=0 pnpm with-env tsx ./src/reset.ts",
+    "seed": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/seed.ts",
     "studio": "pnpm with-env drizzle-kit studio",
     "drop": "pnpm with-env drizzle-kit drop",
-    "reset-test-db": "SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
-    "seed:local": "pnpm with-env tsx src/local-seed.ts",
+    "reset-test-db": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
+    "seed:local": "QUERY_TIMEOUT_MS=0 pnpm with-env tsx src/local-seed.ts",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../env/.env --",
-    "update-db": "pnpm with-env node -r esbuild-register src/update-db.ts"
+    "update-db": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/update-db.ts"
   },
   "dependencies": {
     "@acme/env": "workspace:*",

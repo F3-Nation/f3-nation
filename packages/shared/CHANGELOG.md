@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.2.0...pkg-shared@0.3.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Bug Fixes
+
+* **shared:** remove debug console.log calls from parseSorting ([#970](https://github.com/F3-Nation/f3-nation/issues/970)) ([9342dae](https://github.com/F3-Nation/f3-nation/commit/9342dae75c66952407887f990639959c849dd267))
+
 ## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.1.3...pkg-shared@0.2.0) (2026-09-08)
 
 

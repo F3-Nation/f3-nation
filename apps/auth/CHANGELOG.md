@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.3.2](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.1...auth@2.3.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* **db,ci:** tune Postgres client pool/timeouts and fix stale auth staging_url ([#901](https://github.com/F3-Nation/f3-nation/issues/901)) ([59ead05](https://github.com/F3-Nation/f3-nation/commit/59ead059226ecffaa3b928b67aa64753170fb613))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.6.1
+
+## [2.3.1](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.0...auth@2.3.1) (2026-09-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.6.0
+    * @acme/shared bumped to 0.3.0
+
 ## [2.3.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.2.0...auth@2.3.0) (2026-09-08)
 
 

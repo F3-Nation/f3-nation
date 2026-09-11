@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.9.1](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.9.0...pkg-api@0.9.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **api:** return seriesException on calendar-home-schedule ([#942](https://github.com/F3-Nation/f3-nation/issues/942)) ([364edcd](https://github.com/F3-Nation/f3-nation/commit/364edcd15a62230c6a931cbb7c139b609e910055)), closes [#941](https://github.com/F3-Nation/f3-nation/issues/941)
+* **db:** bound how long a query waits behind a saturated connection pool ([#911](https://github.com/F3-Nation/f3-nation/issues/911)) ([d26f4cb](https://github.com/F3-Nation/f3-nation/commit/d26f4cbd2f57fba6ddcf6f5f6d7c66c5ece8abbe))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.5
+    * @acme/db bumped to 0.6.1
+    * @acme/mail bumped to 0.1.3
+    * @acme/validators bumped to 0.4.2
+
+## [0.9.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.8.0...pkg-api@0.9.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Bug Fixes
+
+* **api:** replace fixed-depth ancestor-active check with recursive CTE ([#967](https://github.com/F3-Nation/f3-nation/issues/967)) ([cd6e1fe](https://github.com/F3-Nation/f3-nation/commit/cd6e1fe29dd270b19cbe7f463fb58cfac5f3aa58))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.4
+    * @acme/db bumped to 0.6.0
+    * @acme/shared bumped to 0.3.0
+    * @acme/validators bumped to 0.4.1
+
 ## [0.8.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.7.0...pkg-api@0.8.0) (2026-09-08)
 
 

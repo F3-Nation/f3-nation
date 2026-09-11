@@ -1,6 +1,6 @@
 [project]
 name = "f3-nation-analytics"
-version = "0.3.0"
+version = "0.3.1"
 description = "Foundation for the F3 Nation analytics Parquet ETL"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
@@ -33,7 +33,7 @@ ignore = ["C901"]
 testpaths = ["tests"]
 
 [build-system]
-requires = ["setuptools==83.0.0", "wheel==0.46.2"]
+requires = ["setuptools==83.0.0", "wheel==0.48.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
