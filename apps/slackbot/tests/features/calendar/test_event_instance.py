@@ -372,7 +372,7 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
         self.assertNotIn("id", kwargs["json"])
         # API expects singular eventTypeId / eventTagId (not arrays)
         self.assertEqual(kwargs["json"]["eventTypeId"], 1)
-        self.assertNotIn("eventTagId", kwargs["json"])  # no tag selected
+        self.assertIsNone(kwargs["json"]["eventTagId"])  # no tag selected
         self.assertEqual(result.id, 99)
 
     def test_update_posts_with_id(self):
@@ -399,7 +399,7 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
         self.assertEqual(kwargs["json"]["id"], 5)
         self.assertEqual(kwargs["json"]["name"], "Updated")
         self.assertEqual(kwargs["json"]["eventTypeId"], 1)
-        self.assertNotIn("eventTagId", kwargs["json"])  # empty list → omitted
+        self.assertIsNone(kwargs["json"]["eventTagId"])  # empty list → clears tag
 
     def test_update_writes_numeric_preblast_ts(self):
         self.client.post.return_value = {"eventInstance": self._raw_instance(id=5)}
@@ -529,6 +529,7 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
                 "isPrivate": False,
                 "highlight": False,
                 "eventTypeId": 5,
+                "eventTagId": None,
                 "meta": {"series_exception_reason": "Rain", "existing_key": "val"},
                 "seriesException": "closed",
             },
@@ -550,6 +551,7 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
                 "isPrivate": False,
                 "highlight": False,
                 "eventTypeId": 5,
+                "eventTagId": None,
                 "meta": {"existing_key": "val"},
                 "seriesException": None,
             },
