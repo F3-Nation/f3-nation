@@ -202,9 +202,8 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
         self.assertEqual(payload["eventTypeId"], 7)
         self.assertEqual(payload["startTime"], "0700")
 
-    def test_update_does_not_send_a_series_exception(self):
-        """A plain time edit leaves the exception untouched: the field is absent,
-        so the API preserves whatever is stored."""
+    def test_update_sends_a_null_series_exception(self):
+        """A plain time edit includes a null series exception in the full payload."""
         self.repo.update(
             instance_id=5,
             name="Renamed",
@@ -224,7 +223,7 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
             preblast=None,
         )
 
-        self.assertNotIn("seriesException", self._posted_payload())
+        self.assertIsNone(self._posted_payload()["seriesException"])
 
 
 class StateChangeTest(unittest.TestCase):
