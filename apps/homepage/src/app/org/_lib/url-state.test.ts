@@ -33,19 +33,9 @@ describe("readLevelFromUrl", () => {
     expect(readLevelFromUrl()).toBe("sector");
   });
 
-  it("reads legacy numeric 0 → sector", () => {
-    setSearch("?level=0");
-    expect(readLevelFromUrl()).toBe("sector");
-  });
-
-  it("reads legacy numeric 1 → area", () => {
-    setSearch("?level=1");
-    expect(readLevelFromUrl()).toBe("area");
-  });
-
-  it("reads legacy numeric 2 → region", () => {
+  it("ignores a numeric level param (no legacy support)", () => {
     setSearch("?level=2");
-    expect(readLevelFromUrl()).toBe("region");
+    expect(readLevelFromUrl()).toBeNull();
   });
 
   it("returns null for unrecognized level name", () => {

@@ -118,6 +118,19 @@ describe("OrgInfoPanel", () => {
     expect(html).toContain("No admins listed");
   });
 
+  it("renders the inconclusive message when the admin lookup couldn't complete", () => {
+    const html = renderToStaticMarkup(
+      <OrgInfoPanel
+        status="loaded"
+        org={baseOrg}
+        detail={baseDetail}
+        adminLookupInconclusive
+      />,
+    );
+    expect(html).toContain("couldn");
+    expect(html).not.toContain("No admins listed");
+  });
+
   it("renders nearest admin org message with names when provided", () => {
     const html = renderToStaticMarkup(
       <OrgInfoPanel

@@ -123,6 +123,8 @@ export interface OrgInfoPanelProps {
   aggregatedMetrics?: OrgMetrics;
   footprintSqMi?: number | null;
   nearestAdminOrg?: NearestAdminOrg | null;
+  /** The ancestor admin lookup failed, so "no admins" can't be asserted. */
+  adminLookupInconclusive?: boolean;
 }
 
 export function OrgInfoPanel({
@@ -133,6 +135,7 @@ export function OrgInfoPanel({
   aggregatedMetrics,
   footprintSqMi = null,
   nearestAdminOrg,
+  adminLookupInconclusive = false,
 }: OrgInfoPanelProps) {
   if (status === "idle" || !org) {
     return (
@@ -312,6 +315,11 @@ export function OrgInfoPanel({
                 {nearestAdminOrg.orgType} for help.
               </>
             )}
+          </p>
+        ) : adminLookupInconclusive ? (
+          <p className="text-sm text-muted-foreground">
+            We couldn&apos;t verify this org&apos;s admins right now. Please try
+            again in a moment.
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">No admins listed.</p>

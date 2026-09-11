@@ -26,6 +26,10 @@ export function SearchBox({ onSelect, getResults, disabled }: SearchBoxProps) {
     }
     if (justSelectedRef.current) {
       justSelectedRef.current = false;
+      // Refresh results to the full-name query so a later focus doesn't reopen
+      // a stale partial-query list, but keep the list closed for now.
+      setResults(getResults(query));
+      setOpen(false);
       return;
     }
     const hits = getResults(query);

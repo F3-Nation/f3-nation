@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 
 import type { Org, OrgDetail, OrgMetrics, OrgType, Point } from "../_lib/types";
-import { buildOrgHierarchy, LAYER_TYPES, orgTypeRank } from "../_lib/org-chart";
+import { buildOrgHierarchy, LAYER_TYPES } from "../_lib/org-chart";
 import {
   convexHull,
   createCircleBuffer,
@@ -17,6 +17,15 @@ import {
   fuzzyScore,
   polygonAreaSqMi,
 } from "../_lib/geo-utils";
+import {
+  getDescendants,
+  getLevelOrgs,
+  getOrgPath,
+  isGeneralInternationalArea,
+  isInternationalSector,
+  nextNavigableLevel,
+  pathForNavigatingTo,
+} from "../_lib/navigation";
 import { fetchOrgById, fetchOrgChart } from "../_lib/api";
 import {
   readLevelFromUrl,
@@ -47,36 +56,6 @@ function getOrgColor(orgId: number, cache: Map<number, string>): string {
   }
   cache.set(orgId, color);
   return color;
-}
-
-function isInternationalSector(org: Org): boolean {
-  return (
-    org.orgType === "sector" &&
-    org.name.trim().toLowerCase() === "international"
-  );
-}
-
-function isGeneralInternationalArea(org: Org): boolean {
-  return (
-    org.orgType === "area" &&
-    org.name.trim().toLowerCase() === "general international area"
-  );
-}
-
-function getDescendants(
-  orgId: number,
-  childrenByParent: Map<number, Org[]>,
-  cache: Map<number, number[]>,
-): number[] {
-  const cached = cache.get(orgId);
-  if (cached) return cached;
-  const children = childrenByParent.get(orgId) ?? [];
-  const ids = [
-    orgId,
-    ...children.flatMap((c) => getDescendants(c.id, childrenByParent, cache)),
-  ];
-  cache.set(orgId, ids);
-  return ids;
 }
 
 function getOrgPoints(
@@ -175,90 +154,6 @@ function getFocusBounds(
   return latLngs ? L.latLngBounds(latLngs) : null;
 }
 
-function getOrgPath(orgId: number, orgById: Map<number, Org>): Org[] {
-  const path: Org[] = [];
-  let current = orgById.get(orgId);
-  while (current) {
-    path.unshift(current);
-    current = current.parentId ? orgById.get(current.parentId) : undefined;
-  }
-  return path;
-}
-
-/** Orgs to show at the current level given the navigation state. */
-function getLevelOrgs(
-  level: OrgType,
-  selectedPath: Org[],
-  orgById: Map<number, Org>,
-  childrenByParent: Map<number, Org[]>,
-  descendantCache: Map<number, number[]>,
-): Org[] {
-  if (
-    !selectedPath.length ||
-    orgTypeRank(level) >=
-      orgTypeRank(selectedPath[selectedPath.length - 1]!.orgType)
-  ) {
-    // Top-level or wider than current selection: show all of this type
-    return [...orgById.values()].filter((o) => o.orgType === level);
-  }
-
-  const parent = selectedPath[selectedPath.length - 1]!;
-
-  // International sector: show all region descendants (no geographic boundary)
-  if (isInternationalSector(parent) && level === "region") {
-    const ids = new Set(
-      getDescendants(parent.id, childrenByParent, descendantCache),
-    );
-    return [...orgById.values()].filter(
-      (o) => o.orgType === "region" && ids.has(o.id),
-    );
-  }
-
-  // If we navigated into a region, show sibling regions
-  if (level === "region" && parent.orgType === "region") {
-    return [...orgById.values()].filter(
-      (o) => o.orgType === "region" && o.parentId === parent.parentId,
-    );
-  }
-
-  return [...orgById.values()].filter(
-    (o) => o.orgType === level && o.parentId === parent.id,
-  );
-}
-
-/**
- * Depth-agnostic: compute path + level when navigating to an org.
- * LAYER_TYPES is ordered leaf→root. A lower index = more specific.
- */
-function pathForNavigatingTo(
-  org: Org,
-  orgById: Map<number, Org>,
-): { path: Org[]; level: OrgType } {
-  const fullPath = getOrgPath(org.id, orgById);
-  const nonNation = fullPath.filter((o) => o.orgType !== "nation");
-  const orgLayerIdx = LAYER_TYPES.indexOf(org.orgType);
-
-  if (orgLayerIdx === -1) {
-    // Not a navigable layer type; show context without this org
-    return { path: nonNation.slice(0, -1), level: org.orgType };
-  }
-
-  if (orgLayerIdx === 0) {
-    // Most-specific layer (e.g. region): view-only, keep ancestors in path
-    const pathWithoutLeaf = nonNation.filter(
-      (o) => LAYER_TYPES.indexOf(o.orgType) > orgLayerIdx,
-    );
-    return { path: pathWithoutLeaf, level: LAYER_TYPES[0]! };
-  }
-
-  // Drill: next layer is one step more specific (lower index)
-  const nextLevel = LAYER_TYPES[orgLayerIdx - 1]!;
-  const pathToOrg = nonNation.filter(
-    (o) => LAYER_TYPES.indexOf(o.orgType) >= orgLayerIdx,
-  );
-  return { path: pathToOrg, level: nextLevel };
-}
-
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function OrgMap() {
@@ -285,6 +180,9 @@ export default function OrgMap() {
   const [infoState, setInfoState] = useState<InfoState>({ status: "idle" });
   const [nearestAdminOrg, setNearestAdminOrg] =
     useState<NearestAdminOrg | null>(null);
+  // True when the ancestor climb couldn't verify admins (a lookup failed),
+  // so the UI can say "couldn't check" instead of a false "none listed".
+  const [adminLookupInconclusive, setAdminLookupInconclusive] = useState(false);
 
   // Layers actually present in the data (depth-agnostic)
   const [presentLayers, setPresentLayers] = useState<OrgType[]>(LAYER_TYPES);
@@ -321,7 +219,12 @@ export default function OrgMap() {
         if (urlOrgId) {
           const urlOrg = orgById.get(urlOrgId);
           if (urlOrg) {
-            const { path, level } = pathForNavigatingTo(urlOrg, orgById);
+            const { path, level } = pathForNavigatingTo(
+              urlOrg,
+              orgById,
+              childrenByParent,
+              descendantCacheRef.current,
+            );
             // Only honor a URL level override that names a navigable layer;
             // ao/nation (e.g. from a legacy ?level= link) aren't selectable.
             const overrideLevel =
@@ -413,7 +316,12 @@ export default function OrgMap() {
 
   const navigateToOrg = useCallback(
     (org: Org) => {
-      const { path, level } = pathForNavigatingTo(org, orgByIdRef.current);
+      const { path, level } = pathForNavigatingTo(
+        org,
+        orgByIdRef.current,
+        childrenByParentRef.current,
+        descendantCacheRef.current,
+      );
       setCurrentLevel(level);
       setSelectedPath(path);
 
@@ -468,9 +376,15 @@ export default function OrgMap() {
         newPath.length > 0
           ? (() => {
               const lastOrg = newPath[newPath.length - 1]!;
-              // Drill one step more specific: lower index in LAYER_TYPES
-              const idx = LAYER_TYPES.indexOf(lastOrg.orgType);
-              return idx > 0 ? LAYER_TYPES[idx - 1]! : lastOrg.orgType;
+              // Drill to the next populated tier, skipping any empty level.
+              return (
+                nextNavigableLevel(
+                  lastOrg,
+                  orgByIdRef.current,
+                  childrenByParentRef.current,
+                  descendantCacheRef.current,
+                ) ?? lastOrg.orgType
+              );
             })()
           : (presentLayers[presentLayers.length - 1] ?? "sector");
       setCurrentLevel(newLevel);
@@ -564,17 +478,25 @@ export default function OrgMap() {
       (infoState.detail.roles?.length ?? 0) > 0
     ) {
       setNearestAdminOrg(null);
+      setAdminLookupInconclusive(false);
       return;
     }
 
     const { org } = infoState;
     let cancelled = false;
 
+    // Reset immediately so the previously-viewed org's admin isn't shown while
+    // this org's asynchronous ancestor climb is still running.
+    setNearestAdminOrg(null);
+    setAdminLookupInconclusive(false);
+
     // Climb every ancestor, nation included: if the nation is the only level
     // with admins we still want to surface it rather than "No admins listed".
     const ancestors = getOrgPath(org.id, orgByIdRef.current)
       .filter((o) => o.id !== org.id)
       .reverse(); // nearest first
+
+    let hadFailure = false;
 
     async function climb() {
       for (const ancestor of ancestors) {
@@ -585,13 +507,9 @@ export default function OrgMap() {
           try {
             detail = await fetchOrgById(ancestor.id);
             if (!cancelled) orgInfoCacheRef.current.set(ancestor.id, detail);
-          } catch (err) {
-            // A failed lookup ("couldn't check") is not the same as "no admins".
-            // Warn so it's debuggable, then try the next ancestor.
-            console.warn(
-              `[org-chart] nearest-admin lookup failed for org ${ancestor.id}`,
-              err,
-            );
+          } catch {
+            // Couldn't check this ancestor — distinct from "it has no admins".
+            hadFailure = true;
             continue;
           }
         }
@@ -612,14 +530,14 @@ export default function OrgMap() {
         // No admins here — keep climbing
       }
 
-      if (!cancelled) setNearestAdminOrg(null);
+      // Reached the top with no admin found: only claim "none" when every
+      // ancestor was actually checked; a failed lookup makes it inconclusive.
+      if (!cancelled) setAdminLookupInconclusive(hadFailure);
     }
 
-    void climb().catch((err: unknown) => {
-      // An unexpected shape (e.g. a null title slipping past the guards) must
-      // not become a silent unhandled rejection.
-      console.warn("[org-chart] nearest-admin climb failed", err);
-      if (!cancelled) setNearestAdminOrg(null);
+    void climb().catch(() => {
+      // An unexpected shape must surface as inconclusive, not a false "none".
+      if (!cancelled) setAdminLookupInconclusive(true);
     });
 
     return () => {
@@ -799,6 +717,7 @@ export default function OrgMap() {
               aggregatedMetrics={infoMetrics}
               footprintSqMi={infoFootprint}
               nearestAdminOrg={nearestAdminOrg}
+              adminLookupInconclusive={adminLookupInconclusive}
             />
           </div>
         </aside>

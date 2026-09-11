@@ -85,4 +85,21 @@ describe("SearchBox", () => {
     fireEvent.change(input, { target: { value: "" } });
     expect(screen.queryByRole("listbox")).toBeNull();
   });
+
+  it("does not reopen a stale partial-query list after select then refocus", () => {
+    render(<SearchBox getResults={getResults} onSelect={vi.fn()} />);
+    const input = screen.getByRole("searchbox");
+    fireEvent.change(input, { target: { value: "Char" } });
+    // Both Charlotte and Charleston match the partial query.
+    expect(screen.getByText("Charleston")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Charlotte"));
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    // Refocusing opens the list for the current (full-name) query only, not the
+    // stale partial-query matches.
+    fireEvent.focus(input);
+    expect(screen.getByText("Charlotte")).toBeTruthy();
+    expect(screen.queryByText("Charleston")).toBeNull();
+  });
 });

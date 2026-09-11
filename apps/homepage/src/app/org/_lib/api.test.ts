@@ -88,3 +88,27 @@ describe("getApiBase (via fetch URL)", () => {
     expect(url).toContain("api.f3nation.com");
   });
 });
+
+describe("auth headers", () => {
+  it("sends the client header and a bearer token when the API key is set", async () => {
+    vi.stubEnv("NEXT_PUBLIC_ORG_MAP_API_KEY", "test-key");
+    mockFetch(200, { orgs: [] });
+    await fetchOrgChart();
+    const init = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers.client).toBe("https://apps.f3nation.com");
+    expect(headers.Authorization).toBe("Bearer test-key");
+  });
+
+  it("omits the Authorization header when no API key is configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_ORG_MAP_API_KEY", undefined);
+    mockFetch(200, { orgs: [] });
+    await fetchOrgChart();
+    const init = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
+    expect(headers.client).toBe("https://apps.f3nation.com");
+  });
+});

@@ -1,14 +1,6 @@
 import type { OrgType } from "./types";
 import { normalizeOrgType } from "./org-chart";
 
-/** Legacy numeric-to-named mapping for old bookmarked URLs (?level=0, etc.). */
-const LEGACY_NUMERIC: Record<string, OrgType> = {
-  "0": "sector",
-  "1": "area",
-  "2": "region",
-  "3": "ao",
-};
-
 /** "sector" → "sectors" */
 function toPlural(t: OrgType): string {
   return `${t}s`;
@@ -24,7 +16,6 @@ export function readLevelFromUrl(): OrgType | null {
   if (typeof window === "undefined") return null;
   const param = new URLSearchParams(window.location.search).get("level");
   if (!param) return null;
-  if (/^\d+$/.test(param)) return LEGACY_NUMERIC[param] ?? null;
   return fromPlural(param);
 }
 
