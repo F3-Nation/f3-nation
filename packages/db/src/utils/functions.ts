@@ -25,7 +25,28 @@ export const getDbUrl = () => {
 export const createDbClient = () => {
   const { databaseUrl, useSsl } = getDbUrl();
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
-  const client = postgres(databaseUrl, sslOptions);
+  const client = postgres(databaseUrl, {
+    ...sslOptions,
+    // Cloud Run scales to many instances, each holding its own pool (see
+    // client.ts) — an untuned client defaults to `max: 10` per instance,
+    // which exhausts the pooler's client ceiling under autoscaling.
+    // connect_timeout tightens postgres-js's 30s default to 10s so a
+    // saturated pooler surfaces as a fast failure instead of a slow one.
+    // Sizing rationale: docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
+    // max_lifetime is deliberately left on its postgres-js default — a
+    // jittered 30–60min per connection; a fixed value would synchronize
+    // expiry across every connection of a deploy into periodic reconnect
+    // stampedes through the pooler.
+    max: 5,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    // PgBouncer fronts the database in transaction pooling mode, which does
+    // not support named prepared statements. Drizzle survives on the default
+    // only because it issues queries through `client.unsafe()` (unprepared);
+    // direct tagged-template usage (e.g. the seed/reset scripts) prepares by
+    // default and would fail intermittently through the pooler.
+    prepare: false,
+  });
   return { db: drizzle(client, { schema }), close: () => client.end() };
 };
 
