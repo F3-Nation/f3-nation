@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/F3-Nation/f3-nation/compare/pkg-mail@0.1.2...pkg-mail@0.1.3) (2026-09-11)
+
+
+### Bug Fixes
+
+* **api:** update region in a box email ([#992](https://github.com/F3-Nation/f3-nation/issues/992)) ([0e1c7a7](https://github.com/F3-Nation/f3-nation/commit/0e1c7a7bf325a774d354f521788c45d6b043494e))
+
 ## [0.1.2](https://github.com/F3-Nation/f3-nation/compare/pkg-mail@0.1.1...pkg-mail@0.1.2) (2026-07-08)
 
 

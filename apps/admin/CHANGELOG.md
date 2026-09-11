@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.5.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.0...admin@2.5.1) (2026-09-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.1
+    * @acme/mail bumped to 0.1.3
+    * @acme/validators bumped to 0.4.2
+
 ## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.4.0...admin@2.5.0) (2026-09-10)
 
 
