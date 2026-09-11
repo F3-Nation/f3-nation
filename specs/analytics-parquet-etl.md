@@ -1,7 +1,7 @@
 # Daily analytics Parquet materializations
 
 > **Approved by the user: 2026-08-26.** This document is the contract for the
-> eight approved materializations. It describes the intended capability; it does
+> nine approved materializations. It describes the intended capability; it does
 > not claim that live database, GCS, IAM, or production validation has
 > been performed.
 
@@ -10,21 +10,22 @@
 The analytics Cloud Run Job is a non-interactive daily full-refresh publisher. It
 reads PostgreSQL transaction data through a dedicated read-only connection, uses
 DuckDB to produce Parquet, and publishes immutable run-scoped objects to GCS.
-The default invocation materializes all eight datasets in the explicit order
+The default invocation materializes all nine datasets in the explicit order
 listed below, sequentially (not concurrently). An ordinary failure for one
 dataset is recorded and does not prevent later datasets from running; the batch
 exits unsuccessfully if any dataset fails.
 
-The eight materializations are exactly:
+The nine materializations are exactly:
 
 1. `pv_regions`
 2. `pv_pax`
 3. `pv_kotter`
 4. `pv_upcoming`
-5. `pv_areas`
-6. `pv_aos`
-7. `pv_sectors`
-8. `pv_events`
+5. `pv_sectors`
+6. `pv_territories`
+7. `pv_areas`
+8. `pv_aos`
+9. `pv_events`
 
 Each dataset has an independent immutable run path, manifest, current pointer,
 and publication lease. A dataset's failure or publication conflict must not
@@ -47,7 +48,7 @@ manually invoked. Scheduler and task retries are zero. Jobs use one task and
 parallelism, a 60-minute timeout, and a 90-minute generation-protected GCS
 publication lease.
 
-The default is all eight datasets in the order above. A narrowly allowlisted
+The default is all nine datasets in the order above. A narrowly allowlisted
 selection may be used for operations or recovery, but it cannot introduce an
 unknown name, duplicate a name, or select a different target. Future datasets,
 cadences, and arbitrary query-driven selection require a new approval.
@@ -139,8 +140,8 @@ Missing relationships are empty/null according to the query schema.
 
 ### `pv_areas` — one row per area
 
-Columns: `area_id`, `area_name`, `sector_id`, `sector_name`, `logo_url`,
-`is_active`, `regions`.
+Columns: `area_id`, `area_name`, `sector_id`, `sector_name`, `territory_id`,
+`territory_name`, `logo_url`, `is_active`, `regions`.
 
 `regions` contains child region records `{region_id, region_name, is_active}`.
 
@@ -154,7 +155,18 @@ derived from active events with non-null `pax_count` belonging to that AO.
 
 ### `pv_sectors` — one row per sector
 
-Columns: `sector_id`, `sector_name`, `logo_url`, `is_active`, `areas`.
+Columns: `sector_id`, `sector_name`, `logo_url`, `is_active`, `territories`, `areas`.
+
+`areas` contains child area records `{area_id, area_name, is_active}`.
+
+`territories` contains child territory records `{territory_id, territory_name,
+logo_url, is_active}`. The legacy `areas` list remains populated for areas that
+are directly under a sector during the gradual hierarchy rollout.
+
+### `pv_territories` — one row per territory
+
+Columns: `territory_id`, `territory_name`, `sector_id`, `sector_name`,
+`logo_url`, `is_active`, `areas`.
 
 `areas` contains child area records `{area_id, area_name, is_active}`.
 
@@ -162,7 +174,8 @@ Columns: `sector_id`, `sector_name`, `logo_url`, `is_active`, `areas`.
 
 Columns: `refreshed_at`, `event_id`, `event_date`, `event_name`, `pax_count`,
 `fng_count`, `ao_org_id`, `ao_name`, `region_org_id`, `region_name`,
-`area_org_id`, `area_name`, `sector_org_id`, `sector_name`, `first_f_ind`,
+`area_org_id`, `area_name`, `territory_org_id`, `territory_name`,
+`sector_org_id`, `sector_name`, `first_f_ind`,
 `second_f_ind`, `third_f_ind`, `types`, `tags`, `attendance`.
 
 Events are active, have non-null `pax_count`, resolve their org hierarchy, and
@@ -230,7 +243,7 @@ atomically finalize one run directory only after every selected materialization
 succeeds; failed runs must leave no final run directory.
 
 - **Nonproduction query gate:** before release, a human must inspect PostgreSQL
-  query plans and measured read volume for all eight datasets against approved
+  query plans and measured read volume for all nine datasets against approved
   nonproduction data. The human gate must establish that sequential execution,
   connection/query scope, runtime, and source load are acceptable. Tests or
   synthetic fixtures do not substitute for this gate.
@@ -245,7 +258,7 @@ performed and recorded by the responsible humans during release.
 
 ## 8. Acceptance criteria
 
-1. The default daily run selects exactly the eight names in the stated sequential
+1. The default daily run selects exactly the nine names in the stated sequential
    order and records a traceable batch/run ID.
 2. Each selected dataset has an isolated path, manifest, pointer, and lease; no
    dataset can publish to another's path or pointer.

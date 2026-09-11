@@ -46,6 +46,8 @@ def fixture() -> duckdb.DuckDBPyConnection:
             (904, 901, "Quiet Region", None, False, "region"),
             (905, 903, "AO", "ao-logo", False, "ao"),
             (906, 903, "Not AO", None, True, "region"),
+            (907, 900, "Territory", "territory-logo", True, "territory"),
+            (908, 907, "Territory Area", None, True, "area"),
         ],
     )
     db.executemany("INSERT INTO pg.public.events VALUES (?, ?)", [(700, "Workout")])
@@ -84,15 +86,26 @@ def test_areas_and_sectors_keep_inactive_rows_and_order_nested_values():
     db = fixture()
     areas = run(db, "pv_areas.sql")
     assert areas[0][0:4] == (901, "Area", 900, "Sector")
-    assert areas[0][4:6] == ("area-logo", False)
-    assert areas[0][6] == [
+    assert areas[0][4:6] == (None, None)
+    assert areas[0][6:8] == ("area-logo", False)
+    assert areas[0][8] == [
         {"region_id": 904, "region_name": "Quiet Region", "is_active": False},
         {"region_id": 903, "region_name": "Region", "is_active": True},
     ]
-    assert areas[1][6] == []
-    assert run(db, "pv_sectors.sql")[0][2:5] == (
+    assert areas[1][8] == []
+    assert run(db, "pv_territories.sql")[0] == (
+        907,
+        "Territory",
+        900,
+        "Sector",
+        "territory-logo",
+        True,
+        [{"area_id": 908, "area_name": "Territory Area", "is_active": True}],
+    )
+    assert run(db, "pv_sectors.sql")[0][2:6] == (
         "sector-logo",
         True,
+        [{"territory_id": 907, "territory_name": "Territory", "logo_url": "territory-logo", "is_active": True}],
         [
             {"area_id": 901, "area_name": "Area", "is_active": False},
             {"area_id": 902, "area_name": "Other Area", "is_active": True},
@@ -198,8 +211,25 @@ def test_upcoming_q_list_ignores_planned_flag_but_requires_q_type():
 def test_physical_nested_schema_is_list_of_structs():
     db = fixture()
     for name, expected in (
-        ("pv_areas.sql", ["area_id", "area_name", "sector_id", "sector_name", "logo_url", "is_active", "regions"]),
-        ("pv_sectors.sql", ["sector_id", "sector_name", "logo_url", "is_active", "areas"]),
+        (
+            "pv_areas.sql",
+            [
+                "area_id",
+                "area_name",
+                "sector_id",
+                "sector_name",
+                "territory_id",
+                "territory_name",
+                "logo_url",
+                "is_active",
+                "regions",
+            ],
+        ),
+        (
+            "pv_territories.sql",
+            ["territory_id", "territory_name", "sector_id", "sector_name", "logo_url", "is_active", "areas"],
+        ),
+        ("pv_sectors.sql", ["sector_id", "sector_name", "logo_url", "is_active", "territories", "areas"]),
         (
             "pv_aos.sql",
             ["refreshed_at", "ao_id", "ao_name", "region_id", "region_name", "logo_url", "is_active", "types", "tags"],
