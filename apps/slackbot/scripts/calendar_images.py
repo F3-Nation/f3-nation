@@ -96,11 +96,7 @@ def _prepare_calendar_labels(df):
 
     df.loc[event_tag_mask, "label"] = df["q_name"] + "\n" + df["event_tag"] + "\n" + df["event_time"]
     df.loc[(df["pax_count"].notna()) & event_tag_mask, "label"] = (
-        df["q_name"]
-        + "\n"
-        + df["event_tag"]
-        + "\nPAX: "
-        + df["pax_count"].astype(str).str.replace(".0", "")
+        df["q_name"] + "\n" + df["event_tag"] + "\nPAX: " + df["pax_count"].astype(str).str.replace(".0", "")
     )
 
 
