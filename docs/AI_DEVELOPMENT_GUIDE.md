@@ -294,6 +294,19 @@ violation is a `BAD_REQUEST`, not a 500.
   to the pooler: with **PgBouncer transaction pooling**, set `prepare: false`
   (prepared statements break in that mode). Make SSL behavior explicit and
   environment-aware.
+  - **Current deployment (verified 2026-09):** the TypeScript apps reach
+    Postgres through PgBouncer in `pool_mode = transaction` — hence
+    `prepare: false` in the shared client. PgBouncer caps client connections
+    at `max_client_conn = 1000` and its own connections into Postgres at
+    `max_db_connections = 40`, so the server side is well bounded and the
+    binding constraint is the **client** side: each db-backed service
+    (api/map/admin/me) pins `--max-instances=25` in its deploy workflow,
+    which with `max: 5` per instance bounds the fleet at 4 × 25 × 5 = 500
+    clients. Raising a service's `--max-instances` or the client's `max`
+    means redoing that arithmetic against `max_client_conn`.
+  - Leave `max_lifetime` on the postgres-js default: it is a per-connection
+    jittered 30–60 min; a fixed value synchronizes expiry into reconnect
+    stampedes through the pooler.
 - **Migrations** (Drizzle, `packages/db`): generate and commit migrations; keep
   the journal consistent; run migrations as a **deploy step**, not during
   `docker build`. Use `pnpm db:pull` / `db:push` and `reset-test-db` per
