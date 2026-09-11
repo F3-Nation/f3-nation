@@ -98,6 +98,7 @@ class EventInstanceService:
         preblast_rich: Any | None = None,
         preblast: str | None = None,
         preblast_ts: int | float | None = None,
+        existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
         """Update an existing event instance and return the updated record."""
         return self._repository.update(
@@ -118,6 +119,7 @@ class EventInstanceService:
             preblast_rich=preblast_rich,
             preblast=preblast,
             preblast_ts=preblast_ts,
+            existing_instance=existing_instance,
         )
 
     def update_preblast_fields(
