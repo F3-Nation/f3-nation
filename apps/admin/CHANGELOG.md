@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.4.0...admin@2.5.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/shared bumped to 0.3.0
+    * @acme/ui bumped to 0.1.5
+    * @acme/validators bumped to 0.4.1
+
 ## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.3.1...admin@2.4.0) (2026-09-08)
 
 

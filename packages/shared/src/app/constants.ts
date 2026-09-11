@@ -193,6 +193,10 @@ export const routes = {
       __path: "/api-keys",
       __auth: "admin",
     },
+    oauthClients: {
+      __path: "/oauth-clients",
+      __auth: "admin",
+    },
     locations: {
       __path: "/locations",
       __auth: "editor",

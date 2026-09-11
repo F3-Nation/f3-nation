@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## [2.4.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.2...slackbot@2.4.3) (2026-09-10)
+
+
+### Bug Fixes
+
+* **slackbot:** temporarily disable broken confirmation dialogs ([#985](https://github.com/F3-Nation/f3-nation/issues/985)) ([8a51eb3](https://github.com/F3-Nation/f3-nation/commit/8a51eb31c16106d265a4339d42b8ce85c23cd326))
+
+## [2.4.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.1...slackbot@2.4.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **ci:** resolve Cloud Run job image digest using exact tag match via jq ([#982](https://github.com/F3-Nation/f3-nation/issues/982)) ([c884180](https://github.com/F3-Nation/f3-nation/commit/c884180e6d9f52dfe822a1a74e5e569d25fe44ce))
+
 ## [2.4.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.0...slackbot@2.4.1) (2026-09-10)
 
 

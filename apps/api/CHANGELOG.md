@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.6.0](https://github.com/F3-Nation/f3-nation/compare/api@6.5.0...api@6.6.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/shared bumped to 0.3.0
+  * devDependencies
+    * @acme/auth bumped to 0.2.4
+    * @acme/db bumped to 0.6.0
+
 ## [6.5.0](https://github.com/F3-Nation/f3-nation/compare/api@6.4.0...api@6.5.0) (2026-09-08)
 
 

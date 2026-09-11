@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.8.0...pkg-api@0.9.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Bug Fixes
+
+* **api:** replace fixed-depth ancestor-active check with recursive CTE ([#967](https://github.com/F3-Nation/f3-nation/issues/967)) ([cd6e1fe](https://github.com/F3-Nation/f3-nation/commit/cd6e1fe29dd270b19cbe7f463fb58cfac5f3aa58))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.4
+    * @acme/db bumped to 0.6.0
+    * @acme/shared bumped to 0.3.0
+    * @acme/validators bumped to 0.4.1
+
 ## [0.8.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.7.0...pkg-api@0.8.0) (2026-09-08)
 
 
