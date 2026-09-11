@@ -20,6 +20,7 @@ CALENDAR_CONFIG_Q_LINEUP_TIME = "calendar_config_q_lineup_time"
 CALENDAR_CONFIG_GROUP_BY_OPTION = "calendar_config_group_by_option"
 CALENDAR_CONFIG_OPEN_EVENT_COLOR = "calendar_config_open_event_color"
 CALENDAR_CONFIG_SPECIAL_DAYS_OUT = "calendar_config_special_days_out"
+CALENDAR_CONFIG_WEEKS_SHOWN = "calendar_config_weeks_shown"
 
 
 def build_calendar_config_form(
@@ -56,6 +57,7 @@ def build_calendar_general_config_form(
             CALENDAR_CONFIG_Q_LINEUP_DAY: safe_convert(region_record.send_q_lineups_day, str) or "6",
             CALENDAR_CONFIG_Q_LINEUP_TIME: q_lineups_time,
             CALENDAR_CONFIG_SPECIAL_DAYS_OUT: region_record.calendar_config_special_days_out,
+            CALENDAR_CONFIG_WEEKS_SHOWN: safe_convert(region_record.calendar_weeks_shown, str) or "2",
         }
     )
     form.post_modal(
@@ -87,6 +89,7 @@ def handle_calendar_config_general(
     region_record.calendar_config_special_days_out = safe_convert(
         safe_get(values, CALENDAR_CONFIG_SPECIAL_DAYS_OUT), int
     )
+    region_record.calendar_weeks_shown = safe_convert(safe_get(values, CALENDAR_CONFIG_WEEKS_SHOWN), int)
     DbManager.update_records(
         cls=SlackSpace,
         filters=[SlackSpace.team_id == region_record.team_id],
@@ -165,6 +168,19 @@ CALENDAR_CONFIG_GENERAL_FORM = orm.BlockView(
             action=CALENDAR_CONFIG_CALENDAR_IMAGE_CHANNEL,
             element=orm.ChannelsSelectElement(placeholder="Select a channel"),
             optional=True,
+        ),
+        orm.InputBlock(
+            label="Weeks to Show",
+            action=CALENDAR_CONFIG_WEEKS_SHOWN,
+            element=orm.RadioButtonsElement(
+                options=orm.as_selector_options(
+                    names=["2 Weeks", "3 Weeks"],
+                    values=["2", "3"],
+                ),
+                initial_value="2",
+            ),
+            optional=False,
+            hint="Number of weeks displayed on the calendar image and posted to Slack.",
         ),
         orm.InputBlock(
             label="Special Days Out",
