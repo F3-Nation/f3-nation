@@ -2,8 +2,6 @@ import os
 import sys
 from typing import List
 
-from apps.slackbot.utilities.constants import MAX_CALENDAR_WEEKS, WEEK_LABELS
-
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import random
@@ -11,7 +9,6 @@ import shutil
 from datetime import datetime, timedelta
 
 import pytz
-from apps.slackbot.utilities.constants import WEEK_ALT_TEXT
 from f3_data_models.models import (
     Attendance,
     Attendance_x_AttendanceType,
@@ -36,7 +33,15 @@ from slack_sdk.models import blocks
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import aliased
 
-from utilities.constants import EVENT_TAG_COLORS, GCP_IMAGE_URL, LOCAL_DEVELOPMENT, S3_IMAGE_URL
+from utilities.constants import (
+    EVENT_TAG_COLORS,
+    GCP_IMAGE_URL,
+    LOCAL_DEVELOPMENT,
+    MAX_CALENDAR_WEEKS,
+    S3_IMAGE_URL,
+    WEEK_ALT_TEXT,
+    WEEK_LABELS,
+)
 from utilities.helper_functions import current_date_cst, safe_convert, safe_get, update_local_region_records
 from utilities.slack import actions
 
