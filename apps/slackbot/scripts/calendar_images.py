@@ -7,6 +7,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import random
 import shutil
 from datetime import datetime, timedelta
+from math import isnan
 from numbers import Real
 
 import pytz
@@ -53,17 +54,19 @@ def time_int_to_str(time: int) -> str:
     return f"{time // 100:02d}{time % 100:02d}"
 
 
-def _normalize_label_series(series):
-    import pandas as pd
-
-    def normalize(value):
-        if value is None or pd.isna(value):
+def _normalize_label_value(value) -> str:
+    if value is None or type(value).__name__ in {"NAType", "NaTType"}:
+        return ""
+    if isinstance(value, Real) and not isinstance(value, bool):
+        if isnan(value):
             return ""
-        if isinstance(value, Real) and not isinstance(value, bool) and float(value).is_integer():
+        if float(value).is_integer():
             return str(int(value))
-        return str(value)
+    return str(value)
 
-    return series.map(normalize)
+
+def _normalize_label_series(series):
+    return series.map(_normalize_label_value)
 
 
 def highlight_cells(s, color_dicts):
