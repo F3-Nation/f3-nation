@@ -1029,6 +1029,79 @@ describe("Event Router", () => {
       ).toEqual(tagIds.sort());
     });
 
+    it("should carry existing event tags onto instances when starting a series", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const tag = await createTestEventTag();
+      if (!tag) return;
+      const eventType = await createTestEventType();
+      if (!eventType) return;
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Converted Tagged Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: null,
+          startDate: nextFutureMonday(1),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+      await db.insert(schema.eventTagsXEvents).values({
+        eventId: event.id,
+        eventTagId: tag.id,
+      });
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+      const result = await createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      expect(result.event?.id).toBe(event.id);
+      const instances = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, event.id));
+      expect(instances.length).toBeGreaterThan(0);
+
+      const tags = await db
+        .select({ eventTagId: schema.eventTagsXEventInstances.eventTagId })
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          inArray(
+            schema.eventTagsXEventInstances.eventInstanceId,
+            instances.map((instance) => instance.id),
+          ),
+        );
+      expect(tags).toHaveLength(instances.length);
+      expect(tags.every(({ eventTagId }) => eventTagId === tag.id)).toBe(true);
+    });
+
     it("should require all mandatory fields", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);

@@ -350,11 +350,22 @@ class ApiSeriesRepositoryTest(unittest.TestCase):
     def test_update_sends_empty_event_tags_to_clear_them(self):
         self.client.post.return_value = _raw_crupdate_response(id=1)
         self.repo.update(
-            series_id=1, region_id=5, ao_id=10, name="Series",
-            start_date="2025-01-06", start_time="0530", end_time="0615",
-            description=None, location_id=None, end_date=None,
-            event_type_ids=[], event_tag_ids=[], is_active=True,
-            is_private=False, highlight=False, meta=None,
+            series_id=1,
+            region_id=5,
+            ao_id=10,
+            name="Series",
+            start_date="2025-01-06",
+            start_time="0530",
+            end_time="0615",
+            description=None,
+            location_id=None,
+            end_date=None,
+            event_type_ids=[],
+            event_tag_ids=[],
+            is_active=True,
+            is_private=False,
+            highlight=False,
+            meta=None,
         )
         payload = self.client.post.call_args.kwargs["json"]
         self.assertEqual(payload["eventTagIds"], [])

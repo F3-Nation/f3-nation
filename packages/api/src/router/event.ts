@@ -871,7 +871,10 @@ export const eventRouter = {
             highlight: result.highlight,
             meta: result.meta,
             eventTypeIds: eventTypeIds,
-            eventTagIds,
+            // Use the effective tags for every cascade path. This preserves
+            // tags when a non-series event is converted to a series and when
+            // an update omits eventTagIds.
+            eventTagIds: effectiveEventTagIds,
           };
 
           if (!existingEvent) {
@@ -909,7 +912,6 @@ export const eventRouter = {
               // Structural change: delete and recreate future instances
               await recreateFutureInstances(transactionDb, {
                 ...seriesData,
-                eventTagIds: effectiveEventTagIds,
               });
             } else {
               // Non-structural change: update future instances in place
