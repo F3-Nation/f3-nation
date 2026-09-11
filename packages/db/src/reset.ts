@@ -77,6 +77,9 @@ export const reset = async (db?: AppDb) => {
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS public CASCADE`);
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS drizzle CASCADE`);
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS auth CASCADE`);
+  // codex is bootstrapped by migration 0023; drop it too so local/test resets
+  // start clean and 0023 recreates it instead of skipping surviving tables.
+  await dbToUse.execute(sql`DROP SCHEMA IF EXISTS codex CASCADE`);
   await dbToUse.execute(sql`CREATE SCHEMA public`);
 
   for (const user of users) {

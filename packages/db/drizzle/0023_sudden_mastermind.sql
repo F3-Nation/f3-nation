@@ -1,8 +1,11 @@
 -- `codex` is a separately-provisioned schema (owned by app_codex) that already
 -- exists in prod. Every statement uses IF NOT EXISTS so this is safe to run
--- whether codex is absent (fresh dev/CI/test — bootstraps it), already present
--- (no-op), or partially provisioned. The migration role must hold CREATE on the
--- codex schema for the already-present case. Structure mirrors the pg_dump.
+-- whether codex is absent (fresh dev/CI/test — bootstraps it) or already present
+-- (no-op). The migration role must hold CREATE on the codex schema for the
+-- already-present case. The column comments below are guarded so a pre-existing
+-- table that lacks those columns can't abort the run. Reconciling a *partially*
+-- provisioned table (missing columns/constraints) is intentionally out of scope
+-- — codex is all-or-nothing in practice. Structure mirrors the pg_dump.
 CREATE SCHEMA IF NOT EXISTS "codex";
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "codex"."admins" (
@@ -73,5 +76,12 @@ CREATE TABLE IF NOT EXISTS "codex"."user_submissions" (
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_entry_references_target_entry_id" ON "codex"."entry_references" USING btree ("target_entry_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_entry_tags_tag_id" ON "codex"."entry_tags" USING btree ("tag_id");--> statement-breakpoint
-COMMENT ON COLUMN "codex"."user_submissions"."rejection_reason" IS 'Admin''s reason for rejecting the submission';--> statement-breakpoint
-COMMENT ON COLUMN "codex"."user_submissions"."admin_notes" IS 'Internal admin notes about the submission';
+DO $$
+BEGIN
+	IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'codex' AND table_name = 'user_submissions' AND column_name = 'rejection_reason') THEN
+		COMMENT ON COLUMN "codex"."user_submissions"."rejection_reason" IS 'Admin''s reason for rejecting the submission';
+	END IF;
+	IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'codex' AND table_name = 'user_submissions' AND column_name = 'admin_notes') THEN
+		COMMENT ON COLUMN "codex"."user_submissions"."admin_notes" IS 'Internal admin notes about the submission';
+	END IF;
+END $$;
