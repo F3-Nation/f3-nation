@@ -10,6 +10,7 @@ export { createDbClient } from "./functions";
 // Postgres — the wrapper's behavior depends on postgres-js internals (lazy
 // dispatch, out-of-band CancelRequest) that mocks cannot meaningfully pin.
 export { withQueryTimeout } from "./query-timeout";
+export { resolveQueryTimeoutMs } from "./functions";
 
 const shouldSkipReset = () => {
   if (

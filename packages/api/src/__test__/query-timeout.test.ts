@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { withQueryTimeout } from "@acme/db/testing";
+import { resolveQueryTimeoutMs, withQueryTimeout } from "@acme/db/testing";
 
 // Coverage for the client-side query timeout. Lives here rather than
 // packages/db because this package already has the live-Postgres vitest
@@ -218,5 +218,28 @@ describe("withQueryTimeout (timer/canceller bookkeeping, faked client)", () => {
       process.off("unhandledRejection", onUnhandled);
       consoleError.mockRestore();
     }
+  });
+});
+
+describe("resolveQueryTimeoutMs", () => {
+  it("parses explicit values, including the 0 disable sentinel", () => {
+    expect(resolveQueryTimeoutMs("5000")).toBe(5_000);
+    expect(resolveQueryTimeoutMs("0")).toBe(0);
+  });
+
+  it("falls through to the default on unset, blank, or invalid values", () => {
+    expect(resolveQueryTimeoutMs(undefined)).toBe(60_000);
+    expect(resolveQueryTimeoutMs("")).toBe(60_000);
+    expect(resolveQueryTimeoutMs("  ")).toBe(60_000);
+    expect(resolveQueryTimeoutMs("abc")).toBe(60_000);
+    expect(resolveQueryTimeoutMs("-1")).toBe(60_000);
+  });
+
+  it("falls through to the default above Node's max timer delay", () => {
+    // setTimeout coerces delays > 2^31 - 1 ms to 1ms — an oversized env
+    // value must not become an instant timeout on every query.
+    expect(resolveQueryTimeoutMs("2147483647")).toBe(2_147_483_647);
+    expect(resolveQueryTimeoutMs("2147483648")).toBe(60_000);
+    expect(resolveQueryTimeoutMs("600000000000")).toBe(60_000);
   });
 });
