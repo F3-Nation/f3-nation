@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.3.2](https://github.com/F3-Nation/f3-nation/compare/map@7.3.1...map@7.3.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **slackbot:** temporarily disable broken confirmation dialogs ([#985](https://github.com/F3-Nation/f3-nation/issues/985)) ([8a51eb3](https://github.com/F3-Nation/f3-nation/commit/8a51eb31c16106d265a4339d42b8ce85c23cd326))
+
 ## [7.3.1](https://github.com/F3-Nation/f3-nation/compare/map@7.3.0...map@7.3.1) (2026-09-10)
 
 

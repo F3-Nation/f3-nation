@@ -363,17 +363,18 @@ def build_event_preblast_select_form(
                 orm.ButtonElement(
                     label="New Unscheduled Event",
                     action=actions.EVENT_PREBLAST_NEW_BUTTON,
-                    confirm=orm.ConfirmObject(
-                        title="Are you sure?",
-                        text=(
-                            "This option should ONLY BE USED FOR UNSCHEDULED EVENTS that are not listed on "
-                            "the calendar. If this is for a normal, scheduled event, please select it from "
-                            "the lists above."
-                        ),
-                        confirm="Yes, I'm sure",
-                        deny="Whups, never mind",
-                        style="danger",
-                    ),
+                    # Temporarily disabled: Slack confirmation dialogs dismiss the parent modal (#984).
+                    # confirm=orm.ConfirmObject(
+                    #     title="Are you sure?",
+                    #     text=(
+                    #         "This option should ONLY BE USED FOR UNSCHEDULED EVENTS that are not listed on "
+                    #         "the calendar. If this is for a normal, scheduled event, please select it from "
+                    #         "the lists above."
+                    #     ),
+                    #     confirm="Yes, I'm sure",
+                    #     deny="Whups, never mind",
+                    #     style="danger",
+                    # ),
                 ),
             ]
         ),
