@@ -7,6 +7,7 @@ from typing import List
 
 import pytz
 import requests
+from apps.slackbot.utilities.constants import MAX_CALENDAR_WEEKS, WEEK_LABELS, WEEK_SCHEDULE_LABELS
 from f3_data_models.models import (
     Attendance,
     Attendance_x_AttendanceType,
@@ -31,7 +32,6 @@ from features.calendar.event_preblast import (
     post_hc_thread_reply,
 )
 from utilities import constants
-from utilities.calendar_constants import MAX_CALENDAR_WEEKS, WEEK_LABELS, WEEK_SCHEDULE_LABELS
 from utilities.constants import GCP_IMAGE_URL, LOCAL_DEVELOPMENT, S3_IMAGE_URL
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import CalendarHomeQuery, get_admin_users, get_aoq_users, home_schedule_query
