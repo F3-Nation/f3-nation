@@ -2,6 +2,7 @@ import { os } from "@orpc/server";
 import omit from "lodash/omit";
 import { z } from "zod";
 
+import type { AnyColumn } from "@acme/db";
 import {
   aliasedTable,
   and,
@@ -10,17 +11,23 @@ import {
   gte,
   isNotNull,
   isNull,
+  ne,
+  notExists,
   lte,
   or,
   schema,
   sql,
 } from "@acme/db";
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, SeriesException } from "@acme/shared/app/enums";
 import { getFullAddress } from "@acme/shared/app/functions";
 import { isTruthy } from "@acme/shared/common/functions";
 import type { LowBandwidthF3Marker } from "@acme/validators";
 import { LowBandwidthF3Marker as LowBandwidthF3MarkerSchema } from "@acme/validators";
 
+import {
+  logIfOrgTreeExceedsMaxDepth,
+  ORG_TREE_MAX_DEPTH,
+} from "../../org-tree";
 import { protectedProcedure } from "../../shared";
 
 /**
@@ -38,6 +45,76 @@ const withinCurrentEventDateWindow = () =>
     ),
   );
 
+/**
+ * True when every org *above* `orgIdColumn` in the hierarchy is active.
+ *
+ * `org.delete` only cascades to events and instances for AOs, so deactivating a
+ * region, area, sector, or nation leaves every descendant org, event, and
+ * instance active. Public read paths therefore have to walk the chain
+ * themselves or they keep serving pins, pin statuses, and workout details for a
+ * retired part of the tree.
+ *
+ * The recursive CTE walks *down* from every inactive org rather than *up*
+ * from `orgIdColumn`, and `orgIdColumn` is only compared against the result
+ * afterward, never referenced inside the CTE itself. That keeps the CTE
+ * decorrelated from the outer per-row `notExists(...)`: PostgreSQL cannot
+ * pull a `WITH RECURSIVE` out of a correlated subquery to flatten it into a
+ * join, so an ancestor-walking form anchored at `orgIdColumn` forces a
+ * `SubPlan` that re-runs the full recursive union once per outer row —
+ * verified ~14x slower than this form at 5k rows in local benchmarking.
+ * Decorrelated, the planner computes the "tainted" (has-an-inactive-ancestor)
+ * org set once and can flatten the outer `NOT EXISTS` into a join.
+ *
+ * It has to stay an inline SQL subquery — not a `db.execute` call like
+ * `checkHasRoleOnOrg` and `getDescendantOrgIds` — because it's embedded via
+ * `notExists(...)` inside bulk selects that return many rows per call; a
+ * per-row round trip would be an N+1. `ORG_TREE_MAX_DEPTH` still bounds the
+ * recursion so a cycle or corrupt data can't run away, and rows beyond the
+ * cap are excluded from the tainted set below so this stays consistent with
+ * `checkHasRoleOnOrg`/`getDescendantOrgIds`, which discard the same boundary
+ * row. Because there's no materialized per-call result to inspect, callers
+ * pair this with `logIfOrgTreeExceedsMaxDepth` (packages/api/src/org-tree.ts)
+ * — a single unanchored scan of the whole `orgs` table — for
+ * `api.org_tree.depth_limit_reached` telemetry instead of a per-row check.
+ *
+ * Callers keep their own predicate on the org the column points at; a null
+ * `orgIdColumn`, or one with no matching org row, passes here.
+ */
+const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
+  const orgId = sql.identifier(schema.orgs.id.name);
+  const parentId = sql.identifier(schema.orgs.parentId.name);
+
+  // notExists() splices its argument in as-is (`sql\`not exists ${subquery}\``)
+  // without adding parens the way a query-builder subquery would, so the
+  // WITH clause needs its own explicit parens to parse as a subquery.
+  return notExists(sql`(
+    SELECT 1 FROM (
+      WITH RECURSIVE tainted(id, depth, path) AS (
+        SELECT
+          ${schema.orgs.id},
+          0,
+          ARRAY[${schema.orgs.id}]
+        FROM ${schema.orgs}
+        WHERE ${schema.orgs.isActive} = false
+
+        UNION ALL
+
+        SELECT
+          child.${orgId},
+          tainted.depth + 1,
+          tainted.path || child.${orgId}
+        FROM ${schema.orgs} AS child
+        INNER JOIN tainted ON child.${parentId} = tainted.id
+        WHERE tainted.depth <= ${ORG_TREE_MAX_DEPTH}
+          AND NOT child.${orgId} = ANY(tainted.path)
+      )
+      SELECT id FROM tainted
+      WHERE depth > 0 AND depth <= ${ORG_TREE_MAX_DEPTH}
+    ) t
+    WHERE t.id = ${orgIdColumn}
+  )`);
+};
+
 export const mapLocationRouter = os.router({
   eventsAndLocations: protectedProcedure
     .route({
@@ -54,6 +131,8 @@ export const mapLocationRouter = os.router({
         .describe("Low-bandwidth array of events and locations"),
     )
     .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const locationsAndEvents = await ctx.db
@@ -78,6 +157,8 @@ export const mapLocationRouter = os.router({
             dayOfWeek: schema.events.dayOfWeek,
             startTime: schema.events.startTime,
             endTime: schema.events.endTime,
+            startDate: schema.events.startDate,
+            endDate: schema.events.endDate,
             name: schema.events.name,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
             json_agg(
@@ -121,7 +202,16 @@ export const mapLocationRouter = os.router({
           schema.eventTypes,
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
-        .where(eq(schema.locations.isActive, true))
+        .where(
+          and(
+            eq(schema.locations.isActive, true),
+            // Deactivating an org does not cascade to child AOs or events, so
+            // the public map must hide them here: the event's own org, plus
+            // every level above it (region, area, sector, nation).
+            or(isNull(aoOrg.id), eq(aoOrg.isActive, true)),
+            ancestorOrgsAreActive(schema.events.orgId),
+          ),
+        )
         .groupBy(
           schema.locations.id,
           aoOrg.name,
@@ -204,10 +294,203 @@ export const mapLocationRouter = os.router({
             event.eventTypes,
             event.aoName,
             event.aoLogo,
+            event.startDate,
+            event.endDate ?? null,
           ]),
       ]);
 
       return lowBandwidthLocationEvents;
+    }),
+  upcomingInstances: protectedProcedure
+    .route({
+      method: "GET",
+      path: "/upcoming-instances",
+      tags: ["map.location"],
+      summary: "Get upcoming event instance exceptions and one-off events",
+      description:
+        "Returns event instances in the next 30 days that have a series exception (closed, different-time, miscellaneous), are standalone one-off events (no seriesId), or belong to a series but sit at a different location than their parent event (including a parent with no fixed location). Used for map pin status flagging.",
+    })
+    .output(
+      z
+        .array(
+          z.object({
+            id: z.number().describe("Event instance ID"),
+            seriesId: z
+              .number()
+              .nullable()
+              .describe("Parent series event ID, null for one-off instances"),
+            locationId: z
+              .number()
+              .nullable()
+              .describe("Location ID, null when the instance has no location"),
+            startDate: z.string().describe("Instance start date (YYYY-MM-DD)"),
+            startTime: z.string().nullable().describe("Instance start time"),
+            endTime: z.string().nullable().describe("Instance end time"),
+            seriesException: z
+              .enum(SeriesException)
+              .nullable()
+              .describe("Series exception type, null when not an exception"),
+            highlight: z
+              .boolean()
+              .describe("Whether the instance is highlighted"),
+            name: z.string().describe("Instance name"),
+            // Location and AO columns come from LEFT JOINs, so every one of
+            // them is null for a locationless instance.
+            lat: z.number().nullable().describe("Location latitude"),
+            lon: z.number().nullable().describe("Location longitude"),
+            aoName: z.string().nullable().describe("AO name"),
+            aoLogo: z.string().nullable().describe("AO logo URL"),
+            locationAddress: z.string().nullable().describe("Street address"),
+            locationAddress2: z
+              .string()
+              .nullable()
+              .describe("Street address line 2"),
+            locationCity: z.string().nullable().describe("City"),
+            locationState: z.string().nullable().describe("State"),
+            locationCountry: z.string().nullable().describe("Country"),
+            eventTypes: z
+              .array(
+                z.object({
+                  id: z.number().describe("Event type ID"),
+                  name: z.string().describe("Event type name"),
+                }),
+              )
+              .describe("Event types, empty array when none are linked"),
+            fullAddress: z
+              .string()
+              .nullable()
+              .describe("Address assembled from the location columns"),
+          }),
+        )
+        .describe("Upcoming event instances for map pin status flagging"),
+    )
+    .handler(async ({ context: ctx }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
+      const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const seriesEvent = aliasedTable(schema.events, "series_event");
+
+      const instances = await ctx.db
+        .select({
+          id: schema.eventInstances.id,
+          seriesId: schema.eventInstances.seriesId,
+          locationId: schema.eventInstances.locationId,
+          startDate: schema.eventInstances.startDate,
+          startTime: schema.eventInstances.startTime,
+          endTime: schema.eventInstances.endTime,
+          seriesException: schema.eventInstances.seriesException,
+          highlight: schema.eventInstances.highlight,
+          name: schema.eventInstances.name,
+          lat: schema.locations.latitude,
+          lon: schema.locations.longitude,
+          aoName: aoOrg.name,
+          aoLogo: aoOrg.logoUrl,
+          locationAddress: schema.locations.addressStreet,
+          locationAddress2: schema.locations.addressStreet2,
+          locationCity: schema.locations.addressCity,
+          locationState: schema.locations.addressState,
+          locationCountry: schema.locations.addressCountry,
+          eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
+            json_agg(
+              DISTINCT jsonb_build_object(
+                'id', ${schema.eventTypes.id},
+                'name', ${schema.eventTypes.name}
+              )
+            )
+            FILTER (
+              WHERE ${schema.eventTypes.id} IS NOT NULL
+            ),
+            '[]'
+          )`,
+        })
+        .from(schema.eventInstances)
+        // LEFT join so locationless exceptions (e.g. "closed") still reach the
+        // client to flag their parent series. The active-location check moves to
+        // the WHERE clause, applied only to rows that have a location.
+        .leftJoin(
+          schema.locations,
+          eq(schema.eventInstances.locationId, schema.locations.id),
+        )
+        .leftJoin(aoOrg, eq(schema.eventInstances.orgId, aoOrg.id))
+        .leftJoin(
+          seriesEvent,
+          eq(seriesEvent.id, schema.eventInstances.seriesId),
+        )
+        .leftJoin(
+          schema.eventInstancesXEventTypes,
+          eq(
+            schema.eventInstancesXEventTypes.eventInstanceId,
+            schema.eventInstances.id,
+          ),
+        )
+        .leftJoin(
+          schema.eventTypes,
+          eq(
+            schema.eventTypes.id,
+            schema.eventInstancesXEventTypes.eventTypeId,
+          ),
+        )
+        .where(
+          and(
+            eq(schema.eventInstances.isActive, true),
+            eq(schema.eventInstances.isPrivate, false),
+            eq(aoOrg.isActive, true),
+            // Descendants stay active when a region, area, sector, or nation is
+            // retired; exclude their instances from public markers and pin
+            // statuses.
+            ancestorOrgsAreActive(schema.eventInstances.orgId),
+            or(
+              isNull(schema.eventInstances.seriesId),
+              and(
+                eq(seriesEvent.isActive, true),
+                eq(seriesEvent.isPrivate, false),
+              ),
+            ),
+            sql`${schema.eventInstances.startDate} >= CURRENT_DATE`,
+            sql`${schema.eventInstances.startDate} <= CURRENT_DATE + INTERVAL '30 days'`,
+            // Locationless rows pass through (client skips markers without coords);
+            // rows with a location must resolve to an active one.
+            or(
+              isNull(schema.eventInstances.locationId),
+              eq(schema.locations.isActive, true),
+            ),
+            or(
+              isNotNull(schema.eventInstances.seriesException),
+              isNull(schema.eventInstances.seriesId),
+              and(
+                isNotNull(schema.eventInstances.seriesId),
+                // Include a series occurrence not at its parent's location:
+                // either side null, or the two differ. Both isNull arms are
+                // required — `ne` yields NULL (not true) when a side is NULL,
+                // which would silently drop those rows.
+                or(
+                  isNull(seriesEvent.locationId),
+                  isNull(schema.eventInstances.locationId),
+                  ne(schema.eventInstances.locationId, seriesEvent.locationId),
+                ),
+              ),
+            ),
+          ),
+        )
+        .groupBy(
+          schema.eventInstances.id,
+          schema.locations.id,
+          schema.locations.latitude,
+          schema.locations.longitude,
+          schema.locations.addressStreet,
+          schema.locations.addressStreet2,
+          schema.locations.addressCity,
+          schema.locations.addressState,
+          schema.locations.addressCountry,
+          aoOrg.id,
+          aoOrg.name,
+          aoOrg.logoUrl,
+        );
+
+      return instances.map((instance) => ({
+        ...instance,
+        fullAddress: getFullAddress(instance),
+      }));
     }),
   locationWorkout: protectedProcedure
     .input(
@@ -303,6 +586,10 @@ export const mapLocationRouter = os.router({
                     .describe("Day of week"),
                   startTime: z.string().nullable().describe("Event start time"),
                   endTime: z.string().nullable().describe("Event end time"),
+                  startDate: z
+                    .string()
+                    .nullable()
+                    .describe("Date the event starts recurring"),
                   endDate: z
                     .string()
                     .nullable()
@@ -329,6 +616,8 @@ export const mapLocationRouter = os.router({
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 
@@ -380,6 +669,7 @@ export const mapLocationRouter = os.router({
             dayOfWeek: schema.events.dayOfWeek,
             startTime: schema.events.startTime,
             endTime: schema.events.endTime,
+            startDate: schema.events.startDate,
             endDate: schema.events.endDate,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
             json_agg(
@@ -400,7 +690,7 @@ export const mapLocationRouter = os.router({
           },
         })
         .from(schema.locations)
-        .innerJoin(
+        .leftJoin(
           schema.events,
           and(
             eq(schema.locations.id, schema.events.locationId),
@@ -438,7 +728,14 @@ export const mapLocationRouter = os.router({
         .where(
           and(
             eq(schema.locations.id, input.locationId),
-            eq(schema.events.isActive, true),
+            eq(schema.locations.isActive, true),
+            or(
+              isNull(schema.events.id),
+              and(
+                or(isNull(parentOrg.id), eq(parentOrg.isActive, true)),
+                ancestorOrgsAreActive(schema.events.orgId),
+              ),
+            ),
           ),
         )
         .groupBy(
@@ -449,16 +746,22 @@ export const mapLocationRouter = os.router({
         );
 
       const location = results[0]?.location;
-      const events = results.map((r) => r.event);
+      const events = results
+        .map((r) => r.event)
+        .filter(
+          (
+            e,
+          ): e is NonNullable<(typeof results)[number]["event"]> & {
+            id: number;
+            name: string;
+          } => e?.id != null && e.name != null,
+        )
+        .map((e) => ({ ...e, id: e.id, name: e.name }));
 
-      // Return a message instead of throwing so the client can show a friendly
-      // "deleted/unavailable" panel without crashing into an error state.
-      //
-      // No rows is the ordinary case of a location whose events have all ended
-      // or don't start within the current date window (see
-      // withinCurrentEventDateWindow) — the message is user-facing, so it must
-      // not leak an internal diagnostic for what is a routine "stale link".
-      if (results.length === 0) {
+      // No events → stale link (LEFT JOIN yields a null-event row when all
+      // events fall outside the date window). Return a message instead of
+      // throwing so the client shows a friendly panel.
+      if (events.length === 0) {
         return {
           location: null,
           message: "This workout is no longer scheduled.",

@@ -4,20 +4,28 @@ on:
   push:
     tags:
       - "analytics@*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re-)deploy, e.g. analytics@1.2.3"
+        required: true
+        type: string
 
 concurrency:
-  group: deploy-analytics-${{ github.ref_name }}
+  group: deploy-analytics-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
   contents: read
   id-token: write
   checks: read
+  issues: write
 
 jobs:
   deploy:
     uses: ./.github/workflows/_deploy-cloudrun-job.yml
     with:
+      ref: ${{ inputs.tag }}
       image_name: analytics-etl
       job_name: analytics-etl
       staging_job_name: analytics-etl-nonprod
