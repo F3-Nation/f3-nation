@@ -46,6 +46,7 @@
     "@vitest/coverage-v8": "catalog:",
     "dotenv-cli": "catalog:",
     "eslint": "catalog:",
+    "postgres": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
