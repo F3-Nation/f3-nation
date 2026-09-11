@@ -287,6 +287,12 @@ export default function OrgMap() {
   // ── info loading ─────────────────────────────────────────────────────────
 
   const loadOrgInfo = useCallback(async (org: Org) => {
+    if (activeInfoOrgIdRef.current !== org.id) {
+      // Drop the previous org's fallback in the same commit as the new detail,
+      // so a switch to an already-cached org can't render its admin for a frame.
+      setNearestAdminOrg(null);
+      setAdminLookupInconclusive(false);
+    }
     activeInfoOrgIdRef.current = org.id;
 
     const cached = orgInfoCacheRef.current.get(org.id);
