@@ -33,7 +33,7 @@ ignore = ["C901"]
 testpaths = ["tests"]
 
 [build-system]
-requires = ["setuptools==83.0.0", "wheel==0.46.2"]
+requires = ["setuptools==83.0.0", "wheel==0.48.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
