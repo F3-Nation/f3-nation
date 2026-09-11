@@ -68,6 +68,7 @@ class EventInstanceRepository(Protocol):
         preblast_rich: Any | None,
         preblast: str | None,
         preblast_ts: int | float | None = None,
+        existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
         """Update an existing event instance and return the updated record."""
         ...
@@ -77,7 +78,7 @@ class EventInstanceRepository(Protocol):
         ...
 
     def reopen(self, instance: EventInstanceData) -> None:
-        """Clear the seriesException field on an instance."""
+        """Recompute the series time exception when reopening an instance."""
         ...
 
     def update_preblast_fields(
