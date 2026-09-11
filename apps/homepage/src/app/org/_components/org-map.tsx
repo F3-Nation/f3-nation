@@ -526,11 +526,15 @@ export default function OrgMap() {
           (r) => r.title?.toLowerCase().includes("admin") ?? false,
         );
         if (admins.length > 0) {
-          setNearestAdminOrg({
-            name: ancestor.name,
-            orgType: ancestor.orgType,
-            adminNames: admins.map((a) => a.f3Name ?? "Unknown"),
-          });
+          // activeInfoOrgIdRef flips synchronously on switch (before any await
+          // resolves), so a stale climb can't overwrite a newer org's panel.
+          if (activeInfoOrgIdRef.current === org.id) {
+            setNearestAdminOrg({
+              name: ancestor.name,
+              orgType: ancestor.orgType,
+              adminNames: admins.map((a) => a.f3Name ?? "Unknown"),
+            });
+          }
           return;
         }
         // No admins here — keep climbing
@@ -538,12 +542,16 @@ export default function OrgMap() {
 
       // Reached the top with no admin found: only claim "none" when every
       // ancestor was actually checked; a failed lookup makes it inconclusive.
-      if (!cancelled) setAdminLookupInconclusive(hadFailure);
+      if (!cancelled && activeInfoOrgIdRef.current === org.id) {
+        setAdminLookupInconclusive(hadFailure);
+      }
     }
 
     void climb().catch(() => {
       // An unexpected shape must surface as inconclusive, not a false "none".
-      if (!cancelled) setAdminLookupInconclusive(true);
+      if (!cancelled && activeInfoOrgIdRef.current === org.id) {
+        setAdminLookupInconclusive(true);
+      }
     });
 
     return () => {
