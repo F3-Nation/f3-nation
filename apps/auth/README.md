@@ -720,7 +720,7 @@ bash apps/auth/scripts/cloud-run-env.sh --env prod
 ```bash
 gcloud run domain-mappings create \
   --service=f3-auth \
-  --domain=staging.auth.f3nation.com \
+  --domain=staging.auth2.f3nation.com \
   --region=us-central1 \
   --project=f3-authentication-staging
 

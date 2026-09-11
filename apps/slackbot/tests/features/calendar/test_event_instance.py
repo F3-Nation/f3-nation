@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from application.event_instance import EventInstanceData
 from application.event_instance.service import EventInstanceService
+from application.series import SeriesData
 from features.calendar.event_instance import (
     CALENDAR_ADD_EVENT_INSTANCE_AO,
     CALENDAR_ADD_EVENT_INSTANCE_END_TIME,
@@ -49,6 +50,7 @@ def _make_instance(
     is_private: bool = False,
     highlight: bool = False,
     preblast_ts: int | float | None = None,
+    series_id: int | None = None,
 ) -> EventInstanceData:
     return EventInstanceData(
         id=id,
@@ -58,6 +60,7 @@ def _make_instance(
         start_time=start_time,
         end_time=end_time,
         series_exception=series_exception,
+        series_id=series_id,
         event_type_ids=event_type_ids or [5],
         event_tag_ids=event_tag_ids or [],
         meta=meta,
@@ -394,7 +397,9 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
             highlight=False,
             preblast_rich=None,
             preblast=None,
+            existing_instance=_make_instance(id=5, series_id=None),
         )
+        self.client.get.assert_not_called()
         _, kwargs = self.client.post.call_args
         self.assertEqual(kwargs["json"]["id"], 5)
         self.assertEqual(kwargs["json"]["name"], "Updated")
@@ -421,9 +426,73 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
             preblast_rich=None,
             preblast=None,
             preblast_ts=987654321,
+            existing_instance=_make_instance(id=5, series_id=None),
         )
+        self.client.get.assert_not_called()
+        self.client.get.assert_not_called()
         _, kwargs = self.client.post.call_args
         self.assertEqual(kwargs["json"]["preblastTs"], 987654321)
+
+    def test_series_time_exception_is_set_and_reverted(self):
+        series_repo = MagicMock()
+        series_repo.get_by_id.return_value = SeriesData(id=22, start_time="0600")
+        repo = ApiEventInstanceRepository(self.client, series_repository=series_repo)
+        existing = _make_instance(id=5, series_exception=None, series_id=22)
+        self.client.post.return_value = {"eventInstance": self._raw_instance(id=5)}
+
+        repo.update(
+            5,
+            "Updated",
+            10,
+            date(2026, 7, 4),
+            "0615",
+            "0715",
+            None,
+            None,
+            [1],
+            [],
+            True,
+            False,
+            None,
+            False,
+            None,
+            None,
+            existing_instance=existing,
+        )
+        self.assertEqual(self.client.post.call_args.kwargs["json"]["seriesException"], "different-time")
+
+        repo.update(
+            5,
+            "Updated",
+            10,
+            date(2026, 7, 4),
+            "0600",
+            "0700",
+            None,
+            None,
+            [1],
+            [],
+            True,
+            False,
+            None,
+            False,
+            None,
+            None,
+            existing_instance=existing,
+        )
+        self.assertIsNone(self.client.post.call_args.kwargs["json"]["seriesException"])
+
+    def test_reopen_recomputes_series_time_exception(self):
+        series_repo = MagicMock()
+        series_repo.get_by_id.return_value = SeriesData(id=22, start_time="0600")
+        repo = ApiEventInstanceRepository(self.client, series_repository=series_repo)
+        repo.reopen(_make_instance(id=4, start_time="0615", series_exception="closed", series_id=22))
+        self.assertEqual(self.client.post.call_args.kwargs["json"]["seriesException"], "different-time")
+
+    def test_reopen_clears_non_series_exception(self):
+        repo = ApiEventInstanceRepository(self.client)
+        repo.reopen(_make_instance(id=4, series_exception="closed", series_id=None))
+        self.assertIsNone(self.client.post.call_args.kwargs["json"]["seriesException"])
 
     def test_update_preblast_fields_merges_meta_and_preserves_required_fields(self):
         self.client.get.return_value = {"eventInstance": {**self._raw_instance(id=10), "meta": {"keep": "yes"}}}
