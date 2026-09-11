@@ -6,6 +6,47 @@ import { env } from "@acme/env";
 import { isTest } from "@acme/shared/common/constants";
 
 import { schema } from "..";
+import { withQueryTimeout } from "./query-timeout";
+
+// postgres-js has no bound on how long a query waits behind a saturated
+// connection pool -- see withQueryTimeout's docstring.
+//
+// 60s is a hang backstop, NOT a latency budget. The production database
+// already logs statements over 5s (log_min_duration_statement=5000), and
+// those logs show the api and map users routinely running 5-31s statements
+// (~180/week, mostly count() on list endpoints) -- a materially lower value
+// here would convert real, succeeding queries into failures. PgBouncer's
+// query_wait_timeout (default 120s) already bounds the wait for a *server*
+// connection; this covers the postgres-js client-side queue, which
+// PgBouncer cannot see.
+//
+// Overridable via QUERY_TIMEOUT_MS; 0 disables the wrapper entirely (set
+// on the migrate/seed/reset scripts in package.json, where long-running
+// statements are expected and a cancelled half-applied run is worse than a
+// slow one). Read via process.env (like packages/shared's constants), not
+// @acme/env: skipValidation short-circuits schema defaults in CI, which
+// would silently disable the timeout exactly where the integration tests
+// exercise it.
+const DEFAULT_QUERY_TIMEOUT_MS = 60_000;
+// Node coerces setTimeout delays above 2^31 - 1 ms (~24.8 days) to 1ms, so
+// an oversized value would instantly time out every query — cap it.
+const MAX_QUERY_TIMEOUT_MS = 2_147_483_647;
+
+// Exported for tests. Blank/whitespace/invalid/oversized values fall through
+// to the default: Number("") is 0, which would silently disable the wrapper
+// on an empty deployment variable — disabling must be an explicit "0".
+export const resolveQueryTimeoutMs = (raw: string | undefined): number => {
+  const trimmed = raw?.trim();
+  const parsed =
+    trimmed === undefined || trimmed === "" ? Number.NaN : Number(trimmed);
+  return Number.isFinite(parsed) &&
+    parsed >= 0 &&
+    parsed <= MAX_QUERY_TIMEOUT_MS
+    ? parsed
+    : DEFAULT_QUERY_TIMEOUT_MS;
+};
+
+const QUERY_TIMEOUT_MS = resolveQueryTimeoutMs(process.env.QUERY_TIMEOUT_MS);
 
 const getDatabaseNameFromUri = (uri: string) => {
   const databaseNameRegex = /\/([^/?]+)(\?|$)/;
@@ -47,6 +88,7 @@ export const createDbClient = () => {
     // default and would fail intermittently through the pooler.
     prepare: false,
   });
+  if (QUERY_TIMEOUT_MS > 0) withQueryTimeout(client, QUERY_TIMEOUT_MS);
   return { db: drizzle(client, { schema }), close: () => client.end() };
 };
 
