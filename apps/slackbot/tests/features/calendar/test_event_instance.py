@@ -397,7 +397,9 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
             highlight=False,
             preblast_rich=None,
             preblast=None,
+            existing_instance=_make_instance(id=5, series_id=None),
         )
+        self.client.get.assert_not_called()
         _, kwargs = self.client.post.call_args
         self.assertEqual(kwargs["json"]["id"], 5)
         self.assertEqual(kwargs["json"]["name"], "Updated")
@@ -424,7 +426,10 @@ class ApiEventInstanceRepositoryTest(unittest.TestCase):
             preblast_rich=None,
             preblast=None,
             preblast_ts=987654321,
+            existing_instance=_make_instance(id=5, series_id=None),
         )
+        self.client.get.assert_not_called()
+        self.client.get.assert_not_called()
         _, kwargs = self.client.post.call_args
         self.assertEqual(kwargs["json"]["preblastTs"], 987654321)
 

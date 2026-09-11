@@ -363,12 +363,7 @@ class ApiEventInstanceRepository:
         preblast_ts: int | float | None = None,
         existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
-        try:
-            existing = existing_instance or self.get_by_id(instance_id)
-        except Exception:
-            # A mutation can still proceed when a legacy API response cannot be
-            # parsed; in that case there is no safe exception to derive.
-            existing = None
+        existing = existing_instance or self.get_by_id(instance_id)
         series_exception = self._series_exception_for_update(existing, start_time) if existing is not None else None
         payload = _build_crupdate_payload(
             name=name,
