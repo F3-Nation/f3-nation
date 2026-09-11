@@ -225,6 +225,32 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
 
         self.assertIsNone(self._posted_payload()["seriesException"])
 
+    def test_update_preserves_miscellaneous_exception_when_time_matches_series(self):
+        series_repo = MagicMock()
+        series_repo.get_by_id.return_value.start_time = "0700"
+        repo = ApiEventInstanceRepository(self.client, series_repository=series_repo)
+        repo.update(
+            instance_id=5,
+            name="Renamed",
+            org_id=10,
+            start_date=date(2026, 6, 1),
+            start_time="0700",
+            end_time="0800",
+            description=None,
+            location_id=3,
+            event_type_ids=[7],
+            event_tag_ids=[],
+            is_active=True,
+            is_private=False,
+            meta=None,
+            highlight=False,
+            preblast_rich=None,
+            preblast=None,
+            existing_instance=_instance(series_id=22, series_exception="miscellaneous"),
+        )
+
+        self.assertEqual(self._posted_payload()["seriesException"], "miscellaneous")
+
 
 class StateChangeTest(unittest.TestCase):
     def setUp(self):

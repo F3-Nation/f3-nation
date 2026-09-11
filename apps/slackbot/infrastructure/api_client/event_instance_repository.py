@@ -261,8 +261,8 @@ class ApiEventInstanceRepository:
 
     def _series_exception_for_update(self, existing: EventInstanceData, submitted_start_time: str | None) -> str | None:
         """Calculate the exception without destroying unknown/current state."""
-        if existing.series_exception == "closed":
-            return "closed"
+        if existing.series_exception not in (None, "different-time"):
+            return existing.series_exception
         if existing.series_id is None or submitted_start_time is None:
             return existing.series_exception
         try:
