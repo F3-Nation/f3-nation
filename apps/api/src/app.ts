@@ -10,6 +10,7 @@ import { openApiJson } from "~/docs";
 import { docsPage } from "~/docs-page";
 import { handleRequest } from "~/handler";
 import { logError } from "~/lib/logging";
+// Surfaced as the service version in the health endpoints below.
 import packageJson from "../package.json";
 
 export const app = new Hono();
