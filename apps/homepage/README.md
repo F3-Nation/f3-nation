@@ -28,6 +28,7 @@ Future routes (e.g. `/status`) can be added without touching the rest of the eco
 apps/homepage/
 ├── next.config.ts               # output: "export", trailingSlash, images unoptimized
 ├── tailwind.config.ts
+├── .env.example                 # NEXT_PUBLIC_* build-time vars (see Environment Variables)
 ├── public/
 │   ├── CNAME                    # Custom domain declaration for GitHub Pages
 │   ├── .nojekyll                # Prevents Jekyll from processing the static output
@@ -37,7 +38,8 @@ apps/homepage/
     └── app/
         ├── layout.tsx            # Root layout (Inter font, CSS vars)
         ├── globals.css           # Tailwind directives + CSS custom properties
-        └── page.tsx              # Landing page (Next.js App Router entry)
+        ├── page.tsx              # Landing page (Next.js App Router entry)
+        └── org/                  # Interactive geographic org directory (see org/README.md)
 ```
 
 ## Local Development
@@ -48,7 +50,10 @@ pnpm dev --filter f3-homepage
 
 The app runs at [http://localhost:3005](http://localhost:3005).
 
-No environment variables are required — the app is fully static.
+The landing page is fully static and needs no configuration. The `/org`
+directory route fetches from the API and reads a couple of `NEXT_PUBLIC_*`
+variables — see [Environment Variables](#environment-variables). Copy
+`.env.example` to `.env` to override the defaults locally.
 
 ## Building
 
@@ -57,6 +62,23 @@ pnpm build --filter f3-homepage
 ```
 
 Output is written to `apps/homepage/out/`. This is what gets deployed to GitHub Pages.
+
+## Environment Variables
+
+All variables are `NEXT_PUBLIC_*`, so they are **inlined into the static bundle
+at build time** (there is no server to read them at runtime) and are visible in
+the browser. See [`.env.example`](.env.example).
+
+| Variable                      | Purpose                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_API_URL`         | Base URL of the API the `/org` route fetches from. Defaults to `https://api.f3nation.com`.             |
+| `NEXT_PUBLIC_ORG_MAP_API_KEY` | Read-only Bearer key for the public org-chart endpoints. Grants nothing beyond public directory reads. |
+| `NEXT_PUBLIC_LOCAL_DEV`       | `"true"` redirects app cards to localhost ports and enables `localHref` links.                         |
+
+In CI these are set on the `github-pages` environment and passed to the build
+step in [`.github/workflows/deploy-homepage.yml`](../../.github/workflows/deploy-homepage.yml).
+Because `NEXT_PUBLIC_ORG_MAP_API_KEY` ships in the client bundle, only ever use
+a key scoped to public org-chart reads — never a privileged token.
 
 ## Deployment
 
