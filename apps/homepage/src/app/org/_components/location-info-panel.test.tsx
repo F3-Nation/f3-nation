@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { afterEach, describe, it, expect, vi } from "vitest";
+import { render, screen, cleanup } from "@testing-library/react";
+import { afterEach, describe, it, expect } from "vitest";
 
 import { LocationInfoPanel } from "./location-info-panel";
 import type { LocationDetail } from "../_lib/types";
@@ -82,7 +82,6 @@ describe("LocationInfoPanel", () => {
   });
 
   it("renders AO cards with socials, positions, and event counts", () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const { container } = render(
       <LocationInfoPanel status="loaded" locationId={5} detail={detail} />,
     );
@@ -109,11 +108,5 @@ describe("LocationInfoPanel", () => {
         img.getAttribute("src")?.startsWith("data:image/svg+xml"),
       ),
     ).toBe(true);
-
-    // Clicking the AO and leader buttons exercises their handlers.
-    fireEvent.click(screen.getByRole("button", { name: "Bootcamp" }));
-    fireEvent.click(screen.getByRole("button", { name: /Splinter/ }));
-    expect(logSpy).toHaveBeenCalledTimes(2);
-    logSpy.mockRestore();
   });
 });

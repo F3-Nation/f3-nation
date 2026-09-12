@@ -458,7 +458,12 @@ export const orgChartRouter = {
           longitude: schema.locations.longitude,
         })
         .from(schema.locations)
-        .where(eq(schema.locations.id, input.locationId));
+        .where(
+          and(
+            eq(schema.locations.id, input.locationId),
+            eq(schema.locations.isActive, true),
+          ),
+        );
 
       if (!location) {
         throw new ORPCError("NOT_FOUND", { message: "Location not found" });

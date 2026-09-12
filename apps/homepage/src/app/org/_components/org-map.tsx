@@ -326,6 +326,8 @@ export default function OrgMap() {
       setAdminLookupInconclusive(false);
     }
     activeInfoOrgIdRef.current = org.id;
+    // A still-pending pin fetch must not override this org selection.
+    activeLocationIdRef.current = null;
 
     const cached = orgInfoCacheRef.current.get(org.id);
     if (cached) {
@@ -396,6 +398,11 @@ export default function OrgMap() {
   const showPinsForOrg = useCallback(
     (org: Org) => {
       pinsActiveRef.current = true;
+      // Cancel a queued hover load so it can't fire after the pins appear.
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
       const pinLayer = pinLayerGroupRef.current;
       if (!pinLayer) return;
       pinLayer.clearLayers();
@@ -559,7 +566,8 @@ export default function OrgMap() {
           if (org.orgType === "region") writeUrlState(currentLevel, org.id);
           if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
           hoverTimerRef.current = setTimeout(() => {
-            void loadOrgInfo(org);
+            // Re-check: pins may have been shown during the debounce window.
+            if (!pinsActiveRef.current) void loadOrgInfo(org);
           }, 200);
         }
       });

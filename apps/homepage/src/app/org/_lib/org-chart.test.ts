@@ -167,8 +167,20 @@ describe("buildOrgHierarchy", () => {
         "region",
         [],
         [
-          { locationId: 101, latitude: 35.5, longitude: -80.5, eventCount: 2, aoCount: 1 },
-          { locationId: 102, latitude: 36.0, longitude: -81.0, eventCount: 1, aoCount: 1 },
+          {
+            locationId: 101,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 2,
+            aoCount: 1,
+          },
+          {
+            locationId: 102,
+            latitude: 36.0,
+            longitude: -81.0,
+            eventCount: 1,
+            aoCount: 1,
+          },
         ],
       ),
     ];
@@ -183,8 +195,20 @@ describe("buildOrgHierarchy", () => {
         "region",
         [],
         [
-          { locationId: 201, latitude: 35.5, longitude: -80.5, eventCount: 5, aoCount: 2 },
-          { locationId: 202, latitude: 36.0, longitude: -81.0, eventCount: 3, aoCount: 1 },
+          {
+            locationId: 201,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 5,
+            aoCount: 2,
+          },
+          {
+            locationId: 202,
+            latitude: 36.0,
+            longitude: -81.0,
+            eventCount: 3,
+            aoCount: 1,
+          },
         ],
       ),
     ];
@@ -208,13 +232,29 @@ describe("buildOrgHierarchy", () => {
         "region",
         [],
         [
-          { locationId: 301, latitude: 35.5, longitude: -80.5, eventCount: 1, aoCount: 1 },
-          { locationId: 302, latitude: 35.5, longitude: -80.5, eventCount: 2, aoCount: 1 },
+          {
+            locationId: 301,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 1,
+            aoCount: 1,
+          },
+          {
+            locationId: 302,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 2,
+            aoCount: 1,
+          },
         ],
       ),
     ];
-    const { pointsById } = buildOrgHierarchy(items);
+    const { pointsById, orgLocationsById } = buildOrgHierarchy(items);
     // Both locations contribute points even when sharing coordinates
     expect(pointsById.get(10)).toHaveLength(2);
+    // Distinct location IDs are preserved so each renders its own map pin
+    expect(orgLocationsById.get(10)?.map((l) => l.locationId)).toEqual([
+      301, 302,
+    ]);
   });
 });
