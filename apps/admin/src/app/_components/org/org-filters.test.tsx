@@ -142,29 +142,27 @@ vi.mock("./area-filter", () => ({
     </div>
   ),
 }));
-vi.mock("../_components/mobile-filter-sheet", () => ({
+vi.mock("../mobile-filter-sheet", () => ({
   MobileFilterSheet: () => null,
 }));
-vi.mock("../_components/reset-filter", () => ({
+vi.mock("../reset-filter", () => ({
   ResetFilter: ({ onClick }: { onClick: () => void }) => (
     <button data-testid="reset-filters" onClick={onClick}>
       Reset
     </button>
   ),
 }));
-vi.mock("../_components/status-filter", () => ({ StatusFilter: () => null }));
+vi.mock("../status-filter", () => ({ StatusFilter: () => null }));
 vi.mock("~/utils/store/modal", () => ({
-  DeleteType: { REGION: "region", AREA: "area" },
+  DeleteType: { ORG: "org" },
   ModalType: {
-    ADMIN_AREAS: "admin-areas",
+    ADMIN_ORG: "admin-org",
     ADMIN_DELETE_CONFIRMATION: "admin-delete-confirmation",
-    ADMIN_REGIONS: "admin-regions",
   },
   openModal: vi.fn(),
 }));
 
-import { AreasTable } from "../areas/areas-table";
-import { RegionsTable } from "./regions-table";
+import { OrgTable } from "./org-table";
 
 const nation: TestOrg = {
   id: 1,
@@ -286,7 +284,7 @@ describe("depth-agnostic admin organization filters", () => {
 
   it("filters regions through mixed direct and territory ancestry", () => {
     mocks.resultOrgs = [nestedRegion];
-    render(<RegionsTable />);
+    render(<OrgTable orgType="region" />);
 
     fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
 
@@ -305,7 +303,7 @@ describe("depth-agnostic admin organization filters", () => {
 
   it("displays ancestry for a region whose immediate area is inactive", () => {
     mocks.resultOrgs = [inactiveAreaRegion];
-    render(<RegionsTable />);
+    render(<OrgTable orgType="region" />);
 
     expect(screen.getByTestId("table-data").textContent).toContain(
       '"area":"Inactive Area"',
@@ -316,7 +314,7 @@ describe("depth-agnostic admin organization filters", () => {
   });
 
   it("retains both selections when sector callbacks occur before a render", () => {
-    render(<RegionsTable />);
+    render(<OrgTable orgType="region" />);
 
     fireEvent.click(screen.getByTestId("select-first-two-sectors"));
 
@@ -328,7 +326,7 @@ describe("depth-agnostic admin organization filters", () => {
   });
 
   it("gives directly selected areas priority over sector-derived areas", () => {
-    render(<RegionsTable />);
+    render(<OrgTable orgType="region" />);
 
     fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
     fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
@@ -337,7 +335,7 @@ describe("depth-agnostic admin organization filters", () => {
   });
 
   it("retains directly selected areas when the last sector is deselected", () => {
-    render(<RegionsTable />);
+    render(<OrgTable orgType="region" />);
 
     fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
     fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
@@ -347,7 +345,7 @@ describe("depth-agnostic admin organization filters", () => {
   });
 
   it("resets sector and area selections together", () => {
-    render(<RegionsTable />);
+    render(<OrgTable orgType="region" />);
 
     fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
     fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
@@ -357,7 +355,7 @@ describe("depth-agnostic admin organization filters", () => {
   });
 
   it("prunes selected areas when their sector is deselected", () => {
-    render(<RegionsTable />);
+    render(<OrgTable orgType="region" />);
 
     fireEvent.click(screen.getByTestId("select-first-two-sectors"));
     fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
@@ -368,7 +366,7 @@ describe("depth-agnostic admin organization filters", () => {
   });
 
   it("prunes an area using its refreshed ancestry after reparenting", () => {
-    const { rerender } = render(<RegionsTable />);
+    const { rerender } = render(<OrgTable orgType="region" />);
 
     fireEvent.click(screen.getByTestId("select-first-two-sectors"));
     fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
@@ -376,7 +374,7 @@ describe("depth-agnostic admin organization filters", () => {
     mocks.hierarchyOrgs = mocks.hierarchyOrgs.map((org) =>
       org.id === nestedArea.id ? { ...org, parentId: sectorTwo.id } : org,
     );
-    rerender(<RegionsTable />);
+    rerender(<OrgTable orgType="region" />);
     fireEvent.click(screen.getByTestId(`sector-${sectorTwo.id}`));
 
     expect(latestResultQuery()?.parentOrgIds).toEqual([directArea.id]);
@@ -384,7 +382,7 @@ describe("depth-agnostic admin organization filters", () => {
 
   it("filters areas through a territory parent", () => {
     mocks.resultOrgs = [nestedArea];
-    render(<AreasTable />);
+    render(<OrgTable orgType="area" />);
 
     fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
 
@@ -404,23 +402,23 @@ describe("depth-agnostic admin organization filters", () => {
   });
 
   it("keeps the area query fail-closed while hierarchy data is unavailable", () => {
-    const { rerender } = render(<AreasTable />);
+    const { rerender } = render(<OrgTable orgType="area" />);
     fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
 
     mocks.hierarchyAvailable = false;
-    rerender(<AreasTable />);
+    rerender(<OrgTable orgType="area" />);
 
     expect(latestResultQuery()?.parentOrgIds).toEqual([-1]);
   });
 
   it("deselects an area-table sector after a refetch replaces its object", () => {
-    const { rerender } = render(<AreasTable />);
+    const { rerender } = render(<OrgTable orgType="area" />);
     fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
 
     mocks.hierarchyOrgs = mocks.hierarchyOrgs.map((org) =>
       org.id === sectorOne.id ? { ...org } : org,
     );
-    rerender(<AreasTable />);
+    rerender(<OrgTable orgType="area" />);
     fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
 
     expect(latestResultQuery()?.parentOrgIds).toBeUndefined();
