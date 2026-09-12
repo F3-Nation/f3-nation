@@ -152,14 +152,31 @@ the assertion and the comments exist. Exhaustive `Record<OrgType, …>` maps mea
 adding a tier fails the build until every consumer is updated — intended, but it
 makes the enum change a wider PR than it looks.
 
-**Not covered by this decision.** The `f3data` warehouse and the BigQuery `pv_*`
-views flatten the hierarchy into one column pair per tier. Flattening cannot be
-depth-agnostic — a column per level _is_ a hardcoded ladder — so those remain a
-per-tier cost, and the `pv_*` definitions are not currently under version
+**Not covered by this decision.** Flattened representations — the `f3data`
+warehouse views, the `pv_*` analytics materializations in `apps/analytics`, and
+the slackbot's view ORM mapping — carry one column pair per tier. Flattening
+cannot be depth-agnostic, because a column per level _is_ a hardcoded ladder, so
+each new tier costs an explicit change in each of them. What this decision does
+require of them is that the _resolution_ of a tier be an ancestor walk rather
+than a fixed number of hops — the defect
+[#1001](https://github.com/F3-Nation/f3-nation/issues/1001) tracks. The BigQuery
+`paxVault` view definitions that PAX Vault reads today remain outside version
 control in any F3 repo.
 
-**Verification.** A scan for the pattern this ADR bans (`aliasedTable(schema.orgs, …)`
-repeated per level, or `level1`/`level2`-style aliases) returns no remaining
-instances as of 2026-09-12. Remaining `aliasedTable(schema.orgs, …)` uses are
-single-hop semantic aliases (`ao_org`, `region_org`, `homeRegion`, `parent_org`).
-That scan is the cheapest way to check this decision still holds.
+**Verification, and its blind spot.** A scan for the TypeScript form of the
+banned pattern — `aliasedTable(schema.orgs, …)` repeated per level, or
+`level1`/`level2`-style aliases — finds no remaining instances as of 2026-09-12.
+What is left are single-hop semantic aliases (`ao_org`, `region_org`,
+`homeRegion`, `parent_org`).
+
+That scan is not sufficient on its own, and it is worth recording why. The same
+ladder exists in raw SQL, where it looks nothing like the query-builder idiom:
+`apps/analytics/analytics/sql/pv_events.sql` joins `p1`/`p2`/`p3` and would drop
+sector off the end ([#1001](https://github.com/F3-Nation/f3-nation/issues/1001)).
+It was missed because `apps/analytics` arrived (#800) after the audit behind
+#855, and because a grep for the query-builder idiom cannot see it.
+
+Checking this decision therefore means scanning **both** forms — the
+query-builder idiom, and repeated self-joins in `.sql` files — and re-checking
+whenever a new app or a long-lived branch merges. This is the third time the
+catalogue has been found incomplete for exactly that reason.
