@@ -24,6 +24,7 @@ import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 
 import { getDescendantOrgIds } from "../../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../../get-editable-org-ids";
+import { paginationFields, resolvePagination } from "../../lib/pagination";
 import type { Context } from "../../shared";
 import { protectedProcedure } from "../../shared";
 import { withPagination } from "../../with-pagination";
@@ -52,8 +53,7 @@ type EventFilterInput = z.infer<typeof eventFilterSchema>;
 // Extended schema with pagination and sorting for the `all` endpoint
 const eventAllInputSchema = eventFilterSchema
   .extend({
-    pageIndex: z.coerce.number().optional(),
-    pageSize: z.coerce.number().optional(),
+    ...paginationFields("events"),
     sorting: z
       .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
       .optional(),
@@ -269,10 +269,11 @@ export const mapEventRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
