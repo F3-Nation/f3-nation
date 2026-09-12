@@ -6,6 +6,9 @@ import { CLOSE_ZOOM } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
 import { orpc, useQuery } from "~/orpc/react";
+import { dateToDayOfWeek } from "~/utils/date";
+import { findNextExceptionNotice } from "~/utils/event-status-map";
+import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
 import { mapStore } from "~/utils/store/map";
 import { selectedItemStore } from "~/utils/store/selected-item";
 
@@ -26,6 +29,8 @@ export const useSelectedItem = () => {
       enabled: typeof debouncedLocationId === "number",
     }),
   );
+
+  const { instances: upcomingInstancesData } = useUpcomingInstances();
 
   const selectedLocation = useMemo(() => {
     if (debouncedLocationId !== locationId) return undefined;
@@ -68,17 +73,48 @@ export const useSelectedItem = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- zoom is not a dependency but we need to monitor its changes
   }, [selectedLocation?.lat, selectedLocation?.lon, map, zoom, bounds]);
 
-  const selectedEvent = useMemo(
-    () =>
-      !selectedLocation
-        ? undefined
-        : // check for null or undefined
-          eventId === null || eventId === undefined
-          ? // get the first of the week (monday is first)
-            selectedLocation.events[0]
-          : // use == incase it is a string
-            selectedLocation.events.find((event) => event.id == eventId),
-    [selectedLocation, eventId],
+  const selectedEvent = useMemo(() => {
+    if (!selectedLocation) return undefined;
+    if (eventId === null || eventId === undefined) {
+      return selectedLocation.events[0];
+    }
+
+    const realEvent = selectedLocation.events.find(
+      (event) => event.id == eventId,
+    );
+    if (realEvent) return realEvent;
+
+    if (eventId < 0) {
+      const instanceId = -eventId;
+      const instance = upcomingInstancesData?.find((i) => i.id === instanceId);
+      if (instance) {
+        return {
+          id: eventId,
+          name: instance.name,
+          dayOfWeek: dateToDayOfWeek(instance.startDate),
+          startTime: instance.startTime,
+          endTime: instance.endTime,
+          description: null,
+          eventTypes: instance.eventTypes,
+          startDate: null,
+          endDate: null,
+          aoId: null,
+          aoName: instance.aoName,
+          aoLogo: instance.aoLogo,
+          aoWebsite: null,
+        };
+      }
+    }
+
+    return undefined;
+  }, [selectedLocation, eventId, upcomingInstancesData]);
+
+  // The hover card shows one schedule, so an upcoming change to it has to be
+  // called out here — a reader who never opens the modal has no other chance to
+  // see the real time.
+  const nextException = useMemo(
+    () => findNextExceptionNotice(selectedEvent, upcomingInstancesData),
+    [selectedEvent, upcomingInstancesData],
   );
 
   // Create memoized debounced function
@@ -109,6 +145,7 @@ export const useSelectedItem = () => {
     eventId,
     selectedLocation,
     selectedEvent,
+    nextException,
     pagePosition: position,
   };
 };

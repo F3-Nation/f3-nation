@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  AppWindow,
   BadgeCheck,
+  CalendarClock,
   Earth,
   CircleSmall,
   CirclePile,
@@ -101,6 +103,12 @@ export const AdminNavLinks = ({
       type: "link",
     },
     {
+      href: routes.admin.eventInstances.__path,
+      icon: CalendarClock,
+      label: "Event instances",
+      type: "link",
+    },
+    {
       href: routes.admin.locations.__path,
       icon: MapPin,
       label: "Locations",
@@ -162,6 +170,16 @@ export const AdminNavLinks = ({
       icon: Mail,
       label: "Email Test",
       type: "link",
+      nationAdminOnly: true,
+    },
+    {
+      href: routes.admin.oauthClients.__path,
+      icon: AppWindow,
+      label: "OAuth Clients",
+      type: "link",
+      // Unlike API Keys, OAuth clients aren't org-scoped — a client can
+      // mint SSO tokens for the whole nation, so this stays nation-admin
+      // only rather than following apiKeys' org-scoped placement above.
       nationAdminOnly: true,
     },
   ];

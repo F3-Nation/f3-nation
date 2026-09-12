@@ -495,12 +495,13 @@ describe("Event Tag Router", () => {
       const client = createTestClient();
 
       // The delete endpoint doesn't throw for non-existent records
-      // It just silently updates nothing
+      // It just silently updates nothing, and still returns the requested
+      // id - locking in that contract now that delete has a real .output().
       await expect(
         client.eventTag.delete({
           id: 999999,
         }),
-      ).resolves.not.toThrow();
+      ).resolves.toEqual({ eventTagId: 999999 });
     });
   });
 

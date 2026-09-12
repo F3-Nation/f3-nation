@@ -14,6 +14,26 @@ on:
         description: "Cloud Run Job name"
         required: true
         type: string
+      staging_job_name:
+        description: "Optional staging Cloud Run Job name"
+        required: false
+        type: string
+        default: ""
+      prod_job_name:
+        description: "Optional production Cloud Run Job name"
+        required: false
+        type: string
+        default: ""
+      staging_runtime_service_account:
+        description: "Optional staging runtime service account"
+        required: false
+        type: string
+        default: ""
+      prod_runtime_service_account:
+        description: "Optional production runtime service account"
+        required: false
+        type: string
+        default: ""
       staging_project:
         description: "GCP project ID for staging"
         required: true
@@ -26,6 +46,11 @@ on:
         description: "Tag prefix to strip for the image version (e.g. slackbot@)"
         required: true
         type: string
+      ref:
+        description: "Release tag to deploy. Empty means the ref that triggered the run (tag push)."
+        required: false
+        type: string
+        default: ""
       dockerfile:
         description: "Path to the Dockerfile"
         required: true
@@ -89,12 +114,38 @@ jobs:
       contents: read
       checks: read
     steps:
+      - name: Validate deploy ref is an existing release tag
+        if: inputs.ref != ''
+        env:
+          REF: ${{ inputs.ref }}
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${REF}" != "${TAG_PREFIX}"* ]]; then
+            echo "::error::ref '${REF}' does not start with expected tag prefix '${TAG_PREFIX}'"
+            exit 1
+          fi
+          if ! gh api "repos/${{ github.repository }}/git/refs/tags/${REF}" >/dev/null 2>&1; then
+            echo "::error::ref '${REF}' is not an existing release tag"
+            exit 1
+          fi
+
+      # lint-title is deliberately excluded: it only runs on `pull_request`
+      # (pr-title.yml has no `push` trigger), so it never has a check-run
+      # against a commit reached via tag push -- waiting on it here would
+      # hang until timeout, not deploy.
+      #
+      # NOTE: wait-on-check-action only fails when the filtered check list is
+      # completely empty (fail-on-no-checks). Redeploying a tag older than the
+      # newest required check (e.g. db-schema-sync, added 2026-08-18) passes
+      # ci-gate using only the checks that existed at that tag's commit --
+      # newer required checks are silently skipped, not failed.
       - name: Wait for CI to pass
         uses: lewagon/wait-on-check-action@369769072fe522a3a8a85c03c96af1e5242a1994 # v1.9.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.ref || github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|test-coverage-hono)$"
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|test-coverage-hono|security-audit|db-schema-sync)$"
           wait-interval: 15
           allowed-conclusions: success
 
@@ -108,9 +159,11 @@ jobs:
     outputs:
       image: ${{ steps.meta.outputs.image }}
       version: ${{ steps.meta.outputs.version }}
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Authenticate to GCP (staging project for AR)
@@ -129,12 +182,13 @@ jobs:
         id: meta
         env:
           TAG_PREFIX: ${{ inputs.tag_prefix }}
+          DEPLOY_REF: ${{ inputs.ref }}
           REGION: ${{ inputs.region }}
           STAGING_PROJECT: ${{ inputs.staging_project }}
           AR_REPO: ${{ inputs.ar_repo }}
           IMAGE_NAME: ${{ inputs.image_name }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${DEPLOY_REF:-$GITHUB_REF_NAME}"
           VERSION="${TAG#"${TAG_PREFIX}"}"
           IMAGE="${REGION}-docker.pkg.dev/${STAGING_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
@@ -144,6 +198,7 @@ jobs:
         env:
           DOCKERFILE: ${{ inputs.dockerfile }}
           BUILD_CONTEXT: ${{ inputs.build_context }}
+          IMAGE: ${{ steps.meta.outputs.image }}
         run: |
           TURBO_VERSION=$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')
           # Cloud Run only runs linux/amd64. The Dockerfile FROM lines no longer
@@ -152,9 +207,36 @@ jobs:
             --platform=linux/amd64 \
             --file "${DOCKERFILE}" \
             --build-arg TURBO_VERSION="${TURBO_VERSION}" \
-            --tag "${{ steps.meta.outputs.image }}" \
+            --tag "${IMAGE}" \
             "${BUILD_CONTEXT}"
-          docker push "${{ steps.meta.outputs.image }}"
+          docker push "${IMAGE}"
+
+      - name: Resolve immutable image digest
+        id: digest
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          PROJECT_ID: ${{ inputs.staging_project }}
+          TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          IMAGE_PATH="${IMAGE%:*}"
+          DIGESTS="$(gcloud artifacts docker images list "${IMAGE_PATH}" \
+            --project "${PROJECT_ID}" \
+            --include-tags \
+            --format=json \
+            | jq -r --arg tag "${TAG}" '[.[] | select(any(.tags[]?; . == $tag)) | .version] | unique[]')"
+
+          if [[ -z "${DIGESTS}" ]]; then
+            echo "No image found for exact tag ${TAG}" >&2
+            exit 1
+          fi
+
+          mapfile -t DIGESTS <<< "${DIGESTS}"
+          if [[ "${#DIGESTS[@]}" -ne 1 ]] || [[ ! "${DIGESTS[0]}" =~ ^sha256: ]]; then
+            echo "Expected one valid digest for tag ${TAG}, got ${#DIGESTS[@]}" >&2
+            exit 1
+          fi
+
+          echo "digest=${DIGESTS[0]}" >> "$GITHUB_OUTPUT"
 
   deploy-staging:
     needs: build
@@ -176,17 +258,22 @@ jobs:
 
       - name: Deploy Cloud Run Job (staging)
         env:
-          JOB_NAME: ${{ inputs.job_name }}
-          IMAGE: ${{ needs.build.outputs.image }}
+          JOB_NAME: ${{ inputs.staging_job_name || inputs.job_name }}
+          IMAGE: ${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}
           REGION: ${{ inputs.region }}
           PROJECT_ID: ${{ inputs.staging_project }}
           FLAGS: ${{ inputs.staging_flags || inputs.flags }}
+          RUNTIME_SERVICE_ACCOUNT: ${{ inputs.staging_runtime_service_account }}
         run: |
           if [[ -n "${FLAGS}" ]]; then
             # shellcheck disable=SC2206
             extra_flags=(${FLAGS})
           else
             extra_flags=()
+          fi
+
+          if [[ -n "${RUNTIME_SERVICE_ACCOUNT}" ]]; then
+            extra_flags+=("--service-account=${RUNTIME_SERVICE_ACCOUNT}")
           fi
 
           gcloud run jobs deploy "${JOB_NAME}" \
@@ -213,6 +300,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - uses: ./.github/actions/staging-smoke-test-issue
@@ -247,28 +335,58 @@ jobs:
           PROD_PROJECT: ${{ inputs.prod_project }}
           AR_REPO: ${{ inputs.ar_repo }}
           IMAGE_NAME: ${{ inputs.image_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          IMAGE: ${{ needs.build.outputs.image }}
+          DIGEST: ${{ needs.build.outputs.digest }}
         run: |
-          STAGING_IMAGE="${{ needs.build.outputs.image }}"
-          PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${STAGING_IMAGE##*:}"
-          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
-          docker pull "${STAGING_IMAGE}"
-          docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
-          docker push "${PROD_IMAGE}"
-          echo "prod_image=${PROD_IMAGE}" >> "$GITHUB_ENV"
+          STAGING_IMAGE="${IMAGE}@${DIGEST}"
+          PROD_IMAGE="${REGION}-docker.pkg.dev/${PROD_PROJECT}/${AR_REPO}/${IMAGE_NAME}:${VERSION}"
+          if [[ "${PROD_PROJECT}" == "${{ inputs.staging_project }}" ]]; then
+            echo "prod_image=${STAGING_IMAGE}" >> "$GITHUB_ENV"
+          else
+            gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+            docker pull "${STAGING_IMAGE}"
+            docker tag "${STAGING_IMAGE}" "${PROD_IMAGE}"
+            docker push "${PROD_IMAGE}"
+            IMAGE_PATH="${PROD_IMAGE%:*}"
+            PROD_DIGESTS="$(gcloud artifacts docker images list "${IMAGE_PATH}" \
+              --project "${PROD_PROJECT}" \
+              --include-tags \
+              --format=json \
+              | jq -r --arg tag "${VERSION}" '[.[] | select(any(.tags[]?; . == $tag)) | .version] | unique[]')"
+
+            if [[ -z "${PROD_DIGESTS}" ]]; then
+              echo "No image found in production Artifact Registry for exact tag ${VERSION}" >&2
+              exit 1
+            fi
+
+            mapfile -t PROD_DIGESTS <<< "${PROD_DIGESTS}"
+            if [[ "${#PROD_DIGESTS[@]}" -ne 1 ]] || [[ ! "${PROD_DIGESTS[0]}" =~ ^sha256: ]]; then
+              echo "Expected one valid digest for tag ${VERSION} in production, got ${#PROD_DIGESTS[@]}" >&2
+              exit 1
+            fi
+
+            echo "prod_image=${PROD_IMAGE}@${PROD_DIGESTS[0]}" >> "$GITHUB_ENV"
+          fi
 
       - name: Deploy Cloud Run Job (prod)
         env:
-          JOB_NAME: ${{ inputs.job_name }}
+          JOB_NAME: ${{ inputs.prod_job_name || inputs.job_name }}
           IMAGE: ${{ env.prod_image }}
           REGION: ${{ inputs.region }}
           PROJECT_ID: ${{ inputs.prod_project }}
           FLAGS: ${{ inputs.prod_flags || inputs.flags }}
+          RUNTIME_SERVICE_ACCOUNT: ${{ inputs.prod_runtime_service_account }}
         run: |
           if [[ -n "${FLAGS}" ]]; then
             # shellcheck disable=SC2206
             extra_flags=(${FLAGS})
           else
             extra_flags=()
+          fi
+
+          if [[ -n "${RUNTIME_SERVICE_ACCOUNT}" ]]; then
+            extra_flags+=("--service-account=${RUNTIME_SERVICE_ACCOUNT}")
           fi
 
           gcloud run jobs deploy "${JOB_NAME}" \

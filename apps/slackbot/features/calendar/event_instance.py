@@ -396,6 +396,7 @@ def handle_event_instance_add(
             highlight=highlight,
             preblast_rich=preblast_rich,
             preblast=preblast_text,
+            existing_instance=existing,
         )
         post_bot_log(
             client=client,
@@ -505,11 +506,11 @@ def build_event_instance_list_form(
             label += " [CLOSED]"
             placeholder = "Reopen, Edit, or Delete"
             options = ["Reopen", "Edit", "Delete"]
-            confirm_text = "Are you sure you want to reopen / edit / delete this event?"
+            # confirm_text = "Are you sure you want to reopen / edit / delete this event?"
         else:
             placeholder = "Edit, Close, or Delete"
             options = ["Edit", "Close", "Delete"]
-            confirm_text = "Are you sure you want to edit / close / delete this event?"
+            # confirm_text = "Are you sure you want to edit / close / delete this event?"
 
         form.blocks.append(
             orm.SectionBlock(
@@ -518,12 +519,13 @@ def build_event_instance_list_form(
                 element=orm.StaticSelectElement(
                     placeholder=placeholder,
                     options=orm.as_selector_options(names=options),
-                    confirm=orm.ConfirmObject(
-                        title="Are you sure?",
-                        text=confirm_text,
-                        confirm="Yes, I'm sure",
-                        deny="Whups, never mind",
-                    ),
+                    # Temporarily disabled: Slack confirmation dialogs dismiss the parent modal (#984).
+                    # confirm=orm.ConfirmObject(
+                    #     title="Are you sure?",
+                    #     text=confirm_text,
+                    #     confirm="Yes, I'm sure",
+                    #     deny="Whups, never mind",
+                    # ),
                 ),
             )
         )

@@ -151,6 +151,7 @@ export const NearbyLocationItem = (props: {
                   location={item}
                   size="small"
                   hideName
+                  mapStatus={event.mapStatus}
                   selected={event.id === eventId && item.id === locationId}
                   onClick={(e) => {
                     handleClick({

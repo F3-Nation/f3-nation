@@ -37,7 +37,7 @@ warn_redundant_casts = true
 
 [project]
 name = "f3-nation-slack-bot"
-version = "2.3.2"
+version = "2.5.0"
 description = ""
 authors = [{ name = "Evan Petzoldt", email = "evan.petzoldt@protonmail.com" }]
 readme = "README.md"
@@ -56,7 +56,7 @@ dependencies = [
     "google-cloud-logging>=3.11.0,<4.0.0",
     "f3-data-models",
     "pillow>=12.2.0",
-    "pillow-heif>=1.5.0,<1.6.0",
+    "pillow-heif>=1.6.0,<1.7.0",
     "watchfiles>=1.1.1,<2.0.0",
     "python-dotenv>=1.2.1,<2.0.0",
     "sendgrid>=6.11.0,<7.0.0",
@@ -68,7 +68,7 @@ dev = [
     "pytest>=9.1.1,<9.2.0",
     "debugpy>=1.8.17,<2.0.0",
     "ruff>=0.14.0,<1.0.0",
-    "mypy>=1.14.0,<2.0.0",
+    "mypy>=2.3.1,<2.4.0",
 ]
 scripts = [
     "mplcyberpunk>=0.7.6,<0.8.0",

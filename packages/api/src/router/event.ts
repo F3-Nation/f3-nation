@@ -116,19 +116,19 @@ async function resolveEditableOrgIds(params: {
   }
 
   const result = await getEditableOrgIdsForUser(ctx);
-  const { editableOrgs, isNationAdmin } = result;
+  const { editableRootOrgIds, isNationAdmin } = result;
 
-  if (!isNationAdmin && editableOrgs.length > 0) {
-    const editableOrgIdsList = editableOrgs.map((org) => org.id);
+  if (!isNationAdmin && editableRootOrgIds.length > 0) {
     const editableOrgIds = await getDescendantOrgIds(
       ctx.db,
-      editableOrgIdsList,
+      editableRootOrgIds,
     );
-    return { editableOrgIds, isNationAdmin };
+    // Defensively fail closed if roots disappear between scope lookup and traversal.
+    return editableOrgIds.length > 0 ? { editableOrgIds, isNationAdmin } : null;
   }
 
-  // If user has no editable orgs and is not a nation admin, return null to indicate empty result
-  if (editableOrgs.length === 0 && !isNationAdmin) {
+  // No direct editable roots means the scoped result must be empty.
+  if (editableRootOrgIds.length === 0 && !isNationAdmin) {
     return null;
   }
 
@@ -253,6 +253,7 @@ export const eventRouter = {
             description: z.string().nullable().describe("Event description"),
             isActive: z.boolean().describe("Whether the event is active"),
             isPrivate: z.boolean().describe("Whether the event is private"),
+            highlight: z.boolean().describe("Whether the event is highlighted"),
             parent: z.string().nullable().describe("Parent organization name"),
             locationId: z.number().nullable().describe("Location ID"),
             startDate: z.string().nullable().describe("Event start date"),
@@ -355,6 +356,7 @@ export const eventRouter = {
         description: schema.events.description,
         isActive: schema.events.isActive,
         isPrivate: schema.events.isPrivate,
+        highlight: schema.events.highlight,
         parent: parentOrg.name,
         locationId: schema.events.locationId,
         startDate: schema.events.startDate,

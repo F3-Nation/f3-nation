@@ -25,6 +25,7 @@
     "DATABASE_NAME",
     "TEST_DATABASE_URL",
     "SKIP_RESET_TEST_DB",
+    "QUERY_TIMEOUT_MS",
     "E2E_BASE_URL",
     "E2E_API_URL",
     "CHAR_TEST_TARGET",
@@ -40,6 +41,7 @@
     "AUTH_REDIRECT_PROXY_URL",
     "AUTH_SECRET",
     "AUTH_JWT_PRIVATE_KEY",
+    "AUTH_USE_BETTER_AUTH",
     "OAUTH_CLIENT_ID",
     "OAUTH_CLIENT_SECRET",
     "OAUTH_REDIRECT_URI",
@@ -78,8 +80,13 @@
         "!.next/cache/**",
         "next-env.d.ts",
         ".expo/**",
-        ".output/**"
+        ".output/**",
+        "dist/**"
       ]
+    },
+    "build:server": {
+      "dependsOn": ["^topo", "^build"],
+      "outputs": ["dist/**"]
     },
     "dev": {
       "persistent": true,

@@ -1,5 +1,56 @@
 # Changelog
 
+## [2.5.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.0...admin@2.5.1) (2026-09-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.1
+    * @acme/mail bumped to 0.1.3
+    * @acme/validators bumped to 0.4.2
+
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.4.0...admin@2.5.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/shared bumped to 0.3.0
+    * @acme/ui bumped to 0.1.5
+    * @acme/validators bumped to 0.4.1
+
+## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.3.1...admin@2.4.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+* **auth,db,admin,api:** better auth config for [#876](https://github.com/F3-Nation/f3-nation/issues/876) phase 3 ([#914](https://github.com/F3-Nation/f3-nation/issues/914)) ([4c77b90](https://github.com/F3-Nation/f3-nation/commit/4c77b904dab9a9864d1c9d98f6356e6f211bb086))
+
+
+### Bug Fixes
+
+* **admin:** make region filters depth-agnostic ([#951](https://github.com/F3-Nation/f3-nation/issues/951)) ([c61e4ca](https://github.com/F3-Nation/f3-nation/commit/c61e4cae21fa27cb43dd256763ce694f063fe9fe))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.8.0
+    * @acme/shared bumped to 0.2.0
+    * @acme/ui bumped to 0.1.4
+    * @acme/validators bumped to 0.4.0
+
 ## [2.3.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.3.0...admin@2.3.1) (2026-08-18)
 
 
