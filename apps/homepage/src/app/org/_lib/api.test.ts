@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fetchOrgChart, fetchOrgById } from "./api";
+import { fetchOrgChart, fetchOrgById, fetchLocationById } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -55,6 +55,29 @@ describe("fetchOrgById", () => {
   it("throws on a non-ok response", async () => {
     mockFetch(404, {});
     await expect(fetchOrgById(999)).rejects.toThrow("API 404");
+  });
+});
+
+describe("fetchLocationById", () => {
+  it("returns the location detail and requests the location path", async () => {
+    const detail = {
+      locationId: 5,
+      locationName: "The Yard",
+      latitude: 35.5,
+      longitude: -80.5,
+      aos: [],
+    };
+    mockFetch(200, detail);
+    const result = await fetchLocationById(5);
+    expect(result).toMatchObject({ locationId: 5, locationName: "The Yard" });
+    const url = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string;
+    expect(url).toContain("/org-chart/location/5");
+  });
+
+  it("throws on a non-ok response", async () => {
+    mockFetch(404, {});
+    await expect(fetchLocationById(999)).rejects.toThrow("API 404");
   });
 });
 

@@ -12317,12 +12317,17 @@
                                       "description": "Location latitude",
                                       "type": "number"
                                     },
+                                    "locationId": {
+                                      "description": "Location ID",
+                                      "type": "number"
+                                    },
                                     "longitude": {
                                       "description": "Location longitude",
                                       "type": "number"
                                     }
                                   },
                                   "required": [
+                                    "locationId",
                                     "latitude",
                                     "longitude",
                                     "eventCount",
@@ -12422,6 +12427,226 @@
           }
         },
         "summary": "List org chart orgs",
+        "tags": [
+          "Org Chart"
+        ]
+      }
+    },
+    "/v1/org-chart/location/{locationId}": {
+      "get": {
+        "description": "Return all AOs with active events at the given location, along with their leadership positions.",
+        "operationId": "orgChart.byLocation",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "in": "path",
+            "name": "locationId",
+            "required": true,
+            "schema": {
+              "description": "The location ID to look up AOs for",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "aos": {
+                      "items": {
+                        "properties": {
+                          "email": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "eventCount": {
+                            "description": "Active events at this location",
+                            "type": "number"
+                          },
+                          "facebook": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "description": "AO org ID",
+                            "type": "number"
+                          },
+                          "instagram": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "logoUrl": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "positions": {
+                            "items": {
+                              "properties": {
+                                "avatarUrl": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "f3Name": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "positionId": {
+                                  "type": "number"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "userId": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "positionId",
+                                "title",
+                                "userId",
+                                "f3Name",
+                                "avatarUrl"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "twitter": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "website": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email",
+                          "website",
+                          "twitter",
+                          "facebook",
+                          "instagram",
+                          "logoUrl",
+                          "eventCount",
+                          "positions"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "latitude": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "locationId": {
+                      "type": "number"
+                    },
+                    "locationName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "longitude": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "locationId",
+                    "locationName",
+                    "latitude",
+                    "longitude",
+                    "aos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get AOs at a location",
         "tags": [
           "Org Chart"
         ]
