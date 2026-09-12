@@ -71,8 +71,8 @@ so `_lib` and `_components` never become URL segments.
 
 ## Tests
 
-Each `_lib` module has a co-located `*.test.ts`, and the components have
-`*.test.tsx`. Run them with:
+`_lib` and component tests are co-located as `*.test.ts` and `*.test.tsx`
+files. Run them with:
 
 ```bash
 pnpm test --filter f3-homepage

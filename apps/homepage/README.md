@@ -75,8 +75,8 @@ the browser. See [`.env.example`](.env.example).
 | `NEXT_PUBLIC_ORG_MAP_API_KEY` | Read-only Bearer key for the public org-chart endpoints. Grants nothing beyond public directory reads. |
 | `NEXT_PUBLIC_LOCAL_DEV`       | `"true"` redirects app cards to localhost ports and enables `localHref` links.                         |
 
-In CI these are set on the `github-pages` environment and passed to the build
-step in [`.github/workflows/deploy-homepage.yml`](../../.github/workflows/deploy-homepage.yml).
+In CI, `NEXT_PUBLIC_ORG_MAP_API_KEY` is set on the `github-pages` environment
+and passed to the build step in [`.github/workflows/deploy-homepage.yml`](../../.github/workflows/deploy-homepage.yml).
 Because `NEXT_PUBLIC_ORG_MAP_API_KEY` ships in the client bundle, only ever use
 a key scoped to public org-chart reads — never a privileged token.
 
