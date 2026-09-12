@@ -10,13 +10,16 @@ the product spec (what it does, who may do it, how it's verified).
 
 ## How it fits the static export
 
-The homepage uses `output: "export"`, so this route cannot use server
-components, API routes, or server-side data fetching. Instead:
+The homepage uses `output: "export"`. That still supports Server Components and
+build-time data fetching; what it rules out are request-time server features —
+API routes, Server Actions, ISR, middleware, and runtime-only server APIs. This
+route is nonetheless a **Client Component**, for two reasons specific to it:
 
-- `page.tsx` renders `OrgMapLoader`, a client component that `dynamic()`-imports
-  the real map with `ssr: false` (Leaflet touches `window`, so it must never run
-  during the static build).
-- All data comes from the browser via `_lib/api.ts`, which calls the public API.
+- `page.tsx` renders `OrgMapLoader`, which `dynamic()`-imports the map with
+  `ssr: false` — Leaflet touches `window`, so it must never run during the
+  static build.
+- The directory is fetched **live in the browser** via `_lib/api.ts` (not at
+  build time), so it reflects current data without a redeploy.
 
 ## Data fetching & auth
 
