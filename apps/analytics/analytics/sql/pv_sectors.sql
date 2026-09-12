@@ -7,6 +7,14 @@ sector_rows AS (
 ),
 sector_values AS (
     SELECT s.*,
+           COALESCE((SELECT list(struct_pack(territory_id := t.id,
+                                             territory_name := COALESCE(t.name, CAST(t.id AS VARCHAR)),
+                                             logo_url := t.logo_url,
+                                             is_active := t.is_active)
+                                 ORDER BY COALESCE(t.name, CAST(t.id AS VARCHAR)), t.id)
+                    FROM pg.public.orgs t
+                    WHERE t.org_type = 'territory' AND t.parent_id = s.sector_id),
+                    []::STRUCT(territory_id INTEGER, territory_name VARCHAR, logo_url VARCHAR, is_active BOOLEAN)[]) AS territories,
            COALESCE((SELECT list(struct_pack(area_id := a.id,
                                              area_name := COALESCE(a.name, CAST(a.id AS VARCHAR)),
                                              is_active := a.is_active)
@@ -16,6 +24,6 @@ sector_values AS (
                     []::STRUCT(area_id INTEGER, area_name VARCHAR, is_active BOOLEAN)[]) AS areas
     FROM sector_rows s
 )
-SELECT sector_id, sector_name, logo_url, is_active, areas
+SELECT sector_id, sector_name, logo_url, is_active, territories, areas
 FROM sector_values CROSS JOIN params
 ORDER BY sector_name, sector_id

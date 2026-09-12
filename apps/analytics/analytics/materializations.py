@@ -32,7 +32,17 @@ class Materialization:
         raise ValueError("unsupported analytics environment")
 
 
-_NAMES = ("pv_regions", "pv_pax", "pv_kotter", "pv_upcoming", "pv_areas", "pv_aos", "pv_sectors", "pv_events")
+_NAMES = (
+    "pv_regions",
+    "pv_pax",
+    "pv_kotter",
+    "pv_upcoming",
+    "pv_sectors",
+    "pv_territories",
+    "pv_areas",
+    "pv_aos",
+    "pv_events",
+)
 
 
 def _definition(name: str) -> Materialization:

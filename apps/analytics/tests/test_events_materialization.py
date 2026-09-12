@@ -94,6 +94,8 @@ def test_events_contract_and_materialization(tmp_path: Path):
         "region_name",
         "area_org_id",
         "area_name",
+        "territory_org_id",
+        "territory_name",
         "sector_org_id",
         "sector_name",
         "first_f_ind",
@@ -104,13 +106,32 @@ def test_events_contract_and_materialization(tmp_path: Path):
         "attendance",
     ]
     row = c.execute("SELECT * FROM read_parquet(?) WHERE event_id = 1", [str(out)]).fetchone()
-    assert row[1:17] == (1, date(2026, 1, 1), "Workout", 10, 2, 4, "AO", 3, "Region", 2, "Area", 1, "Sector", 1, 0, 1)
-    assert row[17] == [
+    assert row[1:19] == (
+        1,
+        date(2026, 1, 1),
+        "Workout",
+        10,
+        2,
+        4,
+        "AO",
+        3,
+        "Region",
+        2,
+        "Area",
+        None,
+        None,
+        1,
+        "Sector",
+        1,
+        0,
+        1,
+    )
+    assert row[19] == [
         {"id": 2, "name": "Bible", "description": "Study", "event_category": "third_f"},
         {"id": 1, "name": "Run", "description": "Running", "event_category": "first_f"},
     ]
-    assert row[18] == [{"id": 7, "name": "Morning", "description": "Morning workout"}]
-    assert row[19] == [
+    assert row[20] == [{"id": 7, "name": "Morning", "description": "Morning workout"}]
+    assert row[21] == [
         {
             "user_id": 1,
             "f3_name": "Alpha",
