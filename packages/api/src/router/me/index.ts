@@ -4,14 +4,15 @@ import { z } from "zod";
 import { and, asc, eq, ilike, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 
-import { protectedProcedure } from "../../shared";
+import { personalUserProcedure, protectedProcedure } from "../../shared";
 
 /**
  * /me router — self-service endpoints for authenticated users.
  *
  * Unlike the /user router (which requires editor/admin roles and manages
  * other users), these endpoints let an authenticated user manage their own
- * profile, positions, and roles with only protectedProcedure auth.
+ * profile, positions, and roles using a user session or Auth access token.
+ * API keys may use the lookup endpoints, but cannot act as their owner here.
  */
 
 const profileUpdateSchema = z
@@ -194,7 +195,7 @@ export const meRouter = {
   /**
    * Get the authenticated user's own profile with PII, roles, and positions.
    */
-  profile: protectedProcedure
+  profile: personalUserProcedure
     .route({
       method: "GET",
       path: "/profile",
@@ -217,7 +218,7 @@ export const meRouter = {
    * Update the authenticated user's own profile.
    * Only whitelisted fields can be changed. Roles cannot be self-assigned.
    */
-  updateProfile: protectedProcedure
+  updateProfile: personalUserProcedure
     .input(profileUpdateSchema)
     .route({
       method: "PATCH",
@@ -311,7 +312,7 @@ export const meRouter = {
   /**
    * Remove the authenticated user from a specific position assignment.
    */
-  deletePosition: protectedProcedure
+  deletePosition: personalUserProcedure
     .input(
       z
         .object({
@@ -364,7 +365,7 @@ export const meRouter = {
   /**
    * Remove the authenticated user from a specific role at an org.
    */
-  deleteRole: protectedProcedure
+  deleteRole: personalUserProcedure
     .input(
       z
         .object({
