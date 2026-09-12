@@ -107,6 +107,14 @@ export const orgChartRouter = {
           aoCount: countDistinct(schema.events.orgId),
         })
         .from(schema.events)
+        .innerJoin(
+          schema.orgs,
+          and(
+            eq(schema.orgs.id, schema.events.orgId),
+            eq(schema.orgs.orgType, "ao"),
+            eq(schema.orgs.isActive, true),
+          ),
+        )
         .where(
           and(
             eq(schema.events.isActive, true),
@@ -131,6 +139,14 @@ export const orgChartRouter = {
             eq(schema.events.locationId, schema.locations.id),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+          ),
+        )
+        .innerJoin(
+          schema.orgs,
+          and(
+            eq(schema.orgs.id, schema.events.orgId),
+            eq(schema.orgs.orgType, "ao"),
+            eq(schema.orgs.isActive, true),
           ),
         )
         .where(
