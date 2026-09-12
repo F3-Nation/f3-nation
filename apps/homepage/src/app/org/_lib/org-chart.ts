@@ -120,16 +120,27 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
     }));
     if (locations.length > 0) orgLocationsById.set(item.orgId, locations);
 
+    // Metrics merge co-located records so an AO with events at multiple
+    // records sharing coordinates isn't counted more than once (the API
+    // returns distinct locationIds for pin rendering, not for counting).
+    const byCoord = new Map<string, { events: number; aos: number }>();
+    for (const loc of item.activeLocations) {
+      const key = `${loc.latitude},${loc.longitude}`;
+      const merged = byCoord.get(key) ?? { events: 0, aos: 0 };
+      merged.events += loc.eventCount;
+      merged.aos = Math.max(merged.aos, loc.aoCount);
+      byCoord.set(key, merged);
+    }
     let events = 0;
     let aos = 0;
-    for (const loc of item.activeLocations) {
-      events += loc.eventCount;
-      aos += loc.aoCount;
+    for (const merged of byCoord.values()) {
+      events += merged.events;
+      aos += merged.aos;
     }
     metricsById.set(item.orgId, {
       events,
       aos,
-      locations: item.activeLocations.length,
+      locations: byCoord.size,
     });
   }
 

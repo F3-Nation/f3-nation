@@ -219,6 +219,38 @@ describe("buildOrgHierarchy", () => {
     expect(m?.locations).toBe(2);
   });
 
+  it("merges co-located records so AOs are not double-counted", () => {
+    const items = [
+      makeItem(
+        10,
+        "region",
+        [],
+        [
+          {
+            locationId: 401,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 3,
+            aoCount: 2,
+          },
+          {
+            locationId: 402,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 4,
+            aoCount: 2,
+          },
+        ],
+      ),
+    ];
+    const { metricsById } = buildOrgHierarchy(items);
+    const m = metricsById.get(10);
+    // Same coordinate: events sum (3+4), AOs take the max (2, not 4), one place.
+    expect(m?.events).toBe(7);
+    expect(m?.aos).toBe(2);
+    expect(m?.locations).toBe(1);
+  });
+
   it("does not add pointsById entry when activeLocations is empty", () => {
     const items = [makeItem(10, "region")];
     const { pointsById } = buildOrgHierarchy(items);

@@ -350,7 +350,10 @@ export const orgChartRouter = {
         )
         .innerJoin(
           schema.users,
-          eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+          and(
+            eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+            eq(schema.users.status, "active"),
+          ),
         )
         .where(eq(schema.positionsXOrgsXUsers.orgId, input.orgId))
         .orderBy(asc(schema.positions.name), asc(schema.users.f3Name));
@@ -371,7 +374,10 @@ export const orgChartRouter = {
         )
         .innerJoin(
           schema.users,
-          eq(schema.users.id, schema.rolesXUsersXOrg.userId),
+          and(
+            eq(schema.users.id, schema.rolesXUsersXOrg.userId),
+            eq(schema.users.status, "active"),
+          ),
         )
         .where(eq(schema.rolesXUsersXOrg.orgId, input.orgId))
         .orderBy(asc(schema.roles.name), asc(schema.users.f3Name));
@@ -540,7 +546,10 @@ export const orgChartRouter = {
         )
         .innerJoin(
           schema.users,
-          eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+          and(
+            eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+            eq(schema.users.status, "active"),
+          ),
         )
         .where(inArray(schema.positionsXOrgsXUsers.orgId, aoIds))
         .orderBy(asc(schema.positions.name), asc(schema.users.f3Name));

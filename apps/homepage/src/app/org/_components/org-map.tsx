@@ -409,6 +409,16 @@ export default function OrgMap() {
 
       const locations = orgLocationsRef.current.get(org.id) ?? [];
 
+      // Group by exact coordinate so co-located pins can be fanned out
+      // ("spiderfied") instead of stacking invisibly on top of one another.
+      const byCoord = new Map<string, typeof locations>();
+      for (const loc of locations) {
+        const key = `${loc.lat},${loc.lng}`;
+        const group = byCoord.get(key) ?? [];
+        group.push(loc);
+        byCoord.set(key, group);
+      }
+
       const icon = L.divIcon({
         className: "",
         html: `<div style="width:14px;height:14px;border-radius:50%;background:#B70D06;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)"></div>`,
@@ -416,17 +426,28 @@ export default function OrgMap() {
         iconAnchor: [7, 7],
       });
 
-      for (const loc of locations) {
-        const marker = L.marker([loc.lat, loc.lng], { icon });
+      for (const group of byCoord.values()) {
+        group.forEach((loc, i) => {
+          let { lat, lng } = loc;
+          if (group.length > 1) {
+            // Fan markers sharing a coordinate around a small circle (~65m)
+            // so each stays individually hoverable/clickable.
+            const angle = (2 * Math.PI * i) / group.length;
+            const radius = 0.0006;
+            lat += radius * Math.cos(angle);
+            lng += radius * Math.sin(angle);
+          }
+          const marker = L.marker([lat, lng], { icon });
 
-        marker.on("mouseover", () => {
-          void loadLocationInfo(loc.locationId);
-        });
-        marker.on("click", () => {
-          void loadLocationInfo(loc.locationId);
-        });
+          marker.on("mouseover", () => {
+            void loadLocationInfo(loc.locationId);
+          });
+          marker.on("click", () => {
+            void loadLocationInfo(loc.locationId);
+          });
 
-        marker.addTo(pinLayer);
+          marker.addTo(pinLayer);
+        });
       }
     },
     [loadLocationInfo],
