@@ -65,6 +65,9 @@ jobs:
   build:
     needs: ci-check
     runs-on: ubuntu-latest
+    # Scope to github-pages so the build can read that environment's variables
+    # (NEXT_PUBLIC_ORG_MAP_API_KEY is baked into the static bundle at build time).
+    environment: github-pages
     permissions:
       contents: read
       pages: write
@@ -77,6 +80,8 @@ jobs:
       - uses: ./.github/actions/setup
 
       - name: Build static export
+        env:
+          NEXT_PUBLIC_ORG_MAP_API_KEY: ${{ vars.NEXT_PUBLIC_ORG_MAP_API_KEY }}
         run: pnpm build --filter f3-homepage
 
       - name: Configure GitHub Pages

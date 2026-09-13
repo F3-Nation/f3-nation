@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.0...pkg-db@0.6.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **db,ci:** tune Postgres client pool/timeouts and fix stale auth staging_url ([#901](https://github.com/F3-Nation/f3-nation/issues/901)) ([59ead05](https://github.com/F3-Nation/f3-nation/commit/59ead059226ecffaa3b928b67aa64753170fb613))
+* **db:** bound how long a query waits behind a saturated connection pool ([#911](https://github.com/F3-Nation/f3-nation/issues/911)) ([d26f4cb](https://github.com/F3-Nation/f3-nation/commit/d26f4cbd2f57fba6ddcf6f5f6d7c66c5ece8abbe))
+
 ## [0.6.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.5.0...pkg-db@0.6.0) (2026-09-10)
 
 

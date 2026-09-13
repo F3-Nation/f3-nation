@@ -63,6 +63,7 @@ guarantees:
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `publicProcedure`         | No auth. Rate-limited only. Safe for truly public, read-only data.                                                                   |
 | `protectedProcedure`      | A valid session/credential exists. **Does _not_ check what that user may touch.**                                                    |
+| `personalUserProcedure`   | A user session or Auth access token exists; rejects API-key sessions. Personal handlers must still scope resources to that user.     |
 | `editorProcedure`         | Caller has editor or admin role on **any** org. Resource-scoped auth (`checkHasRoleOnOrg`) is still required for specific resources. |
 | `adminProcedure`          | Caller has admin role on **any** org. Resource-scoped auth still required.                                                           |
 | `nationAdminProcedure`    | Caller has the nation-level admin role specifically.                                                                                 |

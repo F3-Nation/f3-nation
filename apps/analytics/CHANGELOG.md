@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/analytics@0.3.0...analytics@0.3.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#959](https://github.com/F3-Nation/f3-nation/issues/959)) ([7f45d87](https://github.com/F3-Nation/f3-nation/commit/7f45d876ab3c2d587feb84098d9d7ed2436527e3))
+
 ## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.2.0...analytics@0.3.0) (2026-09-10)
 
 
