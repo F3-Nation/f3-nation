@@ -19,6 +19,7 @@ import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { OrgInsertSchema } from "@acme/validators";
 
+import { assertValidParentType } from "../assert-valid-parent-type";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
@@ -708,7 +709,7 @@ export const orgRouter = {
       tags: ["org"],
       summary: "Create or update organization",
       description:
-        "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → region → area → ao).",
+        "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → area → region → ao).",
     })
     .output(
       z.object({
@@ -785,6 +786,10 @@ export const orgRouter = {
 
       // CASE 1: Create new org
       if (!input.id) {
+        if (input.parentId != null) {
+          await assertValidParentType(ctx.db, input.parentId, input.orgType);
+        }
+
         const [result] = await ctx.db
           .insert(schema.orgs)
           .values({
@@ -846,6 +851,12 @@ export const orgRouter = {
               "You are not authorized to move this org to the destination parent organization",
           });
         }
+
+        await assertValidParentType(
+          ctx.db,
+          destinationParentOrgId,
+          input.orgType,
+        );
       }
 
       // If the parentId is changing and this is an AO, we need to move the locations for the org
