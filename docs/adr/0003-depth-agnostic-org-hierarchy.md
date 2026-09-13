@@ -17,15 +17,15 @@ The database was already built for this. Every org is a row in `orgs` with a
 `parent_id`, so the schema does not care how deep the tree goes. Adding a tier
 is, at the storage layer, one new enum member plus re-parenting some rows.
 
-The application code was not built for this. An audit found **six** places that
-assumed a five-deep tree by hand-writing one step per level. None of them threw,
-and none logged. Each returned quietly wrong results.
+The application code was not built for this. An audit found **five** places
+that assumed a five-deep tree by hand-writing one step per level. None of them
+threw, and none logged. Each returned quietly wrong results.
 
 ### Why the failures were invisible
 
 A `LEFT JOIN` that runs out of tree yields `NULL`, and the callers filtered
 nulls away before use. A truncated ancestor chain was therefore
-indistinguishable from a legitimately short one. Two of the six governed
+indistinguishable from a legitimately short one. Two of the five governed
 authorization, so the symptom would have been administrators silently losing
 access to orgs they owned.
 
@@ -40,7 +40,7 @@ The catalogue began at three entries and was twice incomplete:
 
 - `getDescendantOrgIds` was missed because the audit anchored on "who can edit
   what," and it reads as a generic helper. It had the widest blast radius of
-  all six — eight call sites across six routers.
+  all five — eight call sites across six routers.
 - `ancestorOrgsAreActive`
   ([#965](https://github.com/F3-Nation/f3-nation/issues/965)) was missed because
   it landed via a long-lived branch opened before the audit, so it was never in
@@ -102,17 +102,34 @@ sit under a territory or still directly under a sector, indefinitely. Adjacency
 would reject every un-migrated area. It also rules out expressing the rule as a
 database `CHECK` constraint.
 
+`isValidOrgTypeParent` (`packages/shared/src/app/org-hierarchy.ts`) implements
+this check, but it is not yet wired into the org mutation endpoint
+(`org.crupdate`, `packages/api/src/router/org.ts`) — today that endpoint
+rejects a change to an org's own type but does not compare the new parent's
+rank to the child's. Until that's wired in, this rule is a designed invariant,
+not an enforced one.
+
 ### 4. Unknown org types fail loudly — but dangling parents do not
 
 Code that meets an org type it does not recognize must **not** substitute a
 plausible one. `normalizeOrgType` returns `null`.
 
-The deliberate exception is _re-parenting_: when a client drops an unrecognized
-ancestor, it must re-link that ancestor's children to the nearest recognized
+The deliberate design is _re-parenting_: when a client drops an unrecognized
+ancestor, it should re-link that ancestor's children to the nearest recognized
 ancestor rather than leave a `parent_id` pointing at an org it discarded. The
 alternative to guessing is not "no guess" — it is a dangling pointer, which
 orphans the whole subtree. Attaching to a known-real ancestor degrades to an
 incomplete-but-coherent tree.
+
+That re-linking is not implemented yet. `buildOrgHierarchy`
+(`apps/homepage/src/app/org/_lib/org-chart.ts`) assigns a child's `parentId`
+from its immediate ancestor before that ancestor's type is checked; when the
+ancestor turns out to be unrecognized, the ancestor itself is skipped rather
+than added to `orgById`, leaving the child's `parentId` dangling instead of
+re-linked. The same gap applies when the unrecognized entry is the root, or
+when several consecutive ancestors are unrecognized — the existing test only
+asserts which IDs are present in `orgById`, not what a dangling child's
+`parentId` resolves to.
 
 This distinction matters most for statically-exported clients, which carry a
 build-time snapshot of the enum while reading a live API that may already be
@@ -120,7 +137,7 @@ ahead of them.
 
 ## Alternatives considered
 
-**Add the tier and fix what breaks.** Rejected: all six failures are silent, so
+**Add the tier and fix what breaks.** Rejected: all five failures are silent, so
 "what breaks" would have surfaced as user reports of missing access weeks later,
 with no error to trace. The traversal rewrites deliberately landed _while the
 tree was still five deep_, so they could be proven behavior-preserving against
@@ -142,8 +159,9 @@ by exactly one tier and guarantees a repeat. F3 continues to grow.
 
 **Good.** Adding the next tier is a one-line array change plus a migration and
 data backfill, not a project. The admin UI generates itself from the config, so
-new tiers surface without per-type files. Depth bugs now fail at compile time or
-are bounded at query time rather than returning wrong data.
+new tiers surface without per-type files. Depth bugs now fail at compile time,
+or are bounded at query time by denying a legitimately-inherited role beyond
+the depth cap rather than silently granting or omitting access.
 
 **Costs.** Recursive CTEs are harder to read than join ladders and cannot be
 expressed through the query builder at the pinned drizzle version. The enum's
