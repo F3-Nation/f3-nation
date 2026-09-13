@@ -34,6 +34,16 @@ export const assertValidParentType = async (
     throw new ORPCError("NOT_FOUND", { message: "Parent org not found" });
   }
 
+  // An AO's parent must be an adjacent region, not just any higher-ranked
+  // type: moveAOLocsToNewRegion and the map's region joins both hard-assume
+  // an AO's parent is a region, so a skip-level ao->sector/area/nation parent
+  // would silently break location/region attribution downstream.
+  if (childOrgType === "ao" && parentOrg.orgType !== "region") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `${orgTypeDisplay.ao.label} cannot have a parent of type ${orgTypeDisplay[parentOrg.orgType].label}`,
+    });
+  }
+
   if (!isValidOrgTypeParent(parentOrg.orgType, childOrgType)) {
     throw new ORPCError("BAD_REQUEST", {
       message: `${orgTypeDisplay[childOrgType].label} cannot have a parent of type ${orgTypeDisplay[parentOrg.orgType].label}`,

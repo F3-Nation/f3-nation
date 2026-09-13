@@ -9,6 +9,7 @@
 import {
   TEST_AO_1_ORG_ID,
   TEST_NATION_ORG_ID,
+  TEST_REGION_1_ORG_ID,
   TEST_SECTOR_ORG_ID,
 } from "@acme/shared/app/constants";
 import { OrgType } from "@acme/shared/app/enums";
@@ -85,6 +86,21 @@ describe("assertValidParentType", () => {
   it("resolves for a skip-level parent above the immediate rank", async () => {
     await expect(
       assertValidParentType(db, TEST_NATION_ORG_ID, "area"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects a skip-level parent for an ao, unlike other org types", async () => {
+    // moveAOLocsToNewRegion and the map's region joins both assume an ao's
+    // parent is specifically a region, so ao is the one type that must NOT
+    // accept a higher-ranked skip-level parent.
+    await expect(
+      assertValidParentType(db, TEST_SECTOR_ORG_ID, "ao"),
+    ).rejects.toThrow(/AO.*Sector/);
+  });
+
+  it("resolves for an ao parented to an adjacent region", async () => {
+    await expect(
+      assertValidParentType(db, TEST_REGION_1_ORG_ID, "ao"),
     ).resolves.toBeUndefined();
   });
 });
