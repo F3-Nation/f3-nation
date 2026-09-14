@@ -5,6 +5,29 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { SearchBox } from "./search-box";
 import type { Org } from "../_lib/types";
 
+// Stub the debounced AO hook so these tests stay synchronous: it returns a
+// canned AO only for queries containing "boot", and nothing otherwise.
+vi.mock("../_lib/use-ao-search", () => ({
+  useAoSearch: (q: string) =>
+    q.toLowerCase().includes("boot")
+      ? {
+          results: [
+            {
+              id: 99,
+              name: "Bootcamp",
+              regionId: 10,
+              regionName: "Charlotte",
+              locationId: 5,
+              latitude: 1,
+              longitude: 2,
+              eventCount: 3,
+            },
+          ],
+          loading: false,
+        }
+      : { results: [], loading: false },
+}));
+
 const orgs: Org[] = [
   { id: 1, parentId: null, name: "Charlotte", orgType: "region" },
   { id: 2, parentId: null, name: "Charleston", orgType: "region" },
@@ -22,7 +45,13 @@ afterEach(() => {
 
 describe("SearchBox", () => {
   it("opens the result list and renders matches as the query changes", () => {
-    render(<SearchBox getResults={getResults} onSelect={vi.fn()} />);
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn()}
+      />,
+    );
     fireEvent.change(screen.getByRole("searchbox"), {
       target: { value: "Char" },
     });
@@ -32,7 +61,13 @@ describe("SearchBox", () => {
   });
 
   it("shows the no-match state for a nonempty query with no hits", () => {
-    render(<SearchBox getResults={getResults} onSelect={vi.fn()} />);
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn()}
+      />,
+    );
     fireEvent.change(screen.getByRole("searchbox"), {
       target: { value: "zzz" },
     });
@@ -41,7 +76,13 @@ describe("SearchBox", () => {
 
   it("selects a result, calls onSelect, and keeps the list closed", () => {
     const onSelect = vi.fn();
-    render(<SearchBox getResults={getResults} onSelect={onSelect} />);
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={onSelect}
+        onSelectAo={vi.fn()}
+      />,
+    );
     const input = screen.getByRole("searchbox");
     fireEvent.change(input, { target: { value: "Char" } });
 
@@ -56,7 +97,13 @@ describe("SearchBox", () => {
 
   it("selects the top match on Enter and keeps the list closed", () => {
     const onSelect = vi.fn();
-    render(<SearchBox getResults={getResults} onSelect={onSelect} />);
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={onSelect}
+        onSelectAo={vi.fn()}
+      />,
+    );
     const input = screen.getByRole("searchbox");
     fireEvent.change(input, { target: { value: "Char" } });
 
@@ -67,7 +114,13 @@ describe("SearchBox", () => {
   });
 
   it("closes the list on Escape", () => {
-    render(<SearchBox getResults={getResults} onSelect={vi.fn()} />);
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn()}
+      />,
+    );
     const input = screen.getByRole("searchbox");
     fireEvent.change(input, { target: { value: "Char" } });
     expect(screen.getByRole("listbox")).toBeTruthy();
@@ -77,7 +130,13 @@ describe("SearchBox", () => {
   });
 
   it("clears results and closes when the query is emptied", () => {
-    render(<SearchBox getResults={getResults} onSelect={vi.fn()} />);
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn()}
+      />,
+    );
     const input = screen.getByRole("searchbox");
     fireEvent.change(input, { target: { value: "Char" } });
     expect(screen.getByRole("listbox")).toBeTruthy();
@@ -87,7 +146,13 @@ describe("SearchBox", () => {
   });
 
   it("does not reopen a stale partial-query list after select then refocus", () => {
-    render(<SearchBox getResults={getResults} onSelect={vi.fn()} />);
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn()}
+      />,
+    );
     const input = screen.getByRole("searchbox");
     fireEvent.change(input, { target: { value: "Char" } });
     // Both Charlotte and Charleston match the partial query.
@@ -101,5 +166,42 @@ describe("SearchBox", () => {
     fireEvent.focus(input);
     expect(screen.getByText("Charlotte")).toBeTruthy();
     expect(screen.queryByText("Charleston")).toBeNull();
+  });
+
+  it("renders AO hits with their region and calls onSelectAo on choose", () => {
+    const onSelectAo = vi.fn();
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={onSelectAo}
+      />,
+    );
+    // "boot" matches no org but the stubbed AO hook returns Bootcamp.
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "boot" },
+    });
+    expect(screen.getByText("Bootcamp")).toBeTruthy();
+    // Region name is shown as the AO's subtitle.
+    expect(screen.getByText("Charlotte")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Bootcamp"));
+    expect(onSelectAo).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("selects the first AO on Enter when no org matches", () => {
+    const onSelectAo = vi.fn();
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={onSelectAo}
+      />,
+    );
+    const input = screen.getByRole("searchbox");
+    fireEvent.change(input, { target: { value: "boot" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelectAo).toHaveBeenCalledTimes(1);
   });
 });

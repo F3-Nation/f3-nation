@@ -14,6 +14,7 @@ import type {
   OrgType,
   Point,
   LocationDetail,
+  AoSearchResult,
 } from "../_lib/types";
 import { buildOrgHierarchy, LAYER_TYPES } from "../_lib/org-chart";
 import {
@@ -207,6 +208,11 @@ export default function OrgMap() {
   // True when the ancestor climb couldn't verify admins (a lookup failed),
   // so the UI can say "couldn't check" instead of a false "none listed".
   const [adminLookupInconclusive, setAdminLookupInconclusive] = useState(false);
+  // Set by an AO search selection; consumed by the focus effect below.
+  const [aoFocus, setAoFocus] = useState<{
+    orgId: number;
+    locationId: number;
+  } | null>(null);
 
   // Layers actually present in the data (depth-agnostic)
   const [presentLayers, setPresentLayers] = useState<OrgType[]>(LAYER_TYPES);
@@ -486,6 +492,18 @@ export default function OrgMap() {
     [loadOrgInfo],
   );
 
+  const navigateToAo = useCallback(
+    (ao: AoSearchResult) => {
+      const region = orgByIdRef.current.get(ao.regionId);
+      if (!region) return;
+      navigateToOrg(region);
+      // A fresh object each call re-triggers the focus effect below, even when
+      // the region view doesn't change (same region, different AO).
+      setAoFocus({ orgId: ao.regionId, locationId: ao.locationId });
+    },
+    [navigateToOrg],
+  );
+
   const navigateViaLevelButton = useCallback(
     (level: OrgType) => {
       pinsActiveRef.current = false;
@@ -631,6 +649,17 @@ export default function OrgMap() {
     navigateToOrg,
     showPinsForOrg,
   ]);
+
+  // After an AO search selection, once the region view has (re)rendered, show
+  // its pins and open the selected AO's location. Declared after the polygon
+  // render effect so it runs second — its pins survive that effect's clear.
+  useEffect(() => {
+    if (!aoFocus || !isLoaded) return;
+    const org = orgByIdRef.current.get(aoFocus.orgId);
+    if (!org) return;
+    showPinsForOrg(org);
+    void loadLocationInfo(aoFocus.locationId);
+  }, [aoFocus, isLoaded, showPinsForOrg, loadLocationInfo]);
 
   // ── nearest parent admin lookup (for empty-roles message) ───────────────
 
@@ -879,6 +908,7 @@ export default function OrgMap() {
             <SearchBox
               getResults={getSearchResults}
               onSelect={navigateToOrg}
+              onSelectAo={navigateToAo}
               disabled={!isLoaded}
             />
           </div>

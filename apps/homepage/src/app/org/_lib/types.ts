@@ -79,3 +79,15 @@ export interface LocationDetail {
   longitude: number | null;
   aos: LocationAo[];
 }
+
+// One AO search hit: enough to navigate to its region and open its location.
+export interface AoSearchResult {
+  id: number;
+  name: string | null;
+  regionId: number;
+  regionName: string | null;
+  locationId: number;
+  latitude: number;
+  longitude: number;
+  eventCount: number;
+}
