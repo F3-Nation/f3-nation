@@ -299,4 +299,78 @@ describe("Org Chart Router", () => {
       ).rejects.toThrow();
     });
   });
+
+  describe("aos", () => {
+    it("returns matching active AOs with their region and busiest location", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const sector = await createOrg({
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      const area = sector
+        ? await createOrg({ orgType: "area", parentId: sector.id })
+        : null;
+      const region = area
+        ? await createOrg({ orgType: "region", parentId: area.id })
+        : null;
+      const ao = region
+        ? await createOrg({ orgType: "ao", parentId: region.id })
+        : null;
+      if (!region || !ao) {
+        return;
+      }
+
+      const location = await createLocation(region.id);
+      if (!location) {
+        return;
+      }
+      await createEvent({ orgId: ao.id, locationId: location.id });
+
+      const client = createTestClient();
+      // ao.name is unique (contains a uniqueId), so it matches only this AO.
+      const result = await client.orgChart.aos({ searchTerm: ao.name });
+
+      const hit = result.aos.find((a) => a.id === ao.id);
+      expect(hit).toBeDefined();
+      if (!hit) {
+        throw new Error("Expected the AO in search results");
+      }
+      expect(hit.regionId).toBe(region.id);
+      expect(hit.locationId).toBe(location.id);
+      expect(hit.eventCount).toBe(1);
+    });
+
+    it("excludes AOs with no active events and rejects short queries", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const sector = await createOrg({
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      const area = sector
+        ? await createOrg({ orgType: "area", parentId: sector.id })
+        : null;
+      const region = area
+        ? await createOrg({ orgType: "region", parentId: area.id })
+        : null;
+      const ao = region
+        ? await createOrg({ orgType: "ao", parentId: region.id })
+        : null;
+      if (!ao) {
+        return;
+      }
+
+      const client = createTestClient();
+      // No events created for this AO → it must not appear.
+      const result = await client.orgChart.aos({ searchTerm: ao.name });
+      expect(result.aos.find((a) => a.id === ao.id)).toBeUndefined();
+
+      await expect(client.orgChart.aos({ searchTerm: "a" })).rejects.toThrow();
+    });
+  });
 });

@@ -1,4 +1,9 @@
-import type { LocationDetail, OrgChartItem, OrgDetail } from "./types";
+import type {
+  AoSearchResult,
+  LocationDetail,
+  OrgChartItem,
+  OrgDetail,
+} from "./types";
 
 function getApiBase(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL;
@@ -14,11 +19,17 @@ function getApiBase(): string {
 // in devtools — it grants nothing beyond the public org-chart directory reads.
 const ORG_MAP_CLIENT = "https://apps.f3nation.com";
 
-async function orgMapFetch<T>(path: string): Promise<T> {
+async function orgMapFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
   const url = `${getApiBase()}/v1${path}`;
   const apiKey = process.env.NEXT_PUBLIC_ORG_MAP_API_KEY;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
+  // Abort if the caller's signal fires (e.g. a superseded debounced search).
+  const onAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  }
   try {
     const headers: Record<string, string> = { client: ORG_MAP_CLIENT };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -27,6 +38,7 @@ async function orgMapFetch<T>(path: string): Promise<T> {
     return (await res.json()) as T;
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -45,4 +57,15 @@ export async function fetchLocationById(
   locationId: number,
 ): Promise<LocationDetail> {
   return orgMapFetch<LocationDetail>(`/org-chart/location/${locationId}`);
+}
+
+export async function searchAos(
+  searchTerm: string,
+  signal?: AbortSignal,
+): Promise<AoSearchResult[]> {
+  const data = await orgMapFetch<{ aos: AoSearchResult[] }>(
+    `/org-chart/aos?searchTerm=${encodeURIComponent(searchTerm)}`,
+    signal,
+  );
+  return data.aos;
 }

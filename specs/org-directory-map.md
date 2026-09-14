@@ -28,9 +28,11 @@ unpopulated tier for one branch requires no per-level code.
     `search-box.tsx`
   - `apps/homepage/src/app/org/_lib/`: `navigation.ts` (depth-agnostic drill
     logic), `org-chart.ts` (`LAYER_TYPES`, `orgTypeRank`, `buildOrgHierarchy`),
-    `geo-utils.ts`, `url-state.ts`, `api.ts`, `types.ts`
+    `geo-utils.ts`, `url-state.ts`, `api.ts`, `use-ao-search.ts` (debounced
+    server-side AO search), `types.ts`
   - `packages/api/src/router/org-chart/index.ts` (`protectedProcedure` REST
-    reads: `all`, `byId`, and `byLocation` for AO location details)
+    reads: `all`, `byId`, `byLocation` for AO location details, and `aos`
+    for AO name search)
   - `@acme/shared/app/enums` (`OrgType`),
     `@acme/shared/app/org-hierarchy` (`orgTypeDisplay`, `orgTypeRank`)
 
@@ -96,13 +98,25 @@ unpopulated tier for one branch requires no per-level code.
 
 ### Search
 
-- **AC-10** — GIVEN the visitor types a non-blank query THEN a result list of
-  fuzzy matches across the navigable layers opens; a blank query closes it; a
-  non-blank query with no matches shows a distinct "No matches" state.
-- **AC-11** — GIVEN search results WHEN the visitor selects one (click or
+- **AC-10** — GIVEN the visitor types a non-blank query THEN a result list
+  opens combining instant client-side fuzzy matches across the navigable layers
+  with server-searched **AO** matches (see AC-21); a blank query closes it; a
+  non-blank query with no matches from either source shows a distinct "No
+  matches" state.
+- **AC-11** — GIVEN search results WHEN the visitor selects an org (click or
   Enter) THEN the map navigates to it and the list closes and stays closed —
   including after blurring and re-focusing the input, which must not resurface
-  the prior partial-query matches.
+  the prior partial-query matches. Selecting an **AO** result instead navigates
+  to its region, shows that region's pins, and opens the AO's location panel
+  (see AC-21).
+- **AC-21** — GIVEN AOs are not part of the client dataset (the chart loads
+  regions, not AOs) WHEN the visitor types (≥2 characters) THEN AO matches are
+  fetched from `GET /v1/org-chart/aos?searchTerm=...` after a short debounce,
+  superseded requests are aborted, and each hit shows the AO name with its
+  region.
+  Selecting one navigates to the AO's region, drops that region's pins, and
+  opens the AO's busiest active location; only active AOs with active public
+  events at active locations are returned.
 
 ### Org info panel
 
@@ -142,11 +156,12 @@ unpopulated tier for one branch requires no per-level code.
 ### API
 
 - **AC-15** — GIVEN the org-chart endpoints are `protectedProcedure` WHEN the
-  homepage client calls `GET /v1/org-chart`, `GET /v1/org-chart/{orgId}`, or
-  `GET /v1/org-chart/location/{locationId}` THEN it presents the read-only
-  `NEXT_PUBLIC_ORG_MAP_API_KEY` as a Bearer token (plus the `client` header) and
-  receives the directory data; a call with no valid key or session is rejected
-  (UNAUTHORIZED), and requests are subject to the per-IP rate limit.
+  homepage client calls `GET /v1/org-chart`, `GET /v1/org-chart/{orgId}`,
+  `GET /v1/org-chart/location/{locationId}`, or `GET /v1/org-chart/aos` THEN
+  it presents the read-only `NEXT_PUBLIC_ORG_MAP_API_KEY` as a Bearer token
+  (plus the `client` header) and receives the directory data; a call with no
+  valid key or session is rejected (UNAUTHORIZED), and requests are subject to
+  the per-IP rate limit.
 - **AC-20** — GIVEN the AO location endpoint WHEN the client calls
   `GET /v1/org-chart/location/{locationId}` THEN it returns the active
   location's active AOs (`orgType = "ao"`, active), their active-event counts,
@@ -167,18 +182,18 @@ trusted caller, exactly like `apps/map`'s `F3_MAP_API_KEY`. Because it is a
 that is acceptable here because it is scoped to the read-only, already-public
 org-chart directory data and grants nothing else.
 
-| Action                                                                 | Allowed                                                     | Explicitly denied                           |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------- |
-| Browse the directory map, search, view details                         | Everyone, anonymous included (the app supplies the API key) | —                                           |
-| Call `GET /v1/org-chart[/{id}]` or `/org-chart/location/{id}` directly | Callers presenting a valid API key or session               | Unauthenticated direct calls (UNAUTHORIZED) |
-| Create / edit / delete any org data here                               | No one (feature is read-only)                               | All callers (no write endpoints exist)      |
+| Action                                                                                    | Allowed                                                     | Explicitly denied                           |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------- |
+| Browse the directory map, search, view details                                            | Everyone, anonymous included (the app supplies the API key) | —                                           |
+| Call `GET /v1/org-chart[/{id}]`, `/org-chart/location/{id}`, or `/org-chart/aos` directly | Callers presenting a valid API key or session               | Unauthenticated direct calls (UNAUTHORIZED) |
+| Create / edit / delete any org data here                                                  | No one (feature is read-only)                               | All callers (no write endpoints exist)      |
 
 All callers are subject to the in-memory per-IP rate limit (~500 req/min per
 instance in production) — a per-instance limit, not a global cap.
 
-Every read procedure (`all`, `byId`, `byLocation`) returns **active records
-only** — inactive orgs, locations, events, and users are excluded, so the
-directory never surfaces deactivated orgs, venues, or people.
+Every read procedure (`all`, `byId`, `byLocation`, `aos`) returns **active
+records only** — inactive orgs, locations, events, and users are excluded, so
+the directory never surfaces deactivated orgs, venues, or people.
 
 ## 6. Out of scope / non-goals
 
@@ -195,8 +210,10 @@ directory never surfaces deactivated orgs, venues, or people.
 3. Drilling a branch with an empty intermediate tier skips to the next
    populated layer (AC-5); the International sector shows descendants of the
    drilled sub-level (AC-7).
-4. Search → select a result → list closes and does not reopen on refocus with
-   stale matches (AC-11).
+4. Search → select an org result → list closes and does not reopen on refocus
+   with stale matches (AC-11). Typing also returns debounced AO matches from
+   the server; selecting an AO navigates to its region and opens its location
+   (AC-21).
 5. An admin-less org surfaces the nearest ancestor admins; an inconclusive
    lookup shows the distinct "couldn't verify" message (AC-14).
 6. The homepage client presents the API key and receives org-chart data; an

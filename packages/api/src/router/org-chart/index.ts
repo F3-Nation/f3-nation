@@ -6,7 +6,9 @@ import {
   and,
   asc,
   countDistinct,
+  desc,
   eq,
+  ilike,
   inArray,
   isNotNull,
   schema,
@@ -601,5 +603,131 @@ export const orgChartRouter = {
           })),
         })),
       };
+    }),
+
+  aos: protectedProcedure
+    .input(
+      z.object({
+        searchTerm: z
+          .string()
+          .min(2)
+          .describe("AO name search term (minimum 2 characters)"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/aos",
+      tags: ["Org Chart"],
+      summary: "Search AOs by name",
+      description:
+        "Return active AOs whose name matches the query, each with its region and busiest active location so the map can navigate to it.",
+    })
+    .output(
+      z.object({
+        aos: z.array(
+          z.object({
+            id: z.number().describe("AO org ID"),
+            name: z.string().nullable().describe("AO name"),
+            regionId: z.number().describe("Parent region org ID"),
+            regionName: z.string().nullable().describe("Parent region name"),
+            locationId: z.number().describe("Busiest active location ID"),
+            latitude: z.number().describe("Location latitude"),
+            longitude: z.number().describe("Location longitude"),
+            eventCount: z
+              .number()
+              .describe("Active events for this AO at that location"),
+          }),
+        ),
+      }),
+    )
+    .handler(async ({ context: ctx, input }) => {
+      const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const regionOrg = aliasedTable(schema.orgs, "region_org");
+
+      // One row per (AO, location); ordered so the busiest location leads each
+      // AO, then reduced to that single location below.
+      const rows = await ctx.db
+        .select({
+          id: aoOrg.id,
+          name: aoOrg.name,
+          regionId: regionOrg.id,
+          regionName: regionOrg.name,
+          locationId: schema.locations.id,
+          latitude: schema.locations.latitude,
+          longitude: schema.locations.longitude,
+          eventCount: countDistinct(schema.events.id),
+        })
+        .from(schema.events)
+        .innerJoin(
+          aoOrg,
+          and(
+            eq(aoOrg.id, schema.events.orgId),
+            eq(aoOrg.orgType, "ao"),
+            eq(aoOrg.isActive, true),
+          ),
+        )
+        .innerJoin(
+          regionOrg,
+          and(eq(regionOrg.id, aoOrg.parentId), eq(regionOrg.isActive, true)),
+        )
+        .innerJoin(
+          schema.locations,
+          and(
+            eq(schema.locations.id, schema.events.locationId),
+            eq(schema.locations.isActive, true),
+            isNotNull(schema.locations.latitude),
+            isNotNull(schema.locations.longitude),
+          ),
+        )
+        .where(
+          and(
+            eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
+            ilike(aoOrg.name, `%${input.searchTerm}%`),
+          ),
+        )
+        .groupBy(
+          aoOrg.id,
+          aoOrg.name,
+          regionOrg.id,
+          regionOrg.name,
+          schema.locations.id,
+          schema.locations.latitude,
+          schema.locations.longitude,
+        )
+        .orderBy(asc(aoOrg.name), desc(countDistinct(schema.events.id)))
+        .limit(200);
+
+      // Keep only the busiest location per AO (first row wins), cap results.
+      interface AoSearchHit {
+        id: number;
+        name: string | null;
+        regionId: number;
+        regionName: string | null;
+        locationId: number;
+        latitude: number;
+        longitude: number;
+        eventCount: number;
+      }
+      const seen = new Set<number>();
+      const aos: AoSearchHit[] = [];
+      for (const row of rows) {
+        if (seen.has(row.id)) continue;
+        if (row.latitude === null || row.longitude === null) continue;
+        seen.add(row.id);
+        aos.push({
+          id: row.id,
+          name: row.name,
+          regionId: row.regionId,
+          regionName: row.regionName,
+          locationId: row.locationId,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          eventCount: Number(row.eventCount),
+        });
+        if (aos.length >= 12) break;
+      }
+
+      return { aos };
     }),
 };
