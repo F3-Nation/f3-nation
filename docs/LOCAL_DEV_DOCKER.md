@@ -207,13 +207,13 @@ You should see output ending with:
 
 ### 3. (Optional) Add a Google Maps API key
 
-The app will start without this, but the map tiles won't render. To get one:
+The app will start without this, but the map tiles won't render. You don't need a key to build, run the tests, or pass `pnpm ci:local` — only to see the map itself. To get one:
 
 1. Go to [console.cloud.google.com/google/maps-apis](https://console.cloud.google.com/google/maps-apis/)
 2. Create a project and enable **Maps JavaScript API** and **Places API (New)**
 3. Create an API key
-4. Set the key in both `apps/map/.env` and `apps/api/.env`:
-   `NEXT_PUBLIC_GOOGLE_API_KEY=your-key-here`
+4. Set the key in `apps/map/.env` (and in `apps/admin/.env` if you want map tiles in the admin UI):
+   `F3_GOOGLE_API_KEY=your-key-here`
 
 > **Troubleshooting AuthFailure:** If the map shows an "AuthFailure" error after adding your key, the API key likely has HTTP referrer restrictions that block `localhost`. In the Google Cloud Console, set **Application restrictions** to **None** (or add `http://localhost:3000/*` as an allowed HTTP referrer) for local development.
 
@@ -348,9 +348,9 @@ These tell each Next.js app where to find the other apps. Don't change these unl
 
 ### Google Maps
 
-| Variable                     | Value      | Meaning                                                                      |
-| ---------------------------- | ---------- | ---------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key. App starts without it, but the map is blank. |
+| Variable            | Value      | Meaning                                                                                                      |
+| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| `F3_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key, read by the map and admin apps. They start without it, but the map is blank. |
 
 ---
 
@@ -577,4 +577,4 @@ cp apps/map/.env.example apps/map/.env
 # etc.
 ```
 
-Then add `NEXT_PUBLIC_GOOGLE_API_KEY` to `apps/map/.env` and `apps/api/.env` if you have one.
+Then add `F3_GOOGLE_API_KEY` to `apps/map/.env` (and `apps/admin/.env`) if you have one.
