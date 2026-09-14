@@ -1,10 +1,12 @@
 # Analytics region-roster ETL
 
 The analytics job reads PostgreSQL through DuckDB's read-only PostgreSQL
-attachment, writes Parquet, and publishes immutable run-scoped objects plus a
-manifest to GCS. The generation-protected current pointer is advanced only
-after the run artifacts are durable; readers consume the generation named by
-that pointer.
+attachment, writes Parquet, and publishes one immutable eight-dataset batch to
+GCS. Objects and dataset manifests live under
+`parquets/releases/<run-id>/<dataset>/`; `release.json` is written last as the
+commit record. A fixed `parquets/catalog.json` has immutable empty content and
+metadata-only, metageneration-CAS discovery fields. There are no per-dataset
+leases or `current.json` pointers.
 DuckDB's PostgreSQL extension is loaded from an explicit prebundled path; the
 runtime never runs `INSTALL`.
 
@@ -15,14 +17,19 @@ never accepted as environment or CLI output targets.
 matching Cloud SQL Unix socket; local connectivity requires separate operator
 approval.
 
-Each publication acquires a 90-minute generation-conditional GCS lease before
-reading PostgreSQL. Active leases reject the run; expired leases may be taken
-over. Leases are released by a generation-conditional state update, never by
-deletion.
+Only the exact approved eight-dataset registry may publish or advance the
+global catalog; subset runs are rejected before source access. If a dataset or
+validation fails, no release or catalog metadata is committed. Reruns create a
+new immutable run; lifecycle policy cleans unreachable staged objects.
 
-If pointer publication conflicts or a run fails, retain the prior known-good
-pointer and rerun the complete ETL after concurrent publishers quiesce. A rerun
-creates a new immutable run; committed artifacts are never overwritten.
+Consumers read catalog metadata, retrieve the pinned release manifest
+generation, then consume exactly its eight pinned dataset manifests and listed
+object generations. Source order is the logical batch-start ordering value,
+not a database-wide snapshot; it is monotonic and stale runs fail safely. A human
+rollback may select the retained previous generation-pinned release through the
+explicit catalog metadata-CAS operation, retaining the source high-water mark.
+PAX Vault compatibility and rollout are external consumer-owner dependencies
+and must be verified before catalog activation.
 
 ## Local testing (safe and offline by default)
 
@@ -49,7 +56,7 @@ connection. It requires `ANALYTICS_ENVIRONMENT=local`, a validated local
 PostgreSQL configuration, and an existing absolute output directory that is
 not a symlink. Each invocation creates a unique persistent run directory below
 that directory; `--materialization` may be repeated and is registry-validated.
-It never creates a GCS client, lease, publisher, pointer, or publication.
+It never creates a GCS client, publisher, or catalog publication.
 The destination must have no group or other permissions (`chmod 700`); the CLI
 rejects permissive directories.
 
@@ -245,9 +252,9 @@ Before enabling production:
    scoped GCS IAM bindings. See
    [`docs/ANALYTICS_ETL_OPERATIONS.md`](../../docs/ANALYTICS_ETL_OPERATIONS.md).
 3. Deploy and manually execute `analytics-etl-nonprod`; verify Unix-socket
-   access, database write denial, immutable GCS objects, generation-protected
-   pointer behavior, and lease behavior.
-4. Verify failure, stale-pointer, and alert handling with the configured log
+   access, database write denial, immutable release objects, last-object
+   `release.json` commit, catalog metadata CAS, and source-order behavior.
+4. Verify failed-release, stale-run, rollback, and alert handling with the configured log
    alerts before approving production.
 5. Provision the production Scheduler at `0 6 * * *` UTC with
    `scripts/provision-analytics-scheduler.sh`, then confirm its OAuth dispatch
