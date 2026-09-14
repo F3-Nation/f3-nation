@@ -115,6 +115,18 @@ describe("LocationInfoPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bootcamp" }));
     fireEvent.click(screen.getByRole("button", { name: /Splinter/ }));
     expect(logSpy).toHaveBeenCalledTimes(2);
+    expect(logSpy).toHaveBeenNthCalledWith(1, "[org-chart] ao", {
+      id: 1,
+      name: "Bootcamp",
+      type: "ao",
+    });
+    expect(logSpy).toHaveBeenNthCalledWith(2, "[org-chart] leader", {
+      userId: 42,
+      positionId: 7,
+      roleId: undefined,
+      f3Name: "Splinter",
+      title: "Site Q",
+    });
     logSpy.mockRestore();
   });
 });

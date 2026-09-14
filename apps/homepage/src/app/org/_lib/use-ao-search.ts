@@ -30,6 +30,10 @@ export function useAoSearch(query: string): {
       return;
     }
 
+    // Drop prior query results immediately so Enter cannot select stale AOs
+    // while the debounce timer for the new query is still running.
+    setResults([]);
+
     const controller = new AbortController();
     abortRef.current = controller;
 

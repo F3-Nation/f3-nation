@@ -22,6 +22,7 @@ function LeaderItem({ entry }: { entry: OrgLeaderEntry }) {
           console.log("[org-chart] leader", {
             userId: entry.userId,
             positionId: entry.positionId,
+            roleId: entry.roleId,
             f3Name: entry.f3Name,
             title: entry.title,
           })
@@ -63,7 +64,11 @@ function AoCard({ ao }: { ao: LocationAo }) {
           type="button"
           className="cursor-default text-left text-base font-bold"
           onClick={() =>
-            console.log("[org-chart] ao", { id: ao.id, name: ao.name })
+            console.log("[org-chart] ao", {
+              id: ao.id,
+              name: ao.name,
+              type: "ao",
+            })
           }
         >
           {ao.name ?? "Unnamed AO"}

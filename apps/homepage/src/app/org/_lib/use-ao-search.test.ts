@@ -138,4 +138,29 @@ describe("useAoSearch", () => {
     });
     expect(result.current.results).toEqual([]);
   });
+
+  it("clears previously loaded results immediately when query changes", async () => {
+    searchAosMock.mockResolvedValueOnce([hit]).mockResolvedValueOnce([]);
+
+    const { result, rerender } = renderHook(({ q }) => useAoSearch(q), {
+      initialProps: { q: "boot" },
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.results).toHaveLength(1);
+
+    rerender({ q: "zz" });
+    expect(result.current.results).toEqual([]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(searchAosMock).toHaveBeenLastCalledWith(
+      "zz",
+      expect.any(AbortSignal),
+    );
+    expect(result.current.results).toEqual([]);
+  });
 });
