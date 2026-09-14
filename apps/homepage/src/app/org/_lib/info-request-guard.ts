@@ -10,6 +10,7 @@
 export class InfoRequestGuard {
   private orgId: number | null = null;
   private locationId: number | null = null;
+  private pinnedOrgId: number | null = null;
 
   /**
    * Mark `id` as the active org selection. Clears any location selection.
@@ -27,6 +28,33 @@ export class InfoRequestGuard {
   selectLocation(id: number): void {
     this.locationId = id;
     this.orgId = null;
+  }
+
+  /**
+   * Mark `id` as the org whose location pins are shown.
+   *
+   * Switching to a new org's pins invalidates any pending location request, so
+   * a late-resolving one from the previously-viewed org can't populate the
+   * sidebar after the switch.
+   *
+   * Re-fanning the current org's pins (e.g. on map zoom) preserves any active
+   * or in-flight location selection.
+   *
+   * Returns `true` when switching to a different org, `false` when re-fanning
+   * the same org.
+   */
+  showPinsForOrg(id: number): boolean {
+    const changed = this.pinnedOrgId !== id;
+    this.pinnedOrgId = id;
+    if (changed) {
+      this.locationId = null;
+    }
+    return changed;
+  }
+
+  /** Clear the pinned org tracking (e.g. when pins are hidden). */
+  clearPins(): void {
+    this.pinnedOrgId = null;
   }
 
   /**

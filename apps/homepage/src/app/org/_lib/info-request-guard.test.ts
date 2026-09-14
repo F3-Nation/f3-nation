@@ -31,15 +31,48 @@ describe("InfoRequestGuard", () => {
   // map switches to region B's pins.
   it("invalidates a pending location request when pins switch to a new org", () => {
     const guard = new InfoRequestGuard();
+    guard.showPinsForOrg(10);
 
     // Hovered a location pin in region A — its detail fetch is in flight.
     guard.selectLocation(5);
     expect(guard.isLocationCurrent(5)).toBe(true);
 
-    // Clicked region B's polygon, which shows its pins (clearLocation).
-    guard.clearLocation();
+    // Clicked region B's polygon, which shows its pins.
+    const switched = guard.showPinsForOrg(20);
+    expect(switched).toBe(true);
 
     // Region A's late-resolving fetch must no longer be allowed to render.
+    expect(guard.isLocationCurrent(5)).toBe(false);
+  });
+
+  // Reproduction for the P1 "zoom leaves location details loading" bug:
+  // re-fanning the current org's pins on zoom must NOT clear a pending or
+  // active location selection.
+  it("preserves a pending or active location request when re-fanning pins for the same org", () => {
+    const guard = new InfoRequestGuard();
+    guard.showPinsForOrg(10);
+
+    // Selected or hovered a location pin in region 10 — detail fetch is in flight.
+    guard.selectLocation(5);
+    expect(guard.isLocationCurrent(5)).toBe(true);
+
+    // Zoom event triggers re-fan for the same org.
+    const switched = guard.showPinsForOrg(10);
+    expect(switched).toBe(false);
+
+    // The fetch must remain current so the sidebar updates when it completes.
+    expect(guard.isLocationCurrent(5)).toBe(true);
+  });
+
+  it("resets pinned org tracking when pins are cleared", () => {
+    const guard = new InfoRequestGuard();
+    guard.showPinsForOrg(10);
+    guard.clearPins();
+
+    guard.selectLocation(5);
+    // Showing pins for org 10 again after clearing acts as a new switch.
+    const switched = guard.showPinsForOrg(10);
+    expect(switched).toBe(true);
     expect(guard.isLocationCurrent(5)).toBe(false);
   });
 

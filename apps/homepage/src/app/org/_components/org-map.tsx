@@ -408,12 +408,15 @@ export default function OrgMap() {
   }, []);
 
   const showPinsForOrg = useCallback(
-    (org: Org) => {
+    (org: Org, options?: { preserveLocation?: boolean }) => {
       pinsActiveRef.current = true;
       pinnedOrgRef.current = org;
       // Switching to a new org's pins invalidates any pending location request
       // so a late-resolving one from the previous org can't populate the panel.
-      infoGuardRef.current.clearLocation();
+      // Re-fanning the current org's pins (e.g. on zoom) preserves the location selection.
+      if (!options?.preserveLocation) {
+        infoGuardRef.current.showPinsForOrg(org.id);
+      }
       // Cancel a queued hover load so it can't fire after the pins appear.
       if (hoverTimerRef.current) {
         clearTimeout(hoverTimerRef.current);
@@ -479,7 +482,7 @@ export default function OrgMap() {
     if (!map) return;
     const onZoomEnd = () => {
       if (pinsActiveRef.current && pinnedOrgRef.current) {
-        showPinsForOrg(pinnedOrgRef.current);
+        showPinsForOrg(pinnedOrgRef.current, { preserveLocation: true });
       }
     };
     map.on("zoomend", onZoomEnd);
@@ -536,6 +539,8 @@ export default function OrgMap() {
   const navigateViaLevelButton = useCallback(
     (level: OrgType) => {
       pinsActiveRef.current = false;
+      pinnedOrgRef.current = null;
+      infoGuardRef.current.clearPins();
       pinLayerGroupRef.current?.clearLayers();
       setCurrentLevel(level);
       setSelectedPath([]);
@@ -551,6 +556,8 @@ export default function OrgMap() {
   const navigateViaBreadcrumb = useCallback(
     (depth: number) => {
       pinsActiveRef.current = false;
+      pinnedOrgRef.current = null;
+      infoGuardRef.current.clearPins();
       pinLayerGroupRef.current?.clearLayers();
       if (depth === -1) {
         // Nation breadcrumb → broadest layer (last in leaf→root order)
@@ -597,6 +604,8 @@ export default function OrgMap() {
     layerGroup.clearLayers();
     // Clear pins whenever the polygon layer re-renders (level/path changed)
     pinsActiveRef.current = false;
+    pinnedOrgRef.current = null;
+    infoGuardRef.current.clearPins();
     pinLayerGroupRef.current?.clearLayers();
     const allLatLngs: L.LatLng[] = [];
 
