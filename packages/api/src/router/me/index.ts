@@ -153,40 +153,44 @@ async function fetchFullProfile(db: AppDb, userId: number) {
     throw new ORPCError("NOT_FOUND", { message: "User not found" });
   }
 
-  const roles = await db
-    .select({
-      roleId: schema.rolesXUsersXOrg.roleId,
-      orgId: schema.rolesXUsersXOrg.orgId,
-      orgName: schema.orgs.name,
-      roleName: schema.roles.name,
-    })
-    .from(schema.rolesXUsersXOrg)
-    .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
-    .innerJoin(schema.roles, eq(schema.roles.id, schema.rolesXUsersXOrg.roleId))
-    .where(eq(schema.rolesXUsersXOrg.userId, userId))
-    .orderBy(asc(schema.orgs.name), asc(schema.roles.name));
-
-  const positions = await db
-    .select({
-      positionId: schema.positionsXOrgsXUsers.positionId,
-      orgId: schema.positionsXOrgsXUsers.orgId,
-      positionName: schema.positions.name,
-      orgName: schema.orgs.name,
-    })
-    .from(schema.positionsXOrgsXUsers)
-    .innerJoin(
-      schema.positions,
-      and(
-        eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
-        eq(schema.positions.isActive, true),
-      ),
-    )
-    .innerJoin(
-      schema.orgs,
-      eq(schema.orgs.id, schema.positionsXOrgsXUsers.orgId),
-    )
-    .where(eq(schema.positionsXOrgsXUsers.userId, userId))
-    .orderBy(asc(schema.orgs.name), asc(schema.positions.name));
+  const [roles, positions] = await Promise.all([
+    db
+      .select({
+        roleId: schema.rolesXUsersXOrg.roleId,
+        orgId: schema.rolesXUsersXOrg.orgId,
+        orgName: schema.orgs.name,
+        roleName: schema.roles.name,
+      })
+      .from(schema.rolesXUsersXOrg)
+      .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
+      .innerJoin(
+        schema.roles,
+        eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+      )
+      .where(eq(schema.rolesXUsersXOrg.userId, userId))
+      .orderBy(asc(schema.orgs.name), asc(schema.roles.name)),
+    db
+      .select({
+        positionId: schema.positionsXOrgsXUsers.positionId,
+        orgId: schema.positionsXOrgsXUsers.orgId,
+        positionName: schema.positions.name,
+        orgName: schema.orgs.name,
+      })
+      .from(schema.positionsXOrgsXUsers)
+      .innerJoin(
+        schema.positions,
+        and(
+          eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
+          eq(schema.positions.isActive, true),
+        ),
+      )
+      .innerJoin(
+        schema.orgs,
+        eq(schema.orgs.id, schema.positionsXOrgsXUsers.orgId),
+      )
+      .where(eq(schema.positionsXOrgsXUsers.userId, userId))
+      .orderBy(asc(schema.orgs.name), asc(schema.positions.name)),
+  ]);
 
   return { ...user, roles, positions };
 }
