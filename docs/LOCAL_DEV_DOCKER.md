@@ -207,7 +207,7 @@ You should see output ending with:
 
 ### 3. (Optional) Add a Google Maps API key
 
-The app will start without this, but the map tiles won't render. You don't need a key to build, run the tests, or pass `pnpm ci:local` — only to see the map itself. To get one:
+You don't need a real key to build, run the tests, or pass `pnpm ci:local` — only to see the map itself. `pnpm local:setup` copies `.env.example`, whose placeholder value (`F3_GOOGLE_API_KEY=your-google-maps-api-key-here`) is enough to satisfy env validation; the apps start, but the map tiles won't render. Don't blank the variable out — the map and admin env schemas require it to be non-empty, so an empty value fails `pnpm dev` and `pnpm build`. To get a real key:
 
 1. Go to [console.cloud.google.com/google/maps-apis](https://console.cloud.google.com/google/maps-apis/)
 2. Create a project and enable **Maps JavaScript API** and **Places API (New)**
