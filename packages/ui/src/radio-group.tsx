@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
-import { omit } from "lodash";
+import omit from "lodash/omit";
 import { Circle } from "lucide-react";
 
 import { cn } from ".";
