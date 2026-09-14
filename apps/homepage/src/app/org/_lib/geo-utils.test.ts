@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  computeFanOffsets,
   fuzzyScore,
   convexHull,
   createCircleBuffer,
@@ -240,5 +241,44 @@ describe("dedupePoints", () => {
 
   it("returns an empty array for no points", () => {
     expect(dedupePoints([])).toEqual([]);
+  });
+});
+
+describe("computeFanOffsets", () => {
+  it("returns a single zero offset for one marker", () => {
+    expect(computeFanOffsets(1, 18)).toEqual([{ dx: 0, dy: 0 }]);
+  });
+
+  it("returns a zero offset for an empty group", () => {
+    expect(computeFanOffsets(0, 18)).toEqual([{ dx: 0, dy: 0 }]);
+  });
+
+  it("returns one offset per marker", () => {
+    expect(computeFanOffsets(4, 18)).toHaveLength(4);
+  });
+
+  it("spaces every offset at the given pixel radius", () => {
+    const radius = 18;
+    for (const { dx, dy } of computeFanOffsets(5, radius)) {
+      expect(Math.hypot(dx, dy)).toBeCloseTo(radius, 6);
+    }
+  });
+
+  it("distributes markers evenly around the circle", () => {
+    const offsets = computeFanOffsets(4, 10);
+    // 4 markers → 90° apart, so opposite markers mirror through the center.
+    expect(offsets[0]!.dx).toBeCloseTo(-offsets[2]!.dx, 6);
+    expect(offsets[0]!.dy).toBeCloseTo(-offsets[2]!.dy, 6);
+    expect(offsets[1]!.dx).toBeCloseTo(-offsets[3]!.dx, 6);
+    expect(offsets[1]!.dy).toBeCloseTo(-offsets[3]!.dy, 6);
+  });
+
+  it("scales the fan with the pixel radius, independent of zoom/geography", () => {
+    const small = computeFanOffsets(3, 10);
+    const large = computeFanOffsets(3, 20);
+    small.forEach((s, i) => {
+      expect(large[i]!.dx).toBeCloseTo(s.dx * 2, 6);
+      expect(large[i]!.dy).toBeCloseTo(s.dy * 2, 6);
+    });
   });
 });
