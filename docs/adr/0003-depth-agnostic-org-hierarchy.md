@@ -9,9 +9,7 @@
 ### The triggering change
 
 F3 organizes itself as a tree of orgs — **nation → sector → area → region → AO**
-— and decided to add a sixth tier, **territory**, between sector and area. The
-work is tracked in
-[#855](https://github.com/F3-Nation/f3-nation/issues/855).
+— and decided to add a sixth tier, **territory**, between sector and area.
 
 The database was already built for this. Every org is a row in `orgs` with a
 `parent_id`, so the schema does not care how deep the tree goes. Adding a tier
@@ -41,10 +39,8 @@ The catalogue began at three entries and was twice incomplete:
 - `getDescendantOrgIds` was missed because the audit anchored on "who can edit
   what," and it reads as a generic helper. It had the widest blast radius of
   all five — eight call sites across six routers.
-- `ancestorOrgsAreActive`
-  ([#965](https://github.com/F3-Nation/f3-nation/issues/965)) was missed because
-  it landed via a long-lived branch opened before the audit, so it was never in
-  the tree that was audited.
+- `ancestorOrgsAreActive` was missed because it landed via a long-lived branch
+  opened before the audit, so it was never in the tree that was audited.
 
 This is a property of the pattern, not a lapse in diligence: a fixed-depth join
 ladder is ordinary-looking code that only misbehaves when a constant changes far
@@ -103,13 +99,17 @@ would reject every un-migrated area. It also rules out expressing the rule as a
 database `CHECK` constraint.
 
 `isValidOrgTypeParent` (`packages/shared/src/app/org-hierarchy.ts`) implements
-this check, but it is not yet wired into the org mutation endpoint
-(`org.crupdate`, `packages/api/src/router/org.ts`) — today that endpoint
-rejects a change to an org's own type but does not compare the new parent's
-rank to the child's. Until that's wired in, this rule is a designed invariant,
-not an enforced one.
+this check, and `assertValidParentType`
+(`packages/api/src/assert-valid-parent-type.ts`) wires it into the org
+mutation endpoint (`org.crupdate`, `packages/api/src/router/org.ts`) on both
+create and re-parent, rejecting a `parentId` whose type does not outrank the
+child's. One addition beyond ordinal rank: an AO's parent must be an adjacent
+region, not merely any higher-ranked type — `moveAOLocsToNewRegion` and the
+map's region joins hard-assume that adjacency, so a skip-level `ao` →
+`sector`/`area`/`nation` parent is rejected even though it would satisfy the
+ordinal rule alone.
 
-### 4. Unknown org types fail loudly — but dangling parents do not
+### 4. Unknown org types are never coerced — but dangling parents are not re-linked
 
 Code that meets an org type it does not recognize must **not** substitute a
 plausible one. `normalizeOrgType` returns `null`.
@@ -121,15 +121,11 @@ alternative to guessing is not "no guess" — it is a dangling pointer, which
 orphans the whole subtree. Attaching to a known-real ancestor degrades to an
 incomplete-but-coherent tree.
 
-That re-linking is not implemented yet. `buildOrgHierarchy`
-(`apps/homepage/src/app/org/_lib/org-chart.ts`) assigns a child's `parentId`
-from its immediate ancestor before that ancestor's type is checked; when the
-ancestor turns out to be unrecognized, the ancestor itself is skipped rather
-than added to `orgById`, leaving the child's `parentId` dangling instead of
-re-linked. The same gap applies when the unrecognized entry is the root, or
-when several consecutive ancestors are unrecognized — the existing test only
-asserts which IDs are present in `orgById`, not what a dangling child's
-`parentId` resolves to.
+That re-linking is not implemented yet. The current gap in `buildOrgHierarchy`
+(`apps/homepage/src/app/org/_lib/org-chart.ts`) — and the missing test
+coverage for it — is tracked as a follow-up rather than detailed here, since
+implementation status drifts out of date faster than the design rationale
+above for why re-linking, not a dangling pointer, is the target behavior.
 
 This distinction matters most for statically-exported clients, which carry a
 build-time snapshot of the enum while reading a live API that may already be
@@ -157,11 +153,19 @@ by exactly one tier and guarantees a repeat. F3 continues to grow.
 
 ## Consequences
 
-**Good.** Adding the next tier is a one-line array change plus a migration and
-data backfill, not a project. The admin UI generates itself from the config, so
-new tiers surface without per-type files. Depth bugs now fail at compile time,
-or are bounded at query time by denying a legitimately-inherited role beyond
-the depth cap rather than silently granting or omitting access.
+**Good.** The `OrgType` array is the source of truth for a new tier — adding
+one still costs a migration, a data backfill, and updates to every exhaustive
+`Record<OrgType, …>` consumer (see Costs below), but none of that work is
+silent; the compiler surfaces it. The admin UI generates itself from the
+config, so new tiers surface without per-type files. Depth bugs now fail at
+compile time, or are bounded at query time by `ORG_TREE_MAX_DEPTH`. That
+guard's effect is consumer-specific, not uniform: `checkHasRoleOnOrg` fails
+closed, denying a legitimately-inherited role beyond the cap rather than
+silently granting access; `ancestorOrgsAreActive` fails open in the opposite
+direction, excluding an org from its "has an inactive ancestor" check once
+that ancestor is beyond the cap, so the row is retained rather than filtered.
+Both discard the same boundary row — which of those two effects that produces
+depends on what the caller does with a "beyond the cap" result.
 
 **Costs.** Recursive CTEs are harder to read than join ladders and cannot be
 expressed through the query builder at the pinned drizzle version. The enum's
@@ -176,8 +180,7 @@ the slackbot's view ORM mapping — carry one column pair per tier. Flattening
 cannot be depth-agnostic, because a column per level _is_ a hardcoded ladder, so
 each new tier costs an explicit change in each of them. What this decision does
 require of them is that the _resolution_ of a tier be an ancestor walk rather
-than a fixed number of hops — the defect
-[#1001](https://github.com/F3-Nation/f3-nation/issues/1001) tracks. The BigQuery
+than a fixed number of hops — a known defect tracked separately. The BigQuery
 `paxVault` view definitions that PAX Vault reads today remain outside version
 control in any F3 repo.
 
@@ -190,9 +193,9 @@ What is left are single-hop semantic aliases (`ao_org`, `region_org`,
 That scan is not sufficient on its own, and it is worth recording why. The same
 ladder exists in raw SQL, where it looks nothing like the query-builder idiom:
 `apps/analytics/analytics/sql/pv_events.sql` joins `p1`/`p2`/`p3` and would drop
-sector off the end ([#1001](https://github.com/F3-Nation/f3-nation/issues/1001)).
-It was missed because `apps/analytics` arrived (#800) after the audit behind
-#855, and because a grep for the query-builder idiom cannot see it.
+sector off the end. It was missed because `apps/analytics` arrived after the
+audit behind the triggering change, and because a grep for the query-builder
+idiom cannot see it.
 
 Checking this decision therefore means scanning **both** forms — the
 query-builder idiom, and repeated self-joins in `.sql` files — and re-checking
