@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { schema } from "@acme/db";
 import { removeUndefinedFromObject } from "@acme/shared/common/functions";
 
+import { assertValidParentType } from "../assert-valid-parent-type";
 import type { Context } from "../shared";
 import { moveAOLocsToNewRegion } from "./move-ao-locs-to-new-region";
 
@@ -32,6 +33,10 @@ export const createAO = async (
     throw new ORPCError("BAD_REQUEST", {
       message: "AO name must be at least 2 characters",
     });
+  }
+
+  if (regionId != null) {
+    await assertValidParentType(ctx.db, regionId, "ao");
   }
 
   const [ao] = await ctx.db
@@ -89,13 +94,17 @@ export const updateAO = async (
     const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
     const newLocationIds: number[] = [];
 
-    if (params.parentId && params.parentId !== ao.parentId && ao.parentId) {
-      const result = await moveAOLocsToNewRegion(txCtx, {
-        aoId: ao.id,
-        oldRegionId: ao.parentId,
-        newRegionId: params.parentId,
-      });
-      newLocationIds.push(...result.newLocationIds);
+    if (params.parentId != null && params.parentId !== ao.parentId) {
+      await assertValidParentType(txCtx.db, params.parentId, "ao");
+
+      if (ao.parentId) {
+        const result = await moveAOLocsToNewRegion(txCtx, {
+          aoId: ao.id,
+          oldRegionId: ao.parentId,
+          newRegionId: params.parentId,
+        });
+        newLocationIds.push(...result.newLocationIds);
+      }
     }
 
     const [updatedAO] = await txCtx.db
