@@ -64,3 +64,28 @@ describe("modal store", () => {
     expect(result.current?.type).toBe(ModalType.ADMIN_USERS);
   });
 });
+
+describe("organization editor stack identity", () => {
+  beforeEach(() => closeModal(undefined, "all"));
+
+  it("replaces the same organization type and restores a different type", () => {
+    openModal(ModalType.ADMIN_ORG, { orgType: "sector", id: 1 });
+    openModal(ModalType.ADMIN_ORG, { orgType: "area", id: 2 });
+    openModal(ModalType.ADMIN_ORG, { orgType: "area", id: 3 });
+    closeModal();
+    const { result } = renderHook(() => useOpenModal());
+    expect(result.current?.data).toEqual({ orgType: "sector", id: 1 });
+  });
+
+  it("targets a single organization type when closing", () => {
+    openModal(ModalType.ADMIN_USERS, { id: 9 });
+    openModal(ModalType.ADMIN_ORG, { orgType: "sector", id: 1 });
+    openModal(ModalType.ADMIN_ORG, { orgType: "area", id: 2 });
+    closeModal(undefined, { type: ModalType.ADMIN_ORG, orgType: "sector" });
+    const { result } = renderHook(() => useOpenModal());
+    expect(result.current?.data).toEqual({ orgType: "area", id: 2 });
+    closeModal();
+    const next = renderHook(() => useOpenModal());
+    expect(next.result.current?.type).toBe(ModalType.ADMIN_USERS);
+  });
+});

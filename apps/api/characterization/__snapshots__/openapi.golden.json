@@ -11819,7 +11819,7 @@
         ]
       },
       "post": {
-        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → region → area → ao).",
+        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → area → region → ao).",
         "operationId": "org.crupdate",
         "parameters": [
           {

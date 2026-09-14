@@ -72,7 +72,9 @@ const APP_GROUPS: AppGroup[] = [
         name: "Org Chart",
         description:
           "Geographic digital directory visualizing F3's organizational structure — Sectors, Areas, and Regions on a map.",
-        href: "https://org.f3nation.com",
+        href: "https://apps.f3nation.com/org",
+        localHref: "http://localhost:3005/org",
+        linkLabel: "Open",
       },
     ],
   },

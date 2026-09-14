@@ -1,5 +1,29 @@
 # Changelog
 
+## [6.6.2](https://github.com/F3-Nation/f3-nation/compare/api@6.6.1...api@6.6.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* **api:** hardening and hono ([#996](https://github.com/F3-Nation/f3-nation/issues/996)) ([cee88ea](https://github.com/F3-Nation/f3-nation/commit/cee88ead78f9075b0a7318ce73476d526d848968))
+
+## [6.6.1](https://github.com/F3-Nation/f3-nation/compare/api@6.6.0...api@6.6.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **db,ci:** tune Postgres client pool/timeouts and fix stale auth staging_url ([#901](https://github.com/F3-Nation/f3-nation/issues/901)) ([59ead05](https://github.com/F3-Nation/f3-nation/commit/59ead059226ecffaa3b928b67aa64753170fb613))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.1
+  * devDependencies
+    * @acme/auth bumped to 0.2.5
+    * @acme/db bumped to 0.6.1
+
 ## [6.6.0](https://github.com/F3-Nation/f3-nation/compare/api@6.5.0...api@6.6.0) (2026-09-10)
 
 
