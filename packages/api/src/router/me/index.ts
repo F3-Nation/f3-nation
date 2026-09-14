@@ -163,7 +163,10 @@ async function fetchFullProfile(db: AppDb, userId: number) {
       })
       .from(schema.rolesXUsersXOrg)
       .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
-      .innerJoin(schema.roles, eq(schema.roles.id, schema.rolesXUsersXOrg.roleId))
+      .innerJoin(
+        schema.roles,
+        eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+      )
       .where(eq(schema.rolesXUsersXOrg.userId, userId))
       .orderBy(asc(schema.orgs.name), asc(schema.roles.name)),
     db
