@@ -93,6 +93,8 @@ def test_areas_and_sectors_keep_inactive_rows_and_order_nested_values():
         {"region_id": 903, "region_name": "Region", "is_active": True},
     ]
     assert areas[1][8] == []
+    territory_area = next(row for row in areas if row[0] == 908)
+    assert territory_area == (908, "Territory Area", 900, "Sector", 907, "Territory", None, True, [])
     assert run(db, "pv_territories.sql")[0] == (
         907,
         "Territory",

@@ -34,14 +34,20 @@ def source():
     c.execute("CREATE TABLE pg.public.attendance_x_attendance_types(attendance_id INTEGER, attendance_type_id INTEGER)")
     c.executemany(
         "INSERT INTO pg.public.orgs VALUES (?, ?, ?, ?)",
-        [(1, None, "Sector", "sector"), (2, 1, "Area", "area"), (3, 2, "Region", "region"), (4, 3, "AO", "ao")],
+        [
+            (1, None, "Sector", "sector"),
+            (2, 1, "Territory", "territory"),
+            (3, 2, "Area", "area"),
+            (4, 3, "Region", "region"),
+            (5, 4, "AO", "ao"),
+        ],
     )
     c.executemany(
         "INSERT INTO pg.public.event_instances VALUES (?, ?, true, 10, 2, ?, ?, ?, NULL, true, false)",
         [
-            (1, 4, "{}", "Workout", "2026-01-01"),
-            (2, 4, "{}", "No plans", "2026-01-02"),
-            (3, 4, "{}", "Ghosts", "2026-01-03"),
+            (1, 5, "{}", "Workout", "2026-01-01"),
+            (2, 5, "{}", "No plans", "2026-01-02"),
+            (3, 5, "{}", "Ghosts", "2026-01-03"),
         ],
     )
     c.executemany("INSERT INTO pg.public.event_instances_x_event_types VALUES (?, ?)", [(1, 1), (1, 2)])
@@ -112,14 +118,14 @@ def test_events_contract_and_materialization(tmp_path: Path):
         "Workout",
         10,
         2,
-        4,
+        5,
         "AO",
-        3,
+        4,
         "Region",
-        2,
+        3,
         "Area",
-        None,
-        None,
+        2,
+        "Territory",
         1,
         "Sector",
         1,
@@ -173,10 +179,10 @@ def test_malformed_exclusion_flag_is_strict():
 
 def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
     c = source()
-    c.execute("INSERT INTO pg.public.orgs VALUES (5, 2, 'Region Two', 'region'), (6, 5, 'AO Two', 'ao')")
+    c.execute("INSERT INTO pg.public.orgs VALUES (9, 3, 'Region Two', 'region'), (10, 9, 'AO Two', 'ao')")
     c.execute(
         "INSERT INTO pg.public.event_instances VALUES "
-        "(4, 6, true, 3, 1, '{}', 'Later', '2026-01-04', NULL, true, false)"
+        "(4, 10, true, 3, 1, '{}', 'Later', '2026-01-04', NULL, true, false)"
     )
     root = tmp_path / "events"
     artifacts = materialize(c, root, MATERIALIZATION_REGISTRY["pv_events"], "2026-01-05T00:00:00Z", "2026-01-05")
