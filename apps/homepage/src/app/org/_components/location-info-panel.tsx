@@ -15,7 +15,18 @@ function LeaderItem({ entry }: { entry: OrgLeaderEntry }) {
   const name = entry.f3Name ?? "Unknown";
   return (
     <li>
-      <div className="flex w-full items-start gap-3 rounded-lg p-1 text-left">
+      <button
+        type="button"
+        className="flex w-full cursor-default items-start gap-3 rounded-lg p-1 text-left"
+        onClick={() =>
+          console.log("[org-chart] leader", {
+            userId: entry.userId,
+            positionId: entry.positionId,
+            f3Name: entry.f3Name,
+            title: entry.title,
+          })
+        }
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={avatar}
@@ -29,7 +40,7 @@ function LeaderItem({ entry }: { entry: OrgLeaderEntry }) {
           </div>
           <div className="text-xs text-muted-foreground">{name}</div>
         </div>
-      </div>
+      </button>
     </li>
   );
 }
@@ -48,9 +59,15 @@ function AoCard({ ao }: { ao: LocationAo }) {
   return (
     <div className="rounded-xl border border-border p-3">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-left text-base font-bold">
+        <button
+          type="button"
+          className="cursor-default text-left text-base font-bold"
+          onClick={() =>
+            console.log("[org-chart] ao", { id: ao.id, name: ao.name })
+          }
+        >
           {ao.name ?? "Unnamed AO"}
-        </span>
+        </button>
         <span className="shrink-0 text-xs text-muted-foreground">
           {ao.eventCount} event{ao.eventCount !== 1 ? "s" : ""}
         </span>
