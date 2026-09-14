@@ -177,6 +177,24 @@ def test_malformed_exclusion_flag_is_strict():
         c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"])
 
 
+def test_events_resolve_tiers_beyond_six_and_keep_direct_area_territory_nullable():
+    c = source()
+    c.execute("UPDATE pg.public.orgs SET parent_id = 6 WHERE id = 5")
+    c.execute("INSERT INTO pg.public.orgs VALUES (6, 4, 'Intermediate', 'division')")
+    c.execute("INSERT INTO pg.public.orgs VALUES (7, 1, 'Direct Area', 'area')")
+    c.execute("INSERT INTO pg.public.orgs VALUES (8, 7, 'Direct Region', 'region')")
+    c.execute("INSERT INTO pg.public.orgs VALUES (9, 8, 'Direct AO', 'ao')")
+    c.execute(
+        "INSERT INTO pg.public.event_instances VALUES "
+        "(4, 9, true, 3, 1, '{}', 'Direct', '2026-01-04', NULL, true, false)"
+    )
+    rows = c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"]).fetchall()
+    deep = next(row for row in rows if row[1] == 1)
+    assert deep[14:16] == (1, "Sector")
+    direct = next(row for row in rows if row[1] == 4)
+    assert direct[10:16] == (7, "Direct Area", None, None, 1, "Sector")
+
+
 def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
     c = source()
     c.execute("INSERT INTO pg.public.orgs VALUES (9, 3, 'Region Two', 'region'), (10, 9, 'AO Two', 'ao')")

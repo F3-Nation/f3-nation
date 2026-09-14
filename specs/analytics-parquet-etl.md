@@ -157,13 +157,14 @@ derived from active events with non-null `pax_count` belonging to that AO.
 
 Columns: `sector_id`, `sector_name`, `logo_url`, `is_active`, `territories`, `areas`.
 
-`areas` contains child area records `{area_id, area_name, is_active}`.
+`areas` contains sector-wide descendant area records `{area_id, area_name,
+is_active}`, including areas reached through territories.
 
-`pv_sectors.areas` contains direct children only and can differ from `pv_areas` filtered by `sector_id` when areas are nested under a territory.
+`pv_sectors.areas` contains every descendant area of the sector, whether direct
+or nested under a territory.
 
 `territories` contains child territory records `{territory_id, territory_name,
-logo_url, is_active}`. The legacy `areas` list remains populated for areas that
-are directly under a sector during the gradual hierarchy rollout.
+logo_url, is_active}`.
 
 ### `pv_territories` — one row per territory
 

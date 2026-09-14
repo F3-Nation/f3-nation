@@ -1,14 +1,26 @@
-WITH params AS (SELECT ?::TIMESTAMPTZ AS refreshed_at, ?::DATE AS as_of_date),
+WITH RECURSIVE params AS (SELECT ?::TIMESTAMPTZ AS refreshed_at, ?::DATE AS as_of_date),
+area_ancestors(area_id, ancestor_id, ancestor_name, ancestor_type, visited) AS (
+    SELECT id, id, COALESCE(name, CAST(id AS VARCHAR)), org_type, [id]
+    FROM pg.public.orgs WHERE org_type = 'area'
+    UNION ALL
+    SELECT a.area_id, parent.id, COALESCE(parent.name, CAST(parent.id AS VARCHAR)), parent.org_type,
+           list_append(a.visited, parent.id)
+    FROM area_ancestors a
+    JOIN pg.public.orgs child ON child.id = a.ancestor_id
+    JOIN pg.public.orgs parent ON parent.id = child.parent_id
+    WHERE NOT list_contains(a.visited, parent.id) AND len(a.visited) < 20
+),
 area_rows AS (
     SELECT area.id AS area_id, COALESCE(area.name, CAST(area.id AS VARCHAR)) AS area_name,
-           sector.id AS sector_id, COALESCE(sector.name, CAST(sector.id AS VARCHAR)) AS sector_name,
-           territory.id AS territory_id, COALESCE(territory.name, CAST(territory.id AS VARCHAR)) AS territory_name,
+           MAX(a.ancestor_id) FILTER (WHERE a.ancestor_type = 'sector')::INTEGER AS sector_id,
+           MAX(a.ancestor_name) FILTER (WHERE a.ancestor_type = 'sector') AS sector_name,
+           MAX(a.ancestor_id) FILTER (WHERE a.ancestor_type = 'territory')::INTEGER AS territory_id,
+           MAX(a.ancestor_name) FILTER (WHERE a.ancestor_type = 'territory') AS territory_name,
            area.logo_url, area.is_active
     FROM pg.public.orgs area
-    LEFT JOIN pg.public.orgs territory ON territory.id = area.parent_id AND territory.org_type = 'territory'
-    LEFT JOIN pg.public.orgs sector ON sector.id = COALESCE(territory.parent_id, area.parent_id)
-        AND sector.org_type = 'sector'
+    JOIN area_ancestors a ON a.area_id = area.id
     WHERE area.org_type = 'area'
+    GROUP BY area.id, area.name, area.logo_url, area.is_active
 ),
 area_values AS (
     SELECT a.*,

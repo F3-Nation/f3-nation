@@ -1,55 +1,30 @@
-WITH params AS (
+WITH RECURSIVE params AS (
     SELECT ?::TIMESTAMPTZ AS refreshed_at, ?::DATE AS as_of_date
 ),
+org_ancestors(source_id, ancestor_id, ancestor_name, ancestor_type, visited) AS (
+    SELECT id, id, COALESCE(name, CAST(id AS VARCHAR)), org_type, [id]
+    FROM pg.public.orgs
+    UNION ALL
+    SELECT a.source_id, parent.id, COALESCE(parent.name, CAST(parent.id AS VARCHAR)), parent.org_type,
+           list_append(a.visited, parent.id)
+    FROM org_ancestors a
+    JOIN pg.public.orgs child ON child.id = a.ancestor_id
+    JOIN pg.public.orgs parent ON parent.id = child.parent_id
+    WHERE NOT list_contains(a.visited, parent.id) AND len(a.visited) < 20
+),
 org_chain AS (
-    SELECT o.id AS source_id,
-           COALESCE(CASE WHEN o.org_type = 'ao' THEN o.id END,
-                    CASE WHEN p1.org_type = 'ao' THEN p1.id END,
-                    CASE WHEN p2.org_type = 'ao' THEN p2.id END,
-                    CASE WHEN p3.org_type = 'ao' THEN p3.id END)::INTEGER AS ao_org_id,
-           COALESCE(CASE WHEN o.org_type = 'ao' THEN COALESCE(o.name, CAST(o.id AS VARCHAR)) END,
-                    CASE WHEN p1.org_type = 'ao' THEN COALESCE(p1.name, CAST(p1.id AS VARCHAR)) END,
-                    CASE WHEN p2.org_type = 'ao' THEN COALESCE(p2.name, CAST(p2.id AS VARCHAR)) END,
-                    CASE WHEN p3.org_type = 'ao' THEN COALESCE(p3.name, CAST(p3.id AS VARCHAR)) END) AS ao_name,
-           COALESCE(CASE WHEN o.org_type = 'region' THEN o.id END,
-                    CASE WHEN p1.org_type = 'region' THEN p1.id END,
-                    CASE WHEN p2.org_type = 'region' THEN p2.id END,
-                    CASE WHEN p3.org_type = 'region' THEN p3.id END)::INTEGER AS region_org_id,
-           COALESCE(CASE WHEN o.org_type = 'region' THEN COALESCE(o.name, CAST(o.id AS VARCHAR)) END,
-                    CASE WHEN p1.org_type = 'region' THEN COALESCE(p1.name, CAST(p1.id AS VARCHAR)) END,
-                    CASE WHEN p2.org_type = 'region' THEN COALESCE(p2.name, CAST(p2.id AS VARCHAR)) END,
-                    CASE WHEN p3.org_type = 'region' THEN COALESCE(p3.name, CAST(p3.id AS VARCHAR)) END) AS region_name,
-           COALESCE(CASE WHEN o.org_type = 'area' THEN o.id END,
-                    CASE WHEN p1.org_type = 'area' THEN p1.id END,
-                    CASE WHEN p2.org_type = 'area' THEN p2.id END,
-                    CASE WHEN p3.org_type = 'area' THEN p3.id END)::INTEGER AS area_org_id,
-           COALESCE(CASE WHEN o.org_type = 'area' THEN COALESCE(o.name, CAST(o.id AS VARCHAR)) END,
-                    CASE WHEN p1.org_type = 'area' THEN COALESCE(p1.name, CAST(p1.id AS VARCHAR)) END,
-                    CASE WHEN p2.org_type = 'area' THEN COALESCE(p2.name, CAST(p2.id AS VARCHAR)) END,
-                    CASE WHEN p3.org_type = 'area' THEN COALESCE(p3.name, CAST(p3.id AS VARCHAR)) END) AS area_name,
-           COALESCE(CASE WHEN o.org_type = 'sector' THEN o.id END,
-                    CASE WHEN p1.org_type = 'sector' THEN p1.id END,
-                    CASE WHEN p2.org_type = 'sector' THEN p2.id END,
-                    CASE WHEN p3.org_type = 'sector' THEN p3.id END, CASE WHEN p4.org_type = 'sector' THEN p4.id END)::INTEGER AS sector_org_id,
-           COALESCE(CASE WHEN o.org_type = 'sector' THEN COALESCE(o.name, CAST(o.id AS VARCHAR)) END,
-                    CASE WHEN p1.org_type = 'sector' THEN COALESCE(p1.name, CAST(p1.id AS VARCHAR)) END,
-                    CASE WHEN p2.org_type = 'sector' THEN COALESCE(p2.name, CAST(p2.id AS VARCHAR)) END,
-                    CASE WHEN p3.org_type = 'sector' THEN COALESCE(p3.name, CAST(p3.id AS VARCHAR)) END, CASE WHEN p4.org_type = 'sector' THEN COALESCE(p4.name, CAST(p4.id AS VARCHAR)) END) AS sector_name,
-            COALESCE(CASE WHEN o.org_type = 'territory' THEN o.id END,
-                     CASE WHEN p1.org_type = 'territory' THEN p1.id END,
-                     CASE WHEN p2.org_type = 'territory' THEN p2.id END,
-                     CASE WHEN p3.org_type = 'territory' THEN p3.id END,
-                     CASE WHEN p4.org_type = 'territory' THEN p4.id END)::INTEGER AS territory_org_id,
-            COALESCE(CASE WHEN o.org_type = 'territory' THEN COALESCE(o.name, CAST(o.id AS VARCHAR)) END,
-                     CASE WHEN p1.org_type = 'territory' THEN COALESCE(p1.name, CAST(p1.id AS VARCHAR)) END,
-                     CASE WHEN p2.org_type = 'territory' THEN COALESCE(p2.name, CAST(p2.id AS VARCHAR)) END,
-                     CASE WHEN p3.org_type = 'territory' THEN COALESCE(p3.name, CAST(p3.id AS VARCHAR)) END,
-                     CASE WHEN p4.org_type = 'territory' THEN COALESCE(p4.name, CAST(p4.id AS VARCHAR)) END) AS territory_name
-    FROM pg.public.orgs o
-    LEFT JOIN pg.public.orgs p1 ON p1.id = o.parent_id
-    LEFT JOIN pg.public.orgs p2 ON p2.id = p1.parent_id
-    LEFT JOIN pg.public.orgs p3 ON p3.id = p2.parent_id
-    LEFT JOIN pg.public.orgs p4 ON p4.id = p3.parent_id
+    SELECT source_id,
+           MAX(ancestor_id) FILTER (WHERE ancestor_type = 'ao')::INTEGER AS ao_org_id,
+           MAX(ancestor_name) FILTER (WHERE ancestor_type = 'ao') AS ao_name,
+           MAX(ancestor_id) FILTER (WHERE ancestor_type = 'region')::INTEGER AS region_org_id,
+           MAX(ancestor_name) FILTER (WHERE ancestor_type = 'region') AS region_name,
+           MAX(ancestor_id) FILTER (WHERE ancestor_type = 'area')::INTEGER AS area_org_id,
+           MAX(ancestor_name) FILTER (WHERE ancestor_type = 'area') AS area_name,
+           MAX(ancestor_id) FILTER (WHERE ancestor_type = 'sector')::INTEGER AS sector_org_id,
+           MAX(ancestor_name) FILTER (WHERE ancestor_type = 'sector') AS sector_name,
+           MAX(ancestor_id) FILTER (WHERE ancestor_type = 'territory')::INTEGER AS territory_org_id,
+           MAX(ancestor_name) FILTER (WHERE ancestor_type = 'territory') AS territory_name
+    FROM org_ancestors GROUP BY source_id
 ),
 events AS (
     SELECT ei.*, c.* EXCLUDE (source_id)

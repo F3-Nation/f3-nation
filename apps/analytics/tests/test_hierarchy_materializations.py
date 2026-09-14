@@ -111,6 +111,7 @@ def test_areas_and_sectors_keep_inactive_rows_and_order_nested_values():
         [
             {"area_id": 901, "area_name": "Area", "is_active": False},
             {"area_id": 902, "area_name": "Other Area", "is_active": True},
+            {"area_id": 908, "area_name": "Territory Area", "is_active": True},
         ],
     )
 
