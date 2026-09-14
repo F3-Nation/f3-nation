@@ -527,11 +527,12 @@ export default function OrgMap() {
   const navigateToAo = useCallback(
     (ao: AoSearchResult) => {
       const region = orgByIdRef.current.get(ao.regionId);
-      if (!region) return;
+      if (!region) return false;
       navigateToOrg(region);
       // A fresh object each call re-triggers the focus effect below, even when
       // the region view doesn't change (same region, different AO).
       setAoFocus({ orgId: ao.regionId, locationId: ao.locationId });
+      return true;
     },
     [navigateToOrg],
   );

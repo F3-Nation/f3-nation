@@ -132,7 +132,6 @@ export const orgChartRouter = {
           latitude: schema.locations.latitude,
           longitude: schema.locations.longitude,
           eventCount: countDistinct(schema.events.id),
-          aoCount: sql<number>`0`,
         })
         .from(schema.locations)
         .innerJoin(
@@ -219,10 +218,6 @@ export const orgChartRouter = {
       const aoCountMap = new Map(
         aoCountsByLocation.map((row) => [row.locationId, Number(row.aoCount)]),
       );
-
-      for (const summary of locationSummaries) {
-        summary.aoCount = aoCountMap.get(summary.locationId) ?? 0;
-      }
 
       const activeLocationsByOrg = new Map<
         number,
@@ -644,6 +639,17 @@ export const orgChartRouter = {
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 
+      // Rank exact and prefix matches ahead of substring matches so an exact
+      // name match isn't excluded by the 12-result cap in favor of unrelated
+      // substring hits that sort earlier alphabetically.
+      const matchRank = sql<number>`
+        case
+          when lower(${aoOrg.name}) = lower(${input.searchTerm}) then 0
+          when ${aoOrg.name} ilike ${`${input.searchTerm}%`} then 1
+          else 2
+        end
+      `;
+
       // One row per (AO, location); ordered so the busiest location leads each
       // AO, then reduced to that single location below.
       const rows = await ctx.db
@@ -668,7 +674,11 @@ export const orgChartRouter = {
         )
         .innerJoin(
           regionOrg,
-          and(eq(regionOrg.id, aoOrg.parentId), eq(regionOrg.isActive, true)),
+          and(
+            eq(regionOrg.id, aoOrg.parentId),
+            eq(regionOrg.orgType, "region"),
+            eq(regionOrg.isActive, true),
+          ),
         )
         .innerJoin(
           schema.locations,
@@ -695,7 +705,11 @@ export const orgChartRouter = {
           schema.locations.latitude,
           schema.locations.longitude,
         )
-        .orderBy(asc(aoOrg.name), desc(countDistinct(schema.events.id)))
+        .orderBy(
+          asc(matchRank),
+          asc(aoOrg.name),
+          desc(countDistinct(schema.events.id)),
+        )
         .limit(200);
 
       // Keep only the busiest location per AO (first row wins), cap results.

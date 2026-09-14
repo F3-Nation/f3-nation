@@ -7,7 +7,7 @@ import { useAoSearch } from "../_lib/use-ao-search";
 interface SearchBoxProps {
   onSelect: (org: Org) => void;
   getResults: (query: string) => Org[];
-  onSelectAo: (ao: AoSearchResult) => void;
+  onSelectAo: (ao: AoSearchResult) => boolean;
   disabled?: boolean;
 }
 
@@ -20,6 +20,7 @@ export function SearchBox({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Org[]>([]);
   const [open, setOpen] = useState(false);
+  const [aoNavigateFailed, setAoNavigateFailed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   // Set when a result is chosen: the resulting setQuery(name) must not reopen
   // the list on the next effect run.
@@ -28,24 +29,30 @@ export function SearchBox({
   // AOs aren't in the client dataset (the chart loads regions), so they're
   // searched server-side (debounced). Only query while the list is open so a
   // selection — which sets the query to the chosen name — doesn't refetch.
-  const { results: aoResults, loading: aoLoading } = useAoSearch(
-    open ? query : "",
-  );
+  const {
+    results: aoResults,
+    loading: aoLoading,
+    error: aoError,
+  } = useAoSearch(open ? query : "");
 
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
       setOpen(false);
+      setAoNavigateFailed(false);
       return;
     }
     if (justSelectedRef.current) {
       justSelectedRef.current = false;
       // Refresh results to the full-name query so a later focus doesn't reopen
-      // a stale partial-query list, but keep the list closed for now.
+      // a stale partial-query list, but keep the list closed for now. Leave
+      // aoNavigateFailed as-is: this same query change is what handleSelectAo
+      // just used to report its outcome, and resetting here would erase it.
       setResults(getResults(query));
       setOpen(false);
       return;
     }
+    setAoNavigateFailed(false);
     const hits = getResults(query);
     setResults(hits);
     setOpen(true);
@@ -78,6 +85,7 @@ export function SearchBox({
 
   function handleSelect(org: Org) {
     justSelectedRef.current = true;
+    setAoNavigateFailed(false);
     setQuery(org.name);
     setOpen(false);
     onSelect(org);
@@ -87,11 +95,18 @@ export function SearchBox({
     justSelectedRef.current = true;
     setQuery(ao.name ?? "");
     setOpen(false);
-    onSelectAo(ao);
+    setAoNavigateFailed(!onSelectAo(ao));
   }
 
+  const showAoSearchError =
+    open && aoError && results.length === 0 && aoResults.length === 0;
+
   const showEmpty =
-    open && results.length === 0 && aoResults.length === 0 && !aoLoading;
+    open &&
+    results.length === 0 &&
+    aoResults.length === 0 &&
+    !aoLoading &&
+    !aoError;
 
   return (
     <div ref={containerRef} className="relative">
@@ -164,9 +179,19 @@ export function SearchBox({
           )}
         </div>
       )}
+      {showAoSearchError && (
+        <div className="absolute top-full z-20 mt-1 w-full rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground shadow-lg">
+          Search unavailable — try again
+        </div>
+      )}
       {showEmpty && (
         <div className="absolute top-full z-20 mt-1 w-full rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground shadow-lg">
           No matches
+        </div>
+      )}
+      {aoNavigateFailed && (
+        <div className="absolute top-full z-20 mt-1 w-full rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground shadow-lg">
+          Couldn't locate that AO on the map
         </div>
       )}
     </div>

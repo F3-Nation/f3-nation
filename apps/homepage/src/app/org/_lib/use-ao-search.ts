@@ -15,9 +15,11 @@ const MIN_SEARCH_LENGTH = 2;
 export function useAoSearch(query: string): {
   results: AoSearchResult[];
   loading: boolean;
+  error: boolean;
 } {
   const [results, setResults] = useState<AoSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -27,18 +29,22 @@ export function useAoSearch(query: string): {
     if (trimmed.length < MIN_SEARCH_LENGTH) {
       setResults([]);
       setLoading(false);
+      setError(false);
       return;
     }
 
     // Drop prior query results immediately so Enter cannot select stale AOs
-    // while the debounce timer for the new query is still running.
+    // while the debounce timer for the new query is still running. Flip
+    // `loading` synchronously too, so the empty-results UI doesn't flash
+    // "No matches" for the debounce window before the request even starts.
     setResults([]);
+    setLoading(true);
+    setError(false);
 
     const controller = new AbortController();
     abortRef.current = controller;
 
     const timer = setTimeout(() => {
-      setLoading(true);
       searchAos(trimmed, controller.signal)
         .then((aos) => {
           if (controller.signal.aborted) return;
@@ -46,10 +52,13 @@ export function useAoSearch(query: string): {
           setLoading(false);
         })
         .catch(() => {
-          // Superseded/failed request — surface as an empty result, not noise.
+          // An aborted request was superseded by a newer query, not a
+          // failure — only a real fetch failure gets the distinct error
+          // state, so it isn't confused with "no matches".
           if (controller.signal.aborted) return;
           setResults([]);
           setLoading(false);
+          setError(true);
         });
     }, DEBOUNCE_MS);
 
@@ -60,5 +69,5 @@ export function useAoSearch(query: string): {
     };
   }, [query]);
 
-  return { results, loading };
+  return { results, loading, error };
 }

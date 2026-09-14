@@ -6,26 +6,34 @@ import { SearchBox } from "./search-box";
 import type { Org } from "../_lib/types";
 
 // Stub the debounced AO hook so these tests stay synchronous: it returns a
-// canned AO only for queries containing "boot", and nothing otherwise.
+// canned AO only for queries containing "boot", a simulated fetch failure for
+// queries containing "err", and nothing otherwise.
 vi.mock("../_lib/use-ao-search", () => ({
-  useAoSearch: (q: string) =>
-    q.toLowerCase().includes("boot")
-      ? {
-          results: [
-            {
-              id: 99,
-              name: "Bootcamp",
-              regionId: 10,
-              regionName: "Charlotte",
-              locationId: 5,
-              latitude: 1,
-              longitude: 2,
-              eventCount: 3,
-            },
-          ],
-          loading: false,
-        }
-      : { results: [], loading: false },
+  useAoSearch: (q: string) => {
+    const query = q.toLowerCase();
+    if (query.includes("err")) {
+      return { results: [], loading: false, error: true };
+    }
+    if (query.includes("boot")) {
+      return {
+        results: [
+          {
+            id: 99,
+            name: "Bootcamp",
+            regionId: 10,
+            regionName: "Charlotte",
+            locationId: 5,
+            latitude: 1,
+            longitude: 2,
+            eventCount: 3,
+          },
+        ],
+        loading: false,
+        error: false,
+      };
+    }
+    return { results: [], loading: false, error: false };
+  },
 }));
 
 const orgs: Org[] = [
@@ -169,7 +177,7 @@ describe("SearchBox", () => {
   });
 
   it("renders AO hits with their region and calls onSelectAo on choose", () => {
-    const onSelectAo = vi.fn();
+    const onSelectAo = vi.fn(() => true);
     render(
       <SearchBox
         getResults={getResults}
@@ -191,7 +199,7 @@ describe("SearchBox", () => {
   });
 
   it("selects the first AO on Enter when no org matches", () => {
-    const onSelectAo = vi.fn();
+    const onSelectAo = vi.fn(() => true);
     render(
       <SearchBox
         getResults={getResults}
@@ -203,5 +211,35 @@ describe("SearchBox", () => {
     fireEvent.change(input, { target: { value: "boot" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSelectAo).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a fallback message when an AO's region can't be located on the map", () => {
+    const onSelectAo = vi.fn(() => false);
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={onSelectAo}
+      />,
+    );
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "boot" },
+    });
+    fireEvent.click(screen.getByText("Bootcamp"));
+    expect(screen.getByText("Couldn't locate that AO on the map")).toBeTruthy();
+  });
+
+  it("shows a search-unavailable message when the AO search fails", () => {
+    render(
+      <SearchBox
+        getResults={getResults}
+        onSelect={vi.fn()}
+        onSelectAo={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "error-query" },
+    });
+    expect(screen.getByText("Search unavailable — try again")).toBeTruthy();
   });
 });

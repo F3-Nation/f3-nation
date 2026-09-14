@@ -60,7 +60,7 @@ describe("useAoSearch", () => {
     expect(result.current.results[0]?.name).toBe("Bootcamp");
   });
 
-  it("clears results when the search fails", async () => {
+  it("clears results and sets a distinct error flag when the search fails", async () => {
     searchAosMock.mockRejectedValue(new Error("boom"));
     const { result } = renderHook(({ q }) => useAoSearch(q), {
       initialProps: { q: "boot" },
@@ -72,6 +72,39 @@ describe("useAoSearch", () => {
 
     expect(result.current.results).toEqual([]);
     expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBe(true);
+  });
+
+  it("sets loading synchronously, before the debounce timer fires", () => {
+    searchAosMock.mockResolvedValue([hit]);
+    const { result } = renderHook(({ q }) => useAoSearch(q), {
+      initialProps: { q: "boot" },
+    });
+
+    // Still within the debounce window — no request has fired yet.
+    expect(searchAosMock).not.toHaveBeenCalled();
+    expect(result.current.loading).toBe(true);
+    expect(result.current.error).toBe(false);
+  });
+
+  it("clears a prior error once a new query succeeds", async () => {
+    searchAosMock.mockRejectedValueOnce(new Error("boom"));
+    searchAosMock.mockResolvedValueOnce([hit]);
+    const { result, rerender } = renderHook(({ q }) => useAoSearch(q), {
+      initialProps: { q: "boot" },
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.error).toBe(true);
+
+    rerender({ q: "bootz" });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.error).toBe(false);
+    expect(result.current.results).toHaveLength(1);
   });
 
   it("cancels a superseded query without firing the old request", () => {
