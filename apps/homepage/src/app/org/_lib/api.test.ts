@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fetchOrgChart, fetchOrgById } from "./api";
+import {
+  fetchOrgChart,
+  fetchOrgById,
+  fetchLocationById,
+  searchAos,
+} from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -55,6 +60,73 @@ describe("fetchOrgById", () => {
   it("throws on a non-ok response", async () => {
     mockFetch(404, {});
     await expect(fetchOrgById(999)).rejects.toThrow("API 404");
+  });
+});
+
+describe("fetchLocationById", () => {
+  it("returns the location detail and requests the location path", async () => {
+    const detail = {
+      locationId: 5,
+      locationName: "The Yard",
+      latitude: 35.5,
+      longitude: -80.5,
+      aos: [],
+    };
+    mockFetch(200, detail);
+    const result = await fetchLocationById(5);
+    expect(result).toMatchObject({ locationId: 5, locationName: "The Yard" });
+    const url = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string;
+    expect(url).toContain("/org-chart/location/5");
+  });
+
+  it("throws on a non-ok response", async () => {
+    mockFetch(404, {});
+    await expect(fetchLocationById(999)).rejects.toThrow("API 404");
+  });
+});
+
+describe("searchAos", () => {
+  it("requests the search path with the encoded query and returns aos", async () => {
+    const aos = [
+      {
+        id: 1,
+        name: "Bootcamp",
+        regionId: 10,
+        regionName: "Charlotte",
+        locationId: 5,
+        latitude: 35.5,
+        longitude: -80.5,
+        eventCount: 3,
+      },
+    ];
+    mockFetch(200, { aos });
+    const result = await searchAos("boot camp");
+    expect(result).toHaveLength(1);
+    expect(result[0]?.name).toBe("Bootcamp");
+    const url = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string;
+    expect(url).toContain("/org-chart/aos?searchTerm=boot%20camp");
+  });
+
+  it("throws on a non-ok response", async () => {
+    mockFetch(500, {});
+    await expect(searchAos("boot")).rejects.toThrow("API 500");
+  });
+
+  it("registers an abort listener for a live signal", async () => {
+    mockFetch(200, { aos: [] });
+    const controller = new AbortController();
+    const result = await searchAos("boot", controller.signal);
+    expect(result).toEqual([]);
+  });
+
+  it("handles an already-aborted signal", async () => {
+    mockFetch(200, { aos: [] });
+    const controller = new AbortController();
+    controller.abort();
+    const result = await searchAos("boot", controller.signal);
+    expect(result).toEqual([]);
   });
 });
 
