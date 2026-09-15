@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
+
 from .duckdb import connect
 from .logging import JsonLogger
 from .materializations import select_materializations
@@ -38,7 +40,7 @@ class BatchRunError(RuntimeError):
 
 def run(
     settings: Settings,
-    storage_client: Any,
+    storage_client: StorageClient,
     connection_factory: Callable[[Settings], Any] = connect,
     logger: JsonLogger | None = None,
     now: Callable[[], datetime] | None = None,
@@ -57,7 +59,6 @@ def run(
     if {item.name for item in definitions} != {item.name for item in select_materializations(None)}:
         raise ValueError("publication requires the exact approved materialization set")
     batch_source_order = clock().isoformat()
-    batch_published_at = clock().isoformat()
 
     def emit(event: str, context: dict[str, Any]) -> None:
         log.info(event, **context)
@@ -82,12 +83,13 @@ def run(
                     row_count=artifacts.row_count,
                     duration_ms=round((time.perf_counter() - source_started) * 1000, 3),
                 )
+                dataset_published_at = clock().isoformat()
                 results[definition.name] = publish(
                     GcsPublisher(storage_client, settings),
                     run_id_value,
                     artifacts,
                     refreshed_at,
-                    batch_published_at,
+                    dataset_published_at,
                     definition,
                     emit=emit,
                 )
@@ -118,6 +120,9 @@ def run(
         raise BatchRunError(failures, cleanup_failures)
     try:
         publisher = GcsPublisher(storage_client, settings)
+        # Dataset uploads are staged. Capture publication time only at the
+        # complete release/catalog commit boundary.
+        batch_published_at = clock().isoformat()
         release = build_release_manifest(run_id_value, results, batch_published_at, batch_source_order)
         release_object = publisher.upload_release_manifest(run_id_value, release)
         catalog = publisher.commit_catalog(run_id_value, release_object, batch_source_order)
@@ -137,6 +142,9 @@ def run(
             materialization="batch",
             dataset_count=len(results),
             release_uri=release_object.uri,
+            batch_source_order=batch_source_order,
+            catalog_metageneration=str(getattr(catalog, "metageneration", "")),
+            published_at=batch_published_at,
         )
     except CatalogConflictError as error:
         failures["batch"] = error

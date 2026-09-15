@@ -14,6 +14,7 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from google.api_core.exceptions import NotFound, PreconditionFailed
+from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
 
 from .materializations import MATERIALIZATIONS_BY_NAME, Materialization
 from .settings import Settings
@@ -64,7 +65,9 @@ PointerConflictError = CatalogConflictError
 
 
 class GcsPublisher:
-    def __init__(self, client: Any, settings: Settings, materialization: Materialization | None = None) -> None:
+    def __init__(
+        self, client: StorageClient, settings: Settings, materialization: Materialization | None = None
+    ) -> None:
         self.client = client
         self.bucket_name, dataset_prefix = _prefix_parts(
             settings.target(materialization or MATERIALIZATIONS_BY_NAME["pv_regions"])[0]
@@ -75,7 +78,7 @@ class GcsPublisher:
         self.bucket = client.bucket(self.bucket_name)
 
     @classmethod
-    def from_catalog(cls, client: Any, settings: Any) -> "GcsPublisher":
+    def from_catalog(cls, client: StorageClient, settings: Any) -> "GcsPublisher":
         """Build only the fixed-catalog boundary; no database settings required."""
         publisher = cls.__new__(cls)
         publisher.client = client
@@ -87,8 +90,8 @@ class GcsPublisher:
     def _name(self, run_id: str, dataset: str, filename: str) -> str:
         return f"{self.prefix}/releases/{run_id}/{dataset}/{filename}"
 
-    def run_prefix(self, run_id: str) -> str:
-        return f"gs://{self.bucket_name}/{self.prefix}/releases/{run_id}"
+    def run_prefix(self, run_id: str, dataset: str) -> str:
+        return f"gs://{self.bucket_name}/{self.prefix}/releases/{run_id}/{dataset}"
 
     def upload_parquet_files(
         self, run_id: str, definition: Materialization, artifacts: MaterializationArtifacts
@@ -140,11 +143,24 @@ class GcsPublisher:
         try:
             blob.reload()
         except NotFound:
-            # The catalog's empty content is only ever created once. All later
-            # changes are metadata patches, never content replacement.
+            # Create the initial object and complete metadata atomically. Later
+            # updates are metadata-only CAS patches.
+            blob.metadata = {
+                "catalog_schema_version": "analytics.catalog.v1",
+                "previous_release": previous_release or "",
+                "previous_release_manifest_uri": "",
+                "previous_release_manifest_generation": "",
+                "previous_source_order": "",
+                "current_release": run_id,
+                "current_release_manifest_uri": release.uri,
+                "current_release_manifest_generation": release.generation,
+                "current_source_order": source_order,
+                "high_water_source_order": source_order,
+            }
             try:
-                blob.upload_from_string(b"", content_type="application/json", if_generation_match=0)
+                blob.upload_from_string(b"", content_type="application/json", if_generation_match=0, checksum="crc32c")
                 blob.reload()
+                return blob
             except PreconditionFailed:
                 blob.reload()
         for attempt in range(2):
@@ -325,7 +341,13 @@ def publish(
         raise ValueError("publication uses an unapproved materialization")
     files = gcs.upload_parquet_files(run_id, materialization, artifacts)
     manifest = build_manifest(
-        run_id, files, gcs.run_prefix(run_id), artifacts.row_count, source_read_at, published_at, materialization
+        run_id,
+        files,
+        gcs.run_prefix(run_id, materialization.name),
+        artifacts.row_count,
+        source_read_at,
+        published_at,
+        materialization,
     )
     manifest_object = gcs.upload_dataset_manifest(run_id, manifest)
     if emit:

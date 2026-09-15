@@ -56,7 +56,9 @@ class Blob:
         if (current.generation if current else 0) != expected:
             raise PreconditionFailed("generation conflict")
         type(self).next_generation += 1
-        self.objects[self.name] = Stored(value, type(self).next_generation)
+        stored = Stored(value, type(self).next_generation)
+        stored.metadata = self.__dict__.get("pending_metadata", self.__dict__.get("metadata", {}))
+        self.objects[self.name] = stored
 
     def patch(self, **kwargs):
         current = self.objects[self.name]
@@ -64,6 +66,11 @@ class Blob:
             raise PreconditionFailed("metageneration conflict")
         if self.conflict:
             type(self).conflict = False
+            current.metadata = dict(current.metadata)
+            current.metadata.update(
+                {"competing_winner": "yes", "current_source_order": "s2", "high_water_source_order": "s2"}
+            )
+            current.metageneration += 1
             raise PreconditionFailed("metageneration conflict")
         current.metadata = self.__dict__.pop("pending_metadata", current.metadata)
         current.metageneration += 1
@@ -164,8 +171,9 @@ def test_release_manifest_and_catalog_are_committed_once_all_datasets_succeed(tm
     assert catalog.metadata["current_release_manifest_uri"] == release.uri
     assert catalog.metadata["current_release_manifest_generation"] == release.generation
     assert catalog.generation == Blob.objects["parquets/catalog.json"].generation
-    assert catalog.metageneration == 2
+    assert catalog.metageneration == 1
     assert catalog.metadata["current_source_order"] == "s"
+    assert statuses["pv_regions"].manifest["run_prefix"].endswith("/batch-2/pv_regions")
     assert "parquets/current.json" not in Blob.objects
 
 
@@ -209,11 +217,13 @@ def test_catalog_advance_is_metadata_cas_and_conflict_is_safe(tmp_path):
     release2 = publisher.upload_release_manifest("batch-4", build_release_manifest("batch-4", statuses2, "p", "t"))
     publisher.commit_catalog("batch-4", release2, "t")
     assert Blob.objects["parquets/catalog.json"].metadata["current_release"] == "batch-4"
+    assert Blob.objects["parquets/catalog.json"].metageneration == 3
     catalog = publisher.rollback_catalog(
         "3", release_manifest_uri=release.uri, release_manifest_generation=release.generation, release_id="batch-3"
     )
     assert catalog.metadata["current_release"] == "batch-3"
     assert catalog.metadata["current_release_manifest_generation"] == release.generation
+    assert catalog.metadata["previous_source_order"] == "t"
     assert catalog.metadata["high_water_source_order"] == "t"
     assert catalog.generation == Blob.objects["parquets/catalog.json"].generation
     assert catalog.metageneration == 4

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -160,6 +161,31 @@ def test_catalog_conflict_fails_safely_after_release_upload(monkeypatch, tmp_pat
         assert not FakePublisher.instances[-1].catalog_committed
     finally:
         FakePublisher.fail_commit = False
+
+
+def test_dataset_manifest_publish_times_are_captured_before_release_commit(monkeypatch, tmp_path):
+    published_times = []
+    clock_values = iter(range(10, 22))
+    monkeypatch.setattr(pipeline_module, "GcsPublisher", FakePublisher)
+    monkeypatch.setattr(pipeline_module, "select_materializations", lambda _names: MATERIALIZATIONS)
+    monkeypatch.setattr(pipeline_module, "attach_postgres", lambda *_args: None)
+    monkeypatch.setattr(pipeline_module, "materialize", lambda *_args: MaterializationArtifacts(Path("/tmp"), (), 1))
+
+    def fake_publish(_gcs, _run, _artifacts, _source, published_at, definition, **_kw):
+        published_times.append((definition.name, published_at))
+        return _status(definition, _run)
+
+    monkeypatch.setattr(pipeline_module, "publish", fake_publish)
+    run(
+        _settings(tmp_path),
+        object(),
+        connection_factory=lambda _settings: type("C", (), {"close": lambda self: None})(),
+        now=lambda: datetime.fromtimestamp(next(clock_values), timezone.utc),
+        run_id="publish-times",
+    )
+    assert [value for _, value in published_times] == [
+        f"1970-01-01T00:00:{second:02d}+00:00" for second in range(11, 20)
+    ]
 
 
 @pytest.mark.parametrize("signal", (KeyboardInterrupt, SystemExit))

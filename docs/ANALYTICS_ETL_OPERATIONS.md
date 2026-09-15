@@ -142,9 +142,12 @@ same zero-retry job settings.
 
 ## Release, recovery, and validation
 
-Every run writes a new immutable `parquets/releases/<run-id>/` tree. Each
-dataset manifest is uploaded create-if-absent; `release.json` is written last
-only after all eight datasets validate. A catalog CAS/IAM failure may leave an
+Every run stages a new immutable `parquets/releases/<run-id>/<dataset>/` tree.
+Dataset objects and manifests are staged uploads, not a published release: they
+are unreachable by consumers until `release.json` is written after all eight
+datasets validate and the fixed catalog is successfully advanced by CAS. The
+release/catalog commit timestamp (`published_at`) is captured at that final
+commit boundary, not at batch start. A catalog CAS/IAM failure may leave an
 immutable but unselected `release.json`; catalog metadata alone determines
 consumer visibility. A failed or subset run has no current release and must be
 rerun as a complete batch. Lifecycle policy cleans unreachable staged objects;

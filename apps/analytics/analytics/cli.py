@@ -6,6 +6,8 @@ import argparse
 import os
 from typing import Mapping
 
+from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
+
 from .duckdb import connect
 from .logging import JsonLogger
 from .materializations import select_materializations
@@ -48,17 +50,15 @@ def main() -> int:
     try:
         selected = select_materializations(tuple(materialization_names) if materialization_names else None)
         if args.command == "rollback-catalog":
-            from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
-
             catalog_settings = CatalogSettings.from_env()
-            GcsPublisher.from_catalog(StorageClient(), catalog_settings).rollback_catalog(
+            catalog = GcsPublisher.from_catalog(StorageClient(), catalog_settings).rollback_catalog(
                 args.catalog_metageneration,
                 release_manifest_uri=args.release_manifest_uri,
                 release_manifest_generation=args.release_manifest_generation,
             )
             logger.info(
                 "analytics.etl.catalog_rollback_succeeded",
-                catalog_metageneration=args.catalog_metageneration,
+                catalog_metageneration=str(catalog.metageneration),
                 release_manifest_generation=args.release_manifest_generation,
             )
         elif args.command == "preflight":
@@ -79,8 +79,6 @@ def main() -> int:
                 run_id=str(run_id),
             )
         else:
-            from google.cloud.storage import Client as StorageClient
-
             from .pipeline import BatchRunError, run
 
             try:
