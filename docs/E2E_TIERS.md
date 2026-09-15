@@ -23,7 +23,7 @@ job level and uploads its own failure artifacts
 A test belongs in `tests/e2e/` only if **all** of these hold:
 
 - **Critical path** — it covers a critical-path acceptance criterion from a
-  feature spec (`specs/`), i.e. a flow whose breakage means the app is not
+  feature spec (`docs/specs/`), i.e. a flow whose breakage means the app is not
   shippable (map loads anonymously, search works, detail panel opens…).
 - **Deterministic** — it depends only on the seeded preview data and stable
   selectors; no timing luck, no third-party variance, no "usually passes".

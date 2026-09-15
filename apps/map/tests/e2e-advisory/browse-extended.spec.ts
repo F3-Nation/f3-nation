@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 /**
  * Advisory-tier E2E suite for anonymous map browse & search.
  *
- * Covers useful-but-not-critical ACs from specs/map-browse-and-search.md §8
+ * Covers useful-but-not-critical ACs from docs/specs/map-browse-and-search.md §8
  * that were deliberately left out of the blocking tier (tests/e2e/):
  *
  *   1. Keyboard navigation of search results (AC-7)

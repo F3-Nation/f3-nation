@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
  * Update-request RBAC — BLOCKING tier, API-only (no browser).
  *
  * Exercises the submission/review authorization matrix of
- * specs/map-update-request-flow.md §5 directly against the API app
+ * docs/specs/map-update-request-flow.md §5 directly against the API app
  * (E2E_API_URL) using the seeded local API keys as principals. The browser
  * suite (tests/e2e/update-request.spec.ts) cannot cover these paths because
  * the local dev-mode credentials provider always yields a nation-admin

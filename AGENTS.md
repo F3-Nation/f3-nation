@@ -14,7 +14,7 @@ intro to judge relevance. Two are not optional: read
 [`docs/AI_GUARDRAILS.md`](docs/AI_GUARDRAILS.md) and
 [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md) before
 security-, auth-, or reliability-sensitive work. Read the relevant
-[`specs/`](specs/) file before feature work — specs are the source of truth for
+[`docs/specs/`](docs/specs/) file before feature work — specs are the source of truth for
 **what** a feature does, who may do it, and how it's verified.
 
 ### Agent skills
