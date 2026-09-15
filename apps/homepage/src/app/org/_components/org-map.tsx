@@ -7,9 +7,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 
-import type { Org, OrgDetail, OrgMetrics, OrgType, Point } from "../_lib/types";
+import type {
+  Org,
+  OrgDetail,
+  OrgMetrics,
+  OrgType,
+  Point,
+  LocationDetail,
+  AoSearchResult,
+} from "../_lib/types";
 import { buildOrgHierarchy, LAYER_TYPES } from "../_lib/org-chart";
 import {
+  computeFanOffsets,
   convexHull,
   createCircleBuffer,
   createStarPolygon,
@@ -17,6 +26,7 @@ import {
   fuzzyScore,
   polygonAreaSqMi,
 } from "../_lib/geo-utils";
+import { InfoRequestGuard } from "../_lib/info-request-guard";
 import {
   getDescendants,
   getLevelOrgs,
@@ -26,7 +36,7 @@ import {
   nextNavigableLevel,
   pathForNavigatingTo,
 } from "../_lib/navigation";
-import { fetchOrgById, fetchOrgChart } from "../_lib/api";
+import { fetchLocationById, fetchOrgById, fetchOrgChart } from "../_lib/api";
 import {
   readLevelFromUrl,
   readOrgIdFromUrl,
@@ -34,15 +44,22 @@ import {
 } from "../_lib/url-state";
 import type { NearestAdminOrg } from "./org-info-panel";
 import { OrgInfoPanel } from "./org-info-panel";
+import { LocationInfoPanel } from "./location-info-panel";
 import { SearchBox } from "./search-box";
 
 // ─── types local to this component ───────────────────────────────────────────
+
+// Screen-pixel radius of the fan used to separate co-located location pins.
+const PIN_FAN_RADIUS_PX = 18;
 
 type InfoState =
   | { status: "idle" }
   | { status: "loading"; org: Org }
   | { status: "loaded"; org: Org; detail: OrgDetail }
-  | { status: "error"; org: Org };
+  | { status: "error"; org: Org }
+  | { status: "loading-location"; locationId: number }
+  | { status: "loaded-location"; locationId: number; detail: LocationDetail }
+  | { status: "error-location"; locationId: number };
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -169,10 +186,26 @@ export default function OrgMap() {
   const orgColorsRef = useRef(new Map<number, string>());
   const descendantCacheRef = useRef(new Map<number, number[]>());
   const orgInfoCacheRef = useRef(new Map<number, OrgDetail>());
-  const activeInfoOrgIdRef = useRef<number | null>(null);
+  // Guards which in-flight org/location request may update the info panel, so a
+  // late-resolving request from a previous selection can't overwrite it.
+  const infoGuardRef = useRef(new InfoRequestGuard());
   // Debounces hover-driven info loads so sweeping the cursor across a dense
   // layer doesn't fire a fetch (plus ancestor climbs) per polygon.
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pinLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const orgLocationsRef = useRef(
+    new Map<number, { locationId: number; lat: number; lng: number }[]>(),
+  );
+  const locationInfoCacheRef = useRef(new Map<number, LocationDetail>());
+  // Org whose location pins are currently shown; re-fanned on zoom.
+  const pinnedOrgRef = useRef<Org | null>(null);
+  // Dedup in-flight org detail requests so rapid hovers share one fetch
+  const orgInfoPendingRef = useRef(new Map<number, Promise<OrgDetail>>());
+  const locationInfoPendingRef = useRef(
+    new Map<number, Promise<LocationDetail>>(),
+  );
+  // True while location pins are displayed; suppresses polygon hover updates
+  const pinsActiveRef = useRef(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentLevel, setCurrentLevel] = useState<OrgType>("sector");
@@ -183,6 +216,11 @@ export default function OrgMap() {
   // True when the ancestor climb couldn't verify admins (a lookup failed),
   // so the UI can say "couldn't check" instead of a false "none listed".
   const [adminLookupInconclusive, setAdminLookupInconclusive] = useState(false);
+  // Set by an AO search selection; consumed by the focus effect below.
+  const [aoFocus, setAoFocus] = useState<{
+    orgId: number;
+    locationId: number;
+  } | null>(null);
 
   // Layers actually present in the data (depth-agnostic)
   const [presentLayers, setPresentLayers] = useState<OrgType[]>(LAYER_TYPES);
@@ -192,12 +230,18 @@ export default function OrgMap() {
   useEffect(() => {
     fetchOrgChart()
       .then((items) => {
-        const { orgById, childrenByParent, pointsById, metricsById } =
-          buildOrgHierarchy(items);
+        const {
+          orgById,
+          childrenByParent,
+          pointsById,
+          metricsById,
+          orgLocationsById,
+        } = buildOrgHierarchy(items);
         orgByIdRef.current = orgById;
         childrenByParentRef.current = childrenByParent;
         pointsByIdRef.current = pointsById;
         metricsByIdRef.current = metricsById;
+        orgLocationsRef.current = orgLocationsById;
         descendantCacheRef.current.clear();
 
         // Derive which layer types are actually present
@@ -276,6 +320,8 @@ export default function OrgMap() {
 
     mapRef.current = map;
     layerGroupRef.current = L.layerGroup().addTo(map);
+    // Pin layer sits on top of polygons
+    pinLayerGroupRef.current = L.layerGroup().addTo(map);
 
     return () => {
       map.remove();
@@ -287,17 +333,18 @@ export default function OrgMap() {
   // ── info loading ─────────────────────────────────────────────────────────
 
   const loadOrgInfo = useCallback(async (org: Org) => {
-    if (activeInfoOrgIdRef.current !== org.id) {
-      // Drop the previous org's fallback in the same commit as the new detail,
-      // so a switch to an already-cached org can't render its admin for a frame.
+    // selectOrg returns true on a switch to a different org; drop the previous
+    // org's fallback in the same commit as the new detail, so a switch to an
+    // already-cached org can't render its admin for a frame. A still-pending
+    // pin fetch is invalidated by selectOrg clearing the location selection.
+    if (infoGuardRef.current.selectOrg(org.id)) {
       setNearestAdminOrg(null);
       setAdminLookupInconclusive(false);
     }
-    activeInfoOrgIdRef.current = org.id;
 
     const cached = orgInfoCacheRef.current.get(org.id);
     if (cached) {
-      if (activeInfoOrgIdRef.current === org.id) {
+      if (infoGuardRef.current.isOrgCurrent(org.id)) {
         setInfoState({ status: "loaded", org, detail: cached });
       }
       return;
@@ -305,18 +352,144 @@ export default function OrgMap() {
 
     setInfoState({ status: "loading", org });
 
+    let pending = orgInfoPendingRef.current.get(org.id);
+    if (!pending) {
+      pending = fetchOrgById(org.id);
+      orgInfoPendingRef.current.set(org.id, pending);
+    }
+
     try {
-      const detail = await fetchOrgById(org.id);
+      const detail = await pending;
       orgInfoCacheRef.current.set(org.id, detail);
-      if (activeInfoOrgIdRef.current === org.id) {
+      orgInfoPendingRef.current.delete(org.id);
+      if (infoGuardRef.current.isOrgCurrent(org.id)) {
         setInfoState({ status: "loaded", org, detail });
       }
     } catch {
-      if (activeInfoOrgIdRef.current === org.id) {
+      orgInfoPendingRef.current.delete(org.id);
+      if (infoGuardRef.current.isOrgCurrent(org.id)) {
         setInfoState({ status: "error", org });
       }
     }
   }, []);
+
+  const loadLocationInfo = useCallback(async (locationId: number) => {
+    infoGuardRef.current.selectLocation(locationId);
+
+    const cached = locationInfoCacheRef.current.get(locationId);
+    if (cached) {
+      if (infoGuardRef.current.isLocationCurrent(locationId)) {
+        setInfoState({ status: "loaded-location", locationId, detail: cached });
+      }
+      return;
+    }
+
+    setInfoState({ status: "loading-location", locationId });
+
+    let pending = locationInfoPendingRef.current.get(locationId);
+    if (!pending) {
+      pending = fetchLocationById(locationId);
+      locationInfoPendingRef.current.set(locationId, pending);
+    }
+
+    try {
+      const detail = await pending;
+      locationInfoCacheRef.current.set(locationId, detail);
+      locationInfoPendingRef.current.delete(locationId);
+      if (infoGuardRef.current.isLocationCurrent(locationId)) {
+        setInfoState({ status: "loaded-location", locationId, detail });
+      }
+    } catch {
+      locationInfoPendingRef.current.delete(locationId);
+      if (infoGuardRef.current.isLocationCurrent(locationId)) {
+        setInfoState({ status: "error-location", locationId });
+      }
+    }
+  }, []);
+
+  const showPinsForOrg = useCallback(
+    (org: Org, options?: { preserveLocation?: boolean }) => {
+      pinsActiveRef.current = true;
+      pinnedOrgRef.current = org;
+      // Switching to a new org's pins invalidates any pending location request
+      // so a late-resolving one from the previous org can't populate the panel.
+      // Re-fanning the current org's pins (e.g. on zoom) preserves the location selection.
+      if (!options?.preserveLocation) {
+        infoGuardRef.current.showPinsForOrg(org.id);
+      }
+      // Cancel a queued hover load so it can't fire after the pins appear.
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
+      const pinLayer = pinLayerGroupRef.current;
+      if (!pinLayer) return;
+      pinLayer.clearLayers();
+
+      const locations = orgLocationsRef.current.get(org.id) ?? [];
+
+      // Group by exact coordinate so co-located pins can be fanned out
+      // ("spiderfied") instead of stacking invisibly on top of one another.
+      const byCoord = new Map<string, typeof locations>();
+      for (const loc of locations) {
+        const key = `${loc.lat},${loc.lng}`;
+        const group = byCoord.get(key) ?? [];
+        group.push(loc);
+        byCoord.set(key, group);
+      }
+
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:#B70D06;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+
+      const map = mapRef.current;
+
+      for (const group of byCoord.values()) {
+        // Fan in screen pixels (not fixed degrees) so co-located pins stay
+        // separated at every zoom level instead of collapsing when zoomed out.
+        const offsets = computeFanOffsets(group.length, PIN_FAN_RADIUS_PX);
+        group.forEach((loc, i) => {
+          let latlng = L.latLng(loc.lat, loc.lng);
+          if (group.length > 1 && map) {
+            const offset = offsets[i]!;
+            const base = map.latLngToLayerPoint(latlng);
+            latlng = map.layerPointToLatLng(
+              base.add(L.point(offset.dx, offset.dy)),
+            );
+          }
+          const marker = L.marker(latlng, { icon });
+
+          marker.on("mouseover", () => {
+            void loadLocationInfo(loc.locationId);
+          });
+          marker.on("click", () => {
+            void loadLocationInfo(loc.locationId);
+          });
+
+          marker.addTo(pinLayer);
+        });
+      }
+    },
+    [loadLocationInfo],
+  );
+
+  // Re-fan the pins on zoom so their pixel spacing stays constant on screen.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const onZoomEnd = () => {
+      if (pinsActiveRef.current && pinnedOrgRef.current) {
+        showPinsForOrg(pinnedOrgRef.current, { preserveLocation: true });
+      }
+    };
+    map.on("zoomend", onZoomEnd);
+    return () => {
+      map.off("zoomend", onZoomEnd);
+    };
+  }, [isLoaded, showPinsForOrg]);
 
   // ── navigation helpers ───────────────────────────────────────────────────
 
@@ -351,8 +524,25 @@ export default function OrgMap() {
     [loadOrgInfo],
   );
 
+  const navigateToAo = useCallback(
+    (ao: AoSearchResult) => {
+      const region = orgByIdRef.current.get(ao.regionId);
+      if (!region) return false;
+      navigateToOrg(region);
+      // A fresh object each call re-triggers the focus effect below, even when
+      // the region view doesn't change (same region, different AO).
+      setAoFocus({ orgId: ao.regionId, locationId: ao.locationId });
+      return true;
+    },
+    [navigateToOrg],
+  );
+
   const navigateViaLevelButton = useCallback(
     (level: OrgType) => {
+      pinsActiveRef.current = false;
+      pinnedOrgRef.current = null;
+      infoGuardRef.current.clearPins();
+      pinLayerGroupRef.current?.clearLayers();
       setCurrentLevel(level);
       setSelectedPath([]);
       writeUrlState(level, null);
@@ -366,6 +556,10 @@ export default function OrgMap() {
 
   const navigateViaBreadcrumb = useCallback(
     (depth: number) => {
+      pinsActiveRef.current = false;
+      pinnedOrgRef.current = null;
+      infoGuardRef.current.clearPins();
+      pinLayerGroupRef.current?.clearLayers();
       if (depth === -1) {
         // Nation breadcrumb → broadest layer (last in leaf→root order)
         setSelectedPath([]);
@@ -409,6 +603,11 @@ export default function OrgMap() {
     if (!map || !layerGroup || !isLoaded) return;
 
     layerGroup.clearLayers();
+    // Clear pins whenever the polygon layer re-renders (level/path changed)
+    pinsActiveRef.current = false;
+    pinnedOrgRef.current = null;
+    infoGuardRef.current.clearPins();
+    pinLayerGroupRef.current?.clearLayers();
     const allLatLngs: L.LatLng[] = [];
 
     const orgs = getLevelOrgs(
@@ -440,11 +639,15 @@ export default function OrgMap() {
 
       polygon.on("mouseover", () => {
         polygon.setStyle({ weight: 3, fillOpacity: 0.28 });
-        if (org.orgType === "region") writeUrlState(currentLevel, org.id);
-        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-        hoverTimerRef.current = setTimeout(() => {
-          void loadOrgInfo(org);
-        }, 200);
+        // Suppress polygon hover info while location pins are shown
+        if (!pinsActiveRef.current) {
+          if (org.orgType === "region") writeUrlState(currentLevel, org.id);
+          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          hoverTimerRef.current = setTimeout(() => {
+            // Re-check: pins may have been shown during the debounce window.
+            if (!pinsActiveRef.current) void loadOrgInfo(org);
+          }, 200);
+        }
       });
 
       polygon.on("mouseout", () => {
@@ -456,8 +659,11 @@ export default function OrgMap() {
       });
 
       polygon.on("click", () => {
-        // Most-specific layer is view-only: hover for info, no drill-down
-        if (org.orgType === LAYER_TYPES[0]) return;
+        if (org.orgType === LAYER_TYPES[0]) {
+          // Leaf layer: show location pins for this org
+          showPinsForOrg(org);
+          return;
+        }
         navigateToOrg(org);
       });
 
@@ -474,7 +680,25 @@ export default function OrgMap() {
         hoverTimerRef.current = null;
       }
     };
-  }, [isLoaded, currentLevel, selectedPath, loadOrgInfo, navigateToOrg]);
+  }, [
+    isLoaded,
+    currentLevel,
+    selectedPath,
+    loadOrgInfo,
+    navigateToOrg,
+    showPinsForOrg,
+  ]);
+
+  // After an AO search selection, once the region view has (re)rendered, show
+  // its pins and open the selected AO's location. Declared after the polygon
+  // render effect so it runs second — its pins survive that effect's clear.
+  useEffect(() => {
+    if (!aoFocus || !isLoaded) return;
+    const org = orgByIdRef.current.get(aoFocus.orgId);
+    if (!org) return;
+    showPinsForOrg(org);
+    void loadLocationInfo(aoFocus.locationId);
+  }, [aoFocus, isLoaded, showPinsForOrg, loadLocationInfo]);
 
   // ── nearest parent admin lookup (for empty-roles message) ───────────────
 
@@ -526,9 +750,9 @@ export default function OrgMap() {
           (r) => r.title?.toLowerCase().includes("admin") ?? false,
         );
         if (admins.length > 0) {
-          // activeInfoOrgIdRef flips synchronously on switch (before any await
+          // The guard flips synchronously on switch (before any await
           // resolves), so a stale climb can't overwrite a newer org's panel.
-          if (activeInfoOrgIdRef.current === org.id) {
+          if (infoGuardRef.current.isOrgCurrent(org.id)) {
             setNearestAdminOrg({
               name: ancestor.name,
               orgType: ancestor.orgType,
@@ -542,14 +766,14 @@ export default function OrgMap() {
 
       // Reached the top with no admin found: only claim "none" when every
       // ancestor was actually checked; a failed lookup makes it inconclusive.
-      if (!cancelled && activeInfoOrgIdRef.current === org.id) {
+      if (!cancelled && infoGuardRef.current.isOrgCurrent(org.id)) {
         setAdminLookupInconclusive(hadFailure);
       }
     }
 
     void climb().catch(() => {
       // An unexpected shape must surface as inconclusive, not a false "none".
-      if (!cancelled && activeInfoOrgIdRef.current === org.id) {
+      if (!cancelled && infoGuardRef.current.isOrgCurrent(org.id)) {
         setAdminLookupInconclusive(true);
       }
     });
@@ -579,7 +803,13 @@ export default function OrgMap() {
 
   // ── derived data for info panel ──────────────────────────────────────────
 
-  const infoOrg = infoState.status !== "idle" ? infoState.org : undefined;
+  const infoOrg =
+    infoState.status === "idle" ||
+    infoState.status === "loading-location" ||
+    infoState.status === "loaded-location" ||
+    infoState.status === "error-location"
+      ? undefined
+      : infoState.org;
 
   const infoDescendants = useMemo(() => {
     if (!infoOrg || !isLoaded) return [];
@@ -717,22 +947,43 @@ export default function OrgMap() {
             <SearchBox
               getResults={getSearchResults}
               onSelect={navigateToOrg}
+              onSelectAo={navigateToAo}
               disabled={!isLoaded}
             />
           </div>
           <div className="flex flex-1 flex-col gap-3 rounded-2xl bg-white p-5 shadow-md">
-            <OrgInfoPanel
-              status={infoState.status}
-              org={infoOrg}
-              detail={
-                infoState.status === "loaded" ? infoState.detail : undefined
-              }
-              descendantOrgs={infoDescendants}
-              aggregatedMetrics={infoMetrics}
-              footprintSqMi={infoFootprint}
-              nearestAdminOrg={nearestAdminOrg}
-              adminLookupInconclusive={adminLookupInconclusive}
-            />
+            {infoState.status === "loading-location" ||
+            infoState.status === "loaded-location" ||
+            infoState.status === "error-location" ? (
+              <LocationInfoPanel
+                status={
+                  infoState.status === "loading-location"
+                    ? "loading"
+                    : infoState.status === "error-location"
+                      ? "error"
+                      : "loaded"
+                }
+                locationId={infoState.locationId}
+                detail={
+                  infoState.status === "loaded-location"
+                    ? infoState.detail
+                    : undefined
+                }
+              />
+            ) : (
+              <OrgInfoPanel
+                status={infoState.status}
+                org={infoOrg}
+                detail={
+                  infoState.status === "loaded" ? infoState.detail : undefined
+                }
+                descendantOrgs={infoDescendants}
+                aggregatedMetrics={infoMetrics}
+                footprintSqMi={infoFootprint}
+                nearestAdminOrg={nearestAdminOrg}
+                adminLookupInconclusive={adminLookupInconclusive}
+              />
+            )}
           </div>
         </aside>
       </main>

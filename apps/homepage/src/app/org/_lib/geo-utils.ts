@@ -129,3 +129,28 @@ export function polygonAreaSqMi(points: Point[]): number {
   }
   return Math.abs((area * R * R) / 2);
 }
+
+/**
+ * Screen-pixel offsets to fan out `count` markers that share one coordinate
+ * ("spiderfy"). Returns one `{ dx, dy }` per marker, evenly spaced on a circle
+ * of `radiusPx`. A single marker gets no offset.
+ *
+ * Offsets are in screen pixels rather than fixed geographic degrees, so the fan
+ * keeps a constant on-screen size at every zoom level instead of collapsing —
+ * and hiding co-located pins — when zoomed out.
+ */
+export function computeFanOffsets(
+  count: number,
+  radiusPx: number,
+): { dx: number; dy: number }[] {
+  if (count <= 1) return [{ dx: 0, dy: 0 }];
+  const offsets: { dx: number; dy: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const angle = (2 * Math.PI * i) / count;
+    offsets.push({
+      dx: radiusPx * Math.cos(angle),
+      dy: radiusPx * Math.sin(angle),
+    });
+  }
+  return offsets;
+}
