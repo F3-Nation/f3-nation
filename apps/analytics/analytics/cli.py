@@ -6,6 +6,7 @@ import argparse
 import os
 from typing import Mapping
 
+from google.cloud import storage  # type: ignore[import-untyped]
 from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
 
 from .duckdb import connect
@@ -23,6 +24,11 @@ def cloud_run_context(environ: Mapping[str, str]) -> dict[str, str]:
     if environ.get("CLOUD_RUN_EXECUTION"):
         context["execution"] = environ["CLOUD_RUN_EXECUTION"]
     return context
+
+
+def _storage_client() -> StorageClient:
+    """Construct through the module so tests and callers can patch Client."""
+    return storage.Client()
 
 
 def main() -> int:
@@ -51,14 +57,14 @@ def main() -> int:
         selected = select_materializations(tuple(materialization_names) if materialization_names else None)
         if args.command == "rollback-catalog":
             catalog_settings = CatalogSettings.from_env()
-            catalog = GcsPublisher.from_catalog(StorageClient(), catalog_settings).rollback_catalog(
+            catalog = GcsPublisher.from_catalog(_storage_client(), catalog_settings).rollback_catalog(
                 args.catalog_metageneration,
                 release_manifest_uri=args.release_manifest_uri,
                 release_manifest_generation=args.release_manifest_generation,
             )
             logger.info(
                 "analytics.etl.catalog_rollback_succeeded",
-                catalog_metageneration=str(catalog.metageneration),
+                catalog_metageneration=str(getattr(catalog, "metageneration", args.catalog_metageneration)),
                 release_manifest_generation=args.release_manifest_generation,
             )
         elif args.command == "preflight":
@@ -85,7 +91,7 @@ def main() -> int:
                 settings = Settings.from_env()
                 run(
                     settings,
-                    StorageClient(),
+                    _storage_client(),
                     logger=logger,
                     run_id=str(run_id),
                     execution_context=cloud_run_context(os.environ),
