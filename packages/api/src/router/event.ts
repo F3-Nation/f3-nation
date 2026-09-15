@@ -301,6 +301,7 @@ export const eventRouter = {
                 }),
               )
               .describe("Event types"),
+            eventTagIds: z.array(z.number()).describe("Event tag IDs"),
             location: z.string().nullable().describe("Location"),
           }),
         ),
@@ -414,6 +415,12 @@ export const eventRouter = {
             ),
             '[]'
           )`,
+        eventTagIds: sql<number[]>`COALESCE(
+          ARRAY(SELECT ${schema.eventTagsXEvents.eventTagId}
+            FROM ${schema.eventTagsXEvents}
+            WHERE ${schema.eventTagsXEvents.eventId} = ${schema.events.id}),
+          ARRAY[]::integer[]
+        )`,
       };
 
       const totalCount = await getEventCount({ db: ctx.db, where });
@@ -580,6 +587,7 @@ export const eventRouter = {
                 }),
               )
               .describe("Event types"),
+            eventTagIds: z.array(z.number()).describe("Event tag IDs"),
           })
           .nullable()
           .describe("The event"),
@@ -643,6 +651,12 @@ export const eventRouter = {
               WHERE ${schema.eventTypes.id} IS NOT NULL
             ),
             '[]'
+          )`,
+          eventTagIds: sql<number[]>`COALESCE(
+            ARRAY(SELECT ${schema.eventTagsXEvents.eventTagId}
+              FROM ${schema.eventTagsXEvents}
+              WHERE ${schema.eventTagsXEvents.eventId} = ${schema.events.id}),
+            ARRAY[]::integer[]
           )`,
         })
         .from(schema.events)
@@ -756,7 +770,7 @@ export const eventRouter = {
         });
       }
 
-      const { eventTypeIds, meta, ...eventData } = input;
+      const { eventTypeIds, eventTagIds, meta, ...eventData } = input;
       const mapSeed =
         typeof meta?.mapSeed === "boolean" ? meta.mapSeed : undefined;
       const eventToUpdate: typeof schema.events.$inferInsert = {
@@ -771,123 +785,162 @@ export const eventRouter = {
           : null,
       };
 
-      const [result] = await ctx.db
-        .insert(schema.events)
-        .values(eventToUpdate)
-        .onConflictDoUpdate({
-          target: [schema.events.id],
-          set: eventToUpdate,
-        })
-        .returning();
+      let shouldNotifyFirstEventForRegion = false;
+      const result = await ctx.db.transaction(async (tx) => {
+        const transactionDb = tx as unknown as AppDb;
+        const [result] = await transactionDb
+          .insert(schema.events)
+          .values(eventToUpdate)
+          .onConflictDoUpdate({
+            target: [schema.events.id],
+            set: eventToUpdate,
+          })
+          .returning();
 
-      if (!result) {
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "Failed to create/update event",
-        });
-      }
+        if (!result) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Failed to create/update event",
+          });
+        }
 
-      // Handle event type in join table
-      if (eventTypeIds) {
-        await ctx.db
-          .delete(schema.eventsXEventTypes)
-          .where(eq(schema.eventsXEventTypes.eventId, result.id));
+        const effectiveEventTagIds =
+          eventTagIds === undefined && existingEvent
+            ? (
+                await transactionDb
+                  .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
+                  .from(schema.eventTagsXEvents)
+                  .where(eq(schema.eventTagsXEvents.eventId, result.id))
+              ).map(({ eventTagId }) => eventTagId)
+            : eventTagIds;
 
-        await ctx.db.insert(schema.eventsXEventTypes).values(
-          eventTypeIds.map((eventTypeId: number) => ({
-            eventId: result.id,
-            eventTypeId,
-          })),
-        );
-      }
+        // Handle event type in join table
+        if (eventTypeIds) {
+          await transactionDb
+            .delete(schema.eventsXEventTypes)
+            .where(eq(schema.eventsXEventTypes.eventId, result.id));
 
-      // Handle event instance cascade operations for series (events with recurrence patterns).
-      // null recurrencePattern defaults to weekly in createEventInstancesForSeries.
-      if (result.dayOfWeek) {
-        const {
-          isStructuralChange,
-          createEventInstancesForSeries,
-          updateFutureInstances,
-          recreateFutureInstances,
-        } = await import("../lib/cascade-service");
-
-        // Build series data for cascade operations
-        const seriesData = {
-          id: result.id,
-          orgId: result.orgId,
-          locationId: result.locationId,
-          name: result.name,
-          description: result.description,
-          startDate: result.startDate,
-          endDate: result.endDate,
-          startTime: result.startTime,
-          endTime: result.endTime,
-          dayOfWeek: result.dayOfWeek,
-          recurrencePattern: result.recurrencePattern,
-          recurrenceInterval: result.recurrenceInterval,
-          indexWithinInterval: result.indexWithinInterval,
-          isActive: result.isActive,
-          isPrivate: result.isPrivate,
-          highlight: result.highlight,
-          meta: result.meta,
-          eventTypeIds: eventTypeIds,
-          // eventTagId: eventTagIds?.[0], // TODO: event tag support
-        };
-
-        if (!existingEvent) {
-          // New series: create event instances from series start date
-          await createEventInstancesForSeries(
-            ctx.db,
-            seriesData,
-            4,
-            seriesData.startDate,
+          await transactionDb.insert(schema.eventsXEventTypes).values(
+            eventTypeIds.map((eventTypeId: number) => ({
+              eventId: result.id,
+              eventTypeId,
+            })),
           );
+        }
 
-          // Check if this is the first recurring event for the region and
-          // trigger the "region in a box" notification flow.
-          const { maybeNotifyFirstEventForRegion } =
-            await import("../lib/first-event-service");
-          void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
-            (err: unknown) =>
-              logError("api.event.first_event_notify_failed", {}, err),
-          );
-        } else if (existingEvent.dayOfWeek) {
-          // Existing series: check for structural changes
-          const existingSeriesData = {
-            dayOfWeek: existingEvent.dayOfWeek,
-            recurrencePattern: existingEvent.recurrencePattern,
-            recurrenceInterval: existingEvent.recurrenceInterval,
-            indexWithinInterval: existingEvent.indexWithinInterval,
-            startDate: existingEvent.startDate,
-            endDate: existingEvent.endDate,
-          };
+        if (eventTagIds !== undefined) {
+          await transactionDb
+            .delete(schema.eventTagsXEvents)
+            .where(eq(schema.eventTagsXEvents.eventId, result.id));
+          if (eventTagIds.length > 0) {
+            await transactionDb.insert(schema.eventTagsXEvents).values(
+              eventTagIds.map((eventTagId) => ({
+                eventId: result.id,
+                eventTagId,
+              })),
+            );
+          }
+        }
 
-          const updatedSeriesData = {
+        // Handle event instance cascade operations for series (events with recurrence patterns).
+        // null recurrencePattern defaults to weekly in createEventInstancesForSeries.
+        if (result.dayOfWeek) {
+          const {
+            isStructuralChange,
+            createEventInstancesForSeries,
+            updateFutureInstances,
+            recreateFutureInstances,
+          } = await import("../lib/cascade-service");
+
+          // Build series data for cascade operations
+          const seriesData = {
+            id: result.id,
+            orgId: result.orgId,
+            locationId: result.locationId,
+            name: result.name,
+            description: result.description,
+            startDate: result.startDate,
+            endDate: result.endDate,
+            startTime: result.startTime,
+            endTime: result.endTime,
             dayOfWeek: result.dayOfWeek,
             recurrencePattern: result.recurrencePattern,
             recurrenceInterval: result.recurrenceInterval,
             indexWithinInterval: result.indexWithinInterval,
-            startDate: result.startDate,
-            endDate: result.endDate,
+            isActive: result.isActive,
+            isPrivate: result.isPrivate,
+            highlight: result.highlight,
+            meta: result.meta,
+            eventTypeIds: eventTypeIds,
+            // Use the effective tags for every cascade path. This preserves
+            // tags when a non-series event is converted to a series and when
+            // an update omits eventTagIds.
+            eventTagIds: effectiveEventTagIds,
           };
 
-          if (isStructuralChange(existingSeriesData, updatedSeriesData)) {
-            // Structural change: delete and recreate future instances
-            await recreateFutureInstances(ctx.db, seriesData);
+          if (!existingEvent) {
+            // New series: create event instances from series start date
+            await createEventInstancesForSeries(
+              transactionDb,
+              seriesData,
+              4,
+              seriesData.startDate,
+            );
+
+            // Run this notification only after the transaction commits.
+            shouldNotifyFirstEventForRegion = true;
+          } else if (existingEvent.dayOfWeek) {
+            // Existing series: check for structural changes
+            const existingSeriesData = {
+              dayOfWeek: existingEvent.dayOfWeek,
+              recurrencePattern: existingEvent.recurrencePattern,
+              recurrenceInterval: existingEvent.recurrenceInterval,
+              indexWithinInterval: existingEvent.indexWithinInterval,
+              startDate: existingEvent.startDate,
+              endDate: existingEvent.endDate,
+            };
+
+            const updatedSeriesData = {
+              dayOfWeek: result.dayOfWeek,
+              recurrencePattern: result.recurrencePattern,
+              recurrenceInterval: result.recurrenceInterval,
+              indexWithinInterval: result.indexWithinInterval,
+              startDate: result.startDate,
+              endDate: result.endDate,
+            };
+
+            if (isStructuralChange(existingSeriesData, updatedSeriesData)) {
+              // Structural change: delete and recreate future instances
+              await recreateFutureInstances(transactionDb, {
+                ...seriesData,
+              });
+            } else {
+              // Non-structural change: update future instances in place
+              await updateFutureInstances(transactionDb, seriesData);
+            }
           } else {
-            // Non-structural change: update future instances in place
-            await updateFutureInstances(ctx.db, seriesData);
+            // Converting a non-series event to a series: create instances from series start date
+            await createEventInstancesForSeries(
+              transactionDb,
+              seriesData,
+              4,
+              seriesData.startDate,
+            );
           }
-        } else {
-          // Converting a non-series event to a series: create instances from series start date
-          await createEventInstancesForSeries(
-            ctx.db,
-            seriesData,
-            4,
-            seriesData.startDate,
-          );
         }
 
-        // Notify webhooks and invalidate cache about the event change
+        return result;
+      });
+
+      // Notify only after the transaction commits.
+      if (shouldNotifyFirstEventForRegion) {
+        const { maybeNotifyFirstEventForRegion } =
+          await import("../lib/first-event-service");
+        void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
+          (err: unknown) =>
+            logError("api.event.first_event_notify_failed", {}, err),
+        );
+      }
+      if (result?.dayOfWeek) {
         notifyMapDataChange({
           type: input.id ? "event.updated" : "event.created",
           eventId: result.id,

@@ -21,7 +21,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { and, eq, gte, schema } from "@acme/db";
+import { and, eq, gte, inArray, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db, getOrCreateF3NationOrg, uniqueId } from "../__tests__/test-utils";
 import type { SeriesData } from "./cascade-service";
@@ -40,6 +40,7 @@ describe("Cascade Service", () => {
   // Track created entities for cleanup
   const createdEventIds: number[] = [];
   const createdEventTypeIds: number[] = [];
+  const createdEventTagIds: number[] = [];
   const createdLocationIds: number[] = [];
   const createdOrgIds: number[] = [];
 
@@ -63,6 +64,11 @@ describe("Cascade Service", () => {
             .delete(schema.eventInstancesXEventTypes)
             .where(
               eq(schema.eventInstancesXEventTypes.eventInstanceId, instance.id),
+            );
+          await db
+            .delete(schema.eventTagsXEventInstances)
+            .where(
+              eq(schema.eventTagsXEventInstances.eventInstanceId, instance.id),
             );
         }
       } catch {
@@ -96,6 +102,21 @@ describe("Cascade Service", () => {
         await db
           .delete(schema.eventTypes)
           .where(eq(schema.eventTypes.id, eventTypeId));
+      } catch {
+        // ignore
+      }
+    }
+    for (const eventTagId of createdEventTagIds.reverse()) {
+      try {
+        await db
+          .delete(schema.eventTagsXEvents)
+          .where(eq(schema.eventTagsXEvents.eventTagId, eventTagId));
+        await db
+          .delete(schema.eventTagsXEventInstances)
+          .where(eq(schema.eventTagsXEventInstances.eventTagId, eventTagId));
+        await db
+          .delete(schema.eventTags)
+          .where(eq(schema.eventTags.id, eventTagId));
       } catch {
         // ignore
       }
@@ -184,6 +205,15 @@ describe("Cascade Service", () => {
       .returning();
     if (eventType) createdEventTypeIds.push(eventType.id);
     return eventType!;
+  };
+
+  const createTestEventTag = async () => {
+    const [eventTag] = await db
+      .insert(schema.eventTags)
+      .values({ name: `Cascade EventTag ${uniqueId()}`, isActive: true })
+      .returning();
+    if (eventTag) createdEventTagIds.push(eventTag.id);
+    return eventTag!;
   };
 
   /** Create a series (event with recurrence pattern) in the DB and return SeriesData */
@@ -460,6 +490,26 @@ describe("Cascade Service", () => {
       expect(joinInstanceIds.length).toBe(instances.length);
     });
 
+    it("should roll back instances when tag associations fail", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const series = await createTestSeries(ao.id, null, {
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+        eventTagIds: [999999999],
+      });
+
+      await expect(
+        createEventInstancesForSeries(db, series, 4, "2026-04-01"),
+      ).rejects.toThrow();
+
+      const instances = await db
+        .select()
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      expect(instances).toEqual([]);
+    });
+
     it("should not create instances past the endDate", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);
@@ -490,6 +540,44 @@ describe("Cascade Service", () => {
       for (const inst of instances) {
         expect(inst.startDate <= "2026-04-15").toBe(true);
       }
+    });
+
+    it("should apply tags to every created and recreated instance", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const tagIds = [
+        (await createTestEventTag()).id,
+        (await createTestEventTag()).id,
+      ];
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+        eventTagIds: tagIds,
+      });
+      await createEventInstancesForSeries(db, series, 4, "2026-04-01");
+      const check = async () => {
+        const instances = await db
+          .select({ id: schema.eventInstances.id })
+          .from(schema.eventInstances)
+          .where(eq(schema.eventInstances.seriesId, series.id));
+        for (const instance of instances) {
+          const rows = await db
+            .select({ id: schema.eventTagsXEventInstances.eventTagId })
+            .from(schema.eventTagsXEventInstances)
+            .where(
+              eq(schema.eventTagsXEventInstances.eventInstanceId, instance.id),
+            );
+          expect(rows.map((row) => row.id).sort()).toEqual([...tagIds].sort());
+        }
+      };
+      await check();
+      await recreateFutureInstances(
+        db,
+        { ...series, dayOfWeek: "tuesday" },
+        "2026-04-01",
+      );
+      await check();
     });
   });
 
@@ -774,6 +862,52 @@ describe("Cascade Service", () => {
         expect(joinRows.length).toBe(1);
         expect(joinRows[0]!.eventTypeId).toBe(eventType2.id);
       }
+    });
+
+    it("should replace and clear future instance tags", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const firstTag = await createTestEventTag();
+      const secondTag = await createTestEventTag();
+      const series = await createTestSeries(ao.id, null, {
+        eventTagIds: [firstTag.id],
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+      });
+      await createEventInstancesForSeries(db, series, 4, "2026-04-01");
+      await updateFutureInstances(
+        db,
+        { ...series, eventTagIds: [secondTag.id] },
+        "2026-04-01",
+      );
+      const instances = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      for (const instance of instances) {
+        const rows = await db
+          .select()
+          .from(schema.eventTagsXEventInstances)
+          .where(
+            eq(schema.eventTagsXEventInstances.eventInstanceId, instance.id),
+          );
+        expect(rows.map((row) => row.eventTagId)).toEqual([secondTag.id]);
+      }
+      await updateFutureInstances(
+        db,
+        { ...series, eventTagIds: [] },
+        "2026-04-01",
+      );
+      const remaining = await db
+        .select()
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          inArray(
+            schema.eventTagsXEventInstances.eventInstanceId,
+            instances.map((i) => i.id),
+          ),
+        );
+      expect(remaining).toEqual([]);
     });
 
     it("should return 0 when there are no future instances", async () => {

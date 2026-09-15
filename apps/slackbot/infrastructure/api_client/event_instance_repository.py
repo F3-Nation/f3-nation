@@ -165,8 +165,7 @@ def _build_crupdate_payload(
         "eventTypeId": event_type_id,
         "seriesException": series_exception,
     }
-    if event_tag_id is not None:
-        payload["eventTagId"] = event_tag_id
+    payload["eventTagId"] = event_tag_id
     if description is not None:
         payload["description"] = description
     if location_id is not None:

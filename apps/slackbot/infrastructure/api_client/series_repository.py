@@ -21,8 +21,7 @@ API field notes:
   - Response from POST /v1/event (crupdate) returns ``orgId`` directly.
   - Response from GET /v1/event (list) returns ``parents`` (list of {parentId, parentName})
     for the AO and ``regions`` for the region.
-  - Neither the list nor single-by-ID endpoint returns event tag IDs.
-    ``SeriesData.event_tag_ids`` will always be ``[]`` when parsed from the API.
+  - Event responses include ``eventTagIds`` for pre-populating edits.
 """
 
 from __future__ import annotations
@@ -80,7 +79,7 @@ def _parse_series(raw: dict) -> SeriesData:
         index_within_interval=raw.get("indexWithinInterval", raw.get("index_within_interval")),
         meta=raw.get("meta"),
         event_type_ids=event_type_ids,
-        event_tag_ids=[],  # API does not return event tag IDs for events
+        event_tag_ids=raw.get("eventTagIds", raw.get("event_tag_ids", [])) or [],
     )
 
 
@@ -139,7 +138,9 @@ def _build_crupdate_payload(
         payload["indexWithinInterval"] = index_within_interval
     if meta:
         payload["meta"] = meta
-    if event_tag_ids:
+    # Updates must send [] so the API can distinguish clearing tags from an
+    # omitted optional field.  Preserve the historical omission for creates.
+    if event_tag_ids or series_id is not None:
         payload["eventTagIds"] = event_tag_ids
     return payload
 

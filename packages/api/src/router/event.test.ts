@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, inArray, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -42,6 +42,7 @@ describe("Event Router", () => {
   // Track created entities for cleanup
   const createdEventIds: number[] = [];
   const createdEventTypeIds: number[] = [];
+  const createdEventTagIds: number[] = [];
   const createdLocationIds: number[] = [];
   const createdOrgIds: number[] = [];
 
@@ -69,6 +70,21 @@ describe("Event Router", () => {
       for (const eventTypeId of createdEventTypeIds.reverse()) {
         try {
           await cleanup.eventType(eventTypeId);
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+      for (const eventTagId of createdEventTagIds.reverse()) {
+        try {
+          await db
+            .delete(schema.eventTagsXEvents)
+            .where(eq(schema.eventTagsXEvents.eventTagId, eventTagId));
+          await db
+            .delete(schema.eventTagsXEventInstances)
+            .where(eq(schema.eventTagsXEventInstances.eventTagId, eventTagId));
+          await db
+            .delete(schema.eventTags)
+            .where(eq(schema.eventTags.id, eventTagId));
         } catch {
           // Ignore errors during cleanup
         }
@@ -162,6 +178,15 @@ describe("Event Router", () => {
       createdEventTypeIds.push(eventType.id);
     }
     return eventType;
+  };
+
+  const createTestEventTag = async () => {
+    const [eventTag] = await db
+      .insert(schema.eventTags)
+      .values({ name: `Test Event Tag ${uniqueId()}`, isActive: true })
+      .returning();
+    if (eventTag) createdEventTagIds.push(eventTag.id);
+    return eventTag;
   };
 
   describe("all", () => {
@@ -956,6 +981,127 @@ describe("Event Router", () => {
       }
     });
 
+    it("should persist event tags and expose them in event reads", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const tags = [await createTestEventTag(), await createTestEventTag()];
+      const eventType = await createTestEventType();
+      if (!tags[0] || !tags[1] || !eventType) return;
+      const tagIds = [tags[0].id, tags[1].id];
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+      const client = createTestClient();
+      const created = await client.event.crupdate({
+        name: `Tagged Series ${uniqueId()}`,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate: "2026-01-01",
+        endDate: "2026-03-31",
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        eventTagIds: tagIds,
+        email: null,
+      });
+      if (!created.event) return;
+      createdEventIds.push(created.event.id);
+      const detail = await client.event.byId({ id: created.event.id });
+      expect(detail.event?.eventTagIds.sort()).toEqual(tagIds.sort());
+      const list = await client.event.all({
+        aoIds: [ao.id],
+        pageIndex: 0,
+        pageSize: 100,
+      });
+      expect(
+        list.events
+          .find((event) => event.id === created.event!.id)
+          ?.eventTagIds.sort(),
+      ).toEqual(tagIds.sort());
+    });
+
+    it("should carry existing event tags onto instances when starting a series", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const tag = await createTestEventTag();
+      if (!tag) return;
+      const eventType = await createTestEventType();
+      if (!eventType) return;
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Converted Tagged Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: null,
+          startDate: nextFutureMonday(1),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+      await db.insert(schema.eventTagsXEvents).values({
+        eventId: event.id,
+        eventTagId: tag.id,
+      });
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+      const result = await createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      expect(result.event?.id).toBe(event.id);
+      const instances = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, event.id));
+      expect(instances.length).toBeGreaterThan(0);
+
+      const tags = await db
+        .select({ eventTagId: schema.eventTagsXEventInstances.eventTagId })
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          inArray(
+            schema.eventTagsXEventInstances.eventInstanceId,
+            instances.map((instance) => instance.id),
+          ),
+        );
+      expect(tags).toHaveLength(instances.length);
+      expect(tags.every(({ eventTagId }) => eventTagId === tag.id)).toBe(true);
+    });
+
     it("should require all mandatory fields", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -1474,7 +1620,6 @@ describe("Event Router", () => {
 
         if (!seriesEvent) return;
         createdEventIds.push(seriesEvent.id);
-
         // Create some instances
         const [instance1] = await db
           .insert(schema.eventInstances)
@@ -1554,6 +1699,9 @@ describe("Event Router", () => {
         const eventType = await createTestEventType();
         if (!eventType) return;
 
+        const eventTag = await createTestEventTag();
+        if (!eventTag) return;
+
         // Use dynamic dates so the series is always active relative to today
         const seriesStartDate = nextFutureMonday(1);
         const seriesEndDate = nextFutureMonday(12);
@@ -1580,6 +1728,10 @@ describe("Event Router", () => {
 
         if (!seriesEvent) return;
         createdEventIds.push(seriesEvent.id);
+        await db.insert(schema.eventTagsXEvents).values({
+          eventId: seriesEvent.id,
+          eventTagId: eventTag.id,
+        });
 
         // Create initial instance on Monday
         const [instance1] = await db
@@ -1646,6 +1798,27 @@ describe("Event Router", () => {
           .where(eq(schema.eventInstances.seriesId, seriesEvent.id));
 
         expect(newInstances.length).toBeGreaterThan(0);
+        const recreatedInstanceIds = newInstances.map(
+          (instance) => instance.id,
+        );
+        const recreatedTags = await db
+          .select()
+          .from(schema.eventTagsXEventInstances)
+          .where(
+            inArray(
+              schema.eventTagsXEventInstances.eventInstanceId,
+              recreatedInstanceIds,
+            ),
+          );
+        expect(
+          recreatedTags.every((tag) => tag.eventTagId === eventTag.id),
+        ).toBe(true);
+        expect(recreatedTags).toHaveLength(recreatedInstanceIds.length);
+        for (const instanceId of recreatedInstanceIds) {
+          expect(
+            recreatedTags.filter((tag) => tag.eventInstanceId === instanceId),
+          ).toHaveLength(1);
+        }
       });
 
       it("should create weekly instances when recurrencePattern is null (defaults to weekly)", async () => {
