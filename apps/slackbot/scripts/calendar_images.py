@@ -453,9 +453,7 @@ def generate_calendar_images(force: bool = False):
 
                             if group_by_option == "ao":
                                 df.loc[:, "AO\nLocation"] = (
-                                    df["ao_name"]
-                                    .str.cat(df["ao_description"], sep="\n", na_rep="")
-                                    .str.rstrip("\n")
+                                    df["ao_name"].str.cat(df["ao_description"], sep="\n", na_rep="").str.rstrip("\n")
                                 )
                                 row_key_col = "AO\nLocation"
                                 value_col = "label"
