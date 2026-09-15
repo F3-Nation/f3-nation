@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { schema } from "@acme/db";
+import { eq, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -297,6 +297,226 @@ describe("Org Chart Router", () => {
       await expect(
         client.orgChart.byId({ orgId: 999999999 }),
       ).rejects.toThrow();
+    });
+  });
+
+  describe("aos", () => {
+    it("returns matching active AOs with their region and busiest location", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const sector = await createOrg({
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      const area = sector
+        ? await createOrg({ orgType: "area", parentId: sector.id })
+        : null;
+      const region = area
+        ? await createOrg({ orgType: "region", parentId: area.id })
+        : null;
+      const ao = region
+        ? await createOrg({ orgType: "ao", parentId: region.id })
+        : null;
+      if (!region || !ao) {
+        return;
+      }
+
+      const location = await createLocation(region.id);
+      if (!location) {
+        return;
+      }
+      await createEvent({ orgId: ao.id, locationId: location.id });
+
+      const client = createTestClient();
+      // ao.name is unique (contains a uniqueId), so it matches only this AO.
+      const result = await client.orgChart.aos({ searchTerm: ao.name });
+
+      const hit = result.aos.find((a) => a.id === ao.id);
+      expect(hit).toBeDefined();
+      if (!hit) {
+        throw new Error("Expected the AO in search results");
+      }
+      expect(hit.regionId).toBe(region.id);
+      expect(hit.locationId).toBe(location.id);
+      expect(hit.eventCount).toBe(1);
+    });
+
+    it("prefers the busiest location when an AO has events at multiple locations", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const sector = await createOrg({
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      const area = sector
+        ? await createOrg({ orgType: "area", parentId: sector.id })
+        : null;
+      const region = area
+        ? await createOrg({ orgType: "region", parentId: area.id })
+        : null;
+      const ao = region
+        ? await createOrg({ orgType: "ao", parentId: region.id })
+        : null;
+      if (!region || !ao) {
+        return;
+      }
+
+      const quietLocation = await createLocation(region.id);
+      const busyLocation = await createLocation(region.id);
+      if (!quietLocation || !busyLocation) {
+        return;
+      }
+
+      await createEvent({ orgId: ao.id, locationId: quietLocation.id });
+      await createEvent({ orgId: ao.id, locationId: busyLocation.id });
+      await createEvent({ orgId: ao.id, locationId: busyLocation.id });
+
+      const client = createTestClient();
+      const result = await client.orgChart.aos({ searchTerm: ao.name });
+
+      const hit = result.aos.find((a) => a.id === ao.id);
+      expect(hit).toBeDefined();
+      expect(hit?.locationId).toBe(busyLocation.id);
+      expect(hit?.eventCount).toBe(2);
+    });
+
+    it("excludes AOs with no active events and rejects short queries", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const sector = await createOrg({
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      const area = sector
+        ? await createOrg({ orgType: "area", parentId: sector.id })
+        : null;
+      const region = area
+        ? await createOrg({ orgType: "region", parentId: area.id })
+        : null;
+      const ao = region
+        ? await createOrg({ orgType: "ao", parentId: region.id })
+        : null;
+      if (!ao) {
+        return;
+      }
+
+      const client = createTestClient();
+      // No events created for this AO → it must not appear.
+      const result = await client.orgChart.aos({ searchTerm: ao.name });
+      expect(result.aos.find((a) => a.id === ao.id)).toBeUndefined();
+
+      await expect(client.orgChart.aos({ searchTerm: "a" })).rejects.toThrow();
+    });
+  });
+
+  describe("byLocation", () => {
+    it("throws when the location is missing or inactive", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+      await expect(
+        client.orgChart.byLocation({ locationId: 999999999 }),
+      ).rejects.toThrow();
+    });
+
+    it("returns an empty aos array for a location with no active AO events", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      if (!region) {
+        return;
+      }
+      const location = await createLocation(region.id);
+      if (!location) {
+        return;
+      }
+
+      const client = createTestClient();
+      const result = await client.orgChart.byLocation({
+        locationId: location.id,
+      });
+
+      expect(result.locationId).toBe(location.id);
+      expect(result.aos).toEqual([]);
+    });
+
+    it("groups leadership positions by org for AOs at the location", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+      });
+      const ao = region
+        ? await createOrg({ orgType: "ao", parentId: region.id })
+        : null;
+      if (!region || !ao) {
+        return;
+      }
+      const location = await createLocation(region.id);
+      if (!location) {
+        return;
+      }
+      await createEvent({ orgId: ao.id, locationId: location.id });
+
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-${uniqueId()}@example.com`,
+          f3Name: "Test Leader",
+        })
+        .returning();
+      const [position] = await db
+        .insert(schema.positions)
+        .values({
+          name: `Test Position ${uniqueId()}`,
+          orgId: ao.id,
+          isActive: true,
+        })
+        .returning();
+      if (!user || !position) {
+        throw new Error("Failed to create user/position fixtures");
+      }
+      await db.insert(schema.positionsXOrgsXUsers).values({
+        positionId: position.id,
+        orgId: ao.id,
+        userId: user.id,
+      });
+
+      try {
+        const client = createTestClient();
+        const result = await client.orgChart.byLocation({
+          locationId: location.id,
+        });
+
+        const hit = result.aos.find((a) => a.id === ao.id);
+        expect(hit).toBeDefined();
+        expect(hit?.positions).toHaveLength(1);
+        expect(hit?.positions[0]?.userId).toBe(user.id);
+        expect(hit?.positions[0]?.title).toBe(position.name);
+      } finally {
+        await db
+          .delete(schema.positionsXOrgsXUsers)
+          .where(eq(schema.positionsXOrgsXUsers.positionId, position.id));
+        await db
+          .delete(schema.positions)
+          .where(eq(schema.positions.id, position.id));
+        await cleanup.user(user.id);
+      }
     });
   });
 });
