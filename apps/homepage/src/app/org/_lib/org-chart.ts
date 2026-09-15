@@ -40,6 +40,11 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
   childrenByParent: Map<number, Org[]>;
   pointsById: Map<number, Point[]>;
   metricsById: Map<number, OrgMetrics>;
+  /** Per-org location entries with IDs — used to render map pins. */
+  orgLocationsById: Map<
+    number,
+    { locationId: number; lat: number; lng: number }[]
+  >;
 } {
   const orgById = new Map<number, Org>();
 
@@ -69,20 +74,22 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
     const orgType = normalizeOrgType(item.orgType);
     if (!orgType) continue;
 
-    const parentId = item.hierarchy[0]?.[0] ?? null;
+    // Remove unknown tiers before linking parents so recognized descendants
+    // stay attached to their nearest recognized ancestor in an older bundle.
+    const hierarchy = item.hierarchy.flatMap(([id, name, rawType]) => {
+      const ancestorType = normalizeOrgType(rawType);
+      return ancestorType ? [{ id, name, orgType: ancestorType }] : [];
+    });
+    const parentId = hierarchy[0]?.id ?? null;
     ensureOrg(item.orgId, orgType, item.name, parentId);
 
-    // Walk the hierarchy array; each entry carries its own type — use it.
-    for (let i = 0; i < item.hierarchy.length; i++) {
-      const entry = item.hierarchy[i];
-      if (!entry) continue;
-      const [ancestorId, ancestorName, ancestorTypeRaw] = entry;
-      const ancestorType = normalizeOrgType(ancestorTypeRaw);
-      if (!ancestorType) continue; // skip, don't guess
-
-      const nextEntry = item.hierarchy[i + 1];
-      const ancestorParentId = nextEntry?.[0] ?? null;
-      ensureOrg(ancestorId, ancestorType, ancestorName, ancestorParentId);
+    for (const [i, ancestor] of hierarchy.entries()) {
+      ensureOrg(
+        ancestor.id,
+        ancestor.orgType,
+        ancestor.name,
+        hierarchy[i + 1]?.id ?? null,
+      );
     }
   }
 
@@ -96,6 +103,10 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
 
   const pointsById = new Map<number, Point[]>();
   const metricsById = new Map<number, OrgMetrics>();
+  const orgLocationsById = new Map<
+    number,
+    { locationId: number; lat: number; lng: number }[]
+  >();
 
   for (const item of items) {
     const points: Point[] = item.activeLocations.map((loc) => ({
@@ -104,18 +115,42 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
     }));
     if (points.length > 0) pointsById.set(item.orgId, points);
 
+    const locations = item.activeLocations.map((loc) => ({
+      locationId: loc.locationId,
+      lat: loc.latitude,
+      lng: loc.longitude,
+    }));
+    if (locations.length > 0) orgLocationsById.set(item.orgId, locations);
+
+    // Metrics merge co-located records so an AO with events at multiple
+    // records sharing coordinates isn't counted more than once (the API
+    // returns distinct locationIds for pin rendering, not for counting).
+    const byCoord = new Map<string, { events: number; aos: number }>();
+    for (const loc of item.activeLocations) {
+      const key = `${loc.latitude},${loc.longitude}`;
+      const merged = byCoord.get(key) ?? { events: 0, aos: 0 };
+      merged.events += loc.eventCount;
+      merged.aos = Math.max(merged.aos, loc.aoCount);
+      byCoord.set(key, merged);
+    }
     let events = 0;
     let aos = 0;
-    for (const loc of item.activeLocations) {
-      events += loc.eventCount;
-      aos += loc.aoCount;
+    for (const merged of byCoord.values()) {
+      events += merged.events;
+      aos += merged.aos;
     }
     metricsById.set(item.orgId, {
       events,
       aos,
-      locations: item.activeLocations.length,
+      locations: byCoord.size,
     });
   }
 
-  return { orgById, childrenByParent, pointsById, metricsById };
+  return {
+    orgById,
+    childrenByParent,
+    pointsById,
+    metricsById,
+    orgLocationsById,
+  };
 }

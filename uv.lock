@@ -637,6 +637,7 @@ dependencies = [
 dev = [
     { name = "debugpy" },
     { name = "mypy" },
+    { name = "pandas" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -674,6 +675,7 @@ requires-dist = [
 dev = [
     { name = "debugpy", specifier = ">=1.8.17,<2.0.0" },
     { name = "mypy", specifier = ">=2.3.1,<2.4.0" },
+    { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
     { name = "pytest", specifier = ">=9.1.1,<9.2.0" },
     { name = "ruff", specifier = ">=0.14.0,<1.0.0" },
 ]
