@@ -34,14 +34,20 @@ def source():
     c.execute("CREATE TABLE pg.public.attendance_x_attendance_types(attendance_id INTEGER, attendance_type_id INTEGER)")
     c.executemany(
         "INSERT INTO pg.public.orgs VALUES (?, ?, ?, ?)",
-        [(1, None, "Sector", "sector"), (2, 1, "Area", "area"), (3, 2, "Region", "region"), (4, 3, "AO", "ao")],
+        [
+            (1, None, "Sector", "sector"),
+            (2, 1, "Territory", "territory"),
+            (3, 2, "Area", "area"),
+            (4, 3, "Region", "region"),
+            (5, 4, "AO", "ao"),
+        ],
     )
     c.executemany(
         "INSERT INTO pg.public.event_instances VALUES (?, ?, true, 10, 2, ?, ?, ?, NULL, true, false)",
         [
-            (1, 4, "{}", "Workout", "2026-01-01"),
-            (2, 4, "{}", "No plans", "2026-01-02"),
-            (3, 4, "{}", "Ghosts", "2026-01-03"),
+            (1, 5, "{}", "Workout", "2026-01-01"),
+            (2, 5, "{}", "No plans", "2026-01-02"),
+            (3, 5, "{}", "Ghosts", "2026-01-03"),
         ],
     )
     c.executemany("INSERT INTO pg.public.event_instances_x_event_types VALUES (?, ?)", [(1, 1), (1, 2)])
@@ -94,6 +100,8 @@ def test_events_contract_and_materialization(tmp_path: Path):
         "region_name",
         "area_org_id",
         "area_name",
+        "territory_org_id",
+        "territory_name",
         "sector_org_id",
         "sector_name",
         "first_f_ind",
@@ -104,13 +112,32 @@ def test_events_contract_and_materialization(tmp_path: Path):
         "attendance",
     ]
     row = c.execute("SELECT * FROM read_parquet(?) WHERE event_id = 1", [str(out)]).fetchone()
-    assert row[1:17] == (1, date(2026, 1, 1), "Workout", 10, 2, 4, "AO", 3, "Region", 2, "Area", 1, "Sector", 1, 0, 1)
-    assert row[17] == [
+    assert row[1:19] == (
+        1,
+        date(2026, 1, 1),
+        "Workout",
+        10,
+        2,
+        5,
+        "AO",
+        4,
+        "Region",
+        3,
+        "Area",
+        2,
+        "Territory",
+        1,
+        "Sector",
+        1,
+        0,
+        1,
+    )
+    assert row[19] == [
         {"id": 2, "name": "Bible", "description": "Study", "event_category": "third_f"},
         {"id": 1, "name": "Run", "description": "Running", "event_category": "first_f"},
     ]
-    assert row[18] == [{"id": 7, "name": "Morning", "description": "Morning workout"}]
-    assert row[19] == [
+    assert row[20] == [{"id": 7, "name": "Morning", "description": "Morning workout"}]
+    assert row[21] == [
         {
             "user_id": 1,
             "f3_name": "Alpha",
@@ -150,12 +177,30 @@ def test_malformed_exclusion_flag_is_strict():
         c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"])
 
 
-def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
+def test_events_resolve_tiers_beyond_six_and_keep_direct_area_territory_nullable():
     c = source()
-    c.execute("INSERT INTO pg.public.orgs VALUES (5, 2, 'Region Two', 'region'), (6, 5, 'AO Two', 'ao')")
+    c.execute("UPDATE pg.public.orgs SET parent_id = 6 WHERE id = 5")
+    c.execute("INSERT INTO pg.public.orgs VALUES (6, 4, 'Intermediate', 'division')")
+    c.execute("INSERT INTO pg.public.orgs VALUES (7, 1, 'Direct Area', 'area')")
+    c.execute("INSERT INTO pg.public.orgs VALUES (8, 7, 'Direct Region', 'region')")
+    c.execute("INSERT INTO pg.public.orgs VALUES (9, 8, 'Direct AO', 'ao')")
     c.execute(
         "INSERT INTO pg.public.event_instances VALUES "
-        "(4, 6, true, 3, 1, '{}', 'Later', '2026-01-04', NULL, true, false)"
+        "(4, 9, true, 3, 1, '{}', 'Direct', '2026-01-04', NULL, true, false)"
+    )
+    rows = c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"]).fetchall()
+    deep = next(row for row in rows if row[1] == 1)
+    assert deep[14:16] == (1, "Sector")
+    direct = next(row for row in rows if row[1] == 4)
+    assert direct[10:16] == (7, "Direct Area", None, None, 1, "Sector")
+
+
+def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
+    c = source()
+    c.execute("INSERT INTO pg.public.orgs VALUES (9, 3, 'Region Two', 'region'), (10, 9, 'AO Two', 'ao')")
+    c.execute(
+        "INSERT INTO pg.public.event_instances VALUES "
+        "(4, 10, true, 3, 1, '{}', 'Later', '2026-01-04', NULL, true, false)"
     )
     root = tmp_path / "events"
     artifacts = materialize(c, root, MATERIALIZATION_REGISTRY["pv_events"], "2026-01-05T00:00:00Z", "2026-01-05")
