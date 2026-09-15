@@ -3,7 +3,19 @@ import React from "react";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { SearchBox } from "./search-box";
-import type { Org } from "../_lib/types";
+import type { Org, OrgType } from "../_lib/types";
+import type * as OrgHierarchy from "@acme/shared/app/org-hierarchy";
+
+vi.mock("@acme/shared/app/org-hierarchy", async (importOriginal) => {
+  const actual = await importOriginal<typeof OrgHierarchy>();
+  return {
+    ...actual,
+    orgTypeDisplay: {
+      ...actual.orgTypeDisplay,
+      territory: { ...actual.orgTypeDisplay.area, pluralLabel: "Territories" },
+    },
+  };
+});
 
 // Stub the debounced AO hook so these tests stay synchronous: it returns a
 // canned AO only for queries containing "boot", a simulated fetch failure for
@@ -52,9 +64,53 @@ afterEach(() => {
 });
 
 describe("SearchBox", () => {
+  it.each([
+    {
+      layers: ["region", "area", "sector"],
+      placeholder: "Sectors, Areas, Regions, AOs…",
+    },
+    { layers: ["region", "sector"], placeholder: "Sectors, Regions, AOs…" },
+    { layers: [], placeholder: "AOs…" },
+    // Model the metadata and layer list of a future bundle with territory support.
+    {
+      layers: ["region", "area", "territory", "sector"],
+      placeholder: "Sectors, Territories, Areas, Regions, AOs…",
+    },
+  ])(
+    "labels the available layers as $placeholder",
+    ({ layers, placeholder }) => {
+      render(
+        <SearchBox
+          presentLayers={layers as OrgType[]}
+          getResults={getResults}
+          onSelect={vi.fn()}
+          onSelectAo={vi.fn()}
+        />,
+      );
+      expect(screen.getByRole("searchbox").getAttribute("placeholder")).toBe(
+        placeholder,
+      );
+    },
+  );
+
+  it("updates the placeholder when the available layers change", () => {
+    const props = { getResults, onSelect: vi.fn(), onSelectAo: vi.fn() };
+    const layers = Object.freeze(["region", "area", "sector"] as const);
+    const { rerender } = render(
+      <SearchBox {...props} presentLayers={layers} />,
+    );
+
+    rerender(<SearchBox {...props} presentLayers={["region"]} />);
+
+    expect(screen.getByRole("searchbox").getAttribute("placeholder")).toBe(
+      "Regions, AOs…",
+    );
+  });
+
   it("opens the result list and renders matches as the query changes", () => {
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={vi.fn()}
         onSelectAo={vi.fn()}
@@ -71,6 +127,7 @@ describe("SearchBox", () => {
   it("shows the no-match state for a nonempty query with no hits", () => {
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={vi.fn()}
         onSelectAo={vi.fn()}
@@ -86,6 +143,7 @@ describe("SearchBox", () => {
     const onSelect = vi.fn();
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={onSelect}
         onSelectAo={vi.fn()}
@@ -107,6 +165,7 @@ describe("SearchBox", () => {
     const onSelect = vi.fn();
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={onSelect}
         onSelectAo={vi.fn()}
@@ -124,6 +183,7 @@ describe("SearchBox", () => {
   it("closes the list on Escape", () => {
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={vi.fn()}
         onSelectAo={vi.fn()}
@@ -140,6 +200,7 @@ describe("SearchBox", () => {
   it("clears results and closes when the query is emptied", () => {
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={vi.fn()}
         onSelectAo={vi.fn()}
@@ -156,6 +217,7 @@ describe("SearchBox", () => {
   it("does not reopen a stale partial-query list after select then refocus", () => {
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={vi.fn()}
         onSelectAo={vi.fn()}
@@ -180,6 +242,7 @@ describe("SearchBox", () => {
     const onSelectAo = vi.fn(() => true);
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={vi.fn()}
         onSelectAo={onSelectAo}
@@ -202,6 +265,7 @@ describe("SearchBox", () => {
     const onSelectAo = vi.fn(() => true);
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={vi.fn()}
         onSelectAo={onSelectAo}
@@ -217,6 +281,7 @@ describe("SearchBox", () => {
     const onSelectAo = vi.fn(() => false);
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={vi.fn()}
         onSelectAo={onSelectAo}
@@ -232,6 +297,7 @@ describe("SearchBox", () => {
   it("shows a search-unavailable message when the AO search fails", () => {
     render(
       <SearchBox
+        presentLayers={["region", "area", "sector"]}
         getResults={getResults}
         onSelect={vi.fn()}
         onSelectAo={vi.fn()}
