@@ -63,8 +63,9 @@ describe("readOrgIdFromUrl", () => {
 
 describe("writeUrlState", () => {
   it("omits level param when sector (default)", () => {
-    // jsdom doesn't have a real replaceState, but we can check it doesn't throw
-    expect(() => writeUrlState("sector", null)).not.toThrow();
+    setSearch("?level=regions&org=42");
+    writeUrlState("sector", null);
+    expect(window.location.search).toBe("");
   });
 
   it("writes plural level param for non-sector levels", () => {

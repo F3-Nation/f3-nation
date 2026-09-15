@@ -74,20 +74,22 @@ export function buildOrgHierarchy(items: OrgChartItem[]): {
     const orgType = normalizeOrgType(item.orgType);
     if (!orgType) continue;
 
-    const parentId = item.hierarchy[0]?.[0] ?? null;
+    // Remove unknown tiers before linking parents so recognized descendants
+    // stay attached to their nearest recognized ancestor in an older bundle.
+    const hierarchy = item.hierarchy.flatMap(([id, name, rawType]) => {
+      const ancestorType = normalizeOrgType(rawType);
+      return ancestorType ? [{ id, name, orgType: ancestorType }] : [];
+    });
+    const parentId = hierarchy[0]?.id ?? null;
     ensureOrg(item.orgId, orgType, item.name, parentId);
 
-    // Walk the hierarchy array; each entry carries its own type — use it.
-    for (let i = 0; i < item.hierarchy.length; i++) {
-      const entry = item.hierarchy[i];
-      if (!entry) continue;
-      const [ancestorId, ancestorName, ancestorTypeRaw] = entry;
-      const ancestorType = normalizeOrgType(ancestorTypeRaw);
-      if (!ancestorType) continue; // skip, don't guess
-
-      const nextEntry = item.hierarchy[i + 1];
-      const ancestorParentId = nextEntry?.[0] ?? null;
-      ensureOrg(ancestorId, ancestorType, ancestorName, ancestorParentId);
+    for (const [i, ancestor] of hierarchy.entries()) {
+      ensureOrg(
+        ancestor.id,
+        ancestor.orgType,
+        ancestor.name,
+        hierarchy[i + 1]?.id ?? null,
+      );
     }
   }
 

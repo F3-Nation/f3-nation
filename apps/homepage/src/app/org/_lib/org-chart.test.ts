@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import type { OrgChartItem } from "./types";
 import {
+  getDescendants,
+  getLevelOrgs,
+  getOrgPath,
+  nextNavigableLevel,
+} from "./navigation";
+import {
   LAYER_TYPES,
   normalizeOrgType,
   orgTypeRank,
@@ -144,6 +150,146 @@ describe("buildOrgHierarchy", () => {
     const { orgById } = buildOrgHierarchy(items);
     expect(orgById.has(5)).toBe(true);
     expect(orgById.has(999)).toBe(false);
+    expect(orgById.get(5)?.parentId).toBeNull();
+  });
+
+  it.each(["area", "region"] as const)(
+    "relinks an area to its sector when an unknown territory appears in the %s item",
+    (itemType) => {
+      // Simulate an API tier that this bundle's OrgType does not yet know.
+      const ancestors: OrgChartItem["hierarchy"] = [
+        [3, "Territory", "territory" as OrgChartItem["orgType"]],
+        [2, "Sector", "sector"],
+        [1, "Nation", "nation"],
+      ];
+      const item =
+        itemType === "area"
+          ? makeItem(4, "area", ancestors)
+          : makeItem(5, "region", [[4, "Area", "area"], ...ancestors]);
+      const { orgById, childrenByParent } = buildOrgHierarchy([item]);
+
+      expect(orgById.has(3)).toBe(false);
+      expect(orgById.get(4)?.parentId).toBe(2);
+      expect(childrenByParent.get(2)?.map((org) => org.id)).toEqual([4]);
+      for (const org of orgById.values()) {
+        if (org.parentId !== null) {
+          expect(orgById.has(org.parentId)).toBe(true);
+        }
+      }
+    },
+  );
+
+  it("skips consecutive unknown ancestors", () => {
+    const { orgById } = buildOrgHierarchy([
+      makeItem(4, "area", [
+        [3, "Territory", "territory" as OrgChartItem["orgType"]],
+        [6, "District", "district" as OrgChartItem["orgType"]],
+        [2, "Sector", "sector"],
+        [1, "Nation", "nation"],
+      ]),
+    ]);
+
+    expect(orgById.get(4)?.parentId).toBe(2);
+    expect(orgById.has(3)).toBe(false);
+    expect(orgById.has(6)).toBe(false);
+  });
+
+  it("reduces an unknown six-tier tree to the existing five-tier hierarchy", () => {
+    const fiveTierChain: OrgChartItem["hierarchy"] = [
+      [5, "Region", "region"],
+      [4, "Area", "area"],
+      [2, "Sector", "sector"],
+      [1, "Nation", "nation"],
+    ];
+    const sixTierChain: OrgChartItem["hierarchy"] = [
+      ...fiveTierChain.slice(0, 2),
+      [3, "Territory", "territory" as OrgChartItem["orgType"]],
+      ...fiveTierChain.slice(2),
+    ];
+    const result = buildOrgHierarchy([makeItem(6, "ao", sixTierChain)]);
+
+    expect(result).toEqual(
+      buildOrgHierarchy([makeItem(6, "ao", fiveTierChain)]),
+    );
+    expect(getOrgPath(6, result.orgById).map((org) => org.id)).toEqual([
+      1, 2, 4, 5, 6,
+    ]);
+    expect(getDescendants(2, result.childrenByParent, new Map())).toEqual([
+      2, 4, 5, 6,
+    ]);
+  });
+
+  it("fills a missing parent from a later item's recognized ancestors", () => {
+    const { orgById, childrenByParent } = buildOrgHierarchy([
+      makeItem(4, "area"),
+      makeItem(5, "region", [
+        [4, "Area", "area"],
+        [3, "Territory", "territory" as OrgChartItem["orgType"]],
+        [2, "Sector", "sector"],
+        [1, "Nation", "nation"],
+      ]),
+    ]);
+
+    expect(orgById.get(4)).toMatchObject({ name: "Area", parentId: 2 });
+    expect(childrenByParent.get(2)?.map((org) => org.id)).toEqual([4]);
+    expect(childrenByParent.get(4)?.map((org) => org.id)).toEqual([5]);
+    expect(orgById.has(3)).toBe(false);
+  });
+
+  it("preserves navigation and region location data after skipping an unknown tier", () => {
+    const result = buildOrgHierarchy([
+      makeItem(
+        5,
+        "region",
+        [
+          [4, "Area", "area"],
+          [3, "Territory", "territory" as OrgChartItem["orgType"]],
+          [2, "Sector", "sector"],
+          [1, "Nation", "nation"],
+        ],
+        [
+          {
+            locationId: 10,
+            latitude: 35,
+            longitude: -80,
+            eventCount: 2,
+            aoCount: 1,
+          },
+        ],
+      ),
+    ]);
+    const { orgById, childrenByParent } = result;
+    const sector = orgById.get(2)!;
+    const area = orgById.get(4)!;
+    const cache = new Map<number, number[]>();
+
+    expect(nextNavigableLevel(sector, orgById, childrenByParent, cache)).toBe(
+      "area",
+    );
+    expect(
+      getLevelOrgs("area", [sector], orgById, childrenByParent, cache),
+    ).toEqual([area]);
+    expect(nextNavigableLevel(area, orgById, childrenByParent, cache)).toBe(
+      "region",
+    );
+    expect(
+      getLevelOrgs(
+        "region",
+        [sector, area],
+        orgById,
+        childrenByParent,
+        cache,
+      ).map((org) => org.id),
+    ).toEqual([5]);
+    expect(result.orgLocationsById.get(5)).toEqual([
+      { locationId: 10, lat: 35, lng: -80 },
+    ]);
+    expect(result.pointsById.get(5)).toEqual([{ lat: 35, lng: -80 }]);
+    expect(result.metricsById.get(5)).toEqual({
+      events: 2,
+      aos: 1,
+      locations: 1,
+    });
   });
 
   it("builds childrenByParent correctly", () => {
