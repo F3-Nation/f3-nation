@@ -817,7 +817,12 @@ export const mapLocationRouter = os.router({
     )
     .handler(async ({ context: ctx }) => {
       const regions = await ctx.db
-        .select()
+        .select({
+          id: schema.orgs.id,
+          name: schema.orgs.name,
+          logoUrl: schema.orgs.logoUrl,
+          website: schema.orgs.website,
+        })
         .from(schema.orgs)
         .where(eq(schema.orgs.orgType, "region"));
       return {
