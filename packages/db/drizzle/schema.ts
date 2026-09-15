@@ -1570,3 +1570,106 @@ export const betterAuthOauthClientAssertion = authProviderSchema.table(
     expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
   },
 );
+
+// ─── codex schema ────────────────────────────────────────────────────────────
+// Mirrors the standalone Codex database's `codex` schema exactly as captured by
+// pg_dump. Known rough edges (missing primary keys, camelCase columns on
+// `tags`, the `timestamp`/`references` reserved-word names) are reproduced
+// faithfully and left for a follow-up cleanup PR. Note: `serial` names the
+// references sequence `references_id_seq` rather than the dump's
+// `codex_references_id_seq` — a cosmetic difference for that later cleanup.
+
+export const codexSchema = pgSchema("codex");
+
+export const codexAdmins = codexSchema.table("admins", {
+  id: serial("id").primaryKey().notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow().notNull(),
+});
+
+// `references` is a reserved word; kept as the literal table name from the dump.
+export const codexReferences = codexSchema.table("references", {
+  id: serial("id").notNull(),
+  fromEntryId: integer("from_entry_id").notNull(),
+  toEntryId: integer("to_entry_id").notNull(),
+  context: varchar("context"),
+  created: timestamp("created", { mode: "string" }).notNull(),
+  updated: timestamp("updated", { mode: "string" }).notNull(),
+});
+
+export const codexEntries = codexSchema.table("entries", {
+  id: text("id").notNull(),
+  title: text("title").notNull(),
+  definition: text("definition").notNull(),
+  type: text("type").notNull(),
+  aliases: jsonb("aliases"),
+  videoLink: text("video_link"),
+  createdAt: timestamp("created_at", { mode: "string" }).notNull(),
+  updatedAt: timestamp("updated_at", { mode: "string" }).notNull(),
+  mentionedEntries: jsonb("mentioned_entries"),
+});
+
+export const codexEntryReferences = codexSchema.table(
+  "entry_references",
+  {
+    id: integer("id").notNull(),
+    sourceEntryId: text("source_entry_id").notNull(),
+    targetEntryId: text("target_entry_id").notNull(),
+    context: text("context"),
+    createdAt: timestamp("created_at", { mode: "string" }),
+    updatedAt: timestamp("updated_at", { mode: "string" }),
+  },
+  (t) => [
+    unique("unique_source_target").on(t.sourceEntryId, t.targetEntryId),
+    index("idx_entry_references_target_entry_id").on(t.targetEntryId),
+  ],
+);
+
+export const codexEntryTags = codexSchema.table(
+  "entry_tags",
+  {
+    entryId: text("entry_id").notNull(),
+    tagId: text("tag_id").notNull(),
+  },
+  (t) => [
+    unique("unique_entry_tag").on(t.entryId, t.tagId),
+    index("idx_entry_tags_tag_id").on(t.tagId),
+  ],
+);
+
+export const codexTags = codexSchema.table("tags", {
+  name: text("name").notNull(),
+  id: varchar("id"),
+  createdAt: timestamp("createdAt", {
+    withTimezone: true,
+    mode: "string",
+  }).defaultNow(),
+  updatedAt: timestamp("updatedAt", {
+    withTimezone: true,
+    mode: "string",
+  }).defaultNow(),
+});
+
+export const codexUserSubmissions = codexSchema.table("user_submissions", {
+  id: integer("id").generatedAlwaysAsIdentity(),
+  submissionType: text("submission_type").notNull(),
+  data: jsonb("data").notNull(),
+  submitterName: text("submitter_name"),
+  submitterEmail: text("submitter_email"),
+  status: text("status").notNull(),
+  timestamp: timestamp("timestamp", {
+    withTimezone: true,
+    mode: "string",
+  }).notNull(),
+  createdAt: timestamp("created_at", {
+    withTimezone: true,
+    mode: "string",
+  }).notNull(),
+  updatedAt: timestamp("updated_at", {
+    withTimezone: true,
+    mode: "string",
+  }).notNull(),
+  rejectionReason: text("rejection_reason"),
+  adminNotes: text("admin_notes"),
+});

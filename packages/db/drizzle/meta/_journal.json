@@ -162,6 +162,13 @@
       "when": 1787938666439,
       "tag": "0022_common_meggan",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789144521813,
+      "tag": "0023_sudden_mastermind",
+      "breakpoints": true
     }
   ]
 }
