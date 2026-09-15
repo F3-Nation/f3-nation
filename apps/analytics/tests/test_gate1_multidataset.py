@@ -92,7 +92,7 @@ class FakePublisher:
         if self.fail_commit:
             raise CatalogConflictError({"stage": "catalog_update", "run_id": run_id})
         self.catalog_committed = True
-        return type("Catalog", (), {"generation": 2})()
+        return type("Catalog", (), {"generation": 2, "metageneration": 2})()
 
 
 def _status(definition, run_id="run"):
@@ -176,7 +176,7 @@ def test_dataset_manifest_publish_times_are_captured_before_release_commit(monke
         return _status(definition, _run)
 
     monkeypatch.setattr(pipeline_module, "publish", fake_publish)
-    run(
+    statuses = run(
         _settings(tmp_path),
         object(),
         connection_factory=lambda _settings: type("C", (), {"close": lambda self: None})(),
@@ -186,6 +186,7 @@ def test_dataset_manifest_publish_times_are_captured_before_release_commit(monke
     assert [value for _, value in published_times] == [
         f"1970-01-01T00:00:{second:02d}+00:00" for second in range(11, 20)
     ]
+    assert {status.catalog_metageneration for status in statuses.values()} == {"2"}
 
 
 @pytest.mark.parametrize("signal", (KeyboardInterrupt, SystemExit))
