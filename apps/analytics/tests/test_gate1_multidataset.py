@@ -88,7 +88,7 @@ class FakePublisher:
         self.release_uploaded = True
         return ObjectMetadata(f"gs://bucket/releases/{run_id}/release.json", "9", 10, "crc")
 
-    def commit_catalog(self, run_id, release, source_order):
+    def commit_catalog(self, run_id, release, source_order, emit=None):
         if self.fail_commit:
             raise CatalogConflictError({"stage": "catalog_update", "run_id": run_id})
         self.catalog_committed = True
