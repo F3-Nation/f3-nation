@@ -4,7 +4,7 @@ ADRs record significant, hard-to-reverse technical decisions with their
 context and rejected alternatives, so future maintainers can understand _why_
 the system is built the way it is before changing it.
 
-Boundary: feature behavior specs belong in `/specs`; decisions about **how
+Boundary: feature behavior specs belong in [`docs/specs`](../specs); decisions about **how
 the system is built** belong here.
 
 Conventions:

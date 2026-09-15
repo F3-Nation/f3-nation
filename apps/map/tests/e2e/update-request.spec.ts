@@ -7,7 +7,7 @@ import { TestId } from "@acme/shared/common/enums";
  * Map edit mode & update requests — BLOCKING tier.
  *
  * Browser tests for the update-request flow specified in
- * specs/map-update-request-flow.md. Each test maps 1:1 to an acceptance
+ * docs/specs/map-update-request-flow.md. Each test maps 1:1 to an acceptance
  * criterion:
  *
  *   - "AC-1 anonymous edit toggle opens the sign-in modal"

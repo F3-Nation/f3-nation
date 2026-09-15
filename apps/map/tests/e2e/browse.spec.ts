@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
  * Blocking-tier E2E suite for anonymous map browse & search.
  *
  * Implements the critical-path test cases from
- * specs/map-browse-and-search.md §8 (the blocking tier):
+ * docs/specs/map-browse-and-search.md §8 (the blocking tier):
  *
  *   1. Anonymous map load, no auth wall            (AC-1, AC-2)
  *   2. Search a known workout → select → navigate  (AC-5)
@@ -27,7 +27,7 @@ import { expect, test } from "@playwright/test";
  * a stable signal (e.g. reading clipboard + map-store state) to be
  * deterministic. Add it once a reliable centering assertion exists.
  *
- * specs/map-update-request-flow.md (edit mode / update requests) is covered
+ * docs/specs/map-update-request-flow.md (edit mode / update requests) is covered
  * by rbac.spec.ts in this directory, which exercises the RBAC-critical paths
  * directly against the api preview (E2E_API_URL) using seeded API keys.
  */

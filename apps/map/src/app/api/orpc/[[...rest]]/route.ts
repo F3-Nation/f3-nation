@@ -9,7 +9,7 @@ import { logWarn } from "~/lib/logging";
 const PROXY_PREFIX = "/api/orpc";
 
 // Paths that don't require the caller's own session token — see
-// specs/map-browse-and-search.md AC-1. Some (like ping) are truly open;
+// docs/specs/map-browse-and-search.md AC-1. Some (like ping) are truly open;
 // others (like eventType.all) still need a token upstream, just not the
 // user's — so the map's own API key is attached to all of them. Every entry
 // here must be safe for a fully anonymous caller: no PII, and no data scoped
@@ -27,7 +27,7 @@ export const MAP_KEY_PATHS = new Set([
   "/v1/eventType/all",
 ]);
 
-// Signed-in-only paths the map calls — see specs/map-update-request-flow.md
+// Signed-in-only paths the map calls — see docs/specs/map-update-request-flow.md
 // AC-1. Forwarded with the caller's own cookie, never the map API key, so an
 // anonymous caller gets UNAUTHORIZED from the API itself. This also covers
 // edit-mode-only reads (org/location/event lookups used by the update forms)

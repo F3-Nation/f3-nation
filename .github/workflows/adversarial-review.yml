@@ -114,7 +114,7 @@ jobs:
           : > "${REVIEW_DIR}/specs.md"
           if gh pr diff "${PR}" -R "${GITHUB_REPOSITORY}" --name-only \
               | grep -qE '^(apps/map|apps/admin|packages/api)/'; then
-            for SPEC in specs/*.md; do
+            for SPEC in docs/specs/*.md; do
               [ -e "$SPEC" ] || continue
               {
                 echo "=== ${SPEC} ==="
@@ -122,7 +122,7 @@ jobs:
                 echo
               } >> "${REVIEW_DIR}/specs.md"
             done
-            [ -s "${REVIEW_DIR}/specs.md" ] || echo "No specs/*.md present at this commit."
+            [ -s "${REVIEW_DIR}/specs.md" ] || echo "No docs/specs/*.md present at this commit."
           fi
 
           # Existing CodeRabbit review comments (bodies only, may be empty) —

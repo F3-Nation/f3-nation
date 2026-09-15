@@ -2,7 +2,7 @@
 
 This manual bootstrap guide is not live-state validation. Platform, security,
 database, analytics, and consumer owners must approve the exact grants and
-production release. See the [ETL spec](../specs/analytics-parquet-etl.md) for
+production release. See the [ETL spec](specs/analytics-parquet-etl.md) for
 the data contract and [ETL operations](ANALYTICS_ETL_OPERATIONS.md) for
 recovery. Use [GCP_APP_SETUP](GCP_APP_SETUP.md) for generic Cloud Run setup and
 shared WIF guidance; do not recreate its shared WIF pool/provider.

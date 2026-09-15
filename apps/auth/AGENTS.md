@@ -86,7 +86,7 @@ From the monorepo root:
 pnpm dev   # turbo dev --parallel -- starts apps/auth, apps/api, apps/me, apps/map, ...
 ```
 
-Or run only what you need (see `docs/LOCAL_DEV_SETUP.md` for the minimum stack per app). For an apps/me QA run you need at least `apps/auth` (`:3004`) and `apps/api` (`:3001`) plus a Postgres DB.
+Or run only what you need (see `docs/LOCAL_DEV_DOCKER.md` for the minimum stack per app). For an apps/me QA run you need at least `apps/auth` (`:3004`) and `apps/api` (`:3001`) plus a Postgres DB.
 
 Make sure the Docker services are up, since Mailpit is the only place sent mail can be read:
 
@@ -232,7 +232,7 @@ The one thing to be careful about is the inverse of the old risk: a local `.env`
 ## See also
 
 - [`apps/auth/README.md`](README.md) -- full architecture, deployment, OAuth client registration
-- [`docs/LOCAL_DEV_SETUP.md`](../../docs/LOCAL_DEV_SETUP.md) -- monorepo-wide environment and credential bootstrap
+- [`docs/LOCAL_DEV_DOCKER.md`](../../docs/LOCAL_DEV_DOCKER.md) -- monorepo-wide environment and credential bootstrap
 - [`docs/LOCAL_DEV_DOCKER.md`](../../docs/LOCAL_DEV_DOCKER.md) -- bringing up Mailpit and the rest of the Docker stack
 - [`apps/auth/src/lib/email-mfa.ts`](src/lib/email-mfa.ts) -- the source of truth for what gets emailed
 - [`apps/auth/src/lib/auth-options.ts`](src/lib/auth-options.ts) -- the NextAuth Credentials provider that the callback flow drives

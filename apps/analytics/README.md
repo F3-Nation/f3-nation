@@ -79,7 +79,7 @@ path, and Google Application Default Credentials (ADC) with the narrowly
 scoped nonprod permissions. An empty extension placeholder is not valid. Never
 use production targets or put credentials in logs or source control.
 
-Read [`docs/LOCAL_DEV_SETUP.md`](../../docs/LOCAL_DEV_SETUP.md) first. Use the
+Read [`docs/LOCAL_DEV_DOCKER.md`](../../docs/LOCAL_DEV_DOCKER.md) first. Use the
 operator-approved database connectivity. Cloud Run continues to use its Unix
 socket. Sign in for
 both ordinary gcloud access and ADC, then request the approved least-privilege
