@@ -348,9 +348,9 @@ These tell each Next.js app where to find the other apps. Don't change these unl
 
 ### Google Maps
 
-| Variable            | Value      | Meaning                                                                                                      |
-| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
-| `F3_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key, read by the map and admin apps. They start without it, but the map is blank. |
+| Variable            | Value      | Meaning                                                                                                                                                                                                |
+| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `F3_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key, read by the map and admin apps. They start with the `.env.example` placeholder instead of a real key (the map is just blank), but an empty value fails env validation. |
 
 ---
 
