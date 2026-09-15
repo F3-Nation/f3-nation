@@ -167,8 +167,20 @@ describe("buildOrgHierarchy", () => {
         "region",
         [],
         [
-          { latitude: 35.5, longitude: -80.5, eventCount: 2, aoCount: 1 },
-          { latitude: 36.0, longitude: -81.0, eventCount: 1, aoCount: 1 },
+          {
+            locationId: 101,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 2,
+            aoCount: 1,
+          },
+          {
+            locationId: 102,
+            latitude: 36.0,
+            longitude: -81.0,
+            eventCount: 1,
+            aoCount: 1,
+          },
         ],
       ),
     ];
@@ -183,8 +195,20 @@ describe("buildOrgHierarchy", () => {
         "region",
         [],
         [
-          { latitude: 35.5, longitude: -80.5, eventCount: 5, aoCount: 2 },
-          { latitude: 36.0, longitude: -81.0, eventCount: 3, aoCount: 1 },
+          {
+            locationId: 201,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 5,
+            aoCount: 2,
+          },
+          {
+            locationId: 202,
+            latitude: 36.0,
+            longitude: -81.0,
+            eventCount: 3,
+            aoCount: 1,
+          },
         ],
       ),
     ];
@@ -193,6 +217,38 @@ describe("buildOrgHierarchy", () => {
     expect(m?.events).toBe(8);
     expect(m?.aos).toBe(3);
     expect(m?.locations).toBe(2);
+  });
+
+  it("merges co-located records so AOs are not double-counted", () => {
+    const items = [
+      makeItem(
+        10,
+        "region",
+        [],
+        [
+          {
+            locationId: 401,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 3,
+            aoCount: 2,
+          },
+          {
+            locationId: 402,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 4,
+            aoCount: 2,
+          },
+        ],
+      ),
+    ];
+    const { metricsById } = buildOrgHierarchy(items);
+    const m = metricsById.get(10);
+    // Same coordinate: events sum (3+4), AOs take the max (2, not 4), one place.
+    expect(m?.events).toBe(7);
+    expect(m?.aos).toBe(2);
+    expect(m?.locations).toBe(1);
   });
 
   it("does not add pointsById entry when activeLocations is empty", () => {
@@ -208,13 +264,29 @@ describe("buildOrgHierarchy", () => {
         "region",
         [],
         [
-          { latitude: 35.5, longitude: -80.5, eventCount: 1, aoCount: 1 },
-          { latitude: 35.5, longitude: -80.5, eventCount: 2, aoCount: 1 },
+          {
+            locationId: 301,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 1,
+            aoCount: 1,
+          },
+          {
+            locationId: 302,
+            latitude: 35.5,
+            longitude: -80.5,
+            eventCount: 2,
+            aoCount: 1,
+          },
         ],
       ),
     ];
-    const { pointsById } = buildOrgHierarchy(items);
+    const { pointsById, orgLocationsById } = buildOrgHierarchy(items);
     // Both locations contribute points even when sharing coordinates
     expect(pointsById.get(10)).toHaveLength(2);
+    // Distinct location IDs are preserved so each renders its own map pin
+    expect(orgLocationsById.get(10)?.map((l) => l.locationId)).toEqual([
+      301, 302,
+    ]);
   });
 });

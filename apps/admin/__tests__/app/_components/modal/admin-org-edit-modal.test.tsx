@@ -795,7 +795,9 @@ describe("configuration-only sixth organization type", () => {
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).toBeNull();
     actualStore.closeModal(undefined, "all");
-  });
+    // Heaviest test in the suite (full render + navigation + validation
+    // round-trip + save); the default 5s timeout flakes under parallel CI load.
+  }, 15_000);
 
   it.each(["unknown-org", "arbitrary-path", "constructor", "__proto__"])(
     "rejects %s before issuing organization queries",
