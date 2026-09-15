@@ -285,7 +285,7 @@ removed earlier, before isolation validation.
 
 1. **Preflight PAX Vault.** With the catalog absent, verify that the consumer
    can use its approved legacy pointer compatibility path and that it can read
-   a generation-pinned release manifest and its eight dataset manifests. Record
+   a generation-pinned release manifest and its nine dataset manifests. Record
    the compatibility result and the external owner.
 2. **Install replacement bindings.** Add the release-data get/create binding and the
    exact-catalog get/create/update binding above. Do not grant update or delete
@@ -303,7 +303,7 @@ removed earlier, before isolation validation.
    complete nonprod batch, and verify that `release.json` is written last and
    catalog CAS succeeds.
 6. **Validate the pinned chain.** Independently read catalog metadata, fetch
-   the pinned release manifest generation, and verify exactly eight pinned
+   the pinned release manifest generation, and verify exactly nine pinned
    dataset manifests and their object generations/checksums.
 7. **Switch PAX Vault.** After consumer-owner approval, switch discovery to
    catalog metadata and monitor one complete consumption cycle.
@@ -359,7 +359,7 @@ gcloud run jobs execute "$NONPROD_JOB" --project="$PROJECT_ID" --region="$REGION
       fixed targets, immutable digest promotion, and GitHub protection.
 - [ ] Deployers cannot read runtime data; runtime SAs are distinct and scoped
       to their own SQL, secrets, and GCS prefix; Scheduler is invoker-only.
-- [ ] Database owner approved read-only roles, measured all eight nonprod query
+- [ ] Database owner approved read-only roles, measured all nine nonprod query
       plans/read volume, and demonstrated write/DDL/admin denial.
 - [ ] Secret versions/access and bucket prefix/no-delete conditions are checked
       without exposing values; consumer access and alerts are approved.

@@ -26,11 +26,14 @@ class Blob:
     objects: dict[str, Stored] = {}
     next_generation = 0
     conflict = False
+    reload_after_patch_failure = False
 
     def __init__(self, name: str):
         self.name = name
 
     def reload(self):
+        if self.__dict__.pop("fail_reload_once", False):
+            raise NotFound("reload confirmation unavailable")
         if self.name not in self.objects:
             raise NotFound("missing")
 
@@ -74,6 +77,8 @@ class Blob:
             raise PreconditionFailed("metageneration conflict")
         current.metadata = self.__dict__.pop("pending_metadata", current.metadata)
         current.metageneration += 1
+        if type(self).reload_after_patch_failure:
+            self.__dict__["fail_reload_once"] = True
 
 
 class Bucket:
@@ -229,3 +234,139 @@ def test_catalog_advance_is_metadata_cas_and_conflict_is_safe(tmp_path):
     assert catalog.metageneration == 4
     with pytest.raises(CatalogConflictError):
         publisher.commit_catalog("batch-3", release, "s")
+
+
+def test_catalog_commit_reports_unconfirmed_reload_without_failing(tmp_path):
+    Blob.objects.clear()
+    Blob.reload_after_patch_failure = True
+    try:
+        publisher = _seed_catalog(
+            tmp_path,
+            {
+                "current_release": "batch-old",
+                "current_release_manifest_uri": "gs://bucket/old-release.json",
+                "current_release_manifest_generation": "1",
+                "current_source_order": "old-source",
+                "high_water_source_order": "old-source",
+            },
+        )
+        statuses = {
+            item.name: publish(publisher, "batch-unconfirmed", artifacts(tmp_path, item.name), "s", "p", item)
+            for item in MATERIALIZATION_REGISTRY.values()
+        }
+        release = publisher.upload_release_manifest(
+            "batch-unconfirmed", build_release_manifest("batch-unconfirmed", statuses, "p", "s")
+        )
+        events: list[tuple[str, dict[str, object]]] = []
+        catalog = publisher.commit_catalog(
+            "batch-unconfirmed", release, "s", emit=lambda event, context: events.append((event, context))
+        )
+    finally:
+        Blob.reload_after_patch_failure = False
+
+    assert catalog.metadata["current_release"] == "batch-unconfirmed"
+    assert events == [
+        (
+            "analytics.etl.catalog_committed_unconfirmed",
+            {
+                "run_id": "batch-unconfirmed",
+                "catalog_metageneration": "2",
+                "confirmation": "unconfirmed",
+            },
+        )
+    ]
+
+
+def _seed_catalog(tmp_path: Path, metadata: dict[str, str]) -> GcsPublisher:
+    Blob.objects.clear()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    stored = Stored()
+    stored.metadata = metadata
+    Blob.objects["parquets/catalog.json"] = stored
+    return publisher
+
+
+def _rollback_metadata() -> dict[str, str]:
+    return {
+        "previous_release": "batch-previous",
+        "previous_release_manifest_uri": "gs://bucket/parquets/releases/batch-previous/release.json",
+        "previous_release_manifest_generation": "11",
+        "previous_source_order": "source-previous",
+        "current_release": "batch-current",
+        "current_release_manifest_uri": "gs://bucket/parquets/releases/batch-current/release.json",
+        "current_release_manifest_generation": "12",
+        "current_source_order": "source-current",
+        "high_water_source_order": "source-current",
+    }
+
+
+@pytest.mark.parametrize(
+    ("argument", "value"),
+    [
+        ("release_manifest_uri", "gs://bucket/parquets/releases/other/release.json"),
+        ("release_manifest_generation", "999"),
+        ("release_id", "batch-other"),
+    ],
+)
+def test_rollback_rejects_wrong_previous_release_argument(tmp_path, argument, value):
+    publisher = _seed_catalog(tmp_path, _rollback_metadata())
+    rollback = {
+        "release_manifest_uri": "gs://bucket/parquets/releases/batch-previous/release.json",
+        "release_manifest_generation": "11",
+        "release_id": "batch-previous",
+    }
+    rollback[argument] = value
+    with pytest.raises(ValueError):
+        publisher.rollback_catalog("1", **rollback)
+
+
+def test_rollback_rejects_catalog_without_previous_release(tmp_path):
+    publisher = _seed_catalog(tmp_path, {"current_release": "batch-current"})
+    with pytest.raises(ValueError, match="no retained previous release"):
+        publisher.rollback_catalog(
+            "1",
+            release_manifest_uri="gs://bucket/parquets/releases/batch-previous/release.json",
+            release_manifest_generation="11",
+            release_id="batch-previous",
+        )
+
+
+def test_rollback_rejects_stale_metageneration(tmp_path):
+    publisher = _seed_catalog(tmp_path, _rollback_metadata())
+    with pytest.raises(CatalogConflictError):
+        publisher.rollback_catalog(
+            "2",
+            release_manifest_uri="gs://bucket/parquets/releases/batch-previous/release.json",
+            release_manifest_generation="11",
+            release_id="batch-previous",
+        )
+
+
+def test_rollback_reports_unconfirmed_reload_without_failing(tmp_path):
+    Blob.reload_after_patch_failure = True
+    try:
+        publisher = _seed_catalog(tmp_path, _rollback_metadata())
+        events: list[tuple[str, dict[str, object]]] = []
+        catalog = publisher.rollback_catalog(
+            "1",
+            release_manifest_uri="gs://bucket/parquets/releases/batch-previous/release.json",
+            release_manifest_generation="11",
+            release_id="batch-previous",
+            emit=lambda event, context: events.append((event, context)),
+        )
+    finally:
+        Blob.reload_after_patch_failure = False
+
+    assert catalog.metadata["current_release"] == "batch-previous"
+    assert events == [
+        (
+            "analytics.etl.catalog_committed_unconfirmed",
+            {
+                "operation": "rollback",
+                "expected_metageneration": "1",
+                "catalog_metageneration": "2",
+                "release_manifest_generation": "11",
+                "confirmation": "unconfirmed",
+            },
+        )
+    ]

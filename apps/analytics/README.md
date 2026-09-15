@@ -1,7 +1,7 @@
 # Analytics region-roster ETL
 
 The analytics job reads PostgreSQL through DuckDB's read-only PostgreSQL
-attachment, writes Parquet, and publishes one immutable eight-dataset batch to
+attachment, writes Parquet, and publishes one immutable nine-dataset batch to
 GCS. Objects and dataset manifests live under
 `parquets/releases/<run-id>/<dataset>/`; `release.json` is written last as the
 commit record. A fixed `parquets/catalog.json` has immutable empty content and
@@ -17,13 +17,13 @@ never accepted as environment or CLI output targets.
 matching Cloud SQL Unix socket; local connectivity requires separate operator
 approval.
 
-Only the exact approved eight-dataset registry may publish or advance the
+Only the exact approved nine-dataset registry may publish or advance the
 global catalog; subset runs are rejected before source access. If a dataset or
 validation fails, no release or catalog metadata is committed. Reruns create a
 new immutable run; lifecycle policy cleans unreachable staged objects.
 
 Consumers read catalog metadata, retrieve the pinned release manifest
-generation, then consume exactly its eight pinned dataset manifests and listed
+generation, then consume exactly its nine pinned dataset manifests and listed
 object generations. Source order is the logical batch-start ordering value,
 not a database-wide snapshot; it is monotonic and stale runs fail safely. A human
 rollback may select the retained previous generation-pinned release through the

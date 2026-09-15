@@ -137,7 +137,12 @@ class GcsPublisher:
         return self.bucket.blob(f"{self.prefix}/catalog.json")
 
     def commit_catalog(
-        self, run_id: str, release: ObjectMetadata, source_order: str, previous_release: str | None = None
+        self,
+        run_id: str,
+        release: ObjectMetadata,
+        source_order: str,
+        previous_release: str | None = None,
+        emit: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> Any:
         blob = self._catalog()
         try:
@@ -194,19 +199,33 @@ class GcsPublisher:
             blob.metadata = metadata
             try:
                 blob.patch(if_metageneration_match=expected)
-                blob.reload()
-                return blob
             except (NotFound, PreconditionFailed) as error:
                 try:
                     blob.reload()
-                except Exception:
-                    raise CatalogConflictError({"stage": "catalog_update", "run_id": run_id}) from error
+                except (NotFound, PreconditionFailed) as reload_error:
+                    raise CatalogConflictError({"stage": "catalog_update", "run_id": run_id}) from reload_error
                 # A newer candidate may retry against the winner's actual CAS
                 # token. A stale candidate is rejected above on the next pass.
                 if attempt == 0:
                     continue
                 winner = dict(getattr(blob, "metadata", None) or {})
                 raise CatalogConflictError({"stage": "catalog_update", "run_id": run_id, "winner": winner}) from error
+            # The metadata patch is the commit point. Refreshing the blob is
+            # informational only; a transient expected storage failure here
+            # must not turn a committed update into a reported failure.
+            try:
+                blob.reload()
+            except (NotFound, PreconditionFailed):
+                if emit:
+                    emit(
+                        "analytics.etl.catalog_committed_unconfirmed",
+                        {
+                            "run_id": run_id,
+                            "catalog_metageneration": str(getattr(blob, "metageneration", "")),
+                            "confirmation": "unconfirmed",
+                        },
+                    )
+            return blob
 
     def rollback_catalog(
         self,
@@ -215,6 +234,7 @@ class GcsPublisher:
         release_manifest_uri: str,
         release_manifest_generation: str,
         release_id: str | None = None,
+        emit: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> Any:
         """CAS-select the retained previous release without replacing content.
 
@@ -259,12 +279,28 @@ class GcsPublisher:
         blob.metadata = metadata
         try:
             blob.patch(if_metageneration_match=int(expected_metageneration))
-            blob.reload()
-            return blob
         except (NotFound, PreconditionFailed) as error:
             raise CatalogConflictError(
                 {"stage": "catalog_rollback", "expected_metageneration": expected_metageneration}
             ) from error
+        # patch() is the rollback commit point. The reload only refreshes the
+        # informational response and is not allowed to make a committed
+        # rollback look unsuccessful when storage reports an expected conflict.
+        try:
+            blob.reload()
+        except (NotFound, PreconditionFailed):
+            if emit:
+                emit(
+                    "analytics.etl.catalog_committed_unconfirmed",
+                    {
+                        "operation": "rollback",
+                        "expected_metageneration": expected_metageneration,
+                        "catalog_metageneration": str(getattr(blob, "metageneration", "")),
+                        "release_manifest_generation": release_manifest_generation,
+                        "confirmation": "unconfirmed",
+                    },
+                )
+        return blob
 
 
 def build_manifest(

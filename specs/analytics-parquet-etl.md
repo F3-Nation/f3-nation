@@ -49,9 +49,9 @@ manually invoked. Scheduler and task retries are zero. Jobs use one task and
 parallelism, and a 60-minute timeout. Retention/lifecycle policy, not the
 publisher, removes unreachable staged releases.
 
-The default is all eight datasets in the order above. A subset may be used for
+The default is all nine datasets in the order above. A subset may be used for
 local export or diagnostics, but a publication run rejects any selection other
-than the exact approved eight-name registry set. Only the exact set may create
+than the exact approved nine-name registry set. Only the exact set may create
 the global release commit or advance the catalog.
 
 ## 3. Source and common publication contract
@@ -74,9 +74,9 @@ the global release commit or advance the catalog.
   equivalent integrity values, row/file/byte counts, schema version,
   logical batch-start source-order value, and publication timestamp. Any
   per-dataset read timestamp is descriptive and is not a database-wide snapshot.
-- After all eight datasets are durable and validated, the publisher writes
+- After all nine datasets are durable and validated, the publisher writes
   `parquets/releases/<run-id>/release.json` once, create-if-absent. It is the
-  immutable commit record containing the eight generation-pinned dataset
+  immutable commit record containing the nine generation-pinned dataset
   manifest references. It is written last. A catalog CAS or IAM failure may
   leave this immutable `release.json` present, but it remains unselected and
   invisible; catalog metadata alone determines consumer visibility.
@@ -95,7 +95,7 @@ the global release commit or advance the catalog.
   retains the high-water value, so an in-flight stale run cannot undo the
   rollback. A genuinely newer source order may advance afterward.
 - PAX Vault must read catalog metadata, retrieve the pinned `release.json`
-  generation, then consume exactly its eight pinned dataset manifests and the
+  generation, then consume exactly its nine pinned dataset manifests and the
   objects they list. PAX Vault compatibility must be deployed and verified
   before catalog activation; PAX Vault rollout is external and consumer-owner
   owned.

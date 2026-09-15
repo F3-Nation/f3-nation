@@ -125,7 +125,7 @@ def run(
         batch_published_at = clock().isoformat()
         release = build_release_manifest(run_id_value, results, batch_published_at, batch_source_order)
         release_object = publisher.upload_release_manifest(run_id_value, release)
-        catalog = publisher.commit_catalog(run_id_value, release_object, batch_source_order)
+        catalog = publisher.commit_catalog(run_id_value, release_object, batch_source_order, emit=emit)
         results = {
             name: PublicationStatus(
                 status.manifest,

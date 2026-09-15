@@ -35,7 +35,7 @@ do not access live cloud or database resources.
 A live local CLI run is separate and optional. It is not a sandbox: it reads
 the approved nonprod PostgreSQL database and publishes to
 `gs://f3-analytics-nonprod/parquets/releases/<run-id>/` only after the complete
-eight-dataset batch succeeds.
+nine-dataset batch succeeds.
 It requires explicit human approval,
 real read-only database credentials, access to
 `/cloudsql/f3data:us-central1:f3data-nonprod`, a real signed DuckDB 1.5.5
@@ -59,7 +59,7 @@ ANALYTICS_ENVIRONMENT=local \
 
 The local CLI runs the current checkout under the caller's ADC. It is not the
 deployed nonprod Cloud Run Job and does not use the Cloud Run runtime identity.
-Publication rejects subset selections: only the complete eight-dataset
+Publication rejects subset selections: only the complete nine-dataset
 registry can create `release.json` or advance the global catalog.
 To execute the deployed nonprod job, which publishes through its deployed
 immutable image and nonprod runtime identity, obtain the same explicit human
@@ -144,7 +144,7 @@ same zero-retry job settings.
 
 Every run stages a new immutable `parquets/releases/<run-id>/<dataset>/` tree.
 Dataset objects and manifests are staged uploads, not a published release: they
-are unreachable by consumers until `release.json` is written after all eight
+are unreachable by consumers until `release.json` is written after all nine
 datasets validate and the fixed catalog is successfully advanced by CAS. The
 release/catalog commit timestamp (`published_at`) is captured at that final
 commit boundary, not at batch start. A catalog CAS/IAM failure may leave an
@@ -154,7 +154,7 @@ rerun as a complete batch. Lifecycle policy cleans unreachable staged objects;
 operators and the publisher never delete them.
 
 PAX Vault reads `parquets/catalog.json` custom metadata, downloads the pinned
-`release.json` generation, then reads exactly its eight pinned dataset manifests
+`release.json` generation, then reads exactly its nine pinned dataset manifests
 and the object generations recorded there. Verify catalog schema, current/previous
 URI and generation, logical batch-start source order (not a database snapshot),
 high-water order, and metageneration. Catalog updates
@@ -189,7 +189,7 @@ production human gate. A URI/generation mismatch or CAS conflict fails without
 changing catalog metadata; do not retry with guessed values. After success,
 re-read catalog metadata, verify the selected URI and generation, unchanged
 high-water source order, incremented metageneration, and the complete pinned
-eight-dataset chain before allowing PAX Vault to consume it.
+nine-dataset chain before allowing PAX Vault to consume it.
 
 After a secret rotation, create a new Secret Manager version, verify the
 runtime identity can access it, run nonprod manually, then approve production;

@@ -61,6 +61,7 @@ def main() -> int:
                 args.catalog_metageneration,
                 release_manifest_uri=args.release_manifest_uri,
                 release_manifest_generation=args.release_manifest_generation,
+                emit=lambda event, context: logger.info(event, **context),
             )
             logger.info(
                 "analytics.etl.catalog_rollback_succeeded",
