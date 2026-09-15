@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.6.2](https://github.com/F3-Nation/f3-nation/compare/api@6.6.1...api@6.6.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* **api:** hardening and hono ([#996](https://github.com/F3-Nation/f3-nation/issues/996)) ([cee88ea](https://github.com/F3-Nation/f3-nation/commit/cee88ead78f9075b0a7318ce73476d526d848968))
+
 ## [6.6.1](https://github.com/F3-Nation/f3-nation/compare/api@6.6.0...api@6.6.1) (2026-09-11)
 
 

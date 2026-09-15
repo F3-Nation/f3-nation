@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.5.0...homepage@1.5.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **homepage:** updated ci build to allow me to put in env ([#994](https://github.com/F3-Nation/f3-nation/issues/994)) ([4441028](https://github.com/F3-Nation/f3-nation/commit/44410285df7235efa125e34803bdf6054bce56ec))
+
 ## [1.5.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.2...homepage@1.5.0) (2026-09-11)
 
 
