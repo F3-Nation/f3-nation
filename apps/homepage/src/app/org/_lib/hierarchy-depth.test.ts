@@ -32,7 +32,8 @@ vi.mock("@acme/shared/app/org-hierarchy", async (importOriginal) => {
         ...actual.orgTypeDisplay.area,
         label: "Territory",
         pluralLabel: "Territories",
-        routeSegment: "territories",
+        routeSegment: "admin-territories",
+        urlSegment: "territories",
       },
     },
   };

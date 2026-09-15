@@ -236,6 +236,30 @@ describe("buildOrgHierarchy", () => {
     expect(orgById.has(3)).toBe(false);
   });
 
+  it.each([false, true])(
+    "retains the first non-null parent across conflicting chains (reversed: %s)",
+    (reverse) => {
+      const items = [2, 7].map((sectorId, index) =>
+        makeItem(10 + index, "region", [
+          [4, "Area", "area"],
+          [3, "Territory", "territory" as OrgChartItem["orgType"]],
+          [sectorId, `Sector ${sectorId}`, "sector"],
+          [1, "Nation", "nation"],
+        ]),
+      );
+      if (reverse) items.reverse();
+      const { orgById, childrenByParent } = buildOrgHierarchy(items);
+      const retainedParent = reverse ? 7 : 2;
+      const otherParent = reverse ? 2 : 7;
+      expect(orgById.get(4)?.parentId).toBe(retainedParent);
+      expect(
+        childrenByParent.get(retainedParent)?.map((org) => org.id),
+      ).toEqual([4]);
+      expect(childrenByParent.get(otherParent)).toBeUndefined();
+      expect(orgById.has(3)).toBe(false);
+    },
+  );
+
   it("preserves navigation and region location data after skipping an unknown tier", () => {
     const result = buildOrgHierarchy([
       makeItem(

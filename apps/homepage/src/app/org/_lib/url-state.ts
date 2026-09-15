@@ -2,19 +2,21 @@ import type { OrgType } from "./types";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import { LAYER_TYPES, normalizeOrgType } from "./org-chart";
 
-/** Use shared route metadata for URL names, including irregular plurals. */
+/** Use stable public URL metadata for URL names, including irregular plurals. */
 function toPlural(t: OrgType): string {
-  return orgTypeDisplay[t].routeSegment;
+  return orgTypeDisplay[t].urlSegment;
 }
 
-/** Match navigable route segments first; also accept singular and legacy plural names. */
+/** Match navigable public URL names first; also accept singular and legacy plural names. */
 function fromPlural(s: string): OrgType | null {
   const namedLayer = LAYER_TYPES.find(
-    (type) => orgTypeDisplay[type].routeSegment === s.trim().toLowerCase(),
+    (type) => orgTypeDisplay[type].urlSegment === s.trim().toLowerCase(),
   );
   if (namedLayer) return namedLayer;
-  const singular = s.endsWith("s") ? s.slice(0, -1) : s;
-  return normalizeOrgType(singular) ?? normalizeOrgType(s);
+  const value = s.trim().toLowerCase();
+  const singular = value.endsWith("s") ? value.slice(0, -1) : value;
+  const normalized = normalizeOrgType(singular) ?? normalizeOrgType(value);
+  return normalized && LAYER_TYPES.includes(normalized) ? normalized : null;
 }
 
 export function readLevelFromUrl(): OrgType | null {
