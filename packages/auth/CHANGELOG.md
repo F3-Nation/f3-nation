@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.6](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.5...pkg-auth@0.2.6) (2026-09-15)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.6.2
+    * @acme/shared bumped to 0.3.1
+
 ## [0.2.5](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.4...pkg-auth@0.2.5) (2026-09-11)
 
 

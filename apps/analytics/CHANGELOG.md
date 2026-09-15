@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.3.1...analytics@0.4.0) (2026-09-15)
+
+
+### Features
+
+* **analytics:** territory implementation for analytics ([#991](https://github.com/F3-Nation/f3-nation/issues/991)) ([f8793f0](https://github.com/F3-Nation/f3-nation/commit/f8793f0a6a54790c073f68a395c50c669d555d56))
+
 ## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/analytics@0.3.0...analytics@0.3.1) (2026-09-11)
 
 
