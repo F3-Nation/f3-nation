@@ -1,15 +1,22 @@
 import type { OrgType } from "./types";
-import { normalizeOrgType } from "./org-chart";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import { LAYER_TYPES, normalizeOrgType } from "./org-chart";
 
-/** "sector" → "sectors" */
+/** Use stable public URL metadata for URL names, including irregular plurals. */
 function toPlural(t: OrgType): string {
-  return `${t}s`;
+  return orgTypeDisplay[t].urlSegment;
 }
 
-/** "sectors" → "sector", "sector" → "sector" (both accepted) */
+/** Match navigable public URL names first; also accept singular and legacy plural names. */
 function fromPlural(s: string): OrgType | null {
-  const singular = s.endsWith("s") ? s.slice(0, -1) : s;
-  return normalizeOrgType(singular) ?? normalizeOrgType(s);
+  const namedLayer = LAYER_TYPES.find(
+    (type) => orgTypeDisplay[type].urlSegment === s.trim().toLowerCase(),
+  );
+  if (namedLayer) return namedLayer;
+  const value = s.trim().toLowerCase();
+  const singular = value.endsWith("s") ? value.slice(0, -1) : value;
+  const normalized = normalizeOrgType(singular) ?? normalizeOrgType(value);
+  return normalized && LAYER_TYPES.includes(normalized) ? normalized : null;
 }
 
 export function readLevelFromUrl(): OrgType | null {
@@ -29,8 +36,10 @@ export function readOrgIdFromUrl(): number | null {
 
 export function writeUrlState(level: OrgType, orgId: number | null): void {
   const params = new URLSearchParams();
-  // Omit the param when at the default top-level (sectors)
-  if (level !== "sector") params.set("level", toPlural(level));
+  // Layers are ordered leaf → root; omit the configured broadest layer.
+  if (level !== LAYER_TYPES[LAYER_TYPES.length - 1]) {
+    params.set("level", toPlural(level));
+  }
   if (orgId != null) params.set("org", String(orgId));
   const qs = params.toString();
   window.history.replaceState(null, "", qs ? `?${qs}` : "./");
