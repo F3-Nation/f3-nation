@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.10.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.9.1...pkg-api@0.10.0) (2026-09-15)
+
+
+### Features
+
+* **homepage:** aos on org chart ([#997](https://github.com/F3-Nation/f3-nation/issues/997)) ([e4b36ca](https://github.com/F3-Nation/f3-nation/commit/e4b36ca629e3c7c5366468e2eae3720ad5ff28ec))
+
+
+### Bug Fixes
+
+* **api:** ordinal server-side parent-type validation in org.crupdate ([#1002](https://github.com/F3-Nation/f3-nation/issues/1002)) ([d4a6317](https://github.com/F3-Nation/f3-nation/commit/d4a6317b03b49abbbd61f1cfec96060e6ace7324))
+* **api:** parallelize profile relation queries ([#1016](https://github.com/F3-Nation/f3-nation/issues/1016)) ([24cbd11](https://github.com/F3-Nation/f3-nation/commit/24cbd11f5fc5403f2c3144a11b36cb50a16dd2e7))
+
+
+### Performance Improvements
+
+* **api:** project region map fields ([#1006](https://github.com/F3-Nation/f3-nation/issues/1006)) ([d52a642](https://github.com/F3-Nation/f3-nation/commit/d52a6425ab644b0ad6b3ce52dde49dad678f63d8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.6
+    * @acme/db bumped to 0.6.2
+    * @acme/shared bumped to 0.3.1
+    * @acme/validators bumped to 0.4.3
+
 ## [0.9.1](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.9.0...pkg-api@0.9.1) (2026-09-11)
 
 

@@ -1,5 +1,28 @@
 # Changelog
 
+## [6.7.0](https://github.com/F3-Nation/f3-nation/compare/api@6.6.2...api@6.7.0) (2026-09-15)
+
+
+### Features
+
+* **homepage:** aos on org chart ([#997](https://github.com/F3-Nation/f3-nation/issues/997)) ([e4b36ca](https://github.com/F3-Nation/f3-nation/commit/e4b36ca629e3c7c5366468e2eae3720ad5ff28ec))
+
+
+### Bug Fixes
+
+* **api:** ordinal server-side parent-type validation in org.crupdate ([#1002](https://github.com/F3-Nation/f3-nation/issues/1002)) ([d4a6317](https://github.com/F3-Nation/f3-nation/commit/d4a6317b03b49abbbd61f1cfec96060e6ace7324))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.10.0
+    * @acme/shared bumped to 0.3.1
+  * devDependencies
+    * @acme/auth bumped to 0.2.6
+    * @acme/db bumped to 0.6.2
+
 ## [6.6.2](https://github.com/F3-Nation/f3-nation/compare/api@6.6.1...api@6.6.2) (2026-09-12)
 
 

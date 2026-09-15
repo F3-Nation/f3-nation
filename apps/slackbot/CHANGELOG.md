@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.5.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.5.0...slackbot@2.5.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* **slackbot:** fixing calendar send script pandas error ([#990](https://github.com/F3-Nation/f3-nation/issues/990)) ([47bf01f](https://github.com/F3-Nation/f3-nation/commit/47bf01f9f55d38e1d356a132a7e9a9029abb9099))
+
 ## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.3...slackbot@2.5.0) (2026-09-11)
 
 
