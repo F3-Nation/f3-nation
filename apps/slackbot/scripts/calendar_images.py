@@ -69,6 +69,20 @@ def _normalize_label_series(series):
     return series.map(_normalize_label_value)
 
 
+def _normalize_event_time_value(value) -> str:
+    if value is None or type(value).__name__ in {"NAType", "NaTType"}:
+        return ""
+    if isinstance(value, Real) and not isinstance(value, bool):
+        if isnan(value):
+            return ""
+        return time_int_to_str(int(value))
+    return str(value)
+
+
+def _calendar_time_sort_key(value: str) -> str:
+    return "9999" if value == "" else value
+
+
 def _prepare_calendar_labels(df):
     q_name_missing = df["q_name"].isna()
     event_tag_mask = df["event_tag"].notnull()
@@ -77,14 +91,9 @@ def _prepare_calendar_labels(df):
         "q_name",
         "event_acronym",
         "event_tag",
-        "ao_name",
-        "ao_description",
-        "location_name",
-        "location_description",
-        "location_address_street",
     ):
         df.loc[:, label_column] = _normalize_label_series(df[label_column])
-    df.loc[:, "event_time"] = _normalize_label_series(df["start_time"])
+    df.loc[:, "event_time"] = df["start_time"].map(_normalize_event_time_value)
     df.loc[q_name_missing, "q_name"] = "OPEN!"
     df.loc[:, "q_name"] = df["q_name"].str.replace(r"\s\(([\s\S]*?\))", "", regex=True)
 
@@ -437,16 +446,16 @@ def generate_calendar_images(force: bool = False):
                             # convert start_date from date to string
                             df.loc[:, "event_date"] = pd.to_datetime(df["start_date"])
                             df.loc[:, "event_date_fmt"] = df["event_date"].dt.strftime("%Y/%m/%d")
-                            ao_description_mask = df["ao_description"].notnull()
                             _prepare_calendar_labels(df)
 
                             # Override label for closed events
                             df.loc[df["series_exception"] == Series_Exception.closed, "label"] = "CLOSED"
 
                             if group_by_option == "ao":
-                                df.loc[:, "AO\nLocation"] = df["ao_name"]  # + "\n" + df["ao_description"]
-                                df.loc[ao_description_mask, "AO\nLocation"] = (
-                                    df["ao_name"] + "\n" + df["ao_description"]
+                                df.loc[:, "AO\nLocation"] = (
+                                    df["ao_name"]
+                                    .str.cat(df["ao_description"], sep="\n", na_rep="")
+                                    .str.rstrip("\n")
                                 )
                                 row_key_col = "AO\nLocation"
                                 value_col = "label"
@@ -475,7 +484,14 @@ def generate_calendar_images(force: bool = False):
                             df.to_csv(f"debug_{region_name}_{week}.csv", index=False)
 
                             # Combine cells for days within the chosen grouping (AO vs location).
-                            df.sort_values([sort_key_col, "event_date", "event_time"], ignore_index=True, inplace=True)
+                            df.sort_values(
+                                [sort_key_col, "event_date", "event_time"],
+                                key=lambda column: (
+                                    column.map(_calendar_time_sort_key) if column.name == "event_time" else column
+                                ),
+                                ignore_index=True,
+                                inplace=True,
+                            )
                             prior_date = ""
                             prior_label = ""
                             prior_group_key = ""
