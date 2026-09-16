@@ -122,25 +122,34 @@ export const eventTypeRouter = {
         defaultPageSize: 10,
       });
 
-      const sortedColumns = input?.sorting?.map((sorting) => {
-        const direction = sorting.desc ? desc : asc;
-        switch (sorting.id) {
-          case "name":
-            return direction(schema.eventTypes.name);
-          case "description":
-            return direction(sql`NULLIF(${schema.eventTypes.description}, '')`);
-          case "eventCategory":
-            return direction(schema.eventTypes.eventCategory);
-          case "specificOrgName":
-            return direction(schema.orgs.name);
-          case "count":
-            return direction(count(schema.eventsXEventTypes.eventTypeId));
-          case "created":
-            return direction(schema.eventTypes.created);
-          default:
-            return direction(schema.eventTypes.id);
-        }
-      }) ?? [desc(schema.eventTypes.id)];
+      // asc(id) is appended as a final tiebreaker so event types sharing the
+      // same sort value (e.g. two regions' event types with the same name)
+      // still get a total order -- without one, offset pagination across
+      // separate requests (e.g. useFetchAllPages) can return the same row on
+      // two pages or skip one entirely.
+      const sortedColumns = (
+        input?.sorting?.map((sorting) => {
+          const direction = sorting.desc ? desc : asc;
+          switch (sorting.id) {
+            case "name":
+              return direction(schema.eventTypes.name);
+            case "description":
+              return direction(
+                sql`NULLIF(${schema.eventTypes.description}, '')`,
+              );
+            case "eventCategory":
+              return direction(schema.eventTypes.eventCategory);
+            case "specificOrgName":
+              return direction(schema.orgs.name);
+            case "count":
+              return direction(count(schema.eventsXEventTypes.eventTypeId));
+            case "created":
+              return direction(schema.eventTypes.created);
+            default:
+              return direction(schema.eventTypes.id);
+          }
+        }) ?? [desc(schema.eventTypes.id)]
+      ).concat(asc(schema.eventTypes.id));
 
       const select = {
         id: schema.eventTypes.id,
