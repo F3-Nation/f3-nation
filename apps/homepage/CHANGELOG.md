@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.6.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.5.1...homepage@1.6.0) (2026-09-16)
+
+
+### Features
+
+* **homepage:** aos on org chart ([#997](https://github.com/F3-Nation/f3-nation/issues/997)) ([e4b36ca](https://github.com/F3-Nation/f3-nation/commit/e4b36ca629e3c7c5366468e2eae3720ad5ff28ec))
+
+
+### Bug Fixes
+
+* **homepage:** preserve org navigation across unknown tiers ([#1019](https://github.com/F3-Nation/f3-nation/issues/1019)) ([b616b6b](https://github.com/F3-Nation/f3-nation/commit/b616b6bc2ca0ba3f1ac97874300b1e7713ab2d64))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.3.1
+    * @acme/ui bumped to 0.1.6
+
 ## [1.5.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.5.0...homepage@1.5.1) (2026-09-12)
 
 
