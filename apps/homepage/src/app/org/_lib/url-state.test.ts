@@ -1,6 +1,19 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import type * as OrgHierarchy from "@acme/shared/app/org-hierarchy";
 import { readLevelFromUrl, readOrgIdFromUrl, writeUrlState } from "./url-state";
+
+// An admin-only rename must not change public links.
+vi.mock("@acme/shared/app/org-hierarchy", async (importOriginal) => {
+  const actual = await importOriginal<typeof OrgHierarchy>();
+  return {
+    ...actual,
+    orgTypeDisplay: {
+      ...actual.orgTypeDisplay,
+      region: { ...actual.orgTypeDisplay.region, routeSegment: "org-regions" },
+    },
+  };
+});
 
 const originalReplaceState = window.history.replaceState.bind(window.history);
 
@@ -18,6 +31,24 @@ afterEach(() => {
 });
 
 describe("readLevelFromUrl", () => {
+  it.each(["ao", "aos", "nation", "nations", "the-nation"])(
+    "ignores non-navigable level %s",
+    (level) => {
+      setSearch(`?level=${level}`);
+      expect(readLevelFromUrl()).toBeNull();
+    },
+  );
+
+  it("keeps public links stable when an admin route changes", () => {
+    writeUrlState("region", 42);
+    expect(new URLSearchParams(window.location.search).get("level")).toBe(
+      "regions",
+    );
+    expect(readLevelFromUrl()).toBe("region");
+    setSearch("?level=org-regions");
+    expect(readLevelFromUrl()).toBeNull();
+  });
+
   it("returns null when no level param", () => {
     setSearch("");
     expect(readLevelFromUrl()).toBeNull();
@@ -63,8 +94,9 @@ describe("readOrgIdFromUrl", () => {
 
 describe("writeUrlState", () => {
   it("omits level param when sector (default)", () => {
-    // jsdom doesn't have a real replaceState, but we can check it doesn't throw
-    expect(() => writeUrlState("sector", null)).not.toThrow();
+    setSearch("?level=regions&org=42");
+    writeUrlState("sector", null);
+    expect(window.location.search).toBe("");
   });
 
   it("writes plural level param for non-sector levels", () => {

@@ -1,16 +1,18 @@
 import copy
 from logging import Logger
 
-from f3_data_models.models import SlackSpace
+from f3_data_models.models import F3versaryAnnouncementSetting, Org_x_SlackSpace, SlackSpace
 from f3_data_models.utils import get_session
 from slack_sdk.web import WebClient
-from sqlalchemy import cast, func, update
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert
 
 from utilities import constants
 from utilities.builders import update_submission_wait_view
+from utilities.constants import ALL_USERS_ARE_ADMINS
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import safe_get, update_local_region_records
+from utilities.database.special_queries import get_admin_users
+from utilities.helper_functions import get_user, safe_get
 from utilities.slack import actions, orm
 
 DEFAULT_LEAD_DAYS = 14
@@ -18,12 +20,78 @@ MIN_LEAD_DAYS = 0
 MAX_LEAD_DAYS = 30
 
 
-def _patch_f3versary_settings(team_id: str, values: dict) -> None:
-    """Atomically merge only this feature's keys into SlackSpace.settings."""
+def _is_authorized_region_admin(body: dict, client: WebClient, logger: Logger, region_record: SlackSettings) -> bool:
+    """Bind this settings action to the same region-admin context as Bot Management."""
+    if not isinstance(region_record.org_id, int) or region_record.org_id <= 0:
+        return False
+    if ALL_USERS_ARE_ADMINS:
+        return True
+
+    slack_user_id = safe_get(body, "user_id") or safe_get(body, "user", "id")
+    if not slack_user_id:
+        return False
+    slack_user = get_user(slack_user_id, region_record, client, logger)
+    return any(
+        user[0].id == slack_user.user_id for user in get_admin_users(region_record.org_id, region_record.team_id)
+    )
+
+
+def _resolve_setting_scope(session, region_record: SlackSettings) -> tuple[int, int] | None:
+    """Use the server-side region and verify its workspace link before any read or write."""
+    org_id = region_record.org_id
+    if not isinstance(org_id, int) or org_id <= 0 or not region_record.team_id:
+        return None
+
+    linked_space = (
+        session.query(SlackSpace.id)
+        .join(Org_x_SlackSpace, Org_x_SlackSpace.slack_space_id == SlackSpace.id)
+        .filter(SlackSpace.team_id == region_record.team_id, Org_x_SlackSpace.org_id == org_id)
+        .one_or_none()
+    )
+    return (linked_space[0], org_id) if linked_space else None
+
+
+def _load_f3versary_settings(region_record: SlackSettings) -> dict | None:
+    """Read the region-specific row, never the stale workspace settings cache."""
     with get_session() as session:
-        settings = func.coalesce(SlackSpace.settings, cast({}, JSONB)).op("||")(cast(values, JSONB))
-        session.execute(update(SlackSpace).where(SlackSpace.team_id == team_id).values(settings=settings))
+        scope = _resolve_setting_scope(session, region_record)
+        if scope is None:
+            return None
+        setting = (
+            session.query(F3versaryAnnouncementSetting)
+            .filter(
+                F3versaryAnnouncementSetting.slack_space_id == scope[0],
+                F3versaryAnnouncementSetting.org_id == scope[1],
+            )
+            .one_or_none()
+        )
+        return {
+            "enabled": bool(setting.enabled) if setting else False,
+            "channel": setting.channel if setting else None,
+            "lead_days": setting.lead_days if setting else DEFAULT_LEAD_DAYS,
+        }
+
+
+def _save_f3versary_settings(region_record: SlackSettings, enabled: bool, channel: str | None, lead_days: int) -> bool:
+    """Upsert one region's independent row without rewriting SlackSpace.settings."""
+    with get_session() as session:
+        scope = _resolve_setting_scope(session, region_record)
+        if scope is None:
+            return False
+
+        statement = insert(F3versaryAnnouncementSetting).values(
+            slack_space_id=scope[0], org_id=scope[1], enabled=enabled, channel=channel, lead_days=lead_days
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[
+                F3versaryAnnouncementSetting.slack_space_id,
+                F3versaryAnnouncementSetting.org_id,
+            ],
+            set_={"enabled": enabled, "channel": channel, "lead_days": lead_days, "updated_at": func.now()},
+        )
+        session.execute(statement)
         session.commit()
+        return True
 
 
 def build_f3versary_announcements_form(
@@ -34,18 +102,31 @@ def build_f3versary_announcements_form(
     region_record: SlackSettings,
 ):
     form = copy.deepcopy(F3VERSARY_ANNOUNCEMENTS_FORM)
-    lead_days = (
-        region_record.f3versary_announcements_lead_days
-        if region_record.f3versary_announcements_lead_days is not None
-        else DEFAULT_LEAD_DAYS
-    )
+    authorized = _is_authorized_region_admin(body, client, logger, region_record)
+    settings = _load_f3versary_settings(region_record) if authorized else None
+    if settings is None:
+        logger.warning("F3versary settings unavailable: unauthorized admin or unlinked region")
+        client.views_open(
+            trigger_id=safe_get(body, "trigger_id"),
+            view={
+                "type": "modal",
+                "title": {"type": "plain_text", "text": "F3versary Announcements"},
+                "close": {"type": "plain_text", "text": "Close"},
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": "F3versary settings are unavailable for this region."},
+                    }
+                ],
+            },
+        )
+        return
+
     form.set_initial_values(
         {
-            actions.F3VERSARY_ANNOUNCEMENTS_ENABLED: (
-                "enable" if region_record.f3versary_announcements_enabled else None
-            ),
-            actions.F3VERSARY_ANNOUNCEMENTS_CHANNEL: region_record.f3versary_announcements_channel,
-            actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS: str(lead_days),
+            actions.F3VERSARY_ANNOUNCEMENTS_ENABLED: ["enable"] if settings["enabled"] else [],
+            actions.F3VERSARY_ANNOUNCEMENTS_CHANNEL: settings["channel"],
+            actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS: str(settings["lead_days"]),
         }
     )
     form.post_modal(
@@ -64,9 +145,20 @@ def handle_f3versary_announcements_edit(
     context: dict,
     region_record: SlackSettings,
 ):
-    form_data = F3VERSARY_ANNOUNCEMENTS_FORM.get_selected_values(body)
     submission_view_id = safe_get(body, "submission_view_id") or safe_get(body, "view", "id")
-    enabled = safe_get(form_data, actions.F3VERSARY_ANNOUNCEMENTS_ENABLED) == "enable"
+    if not _is_authorized_region_admin(body, client, logger, region_record):
+        update_submission_wait_view(
+            client=client,
+            title="Not authorized",
+            text="F3versary settings are unavailable for this region.",
+            level=constants.AlertLevel.ERROR,
+            logger=logger,
+            view_id=submission_view_id,
+        )
+        return
+
+    form_data = F3VERSARY_ANNOUNCEMENTS_FORM.get_selected_values(body)
+    enabled = "enable" in (safe_get(form_data, actions.F3VERSARY_ANNOUNCEMENTS_ENABLED) or [])
     channel = safe_get(form_data, actions.F3VERSARY_ANNOUNCEMENTS_CHANNEL)
     raw_lead_days = safe_get(form_data, actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS)
 
@@ -97,19 +189,17 @@ def handle_f3versary_announcements_edit(
         )
         return
 
-    region_record.f3versary_announcements_enabled = enabled
-    region_record.f3versary_announcements_channel = channel
-    region_record.f3versary_announcements_lead_days = lead_days
+    if not _save_f3versary_settings(region_record, enabled, channel, lead_days):
+        update_submission_wait_view(
+            client=client,
+            title="Region unavailable",
+            text="This region is not linked to the Slack workspace. No settings were saved.",
+            level=constants.AlertLevel.ERROR,
+            logger=logger,
+            view_id=submission_view_id,
+        )
+        return
 
-    _patch_f3versary_settings(
-        region_record.team_id,
-        {
-            "f3versary_announcements_enabled": enabled,
-            "f3versary_announcements_channel": channel,
-            "f3versary_announcements_lead_days": lead_days,
-        },
-    )
-    update_local_region_records()
     update_submission_wait_view(
         client=client,
         title="Complete!",
