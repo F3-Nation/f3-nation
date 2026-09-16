@@ -90,7 +90,7 @@ In dev, every send is followed by a log line of the shape:
 Preview email: https://ethereal.email/message/abc123...
 ```
 
-That URL is publicly fetchable with `curl` and contains the full email HTML -- both the **6-digit code** and a magic link. Headless QA pulls the **code** out of that HTML and POSTs it to NextAuth's standard `/api/auth/callback/credentials` endpoint to complete sign-in.
+That URL is publicly fetchable with `curl` and contains the full email HTML -- both the **6-digit code** and a magic link. Headless QA pulls the **code** out of that HTML and POSTs it to NextAuth's `/api/auth/callback/email-mfa` endpoint (the `email-mfa` Credentials provider) to complete sign-in.
 
 > Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. Use the CSRF + callback recipe below for headless flows, or drive the magic link from a JS-capable browser (CDP) for browser-based regression testing.
 
@@ -121,7 +121,7 @@ curl -sb /tmp/jar -c /tmp/jar -L -X POST \
   --data-urlencode "code=$CODE" \
   --data-urlencode "callbackUrl=http://localhost:3004/" \
   --data-urlencode "json=true" \
-  http://localhost:3004/api/auth/callback/credentials
+  http://localhost:3004/api/auth/callback/email-mfa
 ```
 
 The cookie jar `/tmp/jar` now contains a `next-auth.session-token` cookie. Use it for any follow-up requests.

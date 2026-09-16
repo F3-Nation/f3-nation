@@ -12,7 +12,7 @@
 #
 # That URL is publicly accessible (no auth) and contains the entire email HTML,
 # including the 6-digit code and a magic link. Hitting the auth server's
-# `/api/auth/callback/credentials` with the email + code completes sign-in
+# `/api/auth/callback/email-mfa` with the email + code completes sign-in
 # headlessly. See docs/QA_LOCAL_AUTH.md for the full recipe.
 #
 # Freshness: by default this script enforces consume-once semantics -- it
