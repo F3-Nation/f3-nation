@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## [2.5.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.5.0...slackbot@2.5.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **deps:** update dependency pillow-heif to &gt;=1.7.0,&lt;1.8.0 ([#1009](https://github.com/F3-Nation/f3-nation/issues/1009)) ([aa4958d](https://github.com/F3-Nation/f3-nation/commit/aa4958d72098a03206c8649e8234e05512e5bdf8))
+* **slackbot, api:** persisting tags on series and allowing removal ([#979](https://github.com/F3-Nation/f3-nation/issues/979)) ([807630d](https://github.com/F3-Nation/f3-nation/commit/807630d961b09d9934b7deac33aafc927135173c))
+* **slackbot:** fixing calendar send script pandas error ([#990](https://github.com/F3-Nation/f3-nation/issues/990)) ([47bf01f](https://github.com/F3-Nation/f3-nation/commit/47bf01f9f55d38e1d356a132a7e9a9029abb9099))
+
 ## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.3...slackbot@2.5.0) (2026-09-11)
 
 
