@@ -19,7 +19,19 @@ reset by this script.
 
 ### Evidence — September 15, 2026
 
-Passed against the existing local `postgres:18.4-trixie` container:
+The initial rehearsal passed against the existing local `postgres:18.4-trixie`
+container. A subsequent rehearsal also passed against the exact PostgreSQL 18.6
+image pinned by Compose and CI:
+
+```text
+postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+```
+
+The rerun verified server version `18.6 (Debian 18.6-1.pgdg13+2)` in a disposable
+container with networking disabled and no published ports. It used the same
+rehearsal script with only the container name and repository root adjusted.
+The container was removed afterward; existing development/test databases were
+untouched. Both rehearsals verified:
 
 - 5,000 organizations in five-level chains, including inactive records and
   JSON metadata; 6,000 positions covering every old enum value and null.
@@ -33,9 +45,8 @@ Passed against the existing local `postgres:18.4-trixie` container:
 This is a restored, production-shaped **synthetic** dump: the full schema,
 constraints, triggers, and indexes come from repository migrations through 0022. It is not a production export and cannot reveal production-only schema
 drift, extra enum dependencies, privileges, concurrent lock contention, or
-production performance. No production connection was made. The local image
-was 18.4; current Compose configuration pins 18.6. Release review must account
-for those limitations rather than treating this as production verification.
+production performance. No production connection was made. Release review must
+account for those limitations rather than treating this as production verification.
 
 ## Forward migration deployment
 
