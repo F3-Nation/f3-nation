@@ -75,64 +75,32 @@ pnpm -C apps/auth typecheck
 
 ## Local QA / Email Preview
 
-In local development the auth server uses [Ethereal](https://ethereal.email/) -- a free, no-auth SMTP relay that publishes a public preview URL for every message. **No real email account is involved**, no SendGrid credentials are needed, and no inbox has to be polled. This makes the email-MFA flow scriptable end-to-end.
+In local development the auth server sends mail through [Mailpit](https://mailpit.axllent.org/), a local SMTP catcher started by `pnpm docker:up`. **No real email account is involved**, no SendGrid credentials are needed, and no inbox has to be polled. This makes the email-MFA flow scriptable end-to-end.
 
-The transport switches on `NODE_ENV` (`apps/auth/src/lib/email-mfa.ts`):
+There is no environment branching in the transport itself (`apps/auth/src/lib/email-mfa.ts`) -- it is a single nodemailer transport built from the `EMAIL_SERVER` connection string, so which mail server receives a message is purely a matter of configuration:
 
-| `NODE_ENV`    | SMTP host                                                  | Preview URL?             | Real inbox?    |
-| ------------- | ---------------------------------------------------------- | ------------------------ | -------------- |
-| `production`  | `smtp.sendgrid.net:587`                                    | No                       | Yes (SendGrid) |
-| anything else | `smtp.ethereal.email:587` (fresh test account per process) | Yes -- printed to stdout | No             |
+| Environment | `EMAIL_SERVER`                    | Where the mail lands                          |
+| ----------- | --------------------------------- | --------------------------------------------- |
+| Local dev   | `smtp://localhost:1025` (default) | Mailpit -- read it at `http://localhost:8025` |
+| Production  | SendGrid SMTP credentials         | The recipient's real inbox                    |
 
-In dev, every send is followed by a log line of the shape:
+**Nothing is logged when a message is sent** -- retrieve mail from Mailpit's web UI or REST API, never from the auth server's stdout.
 
-```
-Preview email: https://ethereal.email/message/abc123...
-```
+Mailpit's REST API returns the full email HTML -- both the **6-digit code** and a magic link. Headless QA pulls the **code** out of that HTML and POSTs it to NextAuth's `/api/auth/callback/email-mfa` endpoint (the `email-mfa` Credentials provider) to complete sign-in.
 
-That URL is publicly fetchable with `curl` and contains the full email HTML -- both the **6-digit code** and a magic link. Headless QA pulls the **code** out of that HTML and POSTs it to NextAuth's `/api/auth/callback/email-mfa` endpoint (the `email-mfa` Credentials provider) to complete sign-in.
+> Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. See [`AGENTS.md`](AGENTS.md) for the CSRF + callback recipe for headless flows, or drive the magic link from a JS-capable browser (CDP) for browser-based regression testing.
 
-> Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. Use the CSRF + callback recipe below for headless flows, or drive the magic link from a JS-capable browser (CDP) for browser-based regression testing.
+In dev (`NODE_ENV !== "production"`), `/api/verify-email`'s 10-requests-per-minute-per-IP rate limit is bypassed -- mail is caught by Mailpit, so there is no real inbox to bomb. Production traffic remains capped.
 
-In dev (`NODE_ENV !== "production"`), `/api/verify-email`'s 10-requests-per-minute-per-IP rate limit is bypassed -- the email transport is Ethereal, so there is no real inbox to bomb. Production traffic remains capped.
+> **Do not use `scripts/qa/extract-mfa-link.sh`.** It scrapes an Ethereal preview URL out of a captured auth log, and the auth server no longer uses Ethereal or logs anything on send -- so it can only ever find nothing. Use the Mailpit REST API instead.
 
-### Quick recipe (headless)
-
-```bash
-# 1. Capture the auth dev log
-pnpm --filter f3-auth dev > /tmp/f3-auth.log 2>&1 &
-
-# 2. Get a NextAuth CSRF token + cookie
-CSRF=$(curl -sc /tmp/jar http://localhost:3004/api/auth/csrf | jq -r .csrfToken)
-
-# 3. Trigger an MFA send
-curl -sb /tmp/jar -X POST -H 'Content-Type: application/json' \
-  -d '{"email":"qa-bot@f3nation.test"}' \
-  'http://localhost:3004/api/verify-email?action=send'
-
-# 4. Pull the 6-digit code out of the latest preview email
-CODE=$(scripts/qa/extract-mfa-link.sh --code)
-
-# 5. POST email + code to NextAuth's Credentials callback -- auth completes
-curl -sb /tmp/jar -c /tmp/jar -L -X POST \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  --data-urlencode "csrfToken=$CSRF" \
-  --data-urlencode "email=qa-bot@f3nation.test" \
-  --data-urlencode "code=$CODE" \
-  --data-urlencode "callbackUrl=http://localhost:3004/" \
-  --data-urlencode "json=true" \
-  http://localhost:3004/api/auth/callback/email-mfa
-```
-
-The cookie jar `/tmp/jar` now contains a `next-auth.session-token` cookie. Use it for any follow-up requests.
-
-`scripts/qa/extract-mfa-link.sh` returns the magic link by default if you're driving a JS-capable browser instead.
+For the full canonical recipe (CSRF token, triggering a send, pulling the code from Mailpit, and POSTing to the callback), see [`AGENTS.md`](AGENTS.md) -- it is the source of truth for this flow and is kept up to date for AI/QA-automation agents.
 
 ### Where to learn more
 
 - **[`AGENTS.md`](AGENTS.md)** -- full agent-friendly recipe, error modes, and the source-of-truth log line patterns
 - **[`../../docs/QA_LOCAL_AUTH.md`](../../docs/QA_LOCAL_AUTH.md)** -- cookbook version cross-referenced from every consuming app
-- **[`src/lib/email-mfa.ts`](src/lib/email-mfa.ts)** -- the actual code that decides between SendGrid and Ethereal
+- **[`src/lib/email-mfa.ts`](src/lib/email-mfa.ts)** -- the actual code; a single nodemailer transport driven entirely by the `EMAIL_SERVER` connection string (SendGrid in production, Mailpit locally)
 
 ---
 
@@ -837,7 +805,7 @@ The current rate limiter is in-memory (suitable for single Cloud Run instances).
 ### Email Transport
 
 - **Production**: SendGrid SMTP (`smtp.sendgrid.net:587`)
-- **Development**: Ethereal (auto-generated test account, preview URLs logged to console). See [Local QA / Email Preview](#local-qa--email-preview) and [`AGENTS.md`](AGENTS.md) for the full automation recipe.
+- **Development**: [Mailpit](https://mailpit.axllent.org/) (`smtp://localhost:1025` by default, started by `pnpm docker:up`; read captured mail at `http://localhost:8025`). See [Local QA / Email Preview](#local-qa--email-preview) and [`AGENTS.md`](AGENTS.md) for the full automation recipe.
 
 ### Security Features
 
