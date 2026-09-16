@@ -618,7 +618,7 @@ def handle_event_preblast_edit(
     start_time = start_time_raw.replace(":", "") if start_time_raw else None
 
     tag_raw = form_data.get(actions.EVENT_PREBLAST_TAG)
-    event_tag_ids = [int(t) for t in tag_raw] if tag_raw else []
+    event_tag_ids = [int(t) for t in tag_raw] if tag_raw is not None else None
 
     location_raw = form_data.get(actions.EVENT_PREBLAST_LOCATION)
     location_id = int(location_raw) if location_raw else None
@@ -631,7 +631,7 @@ def handle_event_preblast_edit(
         location_id=location_id,
         clear_location_id=location_id is None and event.location_id is not None,
         start_time=start_time,
-        event_tag_ids=event_tag_ids if event_tag_ids else None,
+        event_tag_ids=event_tag_ids,
         desired_channel_id=desired_channel,
         meta_updates=meta_updates if meta_updates else None,
     )
