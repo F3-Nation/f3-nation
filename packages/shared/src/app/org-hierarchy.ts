@@ -29,36 +29,43 @@ export interface OrgTypeDisplayInfo {
   pluralLabel: string;
   /** Admin route segment under /admin, e.g. "regions" (matches routes.admin.*) */
   routeSegment: string;
+  /** Stable public URL name, independent of admin routes and display labels. */
+  urlSegment: string;
   /** lucide-react icon name; consumers resolve this to a component */
   icon: "CircleSmall" | "CirclePile" | "Earth" | "Globe" | "Shield";
 }
 
 export const orgTypeDisplay: Record<OrgType, OrgTypeDisplayInfo> = {
   ao: {
+    urlSegment: "aos",
     label: "AO",
     pluralLabel: "AOs",
     routeSegment: stripLeadingSlash(routes.admin.aos.__path),
     icon: "CircleSmall",
   },
   region: {
+    urlSegment: "regions",
     label: "Region",
     pluralLabel: "Regions",
     routeSegment: stripLeadingSlash(routes.admin.regions.__path),
     icon: "CirclePile",
   },
   area: {
+    urlSegment: "areas",
     label: "Area",
     pluralLabel: "Areas",
     routeSegment: stripLeadingSlash(routes.admin.areas.__path),
     icon: "Earth",
   },
   sector: {
+    urlSegment: "sectors",
     label: "Sector",
     pluralLabel: "Sectors",
     routeSegment: stripLeadingSlash(routes.admin.sectors.__path),
     icon: "Globe",
   },
   nation: {
+    urlSegment: "nations",
     label: "Nation",
     pluralLabel: "The Nation",
     routeSegment: stripLeadingSlash(routes.admin.theNation.__path),
