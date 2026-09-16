@@ -193,6 +193,10 @@ export const routes = {
       __path: "/api-keys",
       __auth: "admin",
     },
+    oauthClients: {
+      __path: "/oauth-clients",
+      __auth: "admin",
+    },
     locations: {
       __path: "/locations",
       __auth: "editor",
@@ -207,6 +211,10 @@ export const routes = {
     },
     positions: {
       __path: "/positions",
+      __auth: "editor",
+    },
+    eventInstances: {
+      __path: "/event-instances",
       __auth: "editor",
     },
     emailTest: {

@@ -23,6 +23,7 @@ from application.event_instance import EventInstanceData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
 from infrastructure.api_client.pagination import fetch_all_pages
+from infrastructure.api_client.series_repository import ApiSeriesRepository, get_api_series_repository
 
 PREBLAST_CHANNEL_META_KEY = "preblast_channel_id"
 PREBLAST_POST_CHANNEL_META_KEY = "preblast_post_channel_id"
@@ -150,6 +151,7 @@ def _build_crupdate_payload(
     preblast_rich: Any | None,
     preblast: str | None,
     preblast_ts: int | float | None = None,
+    series_exception: str | None = None,
 ) -> dict:
     # The API accepts a single eventTypeId and eventTagId (not arrays).
     payload: dict = {
@@ -162,9 +164,9 @@ def _build_crupdate_payload(
         "isPrivate": is_private,
         "highlight": highlight,
         "eventTypeId": event_type_id,
+        "seriesException": series_exception,
     }
-    if event_tag_id is not None:
-        payload["eventTagId"] = event_tag_id
+    payload["eventTagId"] = event_tag_id
     if description is not None:
         payload["description"] = description
     if location_id is not None:
@@ -253,8 +255,26 @@ def _build_state_change_payload(
 class ApiEventInstanceRepository:
     """Fetches and mutates event instances via the F3 Nation REST API."""
 
-    def __init__(self, client: F3ApiClient) -> None:
+    def __init__(self, client: F3ApiClient, series_repository: ApiSeriesRepository | None = None) -> None:
         self._client = client
+        self._series_repository = series_repository
+
+    def _series_exception_for_update(self, existing: EventInstanceData, submitted_start_time: str | None) -> str | None:
+        """Calculate the exception without destroying unknown/current state."""
+        if existing.series_exception not in (None, "different-time"):
+            return existing.series_exception
+        if existing.series_id is None or submitted_start_time is None:
+            return existing.series_exception
+        try:
+            repo = self._series_repository or get_api_series_repository()
+            series = repo.get_by_id(existing.series_id)
+        except Exception:
+            return existing.series_exception
+        if series is None or not series.start_time:
+            return existing.series_exception
+        normalized_instance = submitted_start_time.replace(":", "")
+        normalized_series = series.start_time.replace(":", "")
+        return "different-time" if normalized_instance != normalized_series else None
 
     def get_list(
         self,
@@ -320,6 +340,7 @@ class ApiEventInstanceRepository:
             preblast_rich=preblast_rich,
             preblast=preblast,
             preblast_ts=preblast_ts,
+            series_exception=None,
         )
         result = self._client.post("/v1/event-instance", json=payload)
         raw = result.get("eventInstance") or result.get("result") or result
@@ -344,7 +365,12 @@ class ApiEventInstanceRepository:
         preblast_rich: Any | None,
         preblast: str | None,
         preblast_ts: int | float | None = None,
+        existing_instance: EventInstanceData | None = None,
     ) -> EventInstanceData:
+        existing = existing_instance or self.get_by_id(instance_id)
+        if existing is not None and existing.id != instance_id:
+            raise ValueError(f"Existing event instance {existing.id} does not match requested id {instance_id}")
+        series_exception = self._series_exception_for_update(existing, start_time) if existing is not None else None
         payload = _build_crupdate_payload(
             name=name,
             org_id=org_id,
@@ -362,6 +388,7 @@ class ApiEventInstanceRepository:
             preblast_rich=preblast_rich,
             preblast=preblast,
             preblast_ts=preblast_ts,
+            series_exception=series_exception,
         )
         payload["id"] = instance_id
         result = self._client.post("/v1/event-instance", json=payload)
@@ -376,10 +403,24 @@ class ApiEventInstanceRepository:
         )
 
     def reopen(self, instance: EventInstanceData) -> None:
-        """Clear the seriesException via a full crupdate POST."""
+        """Recompute the time exception when reopening a series instance."""
+        exception = None
+        if instance.series_id is not None:
+            exception = instance.series_exception
+            try:
+                repo = self._series_repository or get_api_series_repository()
+                series = repo.get_by_id(instance.series_id)
+                if series is not None and series.start_time and instance.start_time:
+                    exception = (
+                        "different-time"
+                        if instance.start_time.replace(":", "") != series.start_time.replace(":", "")
+                        else None
+                    )
+            except Exception:
+                pass
         self._client.post(
             "/v1/event-instance",
-            json=_build_state_change_payload(instance, series_exception=None),
+            json=_build_state_change_payload(instance, series_exception=exception),
         )
 
     def delete(self, instance_id: int) -> None:
@@ -428,10 +469,9 @@ class ApiEventInstanceRepository:
             preblast_rich=preblast_rich if preblast_rich is not None else existing.preblast_rich,
             preblast=preblast if preblast is not None else existing.preblast,
             preblast_ts=existing.preblast_ts,
+            series_exception=self._series_exception_for_update(existing, start_time),
         )
         payload["id"] = instance_id
-        if event_tag_ids is not None and not event_tag_ids:
-            payload["eventTagId"] = None
         if clear_location_id:
             payload["locationId"] = None
         result = self._client.post("/v1/event-instance", json=payload)
@@ -445,6 +485,7 @@ class ApiEventInstanceRepository:
                 "meta": payload.get("meta"),
                 "preblast_rich": payload.get("preblastRich", existing.preblast_rich),
                 "preblast": payload.get("preblast", existing.preblast),
+                "series_exception": payload["seriesException"],
             }
         )
         return _parse_mutation_response(result, fallback)
@@ -475,6 +516,7 @@ class ApiEventInstanceRepository:
             preblast_rich=existing.preblast_rich,
             preblast=existing.preblast,
             preblast_ts=preblast_ts,
+            series_exception=existing.series_exception,
         )
         payload["id"] = instance_id
         result = self._client.post("/v1/event-instance", json=payload)
@@ -482,6 +524,7 @@ class ApiEventInstanceRepository:
             update={
                 "meta": payload.get("meta"),
                 "preblast_ts": preblast_ts,
+                "series_exception": payload["seriesException"],
             }
         )
         return _parse_mutation_response(result, fallback)

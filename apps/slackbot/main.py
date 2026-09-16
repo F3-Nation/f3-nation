@@ -1,3 +1,5 @@
+# Entrypoint for the F3 Slackbot service.
+
 import logging
 import os
 import re

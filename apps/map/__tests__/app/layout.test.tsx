@@ -1,7 +1,13 @@
 // Mock setups use vi.fn() with untyped callbacks — unsafe rules don't apply here
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment */
+import { isValidElement } from "react";
+import type { ReactElement } from "react";
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Layout pulls `useUpcomingInstances` (Sentry). `vi.resetModules()` below can
+// re-evaluate the real package unless this file mocks it itself.
+vi.mock("@sentry/nextjs", async () => import("../mocks/sentry-nextjs"));
 
 // RootLayout mounts RuntimeConfigProvider, which fetches /api/runtime-config on
 // mount. Stub it so the suite doesn't hit an unmocked (and unresolvable)
@@ -140,10 +146,26 @@ describe("layout app router", () => {
     async () => {
       const { default: RootLayout } = await import("../../src/app/layout");
       const layoutResult = RootLayout({ children: <div /> });
-      render(layoutResult);
-      // React 19 treats <html>/<body> as singleton host components and applies
-      // their props to the real document elements instead of nesting them inside
-      // the render container, so assert against document.body.
+      expect(isValidElement(layoutResult)).toBe(true);
+      expect(layoutResult.type).toBe("html");
+
+      const body = (layoutResult.props as { children: ReactElement }).children;
+      expect(isValidElement(body)).toBe(true);
+      expect(body.type).toBe("body");
+
+      const bodyProps = body.props as {
+        className?: string;
+        children: React.ReactNode;
+      };
+      if (bodyProps.className) {
+        document.body.className = bodyProps.className;
+      }
+
+      // RTL cannot mount a root <html> tree: a DIV container warns
+      // "html cannot be a child of div", and documentElement warns
+      // "html cannot be a child of html". Mount the body contents instead
+      // and copy body class names onto the real document.body.
+      render(bodyProps.children);
       expect(document.querySelector("body")).toHaveClass(
         "min-h-dvh w-screen bg-background font-sans text-foreground antialiased",
       );

@@ -2,6 +2,53 @@
 
 <!-- version list -->
 
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.3...slackbot@2.5.0) (2026-09-11)
+
+
+### Features
+
+* **slackbot:** configurable 2 or 3 week calendar display ([#829](https://github.com/F3-Nation/f3-nation/issues/829)) ([1ba2dd5](https://github.com/F3-Nation/f3-nation/commit/1ba2dd52d06996a9bece59c777b491d1d613005e))
+* **slackbot:** now setting `seriesException=different-time` on time change ([#989](https://github.com/F3-Nation/f3-nation/issues/989)) ([cd5008e](https://github.com/F3-Nation/f3-nation/commit/cd5008e3275d1e44194b22f35a37e0a7a5217960))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#959](https://github.com/F3-Nation/f3-nation/issues/959)) ([7f45d87](https://github.com/F3-Nation/f3-nation/commit/7f45d876ab3c2d587feb84098d9d7ed2436527e3))
+
+## [2.4.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.2...slackbot@2.4.3) (2026-09-10)
+
+
+### Bug Fixes
+
+* **slackbot:** temporarily disable broken confirmation dialogs ([#985](https://github.com/F3-Nation/f3-nation/issues/985)) ([8a51eb3](https://github.com/F3-Nation/f3-nation/commit/8a51eb31c16106d265a4339d42b8ce85c23cd326))
+
+## [2.4.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.1...slackbot@2.4.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **ci:** resolve Cloud Run job image digest using exact tag match via jq ([#982](https://github.com/F3-Nation/f3-nation/issues/982)) ([c884180](https://github.com/F3-Nation/f3-nation/commit/c884180e6d9f52dfe822a1a74e5e569d25fe44ce))
+
+## [2.4.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.0...slackbot@2.4.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **slackbot, analytics:** hotfix for a couple of build steps ([#975](https://github.com/F3-Nation/f3-nation/issues/975)) ([46eebb7](https://github.com/F3-Nation/f3-nation/commit/46eebb711aad369dff38dad208da813fb3c6c9cd))
+
+## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.2...slackbot@2.4.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+* **repo:** added analytics app ([#800](https://github.com/F3-Nation/f3-nation/issues/800)) ([f7c5123](https://github.com/F3-Nation/f3-nation/commit/f7c512377d93f051495a1ab8ca793af13f3667ec))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#861](https://github.com/F3-Nation/f3-nation/issues/861)) ([419ac1e](https://github.com/F3-Nation/f3-nation/commit/419ac1eb5c93c8d472f1f03362e1440d8278594e))
+
 ## [2.3.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.1...slackbot@2.3.2) (2026-08-27)
 
 

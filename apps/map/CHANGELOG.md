@@ -1,5 +1,59 @@
 # Changelog
 
+## [7.3.3](https://github.com/F3-Nation/f3-nation/compare/map@7.3.2...map@7.3.3) (2026-09-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.1
+    * @acme/auth bumped to 0.2.5
+    * @acme/validators bumped to 0.4.2
+
+## [7.3.2](https://github.com/F3-Nation/f3-nation/compare/map@7.3.1...map@7.3.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **slackbot:** temporarily disable broken confirmation dialogs ([#985](https://github.com/F3-Nation/f3-nation/issues/985)) ([8a51eb3](https://github.com/F3-Nation/f3-nation/commit/8a51eb31c16106d265a4339d42b8ce85c23cd326))
+
+## [7.3.1](https://github.com/F3-Nation/f3-nation/compare/map@7.3.0...map@7.3.1) (2026-09-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/auth bumped to 0.2.4
+    * @acme/shared bumped to 0.3.0
+    * @acme/ui bumped to 0.1.5
+    * @acme/validators bumped to 0.4.1
+
+## [7.3.0](https://github.com/F3-Nation/f3-nation/compare/map@7.2.1...map@7.3.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+
+
+### Bug Fixes
+
+* **map:** add an endpoint allowlist to the /api/orpc proxy ([#948](https://github.com/F3-Nation/f3-nation/issues/948)) ([5a4b0b7](https://github.com/F3-Nation/f3-nation/commit/5a4b0b721215f3055fa84b522d9e6aeb2ccaaf7a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.8.0
+    * @acme/auth bumped to 0.2.3
+    * @acme/shared bumped to 0.2.0
+    * @acme/ui bumped to 0.1.4
+    * @acme/validators bumped to 0.4.0
+
 ## [7.2.1](https://github.com/F3-Nation/f3-nation/compare/map@7.2.0...map@7.2.1) (2026-08-18)
 
 

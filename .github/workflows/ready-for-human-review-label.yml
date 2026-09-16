@@ -1,0 +1,292 @@
+name: Ready for human review label
+
+# Reconciles the `ready for human review` label across every open PR. Polls on
+# a schedule rather than reacting to events: no single GitHub Actions trigger
+# fires for all three conditions this label tracks (draft state, required
+# check conclusions, bot review-thread resolution), and an event-driven
+# handler would also need `pull_request_target` to write labels on fork PRs.
+# A schedule sidesteps both problems, at the cost of up to ~24h latency in
+# both directions -- accepted per #932.
+#
+# Condition 3 is scoped to bot review threads only, not every unresolved
+# thread -- see BOT_LOGINS in the companion script for why.
+
+on:
+  schedule:
+    # Once daily, arbitrarily anchored near midnight US/Eastern. GitHub
+    # Actions schedules are UTC-only with no timezone parameter, and Eastern
+    # crosses DST twice a year -- the resulting ~1h drift twice a year is
+    # accepted rather than built around. Minute offset dodges the scheduler's
+    # top-of-hour peak.
+    - cron: "12 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would change without writing anything"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # check out the shared script
+      # (branch-rules reads ride on GITHUB_TOKEN's always-on metadata:read;
+      # no explicit grant exists for it)
+      pull-requests: write # list PRs, read/write the label
+      checks: read # read check-run conclusions
+      statuses: read # read legacy commit-status conclusions (distinct scope from checks)
+    steps:
+      - name: Check out the shared script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Reconcile label across open PRs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        with:
+          script: |
+            const {
+              LABEL, requiredChecksGreen, botThreadsResolved,
+            } = require('./.github/scripts/ready-for-human-review-label.cjs');
+
+            // Absent on a schedule run, where it must mean "live".
+            const dryRun = process.env.DRY_RUN === 'true';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const rows = [
+              [
+                { data: 'PR', header: true },
+                { data: 'Draft', header: true },
+                { data: 'Checks', header: true },
+                { data: 'Bot threads', header: true },
+                { data: 'Result', header: true },
+              ],
+            ];
+
+            let failures = 0;
+
+            // Pause after each PR's writes to stay under the secondary rate limit.
+            const settle = () => new Promise((resolve) => setTimeout(resolve, 1000));
+
+            // Required-check contexts, cached per base branch (almost always
+            // `main`, but fetched per actual base rather than hardcoded so a PR
+            // targeting anything else is evaluated against its own ruleset).
+            // Uses the raw route rather than a named octokit method: "get rules
+            // for a branch" is new enough that relying on a specific plugin
+            // version exposing a matching `rest.repos.*` wrapper felt riskier
+            // than hitting the documented endpoint directly. It's a paginated
+            // list endpoint (default 30/page) like everything else here, so it
+            // goes through `paginate` too -- a single unpaginated call would
+            // silently truncate a branch with many applicable rulesets.
+            //
+            // The endpoint returns every applicable rule across every ruleset
+            // that targets the branch, not just one -- `flatMap` over all
+            // matching rules rather than taking the first. It also returns
+            // `[]` for a branch no ruleset targets at all (e.g. this repo's
+            // ruleset targets only `main`) -- that's a legitimate, cacheable
+            // answer, not an error, so it doesn't throw. Every PR here
+            // targets `main` today, but a stacked PR against another base
+            // would otherwise throw here on every scheduled run and fail the
+            // *entire* run via `core.setFailed`, not just that one PR. An
+            // empty result still fails closed: the caller treats zero
+            // required contexts as `checksGreen = false` for that PR, not as
+            // vacuously green.
+            const requiredContextsByBase = new Map();
+            const requiredContextsFor = async (base) => {
+              if (requiredContextsByBase.has(base)) return requiredContextsByBase.get(base);
+              const rules = await github.paginate(
+                'GET /repos/{owner}/{repo}/rules/branches/{branch}',
+                { owner, repo, branch: base, per_page: 100 },
+              );
+              const requiredContexts = rules
+                .filter((r) => r.type === 'required_status_checks')
+                .flatMap((r) => r.parameters?.required_status_checks ?? [])
+                .map((c) => ({ context: c.context, integrationId: c.integration_id ?? null }));
+              if (requiredContexts.length === 0) {
+                core.warning(`No required_status_checks rule for base branch "${base}"; treating as not green.`);
+              }
+              requiredContextsByBase.set(base, requiredContexts);
+              return requiredContexts;
+            };
+
+            // GraphQL reviewThreads has no REST equivalent that exposes
+            // isResolved, and actions/github-script's octokit isn't guaranteed
+            // to carry a GraphQL pagination plugin, so this loop is hand-rolled.
+            const fetchReviewThreads = async (prNumber) => {
+              const threads = [];
+              let cursor = null;
+              for (;;) {
+                const result = await github.graphql(
+                  `query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
+                    repository(owner: $owner, name: $repo) {
+                      pullRequest(number: $pr) {
+                        reviewThreads(first: 100, after: $cursor) {
+                          pageInfo { hasNextPage endCursor }
+                          nodes {
+                            isResolved
+                            comments(first: 1) { nodes { author { login } } }
+                          }
+                        }
+                      }
+                    }
+                  }`,
+                  { owner, repo, pr: prNumber, cursor },
+                );
+                const connection = result.repository.pullRequest.reviewThreads;
+                threads.push(...connection.nodes);
+                if (!connection.pageInfo.hasNextPage) break;
+                cursor = connection.pageInfo.endCursor;
+              }
+              return threads;
+            };
+
+            // Deliberately not a fourth condition: merge-conflict/mergeable
+            // state against `main` is not checked. Checks run against
+            // `pr.head.sha`, which doesn't move when `main` does, so a PR can
+            // stay "green" here after it's actually gone unmergeable.
+            // Issue #932 scoped this label to exactly three conditions and
+            // didn't name mergeability either way; GitHub's own UI already
+            // surfaces a conflict independently of this label. Revisit as a
+            // follow-up if that gap turns out to matter in practice.
+            //
+            // Result is pre-shaped before work starts, and mutated by field
+            // name rather than array index, so a throw still lands a result
+            // in the summary table (same as code-scanning-issue.yml) without
+            // requiring every write site to agree on a column number.
+            const reconcilePr = async (pr) => {
+              const result = {
+                pr: `#${pr.number}`, draft: pr.draft ? 'yes' : 'no',
+                checks: '—', threads: '—', outcome: '',
+              };
+              try {
+                const hasLabel = pr.labels.some((label) => label.name === LABEL);
+
+                // Condition 1 already fails on a draft -- no reason to spend
+                // calls evaluating checks or bot threads for one; `desired`
+                // below short-circuits on `!pr.draft` before either matters.
+                let desired = false;
+                if (pr.draft) {
+                  result.checks = 'skipped (draft)';
+                  result.threads = 'skipped (draft)';
+                } else {
+                  const requiredContexts = await requiredContextsFor(pr.base.ref);
+                  const checkRuns = await github.paginate(github.rest.checks.listForRef, {
+                    owner, repo, ref: pr.head.sha, per_page: 100,
+                  });
+                  // A required context can also be satisfied via the legacy
+                  // Commit Status API (some third-party integrations still
+                  // post statuses rather than registering check-runs) --
+                  // evaluated independently from check runs so a passing
+                  // record in one API can't mask a failing record in the
+                  // other. getCombinedStatusForRef already coalesces to the
+                  // latest status per context, capped at per_page (max 100,
+                  // which every realistic context count here is well under).
+                  const { data: combinedStatus } = await github.rest.repos.getCombinedStatusForRef({
+                    owner, repo, ref: pr.head.sha, per_page: 100,
+                  });
+                  const statusRuns = combinedStatus.statuses.map((status) => ({
+                    id: status.id,
+                    name: status.context,
+                    conclusion: status.state === 'success' ? 'success' : status.state,
+                  }));
+                  const checksGreen = requiredContexts.length > 0
+                    && requiredChecksGreen(requiredContexts, checkRuns, statusRuns);
+                  result.checks = checksGreen ? 'green' : 'not green';
+
+                  const threads = await fetchReviewThreads(pr.number);
+                  const threadsResolved = botThreadsResolved(threads);
+                  result.threads = threadsResolved ? 'resolved' : 'unresolved';
+
+                  desired = checksGreen && threadsResolved;
+                }
+
+                if (desired === hasLabel) {
+                  result.outcome = hasLabel ? 'already labeled' : 'already unlabeled';
+                } else if (dryRun) {
+                  result.outcome = desired ? 'would add' : 'would remove';
+                } else if (desired) {
+                  await github.rest.issues.addLabels({
+                    owner, repo, issue_number: pr.number, labels: [LABEL],
+                  });
+                  result.outcome = 'added';
+                } else {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner, repo, issue_number: pr.number, name: LABEL,
+                    });
+                    result.outcome = 'removed';
+                  } catch (error) {
+                    // 404 => already removed by a concurrent run or a maintainer.
+                    if (error?.status !== 404) throw error;
+                    result.outcome = 'already unlabeled';
+                  }
+                }
+              } catch (error) {
+                failures += 1;
+                result.outcome = `FAILED — ${error.status ?? 'no status'} ${error.message}`;
+                core.warning(`PR #${pr.number}: ${result.outcome}`);
+              } finally {
+                // In `finally` so failures are paced too -- the secondary rate
+                // limit is precisely the failure that would otherwise skip it.
+                await settle();
+              }
+              core.info(`PR #${pr.number}: ${result.outcome}`);
+              rows.push([result.pr, result.draft, result.checks, result.threads, result.outcome]);
+            };
+
+            let aborted = null;
+            try {
+              const openPrs = await github.paginate(github.rest.pulls.list, {
+                owner, repo, state: 'open', per_page: 100,
+              });
+              core.info(`${openPrs.length} open PR(s); dry run: ${dryRun}`);
+
+              for (const pr of openPrs) {
+                await reconcilePr(pr);
+              }
+            } catch (error) {
+              aborted = error;
+              throw error;
+            } finally {
+              const report = core.summary.addHeading(
+                dryRun ? 'Reconcile dry run' : 'Reconcile results',
+              );
+              if (aborted) {
+                report.addRaw(
+                  '\n> **Run aborted before completion:** ' +
+                    `${aborted.status ?? 'no status'} ${aborted.message}\n`,
+                );
+              }
+              // In its own try/catch so a summary-write hiccup (job-summary
+              // API error, oversized payload) can't clobber a pending
+              // `aborted` error being re-thrown above -- standard
+              // finally-overrides-throw hazard.
+              try {
+                await report
+                  .addTable(
+                    rows.length > 1
+                      ? rows
+                      : [...rows, ['—', '—', '—', '—', 'nothing to do']],
+                  )
+                  .write();
+              } catch (writeError) {
+                core.warning(`Failed to write job summary: ${writeError.message}`);
+              }
+            }
+
+            if (failures > 0) {
+              core.setFailed(
+                `${failures} PR(s) failed to reconcile; see the job summary. ` +
+                  'Re-running is idempotent.',
+              );
+            }

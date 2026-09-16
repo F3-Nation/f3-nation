@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.6.1](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.0...pkg-db@0.6.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **db,ci:** tune Postgres client pool/timeouts and fix stale auth staging_url ([#901](https://github.com/F3-Nation/f3-nation/issues/901)) ([59ead05](https://github.com/F3-Nation/f3-nation/commit/59ead059226ecffaa3b928b67aa64753170fb613))
+* **db:** bound how long a query waits behind a saturated connection pool ([#911](https://github.com/F3-Nation/f3-nation/issues/911)) ([d26f4cb](https://github.com/F3-Nation/f3-nation/commit/d26f4cbd2f57fba6ddcf6f5f6d7c66c5ece8abbe))
+
+## [0.6.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.5.0...pkg-db@0.6.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.3.0
+
+## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.4.1...pkg-db@0.5.0) (2026-09-08)
+
+
+### Features
+
+* **auth,db,admin,api:** better auth config for [#876](https://github.com/F3-Nation/f3-nation/issues/876) phase 3 ([#914](https://github.com/F3-Nation/f3-nation/issues/914)) ([4c77b90](https://github.com/F3-Nation/f3-nation/commit/4c77b904dab9a9864d1c9d98f6356e6f211bb086))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.2.0
+
 ## [0.4.1](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.4.0...pkg-db@0.4.1) (2026-08-18)
 
 

@@ -38,7 +38,7 @@ export const sendVerificationRequest: NodemailerConfig["sendVerificationRequest"
         }),
       },
     });
-    const failed = result.rejected.concat(result.pending).filter(Boolean);
+    const failed = result.rejected.concat(result.pending ?? []).filter(Boolean);
     if (failed.length) {
       throw new Error(
         `Email (${failed.map(String).join(", ")}) could not be sent`,

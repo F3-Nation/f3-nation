@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.5.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.5.0...homepage@1.5.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **homepage:** updated ci build to allow me to put in env ([#994](https://github.com/F3-Nation/f3-nation/issues/994)) ([4441028](https://github.com/F3-Nation/f3-nation/commit/44410285df7235efa125e34803bdf6054bce56ec))
+
+## [1.5.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.2...homepage@1.5.0) (2026-09-11)
+
+
+### Features
+
+* **homepage:** added /org to home page ([#947](https://github.com/F3-Nation/f3-nation/issues/947)) ([d7e4f3f](https://github.com/F3-Nation/f3-nation/commit/d7e4f3f6620033cf5e2045b3d0cdf3b6b129564f))
+
+## [1.4.2](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.1...homepage@1.4.2) (2026-09-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/ui bumped to 0.1.5
+
+## [1.4.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.0...homepage@1.4.1) (2026-09-08)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/ui bumped to 0.1.4
+
 ## [1.4.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.3.0...homepage@1.4.0) (2026-08-12)
 
 

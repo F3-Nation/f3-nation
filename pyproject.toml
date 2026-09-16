@@ -4,7 +4,7 @@ version = "0.0.0"
 requires-python = ">=3.13,<3.14"
 
 [tool.uv.workspace]
-members = ["apps/slackbot", "packages/db-python"]
+members = ["apps/slackbot", "apps/analytics", "packages/db-python"]
 
 [tool.uv.sources]
 f3-data-models = { workspace = true }

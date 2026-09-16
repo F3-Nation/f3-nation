@@ -4,10 +4,16 @@ on:
   push:
     tags:
       - "admin@*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re-)deploy, e.g. admin@1.2.3"
+        required: true
+        type: string
 
 # Prevent concurrent deploys of the same tag
 concurrency:
-  group: deploy-admin-${{ github.ref_name }}
+  group: deploy-admin-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 # Reusable workflows can't elevate GITHUB_TOKEN beyond what the caller grants.
@@ -23,6 +29,7 @@ jobs:
   deploy:
     uses: ./.github/workflows/_deploy-cloudrun.yml
     with:
+      ref: ${{ inputs.tag }}
       image_name: f3-admin
       service_name: f3-admin
       staging_project: f3-admin-portal-staging
@@ -35,3 +42,6 @@ jobs:
       prod_url: https://admin.f3nation.com
       smoke_test_app: admin
       app_label: "app: admin"
+      # Bound instances x per-instance db pool below the pooler's client
+      # ceiling — sizing rationale in docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
+      flags: "--max-instances=25"

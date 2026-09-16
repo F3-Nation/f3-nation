@@ -7,6 +7,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import random
 import shutil
 from datetime import datetime, timedelta
+from math import isnan
+from numbers import Real
 
 import pytz
 from f3_data_models.models import (
@@ -33,8 +35,16 @@ from slack_sdk.models import blocks
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import aliased
 
-from utilities.constants import EVENT_TAG_COLORS, GCP_IMAGE_URL, LOCAL_DEVELOPMENT, S3_IMAGE_URL
-from utilities.helper_functions import current_date_cst, safe_get, update_local_region_records
+from utilities.constants import (
+    EVENT_TAG_COLORS,
+    GCP_IMAGE_URL,
+    LOCAL_DEVELOPMENT,
+    MAX_CALENDAR_WEEKS,
+    S3_IMAGE_URL,
+    WEEK_ALT_TEXT,
+    WEEK_LABELS,
+)
+from utilities.helper_functions import current_date_cst, safe_convert, safe_get, update_local_region_records
 from utilities.slack import actions
 
 DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
@@ -42,6 +52,61 @@ DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
 
 def time_int_to_str(time: int) -> str:
     return f"{time // 100:02d}{time % 100:02d}"
+
+
+def _normalize_label_value(value) -> str:
+    if value is None or type(value).__name__ in {"NAType", "NaTType"}:
+        return ""
+    if isinstance(value, Real) and not isinstance(value, bool):
+        if isnan(value):
+            return ""
+        if float(value).is_integer():
+            return str(int(value))
+    return str(value)
+
+
+def _normalize_label_series(series):
+    return series.map(_normalize_label_value)
+
+
+def _normalize_event_time_value(value) -> str:
+    if value is None or type(value).__name__ in {"NAType", "NaTType"}:
+        return ""
+    if isinstance(value, Real) and not isinstance(value, bool):
+        if isnan(value):
+            return ""
+        return time_int_to_str(int(value))
+    return str(value)
+
+
+def _calendar_time_sort_key(value: str) -> str:
+    return "9999" if value == "" else value
+
+
+def _prepare_calendar_labels(df):
+    q_name_missing = df["q_name"].isna()
+    event_tag_mask = df["event_tag"].notnull()
+
+    for label_column in (
+        "q_name",
+        "event_acronym",
+        "event_tag",
+    ):
+        df.loc[:, label_column] = _normalize_label_series(df[label_column])
+    df.loc[:, "event_time"] = df["start_time"].map(_normalize_event_time_value)
+    df.loc[q_name_missing, "q_name"] = "OPEN!"
+    df.loc[:, "q_name"] = df["q_name"].str.replace(r"\s\(([\s\S]*?\))", "", regex=True)
+
+    # if pax_count is not null then second line is pax_count otherwise event_acronym + event_time # noqa
+    df.loc[:, "label"] = df["q_name"] + "\n" + df["event_acronym"] + " " + df["event_time"]
+    df.loc[df["pax_count"].notna(), "label"] = (
+        df["q_name"] + "\nPAX: " + df["pax_count"].astype(str).str.replace(".0", "")
+    )
+
+    df.loc[event_tag_mask, "label"] = df["q_name"] + "\n" + df["event_tag"] + "\n" + df["event_time"]
+    df.loc[(df["pax_count"].notna()) & event_tag_mask, "label"] = (
+        df["q_name"] + "\n" + df["event_tag"] + "\nPAX: " + df["pax_count"].astype(str).str.replace(".0", "")
+    )
 
 
 def highlight_cells(s, color_dicts):
@@ -108,6 +173,111 @@ def set_text_color(s, color_dicts):
     return text_color_list
 
 
+def remove_stale_week_images(slack_app_settings: dict, region_id: int, num_weeks: int) -> bool:
+    """Drop the settings and files for weeks a region no longer displays.
+
+    Returns True if anything was removed, meaning the region's Slack post needs to be refreshed.
+    """
+    removed = False
+    for stale_week in WEEK_LABELS[num_weeks:]:
+        stale_file = slack_app_settings.pop(f"calendar_image_{stale_week}", None)
+        if not stale_file:
+            continue
+        removed = True
+        if LOCAL_DEVELOPMENT:
+            continue
+        stale_filenames = [stale_file]
+        if DB_SCHEMA == "f3_prod":
+            # also drop the stable copy written alongside the randomized filename
+            stale_filenames.append(f"{region_id}-{stale_week}.png")
+        for filename in stale_filenames:
+            try:
+                os.remove(f"/mnt/calendar-images/{filename}")
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                print(f"Error deleting stale file {filename} from local storage: {e}")
+    return removed
+
+
+def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunday_run: bool) -> None:
+    print("Posting to Slack channel")
+    client = WebClient(token=slack_app_settings["bot_token"])
+    if LOCAL_DEVELOPMENT:
+        IMAGE_URL = S3_IMAGE_URL
+    else:
+        IMAGE_URL = GCP_IMAGE_URL
+    block_list = [blocks.HeaderBlock(text=":calendar: Q Calendar")]
+    for week in WEEK_LABELS[:num_weeks]:
+        image_name = slack_app_settings.get(f"calendar_image_{week}")
+        if image_name:
+            block_list.append(
+                blocks.ImageBlock(
+                    image_url=IMAGE_URL.format(
+                        bucket="f3nation-calendar-images",
+                        image_name=image_name,
+                    ),
+                    alt_text=WEEK_ALT_TEXT[week],
+                )
+            )
+    block_list.append(
+        blocks.ActionsBlock(
+            elements=[
+                blocks.ButtonElement(
+                    text=":calendar: Open Full Calendar",
+                    action_id=actions.OPEN_CALENDAR_BUTTON,
+                ),
+                blocks.ButtonElement(
+                    text=":world_map: Nearby Special Events",
+                    action_id=actions.NEARBY_EVENTS_OPEN,
+                ),
+            ]
+        )
+    )
+    block_list.extend(create_special_events_blocks(slack_app_settings))
+    try:
+        if slack_app_settings.get("q_image_posting_ts") and (not first_sunday_run):
+            try:
+                client.chat_update(
+                    channel=slack_app_settings["q_image_posting_channel"],
+                    ts=slack_app_settings["q_image_posting_ts"],
+                    blocks=block_list,
+                    text="Q Sheet",
+                )
+            except Exception as e:
+                print(f"Error updating Slack message, posting new message: {e}")
+                response = client.chat_postMessage(
+                    channel=slack_app_settings["q_image_posting_channel"],
+                    text="Q Sheet",
+                    blocks=block_list,
+                )
+                if response["ok"]:
+                    slack_app_settings["q_image_posting_ts"] = response["ts"]
+        else:
+            response = client.chat_postMessage(
+                channel=slack_app_settings["q_image_posting_channel"],
+                text="Q Sheet",
+                blocks=block_list,
+            )
+            if response["ok"]:
+                slack_app_settings["q_image_posting_ts"] = response["ts"]
+    except Exception as e:
+        print(f"Error posting to Slack channel: {e}")
+
+
+def slack_posting_enabled(slack_app_settings: dict) -> bool:
+    return bool(
+        slack_app_settings.get("q_image_posting_enabled")
+        and slack_app_settings.get("q_image_posting_channel")
+        and slack_app_settings.get("bot_token")
+    )
+
+
+def calendar_weeks_shown(slack_app_settings: dict) -> int:
+    num_weeks = safe_convert(slack_app_settings.get("calendar_weeks_shown"), int) or 2
+    return max(1, min(num_weeks, MAX_CALENDAR_WEEKS))
+
+
 def generate_calendar_images(force: bool = False):
     import dataframe_image as dfi
     import pandas as pd
@@ -115,9 +285,7 @@ def generate_calendar_images(force: bool = False):
     with get_session() as session:
         tomorrow_day_of_week = (current_date_cst() + timedelta(days=1)).weekday()
         current_week_start = current_date_cst() + timedelta(days=-tomorrow_day_of_week + 1)
-        current_week_end = current_date_cst() + timedelta(days=7 - tomorrow_day_of_week + 1)
-        next_week_start = current_week_start + timedelta(weeks=1)
-        next_week_end = current_week_end + timedelta(weeks=1)
+        overall_end = current_week_start + timedelta(weeks=MAX_CALENDAR_WEEKS)
 
         firstq_subquery = (
             select(
@@ -133,7 +301,7 @@ def generate_calendar_images(force: bool = False):
             .filter(
                 Attendance_x_AttendanceType.attendance_type_id == 2,
                 EventInstance.start_date >= current_week_start,
-                EventInstance.start_date < next_week_end,
+                EventInstance.start_date < overall_end,
             )
             .alias()
         )
@@ -149,7 +317,7 @@ def generate_calendar_images(force: bool = False):
             .filter(
                 Attendance_x_AttendanceType.attendance_type_id == 2,
                 EventInstance.start_date >= current_week_start,
-                EventInstance.start_date < next_week_end,
+                EventInstance.start_date < overall_end,
             )
             .group_by(Attendance.event_instance_id)
             .alias()
@@ -195,7 +363,7 @@ def generate_calendar_images(force: bool = False):
             .outerjoin(attendance_subquery, EventInstance.id == attendance_subquery.c.event_instance_id)
             .filter(
                 (EventInstance.start_date >= current_week_start),
-                (EventInstance.start_date < next_week_end),
+                (EventInstance.start_date < overall_end),
                 (EventInstance.is_active),
                 # (EventInstance.series_id.is_not(None)),
                 or_(EventTag.name.is_(None), EventTag.name != "Off-The-Books"),
@@ -216,9 +384,10 @@ def generate_calendar_images(force: bool = False):
             .all()
         )
 
-        for region_id in df_all["region_id"].unique():
+        region_ids_with_events = {int(r) for r in df_all["region_id"].unique()} if not df_all.empty else set()
+
+        for region_id in region_ids_with_events:
             try:
-                region_id = int(region_id)
                 df_full = df_all[df_all["region_id"] == region_id].copy()
                 region_name = df_full["region_name"].iloc[0]
                 region_org_record = safe_get([r for r in region_org_records if r[0].id == region_id], 0)
@@ -244,18 +413,13 @@ def generate_calendar_images(force: bool = False):
                         "nation_black": color_dict_nation_black,
                         "generic": color_dict_generic,
                     }
-                    calendar_updated = False
+                    num_weeks = calendar_weeks_shown(slack_app_settings)
+                    calendar_updated = remove_stale_week_images(slack_app_settings, region_id, num_weeks)
 
-                    for week in ["current", "next"]:
-                        if week == "current":
-                            df = df_full[
-                                (df_full["start_date"] >= current_week_start)
-                                & (df_full["start_date"] < current_week_end)
-                            ].copy()
-                        else:
-                            df = df_full[
-                                (df_full["start_date"] >= next_week_start) & (df_full["start_date"] < next_week_end)
-                            ].copy()
+                    for week_index, week in enumerate(WEEK_LABELS[:num_weeks]):
+                        week_start = current_week_start + timedelta(weeks=week_index)
+                        week_end = week_start + timedelta(days=7)
+                        df = df_full[(df_full["start_date"] >= week_start) & (df_full["start_date"] < week_end)].copy()
 
                         max_event_updated = (
                             datetime(year=1900, month=1, day=1)
@@ -273,7 +437,8 @@ def generate_calendar_images(force: bool = False):
                         first_sunday_run = now_cst.weekday() == 6 and now_cst.hour < 1
 
                         if (
-                            (max_changed > datetime.now() - timedelta(hours=1))
+                            not slack_app_settings.get(f"calendar_image_{week}")
+                            or (max_changed > datetime.now() - timedelta(hours=1))
                             or first_sunday_run
                             or LOCAL_DEVELOPMENT
                             or force
@@ -281,34 +446,14 @@ def generate_calendar_images(force: bool = False):
                             # convert start_date from date to string
                             df.loc[:, "event_date"] = pd.to_datetime(df["start_date"])
                             df.loc[:, "event_date_fmt"] = df["event_date"].dt.strftime("%Y/%m/%d")
-                            df.loc[:, "event_time"] = df["start_time"]
-                            df.loc[df["q_name"].isna(), "q_name"] = "OPEN!"
-                            df.loc[:, "q_name"] = df["q_name"].str.replace(r"\s\(([\s\S]*?\))", "", regex=True)
-
-                            # if pax_count is not null then second line is pax_count otherwise event_acronym + event_time # noqa
-                            df.loc[:, "label"] = df["q_name"] + "\n" + df["event_acronym"] + " " + df["event_time"]
-                            df.loc[df["pax_count"].notna(), "label"] = (
-                                df["q_name"] + "\nPAX: " + df["pax_count"].astype(str).str.replace(".0", "")
-                            )
-
-                            df.loc[(df["event_tag"].notnull()), ("label")] = (
-                                df["q_name"] + "\n" + df["event_tag"] + "\n" + df["event_time"]
-                            )
-                            df.loc[(df["pax_count"].notna()) & (df["event_tag"].notnull()), ("label")] = (
-                                df["q_name"]
-                                + "\n"
-                                + df["event_tag"]
-                                + "\nPAX: "
-                                + df["pax_count"].astype(str).str.replace(".0", "")
-                            )
+                            _prepare_calendar_labels(df)
 
                             # Override label for closed events
                             df.loc[df["series_exception"] == Series_Exception.closed, "label"] = "CLOSED"
 
                             if group_by_option == "ao":
-                                df.loc[:, "AO\nLocation"] = df["ao_name"]  # + "\n" + df["ao_description"]
-                                df.loc[df["ao_description"].notnull(), "AO\nLocation"] = (
-                                    df["ao_name"] + "\n" + df["ao_description"]
+                                df.loc[:, "AO\nLocation"] = (
+                                    df["ao_name"].str.cat(df["ao_description"], sep="\n", na_rep="").str.rstrip("\n")
                                 )
                                 row_key_col = "AO\nLocation"
                                 value_col = "label"
@@ -337,7 +482,14 @@ def generate_calendar_images(force: bool = False):
                             df.to_csv(f"debug_{region_name}_{week}.csv", index=False)
 
                             # Combine cells for days within the chosen grouping (AO vs location).
-                            df.sort_values([sort_key_col, "event_date", "event_time"], ignore_index=True, inplace=True)
+                            df.sort_values(
+                                [sort_key_col, "event_date", "event_time"],
+                                key=lambda column: (
+                                    column.map(_calendar_time_sort_key) if column.name == "event_time" else column
+                                ),
+                                ignore_index=True,
+                                inplace=True,
+                            )
                             prior_date = ""
                             prior_label = ""
                             prior_group_key = ""
@@ -454,83 +606,9 @@ def generate_calendar_images(force: bool = False):
                             calendar_updated = True
 
                     # post to slack channel if enabled
-                    if (
-                        slack_app_settings.get("q_image_posting_enabled")
-                        and slack_app_settings.get("q_image_posting_channel")
-                        and slack_app_settings.get("bot_token")
-                        and calendar_updated
-                    ):
-                        print("Posting to Slack channel")
-                        client = WebClient(token=slack_app_settings["bot_token"])
-                        if LOCAL_DEVELOPMENT:
-                            IMAGE_URL = S3_IMAGE_URL
-                        else:
-                            IMAGE_URL = GCP_IMAGE_URL
-                        block_list = [blocks.HeaderBlock(text=":calendar: Q Calendar")]
-                        if slack_app_settings.get("calendar_image_current"):
-                            block_list.append(
-                                blocks.ImageBlock(
-                                    image_url=IMAGE_URL.format(
-                                        bucket="f3nation-calendar-images",
-                                        image_name=slack_app_settings["calendar_image_current"],
-                                    ),
-                                    alt_text="This Week's Q Sheet",
-                                )
-                            )
-                        if slack_app_settings.get("calendar_image_next"):
-                            block_list.append(
-                                blocks.ImageBlock(
-                                    image_url=IMAGE_URL.format(
-                                        bucket="f3nation-calendar-images",
-                                        image_name=slack_app_settings["calendar_image_next"],
-                                    ),
-                                    alt_text="Next Week's Q Sheet",
-                                )
-                            )
-                        block_list.append(
-                            blocks.ActionsBlock(
-                                elements=[
-                                    blocks.ButtonElement(
-                                        text=":calendar: Open Full Calendar",
-                                        action_id=actions.OPEN_CALENDAR_BUTTON,
-                                    ),
-                                    blocks.ButtonElement(
-                                        text=":world_map: Nearby Special Events",
-                                        action_id=actions.NEARBY_EVENTS_OPEN,
-                                    ),
-                                ]
-                            )
-                        )
-                        block_list.extend(create_special_events_blocks(slack_app_settings))
-                        try:
-                            if slack_app_settings.get("q_image_posting_ts") and (not first_sunday_run):
-                                try:
-                                    client.chat_update(
-                                        channel=slack_app_settings["q_image_posting_channel"],
-                                        ts=slack_app_settings["q_image_posting_ts"],
-                                        blocks=block_list,
-                                        text="Q Sheet",
-                                    )
-                                except Exception as e:
-                                    print(f"Error updating Slack message, posting new message: {e}")
-                                    response = client.chat_postMessage(
-                                        channel=slack_app_settings["q_image_posting_channel"],
-                                        text="Q Sheet",
-                                        blocks=block_list,
-                                    )
-                                    if response["ok"]:
-                                        slack_app_settings["q_image_posting_ts"] = response["ts"]
-                            else:
-                                response = client.chat_postMessage(
-                                    channel=slack_app_settings["q_image_posting_channel"],
-                                    text="Q Sheet",
-                                    blocks=block_list,
-                                )
-                                if response["ok"]:
-                                    slack_app_settings["q_image_posting_ts"] = response["ts"]
-                        except Exception as e:
-                            print(f"Error posting to Slack channel: {e}")
-                        # update org record with new filename
+                    if calendar_updated and slack_posting_enabled(slack_app_settings):
+                        post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run)
+
                     print(f"Updating Slack app settings for region {region_name} with {slack_app_settings}")
                     session.query(SlackSpace).filter(SlackSpace.team_id == slack_app_settings["team_id"]).update(
                         {"settings": slack_app_settings}
@@ -539,6 +617,28 @@ def generate_calendar_images(force: bool = False):
 
             except Exception as e:
                 print(f"Error processing region {region_id}: {e}")
+
+        # Regions with no events in the calendar range never enter the loop above, so their stale
+        # week images would otherwise linger forever after a drop from 3 weeks to 2.
+        for region_org_record in region_org_records:
+            region_id = region_org_record[0].id
+            if region_id in region_ids_with_events:
+                continue
+            try:
+                slack_app_settings: dict = region_org_record[2].settings
+                num_weeks = calendar_weeks_shown(slack_app_settings)
+                if not remove_stale_week_images(slack_app_settings, region_id, num_weeks):
+                    continue
+                if slack_posting_enabled(slack_app_settings):
+                    # no images were regenerated for this region, so only refresh the existing post
+                    post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run=False)
+                print(f"Removing stale calendar images for region {region_org_record[0].name}")
+                session.query(SlackSpace).filter(SlackSpace.team_id == slack_app_settings["team_id"]).update(
+                    {"settings": slack_app_settings}
+                )
+                session.commit()
+            except Exception as e:
+                print(f"Error cleaning up stale calendar images for region {region_id}: {e}")
     update_local_region_records()
 
 

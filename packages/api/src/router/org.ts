@@ -18,8 +18,10 @@ import type { AppDb } from "@acme/db/client";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import { OrgInsertSchema } from "@acme/validators";
 
+import { assertValidParentType } from "../assert-valid-parent-type";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
@@ -101,19 +103,19 @@ async function resolveEditableOrgIds(params: {
   }
 
   const result = await getEditableOrgIdsForUser(ctx);
-  const { editableOrgs, isNationAdmin } = result;
+  const { editableRootOrgIds, isNationAdmin } = result;
 
-  if (!isNationAdmin && editableOrgs.length > 0) {
-    const editableOrgIdsList = editableOrgs.map((o) => o.id);
+  if (!isNationAdmin && editableRootOrgIds.length > 0) {
     const editableOrgIds = await getDescendantOrgIds(
       ctx.db,
-      editableOrgIdsList,
+      editableRootOrgIds,
     );
-    return { editableOrgIds, isNationAdmin };
+    // Defensively fail closed if roots disappear between scope lookup and traversal.
+    return editableOrgIds.length > 0 ? { editableOrgIds, isNationAdmin } : null;
   }
 
-  // If user has no editable orgs and is not a nation admin, return null
-  if (editableOrgs.length === 0 && !isNationAdmin) {
+  // No direct editable roots means the scoped result must be empty.
+  if (editableRootOrgIds.length === 0 && !isNationAdmin) {
     return null;
   }
 
@@ -519,15 +521,12 @@ export const orgRouter = {
         directRolesMap.set(key, existing);
       }
 
-      // Get all editable orgs (includes descendants via hierarchy traversal)
-      const { editableOrgs } = await getEditableOrgIdsForUser(ctx);
-      const directEditableIds = editableOrgs
-        .map((o) => o.id)
-        .filter((id): id is number => id !== null);
+      // Get direct editable roots, then expand their descendants once.
+      const { editableRootOrgIds } = await getEditableOrgIdsForUser(ctx);
 
       const editableOrgIds =
-        directEditableIds.length > 0
-          ? await getDescendantOrgIds(ctx.db, directEditableIds)
+        editableRootOrgIds.length > 0
+          ? await getDescendantOrgIds(ctx.db, editableRootOrgIds)
           : [];
 
       // Query full org details for all editable orgs. orderBy(id) makes this
@@ -719,8 +718,12 @@ export const orgRouter = {
       path: "/",
       tags: ["org"],
       summary: "Create or update organization",
-      description:
-        "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → region → area → ao).",
+      description: `Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (${[
+        ...OrgType,
+      ]
+        .reverse()
+        .map((t) => orgTypeDisplay[t].label.toLowerCase())
+        .join(" → ")}).`,
     })
     .output(
       z.object({
@@ -783,6 +786,21 @@ export const orgRouter = {
           message: "Parent ID or ID is required",
         });
       }
+
+      // Verify a create's parent exists before authorization: checkHasRoleOnOrg
+      // returns the same UNAUTHORIZED for a nonexistent org as for an existing
+      // but forbidden one, so without this check "Parent org not found" is
+      // unreachable.
+      if (!input.id && input.parentId != null) {
+        const [existingParentOrg] = await ctx.db
+          .select({ id: schema.orgs.id })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, input.parentId));
+        if (!existingParentOrg) {
+          throw new ORPCError("NOT_FOUND", { message: "Parent org not found" });
+        }
+      }
+
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: orgIdToCheck,
         session: ctx.session,
@@ -797,6 +815,10 @@ export const orgRouter = {
 
       // CASE 1: Create new org
       if (!input.id) {
+        if (input.parentId != null) {
+          await assertValidParentType(ctx.db, input.parentId, input.orgType);
+        }
+
         const [result] = await ctx.db
           .insert(schema.orgs)
           .values({
@@ -845,6 +867,17 @@ export const orgRouter = {
 
         destinationParentOrgId = input.parentId;
 
+        // Same reasoning as the create path above: verify the destination
+        // parent exists before authorization, since checkHasRoleOnOrg can't
+        // distinguish a nonexistent org from an existing but forbidden one.
+        const [destinationParentOrg] = await ctx.db
+          .select({ id: schema.orgs.id })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, destinationParentOrgId));
+        if (!destinationParentOrg) {
+          throw new ORPCError("NOT_FOUND", { message: "Parent org not found" });
+        }
+
         const destinationRoleCheckResult = await checkHasRoleOnOrg({
           orgId: destinationParentOrgId,
           session: ctx.session,
@@ -858,6 +891,12 @@ export const orgRouter = {
               "You are not authorized to move this org to the destination parent organization",
           });
         }
+
+        await assertValidParentType(
+          ctx.db,
+          destinationParentOrgId,
+          input.orgType,
+        );
       }
 
       // If the parentId is changing and this is an AO, we need to move the locations for the org

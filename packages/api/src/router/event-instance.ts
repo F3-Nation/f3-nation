@@ -12,12 +12,13 @@ import {
   ilike,
   inArray,
   isNull,
+  lte,
   or,
   schema,
   sql,
 } from "@acme/db";
 import { SeriesException } from "@acme/shared/app/enums";
-import { arrayOrSingle } from "@acme/shared/app/functions";
+import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { paginationFields, resolvePagination } from "../lib/pagination";
@@ -130,7 +131,20 @@ export const eventInstanceRouter = {
             .optional(),
           regionOrgId: z.coerce.number().optional(),
           aoOrgId: z.coerce.number().optional(),
-          startDate: z.string().optional(),
+          regionOrgIds: z.array(z.coerce.number()).optional(),
+          aoOrgIds: z.array(z.coerce.number()).optional(),
+          startDate: z
+            .string()
+            .optional()
+            .describe(
+              "Inclusive lower bound on the instance start date (YYYY-MM-DD). Only instances starting on or after this date are returned.",
+            ),
+          startDateTo: z
+            .string()
+            .optional()
+            .describe(
+              "Inclusive upper bound on the instance start date (YYYY-MM-DD). Only instances starting on or before this date are returned.",
+            ),
           seriesId: z.coerce.number().optional(),
           onlyStandalone: z.coerce.boolean().optional(), // Only instances without a series
         })
@@ -153,11 +167,18 @@ export const eventInstanceRouter = {
         defaultPageSize: 40,
       });
 
+      const statusFilter = (() => {
+        const s = input?.statuses;
+        if (s === undefined) return eq(schema.eventInstances.isActive, true);
+        if (s.length === 0) return undefined;
+        if (s.length >= 2) return undefined;
+        return s.includes("active")
+          ? eq(schema.eventInstances.isActive, true)
+          : eq(schema.eventInstances.isActive, false);
+      })();
+
       const where = and(
-        // Active status filter
-        input?.statuses?.includes("inactive")
-          ? undefined
-          : eq(schema.eventInstances.isActive, true),
+        statusFilter,
         // Search filter
         input?.searchTerm
           ? or(
@@ -166,12 +187,23 @@ export const eventInstanceRouter = {
             )
           : undefined,
         // Region filter (through AO's parent)
-        input?.regionOrgId ? eq(regionOrg.id, input.regionOrgId) : undefined,
+        input?.regionOrgIds?.length
+          ? inArray(regionOrg.id, input.regionOrgIds)
+          : input?.regionOrgId
+            ? eq(regionOrg.id, input.regionOrgId)
+            : undefined,
         // AO filter
-        input?.aoOrgId ? eq(aoOrg.id, input.aoOrgId) : undefined,
+        input?.aoOrgIds?.length
+          ? inArray(aoOrg.id, input.aoOrgIds)
+          : input?.aoOrgId
+            ? eq(aoOrg.id, input.aoOrgId)
+            : undefined,
         // Start date filter
         input?.startDate
           ? gte(schema.eventInstances.startDate, input.startDate)
+          : undefined,
+        input?.startDateTo
+          ? lte(schema.eventInstances.startDate, input.startDateTo)
           : undefined,
         // Series filter
         input?.seriesId
@@ -188,7 +220,17 @@ export const eventInstanceRouter = {
         name: schema.eventInstances.name,
         description: schema.eventInstances.description,
         isActive: schema.eventInstances.isActive,
+        aoName: aoOrg.name,
+        regionName: regionOrg.name,
         locationId: schema.eventInstances.locationId,
+        // Raw parts feed `getFullAddress` below, which formats them into the
+        // single `location` string the admin table renders.
+        locationName: schema.locations.name,
+        locationAddress: schema.locations.addressStreet,
+        locationAddress2: schema.locations.addressStreet2,
+        locationCity: schema.locations.addressCity,
+        locationState: schema.locations.addressState,
+        locationCountry: schema.locations.addressCountry,
         orgId: schema.eventInstances.orgId,
         seriesId: schema.eventInstances.seriesId,
         seriesException: schema.eventInstances.seriesException,
@@ -222,29 +264,48 @@ export const eventInstanceRouter = {
         )
         .where(where);
 
-      // asc(id) is appended as a final tiebreaker so instances sharing the
-      // same startDate/startTime (or whatever sort field ties) still get a
-      // total order -- without one, offset pagination can return the same
-      // row on two pages or skip one entirely, since the DB is free to break
-      // ties differently between the count query and each page's query.
-      const sortedColumns = (
-        input?.sorting?.map((sorting) => {
-          const direction = sorting.desc ? desc : asc;
-          switch (sorting.id) {
-            case "startDate":
-              return direction(schema.eventInstances.startDate);
-            case "startTime":
-              return direction(schema.eventInstances.startTime);
-            case "name":
-              return direction(schema.eventInstances.name);
-            default:
-              return direction(schema.eventInstances.startDate);
-          }
-        }) ?? [
-          asc(schema.eventInstances.startDate),
-          asc(schema.eventInstances.startTime),
-        ]
-      ).concat(asc(schema.eventInstances.id));
+      const requestedSorting = input?.sorting?.length
+        ? input.sorting
+        : undefined;
+
+      const sortedColumns = requestedSorting?.map((sorting) => {
+        const direction = sorting.desc ? desc : asc;
+        switch (sorting.id) {
+          case "startDate":
+            return direction(schema.eventInstances.startDate);
+          case "endDate":
+            return direction(schema.eventInstances.endDate);
+          case "startTime":
+            return direction(schema.eventInstances.startTime);
+          case "endTime":
+            return direction(schema.eventInstances.endTime);
+          case "name":
+            return direction(schema.eventInstances.name);
+          case "aoName":
+            return direction(aoOrg.name);
+          case "regionName":
+            return direction(regionOrg.name);
+          case "seriesException":
+            return direction(schema.eventInstances.seriesException);
+          case "isPrivate":
+            return direction(schema.eventInstances.isPrivate);
+          case "isActive":
+            return direction(schema.eventInstances.isActive);
+          case "location":
+            return direction(
+              sql`COALESCE(NULLIF(${schema.locations.name}, ''), ${schema.locations.addressStreet})`,
+            );
+          default:
+            return direction(schema.eventInstances.startDate);
+        }
+      }) ?? [
+        asc(schema.eventInstances.startDate),
+        asc(schema.eventInstances.name),
+      ];
+
+      // Every sort ends on the id so ties have a deterministic order; without it
+      // rows with equal sort keys can repeat or vanish between pages.
+      sortedColumns.push(asc(schema.eventInstances.id));
 
       const query = ctx.db
         .select(select)
@@ -263,14 +324,30 @@ export const eventInstanceRouter = {
             eq(regionOrg.id, aoOrg.parentId),
           ),
         )
+        // Left join: an instance without a location still belongs in the list.
+        .leftJoin(
+          schema.locations,
+          eq(schema.locations.id, schema.eventInstances.locationId),
+        )
         .where(where);
 
       const instances = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
+      // Every instance is returned; `location` is a display label that falls back
+      // to the formatted address, and is null when neither is set.
+      const instancesWithLocationLabel = instances.map((instance) => {
+        const locationName = instance.locationName?.trim() ?? "";
+        return {
+          ...instance,
+          location:
+            locationName.length > 0 ? locationName : getFullAddress(instance),
+        };
+      });
+
       return {
-        eventInstances: instances,
+        eventInstances: instancesWithLocationLabel,
         totalCount: instanceCount?.count ?? 0,
       };
     }),
@@ -321,12 +398,14 @@ export const eventInstanceRouter = {
           org: sql<{
             id: number;
             name: string;
+            parentId: number | null;
             meta: Record<string, unknown> | null;
           } | null>`
             CASE WHEN ${aoOrg.id} IS NOT NULL THEN
               jsonb_build_object(
                 'id', ${aoOrg.id},
                 'name', ${aoOrg.name},
+                'parentId', ${aoOrg.parentId},
                 'meta', ${aoOrg.meta}
               )
             ELSE NULL END
@@ -417,6 +496,7 @@ export const eventInstanceRouter = {
           schema.eventInstances.id,
           aoOrg.id,
           aoOrg.name,
+          aoOrg.parentId,
           sql`${aoOrg.meta}::text`,
           schema.locations.id,
           schema.locations.name,
@@ -504,7 +584,7 @@ export const eventInstanceRouter = {
         id: z.coerce.number().optional(),
         name: z.string().optional(),
         description: z.string().nullish(),
-        isActive: z.boolean().optional().default(true),
+        isActive: z.boolean().optional(),
         locationId: z.coerce.number().nullish(),
         orgId: z.coerce.number(),
         seriesId: z.coerce.number().nullish(), // Link to series if this is a series instance
@@ -513,10 +593,23 @@ export const eventInstanceRouter = {
         endDate: z.string().nullish(),
         startTime: z.string().nullish(),
         endTime: z.string().nullish(),
-        highlight: z.boolean().optional().default(false),
+        highlight: z.boolean().optional(),
         meta: z.record(z.string(), z.unknown()).nullish(),
-        isPrivate: z.boolean().optional().default(false),
-        eventTypeId: z.coerce.number().optional(),
+        isPrivate: z.boolean().optional(),
+        eventTypeIds: z
+          .array(z.coerce.number())
+          .optional()
+          .describe(
+            "Event types to associate. An empty array clears the association; omit the field to leave it untouched.",
+          ),
+        // Legacy single-event-type field. The Slackbot (and any other existing
+        // API client) still posts `eventTypeId`, so keep accepting it — dropping
+        // it silently leaves the instance with no event type at all. A falsy id
+        // means "not provided", matching the pre-`eventTypeIds` behaviour.
+        eventTypeId: z.coerce
+          .number()
+          .optional()
+          .describe("Deprecated: use `eventTypeIds`. A single event type id."),
         eventTagId: z.coerce.number().nullish(),
         preblast: z.string().nullish(),
         preblastRich: z.record(z.string(), z.unknown()).nullish(),
@@ -537,31 +630,125 @@ export const eventInstanceRouter = {
       description: "Create a new event instance or update an existing one",
     })
     .handler(async ({ context: ctx, input }) => {
-      // Check permissions
-      const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: input.orgId,
-        session: ctx.session,
-        db: ctx.db,
-        roleName: "editor",
-      });
-      if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to create/update event instances",
+      // When updating, load the persisted instance and authorize against
+      // its actual org — never trust the submitted orgId alone.
+      let existingName: string | null = null;
+      let existingIsActive: boolean | null = null;
+      let existingHighlight: boolean | null = null;
+      let existingIsPrivate: boolean | null = null;
+      let existingSeriesId: number | null = null;
+      if (input.id) {
+        const [existing] = await ctx.db
+          .select({
+            orgId: schema.eventInstances.orgId,
+            name: schema.eventInstances.name,
+            isActive: schema.eventInstances.isActive,
+            highlight: schema.eventInstances.highlight,
+            isPrivate: schema.eventInstances.isPrivate,
+            seriesId: schema.eventInstances.seriesId,
+          })
+          .from(schema.eventInstances)
+          .where(eq(schema.eventInstances.id, input.id));
+
+        if (!existing) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Event instance not found",
+          });
+        }
+
+        const sourceAuth = await checkHasRoleOnOrg({
+          orgId: existing.orgId,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
         });
+        if (!sourceAuth.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to update this event instance",
+          });
+        }
+
+        if (input.orgId !== existing.orgId) {
+          const destAuth = await checkHasRoleOnOrg({
+            orgId: input.orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
+          });
+          if (!destAuth.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message:
+                "You are not authorized to move this event instance to the destination organization",
+            });
+          }
+        }
+
+        existingName = existing.name;
+        existingIsActive = existing.isActive;
+        existingHighlight = existing.highlight;
+        existingIsPrivate = existing.isPrivate;
+        existingSeriesId = existing.seriesId;
+      } else {
+        const createAuth = await checkHasRoleOnOrg({
+          orgId: input.orgId,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
+        });
+        if (!createAuth.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to create event instances",
+          });
+        }
       }
+
+      // Map status is keyed off `seriesId` alone, so a link writes against the
+      // series' org — authorize there. Cross-AO links are legitimate (temporary
+      // AO changes), so only check when the link actually changes.
+      if (input.seriesId != null && input.seriesId !== existingSeriesId) {
+        const [series] = await ctx.db
+          .select({ orgId: schema.events.orgId })
+          .from(schema.events)
+          .where(eq(schema.events.id, input.seriesId));
+
+        if (!series) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Series event not found",
+          });
+        }
+
+        const seriesAuth = await checkHasRoleOnOrg({
+          orgId: series.orgId,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
+        });
+        if (!seriesAuth.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message:
+              "You are not authorized to link this event instance to the requested series",
+          });
+        }
+      }
+
+      // Key presence, not value, decides whether event types are rewritten, so
+      // an empty `eventTypeIds` clears them. Older clients (the Slackbot) send
+      // the singular `eventTypeId`, where a falsy id means "not provided".
+      const legacyEventTypeId =
+        input.eventTypeId != null && input.eventTypeId > 0
+          ? input.eventTypeId
+          : null;
+      const shouldUpdateEventType =
+        "eventTypeIds" in input || legacyEventTypeId != null;
+      const resolvedEventTypeIds =
+        input.eventTypeIds ??
+        (legacyEventTypeId != null ? [legacyEventTypeId] : []);
 
       // Generate a default name if not provided or empty
       let name = input.name;
       if (!name || name.trim() === "") {
-        // If updating an existing record, preserve the existing name
-        if (input.id) {
-          const [existing] = await ctx.db
-            .select({ name: schema.eventInstances.name })
-            .from(schema.eventInstances)
-            .where(eq(schema.eventInstances.id, input.id));
-          if (existing?.name) {
-            name = existing.name;
-          }
+        if (existingName) {
+          name = existingName;
         }
 
         // If still no name (new record or existing had no name), generate default
@@ -573,13 +760,13 @@ export const eventInstanceRouter = {
             .where(eq(schema.orgs.id, input.orgId));
           const aoName = ao?.name ?? "Workout";
 
-          // Get event type name if provided
           let eventTypeName = "Event";
-          if (input.eventTypeId) {
+          const firstEventTypeId = resolvedEventTypeIds[0];
+          if (firstEventTypeId != null) {
             const [eventType] = await ctx.db
               .select({ name: schema.eventTypes.name })
               .from(schema.eventTypes)
-              .where(eq(schema.eventTypes.id, input.eventTypeId));
+              .where(eq(schema.eventTypes.id, firstEventTypeId));
             eventTypeName = eventType?.name ?? "Event";
           }
 
@@ -587,57 +774,87 @@ export const eventInstanceRouter = {
         }
       }
 
+      const isActive = input.isActive ?? existingIsActive ?? true;
+      const highlight = input.highlight ?? existingHighlight ?? false;
+      const isPrivate = input.isPrivate ?? existingIsPrivate ?? false;
+
+      // Presence of the key — not truthiness of the value — decides whether the
+      // association is rewritten, so an explicit null can clear it. Must be read
+      // before destructuring, which would lose the distinction.
       const shouldUpdateEventTag = "eventTagId" in input;
-      const { eventTypeId, eventTagId, name: _inputName, ...eventData } = input;
+      const {
+        eventTypeIds: _inputEventTypeIds,
+        eventTypeId: _inputEventTypeId,
+        eventTagId,
+        name: _inputName,
+        isActive: _inputIsActive,
+        highlight: _inputHighlight,
+        isPrivate: _inputIsPrivate,
+        ...eventData
+      } = input;
 
-      // Create or update the event instance
-      const [result] = await ctx.db
-        .insert(schema.eventInstances)
-        .values({
-          ...eventData,
-          name,
-        })
-        .onConflictDoUpdate({
-          target: [schema.eventInstances.id],
-          set: { ...eventData, name },
-        })
-        .returning();
+      const result = await ctx.db.transaction(async (tx) => {
+        // Create or update the event instance
+        const [upserted] = await tx
+          .insert(schema.eventInstances)
+          .values({
+            ...eventData,
+            name,
+            isActive,
+            highlight,
+            isPrivate,
+          })
+          .onConflictDoUpdate({
+            target: [schema.eventInstances.id],
+            set: { ...eventData, name, isActive, highlight, isPrivate },
+          })
+          .returning();
 
-      if (!result) {
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "Failed to create/update event instance",
-        });
-      }
-
-      // Handle event type in join table
-      if (eventTypeId) {
-        await ctx.db
-          .delete(schema.eventInstancesXEventTypes)
-          .where(
-            eq(schema.eventInstancesXEventTypes.eventInstanceId, result.id),
-          );
-
-        await ctx.db.insert(schema.eventInstancesXEventTypes).values({
-          eventInstanceId: result.id,
-          eventTypeId,
-        });
-      }
-
-      // Handle event tag in join table
-      if (shouldUpdateEventTag) {
-        await ctx.db
-          .delete(schema.eventTagsXEventInstances)
-          .where(
-            eq(schema.eventTagsXEventInstances.eventInstanceId, result.id),
-          );
-
-        if (eventTagId != null) {
-          await ctx.db.insert(schema.eventTagsXEventInstances).values({
-            eventInstanceId: result.id,
-            eventTagId,
+        if (!upserted) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Failed to create/update event instance",
           });
         }
-      }
+
+        // Handle event types in join table
+        if (shouldUpdateEventType) {
+          await tx
+            .delete(schema.eventInstancesXEventTypes)
+            .where(
+              eq(schema.eventInstancesXEventTypes.eventInstanceId, upserted.id),
+            );
+
+          // Duplicates in the payload would violate the join table's primary
+          // key, so collapse them before inserting.
+          const uniqueEventTypeIds = [...new Set(resolvedEventTypeIds)];
+          if (uniqueEventTypeIds.length > 0) {
+            await tx.insert(schema.eventInstancesXEventTypes).values(
+              uniqueEventTypeIds.map((id) => ({
+                eventInstanceId: upserted.id,
+                eventTypeId: id,
+              })),
+            );
+          }
+        }
+
+        // Handle event tag in join table
+        if (shouldUpdateEventTag) {
+          await tx
+            .delete(schema.eventTagsXEventInstances)
+            .where(
+              eq(schema.eventTagsXEventInstances.eventInstanceId, upserted.id),
+            );
+
+          if (eventTagId != null) {
+            await tx.insert(schema.eventTagsXEventInstances).values({
+              eventInstanceId: upserted.id,
+              eventTagId,
+            });
+          }
+        }
+
+        return upserted;
+      });
 
       return result;
     }),
@@ -663,11 +880,13 @@ export const eventInstanceRouter = {
         });
       }
 
+      // Editor, not admin: this soft delete is the same `isActive: false` write
+      // `crupdate` already allows via its Status field.
       const roleCheckResult = await checkHasRoleOnOrg({
         orgId: instance.orgId,
         session: ctx.session,
         db: ctx.db,
-        roleName: "admin",
+        roleName: "editor",
       });
       if (!roleCheckResult.success) {
         throw new ORPCError("UNAUTHORIZED", {
@@ -681,7 +900,7 @@ export const eventInstanceRouter = {
         .set({ isActive: false })
         .where(eq(schema.eventInstances.id, input.id));
 
-      return { success: true };
+      return { eventInstanceId: input.id };
     }),
 
   /**
@@ -1087,6 +1306,8 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
+            seriesException: schema.eventInstances.seriesException,
+            meta: schema.eventInstances.meta,
             hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
@@ -1152,6 +1373,8 @@ export const eventInstanceRouter = {
             schema.eventInstances.startTime,
             schema.eventInstances.orgId,
             schema.eventInstances.seriesId,
+            schema.eventInstances.seriesException,
+            schema.eventInstances.meta,
             aoOrg.name,
             seriesEvent.name,
           )
@@ -1175,6 +1398,8 @@ export const eventInstanceRouter = {
             orgName: aoOrg.name,
             seriesId: schema.eventInstances.seriesId,
             seriesName: seriesEvent.name,
+            seriesException: schema.eventInstances.seriesException,
+            meta: schema.eventInstances.meta,
             hasPreblast: sql<boolean>`${schema.eventInstances.preblastTs} IS NOT NULL`,
             eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
               json_agg(
@@ -1240,6 +1465,8 @@ export const eventInstanceRouter = {
             schema.eventInstances.startTime,
             schema.eventInstances.orgId,
             schema.eventInstances.seriesId,
+            schema.eventInstances.seriesException,
+            schema.eventInstances.meta,
             aoOrg.name,
             seriesEvent.name,
           )

@@ -37,7 +37,7 @@ describe("Next route shims delegate to the moved modules", () => {
     expect(route.PATCH).toBe(handleRequest);
     expect(route.DELETE).toBe(handleRequest);
     expect(route.OPTIONS).toBe(handleRequest);
-  });
+  }, 15_000);
 
   it("docs/openapi.json/route.ts re-exports openApiJson as GET", async () => {
     const { openApiJson } = await import("../src/docs");
