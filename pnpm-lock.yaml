@@ -108,13 +108,13 @@ settings:
 catalogs:
   default:
     '@better-auth/core':
-      specifier: ~1.7.4
+      specifier: ^1.7.4
       version: 1.7.4
     '@better-auth/drizzle-adapter':
-      specifier: ~1.7.4
+      specifier: ^1.7.4
       version: 1.7.4
     '@better-auth/oauth-provider':
-      specifier: ~1.7.4
+      specifier: ^1.7.4
       version: 1.7.4
     '@commitlint/cli':
       specifier: ^21.2.2
@@ -318,7 +318,7 @@ catalogs:
       specifier: ^1.6.27
       version: 1.6.27
     better-auth:
-      specifier: ~1.7.4
+      specifier: ^1.7.4
       version: 1.7.4
     class-variance-authority:
       specifier: ^0.7.1
