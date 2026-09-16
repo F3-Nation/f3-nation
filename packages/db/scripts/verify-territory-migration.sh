@@ -103,7 +103,7 @@ for table in orgs positions; do
     echo "Rollback unexpectedly accepted a territory in $table" >&2
     exit 1
   fi
-  if ! rg -q 'Cannot roll back org_type while territory values exist' "$artifact_dir/rollback-$table.log"; then
+  if ! grep -q 'Cannot roll back org_type while territory values exist' "$artifact_dir/rollback-$table.log"; then
     echo "Rollback failed for an unexpected reason; see $artifact_dir" >&2
     exit 1
   fi
