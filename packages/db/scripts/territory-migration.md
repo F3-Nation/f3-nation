@@ -147,3 +147,8 @@ depth-agnostic and verify Sector and Territory counts for active descendant AOs,
 inactive intermediate organizations, and moves between old and new hierarchy
 paths. This migration only refreshes the existing function to clear stale plans;
 it does not change AO-count semantics or backfill counts.
+
+The API temporarily rejects Area creation and reparenting beneath Territory in
+`assertValidParentType`. Remove that guard in #924 only after both counting paths
+and the mixed-parent regression tests pass. Direct SQL writes bypass this guard
+and must still follow the rollout gate above.

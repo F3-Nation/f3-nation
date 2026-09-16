@@ -679,7 +679,7 @@ describe("Org Router", () => {
       ).rejects.toThrow(/Region.*AO/);
     });
 
-    it("persists and lists Territory, accepts an Area child, and rejects an Area parent", async () => {
+    it("persists and lists Territory but rejects Area creation and reparenting beneath it", async () => {
       const nation = await getOrCreateF3NationOrg();
       await mockAuthWithSession(await createAdminSession());
       const client = createTestClient();
@@ -709,14 +709,35 @@ describe("Org Router", () => {
       });
       expect(territory.org?.orgType).toBe("territory");
       createdOrgIds.push(territory.org!.id);
+      await expect(
+        client.org.crupdate({
+          ...fields,
+          name: `Blocked Territory Area ${uniqueId()}`,
+          orgType: "area",
+          parentId: territory.org!.id,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
       const area = await client.org.crupdate({
         ...fields,
         name: `Territory Area ${uniqueId()}`,
         orgType: "area",
-        parentId: territory.org!.id,
+        parentId: sector.org!.id,
       });
-      expect(area.org?.parentId).toBe(territory.org!.id);
+      expect(area.org?.parentId).toBe(sector.org!.id);
       createdOrgIds.push(area.org!.id);
+      await expect(
+        client.org.crupdate({
+          ...fields,
+          id: area.org!.id,
+          name: area.org!.name,
+          orgType: "area",
+          parentId: territory.org!.id,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      const unchangedArea = await db.query.orgs.findFirst({
+        where: eq(schema.orgs.id, area.org!.id),
+      });
+      expect(unchangedArea?.parentId).toBe(sector.org!.id);
       await expect(
         client.org.crupdate({
           ...fields,

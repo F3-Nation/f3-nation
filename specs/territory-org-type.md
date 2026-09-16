@@ -58,7 +58,8 @@ and sorting, status/Only Mine filters, AO count, and no ancestry columns.
 The exhaustive editor configuration also needs a Territory entry: Sector
 parent selector, blank initial name, no logo control, and the existing shared
 validation/deactivation behavior. Existing Area parent choices remain Sector
-until the mixed-parent work in #924. This change inserts no Territory records
+until the mixed-parent work in #924. The API also rejects creating or reparenting
+an Area beneath a Territory until #924 fixes both AO-counting paths. This change inserts no Territory records
 and reparents no existing organizations.
 
 ## 3. User stories
@@ -121,8 +122,8 @@ rule. Add-button visibility is configuration, not authorization.
 - Creating production Territory records or changing existing parent edges.
 - #924's full management UX, mixed-parent selector, ancestry/filter work, and
   depth-agnostic AO-count trigger/seed recount before populated Territory rollout.
-- Changing authorization inheritance, hierarchy validation, or notification
-  escalation rules.
+- Changing authorization inheritance or notification escalation rules, or
+  hierarchy validation beyond the temporary Area-under-Territory rollout gate.
 - Editing the external warehouse mirror in this repository.
 - Production access, data export, deployment, commits, pushes, or external
   messages without their applicable authorization.
@@ -135,6 +136,8 @@ rule. Add-button visibility is configuration, not authorization.
 - TypeScript/Python/PostgreSQL enum order and Python storage-name assertions.
 - Territory sidebar navigation, page loading, Add gating, and editor parent
   configuration; existing route and enum-consumer regression suites.
+- API rejection of Area creation and reparenting beneath Territory, preserving
+  the existing parent after rejection and allowing Area creation beneath Sector.
 
 The production-shaped dump source and isolated restore target must be resolved
 before AC-3 can be marked complete. Any production export requires separate,
