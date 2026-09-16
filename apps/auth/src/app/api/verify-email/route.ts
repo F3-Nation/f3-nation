@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   // Rate-limit production traffic. In non-production (local dev, CI, preview)
   // email is captured by Mailpit (a local SMTP catcher) — not a real inbox —
   // so there is no email-bombing risk and rate-limiting only blocks legitimate
-  // QA automation. See docs/QA_LOCAL_AUTH.md for the headless flow this enables.
+  // QA automation. See apps/auth/AGENTS.md for the headless flow this enables.
   if (env.NODE_ENV === "production") {
     const ip =
       request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??

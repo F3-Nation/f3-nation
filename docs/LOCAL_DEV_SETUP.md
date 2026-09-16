@@ -244,7 +244,7 @@ This starts all apps in parallel via Turborepo:
 
 > **Note:** `scripts/qa/extract-mfa-link.sh` was written for the old Ethereal flow and needs to be updated to query Mailpit's API instead of parsing Ethereal preview URLs from logs.
 
-Cookbook: [`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md). Agent reference: [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md).
+Full recipe: [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md).
 
 ## Troubleshooting
 

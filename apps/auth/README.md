@@ -99,7 +99,6 @@ For the full canonical recipe (CSRF token, triggering a send, pulling the code f
 ### Where to learn more
 
 - **[`AGENTS.md`](AGENTS.md)** -- full agent-friendly recipe, error modes, and the source-of-truth log line patterns
-- **[`../../docs/QA_LOCAL_AUTH.md`](../../docs/QA_LOCAL_AUTH.md)** -- cookbook version cross-referenced from every consuming app
 - **[`src/lib/email-mfa.ts`](src/lib/email-mfa.ts)** -- the actual code; a single nodemailer transport driven entirely by the `EMAIL_SERVER` connection string (SendGrid in production, Mailpit locally)
 
 ---
