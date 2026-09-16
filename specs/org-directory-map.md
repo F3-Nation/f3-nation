@@ -64,6 +64,9 @@ unpopulated tier for one branch requires no per-level code.
   buttons list exactly the navigable layers present in the data, labeled with
   the plural display names from `@acme/shared` (so a newly added tier appears
   automatically and is pluralized correctly).
+  The search placeholder lists those same present layers from broadest to most
+  specific using their shared plural labels, followed by AOs, which are searched
+  separately on the server.
 
 ### Navigation & drill-down (depth-agnostic)
 
@@ -85,6 +88,14 @@ unpopulated tier for one branch requires no per-level code.
   into any sub-level THEN every descendant org of that type is shown (not only
   direct children), because International's structure does not nest cleanly
   through the middle tiers.
+- **AC-22** — GIVEN the API includes an intermediate org tier that the deployed
+  homepage bundle does not recognize WHEN the homepage builds its hierarchy
+  THEN it skips that tier and connects each recognized descendant to its nearest
+  recognized ancestor, leaving no dangling parent references. For example, an
+  area beneath an unknown territory remains reachable from its sector, along
+  with its regions. Navigation and counts for recognized descendants continue
+  working, and region AO pins and location panels retain the behavior specified
+  in AC-17 and AC-18. Today's five-tier hierarchy behaves unchanged.
 
 ### URL state
 
@@ -222,6 +233,10 @@ the directory never surfaces deactivated orgs, venues, or people.
    location panel listing the active AOs there (AC-17, AC-18); co-located pins
    fan out so each is selectable (AC-19); the location endpoint returns only
    active AOs and leadership (AC-20).
+8. Load a hierarchy containing an unrecognized intermediate tier: its children
+   reconnect to the nearest recognized ancestor with no dangling parent IDs;
+   drilling from sector to area to region, descendant counts, and region AO
+   pins continue working (AC-22, AC-17, AC-18).
 
 ## 8. Observability
 

@@ -1,16 +1,20 @@
 import nodemailer from "nodemailer";
 import type Mail from "nodemailer/lib/mailer";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
 import { env } from "@acme/env";
 
 import type { TemplateType } from "./templates";
 import { DefaultSubject, renderTemplate, Templates } from "./templates";
 
-// Derive the transporter and result types from createTransport so they track
-// whichever SentMessageInfo variant @types/nodemailer infers for our config,
-// rather than pinning SMTPTransport (which mismatches under nodemailer 9).
-type AppTransporter = ReturnType<typeof nodemailer.createTransport>;
-type SentMessageInfo = Awaited<ReturnType<AppTransporter["sendMail"]>>;
+// getTransporter() always calls createTransport() with a plain SMTP connection
+// string, so pin to SMTPTransport's result type directly. The previous
+// ReturnType<typeof createTransport> derivation relied on TS resolving
+// utility types against an overloaded function's *last* signature, which
+// nodemailer 10 turned into a generic `Mail<any>` catch-all, collapsing
+// SentMessageInfo (and every value pushed into arrays typed with it) to `any`.
+type AppTransporter = Mail<SMTPTransport.SentMessageInfo>;
+type SentMessageInfo = SMTPTransport.SentMessageInfo;
 
 /**
  * Default recipients for each template

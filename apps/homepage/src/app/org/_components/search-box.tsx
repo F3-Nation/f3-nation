@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { AoSearchResult, Org } from "../_lib/types";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import type { AoSearchResult, Org, OrgType } from "../_lib/types";
 import { useAoSearch } from "../_lib/use-ao-search";
 
 interface SearchBoxProps {
+  presentLayers: readonly OrgType[];
   onSelect: (org: Org) => void;
   getResults: (query: string) => Org[];
   onSelectAo: (ao: AoSearchResult) => boolean;
@@ -12,6 +14,7 @@ interface SearchBoxProps {
 }
 
 export function SearchBox({
+  presentLayers,
   onSelect,
   getResults,
   onSelectAo,
@@ -108,6 +111,14 @@ export function SearchBox({
     !aoLoading &&
     !aoError;
 
+  const searchLabels = presentLayers
+    .slice()
+    .reverse()
+    .map((type) => orgTypeDisplay[type].pluralLabel);
+  // AO search is server-side, independent of the navigable layers in the chart.
+  const placeholder =
+    [...searchLabels, orgTypeDisplay.ao.pluralLabel].join(", ") + "…";
+
   return (
     <div ref={containerRef} className="relative">
       <label
@@ -123,7 +134,7 @@ export function SearchBox({
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
         onFocus={() => query.trim() && setOpen(true)}
-        placeholder="Sectors, areas, regions, AOs…"
+        placeholder={placeholder}
         disabled={disabled}
         autoComplete="off"
         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-muted disabled:text-muted-foreground"

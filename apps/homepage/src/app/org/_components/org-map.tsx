@@ -945,6 +945,7 @@ export default function OrgMap() {
         <aside className="flex flex-col gap-3 overflow-y-auto">
           <div className="rounded-2xl bg-white p-4 shadow-md">
             <SearchBox
+              presentLayers={presentLayers}
               getResults={getSearchResults}
               onSelect={navigateToOrg}
               onSelectAo={navigateToAo}
