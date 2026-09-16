@@ -21,7 +21,8 @@ API field notes:
   - Response from POST /v1/event (crupdate) returns ``orgId`` directly.
   - Response from GET /v1/event (list) returns ``parents`` (list of {parentId, parentName})
     for the AO and ``regions`` for the region.
-  - Event responses include ``eventTagIds`` for pre-populating edits.
+  - GET event list and by-ID responses include ``eventTagIds`` for pre-populating edits;
+    POST event crupdate responses do not include it.
 """
 
 from __future__ import annotations

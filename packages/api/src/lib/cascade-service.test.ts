@@ -910,6 +910,49 @@ describe("Cascade Service", () => {
       expect(remaining).toEqual([]);
     });
 
+    it("should preserve instance tag overrides when tags are omitted", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const firstTag = await createTestEventTag();
+      const overrideTag = await createTestEventTag();
+      const series = await createTestSeries(ao.id, null, {
+        eventTagIds: [firstTag.id],
+        startDate: "2026-04-01",
+        endDate: "2026-04-30",
+      });
+
+      await createEventInstancesForSeries(db, series, 4, "2026-04-01");
+      const [instance] = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      if (!instance) return;
+
+      await db
+        .delete(schema.eventTagsXEventInstances)
+        .where(
+          eq(schema.eventTagsXEventInstances.eventInstanceId, instance.id),
+        );
+      await db.insert(schema.eventTagsXEventInstances).values({
+        eventInstanceId: instance.id,
+        eventTagId: overrideTag.id,
+      });
+
+      await updateFutureInstances(
+        db,
+        { ...series, eventTagIds: undefined },
+        "2026-04-01",
+      );
+
+      const rows = await db
+        .select({ eventTagId: schema.eventTagsXEventInstances.eventTagId })
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          eq(schema.eventTagsXEventInstances.eventInstanceId, instance.id),
+        );
+      expect(rows.map((row) => row.eventTagId)).toEqual([overrideTag.id]);
+    });
+
     it("should return 0 when there are no future instances", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);

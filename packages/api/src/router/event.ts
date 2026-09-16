@@ -11,6 +11,7 @@ import {
   eq,
   ilike,
   inArray,
+  isNull,
   or,
   schema,
   sql,
@@ -771,6 +772,8 @@ export const eventRouter = {
       }
 
       const { eventTypeIds, eventTagIds, meta, ...eventData } = input;
+      const normalizedEventTagIds =
+        eventTagIds === undefined ? undefined : [...new Set(eventTagIds)];
       const mapSeed =
         typeof meta?.mapSeed === "boolean" ? meta.mapSeed : undefined;
       const eventToUpdate: typeof schema.events.$inferInsert = {
@@ -803,15 +806,47 @@ export const eventRouter = {
           });
         }
 
+        if (normalizedEventTagIds !== undefined) {
+          const [destinationOrg] = await transactionDb
+            .select({ parentId: schema.orgs.parentId })
+            .from(schema.orgs)
+            .where(eq(schema.orgs.id, result.orgId));
+          const availableTags = await transactionDb
+            .select({ id: schema.eventTags.id })
+            .from(schema.eventTags)
+            .where(
+              and(
+                inArray(schema.eventTags.id, normalizedEventTagIds),
+                eq(schema.eventTags.isActive, true),
+                or(
+                  isNull(schema.eventTags.specificOrgId),
+                  eq(schema.eventTags.specificOrgId, result.orgId),
+                  destinationOrg?.parentId
+                    ? eq(
+                        schema.eventTags.specificOrgId,
+                        destinationOrg.parentId,
+                      )
+                    : undefined,
+                ),
+              ),
+            );
+
+          if (availableTags.length !== normalizedEventTagIds.length) {
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Invalid event tags",
+            });
+          }
+        }
+
         const effectiveEventTagIds =
-          eventTagIds === undefined && existingEvent
+          normalizedEventTagIds === undefined && existingEvent
             ? (
                 await transactionDb
                   .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
                   .from(schema.eventTagsXEvents)
                   .where(eq(schema.eventTagsXEvents.eventId, result.id))
               ).map(({ eventTagId }) => eventTagId)
-            : eventTagIds;
+            : normalizedEventTagIds;
 
         // Handle event type in join table
         if (eventTypeIds) {
@@ -827,13 +862,13 @@ export const eventRouter = {
           );
         }
 
-        if (eventTagIds !== undefined) {
+        if (normalizedEventTagIds !== undefined) {
           await transactionDb
             .delete(schema.eventTagsXEvents)
             .where(eq(schema.eventTagsXEvents.eventId, result.id));
-          if (eventTagIds.length > 0) {
+          if (normalizedEventTagIds.length > 0) {
             await transactionDb.insert(schema.eventTagsXEvents).values(
-              eventTagIds.map((eventTagId) => ({
+              normalizedEventTagIds.map((eventTagId) => ({
                 eventId: result.id,
                 eventTagId,
               })),
@@ -915,7 +950,15 @@ export const eventRouter = {
               });
             } else {
               // Non-structural change: update future instances in place
-              await updateFutureInstances(transactionDb, seriesData);
+              await updateFutureInstances(transactionDb, {
+                ...seriesData,
+                // An omitted tag field must not overwrite per-instance
+                // overrides during an in-place series update.
+                eventTagIds:
+                  normalizedEventTagIds === undefined
+                    ? undefined
+                    : effectiveEventTagIds,
+              });
             }
           } else {
             // Converting a non-series event to a series: create instances from series start date
@@ -937,7 +980,11 @@ export const eventRouter = {
           await import("../lib/first-event-service");
         void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
           (err: unknown) =>
-            logError("api.event.first_event_notify_failed", {}, err),
+            logError(
+              "api.event.first_event_notify_failed",
+              { orgId: result.orgId, eventId: result.id },
+              err,
+            ),
         );
       }
       if (result?.dayOfWeek) {

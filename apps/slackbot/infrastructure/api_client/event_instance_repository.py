@@ -467,8 +467,6 @@ class ApiEventInstanceRepository:
             series_exception=self._series_exception_for_update(existing, start_time),
         )
         payload["id"] = instance_id
-        if event_tag_ids is not None and not event_tag_ids:
-            payload["eventTagId"] = None
         if clear_location_id:
             payload["locationId"] = None
         result = self._client.post("/v1/event-instance", json=payload)
