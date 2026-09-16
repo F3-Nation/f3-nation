@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.3.0...pkg-shared@0.3.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **homepage:** preserve org navigation across unknown tiers ([#1019](https://github.com/F3-Nation/f3-nation/issues/1019)) ([b616b6b](https://github.com/F3-Nation/f3-nation/commit/b616b6bc2ca0ba3f1ac97874300b1e7713ab2d64))
+
 ## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.2.0...pkg-shared@0.3.0) (2026-09-10)
 
 

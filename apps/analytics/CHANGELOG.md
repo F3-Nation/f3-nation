@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.3.1...analytics@0.4.0) (2026-09-16)
+
+
+### Features
+
+* **analytics:** new approach to batch releases ([#1013](https://github.com/F3-Nation/f3-nation/issues/1013)) ([e5b0c43](https://github.com/F3-Nation/f3-nation/commit/e5b0c433e864f5613b6a311daf59d5610cfdd5a2))
+* **analytics:** territory implementation for analytics ([#991](https://github.com/F3-Nation/f3-nation/issues/991)) ([f8793f0](https://github.com/F3-Nation/f3-nation/commit/f8793f0a6a54790c073f68a395c50c669d555d56))
+
 ## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/analytics@0.3.0...analytics@0.3.1) (2026-09-11)
 
 
