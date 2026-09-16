@@ -12,14 +12,11 @@ import { ORPCError } from "@orpc/client";
 
 import AdminOrgEditModal from "~/app/_components/modal/admin-org-edit-modal";
 import OrgPage from "~/app/[orgSegment]/page";
+import { orgAdminConfig } from "~/app/_components/org/org-admin-config";
 import { AdminNavLinks } from "~/app/_components/admin-nav-links";
 import { useOpenModal } from "~/utils/store/modal";
 import { DeleteType, ModalType } from "~/utils/store/modal";
 import type * as ModalStore from "~/utils/store/modal";
-import type * as SharedEnums from "@acme/shared/app/enums";
-import type * as OrgHierarchy from "@acme/shared/app/org-hierarchy";
-import type * as EditorConfig from "~/app/_components/modal/org-editor-config";
-import type * as AdminConfig from "~/app/_components/org/org-admin-config";
 
 const mocks = vi.hoisted(() => ({
   byId: vi.fn<(input: unknown) => Promise<unknown>>(),
@@ -84,60 +81,6 @@ vi.mock("~/utils/hooks/use-auth", () => ({
 vi.mock("~/app/admin-layout", () => ({
   default: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }));
-vi.mock("@acme/shared/app/enums", async (importOriginal) => {
-  const actual = await importOriginal<typeof SharedEnums>();
-  return { ...actual, OrgType: [...actual.OrgType, "territory"] };
-});
-vi.mock("@acme/shared/app/org-hierarchy", async (importOriginal) => {
-  const actual = await importOriginal<typeof OrgHierarchy>();
-  return {
-    ...actual,
-    orgTypeDisplay: {
-      ...actual.orgTypeDisplay,
-      territory: {
-        label: "Territory",
-        pluralLabel: "Territories",
-        routeSegment: "territories",
-        icon: "Earth",
-      },
-    },
-  };
-});
-vi.mock("~/app/_components/modal/org-editor-config", async (importOriginal) => {
-  const actual = await importOriginal<typeof EditorConfig>();
-  return {
-    ...actual,
-    orgEditorConfig: {
-      ...actual.orgEditorConfig,
-      territory: {
-        parentType: "sector",
-        parentPlaceholder: "Select a sector",
-        defaultName: "",
-        retainLogo: false,
-        deactivate: "existing",
-        devFakeData: true,
-      },
-    },
-  };
-});
-vi.mock("~/app/_components/org/org-admin-config", async (importOriginal) => {
-  const actual = await importOriginal<typeof AdminConfig>();
-  return {
-    ...actual,
-    orgAdminConfig: {
-      ...actual.orgAdminConfig,
-      territory: {
-        add: true,
-        serverPagination: true,
-        serverSorting: true,
-        filters: "status",
-        columns: [],
-        statusId: "status",
-        aoCount: true,
-      },
-    },
-  };
-});
 vi.mock("@acme/ui/toast", () => ({
   toast: { success: mocks.success, error: mocks.error },
 }));
@@ -249,7 +192,7 @@ const parents = [
 const clients: QueryClient[] = [];
 
 function mount(
-  type: "nation" | "sector" | "area" | "region" | "ao",
+  type: "nation" | "sector" | "territory" | "area" | "region" | "ao",
   id?: number,
   isProd = true,
 ) {
@@ -282,6 +225,13 @@ afterEach(() => {
 });
 
 describe.each([
+  {
+    type: "territory" as const,
+    label: "Territory",
+    parent: "sector",
+    initialName: "",
+    deletion: DeleteType.ORG,
+  },
   {
     type: "sector" as const,
     label: "Sector",
@@ -690,7 +640,28 @@ it("keeps the AO fake-data action restricted to development", async () => {
   expect(field("Description").value).toBe("Fake AO description");
 });
 
-describe("configuration-only sixth organization type", () => {
+describe("Territory organization integration", () => {
+  it("hides Add when Territory creation is disabled in configuration", async () => {
+    const original = orgAdminConfig.territory.add;
+    try {
+      orgAdminConfig.territory.add = false;
+      const page = await OrgPage({
+        params: Promise.resolve({ orgSegment: "territories" }),
+      });
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      clients.push(client);
+      render(<QueryClientProvider client={client}>{page}</QueryClientProvider>);
+      expect(screen.getByRole("heading", { name: "Territories" })).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Add Territory" }),
+      ).toBeNull();
+    } finally {
+      orgAdminConfig.territory.add = original;
+    }
+  });
+
   function EditorHost() {
     const modal = useOpenModal();
     if (modal?.type !== ModalType.ADMIN_ORG) return null;
@@ -750,16 +721,11 @@ describe("configuration-only sixth organization type", () => {
       )!;
     fireEvent.change(statusSelect(), { target: { value: "false" } });
     expect(statusSelect().value).toBe("false");
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
-    fireEvent.click(screen.getByText("(DEV) Fake data"));
-    random.mockRestore();
-    expect(screen.getByRole("dialog").querySelector("select")!.value).toBe("2");
-    expect(field("Last Annual Review").value).toBe("2024-01-01");
-    expect(statusSelect().value).toBe("true");
-    expect(field("Name").value).toBe("Fake Territory");
-    expect(field("Twitter").value).toBe("@faketerritory");
-    // Preserve the existing AO fixture's handle format. The real validator
-    // requires a URL, so verify feedback and correct it before saving.
+    expect(screen.queryByText("(DEV) Fake data")).toBeNull();
+    expect(field("Name").value).toBe("");
+    fireEvent.change(field("Name"), { target: { value: "Test Territory" } });
+    fireEvent.change(field("Twitter"), { target: { value: "@testterritory" } });
+    // Invalid input is rejected through the real shared form validator.
     save();
     await screen.findByText(
       "Please enter a valid X/Twitter URL (e.g. https://x.com/f3nation)",
@@ -779,14 +745,10 @@ describe("configuration-only sixth organization type", () => {
     );
     expect(mocks.save.mock.calls[0]![0]).toMatchObject({
       orgType: "territory",
-      name: "Fake Territory",
+      name: "Test Territory",
       parentId: 3,
-      website: "https://faketerritory.com",
-      email: "faketerritory@example.com",
       twitter: "https://x.com/faketerritory",
-      facebook: "https://facebook.com/faketerritory",
-      instagram: "https://instagram.com/faketerritory",
-      description: "Fake Territory description",
+      isActive: false,
     });
     expect(mocks.all).toHaveBeenCalledWith(
       expect.objectContaining({ orgTypes: ["territory"] }),

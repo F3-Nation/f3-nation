@@ -19,9 +19,10 @@ describe("LAYER_TYPES", () => {
     expect(LAYER_TYPES).not.toContain("nation");
   });
 
-  it("contains region, area, and sector", () => {
+  it("contains region, area, territory, and sector", () => {
     expect(LAYER_TYPES).toContain("region");
     expect(LAYER_TYPES).toContain("area");
+    expect(LAYER_TYPES).toContain("territory");
     expect(LAYER_TYPES).toContain("sector");
   });
 });
@@ -61,6 +62,7 @@ describe("normalizeOrgType", () => {
     expect(normalizeOrgType("ao")).toBe("ao");
     expect(normalizeOrgType("region")).toBe("region");
     expect(normalizeOrgType("area")).toBe("area");
+    expect(normalizeOrgType("TERRITORY")).toBe("territory");
     expect(normalizeOrgType("sector")).toBe("sector");
     expect(normalizeOrgType("nation")).toBe("nation");
     // Implementation does toLowerCase so uppercase is accepted
@@ -154,11 +156,11 @@ describe("buildOrgHierarchy", () => {
   });
 
   it.each(["area", "region"] as const)(
-    "relinks an area to its sector when an unknown territory appears in the %s item",
+    "relinks an area to its sector when an unknown division appears in the %s item",
     (itemType) => {
       // Simulate an API tier that this bundle's OrgType does not yet know.
       const ancestors: OrgChartItem["hierarchy"] = [
-        [3, "Territory", "territory" as OrgChartItem["orgType"]],
+        [3, "Division", "division" as OrgChartItem["orgType"]],
         [2, "Sector", "sector"],
         [1, "Nation", "nation"],
       ];
@@ -182,7 +184,7 @@ describe("buildOrgHierarchy", () => {
   it("skips consecutive unknown ancestors", () => {
     const { orgById } = buildOrgHierarchy([
       makeItem(4, "area", [
-        [3, "Territory", "territory" as OrgChartItem["orgType"]],
+        [3, "Division", "division" as OrgChartItem["orgType"]],
         [6, "District", "district" as OrgChartItem["orgType"]],
         [2, "Sector", "sector"],
         [1, "Nation", "nation"],
@@ -203,7 +205,7 @@ describe("buildOrgHierarchy", () => {
     ];
     const sixTierChain: OrgChartItem["hierarchy"] = [
       ...fiveTierChain.slice(0, 2),
-      [3, "Territory", "territory" as OrgChartItem["orgType"]],
+      [3, "Division", "division" as OrgChartItem["orgType"]],
       ...fiveTierChain.slice(2),
     ];
     const result = buildOrgHierarchy([makeItem(6, "ao", sixTierChain)]);
@@ -224,7 +226,7 @@ describe("buildOrgHierarchy", () => {
       makeItem(4, "area"),
       makeItem(5, "region", [
         [4, "Area", "area"],
-        [3, "Territory", "territory" as OrgChartItem["orgType"]],
+        [3, "Division", "division" as OrgChartItem["orgType"]],
         [2, "Sector", "sector"],
         [1, "Nation", "nation"],
       ]),
@@ -242,7 +244,7 @@ describe("buildOrgHierarchy", () => {
       const items = [2, 7].map((sectorId, index) =>
         makeItem(10 + index, "region", [
           [4, "Area", "area"],
-          [3, "Territory", "territory" as OrgChartItem["orgType"]],
+          [3, "Division", "division" as OrgChartItem["orgType"]],
           [sectorId, `Sector ${sectorId}`, "sector"],
           [1, "Nation", "nation"],
         ]),
@@ -267,7 +269,7 @@ describe("buildOrgHierarchy", () => {
         "region",
         [
           [4, "Area", "area"],
-          [3, "Territory", "territory" as OrgChartItem["orgType"]],
+          [3, "Division", "division" as OrgChartItem["orgType"]],
           [2, "Sector", "sector"],
           [1, "Nation", "nation"],
         ],
