@@ -18,7 +18,11 @@ export const sendVerificationRequest = async (
     Parameters<NodemailerConfig["sendVerificationRequest"]>[0],
     "provider" | "theme" | "expires" | "request"
   > & {
-    server: NodemailerConfig["server"];
+    // Arrives as a JSON body over HTTP (see ../otp/route.tsx), so it's always
+    // a plain SMTP connection string, never NodemailerConfig["server"]'s full
+    // config-time union (which also resolves to `any` under nodemailer 10 --
+    // see send-otp-verification-request-server.ts for why).
+    server: string;
     from: NodemailerConfig["from"];
   },
 ) => {
@@ -34,11 +38,9 @@ export const sendVerificationRequest = async (
     text: text({ host, token }),
     html: html({ token, host, theme }),
   });
-  const failed = result.rejected.concat(result.pending).filter(Boolean);
+  const failed = result.rejected.concat(result.pending ?? []).filter(Boolean);
   if (failed.length) {
-    throw new Error(
-      `Email (${failed.map((f) => (typeof f === "string" ? f : f.address)).join(", ")}) could not be sent`,
-    );
+    throw new Error(`Email (${failed.join(", ")}) could not be sent`);
   }
 };
 
