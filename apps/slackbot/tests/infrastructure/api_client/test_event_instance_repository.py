@@ -126,9 +126,8 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
 
         self.assertEqual(self._posted_payload()["eventTypeId"], 0)
 
-    def test_create_omits_optional_fields_that_were_not_supplied(self):
-        """Omission means 'leave it alone' on the API side, so an unset optional
-        must not be sent as null."""
+    def test_create_sends_null_for_an_unset_event_tag(self):
+        """A null event tag clears the tag on the API side."""
         self.repo.create(
             name="New Event",
             org_id=10,
@@ -148,8 +147,9 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
         )
 
         payload = self._posted_payload()
-        for absent in ("locationId", "description", "meta", "preblast", "preblastRich", "eventTagId"):
+        for absent in ("locationId", "description", "meta", "preblast", "preblastRich"):
             self.assertNotIn(absent, payload)
+        self.assertIsNone(payload["eventTagId"])
 
     def test_create_sends_first_event_tag_id(self):
         self.repo.create(
@@ -201,6 +201,7 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
         payload = self._posted_payload()
         self.assertEqual(payload["id"], 5)
         self.assertEqual(payload["eventTypeId"], 7)
+        self.assertIsNone(payload["eventTagId"])
         self.assertEqual(payload["startTime"], "0700")
 
     def test_update_sends_a_null_series_exception(self):
