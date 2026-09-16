@@ -17,7 +17,15 @@ removes only its two temporary databases on exit and prints the retained
 synthetic archive/log directory. Existing development/test databases are not
 reset by this script.
 
-### Evidence — September 15, 2026
+For an isolated container, set `TERRITORY_TEST_CONTAINER` to its name; it must
+still carry the `f3-local` Compose-project label and use the same local DB user.
+Use the pinned PostgreSQL 18.6 image below. The rehearsal keeps a backend open
+across forward and reverse migration and verifies writes on that same backend.
+It also holds a conflicting lock to verify the forward timeout leaves the
+original schema/data intact, and tests rollback refusal without a command-line
+`ON_ERROR_STOP` flag.
+
+### Evidence — September 15–16, 2026
 
 The initial rehearsal passed against the existing local `postgres:18.4-trixie`
 container. A subsequent rehearsal also passed against the exact PostgreSQL 18.6
@@ -42,6 +50,12 @@ untouched. Both rehearsals verified:
   position. After each refusal, the six-member enum, original rows, and index
   remain intact.
 
+The persistent-session regression initially reproduced `cache lookup failed for
+type` in `update_org_ao_counts()` on PostgreSQL 18.6. Recreating the existing
+function within each enum-replacement transaction fixes that failure; the same
+session now inserts, updates, and deletes organizations after both directions.
+The extended rehearsal also passed the lock-timeout and standalone refusal checks.
+
 This is a restored, production-shaped **synthetic** dump: the full schema,
 constraints, triggers, and indexes come from repository migrations through 0022. It is not a production export and cannot reveal production-only schema
 drift, extra enum dependencies, privileges, concurrent lock contention, or
@@ -53,11 +67,19 @@ account for those limitations rather than treating this as production verificati
 Schedule a maintenance window for 0023 and coordinate application writers before
 running it. Converting both columns to text and back rewrites the tables and
 takes `ACCESS EXCLUSIVE` locks; waiting for those locks can also queue application
-queries. The migration SQL does not set a lock timeout. Before execution, set and
-verify a finite `lock_timeout` on the actual migration connection (for example,
-3 seconds, subject to the target's release plan). Verify the effective
+queries. The migration sets `SET LOCAL lock_timeout = '3s'` before acquiring
+locks. Drizzle applies the pending batch in one transaction, so this setting
+also applies to any later migrations in that batch until the transaction ends.
+Review the complete pending batch before deployment. Verify the effective
 `statement_timeout` separately and size it using target-environment rehearsal;
 the synthetic test does not establish a production duration budget.
+
+From the repository root, use `env -u CI pnpm db:migrate` with the separately
+approved target configured through the repository's `with-env` helper. Never
+add `--reset` or `--seed` to a production migration. The current runner skips
+migration entirely when `CI` is set and can exit zero after logging a failure;
+neither its exit code nor the completion message establishes success. The
+post-run schema and journal checks below are mandatory.
 
 Use the repository's Drizzle migrator so the schema changes and migration
 journal entry share a transaction. The installed `drizzle-orm` implementation
@@ -71,13 +93,21 @@ If lock acquisition or a statement fails, investigate the blocker and confirm
 the schema and journal state before retrying. Verify the six enum values, both
 column types, index validity, and the applied 0023 journal entry before resuming
 writers; command completion alone is not evidence that the migration applied.
+The migration refreshes the known `update_org_ao_counts()` trigger function to
+invalidate its cached enum references. Before resuming writers, recycle database
+connections for every application, including SQLAlchemy pools and PgBouncer's
+server connections. Restarting application clients alone does not necessarily
+replace PgBouncer's PostgreSQL backends. This covers production-only functions
+or cached statements that the repository rehearsal cannot inventory.
 Production execution still requires the normal target and command approval.
 
 ## Operator-led rollback
 
 `rollback-territory-org-type.sql` runs transactionally, locks both dependent
 tables, refuses to proceed if either contains Territory, and reconstructs the
-original five-member enum and index. Run with `psql -X -v ON_ERROR_STOP=1`
+original five-member enum and index. The file sets `\set ON_ERROR_STOP on`
+itself so a refusal exits nonzero even when the caller omits the flag.
+Run with `psql -X -v ON_ERROR_STOP=1`
 against an explicitly approved target. The SQL intentionally lives outside the
 forward-migration directory.
 
@@ -94,11 +124,26 @@ Before a release rollback:
 4. Reconcile the target's Drizzle journal under separately reviewed exact SQL:
    remove only the applied 0023 entry identified by its migration hash and
    journal timestamp. Do not clear the journal or change older entries. The
-   table name is environment-dependent (`__drizzle_migrations_<database>`).
-5. Resume only the coordinated application/migration versions. Retaining 0023
+   table is in the `drizzle` schema. Inspect its actual name before writing SQL:
+   the current runner derives the suffix from the final segment of the database
+   URL, including any query string, so it may differ from the bare database name.
+   The usual name is `drizzle."__drizzle_migrations_<database>"`. Match the 0023 row on
+   `hash` (SHA-256 of the exact deployed SQL file) and `created_at = 1789505471619`
+   (its `_journal.json` `when`).
+5. Recycle application DB pools and PgBouncer server connections as for forward
+   migration, then resume only the coordinated application/migration versions. Retaining 0023
    in a deployed migration directory while removing its journal entry causes
    the next migration run to reapply it.
 
 The local rehearsal verifies the schema rollback, not a production deployment
 or production journal mutation. Production rollback and exact journal SQL
 require the normal human release approval.
+
+## Populated Territory rollout gate — #924
+
+The existing trigger and `seed.ts` recount still assume three ancestor levels.
+Before reparenting any Area under a Territory, #924 must make both counting paths
+depth-agnostic and verify Sector and Territory counts for active descendant AOs,
+inactive intermediate organizations, and moves between old and new hierarchy
+paths. This migration only refreshes the existing function to clear stale plans;
+it does not change AO-count semantics or backfill counts.

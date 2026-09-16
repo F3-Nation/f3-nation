@@ -3,7 +3,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-container=f3-postgres
+container="${TERRITORY_TEST_CONTAINER:-f3-postgres}"
 source_db="territory_923_source_$$_test"
 restore_db="territory_923_restore_$$_test"
 artifact_dir="$(mktemp -d "${TMPDIR:-/tmp}/territory-923.XXXXXX")"
@@ -18,6 +18,10 @@ psql_db() {
 }
 
 cleanup() {
+  if [[ -n "${session_pid:-}" ]]; then
+    exec 3>&-
+    wait "$session_pid" || true
+  fi
   docker exec "$container" dropdb -U f3local --if-exists "$restore_db"
   docker exec "$container" dropdb -U f3local --if-exists "$source_db"
 }
@@ -87,13 +91,52 @@ forward() {
   psql_db "$restore_db" -1 < "$repo_root/packages/db/drizzle/0023_add_territory_org_type.sql"
 }
 rollback() {
-  psql_db "$restore_db" < "$repo_root/packages/db/scripts/rollback-territory-org-type.sql"
+  # Intentionally omit -v ON_ERROR_STOP: the rollback must enforce it itself.
+  docker exec -i "$container" psql -X -U f3local -d "$restore_db" < "$repo_root/packages/db/scripts/rollback-territory-org-type.sql"
+}
+
+# Keep one backend alive across each enum replacement: fresh connections cannot
+# detect cached PL/pgSQL expressions that still reference the old enum OID.
+mkfifo "$artifact_dir/session.in"
+psql_db "$restore_db" < "$artifact_dir/session.in" > "$artifact_dir/session.log" 2>&1 &
+session_pid=$!
+exec 3> "$artifact_dir/session.in"
+
+session_step() {
+  local marker="$1" statement="$2" attempt
+  printf '%s\n\\echo %s\n' "$statement" "$marker" >&3
+  for ((attempt = 0; attempt < 100; attempt++)); do
+    if grep -qx "$marker" "$artifact_dir/session.log"; then
+      return
+    fi
+    if ! kill -0 "$session_pid" 2>/dev/null; then
+      cat "$artifact_dir/session.log" >&2
+      return 1
+    fi
+    sleep 0.1
+  done
+  echo "Persistent session timed out; see $artifact_dir/session.log" >&2
+  return 1
 }
 
 verify '{ao,region,area,sector,nation}'
+session_step warm "INSERT INTO orgs (id, name, org_type, is_active) VALUES (900002, 'Persistent session fixture', 'sector', true); DELETE FROM orgs WHERE id = 900002;"
+session_step locked 'BEGIN; LOCK TABLE orgs IN ACCESS SHARE MODE;'
+if forward > "$artifact_dir/lock-timeout.log" 2>&1; then
+  echo 'Forward migration unexpectedly bypassed the held lock' >&2
+  exit 1
+fi
+if ! grep -q 'canceling statement due to lock timeout' "$artifact_dir/lock-timeout.log"; then
+  echo "Forward migration failed for an unexpected reason; see $artifact_dir" >&2
+  exit 1
+fi
+session_step unlocked 'COMMIT;'
+verify '{ao,region,area,sector,nation}'
 forward
+session_step forward_ok "INSERT INTO orgs (id, name, org_type, is_active) VALUES (900002, 'Persistent session fixture', 'territory', true); UPDATE orgs SET is_active = false WHERE id = 900002; DELETE FROM orgs WHERE id = 900002;"
 verify '{ao,region,area,territory,sector,nation}'
 rollback
+session_step rollback_ok "INSERT INTO orgs (id, name, org_type, is_active) VALUES (900002, 'Persistent session fixture', 'sector', true); UPDATE orgs SET is_active = false WHERE id = 900002; DELETE FROM orgs WHERE id = 900002;"
 verify '{ao,region,area,sector,nation}'
 forward
 
@@ -110,4 +153,4 @@ for table in orgs positions; do
   psql_db "$restore_db" -c "DELETE FROM $table WHERE id = 900001;"
   verify '{ao,region,area,territory,sector,nation}'
 done
-echo "PASS: forward, rollback, data/index preservation, and both refusal cases. Synthetic artifacts: $artifact_dir"
+echo "PASS: forward, rollback, persistent-session writes, lock timeout, data/index preservation, and both refusal cases. Synthetic artifacts: $artifact_dir"

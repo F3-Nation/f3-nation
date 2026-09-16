@@ -16,7 +16,9 @@ through the existing shared components.
 - Prerequisite: #999, merged in #1019. Deployment readiness of the separately
   released homepage must be checked before production rollout.
 - Follow-up: #924 owns full Territory management verification, mixed
-  Sector/Territory Area parents, hierarchy filters, and ancestor displays.
+  Sector/Territory Area parents, hierarchy filters, ancestor displays, and
+  depth-agnostic AO counts in both the trigger and seed recount. Correct Sector
+  and Territory counts are a prerequisite for reparenting Areas under Territories.
 - External mirror: F3-Nation/f3-region-pages#96; coordinate after merge.
 - Affected workspaces: db, db-python, shared, admin; other enum consumers
   require regression verification, including homepage.
@@ -43,6 +45,9 @@ non-nullable `orgs.org_type` column. The existing org-type index explicitly uses
 the final index definition. Keep the Drizzle journal and snapshot consistent.
 The deployment migration must execute transactionally so an error cannot leave
 the columns as text or the index absent.
+Bound lock acquisition with a transaction-local timeout and refresh the existing
+AO-count trigger function after replacing the enum in both migration directions.
+Verify writes from a backend warmed before each enum replacement.
 
 Territory display metadata uses `Territory`, `Territories`, the public URL
 segment `territories`, admin route `/territories`, and the chosen `LandPlot`
@@ -114,7 +119,8 @@ rule. Add-button visibility is configuration, not authorization.
 ## 6. Out of scope / non-goals
 
 - Creating production Territory records or changing existing parent edges.
-- #924's full management UX, mixed-parent selector, and ancestry/filter work.
+- #924's full management UX, mixed-parent selector, ancestry/filter work, and
+  depth-agnostic AO-count trigger/seed recount before populated Territory rollout.
 - Changing authorization inheritance, hierarchy validation, or notification
   escalation rules.
 - Editing the external warehouse mirror in this repository.
@@ -131,9 +137,9 @@ rule. Add-button visibility is configuration, not authorization.
   configuration; existing route and enum-consumer regression suites.
 
 The production-shaped dump source and isolated restore target must be resolved
-before AC-3 can be marked complete. Any production export requires the separate
-exact-operation review in `.personal/DATABASE_ACCESS.md`; this spec does not
-authorize it. Local synthetic testing can proceed independently once the
+before AC-3 can be marked complete. Any production export requires separate,
+human-approved review of the exact operation; this spec does not authorize it.
+Local synthetic testing can proceed independently once the
 implementation criteria are approved.
 
 ## 8. Observability
