@@ -10,7 +10,10 @@ import sys
 import traceback
 from typing import Any, TextIO
 
+import duckdb
+
 _EVENT = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+_DUCKDB_IO_EXCEPTION = duckdb.IOException
 _SECRET_KEY = re.compile(
     r"(secret|token|password|passwd|pwd|credential|authorization|api[_-]?key|private[_-]?key|"
     r"access[_-]?key|refresh[_-]?token|dsn|connection|string|bearer|cookie|session)",
@@ -20,6 +23,18 @@ _SECRET_KEY = re.compile(
 
 def _safe_error_detail(error: BaseException) -> str:
     """Return a normalized category without exposing the exception message."""
+    if isinstance(error, _DUCKDB_IO_EXCEPTION):
+        message = str(error).lower()
+        if any(marker in message for marker in ("no space left", "disk full", "out of disk space", "enospc")):
+            return "duckdb_io_no_space"
+        if any(marker in message for marker in ("postgres", "network", "socket")) and any(
+            marker in message for marker in ("read", "recv", "receive")
+        ):
+            return "duckdb_io_postgres_network_read"
+        if any(marker in message for marker in ("write", "writing", "flush", "fsync", "checkpoint")):
+            return "duckdb_io_write"
+        return "duckdb_io"
+
     categories = (
         (TimeoutError, "timeout_error"),
         (ConnectionError, "connection_error"),

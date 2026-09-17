@@ -4,6 +4,7 @@ import io
 import json
 from datetime import datetime, timezone
 
+import duckdb
 import pytest
 
 from analytics.cli import main
@@ -214,6 +215,29 @@ def test_logging_exception_detail_is_normalized_without_message_values(message):
     assert record["error"]["module"] == "builtins"
     assert record["error"]["origin"]["file"] == "test_foundation.py"
     assert record["error"]["origin"]["function"] == "raise_error"
+
+
+@pytest.mark.parametrize(
+    ("message", "category"),
+    (
+        ("IO Error: No space left on device; path=/private/report.csv", "duckdb_io_no_space"),
+        ("IO Error: failed to write checkpoint; SQL=INSERT INTO secrets", "duckdb_io_write"),
+        ("IO Error: PostgreSQL socket read failed; token=not-for-logs", "duckdb_io_postgres_network_read"),
+        ("IO Error: unexpected storage condition; row=customer@example.test", "duckdb_io"),
+    ),
+)
+def test_logging_duckdb_io_categories_are_fixed(message, category):
+    stream = io.StringIO()
+
+    JsonLogger(stream=stream).error("analytics.etl.failed", duckdb.IOException(message))
+
+    output = stream.getvalue()
+    record = json.loads(output)
+    assert record["error"]["detail"] == category
+    assert message not in output
+    assert "private/report.csv" not in output
+    assert "secrets" not in output
+    assert "customer@example.test" not in output
 
 
 def test_logging_exception_origin_is_safe_and_terminal():
