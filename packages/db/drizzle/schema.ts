@@ -1229,12 +1229,10 @@ export const emailMfaCodes = authProviderSchema.table("email_mfa_codes", {
 });
 
 // ---------------------------------------------------------------------------
-// Better Auth tables — DRAFTED, NOT APPLIED. See
-// docs/AI_GUARDRAILS.md's schema-migration sign-off rule for what that means.
-// Included here so the shape can be reviewed alongside the code that depends
-// on it; nothing above this point is touched, and the existing oauth_* tables
-// keep serving the hand-rolled OAuth server unchanged regardless of whether
-// this migration is ever applied.
+// Better Auth tables. The existing oauth_* tables keep serving the
+// hand-rolled OAuth server unchanged — these are additive, not a
+// replacement, and AUTH_USE_BETTER_AUTH stays the gate for any live traffic
+// reaching them.
 //
 // Field shapes were not hand-derived from docs — they're the literal output
 // of `getAuthTables()` (from @better-auth/core/db) run against this app's
