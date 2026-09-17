@@ -144,10 +144,22 @@ catalog:
   vite: ^8.2.2
   vitest: ^4.1.11
   vitest-canvas-mock: ^1.2.0
-  zod: ^4.6.1
+  zod: ^4.5.4
   zustand: ^5.0.15
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^4.0.6"
+  # zod 4.6.0's JSON-Schema-converter rewrite (colinhacks/zod#6550, PR #6554)
+  # drops format/minLength/int32 bounds when @orpc/zod's ZodToJsonSchemaConverter
+  # converts apps/api's whole router in one pass, failing openapi-spec.char.test.ts's
+  # committed golden. @scalar/types also carries its own independent "zod": "^4.4.3"
+  # dependency (unrelated to our catalog), which resolves to the newest matching
+  # zod on every install; without this override that stray 4.6.x copy leaks into
+  # @better-auth/core's peer resolution and reproduces the same bug for one field
+  # (oauth-client redirectUris) even when our own catalog entry is held back. The
+  # override forces every consumer in the tree onto the same held-back zod instance.
+  # Keep in lockstep with the zod catalog entry above; remove both once upstream
+  # fixes the bulk-conversion case or we deliberately accept the metadata loss.
+  zod: "^4.5.4"
   "@auth/core": "0.41.3" # GHSA-7rqj-j65f-68wh / GHSA-xmf8-cvqr-rfgj (Auth.js email normalizer & getToken DoS)
   # Force patched versions of transitive deps flagged by `pnpm audit --prod
   # --audit-level=high`. Scoped to the vulnerable ranges so unaffected
