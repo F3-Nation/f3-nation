@@ -158,7 +158,8 @@ overrides:
   # (oauth-client redirectUris) even when our own catalog entry is held back. The
   # override forces every consumer in the tree onto the same held-back zod instance.
   # Keep in lockstep with the zod catalog entry above; remove both once upstream
-  # fixes the bulk-conversion case or we deliberately accept the metadata loss.
+  # fixes the bulk-conversion case (tracking: colinhacks/zod#6613) or we
+  # deliberately accept the metadata loss.
   zod: "^4.5.4"
   "@auth/core": "0.41.3" # GHSA-7rqj-j65f-68wh / GHSA-xmf8-cvqr-rfgj (Auth.js email normalizer & getToken DoS)
   # Force patched versions of transitive deps flagged by `pnpm audit --prod
