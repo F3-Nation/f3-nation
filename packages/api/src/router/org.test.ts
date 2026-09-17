@@ -679,6 +679,88 @@ describe("Org Router", () => {
       ).rejects.toThrow(/Region.*AO/);
     });
 
+    it("persists and lists Territory but rejects Area creation and reparenting beneath it", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const fields = {
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+      };
+      const sector = await client.org.crupdate({
+        ...fields,
+        name: `Territory Sector ${uniqueId()}`,
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      expect(sector.org).not.toBeNull();
+      createdOrgIds.push(sector.org!.id);
+      const territory = await client.org.crupdate({
+        ...fields,
+        name: `Territory ${uniqueId()}`,
+        orgType: "territory",
+        parentId: sector.org!.id,
+      });
+      expect(territory.org?.orgType).toBe("territory");
+      createdOrgIds.push(territory.org!.id);
+      await expect(
+        client.org.crupdate({
+          ...fields,
+          name: `Blocked Territory Area ${uniqueId()}`,
+          orgType: "area",
+          parentId: territory.org!.id,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      const area = await client.org.crupdate({
+        ...fields,
+        name: `Territory Area ${uniqueId()}`,
+        orgType: "area",
+        parentId: sector.org!.id,
+      });
+      expect(area.org?.parentId).toBe(sector.org!.id);
+      createdOrgIds.push(area.org!.id);
+      await expect(
+        client.org.crupdate({
+          ...fields,
+          id: area.org!.id,
+          name: area.org!.name,
+          orgType: "area",
+          parentId: territory.org!.id,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      const unchangedArea = await db.query.orgs.findFirst({
+        where: eq(schema.orgs.id, area.org!.id),
+      });
+      expect(unchangedArea?.parentId).toBe(sector.org!.id);
+      await expect(
+        client.org.crupdate({
+          ...fields,
+          name: `Invalid Territory ${uniqueId()}`,
+          orgType: "territory",
+          parentId: area.org!.id,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      const listed = await client.org.all({
+        orgTypes: ["territory"],
+        sorting: [{ id: "orgType", desc: false }],
+        searchTerm: territory.org!.name,
+      });
+      expect(listed.orgs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: territory.org!.id,
+            orgType: "territory",
+          }),
+        ]),
+      );
+    });
+
     it("should accept creating an area parented directly to a sector (un-migrated case)", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const session = await createAdminSession();
