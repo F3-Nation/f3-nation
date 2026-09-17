@@ -16,6 +16,19 @@ _SECRET_KEY = re.compile(
     r"access[_-]?key|refresh[_-]?token|dsn|connection|string|bearer|cookie|session)",
     re.I,
 )
+_URI_SECRET = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.I)
+_SQL_LITERAL = re.compile(r"'[^']*(?:''[^']*)*'")
+_EMAIL = re.compile(r"\b[^\s'\"]+@[^\s'\"]+\b")
+
+
+def _safe_error_detail(error: BaseException) -> str:
+    """Keep useful engine diagnostics while dropping credentials and values."""
+    detail = str(error)
+    detail = _URI_SECRET.sub("[REDACTED]", detail)
+    detail = _SQL_LITERAL.sub("'[REDACTED]'", detail)
+    detail = _EMAIL.sub("[REDACTED]", detail)
+    detail = re.sub(r"(?i)(password|token|secret|dsn)\s*[=:]\s*\S+", "[REDACTED]", detail)
+    return detail[:1000]
 
 
 def _safe(value: Any, key: str = "") -> Any:
@@ -43,6 +56,7 @@ class JsonLogger:
             error_record: dict[str, Any] = {
                 "type": type(error).__name__,
                 "module": type(error).__module__,
+                "detail": _safe_error_detail(error),
             }
             frames = traceback.extract_tb(error.__traceback__) if error.__traceback__ else ()
             if frames:

@@ -221,11 +221,18 @@ def test_duckdb_loads_explicit_extension_without_install(tmp_path):
     calls = []
 
     class Connection:
+        def __init__(self):
+            self.locked = False
+
         def load_extension(self, name):
             calls.append(("LOAD", name))
 
         def execute(self, sql, *parameters):
+            if self.locked and sql != "SET lock_configuration = true":
+                raise RuntimeError("configuration is locked")
             calls.append((sql, parameters))
+            if sql == "SET lock_configuration = true":
+                self.locked = True
 
         def close(self):
             calls.append(("CLOSE",))
@@ -241,7 +248,10 @@ def test_duckdb_loads_explicit_extension_without_install(tmp_path):
     connection = connect(settings, Duckdb)
     assert connection is not None
     assert calls[0] == ("LOAD", "postgres")
-    assert calls[-1][0].startswith("SET lock_configuration")
+    assert calls[1] == ("SET pg_experimental_filter_pushdown = false", ())
+    assert calls[2] == ("SET lock_configuration = true", ())
+    with pytest.raises(RuntimeError, match="configuration is locked"):
+        connection.execute("SET pg_experimental_filter_pushdown = true")
 
 
 def test_duckdb_closes_connection_when_loading_fails(tmp_path):

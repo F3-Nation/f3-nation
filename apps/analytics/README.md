@@ -10,6 +10,11 @@ leases or `current.json` pointers.
 DuckDB's PostgreSQL extension is loaded from an explicit prebundled path; the
 runtime never runs `INSTALL`.
 
+The ETL disables DuckDB PostgreSQL filter pushdown as a read-only correctness
+workaround for the extension's `Unsupported table filter type` compatibility
+issue. This can increase source read volume, so measure it in nonprod before
+enabling production workloads.
+
 Runtime targets are deliberately limited to two environments. Approved GCS
 prefixes are selected from the immutable materialization registry; they are
 never accepted as environment or CLI output targets.
@@ -48,6 +53,24 @@ uv --directory apps/analytics run ruff check .
 These commands are offline-safe: they do not publish data and the test suite
 does not make live cloud or database calls. Do not create or populate an
 `.env` file just to run them.
+
+## Read-only ETL diagnostics
+
+Run the bounded diagnostics command with the same validated settings used by
+the ETL:
+
+```bash
+ANALYTICS_ENVIRONMENT=local uv --directory apps/analytics run analytics-etl diagnostics
+```
+
+It attaches PostgreSQL and reports separate structured results for a basic
+`orgs` scan, the territory predicate, a small local Parquet `COPY`, and both
+`pv_sectors` and `pv_areas` as query and Parquet-COPY stages. It never creates a
+GCS client, publisher, release, or catalog object. A failure in `postgres_scan`
+or `territory_count` indicates source/schema or attachment trouble; a query
+failure points to DuckDB SQL execution, while a COPY-only failure points to
+Parquet writing or filesystem behavior. Logs contain bounded engine error
+detail but no credentials, DSNs, raw rows, or SQL values.
 
 ## Local-only export
 

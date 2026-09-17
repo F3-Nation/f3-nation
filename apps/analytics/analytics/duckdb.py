@@ -24,6 +24,9 @@ def connect(settings: Settings, duckdb_module: Any | None = None) -> Any:
         extension = Path(settings.postgres_extension_path)
         extension.relative_to(settings.extension_directory)
         connection.load_extension("postgres")
+        # Work around the postgres extension's "Unsupported table filter type";
+        # this must precede configuration locking because the setting is immutable after it.
+        connection.execute("SET pg_experimental_filter_pushdown = false")
         connection.execute("SET lock_configuration = true")
         return connection
     except Exception:
