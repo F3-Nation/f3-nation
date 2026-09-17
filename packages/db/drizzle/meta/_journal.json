@@ -176,6 +176,13 @@
       "when": 1789609969970,
       "tag": "0024_next_nekra",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789610822419,
+      "tag": "0025_goofy_masque",
+      "breakpoints": true
     }
   ]
 }

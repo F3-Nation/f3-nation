@@ -1397,7 +1397,12 @@ export const betterAuthOauthClient = authProviderSchema.table(
     subjectType: text("subject_type"),
     scopes: text().array(),
     clientCredentialsScopes: text("client_credentials_scopes").array(),
-    userId: text("user_id").references(() => betterAuthUser.id),
+    // set null, not cascade: deleting the owning user shouldn't delete a
+    // registered OAuth client app out from under whoever's still using it —
+    // see #953, PR #1032's review discussion.
+    userId: text("user_id").references(() => betterAuthUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "string" }),
     updatedAt: timestamp("updated_at", { mode: "string" }),
     name: text(),
@@ -1497,9 +1502,11 @@ export const betterAuthOauthRefreshToken = authProviderSchema.table(
     sessionId: text("session_id").references(() => betterAuthSession.id, {
       onDelete: "set null",
     }),
+    // cascade: deleting the user should revoke every refresh token they
+    // hold, not block the deletion — see #953, PR #1032's review discussion.
     userId: text("user_id")
       .notNull()
-      .references(() => betterAuthUser.id),
+      .references(() => betterAuthUser.id, { onDelete: "cascade" }),
     referenceId: text("reference_id"),
     authorizationCodeId: text("authorization_code_id"),
     resources: text().array(),
@@ -1537,7 +1544,10 @@ export const betterAuthOauthAccessToken = authProviderSchema.table(
     sessionId: text("session_id").references(() => betterAuthSession.id, {
       onDelete: "set null",
     }),
-    userId: text("user_id").references(() => betterAuthUser.id),
+    // cascade: same reasoning as the refresh token table above.
+    userId: text("user_id").references(() => betterAuthUser.id, {
+      onDelete: "cascade",
+    }),
     referenceId: text("reference_id"),
     authorizationCodeId: text("authorization_code_id"),
     resources: text().array(),
@@ -1563,7 +1573,10 @@ export const betterAuthOauthConsent = authProviderSchema.table(
     clientId: text("client_id")
       .notNull()
       .references(() => betterAuthOauthClient.clientId),
-    userId: text("user_id").references(() => betterAuthUser.id),
+    // cascade: same reasoning as the refresh/access token tables above.
+    userId: text("user_id").references(() => betterAuthUser.id, {
+      onDelete: "cascade",
+    }),
     referenceId: text("reference_id"),
     resources: text().array(),
     requestedUserInfoClaims: text("requested_user_info_claims").array(),
