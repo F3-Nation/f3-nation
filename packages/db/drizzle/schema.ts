@@ -1269,10 +1269,10 @@ export const betterAuthUser = authProviderSchema.table(
     // Mirrors `id` (text) as an integer purely so Postgres can enforce a real
     // FK to users.id below — Better Auth itself needs `id` to stay text (see
     // block comment above), so this column exists only for referential
-    // integrity, nothing reads or writes it directly. See #953: without this,
-    // deleting/merging a `users` row (Tackle's merge script) leaves a
-    // dangling `better_auth_user` row that can sign tokens for a user id
-    // that no longer exists, or that gets reassigned to someone else.
+    // integrity, nothing reads or writes it directly. Without this,
+    // deleting/merging a `users` row (e.g. an account-merge admin action)
+    // leaves a dangling `better_auth_user` row that can sign tokens for a
+    // user id that no longer exists, or that gets reassigned to someone else.
     f3UserId: integer("f3_user_id").generatedAlwaysAs(sql`(id)::integer`),
   },
   (table) => [
@@ -1397,9 +1397,10 @@ export const betterAuthOauthClient = authProviderSchema.table(
     subjectType: text("subject_type"),
     scopes: text().array(),
     clientCredentialsScopes: text("client_credentials_scopes").array(),
-    // set null, not cascade: deleting the owning user shouldn't delete a
-    // registered OAuth client app out from under whoever's still using it —
-    // see #953, PR #1032's review discussion.
+    // set null, not cascade: this is the client *owner* reference (who
+    // registered the app), not a user-owned auth artifact. Deleting the
+    // owning user shouldn't delete a registered OAuth client app out from
+    // under whoever's still using it.
     userId: text("user_id").references(() => betterAuthUser.id, {
       onDelete: "set null",
     }),
@@ -1502,8 +1503,8 @@ export const betterAuthOauthRefreshToken = authProviderSchema.table(
     sessionId: text("session_id").references(() => betterAuthSession.id, {
       onDelete: "set null",
     }),
-    // cascade: deleting the user should revoke every refresh token they
-    // hold, not block the deletion — see #953, PR #1032's review discussion.
+    // cascade: this token is a user-owned artifact — deleting the user
+    // should revoke every refresh token they hold, not block the deletion.
     userId: text("user_id")
       .notNull()
       .references(() => betterAuthUser.id, { onDelete: "cascade" }),

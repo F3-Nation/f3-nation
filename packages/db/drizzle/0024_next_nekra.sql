@@ -1,9 +1,9 @@
 -- Custom SQL migration file, put your code below! --
 
--- Part of #953: keeps auth.better_auth_user.email in sync when an admin (or
--- Tackle's merge script) changes users.email directly. Without this, Better
--- Auth's own shadow row still has the old email, so the next sign-in with
--- the new email can't find it, tries to create a fresh row with the same
+-- Keeps auth.better_auth_user.email in sync when an admin (or an account
+-- merge script) changes users.email directly. Without this, Better Auth's
+-- own shadow row still has the old email, so the next sign-in with the new
+-- email can't find it, tries to create a fresh row with the same
 -- (now-colliding) f3_user_id, and the user is locked out.
 --
 -- Does not handle deletes/merges that remove a users row entirely — that
