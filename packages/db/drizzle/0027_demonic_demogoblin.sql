@@ -1,0 +1,1 @@
+ALTER TABLE "auth"."better_auth_user" ADD CONSTRAINT "better_auth_user_id_is_canonical_integer" CHECK ("auth"."better_auth_user"."id" ~ '^[1-9][0-9]*$');

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   customType,
   date,
   doublePrecision,
@@ -1282,6 +1283,17 @@ export const betterAuthUser = authProviderSchema.table(
     // trigger's `WHERE f3_user_id = NEW.id` lookup (0024_next_nekra.sql),
     // so it stays an index scan as this table grows.
     unique("better_auth_user_f3_user_id_key").on(table.f3UserId),
+    // The application only ever writes `id` via one code path today, but
+    // that's an app-level guarantee, not a database-level one — nothing
+    // stops a manual UPDATE/INSERT (e.g. an admin doing incident surgery)
+    // from writing a value the cast below can't handle safely. Requiring
+    // `id` to already look like a canonical positive integer (no leading
+    // zeros, no sign, no whitespace) closes that gap before it ever reaches
+    // the `f3_user_id` cast or the unique/FK constraints above.
+    check(
+      "better_auth_user_id_is_canonical_integer",
+      sql`${table.id} ~ '^[1-9][0-9]*$'`,
+    ),
     foreignKey({
       columns: [table.f3UserId],
       foreignColumns: [users.id],
