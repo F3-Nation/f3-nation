@@ -12,6 +12,7 @@ from __future__ import annotations
 from application.event_tag import EventTagData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
+from infrastructure.api_client.pagination import fetch_all_pages
 
 
 def _parse_event_tag(raw: dict) -> EventTagData:
@@ -32,8 +33,12 @@ class ApiEventTagRepository:
         self._client = client
 
     def _fetch_raw(self, org_id: int) -> list[dict]:
-        result = self._client.get("/v1/event-tag", params={"orgIds": [org_id], "statuses": ["active"]})
-        raw = result.get("eventTags") or result.get("results") or []
+        raw = fetch_all_pages(
+            self._client,
+            "/v1/event-tag",
+            params={"orgIds": [org_id], "statuses": ["active"]},
+            items_key="eventTags",
+        )
         return [t for t in raw if t.get("isActive", t.get("is_active", True))]
 
     def get_by_org(self, org_id: int) -> list[EventTagData]:

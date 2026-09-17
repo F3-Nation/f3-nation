@@ -29,13 +29,9 @@ import { CrupdateUserSchema } from "@acme/validators";
 
 import type { RouterOutputs } from "~/orpc/types";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
-import {
-  invalidateQueries,
-  orpc,
-  ORPCError,
-  useMutation,
-  useQuery,
-} from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { invalidateQueries, orpc, ORPCError, useMutation } from "~/orpc/react";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 export default function UserMutate({
   user,
@@ -43,11 +39,19 @@ export default function UserMutate({
   user: RouterOutputs["user"]["byId"]["user"];
 }) {
   const router = useRouter();
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
-  );
+  const { data: regions } = useFetchAllPages({
+    queryKey: ["org.all.everyRegion"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const sortedRegions = useMemo(() => {
-    return regions?.orgs.sort((a, b) => a.name.localeCompare(b.name)) ?? [];
+    return [...(regions ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   }, [regions]);
 
   const form = useForm({

@@ -18,6 +18,7 @@ import {
 import { Spinner } from "@acme/ui/spinner";
 import { toast } from "@acme/ui/toast";
 
+import { client } from "~/orpc/client";
 import type { RouterOutputs } from "~/orpc/types";
 import {
   invalidateQueries,
@@ -26,6 +27,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import {
   DeleteType,
   ModalType,
@@ -53,11 +55,16 @@ const USER_SEARCH_PAGE_SIZE = 10;
 export const AssignmentsTable = () => {
   const [selectedOrg, setSelectedOrg] = useState<AccessibleOrg | null>(null);
 
-  const { data: accessibleOrgs } = useQuery(
-    orpc.org.accessible.queryOptions({}),
-  );
-
-  const orgs = accessibleOrgs?.orgs;
+  const { data: orgs } = useFetchAllPages({
+    queryKey: ["org.accessible.assignmentsTable"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs: page, total } = await client.org.accessible({
+        pageIndex,
+        pageSize,
+      });
+      return { items: page, total };
+    },
+  });
 
   const sortedOrgs = useMemo(() => {
     if (!orgs) return [];

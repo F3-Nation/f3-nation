@@ -127,10 +127,6 @@ export default function AdminRequestsModal({
       ? REQUEST_FORM_MAP[request.requestType]
       : null;
 
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({ input: undefined }),
-  );
-
   const validateSubmissionByAdmin = useMutation(
     orpc.request.validateSubmissionByAdmin.mutationOptions(),
   );
@@ -318,7 +314,7 @@ export default function AdminRequestsModal({
     });
     setSelectedAoLogoFile(null);
     setSelectedAoLogoPreviewUrl(null);
-  }, [request, form, eventTypes]);
+  }, [request, form]);
 
   useEffect(() => {
     return () => {

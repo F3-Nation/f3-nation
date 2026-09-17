@@ -2,8 +2,9 @@ import { Controller, useFormContext } from "react-hook-form";
 
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
 import { useOptions } from "~/utils/use-options";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { SelectorLoadError } from "./selector-load-error";
 
 interface RegionSelectorProps {
@@ -38,13 +39,21 @@ export function RegionSelector<_T extends RegionSelectorFormValues>({
     data: regions,
     isError,
     refetch,
-  } = useQuery({
-    ...orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  } = useFetchAllPages({
+    queryKey: ["org.all.everyRegion"],
     throwOnError: false,
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
   });
 
   const regionOptions = useOptions(
-    regions?.orgs,
+    regions,
     (r) => r.name,
     (r) => r.id.toString(),
   );
@@ -77,7 +86,7 @@ export function RegionSelector<_T extends RegionSelectorFormValues>({
               options={regionOptions}
               value={field.value?.toString()}
               onSelect={(item) => {
-                const region = regions?.orgs.find(
+                const region = regions?.find(
                   (region) => region.id.toString() === item,
                 );
                 const newValue = region?.id ?? null;

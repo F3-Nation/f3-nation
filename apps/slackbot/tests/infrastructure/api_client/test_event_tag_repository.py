@@ -25,7 +25,10 @@ class ApiEventTagRepositoryTest(unittest.TestCase):
 
         result = self.repo.get_by_org(10)
 
-        self.client.get.assert_called_once_with("/v1/event-tag", params={"orgIds": [10], "statuses": ["active"]})
+        self.client.get.assert_called_once_with(
+            "/v1/event-tag",
+            params={"orgIds": [10], "statuses": ["active"], "pageSize": 100, "pageIndex": 0},
+        )
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, 1)
         self.assertEqual(result[0].specific_org_id, 10)

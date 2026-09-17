@@ -1,7 +1,8 @@
 import { useMemo, useReducer, useState } from "react";
 import { IsActiveStatus } from "@acme/shared/app/enums";
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
 import type { RouterOutputs } from "~/orpc/types";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { OrgAdminConfig } from "./org-admin-config";
 import {
   getOrgById,
@@ -69,13 +70,19 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
     "active",
   ]);
   const [onlyMine, setOnlyMine] = useState(true);
-  const { data: hierarchyData } = useQuery(
-    orpc.org.all.queryOptions({
-      input: { orgTypes: config.ancestorTypes ?? [], statuses: IsActiveStatus },
-      enabled: !!config.ancestorTypes,
-    }),
-  );
-  const hierarchyOrgs = hierarchyData?.orgs;
+  const { data: hierarchyOrgs } = useFetchAllPages({
+    queryKey: ["org.all.hierarchy", config.ancestorTypes],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: config.ancestorTypes ?? [],
+        statuses: IsActiveStatus,
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+    enabled: !!config.ancestorTypes,
+  });
   const orgById = useMemo(
     () => getOrgById(hierarchyOrgs ?? []),
     [hierarchyOrgs],
