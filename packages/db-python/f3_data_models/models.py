@@ -178,6 +178,7 @@ class Org_Type(enum.Enum):
         ao
         region
         area
+        territory
         sector
         nation
     """
@@ -185,8 +186,9 @@ class Org_Type(enum.Enum):
     ao = 1
     region = 2
     area = 3
-    sector = 4
-    nation = 5
+    territory = 4
+    sector = 5
+    nation = 6
 
 
 class Event_Category(enum.Enum):

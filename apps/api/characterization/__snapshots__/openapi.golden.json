@@ -11447,6 +11447,7 @@
                   "ao",
                   "region",
                   "area",
+                  "territory",
                   "sector",
                   "nation"
                 ],
@@ -11692,6 +11693,7 @@
                               "ao",
                               "region",
                               "area",
+                              "territory",
                               "sector",
                               "nation"
                             ],
@@ -11726,6 +11728,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -11819,7 +11822,7 @@
         ]
       },
       "post": {
-        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → area → region → ao).",
+        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → territory → area → region → ao).",
         "operationId": "org.crupdate",
         "parameters": [
           {
@@ -11995,6 +11998,7 @@
                       "ao",
                       "region",
                       "area",
+                      "territory",
                       "sector",
                       "nation"
                     ],
@@ -12197,6 +12201,7 @@
                                 "ao",
                                 "region",
                                 "area",
+                                "territory",
                                 "sector",
                                 "nation"
                               ],
@@ -12378,6 +12383,7 @@
                                         "ao",
                                         "region",
                                         "area",
+                                        "territory",
                                         "sector",
                                         "nation"
                                       ],
@@ -12409,6 +12415,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -12854,6 +12861,7 @@
                         "ao",
                         "region",
                         "area",
+                        "territory",
                         "sector",
                         "nation"
                       ],
@@ -13039,6 +13047,7 @@
                   "ao",
                   "region",
                   "area",
+                  "territory",
                   "sector",
                   "nation"
                 ],
@@ -13117,6 +13126,7 @@
                               "ao",
                               "region",
                               "area",
+                              "territory",
                               "sector",
                               "nation"
                             ],
@@ -13198,6 +13208,7 @@
                   "ao",
                   "region",
                   "area",
+                  "territory",
                   "sector",
                   "nation"
                 ],
@@ -13318,6 +13329,7 @@
                       "ao",
                       "region",
                       "area",
+                      "territory",
                       "sector",
                       "nation"
                     ],
@@ -13385,6 +13397,7 @@
                 "ao",
                 "region",
                 "area",
+                "territory",
                 "sector",
                 "nation"
               ],
@@ -13527,6 +13540,7 @@
                                 "ao",
                                 "region",
                                 "area",
+                                "territory",
                                 "sector",
                                 "nation"
                               ],
@@ -13660,6 +13674,7 @@
                               "ao",
                               "region",
                               "area",
+                              "territory",
                               "sector",
                               "nation"
                             ],
@@ -13784,6 +13799,7 @@
                 "ao",
                 "region",
                 "area",
+                "territory",
                 "sector",
                 "nation"
               ],
@@ -13936,6 +13952,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -14044,6 +14061,7 @@
                           "ao",
                           "region",
                           "area",
+                          "territory",
                           "sector",
                           "nation"
                         ],
@@ -14122,6 +14140,7 @@
                                     "ao",
                                     "region",
                                     "area",
+                                    "territory",
                                     "sector",
                                     "nation"
                                   ],
@@ -14656,6 +14675,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -14895,6 +14915,7 @@
                                     "ao",
                                     "region",
                                     "area",
+                                    "territory",
                                     "sector",
                                     "nation"
                                   ],
@@ -15030,6 +15051,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],

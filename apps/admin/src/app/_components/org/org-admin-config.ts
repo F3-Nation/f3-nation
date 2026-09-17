@@ -46,6 +46,15 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     statusId: "status",
     aoCount: true,
   },
+  territory: {
+    add: true,
+    serverPagination: true,
+    serverSorting: true,
+    filters: "status",
+    columns: [],
+    statusId: "status",
+    aoCount: true,
+  },
   area: {
     add: true,
     serverPagination: true,

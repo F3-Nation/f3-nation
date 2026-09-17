@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { routes } from "@acme/shared/app/constants";
+import { OrgType } from "@acme/shared/app/enums";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import { resolveOrgSegment } from "./org-admin-config";
 
 // Keep this independent of orgTypeDisplay so an accidental configuration
@@ -7,6 +9,7 @@ import { resolveOrgSegment } from "./org-admin-config";
 const orgRouteKeys = new Set([
   "theNation",
   "sectors",
+  "territories",
   "areas",
   "regions",
   "aos",
@@ -22,6 +25,19 @@ const nonOrgSegments = [
 ];
 
 describe("organization route boundary", () => {
+  it("resolves Territory between Area and Sector with the selected icon", () => {
+    expect(OrgType).toEqual([
+      "ao",
+      "region",
+      "area",
+      "territory",
+      "sector",
+      "nation",
+    ]);
+    expect(resolveOrgSegment("territories")).toBe("territory");
+    expect(orgTypeDisplay.territory.icon).toBe("LandPlot");
+  });
+
   it.each(nonOrgSegments)(
     "does not claim the existing /%s route",
     (segment) => {

@@ -1,5 +1,5 @@
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   closeModal,
@@ -9,9 +9,28 @@ import {
   useOpenModal,
 } from "~/utils/store/modal";
 
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => {
+  vi.runOnlyPendingTimers();
+  vi.useRealTimers();
+  document.body.style.pointerEvents = "";
+});
+
 describe("modal store", () => {
   beforeEach(() => {
     closeModal(undefined, "all");
+  });
+
+  it("restores page clicks after closing a modal", () => {
+    vi.runOnlyPendingTimers();
+    openModal(ModalType.ADMIN_USERS, { id: 1 });
+    document.body.style.pointerEvents = "none";
+
+    closeModal();
+
+    expect(document.body.style.pointerEvents).toBe("none");
+    vi.runOnlyPendingTimers();
+    expect(document.body.style.pointerEvents).toBe("auto");
   });
 
   it("opens a modal and returns the most recently opened one", () => {
