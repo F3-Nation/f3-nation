@@ -5,23 +5,26 @@ packages:
 
 catalog:
   "@auth/core": 0.41.3
+  "@better-auth/core": ^1.7.4
+  "@better-auth/drizzle-adapter": ^1.7.4
+  "@better-auth/oauth-provider": ^1.7.4
   "@commitlint/cli": ^21.2.2
   "@commitlint/config-conventional": ^21.2.2
   "@commitlint/cz-commitlint": ^21.2.2
   "@commitlint/types": ^21.2.0
   "@faker-js/faker": ^10.6.0
-  "@google-cloud/storage": ^8.0.1
+  "@google-cloud/storage": ^8.1.0
   "@hono/node-server": ^2.1.1
   "@hookform/resolvers": ^5.9.1
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
-  "@next/eslint-plugin-next": ^16.3.3
+  "@next/eslint-plugin-next": ^16.3.4
   "@orpc/client": ^1.15.0
   "@orpc/experimental-ratelimit": ^1.15.0
   "@orpc/openapi": ^1.15.0
   "@orpc/server": ^1.15.0
   "@orpc/tanstack-query": ^1.15.0
   "@orpc/zod": ^1.15.0
-  "@playwright/test": ^1.62.1
+  "@playwright/test": ^1.63.0
   "@radix-ui/react-alert-dialog": ^1.1.23
   "@radix-ui/react-avatar": ^1.2.6
   "@radix-ui/react-checkbox": ^1.3.11
@@ -43,41 +46,43 @@ catalog:
   "@radix-ui/react-tabs": ^1.1.21
   "@radix-ui/react-tooltip": ^1.2.16
   "@react-hook/window-size": ^3.1.1
-  "@scalar/hono-api-reference": ^0.12.0
-  "@scalar/nextjs-api-reference": ^0.11.17
-  "@sentry/nextjs": ^10.73.0
-  "@sentry/node": ^10.73.0
+  "@scalar/hono-api-reference": ^0.12.1
+  "@scalar/nextjs-api-reference": ^0.11.18
+  "@sentry/nextjs": ^10.74.0
+  "@sentry/node": ^10.74.0
   "@t3-oss/env-core": ^0.13.11
   "@t3-oss/env-nextjs": ^0.13.11
   "@tailwindcss/postcss": ^4.3.3
   "@tanstack/react-query": 5.102.8
   "@tanstack/react-query-devtools": 5.102.8
   "@tanstack/react-table": ^8.21.3
-  "@tanstack/react-virtual": ^3.14.10
+  "@tanstack/react-virtual": ^3.14.11
   "@tanstack/table-core": ^8.21.3
   "@testing-library/jest-dom": ^7.0.1
   "@testing-library/react": ^16.3.3
-  "@testing-library/user-event": ^14.6.6
+  "@testing-library/user-event": ^14.6.7
   "@turbo/gen": ^2.10.12
   "@types/geojson": ^7946.0.16
-  "@types/google.maps": ^3.66.0
+  "@types/google.maps": ^3.66.2
+  "@types/leaflet": ^1.9.22
   "@types/lodash": ^4.17.25
-  "@types/node": ^24.13.3
+  "@types/node": ^24.13.4
   "@types/nodemailer": ^8.0.1
   "@types/pg": ^8.23.1
-  "@types/react": ^19.2.18
-  "@types/react-dom": ^19.2.5
+  "@types/react": ^19.3.0
+  "@types/react-dom": ^19.3.0
   "@types/supercluster": ^7.1.3
   "@vis.gl/react-google-maps": ~1.8.3
   "@vitejs/plugin-react": ^6.1.1
   "@vitest/coverage-v8": ^4.1.11
   "@vitest/eslint-plugin": ^1.6.27
+  better-auth: ^1.7.4
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
   cmdk: ^1.1.1
   commitizen: ^4.3.2
   dayjs: ^1.11.23
-  dompurify: ^3.4.14
+  dompurify: ^3.4.15
   dotenv: ^17.4.2
   dotenv-cli: ^11.0.0
   drizzle-kit: ^0.31.10
@@ -85,7 +90,7 @@ catalog:
   drizzle-zod: ^0.8.3
   esbuild: ^0.28.2
   esbuild-register: ^3.6.0
-  eslint: ^10.9.1
+  eslint: ^10.10.0
   eslint-config-turbo: ^2.10.12
   eslint-plugin-drizzle: ^0.2.3
   eslint-plugin-import-x: ^4.17.1
@@ -93,31 +98,32 @@ catalog:
   eslint-plugin-react: ^7.37.5
   eslint-plugin-react-hooks: ^7.1.1
   geist: ^1.7.2
-  hono: ^4.13.5
+  hono: ^4.13.7
   inquirer: ^12.11.1
   jiti: ^2.7.0
-  jose: ^6.2.10
+  jose: ^6.2.12
   jsdom: ^30.0.1
-  knip: ^6.33.0
+  knip: ^6.35.1
+  leaflet: ^1.9.4
   lefthook: ^2.1.12
   libphonenumber-js: ^1.13.12
   lodash: ^4.18.1
-  lucide-react: ^1.38.0
-  next: ^16.3.3
+  lucide-react: ^1.43.0
+  next: ^16.3.4
   next-auth: 5.0.0-beta.32
   next-themes: ^0.4.6
-  nodemailer: ^10.0.1
+  nodemailer: ^10.0.2
   pg: ^8.23.0
   pg-connection-string: ^2.14.0
   pino: ^10.3.1
   pino-pretty: ^13.1.3
-  postcss: ^8.5.26
+  postcss: ^8.5.28
   postcss-load-config: ^6.0.1
   postgres: ^3.4.9
   prettier: ^3.9.6
   prettier-plugin-tailwindcss: ^0.8.1
-  react: ^19.2.8
-  react-dom: ^19.2.8
+  react: ^19.3.0
+  react-dom: ^19.3.0
   react-hook-form: ^7.87.0
   react-phone-number-input: ^3.4.18
   react-qr-code: ^2.2.0
@@ -132,18 +138,31 @@ catalog:
   turbo: ^2.10.12
   tw-animate-css: ^1.4.0
   typescript: ^6.0.3
-  typescript-eslint: ^8.69.0
+  typescript-eslint: ^8.70.0
   uuid: ^11.1.1
   # Vitest 4 requires Vite >= 6. Vite is otherwise only a transitive (auto-installed
   # peer) dep, which pnpm won't reliably bump from the locked v5; declaring it
   # explicitly in each vitest package pins a compatible Vite deterministically.
   vite: ^8.2.2
   vitest: ^4.1.11
-  vitest-canvas-mock: ^1.1.5
+  vitest-canvas-mock: ^1.2.0
   zod: ^4.5.4
   zustand: ^5.0.15
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^4.0.6"
+  # zod 4.6.0's JSON-Schema-converter rewrite (colinhacks/zod#6550, PR #6554)
+  # drops format/minLength/int32 bounds when @orpc/zod's ZodToJsonSchemaConverter
+  # converts apps/api's whole router in one pass, failing openapi-spec.char.test.ts's
+  # committed golden. @scalar/types also carries its own independent "zod": "^4.4.3"
+  # dependency (unrelated to our catalog), which resolves to the newest matching
+  # zod on every install; without this override that stray 4.6.x copy leaks into
+  # @better-auth/core's peer resolution and reproduces the same bug for one field
+  # (oauth-client redirectUris) even when our own catalog entry is held back. The
+  # override forces every consumer in the tree onto the same held-back zod instance.
+  # Keep in lockstep with the zod catalog entry above; remove both once upstream
+  # fixes the bulk-conversion case (tracking: colinhacks/zod#6613) or we
+  # deliberately accept the metadata loss.
+  zod: "^4.5.4"
   "@auth/core": "0.41.3" # GHSA-7rqj-j65f-68wh / GHSA-xmf8-cvqr-rfgj (Auth.js email normalizer & getToken DoS)
   # Force patched versions of transitive deps flagged by `pnpm audit --prod
   # --audit-level=high`. Scoped to the vulnerable ranges so unaffected
@@ -154,13 +173,13 @@ overrides:
   # and excluded from the prod audit via tooling/eslint devDependencies instead.
   "brace-expansion@<1.1.16": "2.1.4" # GHSA-3jxr-9vmj-r5cp (DoS)
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.9" # GHSA-rgw5-rvv9-x895 (DoS)
-  "fast-uri@<3.1.5": "3.1.6" # host confusion via failed backslash authority introducer
+  "fast-uri@<3.1.5": "3.1.7" # host confusion via failed backslash authority introducer
   "sharp@<0.35.4": "0.35.4" # GHSA-rgj7-g3m4-5g8c / GHSA-g89c-p67h-r497 / GHSA-2jg2-4ch7-h545 (libheif vulnerabilities); next's optional sharp dep resolved to 0.35.3, outside the old <0.35.0 range
-  "next@>=16.0.0 <16.3.0": "16.3.3" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
-  "postcss@<8.5.12": "^8.5.26" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
+  "next@>=16.0.0 <16.3.0": "16.3.4" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
+  "postcss@<8.5.12": "^8.5.28" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
   "nanoid@<3.3.17": "^6.0.1" # GHSA-2v37-7h3g-55p8
   "nanoid@>=4.0.0 <5.1.16": "^6.0.1" # GHSA-28wg-ghj8-5hjv
-  "browserslist@<=4.28.6": "4.28.8" # GHSA-c83g-rgw3-j3cx (unbounded memory growth) / GHSA-73wf-gq98-2v4g (prototype write crash via browserslist-stats.json)
+  "browserslist@<=4.28.6": "4.28.9" # GHSA-c83g-rgw3-j3cx (unbounded memory growth) / GHSA-73wf-gq98-2v4g (prototype write crash via browserslist-stats.json)
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
