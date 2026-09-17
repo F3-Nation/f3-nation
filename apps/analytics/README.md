@@ -63,14 +63,19 @@ the ETL:
 ANALYTICS_ENVIRONMENT=local uv --directory apps/analytics run analytics-etl diagnostics
 ```
 
-It attaches PostgreSQL and reports separate structured results for a basic
-`orgs` scan, the territory predicate, a small local Parquet `COPY`, and both
-`pv_sectors` and `pv_areas` as query and Parquet-COPY stages. It never creates a
-GCS client, publisher, release, or catalog object. A failure in `postgres_scan`
-or `territory_count` indicates source/schema or attachment trouble; a query
-failure points to DuckDB SQL execution, while a COPY-only failure points to
-Parquet writing or filesystem behavior. Logs contain bounded engine error
-detail but no credentials, DSNs, raw rows, or SQL values.
+It attaches PostgreSQL and reports structured results for bounded source samples
+of `orgs`, the territory predicate, a small local Parquet `COPY`, and bounded
+diagnostics for `pv_sectors` and `pv_areas`. The hierarchy probes send an
+explicit `SELECT ... LIMIT 100` to PostgreSQL with `postgres_query`, stage that
+sample and each hierarchy result in temporary DuckDB tables, then copy and
+validate the staged result as Parquet. Each hierarchy query is executed once;
+the reported row count is evidence from the validated Parquet copy. It never
+creates a GCS client, publisher, release, or catalog object. A failure in
+`postgres_scan` or `territory_count` indicates source/schema or attachment
+trouble; a hierarchy failure points to DuckDB SQL execution, while a COPY or
+validation failure points to Parquet writing or filesystem behavior. Logs
+contain only safe error categories and probe context—never raw error details,
+credentials, DSNs, raw rows, or SQL values.
 
 ## Local-only export
 

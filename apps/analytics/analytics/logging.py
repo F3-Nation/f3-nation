@@ -16,19 +16,21 @@ _SECRET_KEY = re.compile(
     r"access[_-]?key|refresh[_-]?token|dsn|connection|string|bearer|cookie|session)",
     re.I,
 )
-_URI_SECRET = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.I)
-_SQL_LITERAL = re.compile(r"'[^']*(?:''[^']*)*'")
-_EMAIL = re.compile(r"\b[^\s'\"]+@[^\s'\"]+\b")
-
-
 def _safe_error_detail(error: BaseException) -> str:
-    """Keep useful engine diagnostics while dropping credentials and values."""
-    detail = str(error)
-    detail = _URI_SECRET.sub("[REDACTED]", detail)
-    detail = _SQL_LITERAL.sub("'[REDACTED]'", detail)
-    detail = _EMAIL.sub("[REDACTED]", detail)
-    detail = re.sub(r"(?i)(password|token|secret|dsn)\s*[=:]\s*\S+", "[REDACTED]", detail)
-    return detail[:1000]
+    """Return a normalized category without exposing the exception message."""
+    categories = (
+        (TimeoutError, "timeout_error"),
+        (ConnectionError, "connection_error"),
+        (PermissionError, "permission_error"),
+        (FileNotFoundError, "not_found_error"),
+        ((ValueError, TypeError), "validation_error"),
+        (OSError, "system_error"),
+        (RuntimeError, "runtime_error"),
+    )
+    for error_type, category in categories:
+        if isinstance(error, error_type):
+            return category
+    return "exception"
 
 
 def _safe(value: Any, key: str = "") -> Any:

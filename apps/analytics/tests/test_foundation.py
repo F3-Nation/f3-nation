@@ -182,8 +182,38 @@ def test_logging_supports_exceptions():
     assert record["error"]["module"] == "builtins"
     assert record["context"]["dsn"] == "[REDACTED]"
     assert record["context"]["private_key"] == "[REDACTED]"
+    assert record["error"]["detail"] == "runtime_error"
     assert "password" not in stream.getvalue()
     assert "postgres://" not in stream.getvalue()
+
+
+@pytest.mark.parametrize(
+    "message",
+    (
+        "arbitrary-user-name",
+        "value='quoted-secret' value=\"double-quoted-secret\"",
+        "password=top-secret token=abc123 api_key=key-value",
+    ),
+)
+def test_logging_exception_detail_is_normalized_without_message_values(message):
+    stream = io.StringIO()
+
+    def raise_error():
+        raise ValueError(message)
+
+    try:
+        raise_error()
+    except ValueError as error:
+        JsonLogger(stream=stream).error("analytics.etl.failed", error)
+
+    output = stream.getvalue()
+    record = json.loads(output)
+    assert record["error"]["detail"] == "validation_error"
+    assert message not in output
+    assert record["error"]["type"] == "ValueError"
+    assert record["error"]["module"] == "builtins"
+    assert record["error"]["origin"]["file"] == "test_foundation.py"
+    assert record["error"]["origin"]["function"] == "raise_error"
 
 
 def test_logging_exception_origin_is_safe_and_terminal():

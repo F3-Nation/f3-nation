@@ -22,8 +22,9 @@ class _Result:
 
 
 class _Connection:
-    def __init__(self):
+    def __init__(self, close_error: Exception | None = None):
         self.sql = []
+        self.close_error = close_error
 
     def execute(self, statement, parameters=()):
         self.sql.append((statement, parameters))
@@ -32,10 +33,18 @@ class _Connection:
         return _Result([])
 
     def close(self):
-        pass
+        if self.close_error:
+            raise self.close_error
 
 
-def test_diagnostics_is_bounded_and_has_no_publication_side_effects(monkeypatch):
+def _logger(events):
+    return SimpleNamespace(
+        info=lambda event, **context: events.append((event, context)),
+        error=lambda event, error=None, **context: events.append((event, context, error)),
+    )
+
+
+def test_diagnostics_use_bounded_source_queries_and_one_materialization_execution(monkeypatch):
     connections = []
 
     def make_connection(_settings):
@@ -44,64 +53,58 @@ def test_diagnostics_is_bounded_and_has_no_publication_side_effects(monkeypatch)
         return connection
 
     monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
-    logger = SimpleNamespace(info=lambda *_args, **_kwargs: None, error=lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        diagnostics,
+        "load_sql",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("production SQL")),
+        raising=False,
+    )
+    events = []
 
     result = diagnostics.run_diagnostics(
-        cast(Settings, SimpleNamespace()),
-        connection_factory=make_connection,
-        logger=cast(JsonLogger, logger),
+        cast(Settings, SimpleNamespace()), connection_factory=make_connection, logger=cast(JsonLogger, _logger(events))
     )
 
     assert set(result) == {
         "postgres_scan",
         "territory_count",
         "local_parquet_copy",
-        "pv_sectors_query",
-        "pv_sectors_copy",
-        "pv_areas_query",
-        "pv_areas_copy",
+        "pv_sectors_materialization",
+        "pv_areas_materialization",
     }
     assert all(item["status"] == "succeeded" for item in result.values())
-    assert len(connections) == 7
-    statements = [item for connection in connections for item in connection.sql]
-    assert all("LIMIT 100" in statement or statement.startswith("SELECT count(*)") for statement, _ in statements)
-    assert not any("GcsPublisher" in statement for statement, _ in statements)
-    query_params = [parameters for statement, parameters in statements if "diagnostic_sample" in statement]
-    assert len(query_params) == 4
-    assert all(len(parameters) == 2 for parameters in query_params)
+    assert len(connections) == 5
+    statements = [statement for connection in connections for statement, _ in connection.sql]
+    source_queries = [statement for statement in statements if "postgres_query('pg'" in statement]
+    assert len(source_queries) == 4
+    assert all("LIMIT 100" in statement for statement in source_queries)
+    assert sum("CREATE TEMP TABLE diagnostic_pv_sectors AS" in statement for statement in statements) == 1
+    assert sum("CREATE TEMP TABLE diagnostic_pv_areas AS" in statement for statement in statements) == 1
+    assert not any("load_sql" in statement or "GcsPublisher" in statement for statement in statements)
+    assert not any("diagnostic_sample" in statement for statement in statements)
+    assert result["pv_sectors_materialization"]["row_count"] == 7
+    assert result["pv_areas_materialization"]["source_sample_limit"] == 100
 
 
-def test_internal_exception_does_not_reuse_invalidated_connection(monkeypatch):
-    import duckdb
-
+def test_cleanup_error_isolated_from_later_probes(monkeypatch):
     connections = []
 
     def make_connection(_settings):
-        connection = _Connection()
-        if not connections:
-            original_execute = connection.execute
-
-            def fail_once(statement, parameters=()):
-                if statement.startswith("SELECT count(*)"):
-                    raise duckdb.InternalException("internal failure")
-                return original_execute(statement, parameters)
-
-            connection.execute = fail_once
+        connection = _Connection(RuntimeError("close failed")) if not connections else _Connection()
         connections.append(connection)
         return connection
 
     monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
+    events = []
     result = diagnostics.run_diagnostics(
-        cast(Settings, SimpleNamespace()),
-        connection_factory=make_connection,
-        logger=cast(
-            JsonLogger, SimpleNamespace(info=lambda *_args, **_kwargs: None, error=lambda *_args, **_kwargs: None)
-        ),
+        cast(Settings, SimpleNamespace()), connection_factory=make_connection, logger=cast(JsonLogger, _logger(events))
     )
 
-    assert result["postgres_scan"]["status"] == "failed"
+    assert len(connections) == 5
     assert result["territory_count"]["status"] == "succeeded"
-    assert len(connections) == 7
+    cleanup_events = [event for event in events if event[0] == "analytics.etl.diagnostic_cleanup_failed"]
+    assert len(cleanup_events) == 1
+    assert cleanup_events[0][1]["probe"] == "postgres_scan"
 
 
 def test_diagnostic_error_is_structured_without_secret_or_rows():
@@ -110,7 +113,7 @@ def test_diagnostic_error_is_structured_without_secret_or_rows():
     logger.error(
         "analytics.etl.diagnostic_failed",
         RuntimeError("Catalog Error: password=top-secret; value 'person@example.test'"),
-        probe="pv_areas_query",
+        probe="pv_areas_materialization",
     )
 
     record = json.loads(stream.getvalue())

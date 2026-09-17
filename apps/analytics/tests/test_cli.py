@@ -7,6 +7,7 @@ import google.cloud.storage
 import pytest
 
 import analytics.cli as cli
+import analytics.diagnostics as diagnostics
 from analytics.publication import CatalogConflictError
 from analytics.settings import CatalogSettings, SettingsError
 
@@ -111,3 +112,55 @@ def test_catalog_settings_reject_missing_or_wrong_target_without_database_config
         ).catalog_object
         == "parquets/catalog.json"
     )
+
+
+def test_diagnostics_command_logs_completion_on_success(monkeypatch):
+    settings = SimpleNamespace(environment="test")
+    logger = SimpleNamespace(
+        info=lambda event, **context: events.append((event, context)), error=lambda *args, **kwargs: None
+    )
+    events = []
+    calls = []
+
+    monkeypatch.setattr(cli, "JsonLogger", lambda: logger)
+    monkeypatch.setattr(cli, "RunId", SimpleNamespace(create=lambda: "run"))
+    monkeypatch.setattr(cli, "select_materializations", lambda _names: ())
+    monkeypatch.setattr(cli.Settings, "from_env", lambda: calls.append("settings") or settings)
+    monkeypatch.setattr(
+        diagnostics,
+        "run_diagnostics",
+        lambda received_settings, *, logger: calls.append((received_settings, logger))
+        or {"postgres_scan": {"status": "succeeded"}},
+    )
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics"])
+
+    assert cli.main() == 0
+    assert calls == ["settings", (settings, logger)]
+    assert events[0][0] == "analytics.etl.diagnostics_completed"
+    assert events[0][1]["failed_count"] == 0
+
+
+def test_diagnostics_command_logs_completion_and_returns_failure_for_partial_probe_failure(monkeypatch):
+    settings = SimpleNamespace(environment="test")
+    logger = SimpleNamespace(
+        info=lambda event, **context: events.append((event, context)), error=lambda *args, **kwargs: None
+    )
+    events = []
+
+    monkeypatch.setattr(cli, "JsonLogger", lambda: logger)
+    monkeypatch.setattr(cli, "RunId", SimpleNamespace(create=lambda: "run"))
+    monkeypatch.setattr(cli, "select_materializations", lambda _names: ())
+    monkeypatch.setattr(cli.Settings, "from_env", lambda: settings)
+    monkeypatch.setattr(
+        diagnostics,
+        "run_diagnostics",
+        lambda received_settings, *, logger: {
+            "postgres_scan": {"status": "succeeded"},
+            "territory_count": {"status": "failed"},
+        },
+    )
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics"])
+
+    assert cli.main() == 1
+    assert events[0][0] == "analytics.etl.diagnostics_completed"
+    assert events[0][1]["failed_count"] == 1
