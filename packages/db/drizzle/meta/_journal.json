@@ -183,6 +183,13 @@
       "when": 1789610822419,
       "tag": "0025_goofy_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789614219942,
+      "tag": "0026_cultured_mulholland_black",
+      "breakpoints": true
     }
   ]
 }

@@ -1275,6 +1275,10 @@ export const betterAuthUser = authProviderSchema.table(
   },
   (table) => [
     unique("better_auth_user_email_key").on(table.email),
+    // Backs the email-sync trigger's `WHERE f3_user_id = NEW.id` lookup
+    // (0024_next_nekra.sql) so it stays an index scan as this table grows,
+    // not a full table scan on every users.email update.
+    index("better_auth_user_f3_user_id_idx").on(table.f3UserId),
     foreignKey({
       columns: [table.f3UserId],
       foreignColumns: [users.id],
