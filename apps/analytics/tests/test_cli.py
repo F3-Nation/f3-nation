@@ -129,8 +129,9 @@ def test_diagnostics_command_logs_completion_on_success(monkeypatch):
     monkeypatch.setattr(
         diagnostics,
         "run_diagnostics",
-        lambda received_settings, *, logger: calls.append((received_settings, logger))
-        or {"postgres_scan": {"status": "succeeded"}},
+        lambda received_settings, *, logger: (
+            calls.append((received_settings, logger)) or {"postgres_scan": {"status": "succeeded"}}
+        ),
     )
     monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics"])
 

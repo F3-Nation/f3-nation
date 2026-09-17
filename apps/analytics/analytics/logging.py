@@ -16,6 +16,8 @@ _SECRET_KEY = re.compile(
     r"access[_-]?key|refresh[_-]?token|dsn|connection|string|bearer|cookie|session)",
     re.I,
 )
+
+
 def _safe_error_detail(error: BaseException) -> str:
     """Return a normalized category without exposing the exception message."""
     categories = (

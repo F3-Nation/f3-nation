@@ -14,10 +14,7 @@ from .source import _sql_literal, attach_postgres
 _LIMIT = 100
 
 
-_ORG_SAMPLE_SQL = (
-    "SELECT id, name, org_type, parent_id, logo_url, is_active "
-    "FROM public.orgs LIMIT 100"
-)
+_ORG_SAMPLE_SQL = "SELECT id, name, org_type, parent_id, logo_url, is_active FROM public.orgs LIMIT 100"
 _TERRITORY_SAMPLE_SQL = "SELECT id FROM public.orgs WHERE CAST(org_type AS VARCHAR) = 'territory' LIMIT 100"
 
 _SECTORS_QUERY = """
@@ -105,6 +102,7 @@ def run_diagnostics(
     """
     log = logger or JsonLogger()
     results: dict[str, dict[str, Any]] = {}
+
     def probe(name: str, operation: Callable[[Any], dict[str, Any]]) -> None:
         connection: Any | None = None
         try:
@@ -128,10 +126,7 @@ def run_diagnostics(
         "postgres_scan",
         lambda db: {
             "row_count": int(
-                db.execute(
-                    "SELECT count(*) FROM postgres_query('pg', "
-                    f"{_sql_literal(_ORG_SAMPLE_SQL)})"
-                ).fetchone()[0]
+                db.execute(f"SELECT count(*) FROM postgres_query('pg', {_sql_literal(_ORG_SAMPLE_SQL)})").fetchone()[0]
             )
         },
     )
@@ -140,8 +135,7 @@ def run_diagnostics(
         lambda db: {
             "row_count": int(
                 db.execute(
-                    "SELECT count(*) FROM postgres_query('pg', "
-                    f"{_sql_literal(_TERRITORY_SAMPLE_SQL)})"
+                    f"SELECT count(*) FROM postgres_query('pg', {_sql_literal(_TERRITORY_SAMPLE_SQL)})"
                 ).fetchone()[0]
             )
         },
@@ -159,6 +153,7 @@ def run_diagnostics(
 
     probe("local_parquet_copy", local_copy)
     for name, query in (("pv_sectors", _SECTORS_QUERY), ("pv_areas", _AREAS_QUERY)):
+
         def materialization_probe(db: Any, query: str = query, name: str = name) -> dict[str, Any]:
             db.execute(
                 "CREATE TEMP TABLE diagnostic_orgs AS SELECT * FROM postgres_query('pg', "
