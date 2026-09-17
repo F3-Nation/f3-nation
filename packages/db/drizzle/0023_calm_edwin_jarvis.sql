@@ -1,0 +1,2 @@
+ALTER TABLE "auth"."better_auth_user" ADD COLUMN "f3_user_id" integer GENERATED ALWAYS AS ((id)::integer) STORED;--> statement-breakpoint
+ALTER TABLE "auth"."better_auth_user" ADD CONSTRAINT "better_auth_user_f3_user_id_fkey" FOREIGN KEY ("f3_user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
