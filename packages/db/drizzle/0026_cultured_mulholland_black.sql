@@ -1,1 +1,0 @@
-CREATE INDEX "better_auth_user_f3_user_id_idx" ON "auth"."better_auth_user" USING btree ("f3_user_id");

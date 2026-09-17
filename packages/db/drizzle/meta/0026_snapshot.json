@@ -1,5 +1,5 @@
 {
-  "id": "9d9ee908-e84f-4108-823c-6945659e45dc",
+  "id": "2fbb56e2-a976-40e5-a40d-53f668799ddf",
   "prevId": "9f1fa773-133b-4999-afe9-4bda34138001",
   "version": "7",
   "dialect": "postgresql",
@@ -1997,23 +1997,7 @@
           }
         }
       },
-      "indexes": {
-        "better_auth_user_f3_user_id_idx": {
-          "name": "better_auth_user_f3_user_id_idx",
-          "columns": [
-            {
-              "expression": "f3_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "better_auth_user_f3_user_id_fkey": {
           "name": "better_auth_user_f3_user_id_fkey",
@@ -2036,6 +2020,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "email"
+          ]
+        },
+        "better_auth_user_f3_user_id_key": {
+          "name": "better_auth_user_f3_user_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "f3_user_id"
           ]
         }
       },
