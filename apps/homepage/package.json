@@ -18,7 +18,7 @@
     "@acme/shared": "workspace:*",
     "@acme/ui": "workspace:*",
     "@f3nation/health": "workspace:*",
-    "leaflet": "^1.9.4",
+    "leaflet": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"

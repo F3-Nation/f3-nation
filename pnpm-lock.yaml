@@ -461,6 +461,9 @@ catalogs:
     knip:
       specifier: ^6.35.1
       version: 6.36.0
+    leaflet:
+      specifier: ^1.9.4
+      version: 1.9.4
     lefthook:
       specifier: ^2.1.12
       version: 2.1.12
@@ -1082,7 +1085,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/health
       leaflet:
-        specifier: ^1.9.4
+        specifier: 'catalog:'
         version: 1.9.4
       next:
         specifier: 'catalog:'
