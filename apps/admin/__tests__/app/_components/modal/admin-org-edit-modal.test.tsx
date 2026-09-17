@@ -731,8 +731,9 @@ describe("Territory organization integration", () => {
       "Please enter a valid X/Twitter URL (e.g. https://x.com/f3nation)",
     );
     expect(mocks.save).not.toHaveBeenCalled();
+    // Replace the rejected handle with a valid URL, then submit again.
     fireEvent.change(field("Twitter"), {
-      target: { value: "https://x.com/faketerritory" },
+      target: { value: "https://x.com/testterritory" },
     });
     fireEvent.change(screen.getByRole("dialog").querySelector("select")!, {
       target: { value: "3" },
@@ -747,7 +748,7 @@ describe("Territory organization integration", () => {
       orgType: "territory",
       name: "Test Territory",
       parentId: 3,
-      twitter: "https://x.com/faketerritory",
+      twitter: "https://x.com/testterritory",
       isActive: false,
     });
     expect(mocks.all).toHaveBeenCalledWith(
