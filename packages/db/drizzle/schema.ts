@@ -1266,8 +1266,23 @@ export const betterAuthUser = authProviderSchema.table(
     updatedAt: timestamp("updated_at", { mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
+    // Mirrors `id` (text) as an integer purely so Postgres can enforce a real
+    // FK to users.id below — Better Auth itself needs `id` to stay text (see
+    // block comment above), so this column exists only for referential
+    // integrity, nothing reads or writes it directly. See #953: without this,
+    // deleting/merging a `users` row (Tackle's merge script) leaves a
+    // dangling `better_auth_user` row that can sign tokens for a user id
+    // that no longer exists, or that gets reassigned to someone else.
+    f3UserId: integer("f3_user_id").generatedAlwaysAs(sql`(id)::integer`),
   },
-  (table) => [unique("better_auth_user_email_key").on(table.email)],
+  (table) => [
+    unique("better_auth_user_email_key").on(table.email),
+    foreignKey({
+      columns: [table.f3UserId],
+      foreignColumns: [users.id],
+      name: "better_auth_user_f3_user_id_fkey",
+    }).onDelete("cascade"),
+  ],
 );
 
 export const betterAuthSession = authProviderSchema.table(
