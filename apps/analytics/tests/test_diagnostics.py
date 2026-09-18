@@ -436,6 +436,31 @@ def test_full_query_text_scanner_mode_sets_before_attach_on_each_fresh_connectio
     assert all(context["scanner_mode"] == "text-copy" for event, context in events)
 
 
+def test_full_query_single_thread_mode_forwards_only_diagnostic_connection_option(monkeypatch):
+    connections = []
+    factory_options = []
+    attachments = []
+
+    def make_connection(_settings, **options):
+        factory_options.append(options)
+        connection = _Connection()
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(diagnostics, "attach_postgres", lambda connection, _settings: attachments.append(connection))
+    result = diagnostics.run_full_query_diagnostics(
+        _settings(), connection_factory=make_connection, scanner_mode="single-thread"
+    )
+
+    assert all(item["status"] == "succeeded" for item in result.values())
+    assert factory_options == [{"diagnostic_single_thread": True}] * 2
+    assert attachments == connections
+    assert all(
+        any(statement.startswith("CREATE TEMP TABLE diagnostic_full_") for statement, _ in connection.sql)
+        for connection in connections
+    )
+
+
 def test_full_query_rejects_invalid_scanner_mode():
     try:
         diagnostics.run_full_query_diagnostics(_settings(), scanner_mode="invalid")

@@ -75,6 +75,11 @@ selected with `--scanner-mode=text-copy`; it sets
 read-only PostgreSQL attachment. The setting is not used by regular ETL or
 the bounded `diagnostics` command.
 
+The explicitly approved `--scanner-mode=single-thread` mode additionally
+creates each diagnostic DuckDB connection with one execution thread and sets
+the PostgreSQL connection limit to one before configuration locking. The
+binary-copy default and text-copy mode do not change these settings.
+
 Run this command only with explicit operator approval because it executes the
 full production-shaped queries. Approval has been granted for the current
 investigation; it is not standing approval for routine use. Selectors are not

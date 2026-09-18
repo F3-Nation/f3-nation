@@ -13,17 +13,21 @@ def connect(
     duckdb_module: Any | None = None,
     *,
     diagnostic_text_copy: bool = False,
+    diagnostic_single_thread: bool = False,
 ) -> Any:
     module: Any = duckdb_module
     if module is None:
         import duckdb as module
+    config = {
+        "autoinstall_known_extensions": "false",
+        "autoload_known_extensions": "false",
+        "extension_directory": str(settings.extension_directory),
+    }
+    if diagnostic_single_thread:
+        config["threads"] = "1"
     connection = module.connect(
         ":memory:",
-        config={
-            "autoinstall_known_extensions": "false",
-            "autoload_known_extensions": "false",
-            "extension_directory": str(settings.extension_directory),
-        },
+        config=config,
     )
     try:
         extension = Path(settings.postgres_extension_path)
@@ -32,6 +36,8 @@ def connect(
         # Work around the postgres extension's "Unsupported table filter type";
         # this must precede configuration locking because the setting is immutable after it.
         connection.execute("SET pg_experimental_filter_pushdown = false")
+        if diagnostic_single_thread:
+            connection.execute("SET pg_connection_limit = 1")
         if diagnostic_text_copy:
             connection.execute("SET pg_use_binary_copy = false")
         connection.execute("SET lock_configuration = true")

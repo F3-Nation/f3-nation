@@ -44,7 +44,7 @@ def main() -> int:
     )
     full_query_parser.add_argument(
         "--scanner-mode",
-        choices=("binary-copy", "text-copy"),
+        choices=("binary-copy", "text-copy", "single-thread"),
         default="binary-copy",
         help="diagnostic-only PostgreSQL scanner mode",
     )

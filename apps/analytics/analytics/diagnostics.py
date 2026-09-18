@@ -17,7 +17,7 @@ from .source import _sql_literal, attach_postgres, load_sql
 
 _LIMIT = 100
 _FULL_QUERY_DIAGNOSTIC_DATASETS = ("pv_kotter", "pv_events")
-_FULL_QUERY_SCANNER_MODES = ("binary-copy", "text-copy")
+_FULL_QUERY_SCANNER_MODES = ("binary-copy", "text-copy", "single-thread")
 
 _KOTTER_SOURCE_SQL = """
 WITH sampled_events AS (
@@ -429,6 +429,8 @@ def run_full_query_diagnostics(
             factory = connection_factory or connect
             if scanner_mode == "text-copy":
                 db = factory(settings, diagnostic_text_copy=True)
+            elif scanner_mode == "single-thread":
+                db = factory(settings, diagnostic_single_thread=True)
             else:
                 db = factory(settings)
             connection = db
