@@ -1,5 +1,5 @@
 {
-  "id": "0944b4ca-ff90-478a-8e2b-b9a50fcf04ea",
+  "id": "ff9a6a4e-d9f2-4288-b987-9a13a4ea778e",
   "prevId": "ed765bf4-0fc8-4951-8951-7ae3295e44a4",
   "version": "7",
   "dialect": "postgresql",
@@ -1985,34 +1985,10 @@
           "primaryKey": false,
           "notNull": true,
           "default": "timezone('utc'::text, now())"
-        },
-        "f3_user_id": {
-          "name": "f3_user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "generated": {
-            "as": "(id)::integer",
-            "type": "stored"
-          }
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "better_auth_user_f3_user_id_fkey": {
-          "name": "better_auth_user_f3_user_id_fkey",
-          "tableFrom": "better_auth_user",
-          "tableTo": "users",
-          "columnsFrom": [
-            "f3_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "better_auth_user_email_key": {
@@ -5245,6 +5221,7 @@
         "ao",
         "region",
         "area",
+        "territory",
         "sector",
         "nation"
       ]

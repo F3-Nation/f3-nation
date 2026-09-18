@@ -34,6 +34,15 @@ export const assertValidParentType = async (
     throw new ORPCError("NOT_FOUND", { message: "Parent org not found" });
   }
 
+  // Temporary rollout gate: #924 must make the trigger and seed recount
+  // depth-agnostic before Areas can be placed beneath Territories.
+  if (childOrgType === "area" && parentOrg.orgType === "territory") {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "Area cannot have a Territory parent until AO counting supports it",
+    });
+  }
+
   // An AO's parent must be an adjacent region, not just any higher-ranked
   // type: moveAOLocsToNewRegion and the map's region joins both hard-assume
   // an AO's parent is a region, so a skip-level ao->sector/area/nation parent

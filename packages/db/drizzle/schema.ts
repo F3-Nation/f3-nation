@@ -1267,11 +1267,13 @@ export const betterAuthUser = authProviderSchema.table(
       .notNull(),
     // Mirrors `id` (text) as an integer purely so Postgres can enforce a real
     // FK to users.id below — Better Auth itself needs `id` to stay text (see
-    // block comment above), so this column exists only for referential
-    // integrity, nothing reads or writes it directly. Without this,
-    // deleting/merging a `users` row (e.g. an account-merge admin action)
-    // leaves a dangling `better_auth_user` row that can sign tokens for a
-    // user id that no longer exists, or that gets reassigned to someone else.
+    // block comment above), so this column exists mainly for referential
+    // integrity; nothing in application code reads or writes it directly
+    // (the email-sync trigger does query it — see the unique-constraint
+    // comment below). Without the FK, deleting/merging a `users` row (e.g.
+    // an account-merge admin action) leaves a dangling `better_auth_user`
+    // row that can sign tokens for a user id that no longer exists, or that
+    // gets reassigned to someone else.
     f3UserId: integer("f3_user_id").generatedAlwaysAs(sql`(id)::integer`),
   },
   (table) => [
@@ -1280,8 +1282,9 @@ export const betterAuthUser = authProviderSchema.table(
     // a plain index wouldn't stop two different `id` text values that cast
     // to the same integer (e.g. "1" and "01") from both pointing at the
     // same `users.id`. The unique constraint also backs the email-sync
-    // trigger's `WHERE f3_user_id = NEW.id` lookup (0024_next_nekra.sql),
-    // so it stays an index scan as this table grows.
+    // trigger's `WHERE f3_user_id = NEW.id` lookup (see the email-sync
+    // migration's trigger function), so it stays an index scan as this
+    // table grows.
     unique("better_auth_user_f3_user_id_key").on(table.f3UserId),
     // The application only ever writes `id` via one code path today, but
     // that's an app-level guarantee, not a database-level one — nothing
