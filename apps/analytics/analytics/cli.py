@@ -58,8 +58,10 @@ def main() -> int:
     logger = JsonLogger()
     run_id = RunId.create()
     try:
-        selected = () if args.command == "diagnostics-full-query" else select_materializations(
-            tuple(materialization_names) if materialization_names else None
+        selected = (
+            ()
+            if args.command == "diagnostics-full-query"
+            else select_materializations(tuple(materialization_names) if materialization_names else None)
         )
         if args.command == "rollback-catalog":
             catalog_settings = CatalogSettings.from_env()

@@ -192,12 +192,17 @@ def test_full_query_diagnostics_command_isolated_success_without_gcs_or_selector
 
     assert cli.main() == 0
     assert calls == [(settings, logger)]
-    assert events == [("analytics.etl.diagnostics_full_query_completed", {
-        "run_id": "run",
-        "environment": "test",
-        "dataset_count": 2,
-        "failed_count": 0,
-    })]
+    assert events == [
+        (
+            "analytics.etl.diagnostics_full_query_completed",
+            {
+                "run_id": "run",
+                "environment": "test",
+                "dataset_count": 2,
+                "failed_count": 0,
+            },
+        )
+    ]
 
 
 def test_full_query_diagnostics_command_returns_failure_and_rejects_selector(monkeypatch):

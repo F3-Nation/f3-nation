@@ -443,9 +443,7 @@ def run_full_query_diagnostics(
                 log.info("analytics.etl.diagnostic_phase_succeeded", probe=name, phase=phase)
 
                 phase = "readback"
-                row_count = int(
-                    db.execute("SELECT count(*) FROM read_parquet(?)", [str(destination)]).fetchone()[0]
-                )
+                row_count = int(db.execute("SELECT count(*) FROM read_parquet(?)", [str(destination)]).fetchone()[0])
                 log.info("analytics.etl.diagnostic_phase_succeeded", probe=name, phase=phase)
             results[name] = {"status": "succeeded", "row_count": row_count}
         except Exception as error:
