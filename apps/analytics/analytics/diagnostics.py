@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -10,10 +11,12 @@ import psycopg
 
 from .duckdb import connect
 from .logging import JsonLogger
+from .materializations import MATERIALIZATION_REGISTRY
 from .settings import Settings
-from .source import _sql_literal, attach_postgres
+from .source import _sql_literal, attach_postgres, load_sql
 
 _LIMIT = 100
+_FULL_QUERY_DIAGNOSTIC_DATASETS = ("pv_kotter", "pv_events")
 
 _KOTTER_SOURCE_SQL = """
 WITH sampled_events AS (
@@ -399,4 +402,65 @@ def run_diagnostics(
             )
 
         probe(name, operation, attach=False)
+    return results
+
+
+def run_full_query_diagnostics(
+    settings: Settings,
+    connection_factory: Callable[[Settings], Any] = connect,
+    logger: JsonLogger | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Run the explicitly approved full-query diagnostic without publication."""
+    log = logger or JsonLogger()
+    results: dict[str, dict[str, Any]] = {}
+    source_timestamp = datetime.now(timezone.utc)
+    refreshed_at = source_timestamp.isoformat()
+    as_of_date = source_timestamp.date().isoformat()
+
+    for name in _FULL_QUERY_DIAGNOSTIC_DATASETS:
+        definition = MATERIALIZATION_REGISTRY[name]
+        connection: Any | None = None
+        phase = "full_query"
+        try:
+            db = connection_factory(settings)
+            connection = db
+            attach_postgres(db, settings)
+            query = load_sql(definition)
+            table_name = f"diagnostic_full_{name}"
+            db.execute(
+                f"CREATE TEMP TABLE {table_name} AS {query}",
+                [refreshed_at, as_of_date],
+            )
+            log.info("analytics.etl.diagnostic_phase_succeeded", probe=name, phase=phase)
+
+            phase = "local_parquet"
+            with tempfile.TemporaryDirectory(prefix="analytics-diagnostic-full-") as directory:
+                destination = Path(directory) / definition.output_filename
+                db.execute(
+                    f"COPY (SELECT * FROM {table_name}) TO {_sql_literal(str(destination))} "
+                    "(FORMAT PARQUET, COMPRESSION ZSTD)"
+                )
+                log.info("analytics.etl.diagnostic_phase_succeeded", probe=name, phase=phase)
+
+                phase = "readback"
+                row_count = int(
+                    db.execute("SELECT count(*) FROM read_parquet(?)", [str(destination)]).fetchone()[0]
+                )
+                log.info("analytics.etl.diagnostic_phase_succeeded", probe=name, phase=phase)
+            results[name] = {"status": "succeeded", "row_count": row_count}
+        except Exception as error:
+            results[name] = {"status": "failed", "error_type": type(error).__name__}
+            log.error(
+                "analytics.etl.diagnostic_phase_failed",
+                error,
+                probe=name,
+                phase=phase,
+                error_type=type(error).__name__,
+            )
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception as error:
+                    log.error("analytics.etl.diagnostic_cleanup_failed", error, probe=name)
     return results

@@ -54,6 +54,27 @@ These commands are offline-safe: they do not publish data and the test suite
 does not make live cloud or database calls. Do not create or populate an
 `.env` file just to run them.
 
+### Approved full-query diagnostic
+
+`diagnostics-full-query` is a deliberately high-load diagnostic for the two
+approved datasets `pv_kotter` and `pv_events` only. It loads each production
+SQL resource once into a temporary DuckDB table, copies only that table to a
+short-lived local Parquet file, and reads the file back using a fresh
+read-only PostgreSQL-attached connection per dataset. It never creates a GCS
+client, publishes, commits a catalog, or runs the ETL pipeline:
+
+```bash
+ANALYTICS_ENVIRONMENT=local \
+  uv --directory apps/analytics run analytics-etl diagnostics-full-query
+```
+
+Run this command only with explicit operator approval because it executes the
+full production-shaped queries. Approval has been granted for the current
+investigation; it is not standing approval for routine use. Selectors are not
+accepted, and a failure in one dataset does not prevent the other dataset from
+running. Logs contain only fixed phases, dataset names, counts, and exception
+types—never SQL, rows, paths, exception messages, credentials, or PII.
+
 ## Read-only ETL diagnostics
 
 Run the bounded diagnostics command with the same validated settings used by

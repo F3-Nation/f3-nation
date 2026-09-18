@@ -369,3 +369,66 @@ def test_diagnostic_error_is_structured_without_secret_or_rows():
     assert "top-secret" not in stream.getvalue()
     assert "person@example.test" not in record["error"]["detail"]
     assert record["error"]["type"] == "RuntimeError"
+
+
+def test_full_query_diagnostics_runs_exact_sql_once_then_copies_temp_table(monkeypatch):
+    connections = []
+    attachments = []
+    events = []
+
+    def make_connection(_settings):
+        connection = _Connection()
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(diagnostics, "attach_postgres", lambda connection, _settings: attachments.append(connection))
+    monkeypatch.setattr(diagnostics, "load_sql", lambda definition: f"SELECT '{definition.name}' AS dataset")
+
+    result = diagnostics.run_full_query_diagnostics(
+        _settings(), connection_factory=make_connection, logger=cast(JsonLogger, _logger(events))
+    )
+
+    assert set(result) == {"pv_kotter", "pv_events"}
+    assert all(item["status"] == "succeeded" for item in result.values())
+    assert len(connections) == 2
+    assert len(attachments) == 2
+    for connection, name in zip(connections, ("pv_kotter", "pv_events"), strict=True):
+        statements = [statement for statement, _ in connection.sql]
+        assert sum(f"CREATE TEMP TABLE diagnostic_full_{name} AS" in statement for statement in statements) == 1
+        create = next(statement for statement in statements if statement.startswith("CREATE TEMP TABLE"))
+        assert create.count(f"SELECT '{name}' AS dataset") == 1
+        assert any(f"COPY (SELECT * FROM diagnostic_full_{name})" in statement for statement in statements)
+        assert any("read_parquet(?)" in statement for statement in statements)
+    phase_successes = [context["phase"] for event, context in events if event.endswith("phase_succeeded")]
+    assert phase_successes == ["full_query", "local_parquet", "readback"] * 2
+
+
+def test_full_query_diagnostics_isolates_failure_and_redacts_error(monkeypatch):
+    connections = []
+    stream = io.StringIO()
+
+    class FirstFails(_Connection):
+        def execute(self, statement, parameters=()):
+            if statement.startswith("CREATE TEMP TABLE"):
+                raise RuntimeError("raw SQL rows password=secret person@example.test")
+            return super().execute(statement, parameters)
+
+    def make_connection(_settings):
+        connection = FirstFails() if not connections else _Connection()
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
+    result = diagnostics.run_full_query_diagnostics(
+        _settings(), connection_factory=make_connection, logger=JsonLogger(stream=stream)
+    )
+
+    assert result["pv_kotter"]["status"] == "failed"
+    assert result["pv_events"]["status"] == "succeeded"
+    assert len(connections) == 2
+    records = [json.loads(line) for line in stream.getvalue().splitlines()]
+    failure = next(record for record in records if record["event"].endswith("phase_failed"))
+    assert failure["context"]["phase"] == "full_query"
+    assert failure["context"]["error_type"] == "RuntimeError"
+    assert "raw SQL" not in stream.getvalue()
+    assert "person@example.test" not in stream.getvalue()
