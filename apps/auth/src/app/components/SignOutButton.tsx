@@ -2,15 +2,31 @@
 
 import { useState } from "react";
 import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
-export default function SignOutButton() {
+import { authClient } from "~/lib/better-auth-client";
+
+export default function SignOutButton({
+  useBetterAuth,
+}: {
+  useBetterAuth: boolean;
+}) {
   const [confirming, setConfirming] = useState(false);
+  const router = useRouter();
 
   async function handleLogout() {
     // Revoke all refresh tokens so client apps can't get new access tokens
     await fetch("/api/logout", { method: "POST" });
-    // Clear the session cookie and redirect to login
-    await signOut({ callbackUrl: "/login" });
+    // Clear the active backend's session cookie and redirect to login —
+    // NextAuth's own signOut() only clears its own cookie, so a Better
+    // Auth session (see apps/auth/src/lib/current-session.ts) needs its
+    // own client's signOut() instead, or the user stays signed in there.
+    if (useBetterAuth) {
+      await authClient.signOut();
+      router.push("/login");
+    } else {
+      await signOut({ callbackUrl: "/login" });
+    }
   }
 
   if (confirming) {
