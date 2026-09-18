@@ -8,7 +8,7 @@ import duckdb
 import pytest
 
 from analytics.cli import main
-from analytics.duckdb import connect
+from analytics.duckdb import connect, connect_staged_diagnostic
 from analytics.logging import JsonLogger
 from analytics.run_id import RunId
 from analytics.settings import Settings, SettingsError
@@ -405,6 +405,38 @@ def test_duckdb_diagnostic_single_thread_config_and_limit_precede_lock(tmp_path)
         ("SET pg_connection_limit = 1", ()),
         ("SET lock_configuration = true", ()),
     ]
+
+
+def test_staged_diagnostic_duckdb_uses_private_spill_config_without_extension(tmp_path):
+    calls = []
+
+    class Connection:
+        def close(self):
+            calls.append("CLOSE")
+
+        def load_extension(self, _name):
+            raise AssertionError("staged diagnostics must not load extensions")
+
+    class Duckdb:
+        @staticmethod
+        def connect(database, config):
+            calls.append((database, config))
+            return Connection()
+
+    connection = connect_staged_diagnostic(tmp_path, Duckdb)
+    assert connection is not None
+    assert calls == [
+        (
+            ":memory:",
+            {
+                "autoinstall_known_extensions": "false",
+                "autoload_known_extensions": "false",
+                "temp_directory": str(tmp_path),
+            },
+        )
+    ]
+    connection.close()
+    assert calls[-1] == "CLOSE"
 
 
 def test_duckdb_closes_connection_when_loading_fails(tmp_path):

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
+
+import duckdb
 
 import analytics.diagnostics as diagnostics
 from analytics.logging import JsonLogger
@@ -468,6 +471,318 @@ def test_full_query_rejects_invalid_scanner_mode():
         assert str(error) == "invalid full-query scanner mode"
     else:
         raise AssertionError("invalid scanner mode was accepted")
+
+
+def test_staged_events_uses_one_read_only_chunked_session_and_local_query(monkeypatch):
+    postgres_sessions = []
+    duckdb_connections = []
+    duckdb_directories = []
+    events = []
+
+    class Cursor:
+        def __init__(self, rows, commands, fetch_sizes):
+            self.rows = rows
+            self.commands = commands
+            self.fetch_sizes = fetch_sizes
+            self.used = False
+            self.closed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.closed = True
+            return False
+
+        def execute(self, statement, parameters=()):
+            self.commands.append((statement, parameters))
+            self.statement = statement
+            self.parameters = parameters
+
+        def fetchmany(self, size):
+            self.fetch_sizes.append(size)
+            if self.used:
+                return []
+            self.used = True
+            return self.rows
+
+    class Transaction:
+        def __init__(self, session, options):
+            self.session = session
+            self.options = options
+
+        def __enter__(self):
+            self.session.transaction_options = self.options
+            return self
+
+        def __exit__(self, *_args):
+            self.session.rolled_back = True
+            return False
+
+    class Postgres:
+        def __init__(self):
+            self.read_only = False
+            self.closed = False
+            self.cursors = []
+            self.commands = []
+            self.fetch_sizes = []
+
+        def transaction(self, **options):
+            return Transaction(self, options)
+
+        def cursor(self, name=None):
+            rows = [(1,)] if name else []
+            cursor = Cursor(rows, self.commands, self.fetch_sizes)
+            self.cursors.append((name, cursor))
+            return cursor
+
+        def close(self):
+            self.closed = True
+
+    class Duckdb:
+        def __init__(self):
+            self.statements = []
+            self.inserts = []
+            self.closed = False
+
+        def execute(self, statement, parameters=()):
+            self.statements.append((statement, parameters))
+            if statement.startswith("SELECT count(*)"):
+                return _Result([(11,)])
+            return _Result([])
+
+        def executemany(self, statement, rows):
+            self.inserts.append((statement, list(rows)))
+
+        def close(self):
+            self.closed = True
+
+    def make_postgres(**_kwargs):
+        session = Postgres()
+        postgres_sessions.append(session)
+        return session
+
+    def make_duckdb(_directory):
+        duckdb_directories.append(Path(_directory))
+        connection = Duckdb()
+        duckdb_connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(diagnostics.psycopg, "connect", make_postgres)
+    production_sql = diagnostics.load_sql(diagnostics.MATERIALIZATION_REGISTRY["pv_events"])
+    monkeypatch.setattr(diagnostics, "load_sql", lambda _definition: production_sql)
+    monkeypatch.setattr(
+        diagnostics,
+        "attach_postgres",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("scanner attach is forbidden")),
+    )
+    result = diagnostics.run_staged_events_diagnostic(
+        _settings(), duckdb_connection_factory=make_duckdb, logger=cast(JsonLogger, _logger(events))
+    )
+
+    assert result == {"status": "succeeded", "row_count": 11}
+    assert len(postgres_sessions) == 1
+    session = postgres_sessions[0]
+    assert session.read_only is True
+    assert session.transaction_options == {"force_rollback": True}
+    assert session.rolled_back is True
+    assert session.closed is True
+    assert all(cursor.closed for _, cursor in session.cursors)
+    assert session.commands[:2] == [
+        ("SELECT set_config('statement_timeout', %s, true)", ("15min",)),
+        ("SELECT set_config('idle_in_transaction_session_timeout', %s, true)", ("15min",)),
+    ]
+    assert session.fetch_sizes and set(session.fetch_sizes) == {diagnostics._STAGED_EVENTS_CHUNK_SIZE}
+    assert len(duckdb_connections) == 1
+    connection = duckdb_connections[0]
+    assert connection.closed is True
+    assert all(not directory.exists() for directory in duckdb_directories)
+    assert (
+        sum("CREATE TEMP TABLE diagnostic_staged_pv_events AS" in statement for statement, _ in connection.statements)
+        == 1
+    )
+    statements = [statement for statement, _ in connection.statements]
+    assert all(
+        any(statement.startswith(f"CREATE TABLE staged.{table} ") for statement in statements)
+        for table, *_ in diagnostics._STAGED_EVENTS_TABLES
+    )
+    local_query = next(
+        statement for statement in statements if "CREATE TEMP TABLE diagnostic_staged_pv_events AS" in statement
+    )
+    assert "pg.public." not in local_query
+    assert all(f"staged.{table}" in local_query for table, *_ in diagnostics._STAGED_EVENTS_TABLES)
+    event_schema = next(
+        statement for statement in statements if statement.startswith("CREATE TABLE staged.event_instances ")
+    )
+    assert "end_date" not in event_schema and "highlight" not in event_schema and "is_private" not in event_schema
+    assert len(connection.inserts) == len(diagnostics._STAGED_EVENTS_TABLES)
+    phases = [context["phase"] for event, context in events if event.endswith("phase_succeeded")]
+    assert phases[-2:] == ["local_full_query", "cleanup"]
+    assert all(context["probe"] == "pv_events" for event, context in events)
+
+
+def test_staged_events_failure_isolated_and_redacted(monkeypatch):
+    stream = io.StringIO()
+    closed = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, statement, _parameters=()):
+            if statement.startswith("SELECT") and "set_config" not in statement:
+                raise RuntimeError("raw SQL rows secret@example.test")
+
+        def fetchmany(self, _size):
+            return []
+
+    class Transaction:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Postgres:
+        read_only = False
+
+        def transaction(self, **_options):
+            return Transaction()
+
+        def cursor(self, name=None):
+            return Cursor()
+
+        def close(self):
+            closed.append("postgres")
+
+    class Duckdb:
+        def execute(self, *_args):
+            return _Result([])
+
+        def close(self):
+            closed.append("duckdb")
+
+    monkeypatch.setattr(diagnostics.psycopg, "connect", lambda **_kwargs: Postgres())
+    monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: (_ for _ in ()).throw(AssertionError()))
+    result = diagnostics.run_staged_events_diagnostic(
+        _settings(), duckdb_connection_factory=lambda _directory: Duckdb(), logger=JsonLogger(stream=stream)
+    )
+
+    assert result == {"status": "failed", "error_type": "RuntimeError"}
+    assert closed == ["postgres", "duckdb"]
+    output = stream.getvalue()
+    assert "raw SQL" not in output
+    assert "secret@example.test" not in output
+    assert '"phase":"psycopg_source_extract"' in output
+    assert '"phase":"cleanup"' in output
+
+
+def test_staged_events_actual_sql_runs_against_all_fixed_local_tables(tmp_path):
+    connection = duckdb.connect(":memory:", config={"temp_directory": str(tmp_path)})
+    connection.execute("CREATE SCHEMA staged")
+    rows = {
+        "orgs": [
+            (1, None, "Sector", "sector"),
+            (2, 1, "Territory", "territory"),
+            (3, 2, "Area", "area"),
+            (4, 3, "Region", "region"),
+            (5, 4, "AO", "ao"),
+        ],
+        "event_instances": [(1, 5, True, 10, 2, "{}", "Workout", "2026-01-01")],
+        "event_instances_x_event_types": [(1, 1)],
+        "event_types": [(1, "Run", "Running", "first_f")],
+        "event_tags_x_event_instances": [(1, 7)],
+        "event_tags": [(7, "Morning", "Morning workout")],
+        "attendance": [(1, 1, 1, False)],
+        "users": [(1, "Alpha", "a@example.com", "alpha.png")],
+        "attendance_x_attendance_types": [(1, 2)],
+        "attendance_types": [(2, "Q")],
+    }
+    for table, _source_sql, create_sql, insert_sql in diagnostics._STAGED_EVENTS_TABLES:
+        connection.execute(create_sql)
+        connection.executemany(insert_sql, rows[table])
+
+    connection.execute(
+        "CREATE TEMP TABLE diagnostic_staged_pv_events AS " + diagnostics._staged_events_local_sql(),
+        ["2026-01-03T00:00:00Z", "2026-01-03"],
+    )
+    columns = connection.execute("DESCRIBE diagnostic_staged_pv_events").fetchall()
+    names = [column[0] for column in columns]
+    assert names[:5] == ["refreshed_at", "event_id", "event_date", "event_name", "pax_count"]
+    assert names[-3:] == ["types", "tags", "attendance"]
+    assert connection.execute("SELECT count(*) FROM diagnostic_staged_pv_events").fetchone()[0] == 1
+    assert connection.execute("SELECT types, tags, attendance FROM diagnostic_staged_pv_events").fetchone()[0]
+    connection.close()
+
+
+def test_staged_events_local_ingestion_failure_has_local_phase(monkeypatch):
+    events = []
+
+    class Cursor:
+        def __init__(self, source):
+            self.source = source
+            self.used = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, _statement, _parameters=()):
+            pass
+
+        def fetchmany(self, _size):
+            if self.source and not self.used:
+                self.used = True
+                return [(1,)]
+            return []
+
+    class Transaction:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Postgres:
+        read_only = False
+
+        def transaction(self, **_options):
+            return Transaction()
+
+        def cursor(self, name=None):
+            return Cursor(name is not None)
+
+        def close(self):
+            pass
+
+    class Duckdb:
+        def execute(self, statement, _parameters=()):
+            return _Result([])
+
+        def executemany(self, _statement, _rows):
+            raise RuntimeError("raw local rows")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        diagnostics,
+        "psycopg",
+        type("Psycopg", (), {"connect": staticmethod(lambda **_kwargs: Postgres())}),
+    )
+    result = diagnostics.run_staged_events_diagnostic(
+        _settings(), duckdb_connection_factory=lambda _directory: Duckdb(), logger=cast(JsonLogger, _logger(events))
+    )
+
+    assert result == {"status": "failed", "error_type": "RuntimeError"}
+    failure = next(item for item in events if item[0].endswith("phase_failed"))
+    assert failure[1]["phase"] == "duckdb_ingestion"
+    assert failure[1]["error_type"] == "RuntimeError"
 
 
 def test_full_query_diagnostics_isolates_failure_and_redacts_error(monkeypatch):

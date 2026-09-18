@@ -87,6 +87,27 @@ accepted, and a failure in one dataset does not prevent the other dataset from
 running. Logs contain only fixed phases, dataset names, counts, and exception
 types—never SQL, rows, paths, exception messages, credentials, or PII.
 
+### Approved staged `pv_events` diagnostic
+
+`diagnostics-staged-events` is a separate, explicitly approved, high-load
+non-publishing diagnostic. It extracts the projected `pv_events` source tables
+through one read-only, forced-rollback Psycopg session in bounded chunks,
+stages them into fixed local DuckDB tables, and executes the production
+`pv_events` SQL locally exactly once. It does not attach PostgreSQL to DuckDB,
+create a GCS client, publish, or persist an output artifact:
+
+```bash
+ANALYTICS_ENVIRONMENT=local \
+  uv --directory apps/analytics run analytics-etl diagnostics-staged-events
+```
+
+This command can hold full projected analytics data, including PII, in memory
+and DuckDB spill storage. Run it only with explicit security, platform, and
+analytics-operator approval for the investigation; it is not routine ETL or a
+safe production smoke test. It accepts no selectors and removes its private
+temporary workspace during cleanup. Logs contain only fixed phases, table
+names, counts, and exception types.
+
 ## Read-only ETL diagnostics
 
 Run the bounded diagnostics command with the same validated settings used by

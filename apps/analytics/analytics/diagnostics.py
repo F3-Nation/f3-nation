@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 import psycopg
 
-from .duckdb import connect
+from .duckdb import connect, connect_staged_diagnostic
 from .logging import JsonLogger
 from .materializations import MATERIALIZATION_REGISTRY
 from .settings import Settings
@@ -18,6 +18,80 @@ from .source import _sql_literal, attach_postgres, load_sql
 _LIMIT = 100
 _FULL_QUERY_DIAGNOSTIC_DATASETS = ("pv_kotter", "pv_events")
 _FULL_QUERY_SCANNER_MODES = ("binary-copy", "text-copy", "single-thread")
+_STAGED_EVENTS_CHUNK_SIZE = 1_000
+_STAGED_EVENTS_TIMEOUT = "15min"
+_STAGED_EVENTS_IDLE_TIMEOUT = "15min"
+_STAGED_EVENTS_TABLES = (
+    (
+        "orgs",
+        "SELECT id, parent_id, name, org_type FROM public.orgs",
+        "CREATE TABLE staged.orgs (id INTEGER, parent_id INTEGER, name VARCHAR, org_type VARCHAR)",
+        "INSERT INTO staged.orgs VALUES (?, ?, ?, ?)",
+    ),
+    (
+        "event_instances",
+        "SELECT id, org_id, is_active, pax_count, fng_count, meta, name, start_date FROM public.event_instances",
+        "CREATE TABLE staged.event_instances (id INTEGER, org_id INTEGER, is_active BOOLEAN, pax_count INTEGER, "
+        "fng_count INTEGER, meta JSON, name VARCHAR, start_date DATE)",
+        "INSERT INTO staged.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ),
+    (
+        "event_instances_x_event_types",
+        "SELECT event_instance_id, event_type_id FROM public.event_instances_x_event_types",
+        "CREATE TABLE staged.event_instances_x_event_types (event_instance_id INTEGER, event_type_id INTEGER)",
+        "INSERT INTO staged.event_instances_x_event_types VALUES (?, ?)",
+    ),
+    (
+        "event_types",
+        "SELECT id, name, description, event_category FROM public.event_types",
+        "CREATE TABLE staged.event_types (id INTEGER, name VARCHAR, description VARCHAR, event_category VARCHAR)",
+        "INSERT INTO staged.event_types VALUES (?, ?, ?, ?)",
+    ),
+    (
+        "event_tags_x_event_instances",
+        "SELECT event_instance_id, event_tag_id FROM public.event_tags_x_event_instances",
+        "CREATE TABLE staged.event_tags_x_event_instances (event_instance_id INTEGER, event_tag_id INTEGER)",
+        "INSERT INTO staged.event_tags_x_event_instances VALUES (?, ?)",
+    ),
+    (
+        "event_tags",
+        "SELECT id, name, description FROM public.event_tags",
+        "CREATE TABLE staged.event_tags (id INTEGER, name VARCHAR, description VARCHAR)",
+        "INSERT INTO staged.event_tags VALUES (?, ?, ?)",
+    ),
+    (
+        "attendance",
+        "SELECT id, event_instance_id, user_id, is_planned FROM public.attendance",
+        "CREATE TABLE staged.attendance (id INTEGER, event_instance_id INTEGER, user_id INTEGER, is_planned BOOLEAN)",
+        "INSERT INTO staged.attendance VALUES (?, ?, ?, ?)",
+    ),
+    (
+        "users",
+        "SELECT id, f3_name, email, avatar_url FROM public.users",
+        "CREATE TABLE staged.users (id INTEGER, f3_name VARCHAR, email VARCHAR, avatar_url VARCHAR)",
+        "INSERT INTO staged.users VALUES (?, ?, ?, ?)",
+    ),
+    (
+        "attendance_x_attendance_types",
+        "SELECT attendance_id, attendance_type_id FROM public.attendance_x_attendance_types",
+        "CREATE TABLE staged.attendance_x_attendance_types (attendance_id INTEGER, attendance_type_id INTEGER)",
+        "INSERT INTO staged.attendance_x_attendance_types VALUES (?, ?)",
+    ),
+    (
+        "attendance_types",
+        "SELECT id, type FROM public.attendance_types",
+        "CREATE TABLE staged.attendance_types (id INTEGER, type VARCHAR)",
+        "INSERT INTO staged.attendance_types VALUES (?, ?)",
+    ),
+)
+
+
+def _staged_events_local_sql() -> str:
+    production_sql = load_sql(MATERIALIZATION_REGISTRY["pv_events"])
+    if "pg.public." not in production_sql or "pg." in production_sql.replace("pg.public.", ""):
+        raise ValueError("staged diagnostic SQL is not eligible for fixed rewrite")
+    return production_sql.replace("pg.public.", "staged.")
+
 
 _KOTTER_SOURCE_SQL = """
 WITH sampled_events AS (
@@ -488,3 +562,131 @@ def run_full_query_diagnostics(
                 except Exception as error:
                     log.error("analytics.etl.diagnostic_cleanup_failed", error, probe=name)
     return results
+
+
+def run_staged_events_diagnostic(
+    settings: Settings,
+    postgres_connection_factory: Callable[..., Any] | None = None,
+    duckdb_connection_factory: Callable[[Path], Any] | None = None,
+    logger: JsonLogger | None = None,
+) -> dict[str, Any]:
+    """Run the explicitly approved full pv_events query from staged source data."""
+    log = logger or JsonLogger()
+    probe = "pv_events"
+    phase = "duckdb_ingestion"
+    failure: BaseException | None = None
+    db: Any | None = None
+    row_count = 0
+    workspace = tempfile.TemporaryDirectory(prefix="analytics-staged-events-")
+    query_timestamp = datetime.now(timezone.utc)
+    query_params = [query_timestamp.isoformat(), query_timestamp.date().isoformat()]
+
+    def postgres_kwargs() -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "dbname": settings.postgres_database,
+            "user": settings.postgres_user,
+            "password": settings.postgres_password,
+        }
+        if settings.postgres_socket_dir:
+            kwargs["host"] = settings.postgres_socket_dir
+        else:
+            kwargs["host"] = settings.postgres_host
+            kwargs["port"] = settings.postgres_port
+        return kwargs
+
+    try:
+        local_db = (duckdb_connection_factory or connect_staged_diagnostic)(Path(workspace.name))
+        db = local_db
+        phase = "duckdb_ingestion"
+        local_db.execute("CREATE SCHEMA staged")
+        for _table, _source_sql, create_sql, _insert_sql in _STAGED_EVENTS_TABLES:
+            local_db.execute(create_sql)
+
+        phase = "psycopg_source_extract"
+        pg = (postgres_connection_factory or psycopg.connect)(**postgres_kwargs())
+        try:
+            pg.read_only = True
+            with pg.transaction(force_rollback=True):
+                with pg.cursor() as timeout_cursor:
+                    timeout_cursor.execute(
+                        "SELECT set_config('statement_timeout', %s, true)", (_STAGED_EVENTS_TIMEOUT,)
+                    )
+                    timeout_cursor.execute(
+                        "SELECT set_config('idle_in_transaction_session_timeout', %s, true)",
+                        (_STAGED_EVENTS_IDLE_TIMEOUT,),
+                    )
+                for table, source_sql, _create_sql, insert_sql in _STAGED_EVENTS_TABLES:
+                    count = 0
+                    with pg.cursor(name=f"diagnostic_staged_{table}") as source_cursor:
+                        source_cursor.execute(source_sql)
+                        while rows := source_cursor.fetchmany(_STAGED_EVENTS_CHUNK_SIZE):
+                            phase = "duckdb_ingestion"
+                            local_db.executemany(insert_sql, rows)
+                            count += len(rows)
+                            phase = "psycopg_source_extract"
+                    log.info(
+                        "analytics.etl.diagnostic_phase_succeeded",
+                        probe=probe,
+                        phase="psycopg_source_extract",
+                        table=table,
+                        row_count=count,
+                    )
+                    log.info(
+                        "analytics.etl.diagnostic_phase_succeeded",
+                        probe=probe,
+                        phase="duckdb_ingestion",
+                        table=table,
+                        row_count=count,
+                    )
+        finally:
+            pg.close()
+
+        phase = "local_full_query"
+        local_sql = _staged_events_local_sql()
+        local_db.execute(
+            f"CREATE TEMP TABLE diagnostic_staged_pv_events AS {local_sql}",
+            query_params,
+        )
+        row_count = int(local_db.execute("SELECT count(*) FROM diagnostic_staged_pv_events").fetchone()[0])
+        log.info(
+            "analytics.etl.diagnostic_phase_succeeded",
+            probe=probe,
+            phase=phase,
+            row_count=row_count,
+        )
+    except Exception as error:
+        failure = error
+        log.error(
+            "analytics.etl.diagnostic_phase_failed",
+            error,
+            probe=probe,
+            phase=phase,
+            error_type=type(error).__name__,
+        )
+    finally:
+        cleanup_error: BaseException | None = None
+        if db is not None:
+            try:
+                db.close()
+            except Exception as error:
+                cleanup_error = error
+        try:
+            workspace.cleanup()
+        except Exception as error:
+            cleanup_error = error
+        if cleanup_error is not None:
+            if failure is None:
+                failure = cleanup_error
+            log.error(
+                "analytics.etl.diagnostic_phase_failed",
+                cleanup_error,
+                probe=probe,
+                phase="cleanup",
+                error_type=type(cleanup_error).__name__,
+            )
+        else:
+            log.info("analytics.etl.diagnostic_phase_succeeded", probe=probe, phase="cleanup")
+
+    if failure is not None:
+        return {"status": "failed", "error_type": type(failure).__name__}
+    return {"status": "succeeded", "row_count": row_count}

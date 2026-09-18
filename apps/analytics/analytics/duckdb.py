@@ -45,3 +45,18 @@ def connect(
     except Exception:
         connection.close()
         raise
+
+
+def connect_staged_diagnostic(temp_directory: Path, duckdb_module: Any | None = None) -> Any:
+    """Create an un-attached DuckDB connection for staged diagnostics only."""
+    module: Any = duckdb_module
+    if module is None:
+        import duckdb as module
+    return module.connect(
+        ":memory:",
+        config={
+            "autoinstall_known_extensions": "false",
+            "autoload_known_extensions": "false",
+            "temp_directory": str(temp_directory),
+        },
+    )
