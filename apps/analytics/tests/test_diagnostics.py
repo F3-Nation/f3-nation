@@ -200,7 +200,8 @@ def test_diagnostics_use_bounded_source_queries_and_one_materialization_executio
     assert not any("GcsPublisher" in statement or "materialize(" in statement for statement in statements)
     assert len(sessions) == 2
     assert all(
-        session.kwargs == {
+        session.kwargs
+        == {
             "dbname": "f3_staging",
             "user": "analytics",
             "password": "password",

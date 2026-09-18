@@ -384,6 +384,7 @@ def run_diagnostics(
             _EVENTS_PARQUET_VALIDATION_SQL,
         ),
     ):
+
         def operation(
             db: Any,
             name: str = name,
