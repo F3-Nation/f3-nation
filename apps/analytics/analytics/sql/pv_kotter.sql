@@ -33,6 +33,10 @@ actual_attendance AS (
       AND u.email IS NOT NULL
       AND regexp_matches(CAST(u.email AS VARCHAR), '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$')
 ),
+attendance_pairs AS (
+    SELECT DISTINCT user_id, event_id
+    FROM actual_attendance
+),
 latest_identity AS (
     SELECT user_id,
            COALESCE(NULLIF(f3_name, ''), CAST(user_id AS VARCHAR)) AS f3_name,
@@ -66,12 +70,29 @@ lifetime AS (
 candidates AS (
     SELECT * FROM lifetime WHERE days_since_last_event BETWEEN 14 AND 90
 ),
-co_attendance_pairs AS (
-    SELECT a.user_id, b.user_id AS bestie_user_id, COUNT(DISTINCT a.event_id)::INTEGER AS co_attendance_count
-    FROM actual_attendance a
-    JOIN actual_attendance b ON b.event_id = a.event_id AND b.user_id <> a.user_id
+candidate_attendance AS (
+    SELECT a.user_id, a.event_id
+    FROM attendance_pairs a
     JOIN candidates c ON c.user_id = a.user_id
+),
+co_attendance_counts AS (
+    SELECT a.user_id, b.user_id AS bestie_user_id, COUNT(*)::INTEGER AS co_attendance_count
+    FROM candidate_attendance a
+    JOIN attendance_pairs b ON b.event_id = a.event_id AND b.user_id <> a.user_id
     GROUP BY a.user_id, b.user_id
+),
+ranked_besties AS (
+    SELECT x.*,
+           row_number() OVER (
+               PARTITION BY x.user_id
+               ORDER BY x.co_attendance_count DESC, x.bestie_user_id ASC
+           ) AS bestie_rank
+    FROM co_attendance_counts x
+),
+top_besties AS (
+    SELECT user_id, bestie_user_id, co_attendance_count
+    FROM ranked_besties
+    WHERE bestie_rank <= 3
 ),
 besties AS (
     SELECT x.user_id,
@@ -83,7 +104,7 @@ besties AS (
                   ORDER BY x.co_attendance_count DESC, x.bestie_user_id ASC)[:3],
              []::STRUCT(user_id INTEGER, f3_name VARCHAR, avatar_url VARCHAR, co_attendance_count INTEGER)[]
            ) AS bestie_list
-    FROM co_attendance_pairs x
+    FROM top_besties x
     LEFT JOIN latest_identity i ON i.user_id = x.bestie_user_id AND i.identity_rank = 1
     GROUP BY x.user_id
 ),
