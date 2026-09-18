@@ -242,8 +242,6 @@ This starts all apps in parallel via Turborepo:
 
 `apps/auth` routes all outbound email through `EMAIL_SERVER` (set in `.env`). In the Docker local dev environment, this points to Mailpit (`smtp://localhost:1025`), which captures every email without sending it. Headless automation can retrieve the 6-digit MFA code or magic link from Mailpit's API at `http://localhost:8025/api/v1/messages`. **No real inbox is needed locally**, and the `/api/verify-email` rate limit is bypassed in non-production environments.
 
-> **Note:** `scripts/qa/extract-mfa-link.sh` was written for the old Ethereal flow and needs to be updated to query Mailpit's API instead of parsing Ethereal preview URLs from logs.
-
 Full recipe: [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md).
 
 ## Troubleshooting

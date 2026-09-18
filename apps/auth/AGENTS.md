@@ -25,10 +25,10 @@ If you only read this section, you have enough to drive the auth flow programmat
 
 The MFA logic lives in `apps/auth/src/lib/email-mfa.ts`. There is **no environment branching in the transport** -- it is a single nodemailer transport built from the `EMAIL_SERVER` connection string, so which mail server receives a message is purely a matter of configuration:
 
-| Environment | `EMAIL_SERVER`                    | Where the mail lands                          |
-| ----------- | --------------------------------- | --------------------------------------------- |
-| Local dev   | `smtp://localhost:1025` (default) | Mailpit -- read it at `http://localhost:8025` |
-| Production  | SendGrid SMTP credentials         | The recipient's real inbox                    |
+| Environment | `EMAIL_SERVER`                                | Where the mail lands                          |
+| ----------- | --------------------------------------------- | --------------------------------------------- |
+| Local dev   | `smtp://localhost:1025` (from `.env.example`) | Mailpit -- read it at `http://localhost:8025` |
+| Production  | SendGrid SMTP credentials                     | The recipient's real inbox                    |
 
 `smtp://localhost:1025` is the default in `apps/auth/.env.example`, and port 1025 is Mailpit's SMTP listener in `docker-compose.yml`. **Nothing is logged when a message is sent** -- retrieve mail from Mailpit, never from the auth server's stdout.
 
@@ -68,7 +68,7 @@ Both are stable across dev runs. Neither depends on parsing arbitrary email-rend
 
 ## Rate limiting
 
-`/api/verify-email` enforces a 10-requests-per-minute-per-IP cap **in production only**. Under `NODE_ENV !== "production"` (local dev, CI, preview environments) the limit is bypassed -- mail is caught by Mailpit, so there is no real inbox to bomb. This bypass is what makes parallel agent QA viable without 429s.
+`/api/verify-email` enforces a 10-requests-per-minute-per-IP cap **in production only**. Under `NODE_ENV !== "production"` (local dev, CI) the limit is bypassed -- with the default `.env.example` config, mail is caught by Mailpit, so there is no real inbox to bomb. The bypass keys on `NODE_ENV`, not on `EMAIL_SERVER`, so it is only safe while `EMAIL_SERVER` points at Mailpit (see [Production safety](#production-safety)). Preview images run with `NODE_ENV=production`, so the cap applies there (see [`docs/PREVIEW_AUTH.md`](../../docs/PREVIEW_AUTH.md)). This bypass is what makes parallel agent QA viable without 429s.
 
 `/api/auth/callback/email-mfa` (the NextAuth Credentials POST endpoint) has no application-level rate limit in any environment.
 
@@ -156,7 +156,7 @@ curl -sb /tmp/jar -c /tmp/jar -L -X POST \
   http://localhost:3004/api/auth/callback/email-mfa
 ```
 
-NextAuth runs the `email-mfa` provider's `authorize()` callback (see `apps/auth/src/lib/auth-options.ts`), which calls `verifyEmailCode(email, code)`. On success the response sets the `next-auth.session-token` cookie in `/tmp/jar`. The `json=true` query param makes the callback respond with JSON instead of an HTTP redirect, which is easier to assert on.
+NextAuth runs the `email-mfa` provider's `authorize()` callback (see `apps/auth/src/lib/auth-options.ts`), which calls `verifyEmailCode(email, code)`. On success the response sets the session cookie (`next-auth.session-token` in dev) in `/tmp/jar`. The `json=true` form field makes the callback respond with JSON instead of an HTTP redirect, which is easier to assert on.
 
 The session cookie is named `next-auth.session-token` in dev and `__session` in production (see `auth-options.ts`).
 
@@ -199,12 +199,6 @@ browser_navigate "$MAGIC_LINK"
 ```
 
 Form/magic-link modes are slower and only needed if you specifically want to QA the verify-page UI or assert that the magic-link auto-submit still works.
-
----
-
-## Helper script
-
-> **Do not use `scripts/qa/extract-mfa-link.sh`.** It scrapes an Ethereal preview URL out of a captured auth log, and the auth server no longer uses Ethereal or logs anything on send -- so it can only ever find nothing. Use the Mailpit `curl` in step 3 instead.
 
 ---
 

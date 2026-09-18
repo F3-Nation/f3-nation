@@ -79,10 +79,10 @@ In local development the auth server sends mail through [Mailpit](https://mailpi
 
 There is no environment branching in the transport itself (`apps/auth/src/lib/email-mfa.ts`) -- it is a single nodemailer transport built from the `EMAIL_SERVER` connection string, so which mail server receives a message is purely a matter of configuration:
 
-| Environment | `EMAIL_SERVER`                    | Where the mail lands                          |
-| ----------- | --------------------------------- | --------------------------------------------- |
-| Local dev   | `smtp://localhost:1025` (default) | Mailpit -- read it at `http://localhost:8025` |
-| Production  | SendGrid SMTP credentials         | The recipient's real inbox                    |
+| Environment | `EMAIL_SERVER`                                | Where the mail lands                          |
+| ----------- | --------------------------------------------- | --------------------------------------------- |
+| Local dev   | `smtp://localhost:1025` (from `.env.example`) | Mailpit -- read it at `http://localhost:8025` |
+| Production  | SendGrid SMTP credentials                     | The recipient's real inbox                    |
 
 **Nothing is logged when a message is sent** -- retrieve mail from Mailpit's web UI or REST API, never from the auth server's stdout.
 
@@ -90,15 +90,13 @@ Mailpit's REST API returns the full email HTML -- both the **6-digit code** and 
 
 > Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. See [`AGENTS.md`](AGENTS.md) for the CSRF + callback recipe for headless flows, or drive the magic link from a JS-capable browser (CDP) for browser-based regression testing.
 
-In dev (`NODE_ENV !== "production"`), `/api/verify-email`'s 10-requests-per-minute-per-IP rate limit is bypassed -- mail is caught by Mailpit, so there is no real inbox to bomb. Production traffic remains capped.
-
-> **Do not use `scripts/qa/extract-mfa-link.sh`.** It scrapes an Ethereal preview URL out of a captured auth log, and the auth server no longer uses Ethereal or logs anything on send -- so it can only ever find nothing. Use the Mailpit REST API instead.
+In dev (`NODE_ENV !== "production"`), `/api/verify-email`'s 10-requests-per-minute-per-IP rate limit is bypassed. This is only safe while `EMAIL_SERVER` points at Mailpit (the `.env.example` value): the bypass keys on `NODE_ENV`, not on the mail server, so a non-production `.env` with real SMTP or SendGrid credentials still delivers real mail with no rate limit. Production traffic remains capped.
 
 For the full canonical recipe (CSRF token, triggering a send, pulling the code from Mailpit, and POSTing to the callback), see [`AGENTS.md`](AGENTS.md) -- it is the source of truth for this flow and is kept up to date for AI/QA-automation agents.
 
 ### Where to learn more
 
-- **[`AGENTS.md`](AGENTS.md)** -- full agent-friendly recipe, error modes, and the source-of-truth log line patterns
+- **[`AGENTS.md`](AGENTS.md)** -- full agent-friendly recipe, error modes, and the Mailpit REST API calls for pulling the code
 - **[`src/lib/email-mfa.ts`](src/lib/email-mfa.ts)** -- the actual code; a single nodemailer transport driven entirely by the `EMAIL_SERVER` connection string (SendGrid in production, Mailpit locally)
 
 ---
