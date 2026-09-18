@@ -401,6 +401,48 @@ def test_full_query_diagnostics_runs_exact_sql_once_then_copies_temp_table(monke
         assert any("read_parquet(?)" in statement for statement in statements)
     phase_successes = [context["phase"] for event, context in events if event.endswith("phase_succeeded")]
     assert phase_successes == ["full_query", "local_parquet", "readback"] * 2
+    assert all(context["scanner_mode"] == "binary-copy" for event, context in events)
+
+
+def test_full_query_text_scanner_mode_sets_before_attach_on_each_fresh_connection(monkeypatch):
+    connections = []
+    attach_order = []
+    factory_options = []
+    events = []
+
+    def make_connection(_settings, **options):
+        factory_options.append(options)
+        connection = _Connection()
+        connections.append(connection)
+        return connection
+
+    def attach(connection, _settings):
+        attach_order.append(connection)
+
+    monkeypatch.setattr(diagnostics, "attach_postgres", attach)
+    result = diagnostics.run_full_query_diagnostics(
+        _settings(),
+        connection_factory=make_connection,
+        logger=cast(JsonLogger, _logger(events)),
+        scanner_mode="text-copy",
+    )
+
+    assert all(item["status"] == "succeeded" for item in result.values())
+    assert attach_order == connections
+    assert factory_options == [{"diagnostic_text_copy": True}] * 2
+    assert all(
+        not any("pg_use_binary_copy" in statement for statement, _ in connection.sql) for connection in connections
+    )
+    assert all(context["scanner_mode"] == "text-copy" for event, context in events)
+
+
+def test_full_query_rejects_invalid_scanner_mode():
+    try:
+        diagnostics.run_full_query_diagnostics(_settings(), scanner_mode="invalid")
+    except ValueError as error:
+        assert str(error) == "invalid full-query scanner mode"
+    else:
+        raise AssertionError("invalid scanner mode was accepted")
 
 
 def test_full_query_diagnostics_isolates_failure_and_redacts_error(monkeypatch):

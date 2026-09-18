@@ -183,7 +183,7 @@ def test_full_query_diagnostics_command_isolated_success_without_gcs_or_selector
     monkeypatch.setattr(
         diagnostics,
         "run_full_query_diagnostics",
-        lambda received_settings, *, logger: (
+        lambda received_settings, *, logger, scanner_mode: (
             calls.append((received_settings, logger)),
             {"pv_kotter": {"status": "succeeded"}, "pv_events": {"status": "succeeded"}},
         )[1],
@@ -200,9 +200,39 @@ def test_full_query_diagnostics_command_isolated_success_without_gcs_or_selector
                 "environment": "test",
                 "dataset_count": 2,
                 "failed_count": 0,
+                "scanner_mode": "binary-copy",
             },
         )
     ]
+
+
+def test_full_query_diagnostics_forwards_text_copy_scanner_mode(monkeypatch):
+    settings = SimpleNamespace(environment="test")
+    events = []
+    scanner_modes = []
+    logger = SimpleNamespace(
+        info=lambda event, **context: events.append((event, context)), error=lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(cli, "JsonLogger", lambda: logger)
+    monkeypatch.setattr(cli, "RunId", SimpleNamespace(create=lambda: "run"))
+    monkeypatch.setattr(cli.Settings, "from_env", lambda: settings)
+    monkeypatch.setattr(
+        diagnostics,
+        "run_full_query_diagnostics",
+        lambda _settings, *, logger, scanner_mode: (
+            scanner_modes.append(scanner_mode),
+            {"pv_kotter": {"status": "succeeded"}, "pv_events": {"status": "succeeded"}},
+        )[1],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["analytics-etl", "diagnostics-full-query", "--scanner-mode=text-copy"],
+    )
+
+    assert cli.main() == 0
+    assert scanner_modes == ["text-copy"]
+    assert events[-1][1]["scanner_mode"] == "text-copy"
 
 
 def test_full_query_diagnostics_command_returns_failure_and_rejects_selector(monkeypatch):
@@ -217,13 +247,21 @@ def test_full_query_diagnostics_command_returns_failure_and_rejects_selector(mon
     monkeypatch.setattr(
         diagnostics,
         "run_full_query_diagnostics",
-        lambda _settings, *, logger: {"pv_kotter": {"status": "failed"}, "pv_events": {"status": "succeeded"}},
+        lambda _settings, *, logger, scanner_mode: {
+            "pv_kotter": {"status": "failed"},
+            "pv_events": {"status": "succeeded"},
+        },
     )
     monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics-full-query"])
     assert cli.main() == 1
     assert events[0][0] == "analytics.etl.diagnostics_full_query_completed"
     assert events[0][1]["failed_count"] == 1
+    assert events[0][1]["scanner_mode"] == "binary-copy"
 
     monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics-full-query", "--materialization", "pv_events"])
+    with pytest.raises(SystemExit):
+        cli.main()
+
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics-full-query", "--scanner-mode", "invalid"])
     with pytest.raises(SystemExit):
         cli.main()

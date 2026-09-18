@@ -17,6 +17,7 @@ from .source import _sql_literal, attach_postgres, load_sql
 
 _LIMIT = 100
 _FULL_QUERY_DIAGNOSTIC_DATASETS = ("pv_kotter", "pv_events")
+_FULL_QUERY_SCANNER_MODES = ("binary-copy", "text-copy")
 
 _KOTTER_SOURCE_SQL = """
 WITH sampled_events AS (
@@ -407,10 +408,13 @@ def run_diagnostics(
 
 def run_full_query_diagnostics(
     settings: Settings,
-    connection_factory: Callable[[Settings], Any] = connect,
+    connection_factory: Callable[..., Any] | None = None,
     logger: JsonLogger | None = None,
+    scanner_mode: str = "binary-copy",
 ) -> dict[str, dict[str, Any]]:
     """Run the explicitly approved full-query diagnostic without publication."""
+    if scanner_mode not in _FULL_QUERY_SCANNER_MODES:
+        raise ValueError("invalid full-query scanner mode")
     log = logger or JsonLogger()
     results: dict[str, dict[str, Any]] = {}
     source_timestamp = datetime.now(timezone.utc)
@@ -422,7 +426,11 @@ def run_full_query_diagnostics(
         connection: Any | None = None
         phase = "full_query"
         try:
-            db = connection_factory(settings)
+            factory = connection_factory or connect
+            if scanner_mode == "text-copy":
+                db = factory(settings, diagnostic_text_copy=True)
+            else:
+                db = factory(settings)
             connection = db
             attach_postgres(db, settings)
             query = load_sql(definition)
@@ -431,7 +439,12 @@ def run_full_query_diagnostics(
                 f"CREATE TEMP TABLE {table_name} AS {query}",
                 [refreshed_at, as_of_date],
             )
-            log.info("analytics.etl.diagnostic_phase_succeeded", probe=name, phase=phase)
+            log.info(
+                "analytics.etl.diagnostic_phase_succeeded",
+                probe=name,
+                phase=phase,
+                scanner_mode=scanner_mode,
+            )
 
             phase = "local_parquet"
             with tempfile.TemporaryDirectory(prefix="analytics-diagnostic-full-") as directory:
@@ -440,11 +453,21 @@ def run_full_query_diagnostics(
                     f"COPY (SELECT * FROM {table_name}) TO {_sql_literal(str(destination))} "
                     "(FORMAT PARQUET, COMPRESSION ZSTD)"
                 )
-                log.info("analytics.etl.diagnostic_phase_succeeded", probe=name, phase=phase)
+                log.info(
+                    "analytics.etl.diagnostic_phase_succeeded",
+                    probe=name,
+                    phase=phase,
+                    scanner_mode=scanner_mode,
+                )
 
                 phase = "readback"
                 row_count = int(db.execute("SELECT count(*) FROM read_parquet(?)", [str(destination)]).fetchone()[0])
-                log.info("analytics.etl.diagnostic_phase_succeeded", probe=name, phase=phase)
+                log.info(
+                    "analytics.etl.diagnostic_phase_succeeded",
+                    probe=name,
+                    phase=phase,
+                    scanner_mode=scanner_mode,
+                )
             results[name] = {"status": "succeeded", "row_count": row_count}
         except Exception as error:
             results[name] = {"status": "failed", "error_type": type(error).__name__}
@@ -454,6 +477,7 @@ def run_full_query_diagnostics(
                 probe=name,
                 phase=phase,
                 error_type=type(error).__name__,
+                scanner_mode=scanner_mode,
             )
         finally:
             if connection is not None:

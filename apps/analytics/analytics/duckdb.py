@@ -8,7 +8,12 @@ from typing import Any
 from .settings import Settings
 
 
-def connect(settings: Settings, duckdb_module: Any | None = None) -> Any:
+def connect(
+    settings: Settings,
+    duckdb_module: Any | None = None,
+    *,
+    diagnostic_text_copy: bool = False,
+) -> Any:
     module: Any = duckdb_module
     if module is None:
         import duckdb as module
@@ -27,6 +32,8 @@ def connect(settings: Settings, duckdb_module: Any | None = None) -> Any:
         # Work around the postgres extension's "Unsupported table filter type";
         # this must precede configuration locking because the setting is immutable after it.
         connection.execute("SET pg_experimental_filter_pushdown = false")
+        if diagnostic_text_copy:
+            connection.execute("SET pg_use_binary_copy = false")
         connection.execute("SET lock_configuration = true")
         return connection
     except Exception:

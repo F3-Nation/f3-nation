@@ -68,6 +68,13 @@ ANALYTICS_ENVIRONMENT=local \
   uv --directory apps/analytics run analytics-etl diagnostics-full-query
 ```
 
+The default scanner mode preserves DuckDB's binary PostgreSQL copy behavior.
+For this diagnostic only, the explicitly approved text-copy mode can be
+selected with `--scanner-mode=text-copy`; it sets
+`pg_use_binary_copy = false` on each fresh diagnostic connection before the
+read-only PostgreSQL attachment. The setting is not used by regular ETL or
+the bounded `diagnostics` command.
+
 Run this command only with explicit operator approval because it executes the
 full production-shaped queries. Approval has been granted for the current
 investigation; it is not standing approval for routine use. Selectors are not

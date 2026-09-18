@@ -331,6 +331,41 @@ def test_duckdb_loads_explicit_extension_without_install(tmp_path):
         connection.execute("SET pg_experimental_filter_pushdown = true")
 
 
+def test_duckdb_diagnostic_text_copy_setting_precedes_configuration_lock(tmp_path):
+    settings = Settings.from_env(extension_env(tmp_path))
+    calls = []
+
+    class Connection:
+        def __init__(self):
+            self.locked = False
+
+        def load_extension(self, name):
+            calls.append(("LOAD", name))
+
+        def execute(self, sql, *parameters):
+            if self.locked and sql != "SET lock_configuration = true":
+                raise RuntimeError("configuration is locked")
+            calls.append((sql, parameters))
+            if sql == "SET lock_configuration = true":
+                self.locked = True
+
+        def close(self):
+            calls.append(("CLOSE",))
+
+    class Duckdb:
+        @staticmethod
+        def connect(database, config):
+            return Connection()
+
+    connect(settings, Duckdb, diagnostic_text_copy=True)
+    assert calls == [
+        ("LOAD", "postgres"),
+        ("SET pg_experimental_filter_pushdown = false", ()),
+        ("SET pg_use_binary_copy = false", ()),
+        ("SET lock_configuration = true", ()),
+    ]
+
+
 def test_duckdb_closes_connection_when_loading_fails(tmp_path):
     settings = Settings.from_env(extension_env(tmp_path))
     closed = []

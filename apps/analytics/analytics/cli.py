@@ -39,7 +39,15 @@ def main() -> int:
     run_parser = commands.add_parser("run", help="publish approved materializations")
     export_parser = commands.add_parser("export-local", help="write approved materializations to local disk")
     commands.add_parser("diagnostics", help="run bounded read-only ETL diagnostics")
-    commands.add_parser("diagnostics-full-query", help="run approved full-query read-only diagnostics")
+    full_query_parser = commands.add_parser(
+        "diagnostics-full-query", help="run approved full-query read-only diagnostics"
+    )
+    full_query_parser.add_argument(
+        "--scanner-mode",
+        choices=("binary-copy", "text-copy"),
+        default="binary-copy",
+        help="diagnostic-only PostgreSQL scanner mode",
+    )
     rollback_parser = commands.add_parser("rollback-catalog", help="CAS-select the retained previous release")
     rollback_parser.add_argument("--release-manifest-uri", required=True)
     rollback_parser.add_argument("--release-manifest-generation", required=True)
@@ -112,7 +120,7 @@ def main() -> int:
             from .diagnostics import run_full_query_diagnostics
 
             settings = Settings.from_env()
-            diagnostic_results = run_full_query_diagnostics(settings, logger=logger)
+            diagnostic_results = run_full_query_diagnostics(settings, logger=logger, scanner_mode=args.scanner_mode)
             failed_count = sum(item["status"] == "failed" for item in diagnostic_results.values())
             logger.info(
                 "analytics.etl.diagnostics_full_query_completed",
@@ -120,6 +128,7 @@ def main() -> int:
                 environment=settings.environment,
                 dataset_count=len(diagnostic_results),
                 failed_count=failed_count,
+                scanner_mode=args.scanner_mode,
             )
             if failed_count:
                 return 1
