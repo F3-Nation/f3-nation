@@ -39,6 +39,10 @@ const nextFutureMonday = (n: number): string => {
 describe("Org Router", () => {
   // Track created orgs for cleanup
   const createdOrgIds: number[] = [];
+  // Track created users for cleanup (only the accessible/in-memory-pagination
+  // tests need a real DB-backed user — everything else uses a purely mocked
+  // session)
+  const createdUserIds: number[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,6 +56,16 @@ describe("Org Router", () => {
   });
 
   afterAll(async () => {
+    // Users first — roles_x_users_x_org rows on the orgs below reference
+    // them, and cleanup.user already deletes its own role rows, but doing
+    // it in this order avoids relying on that ordering being safe both ways.
+    for (const userId of createdUserIds.reverse()) {
+      try {
+        await cleanup.user(userId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
     // Clean up all created orgs in reverse order
     for (const orgId of createdOrgIds.reverse()) {
       try {
@@ -173,6 +187,94 @@ describe("Org Router", () => {
           org.description?.toLowerCase().includes(searchLower);
         expect(matches).toBe(true);
       });
+    });
+  });
+
+  describe("accessible", () => {
+    /**
+     * Sets up a real (DB-backed, not just a mocked session) editor user with
+     * a role on every org in `orgIds` — org.accessible's non-nation-admin
+     * branch reads roles_x_users_x_org straight from the DB via
+     * ctx.session.id (see getEditableOrgIdsForUser), so a purely mocked
+     * session like createEditorSession isn't enough to exercise it.
+     */
+    const createDbBackedEditorSession = async (orgIds: number[]) => {
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-editor-${uniqueId()}@example.com`,
+          f3Name: `TestEditor ${uniqueId()}`,
+        })
+        .returning();
+      if (!user) throw new Error("Failed to create test user");
+      createdUserIds.push(user.id);
+
+      const [editorRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"));
+      if (!editorRole) throw new Error("Editor role not found in DB");
+
+      for (const orgId of orgIds) {
+        await db.insert(schema.rolesXUsersXOrg).values({
+          roleId: editorRole.id,
+          userId: user.id,
+          orgId,
+        });
+      }
+
+      return {
+        id: user.id,
+        email: user.email,
+        user: {
+          id: String(user.id),
+          email: user.email,
+          name: user.f3Name,
+          roles: [],
+        },
+        roles: [],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+    };
+
+    it("paginates the non-nation-admin (in-memory slice) branch when only pageSize is sent", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const prefix = `AccessibleTest-${uniqueId()}`;
+      const orgIds: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `${prefix} Region ${i}`,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        orgIds.push(org.id);
+      }
+
+      // A direct editor role on each of the 3 orgs — this user is not a
+      // nation admin, so org.accessible resolves them through
+      // getEditableOrgIdsForUser and slices the result in memory rather
+      // than via a SQL LIMIT, a distinct code path from the "all" tests
+      // above (which only exercise the SQL-paginated nation-admin branch).
+      const session = await createDbBackedEditorSession(orgIds);
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      // The regression this whole PR fixes: sending pageSize ALONE (no
+      // pageIndex) must still paginate, not silently return every row.
+      const page = await client.org.accessible({ pageSize: 2 });
+
+      expect(page.total).toBe(3);
+      expect(page.orgs).toHaveLength(2);
+      expect(orgIds).toEqual(
+        expect.arrayContaining(page.orgs.map((o) => o.id)),
+      );
     });
   });
 
