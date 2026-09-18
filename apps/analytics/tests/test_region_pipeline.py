@@ -158,7 +158,24 @@ def test_artifact_observability_distinguishes_missing_and_partial_output(tmp_pat
     root = tmp_path / "artifacts"
     root.mkdir()
 
-    assert artifact_observability(root, definition) == {"output_exists": False, "output_size_bucket": "none"}
+    assert artifact_observability(root, definition) == {
+        "output_exists": False,
+        "output_size_bucket": "none",
+        "output_footer_par1": False,
+    }
 
     (root / definition.output_filename).write_bytes(b"partial")
-    assert artifact_observability(root, definition) == {"output_exists": True, "output_size_bucket": "small"}
+    assert artifact_observability(root, definition) == {
+        "output_exists": True,
+        "output_size_bucket": "tiny",
+        "output_footer_par1": False,
+    }
+
+    (root / definition.output_filename).write_bytes(b"PAR1")
+    assert artifact_observability(root, definition)["output_footer_par1"] is True
+    (root / definition.output_filename).write_bytes(b"x" * 5_000 + b"PAR1")
+    assert artifact_observability(root, definition) == {
+        "output_exists": True,
+        "output_size_bucket": "small",
+        "output_footer_par1": True,
+    }

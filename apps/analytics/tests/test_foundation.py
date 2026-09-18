@@ -240,6 +240,29 @@ def test_logging_duckdb_io_categories_are_fixed(message, category):
     assert "customer@example.test" not in output
 
 
+@pytest.mark.parametrize(
+    ("message", "category"),
+    (
+        ("IO Error: PostgreSQL transport unavailable", "duckdb_io_postgres_transport"),
+        ("IO Error: Parquet serialization failed", "duckdb_io_parquet_serialization"),
+        ("IO Error: zstd compression failed", "duckdb_io_compression"),
+        ("IO Error: local spill file unavailable", "duckdb_io_local_or_spill_io"),
+        ("IO Error: resource allocation failed", "duckdb_io_resource_allocation"),
+        ("IO Error: unusual condition secret@example.test", "duckdb_io"),
+    ),
+)
+def test_logging_duckdb_io_extended_categories_are_fixed(message, category):
+    stream = io.StringIO()
+
+    JsonLogger(stream=stream).error("analytics.etl.failed", duckdb.IOException(message))
+
+    output = stream.getvalue()
+    record = json.loads(output)
+    assert record["error"]["detail"] == category
+    assert message not in output
+    assert "secret@example.test" not in output
+
+
 def test_logging_exception_origin_is_safe_and_terminal():
     stream = io.StringIO()
 

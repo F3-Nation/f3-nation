@@ -194,7 +194,7 @@ def test_failed_dataset_log_captures_partial_output_before_workspace_cleanup(mon
     failed = next(record for record in records if record["event"] == "analytics.etl.dataset_failed")
     assert failed["context"]["phase"] == "copy_query_to_parquet"
     assert failed["context"]["output_exists"] is True
-    assert failed["context"]["output_size_bucket"] == "small"
+    assert failed["context"]["output_size_bucket"] == "tiny"
 
 
 def test_catalog_conflict_fails_safely_after_release_upload(monkeypatch, tmp_path):

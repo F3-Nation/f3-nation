@@ -29,6 +29,7 @@ MaterializationArtifactSet = MaterializationArtifacts
 _MATERIALIZATION_PHASES = frozenset(
     {"load_sql", "prepare", "copy_query_to_parquet", "parquet_discovery", "parquet_readback"}
 )
+_TINY_FILE_SIZE = 4 << 10
 _SMALL_FILE_SIZE = 1 << 20
 _MEDIUM_FILE_SIZE = 100 << 20
 
@@ -49,10 +50,21 @@ def materialization_failure_phase(error: BaseException) -> str:
     return phase if phase in _MATERIALIZATION_PHASES else "unknown"
 
 
+def _has_parquet_footer(path: Path) -> bool:
+    try:
+        with path.open("rb") as output:
+            if output.seek(0, 2) < 4:
+                return False
+            output.seek(-4, 2)
+            return output.read(4) == b"PAR1"
+    except OSError:
+        return False
+
+
 def artifact_observability(root: Path | None, materialization: Materialization) -> dict[str, bool | str]:
     """Return bounded artifact state without exposing filesystem details."""
     if root is None:
-        return {"output_exists": False, "output_size_bucket": "unknown"}
+        return {"output_exists": False, "output_size_bucket": "unknown", "output_footer_par1": False}
     files: tuple[Path, ...] = ()
     try:
         files = (
@@ -64,16 +76,23 @@ def artifact_observability(root: Path | None, materialization: Materialization) 
         )
         total_size = sum(path.stat().st_size for path in files)
     except OSError:
-        return {"output_exists": bool(files), "output_size_bucket": "unknown"}
+        return {"output_exists": bool(files), "output_size_bucket": "unknown", "output_footer_par1": False}
     if not files:
         bucket = "none"
+    elif total_size == 0:
+        bucket = "zero"
+    elif total_size <= _TINY_FILE_SIZE:
+        bucket = "tiny"
     elif total_size < _SMALL_FILE_SIZE:
         bucket = "small"
     elif total_size < _MEDIUM_FILE_SIZE:
         bucket = "medium"
     else:
         bucket = "large"
-    return {"output_exists": bool(files), "output_size_bucket": bucket}
+    footer_par1 = False
+    if files:
+        footer_par1 = all(_has_parquet_footer(path) for path in files)
+    return {"output_exists": bool(files), "output_size_bucket": bucket, "output_footer_par1": footer_par1}
 
 
 def postgres_attach_sql(settings: Settings) -> str:
