@@ -58,8 +58,14 @@ describe("getAdminRequestsUrl", () => {
     },
   );
 
-  it.each(["admin.example.test", "localhost:3002", "//admin.example.test"])(
-    "ignores a configured value without an http(s) scheme (%s) and warns",
+  it.each([
+    "admin.example.test",
+    "localhost:3002",
+    "//admin.example.test",
+    "https://admin.example.test?source=mail",
+    "https://admin.example.test/#section",
+  ])(
+    "ignores a configured value that is not a plain http(s) URL (%s) and warns",
     (configured) => {
       setEnv({
         NEXT_PUBLIC_ADMIN_URL: configured,

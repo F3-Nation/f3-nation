@@ -21,14 +21,15 @@ function escapeHtml(str: string): string {
 }
 
 /**
- * Email HTML body
- * Insert invisible space into domains from being turned into a hyperlink by email
- * clients like Outlook and Apple mail, as this is confusing because it seems
- * like they are supposed to click on it to sign in.
+ * Email HTML body.
+ * Inserts a zero-width space into the host's domain so email clients like
+ * Outlook and Apple Mail don't auto-link it. A linked domain is confusing
+ * because it looks like something to click to sign in.
  *
- * @note We don't add the email address to avoid needing to escape it, if you do, remember to sanitize it!
+ * `host` and `token` are HTML-escaped. The recipient address is deliberately
+ * not rendered; if it is ever added, pass it through `escapeHtml` too.
  */
-export function renderOtpEmailHtml({ token, host }: OtpEmailParams) {
+export function renderOtpEmailHtml({ token, host }: OtpEmailParams): string {
   // Escape before inserting the zero-width-space entity so it isn't re-escaped.
   const escapedHost = escapeHtml(host).replace(/\./g, "&#8203;.");
   const escapedToken = escapeHtml(token);
@@ -66,6 +67,6 @@ export function renderOtpEmailHtml({ token, host }: OtpEmailParams) {
 }
 
 /** Email Text body (fallback for email clients that don't render HTML, e.g. feature phones) */
-export function renderOtpEmailText({ token, host }: OtpEmailParams) {
+export function renderOtpEmailText({ token, host }: OtpEmailParams): string {
   return `Sign in to ${host} in your browser with this code: ${token}\n`;
 }

@@ -20,10 +20,12 @@ export const getAdminRequestsUrl = (): string => {
   const channel = env.NEXT_PUBLIC_CHANNEL;
   const configured = env.NEXT_PUBLIC_ADMIN_URL?.trim().replace(/\/+$/, "");
 
-  // URL.canParse alone accepts things like "localhost:3002" (scheme "localhost:")
+  // URL.canParse alone accepts things like "localhost:3002" (scheme "localhost:").
+  // A query or fragment would swallow the appended "/requests" path.
   const isAbsolute =
     !!configured &&
     /^https?:\/\//i.test(configured) &&
+    !/[?#]/.test(configured) &&
     URL.canParse(configured);
   if (configured && !isAbsolute) {
     logWarn("api.admin_url.invalid_configured", { channel });
