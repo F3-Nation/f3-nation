@@ -14,6 +14,12 @@ import duckdb
 
 _EVENT = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
 _DUCKDB_IO_EXCEPTION = duckdb.IOException
+_DUCKDB_IO_MARKERS = {
+    "no_space": ("no space left", "disk full", "out of disk space", "enospc"),
+    "postgres": ("postgres", "network", "socket"),
+    "read": ("read", "recv", "receive"),
+    "write": ("write", "writing", "flush", "fsync", "checkpoint"),
+}
 _SECRET_KEY = re.compile(
     r"(secret|token|password|passwd|pwd|credential|authorization|api[_-]?key|private[_-]?key|"
     r"access[_-]?key|refresh[_-]?token|dsn|connection|string|bearer|cookie|session)",
@@ -25,13 +31,13 @@ def _safe_error_detail(error: BaseException) -> str:
     """Return a normalized category without exposing the exception message."""
     if isinstance(error, _DUCKDB_IO_EXCEPTION):
         message = str(error).lower()
-        if any(marker in message for marker in ("no space left", "disk full", "out of disk space", "enospc")):
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["no_space"]):
             return "duckdb_io_no_space"
-        if any(marker in message for marker in ("postgres", "network", "socket")) and any(
-            marker in message for marker in ("read", "recv", "receive")
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["postgres"]) and any(
+            marker in message for marker in _DUCKDB_IO_MARKERS["read"]
         ):
             return "duckdb_io_postgres_network_read"
-        if any(marker in message for marker in ("write", "writing", "flush", "fsync", "checkpoint")):
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["write"]):
             return "duckdb_io_write"
         return "duckdb_io"
 

@@ -7,7 +7,7 @@ import duckdb
 import pytest
 
 from analytics.materializations import MATERIALIZATION_REGISTRY
-from analytics.source import materialize
+from analytics.source import artifact_observability, materialization_failure_phase, materialize
 
 
 def make_source() -> duckdb.DuckDBPyConnection:
@@ -127,3 +127,38 @@ def test_malformed_flag_on_an_ineligible_event_does_not_fail(tmp_path: Path):
         ).row_count
         == 3
     )
+
+
+@pytest.mark.parametrize(
+    "failure_mode, expected_phase",
+    (("copy", "copy_query_to_parquet"), ("readback", "parquet_readback")),
+)
+def test_materialization_failure_phase_is_attributed(tmp_path: Path, failure_mode: str, expected_phase: str):
+    definition = MATERIALIZATION_REGISTRY["pv_regions"]
+    root = tmp_path / failure_mode
+
+    class FailingConnection:
+        def execute(self, statement, _parameters=None):
+            if statement.startswith("COPY"):
+                if failure_mode == "copy":
+                    raise RuntimeError("copy secret/path must not be logged")
+                (root / definition.output_filename).parent.mkdir(parents=True, exist_ok=True)
+                (root / definition.output_filename).write_bytes(b"fixture")
+                return self
+            raise RuntimeError("readback PII email@example.test")
+
+    with pytest.raises(RuntimeError) as raised:
+        materialize(FailingConnection(), root, definition, "2026-01-01T00:00:00+00:00", "2026-01-01")
+
+    assert materialization_failure_phase(raised.value) == expected_phase
+
+
+def test_artifact_observability_distinguishes_missing_and_partial_output(tmp_path: Path):
+    definition = MATERIALIZATION_REGISTRY["pv_regions"]
+    root = tmp_path / "artifacts"
+    root.mkdir()
+
+    assert artifact_observability(root, definition) == {"output_exists": False, "output_size_bucket": "none"}
+
+    (root / definition.output_filename).write_bytes(b"partial")
+    assert artifact_observability(root, definition) == {"output_exists": True, "output_size_bucket": "small"}

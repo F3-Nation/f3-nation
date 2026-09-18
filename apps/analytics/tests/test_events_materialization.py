@@ -10,6 +10,13 @@ from analytics.source import materialize
 SQL = (Path(__file__).parents[1] / "analytics" / "sql" / "pv_events.sql").read_text()
 
 
+def test_events_uses_explicit_event_and_attendance_projections():
+    assert "SELECT ei.*" not in SQL
+    assert "SELECT a.*" not in SQL
+    assert "preblast" not in SQL
+    assert "backblast" not in SQL
+
+
 def source():
     c = duckdb.connect(":memory:")
     c.execute("ATTACH ':memory:' AS pg")

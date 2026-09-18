@@ -27,7 +27,8 @@ org_chain AS (
     FROM org_ancestors GROUP BY source_id
 ),
 events AS (
-    SELECT ei.*, c.* EXCLUDE (source_id)
+    SELECT ei.id, ei.start_date, ei.name, ei.pax_count, ei.fng_count, ei.org_id, ei.is_active, ei.meta,
+           c.* EXCLUDE (source_id)
     FROM pg.public.event_instances ei
     JOIN org_chain c ON c.source_id = ei.org_id
     WHERE ei.is_active = true AND ei.pax_count IS NOT NULL
@@ -62,7 +63,7 @@ event_tags AS (
     GROUP BY x.event_instance_id
 ),
 valid_attendance AS (
-    SELECT a.*, u.f3_name, u.avatar_url
+    SELECT a.id, a.event_instance_id, a.user_id, a.is_planned, u.f3_name, u.avatar_url
     FROM pg.public.attendance a
     JOIN pg.public.users u ON u.id = a.user_id
     WHERE u.email IS NOT NULL
@@ -82,7 +83,7 @@ attendance_users_grouped AS (
     GROUP BY a.event_instance_id, a.user_id
 ),
 attendance_users AS (
-    SELECT a.*,
+    SELECT a.event_id, a.user_id, a.f3_name, a.avatar_url, a.attended, a.planned, a.q_ind, a.coq_ind,
            max(a.planned) OVER (PARTITION BY a.event_id) AS event_has_planned
     FROM attendance_users_grouped a
 ),

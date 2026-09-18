@@ -67,6 +67,12 @@ def rows(db: duckdb.DuckDBPyConnection):
     return db.execute(SQL, ["2026-08-26T12:00:00+00:00", "2026-08-26"]).fetchall()
 
 
+def test_kotter_uses_an_explicit_event_projection():
+    assert "SELECT ei.*" not in SQL
+    assert "preblast" not in SQL
+    assert "backblast" not in SQL
+
+
 def test_exact_contract_and_bestie_shape():
     db = source()
     db.execute("INSERT INTO pg.public.event_instances VALUES (7, 'Bestie workout', 10, true, 10, '2026-08-11', '{}')")

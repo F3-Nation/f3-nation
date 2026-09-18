@@ -3,7 +3,7 @@ params AS (
     SELECT ?::TIMESTAMPTZ AS refreshed_at, ?::DATE AS as_of_date
 ),
 event_source AS (
-    SELECT ei.*,
+    SELECT ei.id, ei.name, ei.org_id, ei.is_active, ei.pax_count, ei.start_date, ei.meta,
            CASE
              WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') IS NULL THEN false
              WHEN json_type(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault') = 'NULL' THEN false
