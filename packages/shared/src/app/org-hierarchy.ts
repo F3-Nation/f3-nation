@@ -32,7 +32,8 @@ export interface OrgTypeDisplayInfo {
   /** Stable public URL name, independent of admin routes and display labels. */
   urlSegment: string;
   /** lucide-react icon name; consumers resolve this to a component */
-  icon: "CircleSmall" | "CirclePile" | "Earth" | "Globe" | "Shield";
+  icon:
+    "CircleSmall" | "CirclePile" | "Earth" | "LandPlot" | "Globe" | "Shield";
 }
 
 export const orgTypeDisplay: Record<OrgType, OrgTypeDisplayInfo> = {
@@ -56,6 +57,13 @@ export const orgTypeDisplay: Record<OrgType, OrgTypeDisplayInfo> = {
     pluralLabel: "Areas",
     routeSegment: stripLeadingSlash(routes.admin.areas.__path),
     icon: "Earth",
+  },
+  territory: {
+    urlSegment: "territories",
+    label: "Territory",
+    pluralLabel: "Territories",
+    routeSegment: stripLeadingSlash(routes.admin.territories.__path),
+    icon: "LandPlot",
   },
   sector: {
     urlSegment: "sectors",

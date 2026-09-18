@@ -139,9 +139,10 @@ describe.each(OrgType)("%s table contract", (type) => {
         onlyMine: true,
         searchTerm: type === "ao" ? "" : undefined,
       });
-    if (type !== "nation" && type !== "sector")
+    if (type !== "nation" && type !== "sector" && type !== "territory")
       expected.parentOrgIds = type === "ao" ? [] : undefined;
-    if (["ao", "area", "sector"].includes(type)) expected.sorting = [];
+    if (["ao", "area", "territory", "sector"].includes(type))
+      expected.sorting = [];
     expect(lastQuery(type)).toEqual(expected);
     const columns = mocks.props.columns as {
       id?: string;
@@ -159,8 +160,10 @@ describe.each(OrgType)("%s table contract", (type) => {
     expect(columns.map((column) => column.id ?? column.accessorKey)).toEqual([
       "name",
       ...extra,
-      ["sector", "area"].includes(type) ? "status" : "isActive",
-      ...(["sector", "area", "region"].includes(type) ? ["aoCount"] : []),
+      ["sector", "territory", "area"].includes(type) ? "status" : "isActive",
+      ...(["sector", "territory", "area", "region"].includes(type)
+        ? ["aoCount"]
+        : []),
       "lastAnnualReview",
       "created",
       "id",
@@ -187,7 +190,7 @@ describe.each(OrgType)("%s table contract", (type) => {
   });
 });
 
-it.each(["sector", "area", "region", "ao"] as const)(
+it.each(["sector", "territory", "area", "region", "ao"] as const)(
   "preserves %s search/sorting while resetting filters and page",
   (type) => {
     render(<OrgTable orgType={type} />);
