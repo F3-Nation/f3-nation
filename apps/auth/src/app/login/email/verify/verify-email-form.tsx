@@ -36,64 +36,69 @@ function VerifyEmailFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
       setLoading(true);
       setError("");
 
-      // Check if user exists before consuming the MFA code — same check
-      // for both backends, since /api/check-user reads the `users` table
-      // directly rather than either auth backend's own bookkeeping.
-      const checkRes = await fetch("/api/check-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const checkData = (await checkRes.json()) as { exists: boolean };
+      try {
+        // Check if user exists before consuming the MFA code — same check
+        // for both backends, since /api/check-user reads the `users` table
+        // directly rather than either auth backend's own bookkeeping.
+        const checkRes = await fetch("/api/check-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        const checkData = (await checkRes.json()) as { exists: boolean };
 
-      if (!checkData.exists) {
-        // New user — redirect to registration (code stays valid, neither
-        // backend has consumed it yet)
-        const params = new URLSearchParams({
-          email,
-          code: verifyCode,
+        if (!checkData.exists) {
+          // New user — redirect to registration (code stays valid, neither
+          // backend has consumed it yet)
+          const params = new URLSearchParams({
+            email,
+            code: verifyCode,
+            callbackUrl,
+          });
+          router.push(`/register?${params.toString()}`);
+          return;
+        }
+
+        if (useBetterAuth) {
+          const { error: signInError } = await authClient.signIn.emailOtp({
+            email,
+            otp: verifyCode,
+          });
+          if (signInError) {
+            setError("Invalid or expired code. Please try again.");
+            return;
+          }
+        } else {
+          // Existing user — sign in (consumes the code)
+          const result = await signIn("email-mfa", {
+            email,
+            code: verifyCode,
+            redirect: false,
+          });
+
+          if (result?.error) {
+            setError("Invalid or expired code. Please try again.");
+            return;
+          }
+        }
+
+        // Success — redirect. Guard against open-redirect: only follow
+        // same-origin or relative callbackUrls. Use the canonical auth URL
+        // (not window.location.origin) so the check stays consistent with
+        // the server-side guard in sendEmailCode even when served behind a
+        // proxy.
+        const safeUrl = isValidCallbackUrl(
           callbackUrl,
-        });
-        router.push(`/register?${params.toString()}`);
-        return;
+          process.env.NEXT_PUBLIC_AUTH_URL ?? window.location.origin,
+        )
+          ? callbackUrl
+          : "/";
+        router.push(safeUrl);
+      } catch {
+        setError("Something went wrong. Please try again.");
+      } finally {
+        setLoading(false);
       }
-
-      if (useBetterAuth) {
-        const { error: signInError } = await authClient.signIn.emailOtp({
-          email,
-          otp: verifyCode,
-        });
-        if (signInError) {
-          setError("Invalid or expired code. Please try again.");
-          setLoading(false);
-          return;
-        }
-      } else {
-        // Existing user — sign in (consumes the code)
-        const result = await signIn("email-mfa", {
-          email,
-          code: verifyCode,
-          redirect: false,
-        });
-
-        if (result?.error) {
-          setError("Invalid or expired code. Please try again.");
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Success — redirect. Guard against open-redirect: only follow
-      // same-origin or relative callbackUrls. Use the canonical auth URL
-      // (not window.location.origin) so the check stays consistent with the
-      // server-side guard in sendEmailCode even when served behind a proxy.
-      const safeUrl = isValidCallbackUrl(
-        callbackUrl,
-        process.env.NEXT_PUBLIC_AUTH_URL ?? window.location.origin,
-      )
-        ? callbackUrl
-        : "/";
-      router.push(safeUrl);
     },
     [email, callbackUrl, router, useBetterAuth],
   );
