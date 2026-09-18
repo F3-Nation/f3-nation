@@ -87,7 +87,7 @@
       "allowedVersions": "<4.0.0"
     },
     {
-      "description": "Skip zod 4.6.x: 4.6.0's JSON-Schema-converter rewrite (colinhacks/zod#6550, PR #6554) drops format/minLength/int32 bounds when @orpc/zod's ZodToJsonSchemaConverter converts apps/api's whole router in one pass, failing apps/api's openapi-spec.char.test.ts golden snapshot. Isolated single-schema conversions are unaffected — only the bulk multi-schema document path regresses. Filed upstream as colinhacks/zod#6613. See pnpm-workspace.yaml's matching zod catalog/override entries. `>=4.7.0` has no upper bound, so 4.7.x and any later major are proposed automatically once published; remove this rule once #6613 is fixed or a 4.6.x/4.7+ release is otherwise confirmed to fix the bulk-conversion case.",
+      "description": "Skip zod 4.6.x: 4.6.0's JSON-Schema-converter rewrite (colinhacks/zod#6550, PR #6554) drops format/minLength/int32 bounds when @orpc/zod's ZodToJsonSchemaConverter converts apps/api's whole router in one pass, failing apps/api's openapi-spec.char.test.ts golden snapshot. Isolated single-schema conversions are unaffected — only the bulk multi-schema document path regresses. Filed upstream as colinhacks/zod#6613. `>=4.7.0` has no upper bound, so 4.7.x and any later major are proposed automatically once published; remove this rule once #6613 is fixed or a 4.6.x/4.7+ release is otherwise confirmed to fix the bulk-conversion case.",
       "matchDatasources": ["npm"],
       "matchPackageNames": ["zod"],
       "allowedVersions": "<4.6.0 || >=4.7.0"
