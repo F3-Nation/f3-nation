@@ -39,11 +39,14 @@ describe("isValidOrgTypeParent (ordinal property)", () => {
     expect(isValidOrgTypeParent("sector", "area")).toBe(true);
   });
 
-  it("accepts a skip-level parent, standing in for a future territory tier", () => {
-    // area's only ordinal ancestors today are sector and nation. Accepting
-    // nation despite skipping past sector proves the check is rank-based, not
-    // adjacency-based -- which is exactly what lets a future "territory" tier
-    // slot into OrgType without any change to this validation logic.
+  it("accepts territory between area and sector", () => {
+    expect(isValidOrgTypeParent("territory", "area")).toBe(true);
+    expect(isValidOrgTypeParent("sector", "territory")).toBe(true);
+    expect(isValidOrgTypeParent("area", "territory")).toBe(false);
+    expect(isValidOrgTypeParent("territory", "sector")).toBe(false);
+  });
+
+  it("accepts a skip-level parent", () => {
     expect(isValidOrgTypeParent("nation", "area")).toBe(true);
   });
 

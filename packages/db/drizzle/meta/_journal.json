@@ -162,6 +162,13 @@
       "when": 1787938666439,
       "tag": "0022_common_meggan",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789505471619,
+      "tag": "0023_add_territory_org_type",
+      "breakpoints": true
     }
   ]
 }

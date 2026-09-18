@@ -165,6 +165,10 @@ export const routes = {
       __path: "/sectors",
       __auth: "editor",
     },
+    territories: {
+      __path: "/territories",
+      __auth: "editor",
+    },
     areas: {
       __path: "/areas",
       __auth: "editor",
