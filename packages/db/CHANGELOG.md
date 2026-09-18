@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.2](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.1...pkg-db@0.6.2) (2026-09-16)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.3.1
+
 ## [0.6.1](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.0...pkg-db@0.6.1) (2026-09-11)
 
 

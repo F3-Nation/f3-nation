@@ -4,18 +4,6 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { SearchBox } from "./search-box";
 import type { Org, OrgType } from "../_lib/types";
-import type * as OrgHierarchy from "@acme/shared/app/org-hierarchy";
-
-vi.mock("@acme/shared/app/org-hierarchy", async (importOriginal) => {
-  const actual = await importOriginal<typeof OrgHierarchy>();
-  return {
-    ...actual,
-    orgTypeDisplay: {
-      ...actual.orgTypeDisplay,
-      territory: { ...actual.orgTypeDisplay.area, pluralLabel: "Territories" },
-    },
-  };
-});
 
 // Stub the debounced AO hook so these tests stay synchronous: it returns a
 // canned AO only for queries containing "boot", a simulated fetch failure for
@@ -71,7 +59,7 @@ describe("SearchBox", () => {
     },
     { layers: ["region", "sector"], placeholder: "Sectors, Regions, AOs…" },
     { layers: [], placeholder: "AOs…" },
-    // Model the metadata and layer list of a future bundle with territory support.
+    // Include the Territory layer when it is populated.
     {
       layers: ["region", "area", "territory", "sector"],
       placeholder: "Sectors, Territories, Areas, Regions, AOs…",

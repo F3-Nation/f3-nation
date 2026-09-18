@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   customType,
   date,
   doublePrecision,
@@ -1229,12 +1230,10 @@ export const emailMfaCodes = authProviderSchema.table("email_mfa_codes", {
 });
 
 // ---------------------------------------------------------------------------
-// Better Auth tables — DRAFTED, NOT APPLIED. See
-// docs/AI_GUARDRAILS.md's schema-migration sign-off rule for what that means.
-// Included here so the shape can be reviewed alongside the code that depends
-// on it; nothing above this point is touched, and the existing oauth_* tables
-// keep serving the hand-rolled OAuth server unchanged regardless of whether
-// this migration is ever applied.
+// Better Auth tables. The existing oauth_* tables keep serving the
+// hand-rolled OAuth server unchanged — these are additive, not a
+// replacement, and AUTH_USE_BETTER_AUTH stays the gate for any live traffic
+// reaching them.
 //
 // Field shapes were not hand-derived from docs — they're the literal output
 // of `getAuthTables()` (from @better-auth/core/db) run against this app's
@@ -1266,8 +1265,44 @@ export const betterAuthUser = authProviderSchema.table(
     updatedAt: timestamp("updated_at", { mode: "string" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
+    // Mirrors `id` (text) as an integer purely so Postgres can enforce a real
+    // FK to users.id below — Better Auth itself needs `id` to stay text (see
+    // block comment above), so this column exists mainly for referential
+    // integrity; nothing in application code reads or writes it directly
+    // (the email-sync trigger does query it — see the unique-constraint
+    // comment below). Without the FK, deleting/merging a `users` row (e.g.
+    // an account-merge admin action) leaves a dangling `better_auth_user`
+    // row that can sign tokens for a user id that no longer exists, or that
+    // gets reassigned to someone else.
+    f3UserId: integer("f3_user_id").generatedAlwaysAs(sql`(id)::integer`),
   },
-  (table) => [unique("better_auth_user_email_key").on(table.email)],
+  (table) => [
+    unique("better_auth_user_email_key").on(table.email),
+    // Unique, not just indexed: this is a 1:1 shadow row per real user, and
+    // a plain index wouldn't stop two different `id` text values that cast
+    // to the same integer (e.g. "1" and "01") from both pointing at the
+    // same `users.id`. The unique constraint also backs the email-sync
+    // trigger's `WHERE f3_user_id = NEW.id` lookup (see the email-sync
+    // migration's trigger function), so it stays an index scan as this
+    // table grows.
+    unique("better_auth_user_f3_user_id_key").on(table.f3UserId),
+    // The application only ever writes `id` via one code path today, but
+    // that's an app-level guarantee, not a database-level one — nothing
+    // stops a manual UPDATE/INSERT (e.g. an admin doing incident surgery)
+    // from writing a value the cast below can't handle safely. Requiring
+    // `id` to already look like a canonical positive integer (no leading
+    // zeros, no sign, no whitespace) closes that gap before it ever reaches
+    // the `f3_user_id` cast or the unique/FK constraints above.
+    check(
+      "better_auth_user_id_is_canonical_integer",
+      sql`${table.id} ~ '^[1-9][0-9]*$'`,
+    ),
+    foreignKey({
+      columns: [table.f3UserId],
+      foreignColumns: [users.id],
+      name: "better_auth_user_f3_user_id_fkey",
+    }).onDelete("cascade"),
+  ],
 );
 
 export const betterAuthSession = authProviderSchema.table(
@@ -1382,7 +1417,13 @@ export const betterAuthOauthClient = authProviderSchema.table(
     subjectType: text("subject_type"),
     scopes: text().array(),
     clientCredentialsScopes: text("client_credentials_scopes").array(),
-    userId: text("user_id").references(() => betterAuthUser.id),
+    // set null, not cascade: this is the client *owner* reference (who
+    // registered the app), not a user-owned auth artifact. Deleting the
+    // owning user shouldn't delete a registered OAuth client app out from
+    // under whoever's still using it.
+    userId: text("user_id").references(() => betterAuthUser.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "string" }),
     updatedAt: timestamp("updated_at", { mode: "string" }),
     name: text(),
@@ -1482,9 +1523,11 @@ export const betterAuthOauthRefreshToken = authProviderSchema.table(
     sessionId: text("session_id").references(() => betterAuthSession.id, {
       onDelete: "set null",
     }),
+    // cascade: this token is a user-owned artifact — deleting the user
+    // should revoke every refresh token they hold, not block the deletion.
     userId: text("user_id")
       .notNull()
-      .references(() => betterAuthUser.id),
+      .references(() => betterAuthUser.id, { onDelete: "cascade" }),
     referenceId: text("reference_id"),
     authorizationCodeId: text("authorization_code_id"),
     resources: text().array(),
@@ -1522,7 +1565,10 @@ export const betterAuthOauthAccessToken = authProviderSchema.table(
     sessionId: text("session_id").references(() => betterAuthSession.id, {
       onDelete: "set null",
     }),
-    userId: text("user_id").references(() => betterAuthUser.id),
+    // cascade: same reasoning as the refresh token table above.
+    userId: text("user_id").references(() => betterAuthUser.id, {
+      onDelete: "cascade",
+    }),
     referenceId: text("reference_id"),
     authorizationCodeId: text("authorization_code_id"),
     resources: text().array(),
@@ -1548,7 +1594,10 @@ export const betterAuthOauthConsent = authProviderSchema.table(
     clientId: text("client_id")
       .notNull()
       .references(() => betterAuthOauthClient.clientId),
-    userId: text("user_id").references(() => betterAuthUser.id),
+    // cascade: same reasoning as the refresh/access token tables above.
+    userId: text("user_id").references(() => betterAuthUser.id, {
+      onDelete: "cascade",
+    }),
     referenceId: text("reference_id"),
     resources: text().array(),
     requestedUserInfoClaims: text("requested_user_info_claims").array(),
