@@ -21,6 +21,7 @@ _PG_PORT = re.compile(r"^[0-9]+$")
 
 APPROVED_DATABASES = {"nonprod": "f3_staging", "production": "f3_prod"}
 _ENVIRONMENT_ALIASES = {"local": "nonprod", "test": "nonprod"}
+CATALOG_BUCKETS = {"nonprod": "f3-analytics-nonprod", "production": "f3-analytics"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,3 +127,29 @@ class Settings:
             postgres_password,
             postgres_database,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogSettings:
+    """The deliberately database-free configuration needed by catalog operators."""
+
+    environment: str
+    bucket_name: str
+    catalog_object: str = "parquets/catalog.json"
+
+    @classmethod
+    def from_env(cls, environ: dict[str, str] | None = None) -> "CatalogSettings":
+        values = os.environ if environ is None else environ
+        environment = values.get("ANALYTICS_ENVIRONMENT", "").strip()
+        if not _ENVIRONMENT.fullmatch(environment):
+            raise SettingsError("ANALYTICS_ENVIRONMENT must be a safe token")
+        target_environment = _ENVIRONMENT_ALIASES.get(environment, environment)
+        bucket_name = values.get("ANALYTICS_CATALOG_BUCKET", "").strip()
+        if not bucket_name:
+            raise SettingsError("ANALYTICS_CATALOG_BUCKET is required for catalog operations")
+        if bucket_name != CATALOG_BUCKETS[target_environment]:
+            raise SettingsError(f"ANALYTICS_CATALOG_BUCKET does not match {target_environment}")
+        catalog_object = values.get("ANALYTICS_CATALOG_OBJECT", "parquets/catalog.json").strip()
+        if catalog_object != "parquets/catalog.json":
+            raise SettingsError("ANALYTICS_CATALOG_OBJECT must be parquets/catalog.json")
+        return cls(environment, bucket_name, catalog_object)

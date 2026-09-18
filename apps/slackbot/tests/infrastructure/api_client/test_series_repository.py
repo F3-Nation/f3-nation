@@ -20,6 +20,7 @@ def _raw_series_list(
     parent_id: int = 10,
     region_id: int = 5,
     event_type_id: int | None = None,
+    event_tag_ids: list[int] | None = None,
 ) -> dict:
     """Simulates a record from GET /v1/event (list)."""
     raw: dict = {
@@ -41,6 +42,8 @@ def _raw_series_list(
     }
     if event_type_id is not None:
         raw["eventTypes"] = [{"eventTypeId": event_type_id, "eventTypeName": "Bootcamp"}]
+    if event_tag_ids is not None:
+        raw["eventTagIds"] = event_tag_ids
     return raw
 
 
@@ -140,6 +143,10 @@ class ParseSeriesTest(unittest.TestCase):
         raw = _raw_series_list()
         data = _parse_series(raw)
         self.assertEqual(data.event_tag_ids, [])
+
+    def test_parse_event_tag_ids_from_response(self):
+        data = _parse_series(_raw_series_list(event_tag_ids=[7, 8]))
+        self.assertEqual(data.event_tag_ids, [7, 8])
 
     def test_parse_camelcase_fields(self):
         raw = _raw_series_list(
@@ -339,6 +346,29 @@ class ApiSeriesRepositoryTest(unittest.TestCase):
         )
         payload = self.client.post.call_args.kwargs["json"]
         self.assertNotIn("dayOfWeek", payload)
+
+    def test_update_sends_empty_event_tags_to_clear_them(self):
+        self.client.post.return_value = _raw_crupdate_response(id=1)
+        self.repo.update(
+            series_id=1,
+            region_id=5,
+            ao_id=10,
+            name="Series",
+            start_date="2025-01-06",
+            start_time="0530",
+            end_time="0615",
+            description=None,
+            location_id=None,
+            end_date=None,
+            event_type_ids=[],
+            event_tag_ids=[],
+            is_active=True,
+            is_private=False,
+            highlight=False,
+            meta=None,
+        )
+        payload = self.client.post.call_args.kwargs["json"]
+        self.assertEqual(payload["eventTagIds"], [])
 
     # ------------------------------------------------------------------
     # delete

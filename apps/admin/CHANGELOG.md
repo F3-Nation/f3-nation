@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.5.3](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.2...admin@2.5.3) (2026-09-16)
+
+
+### Bug Fixes
+
+* **homepage:** preserve org navigation across unknown tiers ([#1019](https://github.com/F3-Nation/f3-nation/issues/1019)) ([b616b6b](https://github.com/F3-Nation/f3-nation/commit/b616b6bc2ca0ba3f1ac97874300b1e7713ab2d64))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.10.0
+    * @acme/shared bumped to 0.3.1
+    * @acme/ui bumped to 0.1.6
+    * @acme/validators bumped to 0.4.3
+
 ## [2.5.2](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.1...admin@2.5.2) (2026-09-12)
 
 

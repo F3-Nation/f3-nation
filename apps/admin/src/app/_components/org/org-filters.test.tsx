@@ -2,8 +2,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type * as ReactModule from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type * as SharedEnumsModule from "@acme/shared/app/enums";
-
 interface QueryInput {
   orgTypes: string[];
   pageIndex?: number;
@@ -24,15 +22,6 @@ const mocks = vi.hoisted(() => ({
   queryInputs: [] as QueryInput[],
   resultOrgs: [] as TestOrg[],
 }));
-
-vi.mock("@acme/shared/app/enums", async (importOriginal) => {
-  const actual = await importOriginal<typeof SharedEnumsModule>();
-
-  return {
-    ...actual,
-    OrgType: [...actual.OrgType, "territory"],
-  };
-});
 
 vi.mock("~/orpc/react", () => ({
   orpc: {
@@ -395,9 +384,9 @@ describe("depth-agnostic admin organization filters", () => {
       '"sector":"Sector One"',
     );
     expect(mocks.queryInputs[0]?.orgTypes).toEqual([
+      "territory",
       "sector",
       "nation",
-      "territory",
     ]);
   });
 
