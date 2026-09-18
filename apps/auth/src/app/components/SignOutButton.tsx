@@ -18,29 +18,35 @@ export default function SignOutButton({
   async function handleLogout() {
     setError("");
 
-    // Revoke all refresh tokens so client apps can't get new access tokens.
-    // fetch() doesn't reject on an HTTP error status, so check response.ok
-    // explicitly — otherwise a failed revoke still redirects to /login as
-    // if nothing went wrong, leaving live refresh tokens behind.
-    const logoutRes = await fetch("/api/logout", { method: "POST" });
-    if (!logoutRes.ok) {
-      setError("Failed to log out. Please try again.");
-      return;
-    }
-
-    // Clear the active backend's session cookie and redirect to login —
-    // NextAuth's own signOut() only clears its own cookie, so a Better
-    // Auth session (see apps/auth/src/lib/current-session.ts) needs its
-    // own client's signOut() instead, or the user stays signed in there.
-    if (useBetterAuth) {
-      const { error: signOutError } = await authClient.signOut();
-      if (signOutError) {
+    try {
+      // Revoke all refresh tokens so client apps can't get new access
+      // tokens. fetch() doesn't reject on an HTTP error status, so check
+      // response.ok explicitly — otherwise a failed revoke still redirects
+      // to /login as if nothing went wrong, leaving live refresh tokens
+      // behind. A rejected fetch (network failure) falls through to the
+      // catch block below.
+      const logoutRes = await fetch("/api/logout", { method: "POST" });
+      if (!logoutRes.ok) {
         setError("Failed to log out. Please try again.");
         return;
       }
-      router.push("/login");
-    } else {
-      await signOut({ callbackUrl: "/login" });
+
+      // Clear the active backend's session cookie and redirect to login —
+      // NextAuth's own signOut() only clears its own cookie, so a Better
+      // Auth session (see apps/auth/src/lib/current-session.ts) needs its
+      // own client's signOut() instead, or the user stays signed in there.
+      if (useBetterAuth) {
+        const { error: signOutError } = await authClient.signOut();
+        if (signOutError) {
+          setError("Failed to log out. Please try again.");
+          return;
+        }
+        router.push("/login");
+      } else {
+        await signOut({ callbackUrl: "/login" });
+      }
+    } catch {
+      setError("Failed to log out. Please try again.");
     }
   }
 
