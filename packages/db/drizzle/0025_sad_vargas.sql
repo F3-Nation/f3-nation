@@ -18,8 +18,19 @@
 -- let a mixed-case users.email value land in better_auth_user, miss
 -- Better Auth's lowercase lookup on the next sign-in, and reproduce
 -- the exact lockout this trigger exists to prevent.
+--
+-- SECURITY DEFINER: runs with this function's owner's privileges (the
+-- migration role, which owns auth.better_auth_user) rather than whichever
+-- role's UPDATE on public.users fires the trigger — so a narrower
+-- runtime role scoped to just the public schema can still update
+-- users.email without needing its own grant on the auth schema. search_path
+-- is fixed for the standard SECURITY DEFINER hardening (defense in depth on
+-- top of already schema-qualifying every reference below).
 CREATE OR REPLACE FUNCTION auth.sync_better_auth_user_email()
-RETURNS trigger AS $$
+RETURNS trigger
+SECURITY DEFINER
+SET search_path = auth, pg_temp
+AS $$
 BEGIN
   UPDATE auth.better_auth_user
   SET email = lower(trim(NEW.email)), updated_at = timezone('utc'::text, now())
@@ -27,8 +38,13 @@ BEGIN
   RETURN NEW;
 EXCEPTION
   WHEN unique_violation THEN
-    RAISE EXCEPTION 'Cannot sync users.email to auth.better_auth_user for user % (%): target email already claimed by a stale/other shadow row (better_auth_user_email_key). Manual reconciliation required.',
-      NEW.id, NEW.email
+    -- No email in the message: callers (e.g. packages/api/src/router/user.ts's
+    -- crupdate mutation) log the raw driver error on an unexpected DB fault,
+    -- and that error's message text is what actually reaches the log, not
+    -- just the caller's own PII-scrubbed log context. NEW.id is enough to
+    -- find the row for manual reconciliation without leaking the email.
+    RAISE EXCEPTION 'Cannot sync users.email to auth.better_auth_user for user %: target email already claimed by a stale/other shadow row (better_auth_user_email_key). Manual reconciliation required.',
+      NEW.id
       USING ERRCODE = 'unique_violation';
 END;
 $$ LANGUAGE plpgsql;
