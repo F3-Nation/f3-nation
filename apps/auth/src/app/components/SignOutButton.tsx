@@ -12,17 +12,32 @@ export default function SignOutButton({
   useBetterAuth: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState("");
   const router = useRouter();
 
   async function handleLogout() {
-    // Revoke all refresh tokens so client apps can't get new access tokens
-    await fetch("/api/logout", { method: "POST" });
+    setError("");
+
+    // Revoke all refresh tokens so client apps can't get new access tokens.
+    // fetch() doesn't reject on an HTTP error status, so check response.ok
+    // explicitly — otherwise a failed revoke still redirects to /login as
+    // if nothing went wrong, leaving live refresh tokens behind.
+    const logoutRes = await fetch("/api/logout", { method: "POST" });
+    if (!logoutRes.ok) {
+      setError("Failed to log out. Please try again.");
+      return;
+    }
+
     // Clear the active backend's session cookie and redirect to login —
     // NextAuth's own signOut() only clears its own cookie, so a Better
     // Auth session (see apps/auth/src/lib/current-session.ts) needs its
     // own client's signOut() instead, or the user stays signed in there.
     if (useBetterAuth) {
-      await authClient.signOut();
+      const { error: signOutError } = await authClient.signOut();
+      if (signOutError) {
+        setError("Failed to log out. Please try again.");
+        return;
+      }
       router.push("/login");
     } else {
       await signOut({ callbackUrl: "/login" });
@@ -35,6 +50,7 @@ export default function SignOutButton({
         <p className="text-base font-medium text-destructive">
           You will be logged out of all apps that use F3 Auth.
         </p>
+        {error && <p className="text-base text-destructive">{error}</p>}
         <div className="flex gap-3">
           <button
             onClick={handleLogout}
