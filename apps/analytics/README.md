@@ -63,19 +63,41 @@ the ETL:
 ANALYTICS_ENVIRONMENT=local uv --directory apps/analytics run analytics-etl diagnostics
 ```
 
-It attaches PostgreSQL and reports structured results for bounded source samples
-of `orgs`, the territory predicate, a small local Parquet `COPY`, and bounded
-diagnostics for `pv_sectors` and `pv_areas`. The hierarchy probes send an
-explicit `SELECT ... LIMIT 100` to PostgreSQL with `postgres_query`, stage that
-sample and each hierarchy result in temporary DuckDB tables, then copy and
-validate the staged result as Parquet. Each hierarchy query is executed once;
-the reported row count is evidence from the validated Parquet copy. It never
-creates a GCS client, publisher, release, or catalog object. A failure in
-`postgres_scan` or `territory_count` indicates source/schema or attachment
-trouble; a hierarchy failure points to DuckDB SQL execution, while a COPY or
-validation failure points to Parquet writing or filesystem behavior. Logs
-contain only safe error categories and probe context—never raw error details,
-credentials, DSNs, raw rows, or SQL values.
+In `local`, `test`, and `nonprod`, diagnostics retain the legacy DuckDB-scanner
+checks for `orgs`, the territory predicate, a small local Parquet `COPY`, and
+the `pv_sectors`/`pv_areas` hierarchy probes. Those legacy checks are not a
+server-timeout guarantee. They run alongside the two bounded nested-shape
+probes described below.
+
+In `production`, the legacy checks are explicitly skipped. Only `pv_kotter`
+and `pv_events` run, using a fresh DuckDB connection and a separate short-lived
+Psycopg session for each probe; production diagnostics never attach the DuckDB
+PostgreSQL scanner, use `postgres_query`, or copy directly from `pg.public`.
+The Kotter and events probes use diagnostic SQL constants, not production SQL
+resources, and each runs through exactly these phases:
+`source_read` -> `query_aggregation` -> `local_parquet` (COPY/readback). The
+Kotter and events source phases use a dedicated short-lived Psycopg 3 session,
+set the connection read-only before opening a transaction, set a transaction-
+local statement timeout, and force rollback on exit. Each uses one
+parameterized SELECT whose stable event-ID sample and final output are ordered
+and bounded to 100 rows. These are bounded nested-shape probes, not proof that
+the production materialization paths execute successfully.
+
+Fetched rows are staged into fresh DuckDB temporary tables with fixed schemas.
+The Kotter aggregation builds bounded per-user lists of event STRUCTs; the
+events aggregation builds bounded per-event attendance, event-type, and
+event-tag STRUCT lists with typed empty-list defaults. The Parquet readback
+checks every nested events column, and temporary files are removed inside the
+local-parquet phase. Each successful phase emits a fixed-context
+`diagnostic_phase_succeeded` event; failures emit `diagnostic_phase_failed`
+with only the probe, phase, sample limit, and exception type.
+
+Diagnostics never create a GCS client, publisher, release, or catalog object,
+and never call the ETL pipeline or materialization code. Probe failures are
+isolated by fresh connections, so one failed phase does not prevent later
+probes. Logs contain only fixed probe/phase context, counts, the source sample
+limit, and exception type—never raw SQL, rows or IDs, credentials, DSNs,
+exception messages, or PII.
 
 ## Local-only export
 
