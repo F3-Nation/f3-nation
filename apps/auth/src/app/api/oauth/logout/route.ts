@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { eq } from "@acme/db";
 import { oauthClients } from "@acme/db/schema/schema";
 
-import { auth } from "~/lib/auth";
+import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
 import { revokeAllUserTokens } from "~/lib/oauth";
 import { env } from "~/env";
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Revoke tokens if user is authenticated
-  const session = await auth();
+  const session = await getCurrentSession();
   if (session?.user?.id) {
     const userId = Number(session.user.id);
     if (userId) {
@@ -80,13 +80,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Clear the NextAuth session cookie
+  // Clear the active backend's session cookie — NextAuth's own naming when
+  // AUTH_USE_BETTER_AUTH is off, Better Auth's ("better-auth.*", same
+  // "__Secure-" prefixing convention) when it's on, so signing out actually
+  // clears whichever cookie the user is currently carrying.
   const cookieStore = await cookies();
   for (const cookie of cookieStore.getAll()) {
     if (
       cookie.name.startsWith("next-auth") ||
       cookie.name.startsWith("__Secure-next-auth") ||
-      cookie.name.startsWith("authjs")
+      cookie.name.startsWith("authjs") ||
+      cookie.name.startsWith("better-auth") ||
+      cookie.name.startsWith("__Secure-better-auth")
     ) {
       cookieStore.delete(cookie.name);
     }
