@@ -1,8 +1,7 @@
 # ADR NNNN: <short, descriptive title>
 
-- **Status:** Proposed <!-- Proposed | Accepted | Superseded by ADR-NNNN -->
 - **Date:** YYYY-MM-DD
-- **Deciders:** @github-handle, @github-handle
+- **Author(s):** @github-handle, @github-handle
 
 ## Context
 

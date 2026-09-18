@@ -25,18 +25,10 @@ it's verified_, that belongs in [`/specs`](../../specs) instead.
    examples of the level of detail.
 3. Open a pull request like any other change, so it gets reviewed.
 
-## Status
-
-Every ADR has one of these:
-
-- **Proposed** — up for discussion, not yet final.
-- **Accepted** — this is the decision; the codebase should follow it.
-- **Superseded by ADR-NNNN** — a later ADR replaced this one.
-
 ## ADRs don't get rewritten
 
 Once an ADR is Accepted, don't edit its Decision or Consequences later,
 even if things change. If a decision gets reversed, write a **new** ADR
-explaining the change, then come back and update the _old_ one's Status
+explaining the change, then come back and update the _old_ one
 to point at it. This keeps the history honest — you can always see what
 was decided and when, not just what's true today.
