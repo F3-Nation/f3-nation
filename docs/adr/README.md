@@ -27,7 +27,7 @@ it's verified_, that belongs in [`/specs`](../../specs) instead.
 
 ## ADRs don't get rewritten
 
-Once an ADR is Accepted, don't edit its Decision or Consequences later,
+Once an ADR is accepted and merged, don't edit its Decision or Consequences later,
 even if things change. If a decision gets reversed, write a **new** ADR
 explaining the change, then come back and update the _old_ one
 to point at it. This keeps the history honest — you can always see what
