@@ -239,8 +239,62 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     const otp = await auth.api.createVerificationOTP({
       body: { email, type: "sign-in" },
     });
+    // A specific, catchable error — not just "throws something". Before
+    // the create.before hook was hardened to throw explicitly, returning
+    // `false` here made Better Auth's own signInEmailOTP handler
+    // dereference `.id` on a null user, an unrelated TypeError that
+    // happened to also satisfy a bare `.rejects.toThrow()`. Asserting the
+    // actual error code pins the real fix, not just "some error happened".
     await expect(
       auth.api.signInEmailOTP({ body: { email, otp } }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
+  });
+
+  it("registration hand-off (#952): sign-in is refused before the F3 users row exists and succeeds once it does", async () => {
+    // Mirrors the real flow in apps/auth/src/app/login/email/verify and
+    // apps/auth/src/app/register: the UI never actually calls
+    // signIn.emailOtp for an unregistered email — it checks /api/check-user
+    // first (which reads the real `users` table directly, untouched by
+    // Better Auth's own OTP store), precisely because atomicVerifyOTP
+    // consumes the OTP on read regardless of what happens after. This test
+    // exercises the engine-level guarantee the hand-off relies on: before
+    // registration, sign-in is refused; once /api/register has created the
+    // `users` row (simulated here by findF3UserId starting to resolve),
+    // the same email can complete sign-in with a fresh code.
+    const email = "phase3-handoff@f3nation.test";
+    let f3UserId: number | null = null;
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: () => Promise.resolve(f3UserId),
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const preRegistrationOtp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp: preRegistrationOtp } }),
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
+
+    // Registration completes — mirrors /api/register creating the users row.
+    f3UserId = 6161;
+
+    const postRegistrationOtp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    const signIn = await auth.api.signInEmailOTP({
+      body: { email, otp: postRegistrationOtp },
+    });
+    expect(signIn.token).toBeTruthy();
   });
 });
