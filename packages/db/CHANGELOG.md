@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.2...pkg-db@0.7.0) (2026-09-19)
+
+
+### Features
+
+* **db:** add FK cascade and email-sync trigger for better_auth_user ([#1032](https://github.com/F3-Nation/f3-nation/issues/1032)) ([e95c218](https://github.com/F3-Nation/f3-nation/commit/e95c21840646e9096aa8ab49a19a0e891ca23c12))
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.4.0
+
 ## [0.6.2](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.1...pkg-db@0.6.2) (2026-09-16)
 
 
