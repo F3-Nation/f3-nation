@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.3.4](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.3...auth@2.3.4) (2026-09-19)
+
+
+### Bug Fixes
+
+* **auth,api:** pin better-auth packages to exact 1.7.4 ([#1023](https://github.com/F3-Nation/f3-nation/issues/1023)) ([7f2039d](https://github.com/F3-Nation/f3-nation/commit/7f2039d3ac6f5ad780c10b166e581759ad6ade74))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.7.0
+    * @acme/shared bumped to 0.4.0
+
 ## [2.3.3](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.2...auth@2.3.3) (2026-09-16)
 
 

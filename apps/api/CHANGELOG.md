@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.8.0](https://github.com/F3-Nation/f3-nation/compare/api@6.7.0...api@6.8.0) (2026-09-19)
+
+
+### Features
+
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.11.0
+    * @acme/shared bumped to 0.4.0
+  * devDependencies
+    * @acme/auth bumped to 0.2.7
+    * @acme/db bumped to 0.7.0
+
 ## [6.7.0](https://github.com/F3-Nation/f3-nation/compare/api@6.6.2...api@6.7.0) (2026-09-16)
 
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.11.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.10.0...pkg-api@0.11.0) (2026-09-19)
+
+
+### Features
+
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Bug Fixes
+
+* **auth,api:** pin better-auth packages to exact 1.7.4 ([#1023](https://github.com/F3-Nation/f3-nation/issues/1023)) ([7f2039d](https://github.com/F3-Nation/f3-nation/commit/7f2039d3ac6f5ad780c10b166e581759ad6ade74))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.7
+    * @acme/db bumped to 0.7.0
+    * @acme/shared bumped to 0.4.0
+    * @acme/validators bumped to 0.4.4
+
 ## [0.10.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.9.1...pkg-api@0.10.0) (2026-09-16)
 
 
