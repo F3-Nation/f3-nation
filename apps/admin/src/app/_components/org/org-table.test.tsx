@@ -139,7 +139,7 @@ describe.each(OrgType)("%s table contract", (type) => {
         onlyMine: true,
         searchTerm: type === "ao" ? "" : undefined,
       });
-    if (type !== "nation" && type !== "sector" && type !== "territory")
+    if (type !== "nation" && type !== "sector")
       expected.parentOrgIds = type === "ao" ? [] : undefined;
     if (["ao", "area", "territory", "sector"].includes(type))
       expected.sorting = [];
@@ -151,12 +151,14 @@ describe.each(OrgType)("%s table contract", (type) => {
     }[];
     const extra =
       type === "area"
-        ? ["parentOrgName"]
-        : type === "region"
-          ? ["area", "sector"]
-          : type === "ao"
-            ? ["parentOrgName"]
-            : [];
+        ? ["territory", "sector"]
+        : type === "territory"
+          ? ["parentOrgName"]
+          : type === "region"
+            ? ["area", "sector"]
+            : type === "ao"
+              ? ["parentOrgName"]
+              : [];
     expect(columns.map((column) => column.id ?? column.accessorKey)).toEqual([
       "name",
       ...extra,
@@ -187,6 +189,33 @@ describe.each(OrgType)("%s table contract", (type) => {
       orgType: type,
       id: 40,
     });
+  });
+});
+
+describe("ancestor columns", () => {
+  const columnsFor = (type: "area" | "territory") => {
+    render(<OrgTable orgType={type} />);
+    return mocks.props.columns as {
+      id?: string;
+      accessorKey?: string;
+      enableSorting?: boolean;
+    }[];
+  };
+  const find = (columns: ReturnType<typeof columnsFor>, key: string) =>
+    columns.find((column) => (column.id ?? column.accessorKey) === key);
+
+  it("does not sort the area table's resolved territory and sector columns on the server", () => {
+    const columns = columnsFor("area");
+
+    expect(find(columns, "territory")?.enableSorting).toBe(false);
+    expect(find(columns, "sector")?.enableSorting).toBe(false);
+  });
+
+  it("sorts the territory table's sector column by its parent's name", () => {
+    const columns = columnsFor("territory");
+
+    expect(find(columns, "parentOrgName")).toBeDefined();
+    expect(find(columns, "parentOrgName")?.enableSorting).not.toBe(false);
   });
 });
 

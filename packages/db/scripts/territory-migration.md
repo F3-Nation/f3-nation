@@ -114,22 +114,25 @@ forward-migration directory.
 Before a release rollback:
 
 1. Stop application writers and automated migration runners; verify the exact
-   target, deployment versions, and that 0023 is the latest applied migration.
-   If subsequent migrations exist, devise a rollback for that actual state.
+   target, deployment versions, and that 0023 (or the AO-count migration 0026
+   that follows it) is the latest applied migration. If other migrations exist,
+   devise a rollback for that actual state. When 0026 is applied, the script also
+   removes its recount functions and restores the fixed-depth trigger function.
 2. Back up the database and its Drizzle journal. Confirm no Territory values
    exist in either dependent column. Coordinate restoring the pre-Territory
    application build while writers remain stopped.
 3. Run the rollback SQL and verify enum order, preserved rows, column
    nullability, and index validity/definition.
 4. Reconcile the target's Drizzle journal under separately reviewed exact SQL:
-   remove only the applied 0023 entry identified by its migration hash and
-   journal timestamp. Do not clear the journal or change older entries. The
+   remove only the applied 0023 entry, and the 0026 entry when it was applied,
+   each identified by its migration hash and journal timestamp. Do not clear the
+   journal or change older entries. The
    table is in the `drizzle` schema. Inspect its actual name before writing SQL:
    the current runner derives the suffix from the final segment of the database
    URL, including any query string, so it may differ from the bare database name.
    The usual name is `drizzle."__drizzle_migrations_<database>"`. Match the 0023 row on
    `hash` (SHA-256 of the exact deployed SQL file) and `created_at = 1789505471619`
-   (its `_journal.json` `when`).
+   (its `_journal.json` `when`); the 0026 row uses `created_at = 1789775437096`.
 5. Recycle application DB pools and PgBouncer server connections as for forward
    migration, then resume only the coordinated application/migration versions. Retaining 0023
    in a deployed migration directory while removing its journal entry causes
@@ -139,16 +142,55 @@ The local rehearsal verifies the schema rollback, not a production deployment
 or production journal mutation. Production rollback and exact journal SQL
 require the normal human release approval.
 
-## Populated Territory rollout gate — #924
+## Populated Territory rollout
 
-The existing trigger and `seed.ts` recount still assume three ancestor levels.
-Before reparenting any Area under a Territory, #924 must make both counting paths
-depth-agnostic and verify Sector and Territory counts for active descendant AOs,
-inactive intermediate organizations, and moves between old and new hierarchy
-paths. This migration only refreshes the existing function to clear stale plans;
-it does not change AO-count semantics or backfill counts.
+Migration 0026 replaces the fixed three-ancestor AO counting with a depth-agnostic
+recount. `orgs.ao_count` is carried by every organization type except AO and
+Nation. It is the number of active AOs in the organization's subtree, reached only
+through active intermediate organizations; the organization's own status is not
+checked. The trigger, the migration backfill, and `pnpm db:seed` all call
+`recount_org_ao_counts()`, so Sector and Territory counts stay correct for an
+Area directly under a Sector, an Area under a Territory, and any move between them.
 
-The API temporarily rejects Area creation and reparenting beneath Territory in
-`assertValidParentType`. Remove that guard in #924 only after both counting paths
-and the mixed-parent regression tests pass. Direct SQL writes bypass this guard
-and must still follow the rollout gate above.
+`assertValidParentType` accepts an Area beneath either a Sector or a Territory, so
+Areas can be reparented gradually. Direct SQL writes bypass that validation and
+the trigger may be disabled or bypassed; see below for repairing counts.
+
+### Verifying counts during rollout
+
+0026 runs a full backfill, which also corrects drift that predates it (deleted
+AOs, moves, and intermediate deactivations were never recounted). Some stored
+counts can therefore change when it is applied. To review the change, export the
+stored counts before the migration and again after it, then compare:
+
+```sql
+SELECT id, org_type, name, ao_count
+FROM orgs
+WHERE org_type::text NOT IN ('ao', 'nation')
+ORDER BY id;
+```
+
+The migration prints how many rows it corrected. At any later time this
+read-only query lists organizations whose stored count differs from the expected
+one:
+
+```sql
+SELECT o.id, o.name, o.ao_count, e.expected
+FROM orgs o
+JOIN org_ao_count_expected() e ON e.org_id = o.id
+WHERE o.ao_count IS DISTINCT FROM e.expected;
+```
+
+`SELECT recount_org_ao_counts();` repairs every count and returns how many rows it
+changed. Run it after any direct SQL edit that changes an organization's parent,
+active status, or type while the trigger is disabled or bypassed. An
+`app.disable_ao_count_trigger` setting of `true` skips the trigger; an empty or
+`false` value does not.
+
+### Future enum-recreation migrations
+
+`update_org_ao_counts`, `recount_org_ao_counts`, `org_ao_count_expected`, and
+`org_ao_count_targets` reference `org_type`. A migration that recreates the enum
+must re-issue each with `CREATE OR REPLACE`, alongside the connection recycling
+described above, so long-lived sessions do not keep plans for the old enum type.
+Adding a tier between Nation and AO needs no change to their type lists.

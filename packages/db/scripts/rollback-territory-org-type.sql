@@ -1,4 +1,5 @@
--- Operator-led rollback for 0023; not part of the forward migration directory.
+-- Operator-led rollback for 0023 (and, when applied, the AO-count migration 0026 that
+-- follows it); not part of the forward migration directory.
 -- Stop writers and coordinate the old application version before running.
 -- Reconcile the migration journal only after successful rollback; see territory-migration.md.
 \set ON_ERROR_STOP on
@@ -120,4 +121,10 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- The function above is the fixed-depth counter that predates the depth-agnostic
+-- AO-count migration (0026). Remove that migration's functions so the database
+-- matches the state before it; a no-op when 0026 was never applied.
+DROP FUNCTION IF EXISTS public.recount_org_ao_counts(integer[]);
+DROP FUNCTION IF EXISTS public.org_ao_count_expected(integer[]);
+DROP FUNCTION IF EXISTS public.org_ao_count_targets(integer[]);
 COMMIT;
