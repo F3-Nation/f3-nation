@@ -13,16 +13,36 @@ import {
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 interface OrgFilterState {
   selectedAreas: Org[];
+  selectedTerritories: Org[];
   selectedSectors: Org[];
 }
 type OrgFilterAction =
   | { type: "toggle-sector"; sector: Org; orgById: ReadonlyMap<number, Org> }
+  | { type: "toggle-territory"; territory: Org }
   | { type: "toggle-area"; area: Org }
   | { type: "reset" };
 const initialOrgFilterState: OrgFilterState = {
   selectedAreas: [],
+  selectedTerritories: [],
   selectedSectors: [],
 };
+
+// Keep only selections still beneath a selected sector, judged by their current
+// ancestry so a reparenting refetch is honored.
+const pruneToSectors = (
+  selected: Org[],
+  sectorIds: ReadonlySet<number>,
+  orgById: ReadonlyMap<number, Org>,
+) =>
+  sectorIds.size === 0
+    ? selected
+    : selected.filter((org) => {
+        const current = orgById.get(org.id);
+        return (
+          current !== undefined &&
+          isDescendantOfAny(current, sectorIds, orgById)
+        );
+      });
 
 // Preserve the Region reducer's atomic selection/pruning behavior from #920.
 const orgFilterReducer = (
@@ -39,6 +59,20 @@ const orgFilterReducer = (
         : [...state.selectedAreas, action.area],
     };
   }
+  if (action.type === "toggle-territory") {
+    const isSelected = isOrgSelected(
+      state.selectedTerritories,
+      action.territory,
+    );
+    return {
+      ...state,
+      selectedTerritories: isSelected
+        ? state.selectedTerritories.filter(
+            (territory) => territory.id !== action.territory.id,
+          )
+        : [...state.selectedTerritories, action.territory],
+    };
+  }
   const isSelected = isOrgSelected(state.selectedSectors, action.sector);
   const selectedSectors = isSelected
     ? state.selectedSectors.filter((sector) => sector.id !== action.sector.id)
@@ -46,24 +80,22 @@ const orgFilterReducer = (
   const selectedSectorIds = new Set(selectedSectors.map((sector) => sector.id));
   return {
     selectedSectors,
-    selectedAreas:
-      selectedSectorIds.size === 0
-        ? state.selectedAreas
-        : state.selectedAreas.filter((area) => {
-            const currentArea = action.orgById.get(area.id);
-            return (
-              currentArea !== undefined &&
-              isDescendantOfAny(currentArea, selectedSectorIds, action.orgById)
-            );
-          }),
+    selectedAreas: pruneToSectors(
+      state.selectedAreas,
+      selectedSectorIds,
+      action.orgById,
+    ),
+    selectedTerritories: pruneToSectors(
+      state.selectedTerritories,
+      selectedSectorIds,
+      action.orgById,
+    ),
   };
 };
 
 export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
-  const [{ selectedAreas, selectedSectors }, dispatch] = useReducer(
-    orgFilterReducer,
-    initialOrgFilterState,
-  );
+  const [{ selectedAreas, selectedTerritories, selectedSectors }, dispatch] =
+    useReducer(orgFilterReducer, initialOrgFilterState);
   const [selectedRegions, setSelectedRegions] = useState<Org[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<IsActiveStatus[]>([
     "active",
@@ -90,6 +122,13 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
       hierarchyOrgs?.filter((org) => org.orgType === "area" && org.isActive),
     [hierarchyOrgs],
   );
+  const territories = useMemo(
+    () =>
+      hierarchyOrgs?.filter(
+        (org) => org.orgType === "territory" && org.isActive,
+      ),
+    [hierarchyOrgs],
+  );
   const selectedSectorIds = useMemo(
     () => new Set(selectedSectors.map((sector) => sector.id)),
     [selectedSectors],
@@ -103,6 +142,27 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
           ),
     [areas, orgById, selectedSectorIds],
   );
+  const availableTerritories = useMemo(
+    () =>
+      selectedSectorIds.size === 0
+        ? territories
+        : territories?.filter((territory) =>
+            isDescendantOfAny(territory, selectedSectorIds, orgById),
+          ),
+    [territories, orgById, selectedSectorIds],
+  );
+  // A selected sector, and everything the loaded hierarchy places beneath it.
+  const sectorAndDescendantIds = useMemo(
+    () =>
+      hierarchyOrgs
+        ?.filter(
+          (org) =>
+            selectedSectorIds.has(org.id) ||
+            isDescendantOfAny(org, selectedSectorIds, orgById),
+        )
+        .map((org) => org.id),
+    [hierarchyOrgs, selectedSectorIds, orgById],
+  );
   const parentOrgIds = useMemo(() => {
     if (config.filters === "region")
       return selectedRegions.map((region) => region.id);
@@ -112,36 +172,35 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
         selectedSectors.length > 0,
         availableAreas?.map((area) => area.id),
       );
-    if (config.filters === "sector") {
-      const matchingParentIds = hierarchyOrgs
-        ?.filter(
-          (org) =>
-            selectedSectorIds.has(org.id) ||
-            isDescendantOfAny(org, selectedSectorIds, orgById),
-        )
-        .map((org) => org.id);
+    if (config.filters === "sector")
       return getParentOrgIdsForFilter(
         [],
         selectedSectors.length > 0,
-        matchingParentIds,
+        sectorAndDescendantIds,
       );
-    }
+    if (config.filters === "sectorTerritory")
+      return getParentOrgIdsForFilter(
+        selectedTerritories.map((territory) => territory.id),
+        selectedSectors.length > 0,
+        sectorAndDescendantIds,
+      );
     return undefined;
   }, [
     config.filters,
     selectedRegions,
     selectedAreas,
+    selectedTerritories,
     selectedSectors,
     availableAreas,
-    hierarchyOrgs,
-    selectedSectorIds,
-    orgById,
+    sectorAndDescendantIds,
   ]);
   return {
     orgById,
     sectors,
     availableAreas,
+    availableTerritories,
     selectedAreas,
+    selectedTerritories,
     selectedSectors,
     selectedRegions,
     selectedStatuses,
@@ -153,6 +212,7 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
       selectedStatuses.length +
       selectedSectors.length +
       selectedAreas.length +
+      selectedTerritories.length +
       selectedRegions.length +
       (onlyMine ? 1 : 0),
     handleSectorSelect: (sector: Org) => {
@@ -161,6 +221,10 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
     },
     handleAreaSelect: (area: Org) => {
       dispatch({ type: "toggle-area", area });
+      resetPage();
+    },
+    handleTerritorySelect: (territory: Org) => {
+      dispatch({ type: "toggle-territory", territory });
       resetPage();
     },
     handleRegionSelect: (region: Org) => {
