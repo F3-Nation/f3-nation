@@ -26,9 +26,73 @@ class MaterializationArtifacts:
 ArtifactSet = MaterializationArtifacts
 MaterializationArtifactSet = MaterializationArtifacts
 
+_MATERIALIZATION_PHASES = frozenset(
+    {"load_sql", "prepare", "copy_query_to_parquet", "parquet_discovery", "parquet_readback"}
+)
+_TINY_FILE_SIZE = 4 << 10
+_SMALL_FILE_SIZE = 1 << 20
+_MEDIUM_FILE_SIZE = 100 << 20
+
 
 def _sql_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
+
+
+def _mark_materialization_phase(error: BaseException, phase: str) -> None:
+    try:
+        vars(error)["materialization_phase"] = phase
+    except Exception:
+        pass
+
+
+def materialization_failure_phase(error: BaseException) -> str:
+    phase = getattr(error, "materialization_phase", None)
+    return phase if phase in _MATERIALIZATION_PHASES else "unknown"
+
+
+def _has_parquet_footer(path: Path) -> bool:
+    try:
+        with path.open("rb") as output:
+            if output.seek(0, 2) < 4:
+                return False
+            output.seek(-4, 2)
+            return output.read(4) == b"PAR1"
+    except OSError:
+        return False
+
+
+def artifact_observability(root: Path | None, materialization: Materialization) -> dict[str, bool | str]:
+    """Return bounded artifact state without exposing filesystem details."""
+    if root is None:
+        return {"output_exists": False, "output_size_bucket": "unknown", "output_footer_par1": False}
+    files: tuple[Path, ...] = ()
+    try:
+        files = (
+            tuple(path for path in root.rglob("*.parquet") if path.is_file())
+            if materialization.partition_by
+            else (
+                (root / materialization.output_filename,) if (root / materialization.output_filename).is_file() else ()
+            )
+        )
+        total_size = sum(path.stat().st_size for path in files)
+    except OSError:
+        return {"output_exists": bool(files), "output_size_bucket": "unknown", "output_footer_par1": False}
+    if not files:
+        bucket = "none"
+    elif total_size == 0:
+        bucket = "zero"
+    elif total_size <= _TINY_FILE_SIZE:
+        bucket = "tiny"
+    elif total_size < _SMALL_FILE_SIZE:
+        bucket = "small"
+    elif total_size < _MEDIUM_FILE_SIZE:
+        bucket = "medium"
+    else:
+        bucket = "large"
+    footer_par1 = False
+    if files:
+        footer_par1 = all(_has_parquet_footer(path) for path in files)
+    return {"output_exists": bool(files), "output_size_bucket": bucket, "output_footer_par1": footer_par1}
 
 
 def postgres_attach_sql(settings: Settings) -> str:
@@ -68,8 +132,16 @@ def materialize(
     refreshed_at: str,
     as_of_date: str,
 ) -> MaterializationArtifacts:
-    query = load_sql(materialization)
-    root.mkdir(parents=True, exist_ok=True)
+    try:
+        query = load_sql(materialization)
+    except Exception as error:
+        _mark_materialization_phase(error, "load_sql")
+        raise
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except Exception as error:
+        _mark_materialization_phase(error, "prepare")
+        raise
     output_path = root / materialization.output_filename
     identifiers = (*materialization.partition_by, *materialization.sort_by)
     if any(not identifier.isidentifier() for identifier in identifiers):
@@ -83,14 +155,29 @@ def materialize(
         partitions = ", ".join(f'"{identifier}"' for identifier in materialization.partition_by)
         options += f", PARTITION_BY ({partitions}), WRITE_PARTITION_COLUMNS"
     destination = root if materialization.partition_by else output_path
-    connection.execute(
-        f"COPY ({ordered_query}) TO {_sql_literal(str(destination))} ({options})",
-        [refreshed_at, as_of_date],
-    )
-    generated = tuple(sorted(root.rglob("*.parquet"))) if materialization.partition_by else (output_path,)
+    try:
+        connection.execute(
+            f"COPY ({ordered_query}) TO {_sql_literal(str(destination))} ({options})",
+            [refreshed_at, as_of_date],
+        )
+    except Exception as error:
+        _mark_materialization_phase(error, "copy_query_to_parquet")
+        raise
+    try:
+        generated = tuple(sorted(root.rglob("*.parquet"))) if materialization.partition_by else (output_path,)
+    except Exception as error:
+        _mark_materialization_phase(error, "parquet_discovery")
+        raise
     if not generated or any(not path.is_file() for path in generated):
-        raise RuntimeError("materialization did not produce parquet files")
-    row_count = sum(
-        int(connection.execute("SELECT count(*) FROM read_parquet(?)", [str(path)]).fetchone()[0]) for path in generated
-    )
+        missing_output = RuntimeError("materialization did not produce parquet files")
+        _mark_materialization_phase(missing_output, "parquet_discovery")
+        raise missing_output
+    try:
+        row_count = sum(
+            int(connection.execute("SELECT count(*) FROM read_parquet(?)", [str(path)]).fetchone()[0])
+            for path in generated
+        )
+    except Exception as error:
+        _mark_materialization_phase(error, "parquet_readback")
+        raise
     return MaterializationArtifacts(root, generated, row_count)

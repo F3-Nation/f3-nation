@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import json
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,6 +10,7 @@ import pytest
 
 import analytics.materializations as materializations_module
 import analytics.pipeline as pipeline_module
+from analytics.logging import JsonLogger
 from analytics.materializations import MATERIALIZATION_REGISTRY, MATERIALIZATIONS, select_materializations
 from analytics.pipeline import BatchRunError, run
 from analytics.publication import CatalogConflictError, ObjectMetadata, PublicationStatus
@@ -133,6 +136,65 @@ def test_failed_dataset_has_no_release_or_catalog_commit_and_connections_close(m
     assert set(raised.value.failures) == {second.name}
     assert closed == [True, True]
     assert not any(item.release_uploaded or item.catalog_committed for item in FakePublisher.instances)
+
+
+def test_failed_dataset_log_has_bounded_phase_and_artifact_state(monkeypatch, tmp_path):
+    definition = MATERIALIZATIONS[0]
+    stream = io.StringIO()
+    failure = RuntimeError("raw SQL secret/path email@example.test")
+    failure.__dict__["materialization_phase"] = "copy_query_to_parquet"
+    monkeypatch.setattr(pipeline_module, "GcsPublisher", FakePublisher)
+    monkeypatch.setattr(pipeline_module, "select_materializations", lambda _names: (definition,))
+    monkeypatch.setattr(pipeline_module, "attach_postgres", lambda *_args: None)
+    monkeypatch.setattr(pipeline_module, "materialize", lambda *_args: (_ for _ in ()).throw(failure))
+
+    with pytest.raises(BatchRunError):
+        run(
+            _settings(tmp_path),
+            object(),
+            connection_factory=lambda _settings: type("C", (), {"close": lambda self: None})(),
+            logger=JsonLogger(stream=stream),
+            run_id="safe-failure",
+        )
+
+    records = [json.loads(line) for line in stream.getvalue().splitlines()]
+    failed = next(record for record in records if record["event"] == "analytics.etl.dataset_failed")
+    assert failed["context"]["phase"] == "copy_query_to_parquet"
+    assert isinstance(failed["context"]["output_exists"], bool)
+    assert failed["context"]["output_size_bucket"] in {"none", "small", "medium", "large", "unknown"}
+    assert "raw SQL" not in stream.getvalue()
+    assert "email@example.test" not in stream.getvalue()
+
+
+def test_failed_dataset_log_captures_partial_output_before_workspace_cleanup(monkeypatch, tmp_path):
+    definition = MATERIALIZATIONS[0]
+    stream = io.StringIO()
+
+    def fail_after_partial_output(_connection, root, *_args):
+        root.mkdir(parents=True)
+        (root / definition.output_filename).write_bytes(b"partial")
+        failure = RuntimeError("unlogged raw failure")
+        failure.__dict__["materialization_phase"] = "copy_query_to_parquet"
+        raise failure
+
+    monkeypatch.setattr(pipeline_module, "select_materializations", lambda _names: (definition,))
+    monkeypatch.setattr(pipeline_module, "attach_postgres", lambda *_args: None)
+    monkeypatch.setattr(pipeline_module, "materialize", fail_after_partial_output)
+
+    with pytest.raises(BatchRunError):
+        run(
+            _settings(tmp_path),
+            object(),
+            connection_factory=lambda _settings: type("C", (), {"close": lambda self: None})(),
+            logger=JsonLogger(stream=stream),
+            run_id="partial-failure",
+        )
+
+    records = [json.loads(line) for line in stream.getvalue().splitlines()]
+    failed = next(record for record in records if record["event"] == "analytics.etl.dataset_failed")
+    assert failed["context"]["phase"] == "copy_query_to_parquet"
+    assert failed["context"]["output_exists"] is True
+    assert failed["context"]["output_size_bucket"] == "tiny"
 
 
 def test_catalog_conflict_fails_safely_after_release_upload(monkeypatch, tmp_path):

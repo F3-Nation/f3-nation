@@ -10,6 +10,13 @@ from analytics.source import materialize
 SQL = (Path(__file__).parents[1] / "analytics" / "sql" / "pv_events.sql").read_text()
 
 
+def test_events_uses_explicit_event_and_attendance_projections():
+    assert "SELECT ei.*" not in SQL
+    assert "SELECT a.*" not in SQL
+    assert "preblast" not in SQL
+    assert "backblast" not in SQL
+
+
 def source():
     c = duckdb.connect(":memory:")
     c.execute("ATTACH ':memory:' AS pg")
@@ -219,3 +226,57 @@ def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
     ).fetchall()
     assert len(rows) == 4
     assert rows == sorted(rows, key=lambda row: (row[0], row[1]))
+
+
+def test_events_aggregates_independent_lists_and_attendance_flags():
+    c = source()
+    c.executemany(
+        "INSERT INTO pg.public.event_instances VALUES (?, 5, true, 3, 1, '{}', ?, ?, NULL, true, false)",
+        [(4, "Many lists", "2026-01-04"), (5, "Empty lists", "2026-01-05")],
+    )
+    c.executemany(
+        "INSERT INTO pg.public.event_instances_x_event_types VALUES (?, ?)",
+        [(4, 3), (4, 4)],
+    )
+    c.executemany(
+        "INSERT INTO pg.public.event_types VALUES (?, ?, ?, ?)",
+        [(3, "Alpha", "Alpha description", "first_f"), (4, "Zulu", "Zulu description", "second_f")],
+    )
+    c.executemany(
+        "INSERT INTO pg.public.event_tags_x_event_instances VALUES (?, ?)",
+        [(4, 7), (4, 8)],
+    )
+    c.execute("INSERT INTO pg.public.event_tags VALUES (8, 'Evening', 'Evening workout')")
+    c.execute("INSERT INTO pg.public.attendance_types VALUES (4, 'CoQ')")
+    c.executemany(
+        "INSERT INTO pg.public.users VALUES (?, ?, ?, ?)",
+        [(4, "Charlie", "c@example.com", "charlie.png"), (5, "Delta", "d@example.com", "delta.png")],
+    )
+    c.executemany(
+        "INSERT INTO pg.public.attendance VALUES (?, 4, ?, ?)",
+        [(8, 4, True), (9, 5, False), (10, 3, True)],
+    )
+    c.executemany(
+        "INSERT INTO pg.public.attendance_x_attendance_types VALUES (?, ?)",
+        [(8, 3), (9, 4)],
+    )
+
+    rows = c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"]).fetchall()
+    many = next(row for row in rows if row[1] == 4)
+    assert len(many[19]) == 2
+    assert len(many[20]) == 2
+    assert len(many[21]) == 2
+    assert many[19] == [
+        {"id": 3, "name": "Alpha", "description": "Alpha description", "event_category": "first_f"},
+        {"id": 4, "name": "Zulu", "description": "Zulu description", "event_category": "second_f"},
+    ]
+    assert [entry["user_id"] for entry in many[21]] == [4, 5]
+    assert many[21][0]["coq_ind"] == 0
+    assert many[21][0]["fartsack"] is True
+    assert many[21][1]["coq_ind"] == 1
+    assert many[21][1]["ghost"] is True
+
+    empty = next(row for row in rows if row[1] == 5)
+    assert empty[19] == []
+    assert empty[20] == []
+    assert empty[21] == []

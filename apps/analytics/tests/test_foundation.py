@@ -4,10 +4,11 @@ import io
 import json
 from datetime import datetime, timezone
 
+import duckdb
 import pytest
 
 from analytics.cli import main
-from analytics.duckdb import connect
+from analytics.duckdb import connect, connect_ctas_diagnostic, connect_staged_diagnostic
 from analytics.logging import JsonLogger
 from analytics.run_id import RunId
 from analytics.settings import Settings, SettingsError
@@ -182,8 +183,84 @@ def test_logging_supports_exceptions():
     assert record["error"]["module"] == "builtins"
     assert record["context"]["dsn"] == "[REDACTED]"
     assert record["context"]["private_key"] == "[REDACTED]"
+    assert record["error"]["detail"] == "runtime_error"
     assert "password" not in stream.getvalue()
     assert "postgres://" not in stream.getvalue()
+
+
+@pytest.mark.parametrize(
+    "message",
+    (
+        "arbitrary-user-name",
+        "value='quoted-secret' value=\"double-quoted-secret\"",
+        "password=top-secret token=abc123 api_key=key-value",
+    ),
+)
+def test_logging_exception_detail_is_normalized_without_message_values(message):
+    stream = io.StringIO()
+
+    def raise_error():
+        raise ValueError(message)
+
+    try:
+        raise_error()
+    except ValueError as error:
+        JsonLogger(stream=stream).error("analytics.etl.failed", error)
+
+    output = stream.getvalue()
+    record = json.loads(output)
+    assert record["error"]["detail"] == "validation_error"
+    assert message not in output
+    assert record["error"]["type"] == "ValueError"
+    assert record["error"]["module"] == "builtins"
+    assert record["error"]["origin"]["file"] == "test_foundation.py"
+    assert record["error"]["origin"]["function"] == "raise_error"
+
+
+@pytest.mark.parametrize(
+    ("message", "category"),
+    (
+        ("IO Error: No space left on device; path=/private/report.csv", "duckdb_io_no_space"),
+        ("IO Error: failed to write checkpoint; SQL=INSERT INTO secrets", "duckdb_io_write"),
+        ("IO Error: PostgreSQL socket read failed; token=not-for-logs", "duckdb_io_postgres_network_read"),
+        ("IO Error: unexpected storage condition; row=customer@example.test", "duckdb_io"),
+    ),
+)
+def test_logging_duckdb_io_categories_are_fixed(message, category):
+    stream = io.StringIO()
+
+    JsonLogger(stream=stream).error("analytics.etl.failed", duckdb.IOException(message))
+
+    output = stream.getvalue()
+    record = json.loads(output)
+    assert record["error"]["detail"] == category
+    assert message not in output
+    assert "private/report.csv" not in output
+    assert "secrets" not in output
+    assert "customer@example.test" not in output
+
+
+@pytest.mark.parametrize(
+    ("message", "category"),
+    (
+        ("IO Error: PostgreSQL transport unavailable", "duckdb_io_postgres_transport"),
+        ("IO Error: Parquet serialization failed", "duckdb_io_parquet_serialization"),
+        ("IO Error: zstd compression failed", "duckdb_io_compression"),
+        ("IO Error: local spill file unavailable", "duckdb_io_local_or_spill_io"),
+        ("IO Error: resource allocation failed", "duckdb_io_resource_allocation"),
+        ("IO Error: unusual condition secret@example.test", "duckdb_io"),
+    ),
+)
+def test_logging_duckdb_io_extended_categories_are_fixed(message, category):
+    stream = io.StringIO()
+
+    JsonLogger(stream=stream).error("analytics.etl.failed", duckdb.IOException(message))
+
+    output = stream.getvalue()
+    record = json.loads(output)
+    assert record["error"]["detail"] == category
+    assert message not in output
+    assert "secret@example.test" not in output
 
 
 def test_logging_exception_origin_is_safe_and_terminal():
@@ -219,6 +296,153 @@ def test_duckdb_loads_explicit_extension_without_install(tmp_path):
     values = extension_env(tmp_path)
     settings = Settings.from_env(values)
     calls = []
+    configs = []
+
+    class Connection:
+        def __init__(self):
+            self.locked = False
+
+        def load_extension(self, name):
+            calls.append(("LOAD", name))
+
+        def execute(self, sql, *parameters):
+            if self.locked and sql != "SET lock_configuration = true":
+                raise RuntimeError("configuration is locked")
+            calls.append((sql, parameters))
+            if sql == "SET lock_configuration = true":
+                self.locked = True
+
+        def close(self):
+            calls.append(("CLOSE",))
+
+    class Duckdb:
+        @staticmethod
+        def connect(database, config):
+            assert database == ":memory:"
+            configs.append(config)
+            assert config["autoinstall_known_extensions"] == "false"
+            assert config["autoload_known_extensions"] == "false"
+            return Connection()
+
+    connection = connect(settings, Duckdb)
+    assert connection is not None
+    assert calls[0] == ("LOAD", "postgres")
+    assert calls[1] == ("SET pg_experimental_filter_pushdown = false", ())
+    assert calls[2] == ("SET lock_configuration = true", ())
+    assert "threads" not in configs[0]
+    with pytest.raises(RuntimeError, match="configuration is locked"):
+        connection.execute("SET pg_experimental_filter_pushdown = true")
+
+
+def test_duckdb_diagnostic_text_copy_setting_precedes_configuration_lock(tmp_path):
+    settings = Settings.from_env(extension_env(tmp_path))
+    calls = []
+
+    class Connection:
+        def __init__(self):
+            self.locked = False
+
+        def load_extension(self, name):
+            calls.append(("LOAD", name))
+
+        def execute(self, sql, *parameters):
+            if self.locked and sql != "SET lock_configuration = true":
+                raise RuntimeError("configuration is locked")
+            calls.append((sql, parameters))
+            if sql == "SET lock_configuration = true":
+                self.locked = True
+
+        def close(self):
+            calls.append(("CLOSE",))
+
+    class Duckdb:
+        @staticmethod
+        def connect(database, config):
+            return Connection()
+
+    connect(settings, Duckdb, diagnostic_text_copy=True)
+    assert calls == [
+        ("LOAD", "postgres"),
+        ("SET pg_experimental_filter_pushdown = false", ()),
+        ("SET pg_use_binary_copy = false", ()),
+        ("SET lock_configuration = true", ()),
+    ]
+
+
+def test_duckdb_diagnostic_single_thread_config_and_limit_precede_lock(tmp_path):
+    settings = Settings.from_env(extension_env(tmp_path))
+    calls = []
+    configs = []
+
+    class Connection:
+        def __init__(self):
+            self.locked = False
+
+        def load_extension(self, name):
+            calls.append(("LOAD", name))
+
+        def execute(self, sql, *parameters):
+            if self.locked and sql != "SET lock_configuration = true":
+                raise RuntimeError("configuration is locked")
+            calls.append((sql, parameters))
+            if sql == "SET lock_configuration = true":
+                self.locked = True
+
+        def close(self):
+            calls.append(("CLOSE",))
+
+    class Duckdb:
+        @staticmethod
+        def connect(database, config):
+            configs.append(config)
+            return Connection()
+
+    connect(settings, Duckdb, diagnostic_single_thread=True)
+    assert configs[0]["threads"] == "1"
+    assert calls == [
+        ("LOAD", "postgres"),
+        ("SET pg_experimental_filter_pushdown = false", ()),
+        ("SET pg_connection_limit = 1", ()),
+        ("SET lock_configuration = true", ()),
+    ]
+
+
+def test_staged_diagnostic_duckdb_uses_private_spill_config_without_extension(tmp_path):
+    calls = []
+
+    class Connection:
+        def close(self):
+            calls.append("CLOSE")
+
+        def load_extension(self, _name):
+            raise AssertionError("staged diagnostics must not load extensions")
+
+    class Duckdb:
+        @staticmethod
+        def connect(database, config):
+            calls.append((database, config))
+            return Connection()
+
+    connection = connect_staged_diagnostic(tmp_path, Duckdb)
+    assert connection is not None
+    assert calls == [
+        (
+            ":memory:",
+            {
+                "autoinstall_known_extensions": "false",
+                "autoload_known_extensions": "false",
+                "temp_directory": str(tmp_path),
+            },
+        )
+    ]
+    connection.close()
+    assert calls[-1] == "CLOSE"
+
+
+def test_ctas_diagnostic_uses_single_thread_extension_and_private_spill_config(tmp_path):
+    settings = Settings.from_env(extension_env(tmp_path))
+    calls = []
+    configs = []
 
     class Connection:
         def load_extension(self, name):
@@ -233,15 +457,23 @@ def test_duckdb_loads_explicit_extension_without_install(tmp_path):
     class Duckdb:
         @staticmethod
         def connect(database, config):
-            assert database == ":memory:"
-            assert config["autoinstall_known_extensions"] == "false"
-            assert config["autoload_known_extensions"] == "false"
+            configs.append((database, config))
             return Connection()
 
-    connection = connect(settings, Duckdb)
-    assert connection is not None
-    assert calls[0] == ("LOAD", "postgres")
-    assert calls[-1][0].startswith("SET lock_configuration")
+    connect_ctas_diagnostic(settings, tmp_path / "spill", Duckdb)
+    assert configs[0][1] == {
+        "autoinstall_known_extensions": "false",
+        "autoload_known_extensions": "false",
+        "extension_directory": str(settings.extension_directory),
+        "threads": "1",
+        "temp_directory": str(tmp_path / "spill"),
+    }
+    assert calls == [
+        ("LOAD", "postgres"),
+        ("SET pg_experimental_filter_pushdown = false", ()),
+        ("SET pg_connection_limit = 1", ()),
+        ("SET lock_configuration = true", ()),
+    ]
 
 
 def test_duckdb_closes_connection_when_loading_fails(tmp_path):

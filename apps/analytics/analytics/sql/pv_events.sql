@@ -27,7 +27,8 @@ org_chain AS (
     FROM org_ancestors GROUP BY source_id
 ),
 events AS (
-    SELECT ei.*, c.* EXCLUDE (source_id)
+    SELECT ei.id, ei.start_date, ei.name, ei.pax_count, ei.fng_count, ei.org_id, ei.is_active, ei.meta,
+           c.* EXCLUDE (source_id)
     FROM pg.public.event_instances ei
     JOIN org_chain c ON c.source_id = ei.org_id
     WHERE ei.is_active = true AND ei.pax_count IS NOT NULL
@@ -62,13 +63,13 @@ event_tags AS (
     GROUP BY x.event_instance_id
 ),
 valid_attendance AS (
-    SELECT a.*, u.f3_name, u.avatar_url
+    SELECT a.id, a.event_instance_id, a.user_id, a.is_planned, u.f3_name, u.avatar_url
     FROM pg.public.attendance a
     JOIN pg.public.users u ON u.id = a.user_id
     WHERE u.email IS NOT NULL
       AND regexp_matches(CAST(u.email AS VARCHAR), '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$')
 ),
-attendance_users AS (
+attendance_users_grouped AS (
     SELECT a.event_instance_id AS event_id, a.user_id, max(a.f3_name) AS f3_name,
            max(a.avatar_url) AS avatar_url,
            bool_or(a.is_planned = false) AS attended,
@@ -76,24 +77,25 @@ attendance_users AS (
            bool_or(a.is_planned = false AND aty.type = 'Q')::INTEGER AS q_ind,
            bool_or(a.is_planned = false AND aty.type IN ('Co-Q', 'CoQ'))::INTEGER AS coq_ind
     FROM valid_attendance a
+    JOIN events e ON e.id = a.event_instance_id
     LEFT JOIN pg.public.attendance_x_attendance_types ax ON ax.attendance_id = a.id
     LEFT JOIN pg.public.attendance_types aty ON aty.id = ax.attendance_type_id
     GROUP BY a.event_instance_id, a.user_id
 ),
-attendance_events AS (
-    SELECT e.id AS event_id, COALESCE(bool_or(a.planned), false) AS event_has_planned
-    FROM events e LEFT JOIN attendance_users a ON a.event_id = e.id
-    GROUP BY e.id
+attendance_users AS (
+    SELECT a.event_id, a.user_id, a.f3_name, a.avatar_url, a.attended, a.planned, a.q_ind, a.coq_ind,
+           max(a.planned) OVER (PARTITION BY a.event_id) AS event_has_planned
+    FROM attendance_users_grouped a
 ),
 attendance_lists AS (
     SELECT a.event_id,
            list(struct_pack(user_id := a.user_id, f3_name := a.f3_name,
                             q_ind := COALESCE(a.q_ind, 0), coq_ind := COALESCE(a.coq_ind, 0),
                             avatar_url := a.avatar_url, attended := COALESCE(a.attended, false),
-                            ghost := (a.attended AND NOT a.planned AND e.event_has_planned),
+                            ghost := (a.attended AND NOT a.planned AND a.event_has_planned),
                             fartsack := (a.planned AND NOT a.attended))
                 ORDER BY a.f3_name, a.user_id) AS attendance
-    FROM attendance_users a JOIN attendance_events e ON e.event_id = a.event_id
+    FROM attendance_users a
     GROUP BY a.event_id
 )
 SELECT p.refreshed_at, e.id AS event_id, e.start_date AS event_date, e.name AS event_name,

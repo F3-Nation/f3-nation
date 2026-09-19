@@ -10,6 +10,11 @@ leases or `current.json` pointers.
 DuckDB's PostgreSQL extension is loaded from an explicit prebundled path; the
 runtime never runs `INSTALL`.
 
+The ETL disables DuckDB PostgreSQL filter pushdown as a read-only correctness
+workaround for the extension's `Unsupported table filter type` compatibility
+issue. This can increase source read volume, so measure it in nonprod before
+enabling production workloads.
+
 Runtime targets are deliberately limited to two environments. Approved GCS
 prefixes are selected from the immutable materialization registry; they are
 never accepted as environment or CLI output targets.
@@ -48,6 +53,127 @@ uv --directory apps/analytics run ruff check .
 These commands are offline-safe: they do not publish data and the test suite
 does not make live cloud or database calls. Do not create or populate an
 `.env` file just to run them.
+
+### Approved full-query diagnostic
+
+`diagnostics-full-query` is a deliberately high-load diagnostic for the two
+approved datasets `pv_kotter` and `pv_events` only. It loads each production
+SQL resource once into a temporary DuckDB table, copies only that table to a
+short-lived local Parquet file, and reads the file back using a fresh
+read-only PostgreSQL-attached connection per dataset. It never creates a GCS
+client, publishes, commits a catalog, or runs the ETL pipeline:
+
+```bash
+ANALYTICS_ENVIRONMENT=local \
+  uv --directory apps/analytics run analytics-etl diagnostics-full-query
+```
+
+The default scanner mode preserves DuckDB's binary PostgreSQL copy behavior.
+For this diagnostic only, the explicitly approved text-copy mode can be
+selected with `--scanner-mode=text-copy`; it sets
+`pg_use_binary_copy = false` on each fresh diagnostic connection before the
+read-only PostgreSQL attachment. The setting is not used by regular ETL or
+the bounded `diagnostics` command.
+
+The explicitly approved `--scanner-mode=single-thread` mode additionally
+creates each diagnostic DuckDB connection with one execution thread and sets
+the PostgreSQL connection limit to one before configuration locking. The
+binary-copy default and text-copy mode do not change these settings.
+
+Run this command only with explicit operator approval because it executes the
+full production-shaped queries. Approval has been granted for the current
+investigation; it is not standing approval for routine use. Selectors are not
+accepted, and a failure in one dataset does not prevent the other dataset from
+running. Logs contain only fixed phases, dataset names, counts, and exception
+types—never SQL, rows, paths, exception messages, credentials, or PII.
+
+### Approved staged `pv_events` diagnostic
+
+`diagnostics-staged-events` is a separate, explicitly approved, high-load
+non-publishing diagnostic. It extracts the projected `pv_events` source tables
+through one read-only, forced-rollback Psycopg session in bounded chunks,
+stages them into fixed local DuckDB tables, and executes the production
+`pv_events` SQL locally exactly once. It does not attach PostgreSQL to DuckDB,
+create a GCS client, publish, or persist an output artifact:
+
+```bash
+ANALYTICS_ENVIRONMENT=local \
+  uv --directory apps/analytics run analytics-etl diagnostics-staged-events
+```
+
+This command can hold full projected analytics data, including PII, in memory
+and DuckDB spill storage. Run it only with explicit security, platform, and
+analytics-operator approval for the investigation; it is not routine ETL or a
+safe production smoke test. It accepts no selectors and removes its private
+temporary workspace during cleanup. Logs contain only fixed phases, table
+names, counts, and exception types.
+
+### Approved CTAS `pv_events` isolation diagnostic
+
+`diagnostics-ctas-events` is the one-shot production-shaped isolation check.
+It uses the stable DuckDB PostgreSQL attachment to stage each fixed `pv_events`
+source projection with local CTAS statements, detaches PostgreSQL, and then
+executes the exact production query against only the staged local schema:
+
+```bash
+ANALYTICS_ENVIRONMENT=local \
+  uv --directory apps/analytics run analytics-etl diagnostics-ctas-events
+```
+
+It is fixed to `pv_events`, accepts no selectors, creates no Parquet or cloud
+publication artifacts, and removes its private DuckDB spill workspace during
+cleanup. This can hold full projected PII in memory or spill storage; run it
+only under explicit security, platform, and analytics-operator approval. It
+does not change the regular ETL or bounded diagnostics paths. A fixed
+sub-60-minute watchdog uses DuckDB's supported connection interrupt mechanism
+to cancel an active operation before the Cloud Run limit; cleanup still closes
+the connection and removes the workspace. The reported row count is the final
+local `pv_events` output count.
+
+## Read-only ETL diagnostics
+
+Run the bounded diagnostics command with the same validated settings used by
+the ETL:
+
+```bash
+ANALYTICS_ENVIRONMENT=local uv --directory apps/analytics run analytics-etl diagnostics
+```
+
+In `local`, `test`, and `nonprod`, diagnostics retain the legacy DuckDB-scanner
+checks for `orgs`, the territory predicate, a small local Parquet `COPY`, and
+the `pv_sectors`/`pv_areas` hierarchy probes. Those legacy checks are not a
+server-timeout guarantee. They run alongside the two bounded nested-shape
+probes described below.
+
+In `production`, the legacy checks are explicitly skipped. Only `pv_kotter`
+and `pv_events` run, using a fresh DuckDB connection and a separate short-lived
+Psycopg session for each probe; production diagnostics never attach the DuckDB
+PostgreSQL scanner, use `postgres_query`, or copy directly from `pg.public`.
+The Kotter and events probes use diagnostic SQL constants, not production SQL
+resources, and each runs through exactly these phases:
+`source_read` -> `query_aggregation` -> `local_parquet` (COPY/readback). The
+Kotter and events source phases use a dedicated short-lived Psycopg 3 session,
+set the connection read-only before opening a transaction, set a transaction-
+local statement timeout, and force rollback on exit. Each uses one
+parameterized SELECT whose stable event-ID sample and final output are ordered
+and bounded to 100 rows. These are bounded nested-shape probes, not proof that
+the production materialization paths execute successfully.
+
+Fetched rows are staged into fresh DuckDB temporary tables with fixed schemas.
+The Kotter aggregation builds bounded per-user lists of event STRUCTs; the
+events aggregation builds bounded per-event attendance, event-type, and
+event-tag STRUCT lists with typed empty-list defaults. The Parquet readback
+checks every nested events column, and temporary files are removed inside the
+local-parquet phase. Each successful phase emits a fixed-context
+`diagnostic_phase_succeeded` event; failures emit `diagnostic_phase_failed`
+with only the probe, phase, sample limit, and exception type.
+
+Diagnostics never create a GCS client, publisher, release, or catalog object,
+and never call the ETL pipeline or materialization code. Probe failures are
+isolated by fresh connections, so one failed phase does not prevent later
+probes. Logs contain only fixed probe/phase context, counts, the source sample
+limit, and exception type—never raw SQL, rows or IDs, credentials, DSNs,
+exception messages, or PII.
 
 ## Local-only export
 

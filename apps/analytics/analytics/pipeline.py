@@ -22,7 +22,7 @@ from .publication import (
 )
 from .run_id import RunId
 from .settings import Settings
-from .source import attach_postgres, materialize
+from .source import artifact_observability, attach_postgres, materialization_failure_phase, materialize
 
 
 class BatchRunError(RuntimeError):
@@ -66,6 +66,8 @@ def run(
     log.info("analytics.etl.started", run_id=run_id_value, environment=settings.environment)
     for definition in definitions:
         connection: Any | None = None
+        root: Path | None = None
+        artifact_state: dict[str, bool | str] | None = None
         try:
             connection = connection_factory(settings)
             attach_postgres(connection, settings)
@@ -75,27 +77,38 @@ def run(
                 source_timestamp = datetime.fromisoformat(batch_source_order)
                 refreshed_at = source_timestamp.isoformat()
                 as_of_date = source_timestamp.astimezone(timezone.utc).date().isoformat()
-                artifacts = materialize(connection, root, definition, refreshed_at, as_of_date)
-                log.info(
-                    "analytics.etl.source_read_completed",
-                    run_id=run_id_value,
-                    materialization=definition.name,
-                    row_count=artifacts.row_count,
-                    duration_ms=round((time.perf_counter() - source_started) * 1000, 3),
-                )
-                dataset_published_at = clock().isoformat()
-                results[definition.name] = publish(
-                    GcsPublisher(storage_client, settings),
-                    run_id_value,
-                    artifacts,
-                    refreshed_at,
-                    dataset_published_at,
-                    definition,
-                    emit=emit,
-                )
+                try:
+                    artifacts = materialize(connection, root, definition, refreshed_at, as_of_date)
+                    log.info(
+                        "analytics.etl.source_read_completed",
+                        run_id=run_id_value,
+                        materialization=definition.name,
+                        row_count=artifacts.row_count,
+                        duration_ms=round((time.perf_counter() - source_started) * 1000, 3),
+                    )
+                    dataset_published_at = clock().isoformat()
+                    results[definition.name] = publish(
+                        GcsPublisher(storage_client, settings),
+                        run_id_value,
+                        artifacts,
+                        refreshed_at,
+                        dataset_published_at,
+                        definition,
+                        emit=emit,
+                    )
+                except Exception:
+                    artifact_state = artifact_observability(root, definition)
+                    raise
         except Exception as error:
             failures[definition.name] = error
-            log.error("analytics.etl.dataset_failed", error, run_id=run_id_value, materialization=definition.name)
+            log.error(
+                "analytics.etl.dataset_failed",
+                error,
+                run_id=run_id_value,
+                materialization=definition.name,
+                phase=materialization_failure_phase(error),
+                **(artifact_state or artifact_observability(root, definition)),
+            )
         finally:
             if connection is not None:
                 try:
