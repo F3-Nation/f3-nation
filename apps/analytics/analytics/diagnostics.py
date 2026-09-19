@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import tempfile
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 import psycopg
 
-from .duckdb import connect, connect_staged_diagnostic
+from .duckdb import connect, connect_ctas_diagnostic, connect_staged_diagnostic
 from .logging import JsonLogger
 from .materializations import MATERIALIZATION_REGISTRY
 from .settings import Settings
@@ -21,6 +23,7 @@ _FULL_QUERY_SCANNER_MODES = ("binary-copy", "text-copy", "single-thread")
 _STAGED_EVENTS_CHUNK_SIZE = 1_000
 _STAGED_EVENTS_TIMEOUT = "15min"
 _STAGED_EVENTS_IDLE_TIMEOUT = "15min"
+_CTAS_EVENTS_DEADLINE_SECONDS = 50 * 60
 _STAGED_EVENTS_TABLES = (
     (
         "orgs",
@@ -82,6 +85,49 @@ _STAGED_EVENTS_TABLES = (
         "SELECT id, type FROM public.attendance_types",
         "CREATE TABLE staged.attendance_types (id INTEGER, type VARCHAR)",
         "INSERT INTO staged.attendance_types VALUES (?, ?)",
+    ),
+)
+_CTAS_EVENTS_TABLES = (
+    ("orgs", "CREATE TABLE staged.orgs AS SELECT id, parent_id, name, org_type FROM pg.public.orgs"),
+    (
+        "event_instances",
+        "CREATE TABLE staged.event_instances AS SELECT id, org_id, is_active, pax_count, fng_count, meta, name, "
+        "start_date FROM pg.public.event_instances",
+    ),
+    (
+        "event_instances_x_event_types",
+        "CREATE TABLE staged.event_instances_x_event_types AS "
+        "SELECT event_instance_id, event_type_id FROM pg.public.event_instances_x_event_types",
+    ),
+    (
+        "event_types",
+        "CREATE TABLE staged.event_types AS SELECT id, name, description, event_category FROM pg.public.event_types",
+    ),
+    (
+        "event_tags_x_event_instances",
+        "CREATE TABLE staged.event_tags_x_event_instances AS "
+        "SELECT event_instance_id, event_tag_id FROM pg.public.event_tags_x_event_instances",
+    ),
+    (
+        "event_tags",
+        "CREATE TABLE staged.event_tags AS SELECT id, name, description FROM pg.public.event_tags",
+    ),
+    (
+        "attendance",
+        "CREATE TABLE staged.attendance AS SELECT id, event_instance_id, user_id, is_planned FROM pg.public.attendance",
+    ),
+    (
+        "users",
+        "CREATE TABLE staged.users AS SELECT id, f3_name, email, avatar_url FROM pg.public.users",
+    ),
+    (
+        "attendance_x_attendance_types",
+        "CREATE TABLE staged.attendance_x_attendance_types AS "
+        "SELECT attendance_id, attendance_type_id FROM pg.public.attendance_x_attendance_types",
+    ),
+    (
+        "attendance_types",
+        "CREATE TABLE staged.attendance_types AS SELECT id, type FROM pg.public.attendance_types",
     ),
 )
 
@@ -690,3 +736,133 @@ def run_staged_events_diagnostic(
     if failure is not None:
         return {"status": "failed", "error_type": type(failure).__name__}
     return {"status": "succeeded", "row_count": row_count}
+
+
+def run_ctas_events_diagnostic(
+    settings: Settings,
+    connection_factory: Callable[[Settings, Path], Any] | None = None,
+    logger: JsonLogger | None = None,
+    deadline_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Run the approved one-shot pv_events CTAS isolation diagnostic."""
+    log = logger or JsonLogger()
+    probe = "pv_events"
+    phase = "source_staging"
+    failure: BaseException | None = None
+    connection: Any | None = None
+    attached = False
+    workspace = tempfile.TemporaryDirectory(prefix="analytics-ctas-events-")
+    watchdog_stop = threading.Event()
+    watchdog: threading.Thread | None = None
+    timestamp = datetime.now(timezone.utc)
+    query_params = [timestamp.isoformat(), timestamp.date().isoformat()]
+    row_count = 0
+    local_count = 0
+
+    def checkpoint() -> None:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("ctas diagnostic deadline exceeded")
+
+    try:
+        factory = connection_factory or connect_ctas_diagnostic
+        db = factory(settings, Path(workspace.name))
+        connection = db
+        active_deadline = _CTAS_EVENTS_DEADLINE_SECONDS if deadline_seconds is None else deadline_seconds
+        if active_deadline < 0:
+            raise ValueError("deadline_seconds must not be negative")
+        deadline = time.monotonic() + active_deadline
+
+        def interrupt_on_deadline() -> None:
+            if not watchdog_stop.wait(active_deadline):
+                try:
+                    db.interrupt()
+                except Exception:
+                    pass
+
+        watchdog = threading.Thread(target=interrupt_on_deadline, name="analytics-ctas-watchdog")
+        watchdog.start()
+        db.execute("CREATE SCHEMA staged")
+        attach_postgres(db, settings)
+        attached = True
+        for table, statement in _CTAS_EVENTS_TABLES:
+            checkpoint()
+            started = time.perf_counter()
+            log.info("analytics.etl.diagnostic_table_started", probe=probe, phase=phase, table=table)
+            db.execute(statement)
+            table_count = int(db.execute(f"SELECT count(*) FROM staged.{table}").fetchone()[0])
+            log.info(
+                "analytics.etl.diagnostic_table_completed",
+                probe=probe,
+                phase=phase,
+                table=table,
+                row_count=table_count,
+                duration_ms=round((time.perf_counter() - started) * 1000, 3),
+            )
+            row_count += table_count
+
+        checkpoint()
+        phase = "detach_postgres"
+        db.execute("DETACH pg")
+        attached = False
+
+        phase = "local_full_query"
+        local_sql = _staged_events_local_sql()
+        log.info("analytics.etl.diagnostic_phase_started", probe=probe, phase=phase)
+        started = time.perf_counter()
+        db.execute(
+            f"CREATE TEMP TABLE diagnostic_ctas_pv_events AS {local_sql}",
+            query_params,
+        )
+        local_count = int(db.execute("SELECT count(*) FROM diagnostic_ctas_pv_events").fetchone()[0])
+        log.info(
+            "analytics.etl.diagnostic_phase_succeeded",
+            probe=probe,
+            phase=phase,
+            row_count=local_count,
+            duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        )
+    except Exception as error:
+        failure = error
+        log.error(
+            "analytics.etl.diagnostic_phase_failed",
+            error,
+            probe=probe,
+            phase=phase,
+            error_type=type(error).__name__,
+        )
+    finally:
+        watchdog_stop.set()
+        if watchdog is not None:
+            watchdog.join()
+        cleanup_error: BaseException | None = None
+        if connection is not None and attached:
+            try:
+                connection.execute("DETACH pg")
+                attached = False
+            except Exception as error:
+                cleanup_error = error
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception as error:
+                cleanup_error = error
+        try:
+            workspace.cleanup()
+        except Exception as error:
+            cleanup_error = error
+        if cleanup_error is not None:
+            if failure is None:
+                failure = cleanup_error
+            log.error(
+                "analytics.etl.diagnostic_phase_failed",
+                cleanup_error,
+                probe=probe,
+                phase="cleanup",
+                error_type=type(cleanup_error).__name__,
+            )
+        else:
+            log.info("analytics.etl.diagnostic_phase_succeeded", probe=probe, phase="cleanup")
+
+    if failure is not None:
+        return {"status": "failed", "error_type": type(failure).__name__}
+    return {"status": "succeeded", "row_count": local_count}

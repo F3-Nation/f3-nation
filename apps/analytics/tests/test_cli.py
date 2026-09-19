@@ -321,6 +321,38 @@ def test_staged_events_diagnostics_command_returns_status_without_gcs_or_selecto
     with pytest.raises(SystemExit):
         cli.main()
 
+
+def test_ctas_events_diagnostics_command_returns_status_without_gcs_or_selectors(monkeypatch):
+    settings = SimpleNamespace(environment="test")
+    events = []
+    logger = SimpleNamespace(
+        info=lambda event, **context: events.append((event, context)), error=lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(cli, "JsonLogger", lambda: logger)
+    monkeypatch.setattr(cli, "RunId", SimpleNamespace(create=lambda: "run"))
+    monkeypatch.setattr(cli.Settings, "from_env", lambda: settings)
+    monkeypatch.setattr(cli, "_storage_client", lambda: (_ for _ in ()).throw(AssertionError("GCS")))
+    monkeypatch.setattr(
+        diagnostics,
+        "run_ctas_events_diagnostic",
+        lambda _settings, *, logger: {"status": "succeeded", "row_count": 1},
+    )
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics-ctas-events"])
+
+    assert cli.main() == 0
+    assert events[-1] == (
+        "analytics.etl.diagnostics_ctas_events_completed",
+        {"run_id": "run", "environment": "test", "dataset_count": 1, "failed_count": 0},
+    )
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["analytics-etl", "diagnostics-ctas-events", "--materialization", "pv_events"],
+    )
+    with pytest.raises(SystemExit):
+        cli.main()
+
     monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics-full-query", "--scanner-mode", "invalid"])
     with pytest.raises(SystemExit):
         cli.main()

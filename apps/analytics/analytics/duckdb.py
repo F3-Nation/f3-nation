@@ -14,6 +14,7 @@ def connect(
     *,
     diagnostic_text_copy: bool = False,
     diagnostic_single_thread: bool = False,
+    diagnostic_temp_directory: Path | None = None,
 ) -> Any:
     module: Any = duckdb_module
     if module is None:
@@ -25,6 +26,8 @@ def connect(
     }
     if diagnostic_single_thread:
         config["threads"] = "1"
+    if diagnostic_temp_directory is not None:
+        config["temp_directory"] = str(diagnostic_temp_directory)
     connection = module.connect(
         ":memory:",
         config=config,
@@ -59,4 +62,14 @@ def connect_staged_diagnostic(temp_directory: Path, duckdb_module: Any | None = 
             "autoload_known_extensions": "false",
             "temp_directory": str(temp_directory),
         },
+    )
+
+
+def connect_ctas_diagnostic(settings: Settings, temp_directory: Path, duckdb_module: Any | None = None) -> Any:
+    """Create a temporary extension-enabled connection for CTAS diagnostics."""
+    return connect(
+        settings,
+        duckdb_module,
+        diagnostic_single_thread=True,
+        diagnostic_temp_directory=temp_directory,
     )

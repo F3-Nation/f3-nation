@@ -49,6 +49,7 @@ def main() -> int:
         help="diagnostic-only PostgreSQL scanner mode",
     )
     commands.add_parser("diagnostics-staged-events", help="run approved staged pv_events diagnostic")
+    commands.add_parser("diagnostics-ctas-events", help="run approved CTAS pv_events diagnostic")
     rollback_parser = commands.add_parser("rollback-catalog", help="CAS-select the retained previous release")
     rollback_parser.add_argument("--release-manifest-uri", required=True)
     rollback_parser.add_argument("--release-manifest-generation", required=True)
@@ -62,14 +63,17 @@ def main() -> int:
     materialization_names = (args.global_materializations or []) + (getattr(args, "command_materializations", []) or [])
     if args.command == "export-local" and not args.command_output_dir:
         parser.error("export-local requires --output-dir")
-    if args.command in ("diagnostics-full-query", "diagnostics-staged-events") and materialization_names:
+    if (
+        args.command in ("diagnostics-full-query", "diagnostics-staged-events", "diagnostics-ctas-events")
+        and materialization_names
+    ):
         parser.error(f"{args.command} does not accept materialization selectors")
     logger = JsonLogger()
     run_id = RunId.create()
     try:
         selected = (
             ()
-            if args.command in ("diagnostics-full-query", "diagnostics-staged-events")
+            if args.command in ("diagnostics-full-query", "diagnostics-staged-events", "diagnostics-ctas-events")
             else select_materializations(tuple(materialization_names) if materialization_names else None)
         )
         if args.command == "rollback-catalog":
@@ -141,6 +145,21 @@ def main() -> int:
             failed_count = int(diagnostic_result["status"] == "failed")
             logger.info(
                 "analytics.etl.diagnostics_staged_events_completed",
+                run_id=str(run_id),
+                environment=settings.environment,
+                dataset_count=1,
+                failed_count=failed_count,
+            )
+            if failed_count:
+                return 1
+        elif args.command == "diagnostics-ctas-events":
+            from .diagnostics import run_ctas_events_diagnostic
+
+            settings = Settings.from_env()
+            diagnostic_result = run_ctas_events_diagnostic(settings, logger=logger)
+            failed_count = int(diagnostic_result["status"] == "failed")
+            logger.info(
+                "analytics.etl.diagnostics_ctas_events_completed",
                 run_id=str(run_id),
                 environment=settings.environment,
                 dataset_count=1,

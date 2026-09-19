@@ -8,7 +8,7 @@ import duckdb
 import pytest
 
 from analytics.cli import main
-from analytics.duckdb import connect, connect_staged_diagnostic
+from analytics.duckdb import connect, connect_ctas_diagnostic, connect_staged_diagnostic
 from analytics.logging import JsonLogger
 from analytics.run_id import RunId
 from analytics.settings import Settings, SettingsError
@@ -437,6 +437,43 @@ def test_staged_diagnostic_duckdb_uses_private_spill_config_without_extension(tm
     ]
     connection.close()
     assert calls[-1] == "CLOSE"
+
+
+def test_ctas_diagnostic_uses_single_thread_extension_and_private_spill_config(tmp_path):
+    settings = Settings.from_env(extension_env(tmp_path))
+    calls = []
+    configs = []
+
+    class Connection:
+        def load_extension(self, name):
+            calls.append(("LOAD", name))
+
+        def execute(self, sql, *parameters):
+            calls.append((sql, parameters))
+
+        def close(self):
+            calls.append(("CLOSE",))
+
+    class Duckdb:
+        @staticmethod
+        def connect(database, config):
+            configs.append((database, config))
+            return Connection()
+
+    connect_ctas_diagnostic(settings, tmp_path / "spill", Duckdb)
+    assert configs[0][1] == {
+        "autoinstall_known_extensions": "false",
+        "autoload_known_extensions": "false",
+        "extension_directory": str(settings.extension_directory),
+        "threads": "1",
+        "temp_directory": str(tmp_path / "spill"),
+    }
+    assert calls == [
+        ("LOAD", "postgres"),
+        ("SET pg_experimental_filter_pushdown = false", ()),
+        ("SET pg_connection_limit = 1", ()),
+        ("SET lock_configuration = true", ()),
+    ]
 
 
 def test_duckdb_closes_connection_when_loading_fails(tmp_path):

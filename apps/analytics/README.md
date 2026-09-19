@@ -108,6 +108,28 @@ safe production smoke test. It accepts no selectors and removes its private
 temporary workspace during cleanup. Logs contain only fixed phases, table
 names, counts, and exception types.
 
+### Approved CTAS `pv_events` isolation diagnostic
+
+`diagnostics-ctas-events` is the one-shot production-shaped isolation check.
+It uses the stable DuckDB PostgreSQL attachment to stage each fixed `pv_events`
+source projection with local CTAS statements, detaches PostgreSQL, and then
+executes the exact production query against only the staged local schema:
+
+```bash
+ANALYTICS_ENVIRONMENT=local \
+  uv --directory apps/analytics run analytics-etl diagnostics-ctas-events
+```
+
+It is fixed to `pv_events`, accepts no selectors, creates no Parquet or cloud
+publication artifacts, and removes its private DuckDB spill workspace during
+cleanup. This can hold full projected PII in memory or spill storage; run it
+only under explicit security, platform, and analytics-operator approval. It
+does not change the regular ETL or bounded diagnostics paths. A fixed
+sub-60-minute watchdog uses DuckDB's supported connection interrupt mechanism
+to cancel an active operation before the Cloud Run limit; cleanup still closes
+the connection and removes the workspace. The reported row count is the final
+local `pv_events` output count.
+
 ## Read-only ETL diagnostics
 
 Run the bounded diagnostics command with the same validated settings used by

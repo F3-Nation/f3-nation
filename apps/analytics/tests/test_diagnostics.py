@@ -785,6 +785,187 @@ def test_staged_events_local_ingestion_failure_has_local_phase(monkeypatch):
     assert failure[1]["error_type"] == "RuntimeError"
 
 
+def test_ctas_events_stages_tables_detaches_then_runs_local_query(monkeypatch):
+    connections = []
+    attached = []
+    events = []
+
+    class Connection:
+        def __init__(self):
+            self.statements = []
+            self.closed = False
+
+        def execute(self, statement, parameters=()):
+            self.statements.append((statement, parameters))
+            if statement.startswith("SELECT count(*)"):
+                return _Result([(3,)])
+            return _Result([])
+
+        def close(self):
+            self.closed = True
+
+    directories = []
+
+    def make_connection(_settings, directory):
+        directories.append(Path(directory))
+        connection = Connection()
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(diagnostics, "attach_postgres", lambda connection, _settings: attached.append(connection))
+    result = diagnostics.run_ctas_events_diagnostic(
+        _settings(), connection_factory=make_connection, logger=cast(JsonLogger, _logger(events))
+    )
+
+    assert result == {"status": "succeeded", "row_count": 3}
+    connection = connections[0]
+    statements = [statement for statement, _ in connection.statements]
+    assert len(attached) == 1
+    assert connection.closed is True
+    assert all(not directory.exists() for directory in directories)
+    ctas = [statement for statement in statements if statement.startswith("CREATE TABLE staged.")]
+    assert len(ctas) == len(diagnostics._CTAS_EVENTS_TABLES)
+    assert statements.index("DETACH pg") < next(
+        index
+        for index, statement in enumerate(statements)
+        if "CREATE TEMP TABLE diagnostic_ctas_pv_events" in statement
+    )
+    assert any(context["phase"] == "local_full_query" for event, context in events)
+    assert any(event.endswith("table_started") for event, _ in events)
+    assert any(event.endswith("table_completed") for event, _ in events)
+
+
+def test_ctas_events_failure_reports_source_phase_and_cleanup(monkeypatch):
+    events = []
+
+    class Connection:
+        def execute(self, statement, _parameters=()):
+            if statement.startswith("CREATE TABLE staged.event_types"):
+                raise RuntimeError("raw SQL PII secret@example.test")
+            return _Result([(0,)])
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
+    result = diagnostics.run_ctas_events_diagnostic(
+        _settings(),
+        connection_factory=lambda _settings, _directory: Connection(),
+        logger=cast(JsonLogger, _logger(events)),
+    )
+
+    assert result == {"status": "failed", "error_type": "RuntimeError"}
+    failure = next(item for item in events if item[0].endswith("phase_failed"))
+    assert failure[1]["phase"] == "source_staging"
+    assert any(item[0].endswith("phase_succeeded") and item[1]["phase"] == "cleanup" for item in events)
+
+
+def test_ctas_events_local_query_failure_is_classified_after_detach(monkeypatch):
+    events = []
+
+    class Connection:
+        def execute(self, statement, _parameters=()):
+            if statement.startswith("CREATE TEMP TABLE diagnostic_ctas_pv_events"):
+                raise RuntimeError("local query failed")
+            return _Result([(0,)])
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
+    result = diagnostics.run_ctas_events_diagnostic(
+        _settings(),
+        connection_factory=lambda _settings, _directory: Connection(),
+        logger=cast(JsonLogger, _logger(events)),
+    )
+
+    assert result == {"status": "failed", "error_type": "RuntimeError"}
+    failure = next(item for item in events if item[0].endswith("phase_failed"))
+    assert failure[1]["phase"] == "local_full_query"
+
+
+def test_ctas_events_deadline_interrupts_blocking_operation_and_cleans_up(monkeypatch):
+    events = []
+    directories = []
+
+    class Connection:
+        def __init__(self):
+            self.interrupted = False
+            self.closed = False
+
+        def execute(self, statement, _parameters=()):
+            if statement.startswith("CREATE TABLE staged.orgs"):
+                while not self.interrupted:
+                    pass
+                raise RuntimeError("interrupted")
+            return _Result([(0,)])
+
+        def interrupt(self):
+            self.interrupted = True
+
+        def close(self):
+            self.closed = True
+
+    connection = Connection()
+
+    def make_connection(_settings, directory):
+        directories.append(Path(directory))
+        return connection
+
+    monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
+    result = diagnostics.run_ctas_events_diagnostic(
+        _settings(),
+        connection_factory=make_connection,
+        logger=cast(JsonLogger, _logger(events)),
+        deadline_seconds=0.01,
+    )
+
+    assert result == {"status": "failed", "error_type": "RuntimeError"}
+    assert connection.interrupted is True and connection.closed is True
+    assert all(not directory.exists() for directory in directories)
+    failure = next(item for item in events if item[0].endswith("phase_failed"))
+    assert failure[1]["phase"] == "source_staging"
+
+
+def test_ctas_events_real_ctas_detach_and_local_production_query(tmp_path):
+    connection = duckdb.connect(":memory:", config={"temp_directory": str(tmp_path)})
+    connection.execute("ATTACH ':memory:' AS pg")
+    connection.execute("CREATE SCHEMA pg.public")
+    rows = {
+        "orgs": [
+            (1, None, "Sector", "sector"),
+            (2, 1, "Territory", "territory"),
+            (3, 2, "Area", "area"),
+            (4, 3, "Region", "region"),
+            (5, 4, "AO", "ao"),
+        ],
+        "event_instances": [(1, 5, True, 10, 2, "{}", "Workout", "2026-01-01")],
+        "event_instances_x_event_types": [(1, 1)],
+        "event_types": [(1, "Run", "Running", "first_f")],
+        "event_tags_x_event_instances": [(1, 7)],
+        "event_tags": [(7, "Morning", "Morning workout")],
+        "attendance": [(1, 1, 1, False)],
+        "users": [(1, "Alpha", "a@example.com", "alpha.png")],
+        "attendance_x_attendance_types": [(1, 2)],
+        "attendance_types": [(2, "Q")],
+    }
+    for table, _source_sql, create_sql, insert_sql in diagnostics._STAGED_EVENTS_TABLES:
+        connection.execute(create_sql.replace("staged.", "pg.public."))
+        connection.executemany(insert_sql.replace("staged.", "pg.public."), rows[table])
+    connection.execute("CREATE SCHEMA staged")
+    for _table, statement in diagnostics._CTAS_EVENTS_TABLES:
+        connection.execute(statement)
+    assert connection.execute("SELECT count(*) FROM staged.event_instances").fetchone()[0] == 1
+    connection.execute("DETACH pg")
+    connection.execute(
+        "CREATE TEMP TABLE diagnostic_ctas_pv_events AS " + diagnostics._staged_events_local_sql(),
+        ["2026-01-03T00:00:00Z", "2026-01-03"],
+    )
+    assert connection.execute("SELECT count(*) FROM diagnostic_ctas_pv_events").fetchone()[0] == 1
+    assert connection.execute("SELECT attendance FROM diagnostic_ctas_pv_events").fetchone()[0]
+    connection.close()
+
+
 def test_full_query_diagnostics_isolates_failure_and_redacts_error(monkeypatch):
     connections = []
     stream = io.StringIO()
