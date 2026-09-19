@@ -543,8 +543,8 @@ catalogs:
       specifier: ^2.0.8
       version: 2.0.8
     supercluster:
-      specifier: ^8.0.1
-      version: 8.0.1
+      specifier: ^9.1.0
+      version: 9.1.0
     tailwind-merge:
       specifier: ^3.6.0
       version: 3.6.0
@@ -1267,7 +1267,7 @@ importers:
         version: 0.0.1
       supercluster:
         specifier: 'catalog:'
-        version: 8.0.1
+        version: 9.1.0
       uuid:
         specifier: 'catalog:'
         version: 11.1.1
@@ -7600,8 +7600,8 @@ packages:
   jws@4.0.1:
     resolution: {integrity: sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==}
 
-  kdbush@4.0.2:
-    resolution: {integrity: sha512-WbCVYJ27Sz8zi9Q7Q0xHC+05iwkm3Znipc2XTlrnJbsHMYktW4hPhXUE8Ys1engBrvffoSCqbil1JQAa7clRpA==}
+  kdbush@4.1.0:
+    resolution: {integrity: sha512-e9vurzrXJQrFX6ckpHP3bvj5l+9CnYzkxDNnNQ1h2QTqdWsUAJgXiKdGNcOa1EY85dU8KbQ+z/FdQdB7P+9yfQ==}
 
   keyv@5.6.0:
     resolution: {integrity: sha512-CYDD3SOtsHtyXeEORYRx2qBtpDJFjRTGXUtmNEMGyzYOKj1TE3tycdlho7kA1Ufx9OYWZzg52QFBGALTirzDSw==}
@@ -8864,8 +8864,8 @@ packages:
       babel-plugin-macros:
         optional: true
 
-  supercluster@8.0.1:
-    resolution: {integrity: sha512-IiOea5kJ9iqzD2t7QJq/cREyLHTtSmUT6gQsweojg9WH2sYJqZK9SswTu6jrscO6D1G5v5vYZ9ru/eq85lXeZQ==}
+  supercluster@9.1.0:
+    resolution: {integrity: sha512-WMhsJPm8Tf9f5mKxJ1D0mB5tbCMOFi8wTrm/LGnsJHGg8xkeNT/TWDZuFauOGRISnclbYgnxD7g3xJAfQO3FLg==}
 
   supports-color@5.5.0:
     resolution: {integrity: sha512-QjVjwdXIt408MIiAqCX4oUKsgU2EqAGzs2Ppkm4aQYbjm+ZEWEcW4SfFNTr4uMNZma0ey4f5lgLrkB0aX0QMow==}
@@ -9376,7 +9376,7 @@ packages:
     resolution: {integrity: sha512-Q6/nZLe6jxuU80qb/4uJ4t5v2VEZ44lzQjPDhYJNztRQ4wyWc6VF3D3Kb/fAuPetZQnhS3hnajCf9CsWesghLQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      zod: 4.5.4
+      zod: ^4.5.4
 
   zod@4.5.4:
     resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
@@ -14314,7 +14314,7 @@ snapshots:
       jwa: 2.0.1
       safe-buffer: 5.2.1
 
-  kdbush@4.0.2: {}
+  kdbush@4.1.0: {}
 
   keyv@5.6.0:
     dependencies:
@@ -15712,9 +15712,10 @@ snapshots:
     optionalDependencies:
       '@babel/core': 7.29.0(supports-color@8.1.1)
 
-  supercluster@8.0.1:
+  supercluster@9.1.0:
     dependencies:
-      kdbush: 4.0.2
+      '@types/geojson': 7946.0.16
+      kdbush: 4.1.0
 
   supports-color@5.5.0:
     dependencies:
