@@ -14,7 +14,7 @@ export const orgTypeRank = (t: OrgType): number => OrgType.indexOf(t);
 
 /**
  * True if `parent` sits above `child` in the org hierarchy (strictly
- * higher rank). Used to validate an org's parent assignment.
+ * higher rank). Rank only; use `isPermittedOrgParent` to validate a parent assignment.
  */
 export const isValidOrgTypeParent = (
   parent: OrgType,

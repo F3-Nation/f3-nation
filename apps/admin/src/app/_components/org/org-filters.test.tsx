@@ -6,6 +6,7 @@ interface QueryInput {
   orgTypes: string[];
   pageIndex?: number;
   parentOrgIds?: number[];
+  statuses?: ("active" | "inactive")[];
 }
 
 interface TestOrg {
@@ -44,8 +45,13 @@ vi.mock("~/orpc/react", () => ({
       data: {
         orgs: isResultQuery
           ? mocks.resultOrgs
-          : mocks.hierarchyOrgs.filter((org) =>
-              input.orgTypes.includes(org.orgType),
+          : mocks.hierarchyOrgs.filter(
+              (org) =>
+                input.orgTypes.includes(org.orgType) &&
+                // Like the real org.all: no statuses means active rows only.
+                (input.statuses ?? ["active"]).includes(
+                  org.isActive ? "active" : "inactive",
+                ),
             ),
         total: 0,
       },

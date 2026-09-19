@@ -43,9 +43,15 @@ function orgColumns(orgType: OrgType): TableOptions<Org>["columns"] {
     ...config.columns.map((column) => ({
       accessorKey: column.key,
       ...(column.id ? { id: column.id } : {}),
-      ...(column.sortable === false ? { enableSorting: false } : {}),
       meta: { name: column.label },
-      header: Header,
+      // The shared Header sorts through column.toggleSorting(), which ignores
+      // enableSorting, so a non-sortable column needs a plain label instead.
+      ...(column.sortable === false
+        ? {
+            enableSorting: false,
+            header: () => <div className="px-4">{column.label}</div>,
+          }
+        : { header: Header }),
       cell: column.parentType
         ? (cell: CellContext<Org, unknown>) => (
             <Cell>

@@ -51,7 +51,7 @@ export const orgEditorConfig: Record<OrgType, OrgEditorConfig> = {
     deactivate: "existing",
   },
   area: {
-    // An area may sit under a territory or, until migrated, directly under a sector.
+    // An area may sit under a territory or directly under a sector.
     parentTypes: ["sector", "territory"],
     parentPlaceholder: "Select a sector or territory",
     defaultName: "",

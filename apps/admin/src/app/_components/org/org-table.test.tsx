@@ -16,10 +16,12 @@ import type * as MDTableModule from "@acme/ui/md-table";
 const mocks = vi.hoisted(
   (): {
     inputs: Record<string, unknown>[];
+    orgs: ({ orgType: string } & Record<string, unknown>)[];
     props: Record<string, unknown>;
     open: ReturnType<typeof vi.fn>;
   } => ({
     inputs: [] as Record<string, unknown>[],
+    orgs: [],
     props: {},
     open: vi.fn(),
   }),
@@ -35,7 +37,13 @@ vi.mock("~/orpc/react", () => ({
   }) => {
     if (enabled === false) return {};
     mocks.inputs.push(input);
-    return { data: { orgs: [], total: 100 } };
+    const orgTypes = (input.orgTypes ?? []) as string[];
+    return {
+      data: {
+        orgs: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
+        total: 100,
+      },
+    };
   },
 }));
 vi.mock("~/utils/store/modal", () => ({
@@ -119,6 +127,7 @@ vi.mock("../reset-filter", () => ({
 
 beforeEach(() => {
   mocks.inputs = [];
+  mocks.orgs = [];
   mocks.props = {};
   vi.clearAllMocks();
 });
@@ -217,6 +226,74 @@ describe("ancestor columns", () => {
     expect(find(columns, "parentOrgName")).toBeDefined();
     expect(find(columns, "parentOrgName")?.enableSorting).not.toBe(false);
   });
+
+  it("renders the area table's resolved territory and sector headers without a sort button", () => {
+    render(<OrgTable orgType="area" />);
+    const table = capturedTable([]);
+    const rendered = (id: string) => {
+      const column = table.getColumn(id)!;
+      return render(
+        flexRender(column.columnDef.header, {
+          table,
+          column,
+          header: {} as never,
+        }),
+      ).container;
+    };
+
+    for (const [id, label] of [
+      ["territory", "Territory"],
+      ["sector", "Sector"],
+    ] as const) {
+      const container = rendered(id);
+      expect(container.textContent).toBe(label);
+      expect(container.querySelector("button")).toBeNull();
+    }
+    expect(rendered("name").querySelector("button")).not.toBeNull();
+  });
+
+  it.each([
+    {
+      name: "an area directly under a sector",
+      areaParentId: 2,
+      territory: "",
+      sector: "Sector One",
+    },
+    {
+      name: "an area under an inactive territory",
+      areaParentId: 1,
+      territory: "Inactive Territory",
+      sector: "Sector One",
+    },
+  ])(
+    "renders the resolved Territory and Sector text for $name",
+    ({ areaParentId, territory, sector }) => {
+      mocks.orgs = [
+        { id: 2, parentId: null, orgType: "sector", name: "Sector One" },
+        {
+          id: 1,
+          parentId: 2,
+          orgType: "territory",
+          name: "Inactive Territory",
+          isActive: false,
+        },
+        { id: 3, parentId: areaParentId, orgType: "area", name: "Area" },
+      ];
+      render(<OrgTable orgType="area" />);
+      const table = capturedTable(mocks.props.data as Org[]);
+      const cellText = (id: string) => {
+        const cell = table
+          .getRowModel()
+          .rows[0]!.getAllCells()
+          .find((item) => item.column.id === id)!;
+        return render(flexRender(cell.column.columnDef.cell, cell.getContext()))
+          .container.textContent;
+      };
+
+      expect(cellText("territory")).toBe(territory);
+      expect(cellText("sector")).toBe(sector);
+    },
+  );
 });
 
 it.each(["sector", "territory", "area", "region", "ao"] as const)(

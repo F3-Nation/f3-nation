@@ -326,6 +326,78 @@ describe("org AO counts", () => {
     });
   });
 
+  describe("changes the trigger must notice", () => {
+    it("recounts the ancestors when an AO becomes a region and back", async () => {
+      const tree = newTree();
+      const [sector, area, region, ao] = await tree.chain([
+        "sector",
+        "area",
+        "region",
+        "ao",
+      ]);
+      const named = {
+        sector: must(sector),
+        area: must(area),
+        region: must(region),
+      };
+      const setType = (orgType: OrgType) =>
+        db
+          .update(schema.orgs)
+          .set({ orgType })
+          .where(eq(schema.orgs.id, must(ao).id));
+
+      await setType("region");
+      expect(await countsOf(tree, named)).toEqual({
+        sector: 0,
+        area: 0,
+        region: 0,
+      });
+
+      await setType("ao");
+      expect(await countsOf(tree, named)).toEqual({
+        sector: 1,
+        area: 1,
+        region: 1,
+      });
+    });
+
+    it("recounts the old chain when an area with an AO beneath it is detached", async () => {
+      const tree = newTree();
+      const [sector, territory, area, region] = await tree.chain([
+        "sector",
+        "territory",
+        "area",
+        "region",
+        "ao",
+      ]);
+
+      await tree.move(must(area).id, null);
+
+      expect(
+        await countsOf(tree, {
+          sector: must(sector),
+          territory: must(territory),
+          area: must(area),
+          region: must(region),
+        }),
+      ).toEqual({ sector: 0, territory: 0, area: 1, region: 1 });
+    });
+
+    it("deletes a parentless area", async () => {
+      const tree = newTree();
+      const area = await tree.create({ orgType: "area" });
+
+      await expect(tree.remove(area.id)).resolves.toBeUndefined();
+
+      expect(
+        await db
+          .select({ id: schema.orgs.id })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, area.id)),
+      ).toEqual([]);
+    });
+  });
+
   describe("writes that change nothing", () => {
     it("leaves counts and ancestor timestamps untouched on a rename or an unchanged save", async () => {
       const tree = newTree();
@@ -380,7 +452,8 @@ describe("org AO counts", () => {
 
     it("counts an AO at the same depth limit the TypeScript traversals use", async () => {
       const tree = newTree();
-      // The SQL hardcodes its cap; this fails if it drifts from ORG_TREE_MAX_DEPTH.
+      // The SQL hardcodes its cap; this and the next test fail if it drifts
+      // from ORG_TREE_MAX_DEPTH in either direction.
       const orgs = await tree.chain([
         "sector",
         ...Array<OrgType>(ORG_TREE_MAX_DEPTH - 1).fill("area"),
@@ -392,6 +465,24 @@ describe("org AO counts", () => {
       expect(await tree.aoCount(must(orgs[10]).id)).toBe(1);
     });
 
+    it("does not count an AO one level beyond the depth limit", async () => {
+      const tree = newTree();
+      const orgs = await tree.chain([
+        "sector",
+        ...Array<OrgType>(ORG_TREE_MAX_DEPTH).fill("area"),
+        "ao",
+      ]);
+
+      expect(orgs).toHaveLength(ORG_TREE_MAX_DEPTH + 2);
+      expect(await tree.aoCount(must(orgs[0]).id)).toBe(0);
+      expect(await tree.aoCount(must(orgs[1]).id)).toBe(1);
+      // The trigger stops at the shallower of its two caps; a full recount
+      // exercises the counting cap on its own.
+      await recount();
+      expect(await tree.aoCount(must(orgs[0]).id)).toBe(0);
+      expect(await tree.aoCount(must(orgs[1]).id)).toBe(1);
+    });
+
     it("terminates when the hierarchy contains a cycle", async () => {
       const tree = newTree();
       const [area, region] = await tree.chain(["area", "region"]);
@@ -401,6 +492,29 @@ describe("org AO counts", () => {
         tree.move(must(area).id, must(region).id),
       ).resolves.toBeUndefined();
       await expect(recount()).resolves.toBeTypeOf("number");
+      expect(
+        await countsOf(tree, { area: must(area), region: must(region) }),
+      ).toEqual({ area: 1, region: 1 });
+    });
+
+    it("counts an AO once when an organization is its own parent", async () => {
+      const tree = newTree();
+      const [sector, area, region] = await tree.chain([
+        "sector",
+        "area",
+        "region",
+        "ao",
+      ]);
+
+      await tree.move(must(sector).id, must(sector).id);
+
+      expect(
+        await countsOf(tree, {
+          sector: must(sector),
+          area: must(area),
+          region: must(region),
+        }),
+      ).toEqual({ sector: 1, area: 1, region: 1 });
     });
   });
 
@@ -457,6 +571,64 @@ describe("org AO counts", () => {
       } finally {
         release();
         await db.delete(schema.orgs).where(eq(schema.orgs.parentId, parentId));
+      }
+    });
+  });
+
+  describe("concurrent reparenting", () => {
+    it("counts an AO inserted while its area is being moved to another sector", async () => {
+      const tree = newTree();
+      const sector1 = await tree.create({ orgType: "sector" });
+      const [sector2, territory] = await tree.chain(["sector", "territory"]);
+      const [area, region] = await tree.chain(["area", "region"], {
+        parentId: sector1.id,
+      });
+      const regionId = must(region).id;
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let moved!: () => void;
+      const areaMoved = new Promise<void>((resolve) => {
+        moved = resolve;
+      });
+
+      try {
+        const mover = db.transaction(async (tx) => {
+          await tx
+            .update(schema.orgs)
+            .set({ parentId: must(territory).id })
+            .where(eq(schema.orgs.id, must(area).id));
+          moved();
+          await gate;
+        });
+        await areaMoved;
+        // Its ancestors are read from the committed tree, where the area is
+        // still under sector1, while the move holds the area's row lock.
+        const inserter = db.transaction(async (tx) => {
+          await tx.insert(schema.orgs).values({
+            name: "concurrent-move-ao",
+            orgType: "ao",
+            parentId: regionId,
+            isActive: true,
+          });
+        });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        release();
+        await Promise.all([mover, inserter]);
+
+        expect(
+          await countsOf(tree, {
+            sector1,
+            sector2: must(sector2),
+            territory: must(territory),
+            area: must(area),
+            region: must(region),
+          }),
+        ).toEqual({ sector1: 0, sector2: 1, territory: 1, area: 1, region: 1 });
+      } finally {
+        release();
+        await db.delete(schema.orgs).where(eq(schema.orgs.parentId, regionId));
       }
     });
   });

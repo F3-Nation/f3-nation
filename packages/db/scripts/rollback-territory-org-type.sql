@@ -1,5 +1,6 @@
--- Operator-led rollback for 0023 (and, when applied, the AO-count migration 0026 that
--- follows it); not part of the forward migration directory.
+-- Operator-led rollback for 0023 (and, when applied, the AO-count migration 0026);
+-- migrations 0024 and 0025 are unrelated and untouched. Not part of the forward
+-- migration directory.
 -- Stop writers and coordinate the old application version before running.
 -- Reconcile the migration journal only after successful rollback; see territory-migration.md.
 \set ON_ERROR_STOP on

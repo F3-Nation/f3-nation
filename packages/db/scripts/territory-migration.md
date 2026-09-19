@@ -114,10 +114,13 @@ forward-migration directory.
 Before a release rollback:
 
 1. Stop application writers and automated migration runners; verify the exact
-   target, deployment versions, and that 0023 (or the AO-count migration 0026
-   that follows it) is the latest applied migration. If other migrations exist,
-   devise a rollback for that actual state. When 0026 is applied, the script also
-   removes its recount functions and restores the fixed-depth trigger function.
+   target, deployment versions, and that the applied migrations above 0022 are
+   0023 through 0025, plus the AO-count migration 0026 when it was applied. 0024
+   and 0025 (Better Auth foreign keys and the email-sync trigger) do not touch
+   `org_type` or AO counts, and this script does not reverse them. If any other
+   migration is applied, devise a rollback for that actual state. When 0026 is
+   applied, the script also restores the fixed-depth trigger function and removes
+   its recount functions.
 2. Back up the database and its Drizzle journal. Confirm no Territory values
    exist in either dependent column. Coordinate restoring the pre-Territory
    application build while writers remain stopped.
@@ -125,8 +128,9 @@ Before a release rollback:
    nullability, and index validity/definition.
 4. Reconcile the target's Drizzle journal under separately reviewed exact SQL:
    remove only the applied 0023 entry, and the 0026 entry when it was applied,
-   each identified by its migration hash and journal timestamp. Do not clear the
-   journal or change older entries. The
+   each identified by its migration hash and journal timestamp. Leave the 0024
+   and 0025 entries in place, since the script does not reverse them. Do not clear
+   the journal or change older entries. The
    table is in the `drizzle` schema. Inspect its actual name before writing SQL:
    the current runner derives the suffix from the final segment of the database
    URL, including any query string, so it may differ from the bare database name.

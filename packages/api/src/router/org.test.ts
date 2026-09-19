@@ -772,7 +772,7 @@ describe("Org Router", () => {
       );
     });
 
-    it("counts AOs beneath an Area under a Territory in the Area, Territory, and Sector, and follows the Area between parents", async () => {
+    it("counts an Area's AOs in its Territory and Sector, following the Area between parents", async () => {
       await mockAuthWithSession(await createAdminSession());
       const client = createTestClient();
       const { sector, territory } = await createSectorAndTerritory(client);

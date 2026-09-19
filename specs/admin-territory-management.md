@@ -198,9 +198,9 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
 
 - **AC-27** — GIVEN the rollback script for the Territory enum migration WHEN it is
   run after the depth-agnostic count migration THEN it restores the previous
-  fixed-depth trigger function only after removing the new recount functions, and
-  the migration documentation states the required ordering. This is exercised on an
-  isolated local database.
+  fixed-depth trigger function and removes the new recount functions, and the
+  migration documentation describes both steps. This is exercised on an isolated
+  local database.
 
 ## 5. Roles & authorization (RBAC)
 

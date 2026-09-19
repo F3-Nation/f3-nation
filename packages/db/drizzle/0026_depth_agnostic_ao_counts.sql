@@ -56,7 +56,7 @@ AS $$
   )
   SELECT
     t.id,
-    COALESCE(count(s.id) FILTER (WHERE s.org_type = 'ao' AND s.is_active), 0)::integer
+    COALESCE(count(DISTINCT s.id) FILTER (WHERE s.org_type = 'ao' AND s.is_active), 0)::integer
   FROM targets t
   LEFT JOIN subtree s ON s.root_id = t.id
   GROUP BY t.id
@@ -65,13 +65,18 @@ $$;--> statement-breakpoint
 -- Recomputes ao_count for the count-carrying ancestors of seed_ids (NULL: every
 -- count-carrying organization) and returns how many rows changed. Rows are
 -- locked in id order before counting, so the count runs on a snapshot that
--- includes concurrently committed AOs and two recounts cannot deadlock.
+-- includes concurrently committed AOs. A lock wait can outlast a concurrent
+-- reparent, so the ancestors are resolved again once the locks are held and any
+-- new ones are locked before counting. The write that fired the trigger already
+-- holds its own row lock outside that order, so two writers on one ancestor
+-- chain can still deadlock; PostgreSQL aborts one and that write can be retried.
 CREATE OR REPLACE FUNCTION public.recount_org_ao_counts(seed_ids integer[] DEFAULT NULL)
 RETURNS integer
 LANGUAGE plpgsql
 AS $$
 DECLARE
   target_ids integer[];
+  fresh_ids integer[];
   changed integer;
 BEGIN
   IF seed_ids IS NULL THEN
@@ -86,11 +91,21 @@ BEGIN
     RETURN 0;
   END IF;
 
-  PERFORM 1
-  FROM public.orgs o
-  WHERE o.id = ANY (target_ids)
-  ORDER BY o.id
-  FOR NO KEY UPDATE;
+  LOOP
+    PERFORM 1
+    FROM public.orgs o
+    WHERE o.id = ANY (target_ids)
+    ORDER BY o.id
+    FOR NO KEY UPDATE;
+
+    EXIT WHEN seed_ids IS NULL;
+
+    fresh_ids := public.org_ao_count_targets(seed_ids);
+    EXIT WHEN fresh_ids IS NULL OR fresh_ids <@ target_ids;
+
+    SELECT array_agg(DISTINCT t) INTO target_ids
+    FROM unnest(target_ids || fresh_ids) AS t;
+  END LOOP;
 
   UPDATE public.orgs o
   SET ao_count = e.expected
