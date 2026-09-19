@@ -16,6 +16,7 @@ import { OrgType } from "@acme/shared/app/enums";
 import {
   isValidOrgTypeParent,
   orgTypeRank,
+  orgTypesAbove,
 } from "@acme/shared/app/org-hierarchy";
 import { describe, expect, it } from "vitest";
 
@@ -58,6 +59,37 @@ describe("isValidOrgTypeParent (ordinal property)", () => {
     for (const type of OrgType) {
       expect(isValidOrgTypeParent(type, type)).toBe(false);
     }
+  });
+});
+
+describe("orgTypesAbove", () => {
+  it("returns exactly the types that may parent the given type, in enum order", () => {
+    for (const type of OrgType) {
+      expect(orgTypesAbove(type)).toEqual(
+        OrgType.filter((parent) => isValidOrgTypeParent(parent, type)),
+      );
+    }
+  });
+
+  it("includes territory between area and sector", () => {
+    expect(orgTypesAbove("ao")).toEqual([
+      "region",
+      "area",
+      "territory",
+      "sector",
+      "nation",
+    ]);
+    expect(orgTypesAbove("region")).toEqual([
+      "area",
+      "territory",
+      "sector",
+      "nation",
+    ]);
+    expect(orgTypesAbove("area")).toEqual(["territory", "sector", "nation"]);
+  });
+
+  it("returns nothing above the root", () => {
+    expect(orgTypesAbove("nation")).toEqual([]);
   });
 });
 

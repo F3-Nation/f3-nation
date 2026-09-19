@@ -14,13 +14,19 @@ export const orgTypeRank = (t: OrgType): number => OrgType.indexOf(t);
 
 /**
  * True if `parent` sits above `child` in the org hierarchy (strictly
- * higher rank). Intended for validating an org's parent assignment
- * (not yet wired into any endpoint).
+ * higher rank). Used to validate an org's parent assignment.
  */
 export const isValidOrgTypeParent = (
   parent: OrgType,
   child: OrgType,
 ): boolean => orgTypeRank(parent) > orgTypeRank(child);
+
+/**
+ * Every type that ranks strictly above `type`, nearest tier first (the types
+ * for which `isValidOrgTypeParent(parent, type)` holds).
+ */
+export const orgTypesAbove = (type: OrgType): OrgType[] =>
+  OrgType.filter((candidate) => isValidOrgTypeParent(candidate, type));
 
 export interface OrgTypeDisplayInfo {
   /** Singular display label, e.g. "Region" */

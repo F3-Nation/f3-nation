@@ -1,4 +1,5 @@
-import { OrgType } from "@acme/shared/app/enums";
+import type { OrgType } from "@acme/shared/app/enums";
+import { orgTypesAbove } from "@acme/shared/app/org-hierarchy";
 
 export interface OrgHierarchyNode {
   id: number;
@@ -9,21 +10,12 @@ export interface OrgHierarchyNode {
 
 const NO_MATCHING_PARENT_ORG_ID = -1;
 
-export const getAdminHierarchyOrgTypes = <T extends string>(
-  orgTypes: readonly T[],
-) =>
-  // New non-AO/region org types are assumed to be structural levels between
-  // areas and the root, so future levels are included without ordering rules.
-  //
-  // This exclusion rule is a placeholder for the shared hierarchy config in
-  // #916, which derives rank from OrgType's array position. Replace it with a
-  // rank comparison once that lands rather than adding types to this filter.
-  orgTypes.filter((orgType) => orgType !== "ao" && orgType !== "region");
-
-export const AdminHierarchyOrgTypes = getAdminHierarchyOrgTypes(OrgType);
-export const AdminAreaAncestorOrgTypes = AdminHierarchyOrgTypes.filter(
-  (orgType) => orgType !== "area",
-);
+// Derived from rank so a new tier is picked up without editing these lists.
+export const AdminHierarchyOrgTypes = orgTypesAbove("region");
+export const AdminAreaAncestorOrgTypes = orgTypesAbove("area");
+// The org types a role or an org filter can be scoped to: every tier above the
+// AO leaf.
+export const AdminScopeOrgTypes = orgTypesAbove("ao");
 
 export const getOrgById = <T extends OrgHierarchyNode>(orgs: readonly T[]) =>
   new Map(orgs.map((org) => [org.id, org]));

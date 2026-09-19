@@ -1,3 +1,4 @@
+import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
 import type { RouterOutputs } from "~/orpc/types";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { orpc, useQuery } from "~/orpc/react";
@@ -5,11 +6,15 @@ import type { OrgType } from "@acme/shared/app/enums";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
+const DEFAULT_ORG_TYPES = AdminScopeOrgTypes.filter(
+  (orgType) => orgType !== "nation",
+);
+
 export const OrgFilter = ({
   onOrgSelect,
   selectedOrgs,
   label = "Org",
-  orgTypes = ["region", "area", "sector"],
+  orgTypes = DEFAULT_ORG_TYPES,
 }: {
   onOrgSelect: (org: Org) => void;
   selectedOrgs: Org[];
