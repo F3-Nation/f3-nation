@@ -1,5 +1,16 @@
 import type { Session } from "@acme/auth";
 import type { OrgType, UserRole } from "@acme/shared/app/enums";
+import {
+  TEST_NATION_ORG_ID,
+  TEST_SECTOR_ORG_ID,
+  TEST_AREA_ORG_ID,
+  TEST_TERRITORY_ORG_ID,
+  TEST_TERRITORY_AREA_ORG_ID,
+  TEST_TERRITORY_REGION_ORG_ID,
+  TEST_TERRITORY_AO_ORG_ID,
+  TEST_AREA_REGION_ORG_ID,
+  TEST_AREA_AO_ORG_ID,
+} from "@acme/shared/app/constants";
 import { eq, inArray, schema } from "@acme/db";
 import {
   afterAll,
@@ -16,7 +27,12 @@ vi.mock("./logger", { spy: true });
 
 const mockLogError = vi.mocked(loggerModule.logError);
 
-import { db, getOrCreateRoles, uniqueId } from "./__tests__/test-utils";
+import {
+  createMixedOrgTree,
+  db,
+  getOrCreateRoles,
+  uniqueId,
+} from "./__tests__/test-utils";
 import { checkHasRoleOnOrg } from "./check-has-role-on-org";
 import { getDescendantOrgIds } from "./get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "./get-editable-org-ids";
@@ -377,6 +393,109 @@ describe("organization tree traversal", () => {
       editableRootOrgIds: [],
       isNationAdmin: true,
     });
+  });
+
+  it("seeds complete Territory and direct-Area paths", async () => {
+    const expected = [
+      { id: TEST_NATION_ORG_ID, orgType: "nation", parentId: null },
+      {
+        id: TEST_SECTOR_ORG_ID,
+        orgType: "sector",
+        parentId: TEST_NATION_ORG_ID,
+      },
+      {
+        id: TEST_TERRITORY_ORG_ID,
+        orgType: "territory",
+        parentId: TEST_SECTOR_ORG_ID,
+      },
+      {
+        id: TEST_TERRITORY_AREA_ORG_ID,
+        orgType: "area",
+        parentId: TEST_TERRITORY_ORG_ID,
+      },
+      {
+        id: TEST_TERRITORY_REGION_ORG_ID,
+        orgType: "region",
+        parentId: TEST_TERRITORY_AREA_ORG_ID,
+      },
+      {
+        id: TEST_TERRITORY_AO_ORG_ID,
+        orgType: "ao",
+        parentId: TEST_TERRITORY_REGION_ORG_ID,
+      },
+      { id: TEST_AREA_ORG_ID, orgType: "area", parentId: TEST_SECTOR_ORG_ID },
+      {
+        id: TEST_AREA_REGION_ORG_ID,
+        orgType: "region",
+        parentId: TEST_AREA_ORG_ID,
+      },
+      {
+        id: TEST_AREA_AO_ORG_ID,
+        orgType: "ao",
+        parentId: TEST_AREA_REGION_ORG_ID,
+      },
+    ];
+    const actual = await db
+      .select({
+        id: schema.orgs.id,
+        orgType: schema.orgs.orgType,
+        parentId: schema.orgs.parentId,
+      })
+      .from(schema.orgs)
+      .where(
+        inArray(
+          schema.orgs.id,
+          expected.map((org) => org.id),
+        ),
+      );
+    expect(actual.sort((a, b) => a.id - b.id)).toEqual(
+      expected.sort((a, b) => a.id - b.id),
+    );
+  });
+
+  it("traverses real Territory and direct-Area branches without widening scope", async () => {
+    const tree = await createMixedOrgTree(createdOrgIds);
+    const { territoryBranch, directBranch, unrelatedBranch } = tree;
+    const ctx = await createDbRoleContext(tree.territory, "editor");
+    await expect(
+      checkHasRoleOnOrg({
+        session: ctx.session,
+        db,
+        orgId: territoryBranch.ao.id,
+        roleName: "editor",
+      }),
+    ).resolves.toMatchObject({ success: true });
+    await expect(
+      checkHasRoleOnOrg({
+        session: ctx.session,
+        db,
+        orgId: directBranch.ao.id,
+        roleName: "editor",
+      }),
+    ).resolves.toMatchObject({ success: false });
+
+    const editable = await getEditableOrgIdsForUser(ctx);
+    expect(editable.isNationAdmin).toBe(false);
+    expect(new Set(editable.editableOrgs.map((org) => org.id))).toEqual(
+      new Set([
+        tree.territory.id,
+        territoryBranch.area.id,
+        territoryBranch.region.id,
+      ]),
+    );
+    const descendants = await getDescendantOrgIds(db, [tree.sector.id]);
+    expect(new Set(descendants)).toEqual(
+      new Set([
+        tree.sector.id,
+        tree.territory.id,
+        ...Object.values(territoryBranch).map((org) => org.id),
+        ...Object.values(directBranch).map((org) => org.id),
+      ]),
+    );
+    expect(descendants).not.toContain(unrelatedBranch.ao.id);
+    expect(await getDescendantOrgIds(db, [tree.nation.id])).toContain(
+      territoryBranch.ao.id,
+    );
   });
 
   it("reaches the deepest node in a synthetic six-level hierarchy", async () => {
