@@ -21,6 +21,27 @@ export const isValidOrgTypeParent = (
   child: OrgType,
 ): boolean => orgTypeRank(parent) > orgTypeRank(child);
 
+// An AO's parent must be a region, not just any higher-ranked type:
+// moveAOLocsToNewRegion and the map's region joins both assume it, so a
+// skip-level ao->sector/area/nation parent would silently break location and
+// region attribution downstream.
+const REQUIRED_PARENT_TYPE: Partial<Record<OrgType, OrgType>> = {
+  ao: "region",
+};
+
+/**
+ * True if `parent` may be assigned as `child`'s parent: it must outrank `child`
+ * and, for a type with a required parent type, be exactly that type. This is
+ * the rule the API enforces, so the admin editors' parent lists are checked
+ * against it.
+ */
+export const isPermittedOrgParent = (
+  parent: OrgType,
+  child: OrgType,
+): boolean =>
+  isValidOrgTypeParent(parent, child) &&
+  (REQUIRED_PARENT_TYPE[child] ?? parent) === parent;
+
 /**
  * Every type that ranks strictly above `type`, nearest tier first (the types
  * for which `isValidOrgTypeParent(parent, type)` holds).

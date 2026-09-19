@@ -14,6 +14,7 @@ import {
 } from "@acme/shared/app/constants";
 import { OrgType } from "@acme/shared/app/enums";
 import {
+  isPermittedOrgParent,
   isValidOrgTypeParent,
   orgTypeRank,
   orgTypesAbove,
@@ -59,6 +60,30 @@ describe("isValidOrgTypeParent (ordinal property)", () => {
     for (const type of OrgType) {
       expect(isValidOrgTypeParent(type, type)).toBe(false);
     }
+  });
+});
+
+describe("isPermittedOrgParent", () => {
+  it("matches the ordinal rule for every pair except an AO's required parent", () => {
+    for (const parent of OrgType) {
+      for (const child of OrgType) {
+        const expected =
+          child === "ao"
+            ? parent === "region"
+            : isValidOrgTypeParent(parent, child);
+        expect(isPermittedOrgParent(parent, child)).toBe(expected);
+      }
+    }
+  });
+
+  it("accepts an area beneath either a sector or a territory", () => {
+    expect(isPermittedOrgParent("sector", "area")).toBe(true);
+    expect(isPermittedOrgParent("territory", "area")).toBe(true);
+  });
+
+  it("rejects a skip-level parent for an ao but not for other types", () => {
+    expect(isPermittedOrgParent("sector", "ao")).toBe(false);
+    expect(isPermittedOrgParent("nation", "region")).toBe(true);
   });
 });
 
