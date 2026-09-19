@@ -15,7 +15,9 @@ import { expect, test } from "@playwright/test";
  * DATA ASSUMPTION: the target (E2E_BASE_URL) is a preview environment backed
  * by the deterministic sandbox seed (packages/db/src/local-seed-lib/data.ts):
  * Boone AOs "The Dark Tower" and "The Viaduct"; Charlotte AOs "The Foundry",
- * "The Colosseum", and "South End Station". Every seeded AO has exactly one
+ * "The Colosseum", and "South End Station"; plus "Local Territory AO" under
+ * Local Test Territory → Local Territory Area → Local Territory Region.
+ * Every seeded AO has exactly one
  * weekly Bootcamp named "<AO name> Bootcamp" on Monday at 05:30 (AM). That
  * makes the AM/PM quick filters deterministic (PM → empty, AM → everything)
  * regardless of the day the suite runs, so test 4 filters by time of day

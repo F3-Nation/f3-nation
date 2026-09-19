@@ -40,8 +40,8 @@ export async function seedOrgHierarchy(db: AppDb): Promise<OrgIds> {
     );
   }
 
-  // 3. Territories. #924 owns AO-count correctness and the API parenting gate;
-  // these direct local inserts exercise map traversal before populated rollout.
+  // 3. Territories. Direct inserts bypass API parent validation to exercise
+  // map traversal; the current trigger does not maintain counts at every tier.
   const territoryIds: Record<string, number> = {};
   for (const { sectorName, ...territory } of TERRITORIES) {
     const sectorId = sectorIds[sectorName];
@@ -53,7 +53,7 @@ export async function seedOrgHierarchy(db: AppDb): Promise<OrgIds> {
     );
   }
 
-  // 4. Areas retain both Sector and Territory parents during gradual rollout.
+  // 4. Areas may be parented by either a Sector or a Territory.
   const areaIds: Record<string, number> = {};
   for (const area of AREAS) {
     const { sectorName, territoryName, ...areaData } = area;

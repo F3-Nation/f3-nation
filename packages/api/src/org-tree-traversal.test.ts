@@ -1,6 +1,11 @@
 import type { Session } from "@acme/auth";
 import type { OrgType, UserRole } from "@acme/shared/app/enums";
 import {
+  TEST_REGION_1_ORG_ID,
+  TEST_REGION_2_ORG_ID,
+  TEST_REGION_3_ORG_ID,
+  TEST_AO_1_ORG_ID,
+  TEST_AO_2_ORG_ID,
   TEST_NATION_ORG_ID,
   TEST_SECTOR_ORG_ID,
   TEST_AREA_ORG_ID,
@@ -399,6 +404,23 @@ describe("organization tree traversal", () => {
     const expected = [
       { id: TEST_NATION_ORG_ID, orgType: "nation", parentId: null },
       {
+        id: TEST_REGION_1_ORG_ID,
+        orgType: "region",
+        parentId: TEST_SECTOR_ORG_ID,
+      },
+      {
+        id: TEST_REGION_2_ORG_ID,
+        orgType: "region",
+        parentId: TEST_SECTOR_ORG_ID,
+      },
+      {
+        id: TEST_REGION_3_ORG_ID,
+        orgType: "region",
+        parentId: TEST_SECTOR_ORG_ID,
+      },
+      { id: TEST_AO_1_ORG_ID, orgType: "ao", parentId: TEST_REGION_1_ORG_ID },
+      { id: TEST_AO_2_ORG_ID, orgType: "ao", parentId: TEST_REGION_3_ORG_ID },
+      {
         id: TEST_SECTOR_ORG_ID,
         orgType: "sector",
         parentId: TEST_NATION_ORG_ID,
@@ -440,6 +462,7 @@ describe("organization tree traversal", () => {
         id: schema.orgs.id,
         orgType: schema.orgs.orgType,
         parentId: schema.orgs.parentId,
+        isActive: schema.orgs.isActive,
       })
       .from(schema.orgs)
       .where(
@@ -449,8 +472,33 @@ describe("organization tree traversal", () => {
         ),
       );
     expect(actual.sort((a, b) => a.id - b.id)).toEqual(
-      expected.sort((a, b) => a.id - b.id),
+      expected
+        .map((org) => ({ ...org, isActive: true }))
+        .sort((a, b) => a.id - b.id),
     );
+    const counts = await db
+      .select({ id: schema.orgs.id, aoCount: schema.orgs.aoCount })
+      .from(schema.orgs)
+      .where(
+        inArray(
+          schema.orgs.id,
+          expected.map((org) => org.id),
+        ),
+      );
+    const countsById = new Map(counts.map((org) => [org.id, org.aoCount]));
+    for (const [id, count] of [
+      [TEST_SECTOR_ORG_ID, 4],
+      [TEST_TERRITORY_ORG_ID, 1],
+      [TEST_TERRITORY_AREA_ORG_ID, 1],
+      [TEST_AREA_ORG_ID, 1],
+      [TEST_TERRITORY_REGION_ORG_ID, 1],
+      [TEST_AREA_REGION_ORG_ID, 1],
+      [TEST_REGION_1_ORG_ID, 1],
+      [TEST_REGION_2_ORG_ID, 0],
+      [TEST_REGION_3_ORG_ID, 1],
+    ] as const) {
+      expect(countsById.get(id), `AO count for seeded org ${id}`).toBe(count);
+    }
   });
 
   it("traverses real Territory and direct-Area branches without widening scope", async () => {
@@ -481,6 +529,37 @@ describe("organization tree traversal", () => {
         tree.territory.id,
         territoryBranch.area.id,
         territoryBranch.region.id,
+      ]),
+    );
+    const sectorCtx = await createDbRoleContext(tree.sector, "editor");
+    for (const branch of [territoryBranch, directBranch]) {
+      await expect(
+        checkHasRoleOnOrg({
+          session: sectorCtx.session,
+          db,
+          orgId: branch.ao.id,
+          roleName: "editor",
+        }),
+      ).resolves.toMatchObject({ success: true });
+    }
+    await expect(
+      checkHasRoleOnOrg({
+        session: sectorCtx.session,
+        db,
+        orgId: unrelatedBranch.ao.id,
+        roleName: "editor",
+      }),
+    ).resolves.toMatchObject({ success: false });
+    const sectorEditable = await getEditableOrgIdsForUser(sectorCtx);
+    expect(sectorEditable.isNationAdmin).toBe(false);
+    expect(new Set(sectorEditable.editableOrgs.map((org) => org.id))).toEqual(
+      new Set([
+        tree.sector.id,
+        tree.territory.id,
+        territoryBranch.area.id,
+        territoryBranch.region.id,
+        directBranch.area.id,
+        directBranch.region.id,
       ]),
     );
     const descendants = await getDescendantOrgIds(db, [tree.sector.id]);

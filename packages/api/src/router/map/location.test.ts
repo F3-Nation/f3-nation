@@ -1363,16 +1363,26 @@ describe("Map Location Router", () => {
       const startDate = await getDbTomorrow();
       const instanceIds: number[] = [];
       const locationIds: number[] = [];
+      const recurringWorkouts: {
+        locationId: number;
+        eventId: number;
+        regionId: number;
+      }[] = [];
       for (const branch of [tree.territoryBranch, tree.directBranch]) {
         const location = await createTestLocation(branch.region.id);
         if (!location) throw new Error("Failed to create mixed-tree location");
         locationIds.push(location.id);
-        await createDatedEvent({
+        const recurringEvent = await createDatedEvent({
           aoId: branch.ao.id,
           locationId: location.id,
           label: "Mixed Territory recurring visibility",
           dayOfWeek: "monday",
           startDate: shiftDays(startDate, -2),
+        });
+        recurringWorkouts.push({
+          locationId: location.id,
+          eventId: recurringEvent.id,
+          regionId: branch.region.id,
         });
         const [instance] = await db
           .insert(schema.eventInstances)
@@ -1400,11 +1410,18 @@ describe("Map Location Router", () => {
       expect(activeMarkers.map((location) => location[0])).toEqual(
         expect.arrayContaining(locationIds),
       );
-      for (const locationId of locationIds) {
+      for (const { locationId, eventId, regionId } of recurringWorkouts) {
         const workout = await client.map.location.locationWorkout({
           locationId,
         });
-        expect(workout.location?.id).toBe(locationId);
+        expect(workout.location).toMatchObject({
+          id: locationId,
+          regionId,
+          regionType: "region",
+        });
+        expect(workout.location?.events.map((event) => event.id)).toContain(
+          eventId,
+        );
       }
       const active = await client.map.location.upcomingInstances();
       expect(active.map((instance) => instance.id)).toEqual(
@@ -1433,7 +1450,14 @@ describe("Map Location Router", () => {
       const visibleWorkout = await client.map.location.locationWorkout({
         locationId: directLocationId,
       });
-      expect(visibleWorkout.location?.id).toBe(directLocationId);
+      expect(visibleWorkout.location).toMatchObject({
+        id: directLocationId,
+        regionId: tree.directBranch.region.id,
+        regionType: "region",
+      });
+      expect(
+        visibleWorkout.location?.events.map((event) => event.id),
+      ).toContain(recurringWorkouts[1]?.eventId);
     });
 
     it("should exclude a qualifying instance whose region is inactive", async () => {

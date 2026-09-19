@@ -48,11 +48,12 @@ export interface FixtureOrg {
 }
 
 /**
- * Real mixed-parent tree for traversal/map regressions. Direct DB insertion
- * deliberately bypasses the temporary Area-under-Territory API rollout gate.
- * Reuse the shared nation without adding it to the caller's cleanup list.
- * Track each inserted ID immediately so callers can clean up partial creation;
- * delete dependents first, then organizations in reverse insertion order.
+ * Builds Territory → Area → Region → AO and direct Area → Region → AO paths
+ * under one Sector, plus an unrelated Sector branch, beneath a shared nation.
+ * Inserts directly, bypassing API parent-type validation. Each created ID is
+ * appended to `createdOrgIds` immediately so partial failures can be cleaned up;
+ * the shared nation is reused and not tracked. Delete dependents first, then
+ * organizations in reverse insertion order.
  */
 export const createMixedOrgTree = async (createdOrgIds: number[]) => {
   const prefix = `Mixed tree ${uniqueId()}`;

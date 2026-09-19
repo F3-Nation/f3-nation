@@ -47,13 +47,14 @@ through both paths.
 - **AC-5** — Map location queries retain an active Territory branch and exclude
   its workout when the Territory ancestor becomes inactive, without hiding
   the active direct-Area branch.
-- **AC-6** — Browser verification against the local mixed seed demonstrates
-  loading, region search, workout filtering, and workout details for the new
-  branch, plus continued visibility of the legacy branch. Record evidence and
-  any limitations separately from automated test results.
-- **AC-7** — Audit actual map callers for hierarchy assumptions; preserve
-  intentional AO-under-Region behavior. Required formatting, lint, unused-code,
-  typecheck, build, and test gates pass before declaring implementation ready.
+- **AC-6** — Against the local mixed seed, map search finds Local Territory
+  Region and its AO; selecting the region displays its workout, and opening
+  details shows its event and region. PM filtering hides the morning workouts;
+  AM filtering restores both Local Territory AO and the legacy Boone AOs.
+- **AC-7** — Immediately after the test seed completes, Sector AO counts include
+  both mixed-parent paths and legacy direct-Region children. The seeded Sector
+  has four active AO descendants, and the seeded Territory has one. This initial
+  recount does not change the live trigger's behavior on subsequent mutations.
 
 ## 5. Roles & authorization
 
@@ -68,9 +69,10 @@ protected map-event procedure tiers remain in place.
 
 ## 6. Out of scope / non-goals
 
-- #924's trigger/recount rewrite, admin parent selector, and parenting-guard
-  removal. The reachable recount in `seed.ts` remains explicitly #924-owned;
-  mixed seed data is not evidence of correct Sector/Territory AO counts.
+- #924's live trigger and legacy `seed.ts` recount rewrite, admin parent selector,
+  and parenting-guard removal. The test seed normalizes its initial fixture
+  counts only; subsequent mutations and local-seed counts remain subject to the
+  existing trigger limitations.
 - Production seed execution, data reparenting, recounting, or deployment.
 - New schema migrations, authorization changes, or broad map UI refactors.
 - Reviving historical inactive insertion functions in `seed.ts`.
@@ -84,6 +86,6 @@ protected map-event procedure tiers remain in place.
 
 ## 8. Observability
 
-No new application events. Retain aggregate seed verification, test results,
-browser evidence, and known #924 limitations without credentials or personal
-data. Synthetic local seed names are not production organization mappings.
+No new application events. The PR description records test results, browser
+verification, the map caller audit, and the counting limitations. Synthetic local
+seed names are not production organization mappings.
