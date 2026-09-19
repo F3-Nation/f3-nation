@@ -38,7 +38,7 @@ describe("better_auth_user sync with users (#953)", () => {
     const user = await createUser(email);
     await createBetterAuthUser(user.id, email.toLowerCase());
 
-    const newEmail = `${uniqueId()}@F3Nation.Test`; // mixed case on write
+    const newEmail = `  ${uniqueId()}@F3Nation.Test  `; // mixed case + whitespace on write
     await db
       .update(schema.users)
       .set({ email: newEmail })
@@ -49,7 +49,7 @@ describe("better_auth_user sync with users (#953)", () => {
       .from(authSchema.betterAuthUser)
       .where(eq(authSchema.betterAuthUser.id, String(user.id)));
 
-    expect(shadow?.email).toBe(newEmail.toLowerCase());
+    expect(shadow?.email).toBe(newEmail.trim().toLowerCase());
   });
 
   it("removes the better_auth_user row (and its session) when the users row is deleted", async () => {
@@ -133,8 +133,13 @@ describe("better_auth_user sync with users (#953)", () => {
     expect(thrown).toBeInstanceOf(Error);
     const cause = (thrown as Error).cause;
     expect(cause).toBeInstanceOf(Error);
-    expect((cause as Error).message).toContain(
-      "Manual reconciliation required",
-    );
+    const causeMessage = (cause as Error).message;
+    expect(causeMessage).toContain("Manual reconciliation required");
+    // The trigger deliberately omits the email from its exception message
+    // (see its own SQL comment) — callers log the raw driver error on an
+    // unexpected fault, so a leaked email here would bypass that safeguard.
+    expect(causeMessage).not.toContain(emailA);
+    expect(causeMessage).not.toContain(emailB);
+    expect(causeMessage).not.toContain(staleEmail);
   });
 });
