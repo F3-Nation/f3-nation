@@ -24,6 +24,22 @@ const recount = async (ids?: number[]) => {
   return Number(must(rows[0]).changed);
 };
 
+const waitForLockWait = async (
+  backendPid: Promise<number>,
+  timeoutMs = 5_000,
+) => {
+  const pid = await backendPid;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const rows = await db.execute(
+      sql`SELECT 1 FROM pg_stat_activity WHERE pid = ${pid} AND wait_event_type = 'Lock'`,
+    );
+    if (rows.length > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Backend ${pid} never reached a lock wait`);
+};
+
 describe("org AO counts", () => {
   const trees: OrgTree[] = [];
   const newTree = () => {
@@ -548,7 +564,15 @@ describe("org AO counts", () => {
           await gate;
         });
         await inserted;
+        let reportPid!: (pid: number) => void;
+        const secondPid = new Promise<number>((resolve) => {
+          reportPid = resolve;
+        });
         const second = db.transaction(async (tx) => {
+          const rows = await tx.execute<{ pid: number }>(
+            sql`SELECT pg_backend_pid() AS pid`,
+          );
+          reportPid(must(rows[0]).pid);
           await tx.insert(schema.orgs).values({
             name: "concurrent-2",
             orgType: "ao",
@@ -556,8 +580,8 @@ describe("org AO counts", () => {
             isActive: true,
           });
         });
-        // Let the second insert reach the row lock the first still holds.
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        // The second insert must be blocked on the lock the first still holds.
+        await waitForLockWait(secondPid);
         release();
         await Promise.all([first, second]);
 
@@ -605,7 +629,15 @@ describe("org AO counts", () => {
         await areaMoved;
         // Its ancestors are read from the committed tree, where the area is
         // still under sector1, while the move holds the area's row lock.
+        let reportPid!: (pid: number) => void;
+        const inserterPid = new Promise<number>((resolve) => {
+          reportPid = resolve;
+        });
         const inserter = db.transaction(async (tx) => {
+          const rows = await tx.execute<{ pid: number }>(
+            sql`SELECT pg_backend_pid() AS pid`,
+          );
+          reportPid(must(rows[0]).pid);
           await tx.insert(schema.orgs).values({
             name: "concurrent-move-ao",
             orgType: "ao",
@@ -613,7 +645,7 @@ describe("org AO counts", () => {
             isActive: true,
           });
         });
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await waitForLockWait(inserterPid);
         release();
         await Promise.all([mover, inserter]);
 
