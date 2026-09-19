@@ -152,9 +152,9 @@ checked. The trigger, the migration backfill, and `pnpm db:seed` all call
 `recount_org_ao_counts()`, so Sector and Territory counts stay correct for an
 Area directly under a Sector, an Area under a Territory, and any move between them.
 
-The API temporarily rejects Area creation and reparenting beneath Territory in
-`assertValidParentType`. Remove that guard only after the counting tests pass.
-Direct SQL writes bypass this guard.
+`assertValidParentType` accepts an Area beneath either a Sector or a Territory, so
+Areas can be reparented gradually. Direct SQL writes bypass that validation and
+the trigger may be disabled or bypassed; see below for repairing counts.
 
 ### Verifying counts during rollout
 

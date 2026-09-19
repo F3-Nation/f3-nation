@@ -15,10 +15,10 @@ through the existing shared components.
 - Issue: [#923](https://github.com/F3-Nation/f3-nation/issues/923); epic #855.
 - Prerequisite: #999, merged in #1019. Deployment readiness of the separately
   released homepage must be checked before production rollout.
-- Follow-up: #924 owns full Territory management verification, mixed
-  Sector/Territory Area parents, hierarchy filters, ancestor displays, and
-  depth-agnostic AO counts in both the trigger and seed recount. Correct Sector
-  and Territory counts are a prerequisite for reparenting Areas under Territories.
+- Follow-up: [`admin-territory-management.md`](admin-territory-management.md)
+  owns full Territory management, mixed Sector/Territory Area parents, hierarchy
+  filters, ancestor displays, and depth-agnostic AO counts in the trigger and
+  the seed recount.
 - External mirror: F3-Nation/f3-region-pages#96; coordinate after merge.
 - Affected workspaces: db, db-python, shared, admin; other enum consumers
   require regression verification, including homepage.
@@ -58,9 +58,9 @@ and sorting, status/Only Mine filters, AO count, and no ancestry columns.
 The exhaustive editor configuration also needs a Territory entry: Sector
 parent selector, blank initial name, no logo control, and the existing shared
 validation/deactivation behavior. Existing Area parent choices remain Sector
-until the mixed-parent work in #924. The API also rejects creating or reparenting
-an Area beneath a Territory until #924 fixes both AO-counting paths. This change inserts no Territory records
-and reparents no existing organizations.
+until the mixed-parent work in the follow-up spec, which also allows the API to
+accept an Area beneath a Territory once AO counts are depth-agnostic. This change
+inserts no Territory records and reparents no existing organizations.
 
 ## 3. User stories
 
@@ -120,10 +120,10 @@ rule. Add-button visibility is configuration, not authorization.
 ## 6. Out of scope / non-goals
 
 - Creating production Territory records or changing existing parent edges.
-- #924's full management UX, mixed-parent selector, ancestry/filter work, and
-  depth-agnostic AO-count trigger/seed recount before populated Territory rollout.
+- The full management UX, mixed-parent selector, ancestry/filter work, and
+  depth-agnostic AO-count trigger/seed recount, specified in the follow-up spec.
 - Changing authorization inheritance or notification escalation rules, or
-  hierarchy validation beyond the temporary Area-under-Territory rollout gate.
+  hierarchy validation.
 - Editing the external warehouse mirror in this repository.
 - Production access, data export, deployment, commits, pushes, or external
   messages without their applicable authorization.
@@ -136,8 +136,8 @@ rule. Add-button visibility is configuration, not authorization.
 - TypeScript/Python/PostgreSQL enum order and Python storage-name assertions.
 - Territory sidebar navigation, page loading, Add gating, and editor parent
   configuration; existing route and enum-consumer regression suites.
-- API rejection of Area creation and reparenting beneath Territory, preserving
-  the existing parent after rejection and allowing Area creation beneath Sector.
+- API validation of Territory parents, and Area creation beneath Sector; Area
+  creation and reparenting beneath Territory is covered by the follow-up spec.
 
 The production-shaped dump source and isolated restore target must be resolved
 before AC-3 can be marked complete. Any production export requires separate,

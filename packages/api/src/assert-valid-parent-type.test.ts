@@ -20,7 +20,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { assertValidParentType } from "./assert-valid-parent-type";
-import { db } from "./__tests__/test-utils";
+import { createOrgTree, db } from "./__tests__/test-utils";
 
 const NONEXISTENT_ORG_ID = 999999999;
 
@@ -90,6 +90,32 @@ describe("assertValidParentType", () => {
     await expect(
       assertValidParentType(db, TEST_NATION_ORG_ID, "area"),
     ).resolves.toBeUndefined();
+  });
+
+  it("resolves for an area parented to a territory", async () => {
+    const tree = createOrgTree();
+    try {
+      const territory = await tree.create({ orgType: "territory" });
+
+      await expect(
+        assertValidParentType(db, territory.id, "area"),
+      ).resolves.toBeUndefined();
+    } finally {
+      await tree.cleanup();
+    }
+  });
+
+  it("rejects a territory parented to an area", async () => {
+    const tree = createOrgTree();
+    try {
+      const area = await tree.create({ orgType: "area" });
+
+      await expect(
+        assertValidParentType(db, area.id, "territory"),
+      ).rejects.toThrow(/Territory.*Area/);
+    } finally {
+      await tree.cleanup();
+    }
   });
 
   it("rejects a skip-level parent for an ao, unlike other org types", async () => {
