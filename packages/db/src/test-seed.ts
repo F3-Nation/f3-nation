@@ -5,6 +5,8 @@ import {
   TEST_AO_1_ORG_ID,
   TEST_AO_2_ORG_ID,
   TEST_AREA_ORG_ID,
+  TEST_AREA_REGION_ORG_ID,
+  TEST_AREA_AO_ORG_ID,
   TEST_EDITOR_ROLE_ID,
   TEST_EDITOR_USER_ID,
   TEST_NATION_ORG_ID,
@@ -12,6 +14,10 @@ import {
   TEST_REGION_2_ORG_ID,
   TEST_REGION_3_ORG_ID,
   TEST_SECTOR_ORG_ID,
+  TEST_TERRITORY_ORG_ID,
+  TEST_TERRITORY_AREA_ORG_ID,
+  TEST_TERRITORY_REGION_ORG_ID,
+  TEST_TERRITORY_AO_ORG_ID,
 } from "@acme/shared/app/constants";
 import { EventTypes } from "@acme/shared/app/enums";
 
@@ -156,6 +162,76 @@ export const testSeed = async (db?: AppDb) => {
       twitter: "@testorg",
     },
   ]);
+
+  // Preserve existing fixture edges while adding complete mixed-parent paths.
+  // Direct inserts bypass API parent-type validation. Recount after insertion
+  // because the current trigger only handles fixed-depth ancestor paths.
+  await _db.insert(orgs).values([
+    {
+      id: TEST_TERRITORY_ORG_ID,
+      name: "Test Territory",
+      orgType: "territory",
+      parentId: TEST_SECTOR_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_TERRITORY_AREA_ORG_ID,
+      name: "Test Territory Area",
+      orgType: "area",
+      parentId: TEST_TERRITORY_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_TERRITORY_REGION_ORG_ID,
+      name: "Test Territory Region",
+      orgType: "region",
+      parentId: TEST_TERRITORY_AREA_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_TERRITORY_AO_ORG_ID,
+      name: "Test Territory AO",
+      orgType: "ao",
+      parentId: TEST_TERRITORY_REGION_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_AREA_REGION_ORG_ID,
+      name: "Test Area Region",
+      orgType: "region",
+      parentId: TEST_AREA_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_AREA_AO_ORG_ID,
+      name: "Test Area AO",
+      orgType: "ao",
+      parentId: TEST_AREA_REGION_ORG_ID,
+      isActive: true,
+    },
+  ]);
+
+  // Normalize the fixed test fixtures after all AO inserts. The live trigger
+  // cannot combine mixed-depth branches; this only repairs the initial seed.
+  // Active descendants are counted only through active intermediate orgs.
+  await _db.execute(sql`
+    WITH RECURSIVE descendants(root_id, id, org_type, path) AS (
+      SELECT id, id, org_type, ARRAY[id] FROM orgs
+      UNION ALL
+      SELECT descendants.root_id, child.id, child.org_type,
+             descendants.path || child.id
+      FROM descendants
+      JOIN orgs child ON child.parent_id = descendants.id
+      WHERE child.is_active = true
+        AND NOT child.id = ANY(descendants.path)
+    )
+    UPDATE orgs AS root
+    SET ao_count = (
+      SELECT COUNT(*) FROM descendants
+      WHERE descendants.root_id = root.id AND descendants.org_type = 'ao'
+    )
+    WHERE root.org_type <> 'ao';
+  `);
 
   // Create editor and admin roles
   const [editorRole, adminRole] = await Promise.all([
