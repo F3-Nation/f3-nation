@@ -98,7 +98,8 @@ export default function UserMutate({
             <form
               onSubmit={form.handleSubmit(
                 (data) => {
-                  console.log(data);
+                  // Deliberately not logged: this payload is a full user record
+                  // (email, phone, emergency contact). AGENTS.md: never log PII.
                   crupdateUser.mutate(data);
                 },
                 (error) => {
