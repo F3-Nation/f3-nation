@@ -50,12 +50,57 @@ function createTestAuth(f3UserId: number | null) {
     database: memoryAdapter(memoryDb),
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(f3UserId),
+    isNationAdmin: () => Promise.resolve(false),
   };
   const authOptions = buildBetterAuthOptions(options);
   for (const table of Object.keys(getAuthTables(authOptions))) {
     memoryDb[table] ??= [];
   }
   return createAuthInstance(options);
+}
+
+// Unlike createTestAuth above, this maps distinct emails to distinct F3 user
+// ids (and lets a caller mark some of them nation admins) — needed to model
+// two separate people signing in against the same instance, which the
+// clientReference tests below require.
+function createMultiUserTestAuth(
+  emailToF3UserId: Record<string, number>,
+  adminF3UserIds: Set<number> = new Set<number>(),
+) {
+  const memoryDb: MemoryDB = {};
+  const options = {
+    baseURL: BASE_URL,
+    basePath: BASE_PATH,
+    secret: "test-only-not-a-real-secret",
+    issuer: ISSUER,
+    database: memoryAdapter(memoryDb),
+    sendVerificationOTP: () => Promise.resolve(),
+    findF3UserId: (email: string) =>
+      Promise.resolve(emailToF3UserId[email] ?? null),
+    isNationAdmin: (f3UserId: number) =>
+      Promise.resolve(adminF3UserIds.has(f3UserId)),
+  };
+  const authOptions = buildBetterAuthOptions(options);
+  for (const table of Object.keys(getAuthTables(authOptions))) {
+    memoryDb[table] ??= [];
+  }
+  return createAuthInstance(options);
+}
+
+async function createConfidentialClient(
+  auth: ReturnType<typeof createTestAuth>,
+  sessionToken: string,
+) {
+  return auth.api.createOAuthClient({
+    headers: { authorization: `Bearer ${sessionToken}` },
+    body: {
+      redirect_uris: [REDIRECT_URI],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      application_type: "web",
+      scope: "openid profile email offline_access",
+    },
+  });
 }
 
 async function signInAndGetToken(
@@ -242,5 +287,48 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     await expect(
       auth.api.signInEmailOTP({ body: { email, otp } }),
     ).rejects.toThrow();
+  });
+
+  it("lets any nation admin rotate the secret of a client another nation admin created (#876 Phase 3 client-reference)", async () => {
+    const auth = createMultiUserTestAuth(
+      {
+        "admin-a@f3nation.test": 501,
+        "admin-b@f3nation.test": 502,
+      },
+      new Set([501, 502]),
+    );
+
+    const tokenA = await signInAndGetToken(auth, "admin-a@f3nation.test");
+    const client = await createConfidentialClient(auth, tokenA);
+    expect(client.client_secret).toBeTruthy();
+
+    // A different nation admin, who did not create this client, rotates its
+    // secret — only possible because clientReference stamped the client
+    // with F3_NATION_CLIENT_REFERENCE_ID instead of admin A's own user id.
+    const tokenB = await signInAndGetToken(auth, "admin-b@f3nation.test");
+    const rotated = await auth.api.rotateClientSecret({
+      headers: { authorization: `Bearer ${tokenB}` },
+      body: { client_id: client.client_id },
+    });
+    expect(rotated.client_secret).toBeTruthy();
+    expect(rotated.client_secret).not.toBe(client.client_secret);
+  });
+
+  it("still refuses to let one non-admin rotate another non-admin's client", async () => {
+    const auth = createMultiUserTestAuth({
+      "pax-a@f3nation.test": 601,
+      "pax-b@f3nation.test": 602,
+    });
+
+    const tokenA = await signInAndGetToken(auth, "pax-a@f3nation.test");
+    const client = await createConfidentialClient(auth, tokenA);
+
+    const tokenB = await signInAndGetToken(auth, "pax-b@f3nation.test");
+    await expect(
+      auth.api.rotateClientSecret({
+        headers: { authorization: `Bearer ${tokenB}` },
+        body: { client_id: client.client_id },
+      }),
+    ).rejects.toMatchObject({ status: "UNAUTHORIZED" });
   });
 });

@@ -68,8 +68,12 @@ import {
   betterAuthSession,
   betterAuthUser,
   betterAuthVerification,
+  orgs,
+  roles,
+  rolesXUsersXOrg,
   users,
 } from "@acme/db/schema/schema";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 
 // The OAuth Provider plugin's `claims.accessToken` extension is strictly
 // additive (can't override an AS-owned/reserved claim) and is only
@@ -140,7 +144,24 @@ export interface CreateAuthInstanceOptions {
    * what makes that `before` hook refuse the sign-in instead.
    */
   findF3UserId: (email: string) => Promise<number | null>;
+  /**
+   * Returns whether the given F3 `users.id` currently holds the nation-admin
+   * role — the same check `nationAdminProcedure` uses (packages/api/src/
+   * shared.ts), just against a raw user id instead of a `Session`, since
+   * oauth-provider's `clientReference` callback below only gets Better
+   * Auth's own `{ user, session }` shape, not an F3 `Session` with a
+   * populated `roles` array.
+   */
+  isNationAdmin: (f3UserId: number) => Promise<boolean>;
 }
+
+// The stable "owner" identity for F3-Nation-managed OAuth clients (apps/admin,
+// apps/me) — set as a client's referenceId rather than a per-user userId, so
+// any current or future nation admin can manage and rotate the secret for a
+// client one of them created, not just whoever happened to create it. See
+// oauthProvider's clientReference option below, and #876 Phase 3's
+// client-secret-issuance question this resolves.
+const F3_NATION_CLIENT_REFERENCE_ID = "f3-nation";
 
 /**
  * Split out from createAuthInstance so tests can pre-seed a memoryAdapter's
@@ -220,6 +241,21 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         // apps/auth/src/lib/oauth.ts's exchangeAuthorizationCode). Set
         // explicitly here anyway so the intent is documented, not implicit.
         clientRegistrationRequirePKCE: true,
+        // Any nation admin can create/manage/rotate the shared,
+        // F3-Nation-owned clients (apps/admin, apps/me) instead of each one
+        // being tied to whichever individual admin happened to create it —
+        // see F3_NATION_CLIENT_REFERENCE_ID above. A session that isn't a
+        // nation admin gets `undefined` here, so oauth-provider falls back
+        // to its normal per-user ownership (session.user.id) for any client
+        // that admin creates for themselves.
+        clientReference: async ({ user }) => {
+          if (!user) return undefined;
+          const f3UserId = Number(user.id);
+          if (!Number.isInteger(f3UserId)) return undefined;
+          return (await options.isNationAdmin(f3UserId))
+            ? F3_NATION_CLIENT_REFERENCE_ID
+            : undefined;
+        },
         // Deliberately no storeClientSecret override — prefers Better
         // Auth's own default secret hashing over matching the hand-rolled
         // server's sha256 scheme, even though it means confidential clients
@@ -311,6 +347,22 @@ export async function getAuth() {
         .where(eq(users.email, normalizedEmail))
         .limit(1);
       return existing ? existing.id : null;
+    },
+    // Same query shape as getSessionFromOAuthToken (packages/api/src/
+    // shared.ts), reused so this stays the one place that decides who
+    // counts as a nation admin.
+    isNationAdmin: async (f3UserId) => {
+      const userRoles = await db
+        .select({
+          orgId: orgs.id,
+          orgName: orgs.name,
+          roleName: roles.name,
+        })
+        .from(rolesXUsersXOrg)
+        .innerJoin(orgs, eq(orgs.id, rolesXUsersXOrg.orgId))
+        .innerJoin(roles, eq(roles.id, rolesXUsersXOrg.roleId))
+        .where(eq(rolesXUsersXOrg.userId, f3UserId));
+      return isNationAdminFromSession({ roles: userRoles });
     },
   });
 
