@@ -53,8 +53,8 @@ through both paths.
   AM filtering restores both Local Territory AO and the legacy Boone AOs.
 - **AC-7** — Immediately after the test seed completes, Sector AO counts include
   both mixed-parent paths and legacy direct-Region children. The seeded Sector
-  has four active AO descendants, and the seeded Territory has one. This initial
-  recount does not change the live trigger's behavior on subsequent mutations.
+  has four active AO descendants, and the seeded Territory has one. These counts
+  come from the depth-agnostic AO-count trigger, not a separate seed-time recount.
 
 ## 5. Roles & authorization
 
@@ -69,10 +69,9 @@ protected map-event procedure tiers remain in place.
 
 ## 6. Out of scope / non-goals
 
-- #924's live trigger and legacy `seed.ts` recount rewrite, admin parent selector,
-  and parenting-guard removal. The test seed normalizes its initial fixture
-  counts only; subsequent mutations and local-seed counts remain subject to the
-  existing trigger limitations.
+- #924's admin parent selector and parenting-guard removal. The depth-agnostic
+  AO-count trigger and the `seed.ts` recount that use it are delivered by #924's
+  migration.
 - Production seed execution, data reparenting, recounting, or deployment.
 - New schema migrations, authorization changes, or broad map UI refactors.
 - Reviving historical inactive insertion functions in `seed.ts`.

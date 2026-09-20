@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { routes } from "@acme/shared/app/constants";
 import { OrgType } from "@acme/shared/app/enums";
-import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
-import { resolveOrgSegment } from "./org-admin-config";
+import { orgTypeDisplay, orgTypesAbove } from "@acme/shared/app/org-hierarchy";
+import { orgAdminConfig, resolveOrgSegment } from "./org-admin-config";
 
 // Keep this independent of orgTypeDisplay so an accidental configuration
 // collision with an existing non-org route cannot filter itself out.
@@ -44,4 +44,41 @@ describe("organization route boundary", () => {
       expect(resolveOrgSegment(segment)).toBeUndefined();
     },
   );
+});
+
+describe("organization table ancestry configuration", () => {
+  it.each(OrgType)("%s displays and fetches only types above it", (orgType) => {
+    const config = orgAdminConfig[orgType];
+    const above = orgTypesAbove(orgType);
+
+    for (const ancestor of config.displayAncestors ?? []) {
+      expect(above).toContain(ancestor);
+      expect(config.ancestorTypes).toContain(ancestor);
+    }
+    for (const ancestor of config.ancestorTypes ?? []) {
+      expect(above).toContain(ancestor);
+    }
+  });
+
+  it("filters territories by sector and areas by sector and territory", () => {
+    expect(orgAdminConfig.territory.filters).toBe("sector");
+    expect(orgAdminConfig.area.filters).toBe("sectorTerritory");
+    expect(orgAdminConfig.area.displayAncestors).toEqual([
+      "territory",
+      "sector",
+    ]);
+  });
+
+  it("never ties a resolved-ancestor column to a server sort id", () => {
+    for (const orgType of OrgType) {
+      const config = orgAdminConfig[orgType];
+      for (const ancestor of config.displayAncestors ?? []) {
+        const column = config.columns.find((item) => item.key === ancestor);
+        expect(column?.id).toBeUndefined();
+      }
+    }
+    expect(
+      orgAdminConfig.area.columns.every((column) => column.sortable === false),
+    ).toBe(true);
+  });
 });

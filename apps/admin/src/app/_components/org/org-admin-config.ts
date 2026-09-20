@@ -1,5 +1,5 @@
 import { OrgType } from "@acme/shared/app/enums";
-import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import { orgTypeDisplay, orgTypesAbove } from "@acme/shared/app/org-hierarchy";
 import {
   AdminAreaAncestorOrgTypes,
   AdminHierarchyOrgTypes,
@@ -11,10 +11,18 @@ export interface OrgAdminConfig {
   add: boolean;
   serverPagination: boolean;
   serverSorting: boolean;
-  filters: "none" | "status" | "sector" | "sectorArea" | "region";
+  filters:
+    "none" | "status" | "sector" | "sectorTerritory" | "sectorArea" | "region";
   ancestorTypes?: OrgType[];
   displayAncestors?: OrgType[];
-  columns: { key: string; label: string; id?: string; parentType?: OrgType }[];
+  columns: {
+    key: string;
+    label: string;
+    id?: string;
+    parentType?: OrgType;
+    /** False for a column resolved in the browser, which the server cannot sort. */
+    sortable?: boolean;
+  }[];
   statusId: "status" | "isActive";
   aoCount: boolean;
   inactiveAction?: boolean;
@@ -50,8 +58,9 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     add: true,
     serverPagination: true,
     serverSorting: true,
-    filters: "status",
-    columns: [],
+    filters: "sector",
+    ancestorTypes: orgTypesAbove("territory"),
+    columns: [{ key: "parentOrgName", label: "Sector", parentType: "sector" }],
     statusId: "status",
     aoCount: true,
   },
@@ -59,10 +68,13 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     add: true,
     serverPagination: true,
     serverSorting: true,
-    filters: "sector",
+    filters: "sectorTerritory",
     ancestorTypes: AdminAreaAncestorOrgTypes,
-    displayAncestors: ["sector"],
-    columns: [{ key: "sector", label: "Sector", id: "parentOrgName" }],
+    displayAncestors: ["territory", "sector"],
+    columns: [
+      { key: "territory", label: "Territory", sortable: false },
+      { key: "sector", label: "Sector", sortable: false },
+    ],
     statusId: "status",
     aoCount: true,
   },

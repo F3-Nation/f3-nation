@@ -155,6 +155,13 @@ vi.mock("@acme/ui/select", () => ({
   SelectTrigger: () => null,
   SelectValue: () => null,
   SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectGroup: ({ children }: { children: ReactNode }) => <>{children}</>,
+  // A disabled option stands in for a group title so option order stays visible.
+  SelectLabel: ({ children }: { children: ReactNode }) => (
+    <option disabled value="">
+      {children}
+    </option>
+  ),
   SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
     <option value={value}>{children}</option>
   ),
@@ -186,8 +193,8 @@ const record = {
   meta: { region_location_short_description: "Keep this metadata" },
 };
 const parents = [
-  { id: 2, name: "Zulu" },
-  { id: 3, name: "Alpha" },
+  { id: 2, name: "Zulu", orgType: "sector" },
+  { id: 3, name: "Alpha", orgType: "sector" },
 ];
 const clients: QueryClient[] = [];
 
@@ -211,6 +218,8 @@ const save = () =>
   fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
 const parentSelect = () =>
   screen.getAllByRole<HTMLSelectElement>("combobox")[0]!;
+const parentOptions = () =>
+  Array.from(parentSelect().options).filter((option) => !option.disabled);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -228,45 +237,46 @@ describe.each([
   {
     type: "territory" as const,
     label: "Territory",
-    parent: "sector",
+    parentTypes: ["sector"],
     initialName: "",
     deletion: DeleteType.ORG,
   },
   {
     type: "sector" as const,
     label: "Sector",
-    parent: "nation",
+    parentTypes: ["nation"],
     initialName: "Unknown",
     deletion: DeleteType.ORG,
   },
   {
     type: "area" as const,
     label: "Area",
-    parent: "sector",
+    parentTypes: ["sector", "territory"],
     initialName: "",
     deletion: DeleteType.ORG,
   },
-])("$label editor", ({ type, label, parent, initialName, deletion }) => {
+])("$label editor", ({ type, label, parentTypes, initialName, deletion }) => {
   it("loads the record and sorted parent options with the current selection", async () => {
     mount(type, record.id);
     await waitFor(() => expect(field("Name").value).toBe(record.name));
     expect(screen.getByRole("heading").textContent).toBe(`Edit ${label}`);
     expect(field("ID").disabled).toBe(true);
     expect(field("ID").value).toBe("40");
-    await waitFor(() => expect(parentSelect().options.length).toBe(2));
-    expect(
-      Array.from(parentSelect().options).map((option) => option.text),
-    ).toEqual(["Alpha", "Zulu"]);
+    await waitFor(() => expect(parentOptions().length).toBe(2));
+    expect(parentOptions().map((option) => option.text)).toEqual([
+      "Alpha",
+      "Zulu",
+    ]);
     expect(parentSelect().value).toBe("2");
     expect(mocks.byId).toHaveBeenCalledWith({ id: 40, orgType: type });
-    expect(mocks.all).toHaveBeenCalledWith({ orgTypes: [parent] });
+    expect(mocks.all).toHaveBeenCalledWith({ orgTypes: parentTypes });
   });
 
   it("creates with the configured defaults and selected parent without a detail request", async () => {
     mount(type);
     expect(field("Name").value).toBe(initialName);
     expect(screen.getByRole("heading").textContent).toBe(`Add ${label}`);
-    await waitFor(() => expect(parentSelect().options.length).toBe(2));
+    await waitFor(() => expect(parentOptions().length).toBe(2));
     fireEvent.change(field("Name"), { target: { value: "New Org" } });
     fireEvent.change(parentSelect(), { target: { value: "3" } });
     save();
@@ -400,6 +410,104 @@ describe.each([
       ).toBeNull();
     },
   );
+});
+
+describe("Area parent selection", () => {
+  const sectorsAndTerritories = [
+    { id: 2, name: "Zulu Sector", orgType: "sector" },
+    { id: 3, name: "Alpha Sector", orgType: "sector" },
+    { id: 12, name: "Beta Territory", orgType: "territory" },
+    { id: 11, name: "Alpha Territory", orgType: "territory" },
+  ];
+  const areaUnder = (parentId: number) =>
+    mocks.byId.mockResolvedValue({ org: { ...record, parentId } });
+  const savedParent = async () => {
+    save();
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    return mocks.save.mock.calls[0]![0].parentId;
+  };
+
+  beforeEach(() => {
+    mocks.all.mockResolvedValue({ orgs: sectorsAndTerritories });
+  });
+
+  it("labels the selector for both types and groups sectors above territories, each sorted by name", async () => {
+    mount("area");
+
+    await waitFor(() => expect(parentSelect().options.length).toBe(6));
+    expect(screen.getByText("Sector or Territory")).toBeTruthy();
+    expect(mocks.all).toHaveBeenCalledWith({
+      orgTypes: ["sector", "territory"],
+    });
+    expect(
+      Array.from(parentSelect().options).map((option) => [
+        option.disabled ? "group" : "org",
+        option.text,
+      ]),
+    ).toEqual([
+      ["group", "Sectors"],
+      ["org", "Alpha Sector"],
+      ["org", "Zulu Sector"],
+      ["group", "Territories"],
+      ["org", "Alpha Territory"],
+      ["org", "Beta Territory"],
+    ]);
+  });
+
+  it("omits a group with no organizations", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: sectorsAndTerritories.filter((org) => org.orgType === "sector"),
+    });
+    mount("area");
+
+    await waitFor(() => expect(parentSelect().options.length).toBe(3));
+    expect(
+      Array.from(parentSelect().options).map((option) => option.text),
+    ).toEqual(["Sectors", "Alpha Sector", "Zulu Sector"]);
+  });
+
+  it("keeps an area under a sector editable and saves the same parent", async () => {
+    areaUnder(2);
+    mount("area", record.id);
+
+    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    await waitFor(() => expect(parentSelect().value).toBe("2"));
+
+    expect(await savedParent()).toBe(2);
+  });
+
+  it("selects the territory of an area under a territory and moves it to a sector", async () => {
+    areaUnder(12);
+    mount("area", record.id);
+
+    await waitFor(() => expect(parentSelect().value).toBe("12"));
+    fireEvent.change(parentSelect(), { target: { value: "3" } });
+
+    expect(await savedParent()).toBe(3);
+  });
+
+  it("moves an area under a sector to a territory", async () => {
+    areaUnder(2);
+    mount("area", record.id);
+
+    await waitFor(() => expect(parentSelect().value).toBe("2"));
+    fireEvent.change(parentSelect(), { target: { value: "11" } });
+
+    expect(await savedParent()).toBe(11);
+  });
+
+  it("keeps single-parent editors as a flat, ungrouped list", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: sectorsAndTerritories.filter((org) => org.orgType === "sector"),
+    });
+    mount("territory");
+
+    await waitFor(() => expect(parentSelect().options.length).toBe(2));
+    expect(
+      Array.from(parentSelect().options).every((option) => !option.disabled),
+    ).toBe(true);
+    expect(screen.getByText("Sector")).toBeTruthy();
+  });
 });
 
 describe("Nation exceptions", () => {

@@ -41,7 +41,7 @@ export async function seedOrgHierarchy(db: AppDb): Promise<OrgIds> {
   }
 
   // 3. Territories. Direct inserts bypass API parent validation to exercise
-  // map traversal; the current trigger does not maintain counts at every tier.
+  // map traversal; the AO-count trigger maintains counts at every tier.
   const territoryIds: Record<string, number> = {};
   for (const { sectorName, ...territory } of TERRITORIES) {
     const sectorId = sectorIds[sectorName];
