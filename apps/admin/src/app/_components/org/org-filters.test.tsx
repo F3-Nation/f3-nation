@@ -31,24 +31,49 @@ vi.mock("~/orpc/react", () => ({
       },
     },
   },
-  useQuery: ({ input }: { input: QueryInput }) => {
-    mocks.queryInputs.push(input);
+  useQuery: (
+    options:
+      | { input: QueryInput }
+      | { queryKey: [string, string[] | undefined]; enabled?: boolean },
+  ) => {
+    // org-table.tsx's own direct paginated table query, unchanged.
+    if ("input" in options) {
+      const { input } = options;
+      mocks.queryInputs.push(input);
 
-    const isResultQuery =
-      input.orgTypes.length === 1 &&
-      (input.orgTypes[0] === "region" || input.pageIndex !== undefined);
+      const isResultQuery =
+        input.orgTypes.length === 1 &&
+        (input.orgTypes[0] === "region" || input.pageIndex !== undefined);
 
-    if (!isResultQuery && !mocks.hierarchyAvailable) return { data: undefined };
+      if (!isResultQuery && !mocks.hierarchyAvailable)
+        return { data: undefined };
+
+      return {
+        data: {
+          orgs: isResultQuery
+            ? mocks.resultOrgs
+            : mocks.hierarchyOrgs.filter((org) =>
+                input.orgTypes.includes(org.orgType),
+              ),
+          total: 0,
+        },
+      };
+    }
+
+    // use-org-filters.ts's useFetchAllPages hierarchy query -- identified by
+    // the absence of `input` (useFetchAllPages calls useQuery with
+    // queryKey/fetchPage, never an oRPC-generated `input`). Mirrors the
+    // input-based branch above but returns the flattened array
+    // useFetchAllPages produces, not the {orgs, total} page shape.
+    const { queryKey, enabled } = options;
+    if (enabled === false) return { data: undefined };
+    const orgTypes = queryKey[1] ?? [];
+    mocks.queryInputs.push({ orgTypes });
+
+    if (!mocks.hierarchyAvailable) return { data: undefined };
 
     return {
-      data: {
-        orgs: isResultQuery
-          ? mocks.resultOrgs
-          : mocks.hierarchyOrgs.filter((org) =>
-              input.orgTypes.includes(org.orgType),
-            ),
-        total: 0,
-      },
+      data: mocks.hierarchyOrgs.filter((org) => orgTypes.includes(org.orgType)),
     };
   },
 }));

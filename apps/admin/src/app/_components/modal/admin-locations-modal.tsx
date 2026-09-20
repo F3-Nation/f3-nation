@@ -44,6 +44,7 @@ import {
 import { LocationInsertSchema } from "@acme/validators";
 
 import gte from "lodash/gte";
+import { client } from "~/orpc/client";
 import {
   invalidateQueries,
   orpc,
@@ -51,6 +52,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
@@ -77,9 +79,17 @@ export default function AdminLocationsModal({
     }),
   );
   const location = locationResponse?.location;
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
-  );
+  const { data: regions } = useFetchAllPages({
+    queryKey: ["org.all.everyRegion"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -242,7 +252,7 @@ export default function AdminLocationsModal({
                           <VirtualizedCombobox
                             value={field.value?.toString()}
                             options={
-                              regions?.orgs?.map((region) => ({
+                              regions?.map((region) => ({
                                 value: region.id.toString(),
                                 label: region.name,
                               })) ?? []
@@ -567,8 +577,7 @@ export default function AdminLocationsModal({
                             form.setValue("name", "Fake Location");
                             form.setValue(
                               "regionId",
-                              regions?.orgs?.find((r) => r.name === "Boone")
-                                ?.id ?? 1,
+                              regions?.find((r) => r.name === "Boone")?.id ?? 1,
                             );
                             form.setValue("email", "fake@example.com");
                             form.setValue("latitude", "37.7749");

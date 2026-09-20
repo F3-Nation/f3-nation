@@ -38,6 +38,7 @@ import { CrupdateUserSchema } from "@acme/validators";
 
 import gte from "lodash/gte";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
+import { client } from "~/orpc/client";
 import {
   ORPCError,
   invalidateQueries,
@@ -45,6 +46,7 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
 import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
@@ -75,17 +77,33 @@ export default function UserModal({
   const user = userResponse?.user;
   const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
-  );
+  const { data: regions } = useFetchAllPages({
+    queryKey: ["org.all.everyRegion"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   // Get orgs where user has admin role (required to manage access)
-  const { data: accessibleOrgsData } = useQuery(
-    orpc.org.accessible.queryOptions({
-      input: {
+  const { data: accessibleOrgs } = useFetchAllPages({
+    queryKey: ["org.accessible.adminUsersModal"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.accessible({
         orgTypes: ["region", "area", "sector", "nation"],
-      },
-    }),
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const accessibleOrgsData = useMemo(
+    () => (accessibleOrgs ? { orgs: accessibleOrgs } : undefined),
+    [accessibleOrgs],
   );
 
   // Filter to only orgs where user is admin (or all orgs if nation admin - roles will be empty)
@@ -406,7 +424,7 @@ export default function UserModal({
                                 : String(field.value)
                             }
                             options={
-                              regions?.orgs.map((region) => ({
+                              regions?.map((region) => ({
                                 value: region.id.toString(),
                                 label: region.name,
                               })) ?? []

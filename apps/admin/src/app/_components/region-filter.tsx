@@ -13,7 +13,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
 import type { RouterOutputs } from "~/orpc/types";
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 type Region = RouterOutputs["org"]["all"]["orgs"][number];
 
@@ -24,9 +25,17 @@ export const RegionFilter = ({
   onRegionSelect: (region: Region) => void;
   selectedRegions: Region[];
 }) => {
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
-  );
+  const { data: regions } = useFetchAllPages({
+    queryKey: ["org.all.everyRegion"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const [open, setOpen] = useState(false);
 
   return (
@@ -50,7 +59,7 @@ export const RegionFilter = ({
             <CommandInput placeholder="Search regions..." />
             <CommandEmpty>No regions found.</CommandEmpty>
             <CommandGroup className="max-h-96 overflow-y-auto">
-              {regions?.orgs.map((region) => (
+              {regions?.map((region) => (
                 <CommandItem
                   key={region.id}
                   value={region.name}

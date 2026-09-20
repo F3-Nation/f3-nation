@@ -8,7 +8,8 @@ import { MultiSelect } from "@acme/ui/multi-select";
 import { ControlledSelect } from "@acme/ui/select";
 import { Textarea } from "@acme/ui/textarea";
 
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { ControlledTimeInput } from "./controlled-time-input";
 import { useEffect } from "react";
 
@@ -36,16 +37,23 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
   const formEventName = form.watch("eventName");
 
   // Get event types for the region
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({
-      input: { orgIds: formRegionId ? [formRegionId] : [] },
-      enabled: formRegionId != null,
-    }),
-  );
+  const orgIds = formRegionId ? [formRegionId] : [];
+  const { data: eventTypes } = useFetchAllPages({
+    queryKey: ["eventType.all.everyMatching", orgIds],
+    enabled: formRegionId != null,
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { eventTypes: items, totalCount } = await client.eventType.all({
+        orgIds,
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
 
   useEffect(() => {
     if (!eventTypes) return;
-    const validIds = new Set(eventTypes.eventTypes.map((type) => type.id));
+    const validIds = new Set(eventTypes.map((type) => type.id));
     const selectedIds = form.getValues("eventTypeIds") ?? [];
     const nextIds = selectedIds.filter((id) => validIds.has(id));
     if (nextIds.length !== selectedIds.length) {
@@ -150,7 +158,7 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
                     defaultValue={(field.value ?? []).map(String)}
                     value={(field.value ?? []).map(String)}
                     options={
-                      eventTypes?.eventTypes.map((type) => ({
+                      eventTypes?.map((type) => ({
                         label: type.name,
                         value: type.id.toString(),
                       })) ?? []
@@ -174,11 +182,7 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
               JSON.stringify(formEventTypeIds) && (
               <p className="text-xs text-muted-foreground line-through">
                 {currentValues.eventTypeIds
-                  .map(
-                    (id) =>
-                      eventTypes?.eventTypes.find((type) => type.id === id)
-                        ?.name,
-                  )
+                  .map((id) => eventTypes?.find((type) => type.id === id)?.name)
                   .join(", ")}
               </p>
             )}

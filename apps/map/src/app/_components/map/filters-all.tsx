@@ -19,7 +19,8 @@ import {
 import { useTheme } from "@acme/ui/theme";
 
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { FiltersType } from "~/utils/store/filter";
 import {
   filterStore,
@@ -48,16 +49,19 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
-  const { data: nationalEventTypesResult, isLoading } = useQuery(
-    orpc.eventType.all.queryOptions({
-      input: {
+  const { data: nationalEventTypes, isLoading } = useFetchAllPages({
+    queryKey: ["eventType.all.everyNational"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { eventTypes: items, totalCount } = await client.eventType.all({
         nationalOnly: true,
         statuses: ["active"],
         sorting: [{ id: "name", desc: false }],
-      },
-    }),
-  );
-  const nationalEventTypes = nationalEventTypesResult?.eventTypes;
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
 
   const eventTypeOptions = useMemo(
     () =>

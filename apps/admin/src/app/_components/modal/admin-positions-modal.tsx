@@ -33,6 +33,7 @@ import { toast } from "@acme/ui/toast";
 import { PositionInsertSchema } from "@acme/validators";
 
 import gte from "lodash/gte";
+import { client } from "~/orpc/client";
 import {
   invalidateQueries,
   orpc,
@@ -41,6 +42,7 @@ import {
   useQuery,
 } from "~/orpc/react";
 import { useAuth } from "~/utils/hooks/use-auth";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
@@ -101,16 +103,22 @@ export default function AdminPositionsModal({
 
   const selectedOrgType = form.watch("orgType");
 
-  const { data: editableOrgsResponse } = useQuery(
-    orpc.org.all.queryOptions({
-      input: {
+  // This dropdown needs every editable org, not one page of them — org.all
+  // is capped server-side (see pagination.ts), so page through it instead
+  // of relying on an unbounded "omit both params" request.
+  const { data: editableOrgs } = useFetchAllPages({
+    queryKey: ["org.all.everyEditable", selectedOrgType],
+    enabled: !!selectedOrgType,
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
         orgTypes: selectedOrgType ? [selectedOrgType] : ["region"],
         onlyMine: true,
-        pageSize: 1000,
-      },
-      enabled: !!selectedOrgType,
-    }),
-  );
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   const prevOrgTypeRef = useRef<string | null | undefined>(undefined);
 
@@ -125,7 +133,7 @@ export default function AdminPositionsModal({
   }, [selectedOrgType, form]);
 
   const orgOptions = useMemo(() => {
-    const orgs = editableOrgsResponse?.orgs ?? [];
+    const orgs = editableOrgs ?? [];
     const options: { value: string; label: string }[] = orgs.map((org) => ({
       value: org.id.toString(),
       label: org.name,
@@ -151,7 +159,7 @@ export default function AdminPositionsModal({
     }
 
     return options;
-  }, [editableOrgsResponse, isNationAdmin, selectedOrgType, position]);
+  }, [editableOrgs, isNationAdmin, selectedOrgType, position]);
 
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";

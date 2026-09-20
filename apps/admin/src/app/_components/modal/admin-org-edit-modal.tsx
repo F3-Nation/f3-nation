@@ -49,6 +49,8 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import {
   closeModal,
   DeleteType,
@@ -81,12 +83,18 @@ export default function AdminOrgEditModal({
     }),
   );
   const org = orgResponse?.org;
-  const { data: parents } = useQuery(
-    orpc.org.all.queryOptions({
-      input: { orgTypes: config.parentType ? [config.parentType] : [] },
-      enabled: !!config.parentType,
-    }),
-  );
+  const { data: parents } = useFetchAllPages({
+    queryKey: ["org.all.everyParent", config.parentType],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: config.parentType ? [config.parentType] : [],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+    enabled: !!config.parentType,
+  });
   const router = useRouter();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -348,8 +356,8 @@ export default function AdminOrgEditModal({
                           <VirtualizedCombobox
                             value={field.value?.toString()}
                             options={
-                              parents?.orgs
-                                .filter(
+                              parents
+                                ?.filter(
                                   (org) => org.orgType === config.parentType,
                                 )
                                 .map((region) => ({
@@ -383,7 +391,7 @@ export default function AdminOrgEditModal({
                               />
                             </SelectTrigger>
                             <SelectContent>
-                              {parents?.orgs
+                              {parents
                                 ?.slice()
                                 .sort((a, b) => a.name.localeCompare(b.name))
                                 .map((parent) => (
@@ -648,8 +656,8 @@ export default function AdminOrgEditModal({
                         form.setValue("name", `Fake ${label}`);
                         form.setValue(
                           "parentId",
-                          parents?.orgs?.[
-                            Math.floor(Math.random() * parents?.orgs.length)
+                          parents?.[
+                            Math.floor(Math.random() * (parents?.length ?? 0))
                           ]?.id ?? -1,
                         );
                         form.setValue("website", `https://fake${orgType}.com`);

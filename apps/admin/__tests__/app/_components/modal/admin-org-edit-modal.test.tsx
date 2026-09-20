@@ -132,6 +132,13 @@ vi.mock("~/orpc/react", async () => ({
     },
   },
 }));
+// useFetchAllPages (used for the parent-options dropdown) calls the
+// imperative client directly rather than going through orpc.org.all's
+// queryOptions -- route it to the same mocks.all so existing
+// mocks.all.mockResolvedValue/mockImplementation setups still apply.
+vi.mock("~/orpc/client", () => ({
+  client: { org: { all: (input: unknown) => mocks.all(input) } },
+}));
 
 // Popover layout/focus are browser concerns. Native selects exercise the same
 // controlled value, option ordering and onValueChange contract in jsdom.
@@ -259,7 +266,11 @@ describe.each([
     ).toEqual(["Alpha", "Zulu"]);
     expect(parentSelect().value).toBe("2");
     expect(mocks.byId).toHaveBeenCalledWith({ id: 40, orgType: type });
-    expect(mocks.all).toHaveBeenCalledWith({ orgTypes: [parent] });
+    expect(mocks.all).toHaveBeenCalledWith({
+      orgTypes: [parent],
+      pageIndex: 0,
+      pageSize: 100,
+    });
   });
 
   it("creates with the configured defaults and selected parent without a detail request", async () => {
@@ -754,7 +765,11 @@ describe("Territory organization integration", () => {
     expect(mocks.all).toHaveBeenCalledWith(
       expect.objectContaining({ orgTypes: ["territory"] }),
     );
-    expect(mocks.all).toHaveBeenCalledWith({ orgTypes: ["sector"] });
+    expect(mocks.all).toHaveBeenCalledWith({
+      orgTypes: ["sector"],
+      pageIndex: 0,
+      pageSize: 100,
+    });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).toBeNull();
     actualStore.closeModal(undefined, "all");

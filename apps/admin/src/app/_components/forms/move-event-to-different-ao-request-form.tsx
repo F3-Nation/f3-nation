@@ -4,8 +4,10 @@ import { Case } from "@acme/shared/common/enums";
 import { convertCase } from "@acme/shared/common/functions";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
+import { client } from "~/orpc/client";
 import { orpc, useQuery } from "~/orpc/react";
 import { useUpdateLocationFormContext } from "~/utils/forms";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import {
   DevMetaSummary,
   LocationDetailsFields,
@@ -29,12 +31,20 @@ export const MoveEventToDifferentAoRequestForm = () => {
   const { data: regionsResponse } = useQuery(
     orpc.map.location.regions.queryOptions(),
   );
-  const { data: allAoData } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
-  );
+  const { data: allAos } = useFetchAllPages({
+    queryKey: ["org.all.everyAo"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["ao"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   const regions = regionsResponse?.regions;
-  const aos = useMemo(() => allAoData?.orgs ?? [], [allAoData]);
+  const aos = useMemo(() => allAos ?? [], [allAos]);
   const destinationAoOptions = useMemo(() => {
     // Treat -1/null/0 (no region selected) as unfiltered so the AO list isn't empty.
     const hasRegionFilter = !!formRegionId && formRegionId !== -1;
