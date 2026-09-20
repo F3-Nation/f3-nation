@@ -158,6 +158,29 @@ export interface CreateAuthInstanceOptions {
    * populated `roles` array.
    */
   isNationAdmin: (f3UserId: number) => Promise<boolean>;
+  /**
+   * Gates every OAuth client mutation via oauth-provider's `clientPrivileges`
+   * hook — called with the attempted action, returns whether it's allowed.
+   * Production denies "create" (see F3_NATION_CLIENT_REFERENCE_ID's comment:
+   * dynamic self-serve client creation isn't part of the design, so no live
+   * session — nation admin or not — should be able to spin one up; letting
+   * that through would auto-tag whatever an admin creates as F3-managed via
+   * clientReference below, not just the two intended clients — the gap
+   * #1046's review caught) and "configure-client-credentials-scopes"
+   * (unused). Everything else (read/update/delete/list/rotate) still relies
+   * on oauth-provider's own per-client ownership checks. Tests pass a
+   * permissive policy so fixtures can exercise client creation directly.
+   */
+  allowClientAction: (
+    action:
+      | "create"
+      | "read"
+      | "update"
+      | "delete"
+      | "list"
+      | "rotate"
+      | "configure-client-credentials-scopes",
+  ) => Promise<boolean>;
 }
 
 // The stable "owner" identity for F3-Nation-managed OAuth clients (apps/admin,
@@ -246,13 +269,25 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         // apps/auth/src/lib/oauth.ts's exchangeAuthorizationCode). Set
         // explicitly here anyway so the intent is documented, not implicit.
         clientRegistrationRequirePKCE: true,
-        // Any nation admin can create/manage/rotate the shared,
-        // F3-Nation-owned clients (apps/admin, apps/me) instead of each one
-        // being tied to whichever individual admin happened to create it —
-        // see F3_NATION_CLIENT_REFERENCE_ID above. A session that isn't a
+        // Any nation admin can manage/rotate the shared, F3-Nation-owned
+        // clients (apps/admin, apps/me) instead of each one being tied to
+        // whichever individual admin happened to create it — see
+        // F3_NATION_CLIENT_REFERENCE_ID above. A session that isn't a
         // nation admin gets `undefined` here, so oauth-provider falls back
         // to its normal per-user ownership (session.user.id) for any client
         // that admin creates for themselves.
+        //
+        // This callback only ever sees the calling session — oauth-provider
+        // never hands it the client being created/mutated — so it can't by
+        // itself tell "one of the two intended F3-managed clients" apart
+        // from any other client a nation admin happens to create. Relying
+        // on it alone at creation time would auto-share every client any
+        // nation admin creates, not just apps/admin and apps/me (the gap
+        // #1046's review caught). allowClientAction below closes that by
+        // denying client creation outright in production — the two real
+        // clients get provisioned out-of-band instead, with referenceId set
+        // directly — so this callback's create-time return value only
+        // matters for oauth-provider's already-permissive test/dev paths.
         clientReference: async ({ user }) => {
           if (!user) return undefined;
           const f3UserId = Number(user.id);
@@ -261,6 +296,8 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
             ? F3_NATION_CLIENT_REFERENCE_ID
             : undefined;
         },
+        // See allowClientAction's doc comment above.
+        clientPrivileges: ({ action }) => options.allowClientAction(action),
         // Deliberately no storeClientSecret override — prefers Better
         // Auth's own default secret hashing over matching the hand-rolled
         // server's sha256 scheme, even though it means confidential clients
@@ -313,6 +350,20 @@ export async function isNationAdminForUser(
     .innerJoin(roles, eq(roles.id, rolesXUsersXOrg.roleId))
     .where(eq(rolesXUsersXOrg.userId, f3UserId));
   return isNationAdminFromSession({ roles: userRoles });
+}
+
+/**
+ * Production's allowClientAction policy — see CreateAuthInstanceOptions's
+ * doc comment for why "create" and "configure-client-credentials-scopes"
+ * are denied. Split out from getAuth() (which needs a live DB connection to
+ * construct at all) so this pure decision is independently testable.
+ */
+export function allowProductionClientAction(
+  action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
+): Promise<boolean> {
+  return Promise.resolve(
+    action !== "create" && action !== "configure-client-credentials-scopes",
+  );
 }
 
 /**
@@ -379,6 +430,7 @@ export async function getAuth() {
       return existing ? existing.id : null;
     },
     isNationAdmin: (f3UserId) => isNationAdminForUser(db, f3UserId),
+    allowClientAction: allowProductionClientAction,
   });
 
   return _auth;

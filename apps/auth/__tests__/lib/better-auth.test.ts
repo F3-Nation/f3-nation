@@ -6,6 +6,7 @@ import { getAuthTables } from "@better-auth/core/db";
 import { isAccessTokenPayload } from "@f3nation/sso";
 
 import {
+  allowProductionClientAction,
   buildBetterAuthOptions,
   createAuthInstance,
   memoryAdapter,
@@ -51,6 +52,10 @@ function createTestAuth(f3UserId: number | null) {
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(f3UserId),
     isNationAdmin: () => Promise.resolve(false),
+    // Permissive — unlike production, these tests need to exercise client
+    // creation directly. See "denies client creation..." below for
+    // coverage of production's actual (stricter) policy.
+    allowClientAction: () => Promise.resolve(true),
   };
   const authOptions = buildBetterAuthOptions(options);
   for (const table of Object.keys(getAuthTables(authOptions))) {
@@ -79,6 +84,7 @@ function createMultiUserTestAuth(
       Promise.resolve(emailToF3UserId[email] ?? null),
     isNationAdmin: (f3UserId: number) =>
       Promise.resolve(adminF3UserIds.has(f3UserId)),
+    allowClientAction: () => Promise.resolve(true),
   };
   const authOptions = buildBetterAuthOptions(options);
   for (const table of Object.keys(getAuthTables(authOptions))) {
@@ -330,5 +336,55 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
         body: { client_id: client.client_id },
       }),
     ).rejects.toMatchObject({ status: "UNAUTHORIZED" });
+  });
+
+  it("denies client creation under production's allowClientAction policy, even for a nation admin (#1046 review finding)", async () => {
+    // clientReference alone can't tell "one of the two F3-managed clients"
+    // apart from any other client a nation admin happens to create — it
+    // only ever sees the calling session, never the client being created.
+    // Production closes that gap by denying "create" outright via
+    // allowProductionClientAction instead; this wires the real function in,
+    // not a re-declared copy of its policy.
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: () => Promise.resolve(701),
+      isNationAdmin: () => Promise.resolve(true),
+      allowClientAction: allowProductionClientAction,
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const token = await signInAndGetToken(auth, "admin-c@f3nation.test");
+    await expect(createConfidentialClient(auth, token)).rejects.toMatchObject({
+      status: "UNAUTHORIZED",
+    });
+  });
+});
+
+describe("allowProductionClientAction", () => {
+  it("denies create and configure-client-credentials-scopes, allows everything else", async () => {
+    await expect(allowProductionClientAction("create")).resolves.toBe(false);
+    await expect(
+      allowProductionClientAction("configure-client-credentials-scopes"),
+    ).resolves.toBe(false);
+
+    for (const action of [
+      "read",
+      "update",
+      "delete",
+      "list",
+      "rotate",
+    ] as const) {
+      await expect(allowProductionClientAction(action)).resolves.toBe(true);
+    }
   });
 });
