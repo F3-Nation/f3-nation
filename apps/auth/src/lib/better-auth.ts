@@ -55,6 +55,11 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { eq } from "drizzle-orm";
 
+// Type-only — erased at compile time, so this does NOT import ~/lib/db (and
+// its DATABASE_* env requirement) as a module-load side effect. See getAuth's
+// own dynamic `await import("~/lib/db")` below for the actual runtime import.
+import type { db as authDbType } from "~/lib/db";
+
 import {
   betterAuthAccount,
   betterAuthJwks,
@@ -285,6 +290,31 @@ export function createAuthInstance(options: CreateAuthInstanceOptions) {
 
 let _auth: ReturnType<typeof createAuthInstance> | null = null;
 
+type AuthDb = typeof authDbType;
+
+/**
+ * Same query shape as getSessionFromOAuthToken (packages/api/src/shared.ts),
+ * kept as a standalone function — rather than inline in getAuth's
+ * `isNationAdmin` field — so it can be exercised against a live database in
+ * tests without constructing a whole Better Auth instance.
+ */
+export async function isNationAdminForUser(
+  database: AuthDb,
+  f3UserId: number,
+): Promise<boolean> {
+  const userRoles = await database
+    .select({
+      orgId: orgs.id,
+      orgName: orgs.name,
+      roleName: roles.name,
+    })
+    .from(rolesXUsersXOrg)
+    .innerJoin(orgs, eq(orgs.id, rolesXUsersXOrg.orgId))
+    .innerJoin(roles, eq(roles.id, rolesXUsersXOrg.roleId))
+    .where(eq(rolesXUsersXOrg.userId, f3UserId));
+  return isNationAdminFromSession({ roles: userRoles });
+}
+
 /**
  * The production Better Auth instance, backed by the real database via
  * drizzleAdapter. Only constructed when first called — see
@@ -348,22 +378,7 @@ export async function getAuth() {
         .limit(1);
       return existing ? existing.id : null;
     },
-    // Same query shape as getSessionFromOAuthToken (packages/api/src/
-    // shared.ts), reused so this stays the one place that decides who
-    // counts as a nation admin.
-    isNationAdmin: async (f3UserId) => {
-      const userRoles = await db
-        .select({
-          orgId: orgs.id,
-          orgName: orgs.name,
-          roleName: roles.name,
-        })
-        .from(rolesXUsersXOrg)
-        .innerJoin(orgs, eq(orgs.id, rolesXUsersXOrg.orgId))
-        .innerJoin(roles, eq(roles.id, rolesXUsersXOrg.roleId))
-        .where(eq(rolesXUsersXOrg.userId, f3UserId));
-      return isNationAdminFromSession({ roles: userRoles });
-    },
+    isNationAdmin: (f3UserId) => isNationAdminForUser(db, f3UserId),
   });
 
   return _auth;
