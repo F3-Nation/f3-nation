@@ -39,7 +39,7 @@ const orgFilterSchema = z.object({
     })
     .default(["region"])
     .describe(
-      "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+      `Filter organizations by type. Returns orgs matching ANY of the given types (${OrgType.join(", ")}). Defaults to [region].`,
     ),
   searchTerm: z
     .string()
