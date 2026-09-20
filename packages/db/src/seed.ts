@@ -456,7 +456,9 @@ const withTriggerManagement = async (db: AppDb, fn: () => Promise<void>) => {
   await fn();
   await db.execute(sql`SELECT toggle_ao_count_trigger(FALSE)`);
 
-  // Run a one-time recalculation of all counts
+  // Legacy recount: only walks Sector → Area → Region → AO, so AOs under an
+  // Area parented by a Territory are not counted toward any Sector, and
+  // Territories themselves are never recounted. Used by this entrypoint only.
   await db.execute(sql`
   -- Update regions
   UPDATE orgs region

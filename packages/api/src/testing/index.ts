@@ -8,6 +8,7 @@
  */
 
 import type { Session } from "@acme/auth";
+import type { OrgType } from "@acme/shared/app/enums";
 import { eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 
@@ -45,6 +46,62 @@ export interface FixtureOrg {
   id: number;
   name: string | null;
 }
+
+/**
+ * Builds Territory → Area → Region → AO and direct Area → Region → AO paths
+ * under one Sector, plus an unrelated Sector branch, beneath a shared nation.
+ * Inserts directly, bypassing API parent-type validation. Each created ID is
+ * appended to `createdOrgIds` immediately so partial failures can be cleaned up;
+ * the shared nation is reused and not tracked. Delete dependents first, then
+ * organizations in reverse insertion order.
+ */
+export const createMixedOrgTree = async (createdOrgIds: number[]) => {
+  const prefix = `Mixed tree ${uniqueId()}`;
+  const insertOrg = async (
+    orgType: OrgType,
+    label: string,
+    parentId?: number,
+  ) => {
+    const [org] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `${prefix} ${label}`,
+        orgType,
+        parentId,
+        isActive: true,
+      })
+      .returning({ id: schema.orgs.id, name: schema.orgs.name });
+    if (!org) throw new Error(`Failed to create mixed tree ${label}`);
+    createdOrgIds.push(org.id);
+    return org;
+  };
+  const nation = await getOrCreateF3NationOrg();
+  const sector = await insertOrg("sector", "Sector", nation.id);
+  const territory = await insertOrg("territory", "Territory", sector.id);
+  const createBranch = async (parentId: number, label: string) => {
+    const area = await insertOrg("area", `${label} Area`, parentId);
+    const region = await insertOrg("region", `${label} Region`, area.id);
+    const ao = await insertOrg("ao", `${label} AO`, region.id);
+    return { area, region, ao };
+  };
+  const territoryBranch = await createBranch(territory.id, "Territory");
+  const directBranch = await createBranch(sector.id, "Direct");
+  const unrelatedSector = await insertOrg(
+    "sector",
+    "Unrelated Sector",
+    nation.id,
+  );
+  const unrelatedBranch = await createBranch(unrelatedSector.id, "Unrelated");
+  return {
+    nation,
+    sector,
+    territory,
+    territoryBranch,
+    directBranch,
+    unrelatedSector,
+    unrelatedBranch,
+  };
+};
 
 /**
  * Gets or creates the F3 Nation org (required for admin operations)

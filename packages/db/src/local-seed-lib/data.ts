@@ -22,7 +22,34 @@ export const SECTORS = [
   },
 ];
 
-export const AREAS = [
+// Synthetic Territory branch; existing local branches keep their identities.
+export const TERRITORIES = [
+  {
+    name: "Local Test Territory",
+    orgType: "territory" as const,
+    isActive: true,
+    sectorName: "F3 Southeast",
+  },
+];
+
+type AreaSeed = {
+  name: string;
+  orgType: "area";
+  isActive: boolean;
+  description: string;
+} & (
+  | { sectorName: string; territoryName?: never }
+  | { territoryName: string; sectorName?: never }
+);
+
+export const AREAS: AreaSeed[] = [
+  {
+    name: "Local Territory Area",
+    orgType: "area",
+    isActive: true,
+    territoryName: "Local Test Territory",
+    description: "Synthetic Area beneath Territory for local verification",
+  },
   {
     name: "F3 Western NC",
     orgType: "area" as const,
@@ -39,8 +66,17 @@ export const AREAS = [
   },
 ];
 
-// Regions must include "Boone" — the existing seed.ts insertUsers() expects it.
+// Keep Boone stable: local API-key scoping and map E2E fixtures resolve its name.
 export const REGIONS = [
+  {
+    name: "Local Territory Region",
+    orgType: "region" as const,
+    isActive: true,
+    areaName: "Local Territory Area",
+    email: "territory-region@example.com",
+    website: "https://example.com",
+    description: "Synthetic region beneath Territory for local verification",
+  },
   {
     name: "Boone",
     orgType: "region" as const,
@@ -63,6 +99,17 @@ export const REGIONS = [
 
 // AOs with lat/long so they show on the map
 export const AOS = [
+  {
+    name: "Local Territory AO",
+    orgType: "ao" as const,
+    isActive: true,
+    regionName: "Local Territory Region",
+    description: "Synthetic workout beneath Territory",
+    latitude: 36.214,
+    longitude: -81.68,
+    addressCity: "Boone",
+    addressState: "NC",
+  },
   // Boone AOs (around 36.21, -81.67)
   {
     name: "The Dark Tower",
