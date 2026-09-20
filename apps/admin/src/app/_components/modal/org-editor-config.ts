@@ -42,6 +42,13 @@ export const orgEditorConfig: Record<OrgType, OrgEditorConfig> = {
     parentTestId: TestId.SECTOR_NATION_SELECT,
     deactivate: "existing",
   },
+  territory: {
+    parentType: "sector",
+    parentPlaceholder: "Select a sector",
+    defaultName: "",
+    retainLogo: false,
+    deactivate: "existing",
+  },
   area: {
     parentType: "sector",
     parentPlaceholder: "Select a sector",

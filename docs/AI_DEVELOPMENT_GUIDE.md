@@ -244,9 +244,9 @@ violation is a `BAD_REQUEST`, not a 500.
   logouts. Either give rotation a short grace window with chain-linking on the
   server, or single-flight the refresh on the client. See
   [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) and the `me`/`admin` middleware.
-- **MFA / email codes in local dev** are captured by Mailpit / Ethereal — see
-  [`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md). Don't disable verification to make
-  flows pass; drive them properly.
+- **MFA / email codes in local dev** are captured by Mailpit — see
+  [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md). Don't disable verification to
+  make flows pass; drive them properly.
 
 ---
 
@@ -356,5 +356,4 @@ Before proposing a diff, confirm:
 - [`docs/AI_AUDIT_PLAYBOOK.md`](AI_AUDIT_PLAYBOOK.md) — how to audit the repo.
 - [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) — auth app specifics & local QA.
 - [`apps/me/AGENTS.md`](../apps/me/AGENTS.md) — token-scoped client app pattern.
-- [`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md) — driving auth flows in local dev.
 - [`docs/LOCAL_DEV_DOCKER.md`](LOCAL_DEV_DOCKER.md) — local environment setup.

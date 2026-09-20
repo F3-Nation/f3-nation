@@ -103,7 +103,7 @@ List endpoints accept `pageIndex` (0-based) and `pageSize`. Responses include `t
 
 ### org
 
-Organizations are hierarchical: `nation → sector → area → region → ao`
+Organizations are hierarchical: `nation → sector → territory → area → region → ao`
 
 | Method   | Path                  | Purpose                                                      |
 | -------- | --------------------- | ------------------------------------------------------------ |
@@ -120,7 +120,7 @@ Organizations are hierarchical: `nation → sector → area → region → ao`
 `logoUrl`, `website`, `email`, `twitter`, `facebook`, `instagram`, `lastAnnualReview`,
 `meta`, `created`, `updated`, `aoCount`, `parentOrgName`, `parentOrgType`
 
-**`orgType` values:** `"ao"` | `"region"` | `"area"` | `"sector"` | `"nation"`
+**`orgType` values:** `"ao"` | `"region"` | `"area"` | `"territory"` | `"sector"` | `"nation"`
 
 ---
 

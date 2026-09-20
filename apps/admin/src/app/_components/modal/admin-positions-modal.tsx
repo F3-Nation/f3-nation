@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
+import { OrgType } from "@acme/shared/app/enums";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -50,13 +52,10 @@ import {
 } from "~/utils/store/modal";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
-const ORG_TYPE_OPTIONS = [
-  { label: "AO", value: "ao" },
-  { label: "Region", value: "region" },
-  { label: "Area", value: "area" },
-  { label: "Sector", value: "sector" },
-  { label: "Nation", value: "nation" },
-] as const;
+const ORG_TYPE_OPTIONS = OrgType.map((value) => ({
+  label: orgTypeDisplay[value].label,
+  value,
+}));
 
 const NATIONAL_ORG_VALUE = "__national__";
 

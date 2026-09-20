@@ -257,6 +257,7 @@ describe("PositionsTable org-level filter and column (single source of truth org
       "AO",
       "Region",
       "Area",
+      "Territory",
       "Sector",
       "Nation",
     ]);
