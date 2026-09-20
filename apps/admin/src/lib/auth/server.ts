@@ -86,9 +86,7 @@ export async function getSessionUser(): Promise<AdminSession | null> {
       })),
     };
   } catch (error) {
-    logWarn("admin.auth.roles_hydrate_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    logWarn("admin.auth.roles_hydrate_failed", { err: error });
     return session;
   }
 }
