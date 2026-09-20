@@ -20,6 +20,7 @@ type OrgFilterAction =
   | { type: "toggle-sector"; sector: Org; orgById: ReadonlyMap<number, Org> }
   | { type: "toggle-territory"; territory: Org }
   | { type: "toggle-area"; area: Org }
+  | { type: "reconcile"; selected: OrgFilterState }
   | { type: "reset" };
 const initialOrgFilterState: OrgFilterState = {
   selectedAreas: [],
@@ -59,6 +60,7 @@ const orgFilterReducer = (
   action: OrgFilterAction,
 ): OrgFilterState => {
   if (action.type === "reset") return initialOrgFilterState;
+  if (action.type === "reconcile") return action.selected;
   if (action.type === "toggle-area") {
     const isSelected = isOrgSelected(state.selectedAreas, action.area);
     return {
@@ -174,6 +176,18 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
     () => keepOffered(pickedFilters.selectedTerritories, availableTerritories),
     [pickedFilters.selectedTerritories, availableTerritories],
   );
+  // Store the drops too, so a dropped selection cannot return when the sector
+  // selection later changes. Each pass strictly shrinks the stored picks.
+  if (
+    selectedSectors.length !== pickedFilters.selectedSectors.length ||
+    selectedAreas.length !== pickedFilters.selectedAreas.length ||
+    selectedTerritories.length !== pickedFilters.selectedTerritories.length
+  ) {
+    dispatch({
+      type: "reconcile",
+      selected: { selectedSectors, selectedAreas, selectedTerritories },
+    });
+  }
   // A selected sector, and everything the loaded hierarchy places beneath it.
   const sectorAndDescendantIds = useMemo(
     () =>

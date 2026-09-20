@@ -10,6 +10,7 @@ source_db="territory_923_source_$$_test"
 restore_db="territory_923_restore_$$_test"
 journal_trap_db="territory_923_journal_trap_$$_test"
 journal_recovery_db="territory_923_journal_recovery_$$_test"
+journal_reapplied_db="territory_923_journal_reapplied_$$_test"
 artifact_dir="$(mktemp -d "${TMPDIR:-/tmp}/territory-923.XXXXXX")"
 
 if [[ "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$container")" != f3-local ]]; then
@@ -26,6 +27,7 @@ cleanup() {
     exec 3>&-
     wait "$session_pid" || true
   fi
+  docker exec "$container" dropdb -U f3local --if-exists "$journal_reapplied_db"
   docker exec "$container" dropdb -U f3local --if-exists "$journal_recovery_db"
   docker exec "$container" dropdb -U f3local --if-exists "$journal_trap_db"
   docker exec "$container" dropdb -U f3local --if-exists "$restore_db"
@@ -193,7 +195,10 @@ query() {
 run_runner() {
   local log="$artifact_dir/runner-$1.log"
   # CI must be unset: the runner returns early, still printing success, when set.
-  (cd "$repo_root/packages/db" && env -u CI SKIP_ENV_VALIDATION=1 QUERY_TIMEOUT_MS=0 \
+  # The DB client reads TEST_DATABASE_URL instead of DATABASE_URL when NODE_ENV is
+  # "test", which would migrate whatever database the caller's shell points at.
+  (cd "$repo_root/packages/db" && env -u CI -u TEST_DATABASE_URL NODE_ENV=development \
+    SKIP_ENV_VALIDATION=1 QUERY_TIMEOUT_MS=0 \
     DATABASE_URL="postgres://f3local:$db_password@localhost:$db_port/$1" \
     node -r esbuild-register src/migrate.ts) > "$log" 2>&1 || true
   if ! grep -qx 'Migration done' "$log" || grep -q 'Migration failed' "$log"; then
@@ -209,6 +214,26 @@ assert_state() {
 }
 journal_has() {
   [[ "$(query "$1" "SELECT count(*) FROM $(journal_table "$1") WHERE created_at = $(migration_when "$2")")" == 1 ]]
+}
+# 0023 defines update_org_ao_counts() with the old fixed-depth body and 0026
+# replaces it with the depth-agnostic one. Enum and row counts cannot show which
+# is live, so assert on the function body.
+assert_depth_agnostic_trigger() {
+  [[ "$(query "$1" "SELECT pg_get_functiondef('public.update_org_ao_counts'::regproc) ILIKE '%great_grandparent%'")" == f ]] \
+    || fail "$1: update_org_ao_counts() is the old fixed-depth trigger"
+}
+# 0023's exact SQL plus its journal row, for one transaction. With "remove-0026"
+# it also removes 0026's row so the runner re-applies 0026 afterwards.
+recovery_sql() {
+  local table
+  table="$(journal_table "$1")"
+  cat "$(migration_file 0023)"
+  printf '\nINSERT INTO %s (hash, created_at) VALUES ('"'%s'"', %s);\n' \
+    "$table" "$(migration_hash 0023)" "$(migration_when 0023)"
+  if [[ "${2:-}" == remove-0026 ]]; then
+    printf "DELETE FROM %s WHERE created_at = %s AND hash = '%s';\n" \
+      "$table" "$(migration_when 0026)" "$(migration_hash 0026)"
+  fi
 }
 
 # Migrate with the real runner, roll back, and reconcile the journal exactly as
@@ -232,19 +257,28 @@ journal_has "$journal_trap_db" 0026 || fail 'Runner did not re-run 0026 after it
 if journal_has "$journal_trap_db" 0023; then
   fail 'Runner unexpectedly re-ran 0023'
 fi
+assert_depth_agnostic_trigger "$journal_trap_db"
 
 # Recovery: apply 0023's exact SQL and its journal row in one transaction before
 # the runner deploys, so the runner then finds only 0026 pending, as originally.
 rolled_back_journal_db "$journal_recovery_db"
-{
-  cat "$(migration_file 0023)"
-  printf '\nINSERT INTO %s (hash, created_at) VALUES ('"'%s'"', %s);\n' \
-    "$(journal_table "$journal_recovery_db")" "$(migration_hash 0023)" "$(migration_when 0023)"
-} | psql_db "$journal_recovery_db" -1 > "$artifact_dir/recovery.log"
+recovery_sql "$journal_recovery_db" | psql_db "$journal_recovery_db" -1 > "$artifact_dir/recovery.log"
 run_runner "$journal_recovery_db"
 assert_state "$journal_recovery_db" "$territory_enum" "$migration_count"
+assert_depth_agnostic_trigger "$journal_recovery_db"
 run_runner "$journal_recovery_db"
 assert_state "$journal_recovery_db" "$territory_enum" "$migration_count"
 psql_db "$journal_recovery_db" -c "INSERT INTO orgs (id, name, org_type, is_active) VALUES (900003, 'Recovered territory', 'territory', true); DELETE FROM orgs WHERE id = 900003;" > /dev/null
 
-echo "PASS: forward, rollback, persistent-session writes, lock timeout, data/index preservation, both refusal cases, and the Drizzle journal trap and recovery. Synthetic artifacts: $artifact_dir"
+# Out of order: a runner pass already re-applied 0026 before Territory is
+# restored. 0023 alone would put its old fixed-depth trigger back over 0026's and
+# the runner would never repair it (0026 stays journaled), so the same
+# transaction also removes 0026's row and the runner re-applies 0026 afterwards.
+rolled_back_journal_db "$journal_reapplied_db"
+run_runner "$journal_reapplied_db"
+recovery_sql "$journal_reapplied_db" remove-0026 | psql_db "$journal_reapplied_db" -1 > "$artifact_dir/recovery-reapplied.log"
+run_runner "$journal_reapplied_db"
+assert_state "$journal_reapplied_db" "$territory_enum" "$migration_count"
+assert_depth_agnostic_trigger "$journal_reapplied_db"
+
+echo "PASS: forward, rollback, persistent-session writes, lock timeout, data/index preservation, both refusal cases, and the Drizzle journal trap and both recovery orderings. Synthetic artifacts: $artifact_dir"

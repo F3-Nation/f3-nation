@@ -13,14 +13,17 @@ named temporary databases, applies migrations through 0022, and inserts only
 synthetic organizations and positions. It dumps that populated database using
 `pg_dump -Fc`, restores the archive into the second database, and exercises the
 forward migration, rollback, reapplication, and rollback-refusal cases. It then
-rehearses the rollback's Drizzle journal reconciliation in two further temporary
+rehearses the rollback's Drizzle journal reconciliation in three further temporary
 databases built by the repository's real migration runner (`src/migrate.ts`, so
 `node` and installed dependencies are required): one shows that reconciling the
-journal alone does not bring Territory back, the other applies the recovery in
-[Restoring Territory after a rollback](#restoring-territory-after-a-rollback).
-It removes only its four temporary databases on exit and prints the retained
+journal alone does not bring Territory back, and two apply the recovery in
+[Restoring Territory after a rollback](#restoring-territory-after-a-rollback),
+one before and one after a runner pass has re-applied 0026. Each recovery checks
+the live `update_org_ao_counts()` body, not just the enum and journal.
+It removes only its five temporary databases on exit and prints the retained
 synthetic archive/log directory. Existing development/test databases are not
-reset by this script.
+reset by this script, and the runner is pinned away from `TEST_DATABASE_URL`, so
+a `NODE_ENV=test` shell cannot redirect it onto another database.
 
 For an isolated container, set `TERRITORY_TEST_CONTAINER` to its name; it must
 still carry the `f3-local` Compose-project label and use the same local DB user.
@@ -191,12 +194,32 @@ like the forward migration:
    PgBouncer server connections as for forward migration.
 4. Deploy the coordinated build. The runner now finds only the migrations newer
    than 0025 that are not yet applied (0026, when its row was removed) and applies
-   them in their original order.
+   them in their original order. Afterwards confirm the live trigger is 0026's;
+   this must return `f`:
 
-If a runner pass has already re-applied 0026, applying the same transaction
-afterwards also works, but 0023 replaces the enum that 0026's functions
-reference, so recycle every pooled connection. The rehearsal does not cover that
-ordering.
+   ```sql
+   SELECT pg_get_functiondef('public.update_org_ao_counts'::regproc) ILIKE '%great_grandparent%';
+   ```
+
+If a runner pass has already re-applied 0026, do **not** apply the transaction
+above unchanged. 0023 also defines `update_org_ao_counts()`, with the old
+fixed-depth body, so applying it over the re-applied 0026 puts that trigger back:
+an AO under Sector, Territory, Area, and Region would stop updating the Sector's
+count, and intermediate moves and deactivations would stop triggering recounts.
+The runner never repairs this, because 0026 stays recorded as applied. Add one
+statement to the same transaction, removing 0026's row exactly as in step 4 of the
+rollback (match `hash` and `created_at = 1789775437096`):
+
+```sql
+DELETE FROM drizzle."__drizzle_migrations_<database>"
+WHERE "hash" = '<SHA-256 of the exact deployed 0026 file>'
+  AND "created_at" = 1789775437096;
+```
+
+The runner then re-applies 0026 after 0023. Its functions are `CREATE OR REPLACE`
+and its backfill is idempotent, so this restores the depth-agnostic trigger and
+recounts. Verify with the trigger check in step 4, and recycle every pooled
+connection, because 0023 replaces the enum that 0026's functions reference.
 
 The alternative is to ship Territory as a new migration with a fresh, later
 `when`. Its SQL must then also re-issue `update_org_ao_counts`,
@@ -204,8 +227,8 @@ The alternative is to ship Territory as a new migration with a fresh, later
 [Future enum-recreation migrations](#future-enum-recreation-migrations)), and 0026 would run before it.
 The rehearsal does not cover this route, so it needs its own review.
 
-`verify-territory-migration.sh` rehearses the trap and the recovery above against
-databases built by the real runner, using the same journal edit as step 4. Those
+`verify-territory-migration.sh` rehearses the trap and both recovery orderings above
+against databases built by the real runner, using the same journal edit as step 4. Those
 databases are fresh synthetic ones, so the production journal table name and any
 production-only drift still have to be checked on the actual target.
 
