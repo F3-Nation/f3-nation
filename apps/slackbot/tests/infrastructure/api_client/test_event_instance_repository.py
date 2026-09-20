@@ -126,9 +126,8 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
 
         self.assertEqual(self._posted_payload()["eventTypeId"], 0)
 
-    def test_create_omits_optional_fields_that_were_not_supplied(self):
-        """Omission means 'leave it alone' on the API side, so an unset optional
-        must not be sent as null."""
+    def test_create_sends_null_for_an_unset_event_tag(self):
+        """A null event tag clears the tag on the API side."""
         self.repo.create(
             name="New Event",
             org_id=10,
@@ -148,8 +147,9 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
         )
 
         payload = self._posted_payload()
-        for absent in ("locationId", "description", "meta", "preblast", "preblastRich", "eventTagId"):
+        for absent in ("locationId", "description", "meta", "preblast", "preblastRich"):
             self.assertNotIn(absent, payload)
+        self.assertIsNone(payload["eventTagId"])
 
     def test_create_sends_first_event_tag_id(self):
         self.repo.create(
@@ -195,16 +195,17 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
             highlight=False,
             preblast_rich=None,
             preblast=None,
+            existing_instance=_instance(series_id=None),
         )
 
         payload = self._posted_payload()
         self.assertEqual(payload["id"], 5)
         self.assertEqual(payload["eventTypeId"], 7)
+        self.assertIsNone(payload["eventTagId"])
         self.assertEqual(payload["startTime"], "0700")
 
-    def test_update_does_not_send_a_series_exception(self):
-        """A plain time edit leaves the exception untouched: the field is absent,
-        so the API preserves whatever is stored."""
+    def test_update_sends_a_null_series_exception(self):
+        """A plain time edit includes a null series exception in the full payload."""
         self.repo.update(
             instance_id=5,
             name="Renamed",
@@ -222,9 +223,62 @@ class BuildCrupdatePayloadTest(unittest.TestCase):
             highlight=False,
             preblast_rich=None,
             preblast=None,
+            existing_instance=_instance(series_id=None),
         )
 
-        self.assertNotIn("seriesException", self._posted_payload())
+        self.client.get.assert_not_called()
+        self.assertIsNone(self._posted_payload()["seriesException"])
+
+    def test_update_does_not_post_when_existing_lookup_fails(self):
+        self.client.get.side_effect = RuntimeError("lookup failed")
+
+        with self.assertRaisesRegex(RuntimeError, "lookup failed"):
+            self.repo.update(
+                instance_id=5,
+                name="Renamed",
+                org_id=10,
+                start_date=date(2026, 6, 1),
+                start_time="0700",
+                end_time="0800",
+                description=None,
+                location_id=3,
+                event_type_ids=[7],
+                event_tag_ids=[],
+                is_active=True,
+                is_private=False,
+                meta=None,
+                highlight=False,
+                preblast_rich=None,
+                preblast=None,
+            )
+
+        self.client.post.assert_not_called()
+
+    def test_update_preserves_miscellaneous_exception_when_time_matches_series(self):
+        series_repo = MagicMock()
+        series_repo.get_by_id.return_value.start_time = "0700"
+        repo = ApiEventInstanceRepository(self.client, series_repository=series_repo)
+        repo.update(
+            instance_id=5,
+            name="Renamed",
+            org_id=10,
+            start_date=date(2026, 6, 1),
+            start_time="0700",
+            end_time="0800",
+            description=None,
+            location_id=3,
+            event_type_ids=[7],
+            event_tag_ids=[],
+            is_active=True,
+            is_private=False,
+            meta=None,
+            highlight=False,
+            preblast_rich=None,
+            preblast=None,
+            existing_instance=_instance(series_id=22, series_exception="miscellaneous"),
+        )
+
+        self.assertEqual(self._posted_payload()["seriesException"], "miscellaneous")
 
 
 class StateChangeTest(unittest.TestCase):

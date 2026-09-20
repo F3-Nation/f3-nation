@@ -30,7 +30,7 @@ export interface SeriesData {
   highlight: boolean;
   meta: Record<string, unknown> | null;
   eventTypeIds?: number[];
-  // eventTagId?: number; // TODO: event tag support
+  eventTagIds?: number[];
 }
 
 // Structural fields that require recreating instances
@@ -224,6 +224,22 @@ export async function createEventInstancesForSeries(
   yearsAhead = 4,
   fromDate?: string,
 ): Promise<number> {
+  return db.transaction((tx) =>
+    createEventInstancesForSeriesInTransaction(
+      tx as unknown as AppDb,
+      series,
+      yearsAhead,
+      fromDate,
+    ),
+  );
+}
+
+async function createEventInstancesForSeriesInTransaction(
+  db: AppDb,
+  series: SeriesData,
+  yearsAhead: number,
+  fromDate?: string,
+): Promise<number> {
   if (!series.dayOfWeek) {
     // Not a valid recurring series
     return 0;
@@ -336,15 +352,16 @@ export async function createEventInstancesForSeries(
   }
 
   // Handle event tag join table
-  // TODO: event tag support - need to add eventTagId to SeriesData and handle in event router
-  // if (series.eventTagId && created.length > 0) {
-  //   await db.insert(schema.eventTagsXEventInstances).values(
-  //     created.map((instance) => ({
-  //       eventInstanceId: instance.id,
-  //       eventTagId: series.eventTagId!,
-  //     })),
-  //   );
-  // }
+  if (series.eventTagIds?.length && created.length > 0) {
+    await db.insert(schema.eventTagsXEventInstances).values(
+      created.flatMap((instance) =>
+        series.eventTagIds!.map((eventTagId) => ({
+          eventInstanceId: instance.id,
+          eventTagId,
+        })),
+      ),
+    );
+  }
 
   return created.length;
 }
@@ -353,6 +370,20 @@ export async function createEventInstancesForSeries(
  * Update future event instances with non-structural changes from series
  */
 export async function updateFutureInstances(
+  db: AppDb,
+  series: SeriesData,
+  startDate?: string,
+): Promise<number> {
+  return db.transaction((tx) =>
+    updateFutureInstancesInTransaction(
+      tx as unknown as AppDb,
+      series,
+      startDate,
+    ),
+  );
+}
+
+async function updateFutureInstancesInTransaction(
   db: AppDb,
   series: SeriesData,
   startDate?: string,
@@ -414,26 +445,25 @@ export async function updateFutureInstances(
     }
   }
 
-  // Update event tags if provided
-  // TODO: event tag support - need to add eventTagId to SeriesData and handle in event router
-  // if (series.eventTagId !== undefined) {
-  //   // Delete existing event tag associations
-  //   await db
-  //     .delete(schema.eventTagsXEventInstances)
-  //     .where(
-  //       inArray(schema.eventTagsXEventInstances.eventInstanceId, instanceIds),
-  //     );
+  // Update event tags if provided (an empty array intentionally clears them).
+  if (series.eventTagIds !== undefined) {
+    await db
+      .delete(schema.eventTagsXEventInstances)
+      .where(
+        inArray(schema.eventTagsXEventInstances.eventInstanceId, instanceIds),
+      );
 
-  //   // Add new associations
-  //   if (series.eventTagId) {
-  //     await db.insert(schema.eventTagsXEventInstances).values(
-  //       instanceIds.map((id) => ({
-  //         eventInstanceId: id,
-  //         eventTagId: series.eventTagId!,
-  //       })),
-  //     );
-  //   }
-  // }
+    if (series.eventTagIds.length > 0) {
+      await db.insert(schema.eventTagsXEventInstances).values(
+        instanceIds.flatMap((id) =>
+          series.eventTagIds!.map((eventTagId) => ({
+            eventInstanceId: id,
+            eventTagId,
+          })),
+        ),
+      );
+    }
+  }
 
   return futureInstances.length;
 } /**
@@ -446,13 +476,29 @@ export async function recreateFutureInstances(
   startDate?: string,
   yearsAhead = 4,
 ): Promise<{ deleted: number; created: number }> {
+  return db.transaction((tx) =>
+    recreateFutureInstancesInTransaction(
+      tx as unknown as AppDb,
+      series,
+      startDate,
+      yearsAhead,
+    ),
+  );
+}
+
+async function recreateFutureInstancesInTransaction(
+  db: AppDb,
+  series: SeriesData,
+  startDate: string | undefined,
+  yearsAhead: number,
+): Promise<{ deleted: number; created: number }> {
   const fromDate = startDate ?? getCurrentDate();
 
   // Delete existing future instances
   const deleted = await deleteFutureInstancesForSeries(db, series.id, fromDate);
 
   // Create new instances
-  const created = await createEventInstancesForSeries(
+  const created = await createEventInstancesForSeriesInTransaction(
     db,
     series,
     yearsAhead,

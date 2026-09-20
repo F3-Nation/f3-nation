@@ -114,6 +114,24 @@ export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
   return next({ context });
 });
 
+/** Personal self-service requires a user session or Auth access token. */
+export const personalUserProcedure = protectedProcedure.use(
+  ({ context, next }) => {
+    // `apiKey` is only set on the result of `getSession` when auth fell
+    // through session/JWT resolution to an API-key lookup — never for a
+    // real user session or Auth access token.
+    if (context.session!.apiKey) {
+      logWarn("api.auth.personal_endpoint_api_key_denied", {
+        apiKeyId: context.session!.apiKey.id,
+      });
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "Sign in with your user account to access this endpoint.",
+      });
+    }
+    return next({ context });
+  },
+);
+
 export const editorProcedure = withSessionAndDb.use(({ context, next }) => {
   const isEditorOrAdmin = context.session?.roles?.some((r) =>
     ["editor", "admin"].includes(r.roleName),

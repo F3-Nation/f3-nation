@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## [2.5.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.5.0...slackbot@2.5.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **deps:** update dependency pillow-heif to &gt;=1.7.0,&lt;1.8.0 ([#1009](https://github.com/F3-Nation/f3-nation/issues/1009)) ([aa4958d](https://github.com/F3-Nation/f3-nation/commit/aa4958d72098a03206c8649e8234e05512e5bdf8))
+* **slackbot, api:** persisting tags on series and allowing removal ([#979](https://github.com/F3-Nation/f3-nation/issues/979)) ([807630d](https://github.com/F3-Nation/f3-nation/commit/807630d961b09d9934b7deac33aafc927135173c))
+* **slackbot:** fixing calendar send script pandas error ([#990](https://github.com/F3-Nation/f3-nation/issues/990)) ([47bf01f](https://github.com/F3-Nation/f3-nation/commit/47bf01f9f55d38e1d356a132a7e9a9029abb9099))
+
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.3...slackbot@2.5.0) (2026-09-11)
+
+
+### Features
+
+* **slackbot:** configurable 2 or 3 week calendar display ([#829](https://github.com/F3-Nation/f3-nation/issues/829)) ([1ba2dd5](https://github.com/F3-Nation/f3-nation/commit/1ba2dd52d06996a9bece59c777b491d1d613005e))
+* **slackbot:** now setting `seriesException=different-time` on time change ([#989](https://github.com/F3-Nation/f3-nation/issues/989)) ([cd5008e](https://github.com/F3-Nation/f3-nation/commit/cd5008e3275d1e44194b22f35a37e0a7a5217960))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#959](https://github.com/F3-Nation/f3-nation/issues/959)) ([7f45d87](https://github.com/F3-Nation/f3-nation/commit/7f45d876ab3c2d587feb84098d9d7ed2436527e3))
+
 ## [2.4.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.2...slackbot@2.4.3) (2026-09-10)
 
 

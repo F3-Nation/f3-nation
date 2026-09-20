@@ -396,6 +396,7 @@ def handle_event_instance_add(
             highlight=highlight,
             preblast_rich=preblast_rich,
             preblast=preblast_text,
+            existing_instance=existing,
         )
         post_bot_log(
             client=client,

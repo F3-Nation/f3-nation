@@ -150,8 +150,10 @@ class EventInstanceApiContractTest(unittest.TestCase):
             highlight=False,
             preblast_rich=None,
             preblast=None,
+            existing_instance=_instance(series_id=None),
         )
 
+        self.client.get.assert_not_called()
         self._assert_payload_matches_schema("update")
 
     def test_close_payload_matches_the_schema(self):

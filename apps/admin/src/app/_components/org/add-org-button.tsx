@@ -1,0 +1,22 @@
+"use client";
+import { Plus } from "lucide-react";
+import type { OrgType } from "@acme/shared/app/enums";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import { cn } from "@acme/ui";
+import { ModalType, openModal } from "~/utils/store/modal";
+
+export function AddOrgButton({ orgType }: { orgType: OrgType }) {
+  return (
+    <button
+      onClick={() => openModal(ModalType.ADMIN_ORG, { orgType, id: undefined })}
+      className={cn(
+        "inline-flex items-center justify-center rounded-md text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50",
+        "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
+        "h-9 px-4 py-2",
+      )}
+    >
+      <Plus />
+      Add {orgTypeDisplay[orgType].label}
+    </button>
+  );
+}

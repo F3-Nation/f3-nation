@@ -63,6 +63,7 @@ guarantees:
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `publicProcedure`         | No auth. Rate-limited only. Safe for truly public, read-only data.                                                                   |
 | `protectedProcedure`      | A valid session/credential exists. **Does _not_ check what that user may touch.**                                                    |
+| `personalUserProcedure`   | A user session or Auth access token exists; rejects API-key sessions. Personal handlers must still scope resources to that user.     |
 | `editorProcedure`         | Caller has editor or admin role on **any** org. Resource-scoped auth (`checkHasRoleOnOrg`) is still required for specific resources. |
 | `adminProcedure`          | Caller has admin role on **any** org. Resource-scoped auth still required.                                                           |
 | `nationAdminProcedure`    | Caller has the nation-level admin role specifically.                                                                                 |
@@ -243,9 +244,9 @@ violation is a `BAD_REQUEST`, not a 500.
   logouts. Either give rotation a short grace window with chain-linking on the
   server, or single-flight the refresh on the client. See
   [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) and the `me`/`admin` middleware.
-- **MFA / email codes in local dev** are captured by Mailpit / Ethereal — see
-  [`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md). Don't disable verification to make
-  flows pass; drive them properly.
+- **MFA / email codes in local dev** are captured by Mailpit — see
+  [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md). Don't disable verification to
+  make flows pass; drive them properly.
 
 ---
 
@@ -294,6 +295,19 @@ violation is a `BAD_REQUEST`, not a 500.
   to the pooler: with **PgBouncer transaction pooling**, set `prepare: false`
   (prepared statements break in that mode). Make SSL behavior explicit and
   environment-aware.
+  - **Current deployment (verified 2026-09):** the TypeScript apps reach
+    Postgres through PgBouncer in `pool_mode = transaction` — hence
+    `prepare: false` in the shared client. PgBouncer caps client connections
+    at `max_client_conn = 1000` and its own connections into Postgres at
+    `max_db_connections = 40`, so the server side is well bounded and the
+    binding constraint is the **client** side: each db-backed service
+    (api/map/admin/me) pins `--max-instances=25` in its deploy workflow,
+    which with `max: 5` per instance bounds the fleet at 4 × 25 × 5 = 500
+    clients. Raising a service's `--max-instances` or the client's `max`
+    means redoing that arithmetic against `max_client_conn`.
+  - Leave `max_lifetime` on the postgres-js default: it is a per-connection
+    jittered 30–60 min; a fixed value synchronizes expiry into reconnect
+    stampedes through the pooler.
 - **Migrations** (Drizzle, `packages/db`): generate and commit migrations; keep
   the journal consistent; run migrations as a **deploy step**, not during
   `docker build`. Use `pnpm db:pull` / `db:push` and `reset-test-db` per
@@ -342,5 +356,4 @@ Before proposing a diff, confirm:
 - [`docs/AI_AUDIT_PLAYBOOK.md`](AI_AUDIT_PLAYBOOK.md) — how to audit the repo.
 - [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) — auth app specifics & local QA.
 - [`apps/me/AGENTS.md`](../apps/me/AGENTS.md) — token-scoped client app pattern.
-- [`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md) — driving auth flows in local dev.
 - [`docs/LOCAL_DEV_DOCKER.md`](LOCAL_DEV_DOCKER.md) — local environment setup.

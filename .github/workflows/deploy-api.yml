@@ -42,3 +42,6 @@ jobs:
       prod_url: https://api.f3nation.com
       smoke_test_app: api
       app_label: "app: api"
+      # Bound instances x per-instance db pool below the pooler's client
+      # ceiling — sizing rationale in docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
+      flags: "--max-instances=25"

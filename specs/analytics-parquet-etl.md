@@ -1,7 +1,7 @@
 # Daily analytics Parquet materializations
 
 > **Approved by the user: 2026-08-26.** This document is the contract for the
-> eight approved materializations. It describes the intended capability; it does
+> nine approved materializations. It describes the intended capability; it does
 > not claim that live database, GCS, IAM, or production validation has
 > been performed.
 
@@ -10,72 +10,95 @@
 The analytics Cloud Run Job is a non-interactive daily full-refresh publisher. It
 reads PostgreSQL transaction data through a dedicated read-only connection, uses
 DuckDB to produce Parquet, and publishes immutable run-scoped objects to GCS.
-The default invocation materializes all eight datasets in the explicit order
-listed below, sequentially (not concurrently). An ordinary failure for one
+The default invocation materializes all nine datasets in the explicit order
+listed below, sequentially (not concurrently). One batch source-order value is
+used for every dataset and the release manifest. An ordinary failure for one
 dataset is recorded and does not prevent later datasets from running; the batch
-exits unsuccessfully if any dataset fails.
+exits unsuccessfully and cannot commit a release if any dataset fails.
 
-The eight materializations are exactly:
+The nine materializations are exactly:
 
 1. `pv_regions`
 2. `pv_pax`
 3. `pv_kotter`
 4. `pv_upcoming`
-5. `pv_areas`
-6. `pv_aos`
-7. `pv_sectors`
-8. `pv_events`
+5. `pv_sectors`
+6. `pv_territories`
+7. `pv_areas`
+8. `pv_aos`
+9. `pv_events`
 
-Each dataset has an independent immutable run path, manifest, current pointer,
-and publication lease. A dataset's failure or publication conflict must not
-change the publication state of another dataset.
+The batch is the publication unit. A dataset's failure or upload conflict may
+leave unreachable staged objects, but cannot change the consumer-selected
+release. Full release consistency takes priority over individual freshness.
 
 ## 2. Environment targets and operation
 
 Production targets are, for each `<name>` in the approved list:
 
-- GCS: `gs://f3-analytics/parquets/<name>`
+- GCS: `gs://f3-analytics/parquets/releases/<run-id>/<name>`
 
 Nonproduction targets are:
 
-- GCS: `gs://f3-analytics-nonprod/parquets/<name>`
+- GCS: `gs://f3-analytics-nonprod/parquets/releases/<run-id>/<name>`
 
 The job runs in project `f3data`, region `us-central1`. Production uses Cloud
 SQL instance `f3data`; nonproduction uses `f3data-nonprod`. Cloud Run uses Cloud
 SQL Unix sockets. Production is Scheduler-triggered daily; nonproduction is
 manually invoked. Scheduler and task retries are zero. Jobs use one task and
-parallelism, a 60-minute timeout, and a 90-minute generation-protected GCS
-publication lease.
+parallelism, and a 60-minute timeout. Retention/lifecycle policy, not the
+publisher, removes unreachable staged releases.
 
-The default is all eight datasets in the order above. A narrowly allowlisted
-selection may be used for operations or recovery, but it cannot introduce an
-unknown name, duplicate a name, or select a different target. Future datasets,
-cadences, and arbitrary query-driven selection require a new approval.
+The default is all nine datasets in the order above. A subset may be used for
+local export or diagnostics, but a publication run rejects any selection other
+than the exact approved nine-name registry set. Only the exact set may create
+the global release commit or advance the catalog.
 
 ## 3. Source and common publication contract
 
 - PostgreSQL base tables are the only source. The database role is read-only:
   no INSERT, UPDATE, DELETE, DDL, or administrative privileges.
-- DuckDB attaches PostgreSQL read-only and uses one documented consistency
-  boundary/snapshot per dataset. The job supplies `refreshed_at` and `as_of_date`
+- DuckDB attaches PostgreSQL read-only and uses one documented read boundary per
+  dataset. The batch source-order value is the logical batch-start ordering
+  value, not a database-wide snapshot. The job supplies `refreshed_at` and `as_of_date`
   parameters where the query contract calls for them.
-- Every dataset writes only beneath a new unique run directory. Committed
-  Parquet and manifests are immutable; corrections create a new run.
+- Every dataset writes only beneath
+  `parquets/releases/<run-id>/<dataset>/`. Parquet files and dataset manifests
+  are immutable and create-if-absent; corrections create a new run.
 - Before publication, generated files are checked for readable valid Parquet,
   expected schema, completeness, counts, and integrity metadata. Missing,
-  malformed, duplicate, or schema-invalid data fails that dataset before its
-  pointer is changed.
+  malformed, duplicate, or schema-invalid data fails that dataset before it can
+  contribute to the batch commit.
 - A dataset manifest is the commit record and includes at least dataset name,
   run ID, exact committed directory, complete object list, checksums or
   equivalent integrity values, row/file/byte counts, schema version,
-  source-read/snapshot timestamp, and publication timestamp.
-- The dataset's current pointer is advanced only after all its objects and
-  manifest are durable, using a generation-conditional/concurrency-safe update.
-  Readers resolve one pointer and consume only that generation.
-- A prior known-good publication remains consumable on failure. Retries create
-  distinct run IDs and never overwrite committed objects. Lease takeover,
-  pointer recovery, rollback, garbage collection, retention, and alert
-  escalation must preserve consumers and are human-approved operational policy.
+  logical batch-start source-order value, and publication timestamp. Any
+  per-dataset read timestamp is descriptive and is not a database-wide snapshot.
+- After all nine datasets are durable and validated, the publisher writes
+  `parquets/releases/<run-id>/release.json` once, create-if-absent. It is the
+  immutable commit record containing the nine generation-pinned dataset
+  manifest references. It is written last. A catalog CAS or IAM failure may
+  leave this immutable `release.json` present, but it remains unselected and
+  invisible; catalog metadata alone determines consumer visibility.
+- One fixed `parquets/catalog.json` has immutable empty content. Its
+  schema-versioned custom metadata is changed only with
+  `if_metageneration_match`, and records current/previous release IDs,
+  manifest URIs and generations, source-order values, and a high-water
+  source-order value. The object generation does not change on metadata update.
+- Source order is the batch's comparable logical batch-start ordering value, not
+  a database-wide snapshot. An older
+  candidate cannot supersede current or lower the high-water value. After a CAS
+  conflict, a newer candidate reloads and retries with the actual
+  metageneration; a stale candidate fails safely.
+- A human rollback may select only the retained, generation-pinned previous
+  release through the explicit catalog metadata-CAS rollback operation. It
+  retains the high-water value, so an in-flight stale run cannot undo the
+  rollback. A genuinely newer source order may advance afterward.
+- PAX Vault must read catalog metadata, retrieve the pinned `release.json`
+  generation, then consume exactly its nine pinned dataset manifests and the
+  objects they list. PAX Vault compatibility must be deployed and verified
+  before catalog activation; PAX Vault rollout is external and consumer-owner
+  owned.
 
 ## 4. User-query data contracts
 
@@ -139,8 +162,8 @@ Missing relationships are empty/null according to the query schema.
 
 ### `pv_areas` — one row per area
 
-Columns: `area_id`, `area_name`, `sector_id`, `sector_name`, `logo_url`,
-`is_active`, `regions`.
+Columns: `area_id`, `area_name`, `sector_id`, `sector_name`, `territory_id`,
+`territory_name`, `logo_url`, `is_active`, `regions`.
 
 `regions` contains child region records `{region_id, region_name, is_active}`.
 
@@ -154,7 +177,21 @@ derived from active events with non-null `pax_count` belonging to that AO.
 
 ### `pv_sectors` — one row per sector
 
-Columns: `sector_id`, `sector_name`, `logo_url`, `is_active`, `areas`.
+Columns: `sector_id`, `sector_name`, `logo_url`, `is_active`, `territories`, `areas`.
+
+`areas` contains sector-wide descendant area records `{area_id, area_name,
+is_active}`, including areas reached through territories.
+
+`pv_sectors.areas` contains every descendant area of the sector, whether direct
+or nested under a territory.
+
+`territories` contains child territory records `{territory_id, territory_name,
+logo_url, is_active}`.
+
+### `pv_territories` — one row per territory
+
+Columns: `territory_id`, `territory_name`, `sector_id`, `sector_name`,
+`logo_url`, `is_active`, `areas`.
 
 `areas` contains child area records `{area_id, area_name, is_active}`.
 
@@ -162,7 +199,8 @@ Columns: `sector_id`, `sector_name`, `logo_url`, `is_active`, `areas`.
 
 Columns: `refreshed_at`, `event_id`, `event_date`, `event_name`, `pax_count`,
 `fng_count`, `ao_org_id`, `ao_name`, `region_org_id`, `region_name`,
-`area_org_id`, `area_name`, `sector_org_id`, `sector_name`, `first_f_ind`,
+`area_org_id`, `area_name`, `territory_org_id`, `territory_name`,
+`sector_org_id`, `sector_name`, `first_f_ind`,
 `second_f_ind`, `third_f_ind`, `types`, `tags`, `attendance`.
 
 Events are active, have non-null `pax_count`, resolve their org hierarchy, and
@@ -180,7 +218,7 @@ trigger, download, query, or edit action. Production and nonproduction use
 separate runtime identities; the Scheduler identity is invoker-only and GitHub
 WIF is the deployment identity. End users and application identities cannot
 invoke the job, read PostgreSQL, read the ETL bucket, or mutate committed
-objects, manifests, or pointers.
+objects, manifests, or catalog metadata.
 
 The `pv_pax`, `pv_kotter`, and `pv_events` outputs are sensitive PAX/Kotter/events
 data and their inclusion is explicitly authorized by this approval. Access is
@@ -191,21 +229,30 @@ delivery, network path, encryption/key ownership, audit retention, and whether
 PAX Vault may read GCS directly. Credentials never enter logs or Parquet, and
 logs/metrics contain no row-level sensitive data.
 
+The publisher's release-path grant is create/get, scoped to
+`parquets/releases/`; it has no delete and cannot overwrite
+existing release content. The fixed catalog separately permits get/create and
+`storage.objects.update` only on
+`projects/_/buckets/<bucket>/objects/parquets/catalog.json` for metadata CAS.
+Do not grant object update across `parquets/`. Nonprod and production buckets
+and runtime identities remain distinct, and the exact bindings require human
+security/platform approval.
+
 ## 6. Failure isolation, reliability, and observability
 
-Each materialization acquires and releases its own 90-minute generation-conditional
-lease and owns its own publication lifecycle. Lease conflicts, source/query,
-validation, upload, and pointer errors are classified per dataset.
+The batch owns publication lifecycle. Source/query, validation, upload, release,
+and catalog-CAS errors are classified with dataset or batch context.
 The runner continues after ordinary exceptions, records all failed names and
 recovery metadata, then returns a nonzero/unsuccessful batch result. Process
 cancellation is not treated as an ordinary dataset failure.
 
 Structured events and metrics include batch/run ID, materialization name,
-environment, phase, durations, counts, source snapshot time, committed
-directory, outcome, pointer age, publication lag, retry count, and error class.
+environment, phase, durations, counts, logical batch-start source order, committed
+directory, outcome, catalog metageneration, publication lag, retry count, and
+error class.
 Use the approved logging abstraction rather than `console.*`; never emit
 credentials, tokens, connection strings, PII, or raw rows. Alert on missed daily
-execution, stale pointers, SLO/freshness breaches, repeated failures,
+execution, stale catalog source order, SLO/freshness breaches, repeated failures,
 validation drift, and permission failures.
 
 ## 7. Human release gates and ownership
@@ -230,7 +277,7 @@ atomically finalize one run directory only after every selected materialization
 succeeds; failed runs must leave no final run directory.
 
 - **Nonproduction query gate:** before release, a human must inspect PostgreSQL
-  query plans and measured read volume for all eight datasets against approved
+  query plans and measured read volume for all nine datasets against approved
   nonproduction data. The human gate must establish that sequential execution,
   connection/query scope, runtime, and source load are acceptable. Tests or
   synthetic fixtures do not substitute for this gate.
@@ -245,19 +292,21 @@ performed and recorded by the responsible humans during release.
 
 ## 8. Acceptance criteria
 
-1. The default daily run selects exactly the eight names in the stated sequential
+1. The default daily run selects exactly the nine names in the stated sequential
    order and records a traceable batch/run ID.
-2. Each selected dataset has an isolated path, manifest, pointer, and lease; no
-   dataset can publish to another's path or pointer.
+2. Each dataset has an isolated release-scoped path and manifest; no dataset can
+   publish to another's path. There are no per-dataset leases or `current.json`
+   pointers.
 3. Valid output satisfies its contract above and is immutable, readable Parquet
    under a new run directory.
-4. Validation or ordinary publication failure leaves that dataset's prior
-   pointer consumable, while later datasets still run; those failures make the
-   batch unsuccessful. A post-commit lease-release or connection-close failure
-   is logged as a cleanup warning but does not invalidate published output or
-   make the batch unsuccessful.
-5. Successful publication advances only the matching generation-protected
-   current pointer after durable GCS commit.
+4. Validation or ordinary dataset publication failure makes the batch
+   unsuccessful and writes no release commit or catalog metadata. A later
+   catalog CAS/IAM failure may leave an immutable `release.json`, but it remains
+   unselected and invisible; catalog metadata remains unchanged. Later datasets
+   may run, but no partial release is current; unreachable objects are
+   lifecycle-cleaned.
+5. Successful publication writes one immutable release manifest last and advances
+   only the fixed catalog through metageneration CAS and monotonic source order.
 6. Retry and concurrent-publisher handling cannot overwrite committed objects or
    create a mixed-generation dataset.
 7. Read-only database permissions, sensitive-output authorization, secret
@@ -267,7 +316,7 @@ performed and recorded by the responsible humans during release.
    this document does not claim they have passed.
 9. `analytics-etl export-local` accepts only validated local/nonproduction
    configuration and registry-validated selections; it cannot create a GCS
-   client or invoke publication, lease, pointer, or publisher code.
+   client or invoke publication or catalog code.
 10. Local export requires an existing safe destination, creates a unique private
     staging directory, atomically finalizes only after all selected datasets
     succeed, and removes failed staging output without replacing the primary

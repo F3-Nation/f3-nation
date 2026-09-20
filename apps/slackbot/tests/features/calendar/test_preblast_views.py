@@ -422,6 +422,33 @@ class PreblastViewsTest(unittest.TestCase):
             [],
         )
 
+    @patch("features.calendar.event_preblast.extract_state_values")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    @patch("features.calendar.event_preblast._build_preblast_service")
+    def test_handle_event_preblast_edit_clears_existing_tags_when_selection_is_empty(
+        self,
+        mock_build_preblast_service,
+        mock_build_event_service,
+        mock_extract_state_values,
+    ):
+        event_id = 42
+        event = _event(id=event_id, event_tag_ids=[10, 20])
+
+        preblast_service = MagicMock()
+        preblast_service.build_update_command.return_value = object()
+        mock_build_preblast_service.return_value = preblast_service
+
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        mock_build_event_service.return_value = event_service
+        mock_extract_state_values.return_value = {actions.EVENT_PREBLAST_TAG: []}
+
+        body = {"view": {"private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'}}
+
+        handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+        self.assertEqual(preblast_service.build_update_command.call_args.kwargs["event_tag_ids"], [])
+
     @patch("features.calendar.event_preblast.update_submission_wait_view")
     @patch("features.calendar.event_preblast.get_user")
     @patch("features.calendar.event_preblast.extract_state_values")

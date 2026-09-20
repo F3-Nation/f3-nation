@@ -4,14 +4,15 @@ import { z } from "zod";
 import { and, asc, eq, ilike, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 
-import { protectedProcedure } from "../../shared";
+import { personalUserProcedure, protectedProcedure } from "../../shared";
 
 /**
  * /me router — self-service endpoints for authenticated users.
  *
  * Unlike the /user router (which requires editor/admin roles and manages
  * other users), these endpoints let an authenticated user manage their own
- * profile, positions, and roles with only protectedProcedure auth.
+ * profile, positions, and roles using a user session or Auth access token.
+ * API keys may use the lookup endpoints, but cannot act as their owner here.
  */
 
 const profileUpdateSchema = z
@@ -152,40 +153,44 @@ async function fetchFullProfile(db: AppDb, userId: number) {
     throw new ORPCError("NOT_FOUND", { message: "User not found" });
   }
 
-  const roles = await db
-    .select({
-      roleId: schema.rolesXUsersXOrg.roleId,
-      orgId: schema.rolesXUsersXOrg.orgId,
-      orgName: schema.orgs.name,
-      roleName: schema.roles.name,
-    })
-    .from(schema.rolesXUsersXOrg)
-    .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
-    .innerJoin(schema.roles, eq(schema.roles.id, schema.rolesXUsersXOrg.roleId))
-    .where(eq(schema.rolesXUsersXOrg.userId, userId))
-    .orderBy(asc(schema.orgs.name), asc(schema.roles.name));
-
-  const positions = await db
-    .select({
-      positionId: schema.positionsXOrgsXUsers.positionId,
-      orgId: schema.positionsXOrgsXUsers.orgId,
-      positionName: schema.positions.name,
-      orgName: schema.orgs.name,
-    })
-    .from(schema.positionsXOrgsXUsers)
-    .innerJoin(
-      schema.positions,
-      and(
-        eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
-        eq(schema.positions.isActive, true),
-      ),
-    )
-    .innerJoin(
-      schema.orgs,
-      eq(schema.orgs.id, schema.positionsXOrgsXUsers.orgId),
-    )
-    .where(eq(schema.positionsXOrgsXUsers.userId, userId))
-    .orderBy(asc(schema.orgs.name), asc(schema.positions.name));
+  const [roles, positions] = await Promise.all([
+    db
+      .select({
+        roleId: schema.rolesXUsersXOrg.roleId,
+        orgId: schema.rolesXUsersXOrg.orgId,
+        orgName: schema.orgs.name,
+        roleName: schema.roles.name,
+      })
+      .from(schema.rolesXUsersXOrg)
+      .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
+      .innerJoin(
+        schema.roles,
+        eq(schema.roles.id, schema.rolesXUsersXOrg.roleId),
+      )
+      .where(eq(schema.rolesXUsersXOrg.userId, userId))
+      .orderBy(asc(schema.orgs.name), asc(schema.roles.name)),
+    db
+      .select({
+        positionId: schema.positionsXOrgsXUsers.positionId,
+        orgId: schema.positionsXOrgsXUsers.orgId,
+        positionName: schema.positions.name,
+        orgName: schema.orgs.name,
+      })
+      .from(schema.positionsXOrgsXUsers)
+      .innerJoin(
+        schema.positions,
+        and(
+          eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
+          eq(schema.positions.isActive, true),
+        ),
+      )
+      .innerJoin(
+        schema.orgs,
+        eq(schema.orgs.id, schema.positionsXOrgsXUsers.orgId),
+      )
+      .where(eq(schema.positionsXOrgsXUsers.userId, userId))
+      .orderBy(asc(schema.orgs.name), asc(schema.positions.name)),
+  ]);
 
   return { ...user, roles, positions };
 }
@@ -194,7 +199,7 @@ export const meRouter = {
   /**
    * Get the authenticated user's own profile with PII, roles, and positions.
    */
-  profile: protectedProcedure
+  profile: personalUserProcedure
     .route({
       method: "GET",
       path: "/profile",
@@ -217,7 +222,7 @@ export const meRouter = {
    * Update the authenticated user's own profile.
    * Only whitelisted fields can be changed. Roles cannot be self-assigned.
    */
-  updateProfile: protectedProcedure
+  updateProfile: personalUserProcedure
     .input(profileUpdateSchema)
     .route({
       method: "PATCH",
@@ -311,7 +316,7 @@ export const meRouter = {
   /**
    * Remove the authenticated user from a specific position assignment.
    */
-  deletePosition: protectedProcedure
+  deletePosition: personalUserProcedure
     .input(
       z
         .object({
@@ -364,7 +369,7 @@ export const meRouter = {
   /**
    * Remove the authenticated user from a specific role at an org.
    */
-  deleteRole: protectedProcedure
+  deleteRole: personalUserProcedure
     .input(
       z
         .object({

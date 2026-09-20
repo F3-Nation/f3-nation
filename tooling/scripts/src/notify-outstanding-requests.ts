@@ -55,9 +55,9 @@ async function main() {
   const { and, eq, gte } = await import("drizzle-orm");
   const { schema } = await import("@acme/db");
   const { db } = await import("@acme/db/client");
-  const { env } = await import("@acme/env");
   const { requestTypeToTitle } = await import("@acme/shared/app/functions");
   const { mail, Templates } = await import("@acme/mail");
+  const { getAdminRequestsUrl } = await import("@acme/api/lib/admin-url");
   const { getUsersWithRoles } =
     await import("@acme/api/services/map-request-notification");
 
@@ -165,8 +165,7 @@ async function main() {
   console.log("\n" + "─".repeat(80));
   console.log("\n📬 Email Summary:\n");
 
-  const adminBaseUrl = (env.NEXT_PUBLIC_ADMIN_URL ?? "").replace(/\/$/, "");
-  const requestsUrl = `${adminBaseUrl}/requests`;
+  const requestsUrl = getAdminRequestsUrl();
 
   // Display and optionally send emails
   let emailsSent = 0;

@@ -43,3 +43,6 @@ jobs:
       revalidate_after_deploy: true
       smoke_test_app: map
       app_label: "app: map"
+      # Bound instances x per-instance db pool below the pooler's client
+      # ceiling — sizing rationale in docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
+      flags: "--max-instances=25"

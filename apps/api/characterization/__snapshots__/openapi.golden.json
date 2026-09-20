@@ -3162,6 +3162,13 @@
                             ],
                             "description": "Event end time"
                           },
+                          "eventTagIds": {
+                            "description": "Event tag IDs",
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
                           "eventTypes": {
                             "description": "Event types",
                             "items": {
@@ -3401,6 +3408,7 @@
                           "parents",
                           "regions",
                           "eventTypes",
+                          "eventTagIds",
                           "location"
                         ],
                         "type": "object"
@@ -6557,6 +6565,13 @@
                               ],
                               "description": "Event end time"
                             },
+                            "eventTagIds": {
+                              "description": "Event tag IDs",
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
+                            },
                             "eventTypes": {
                               "description": "Event types",
                               "items": {
@@ -6698,7 +6713,8 @@
                             "isPrivate",
                             "aos",
                             "regions",
-                            "eventTypes"
+                            "eventTypes",
+                            "eventTagIds"
                           ],
                           "type": "object"
                         },
@@ -11461,6 +11477,7 @@
                   "ao",
                   "region",
                   "area",
+                  "territory",
                   "sector",
                   "nation"
                 ],
@@ -11710,6 +11727,7 @@
                               "ao",
                               "region",
                               "area",
+                              "territory",
                               "sector",
                               "nation"
                             ],
@@ -11744,6 +11762,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -11837,7 +11856,7 @@
         ]
       },
       "post": {
-        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → region → area → ao).",
+        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → territory → area → region → ao).",
         "operationId": "org.crupdate",
         "parameters": [
           {
@@ -12013,6 +12032,7 @@
                       "ao",
                       "region",
                       "area",
+                      "territory",
                       "sector",
                       "nation"
                     ],
@@ -12215,6 +12235,7 @@
                                 "ao",
                                 "region",
                                 "area",
+                                "territory",
                                 "sector",
                                 "nation"
                               ],
@@ -12351,12 +12372,17 @@
                                       "description": "Location latitude",
                                       "type": "number"
                                     },
+                                    "locationId": {
+                                      "description": "Location ID",
+                                      "type": "number"
+                                    },
                                     "longitude": {
                                       "description": "Location longitude",
                                       "type": "number"
                                     }
                                   },
                                   "required": [
+                                    "locationId",
                                     "latitude",
                                     "longitude",
                                     "eventCount",
@@ -12391,6 +12417,7 @@
                                         "ao",
                                         "region",
                                         "area",
+                                        "territory",
                                         "sector",
                                         "nation"
                                       ],
@@ -12422,6 +12449,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -12456,6 +12484,334 @@
           }
         },
         "summary": "List org chart orgs",
+        "tags": [
+          "Org Chart"
+        ]
+      }
+    },
+    "/v1/org-chart/aos": {
+      "get": {
+        "description": "Return active AOs whose name matches the query, each with its region and busiest active location so the map can navigate to it.",
+        "operationId": "orgChart.aos",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "in": "query",
+            "name": "searchTerm",
+            "required": true,
+            "schema": {
+              "description": "AO name search term (minimum 2 characters)",
+              "minLength": 2,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "aos": {
+                      "items": {
+                        "properties": {
+                          "eventCount": {
+                            "description": "Active events for this AO at that location",
+                            "type": "number"
+                          },
+                          "id": {
+                            "description": "AO org ID",
+                            "type": "number"
+                          },
+                          "latitude": {
+                            "description": "Location latitude",
+                            "type": "number"
+                          },
+                          "locationId": {
+                            "description": "Busiest active location ID",
+                            "type": "number"
+                          },
+                          "longitude": {
+                            "description": "Location longitude",
+                            "type": "number"
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "AO name"
+                          },
+                          "regionId": {
+                            "description": "Parent region org ID",
+                            "type": "number"
+                          },
+                          "regionName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Parent region name"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "regionId",
+                          "regionName",
+                          "locationId",
+                          "latitude",
+                          "longitude",
+                          "eventCount"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "aos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Search AOs by name",
+        "tags": [
+          "Org Chart"
+        ]
+      }
+    },
+    "/v1/org-chart/location/{locationId}": {
+      "get": {
+        "description": "Return all AOs with active events at the given location, along with their leadership positions.",
+        "operationId": "orgChart.byLocation",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "in": "path",
+            "name": "locationId",
+            "required": true,
+            "schema": {
+              "description": "The location ID to look up AOs for",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "aos": {
+                      "items": {
+                        "properties": {
+                          "email": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "eventCount": {
+                            "description": "Active events at this location",
+                            "type": "number"
+                          },
+                          "facebook": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "description": "AO org ID",
+                            "type": "number"
+                          },
+                          "instagram": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "logoUrl": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "positions": {
+                            "items": {
+                              "properties": {
+                                "avatarUrl": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "f3Name": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "positionId": {
+                                  "type": "number"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "userId": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "positionId",
+                                "title",
+                                "userId",
+                                "f3Name",
+                                "avatarUrl"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "twitter": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "website": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email",
+                          "website",
+                          "twitter",
+                          "facebook",
+                          "instagram",
+                          "logoUrl",
+                          "eventCount",
+                          "positions"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "latitude": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "locationId": {
+                      "type": "number"
+                    },
+                    "locationName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "longitude": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "locationId",
+                    "locationName",
+                    "latitude",
+                    "longitude",
+                    "aos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get AOs at a location",
         "tags": [
           "Org Chart"
         ]
@@ -12539,6 +12895,7 @@
                         "ao",
                         "region",
                         "area",
+                        "territory",
                         "sector",
                         "nation"
                       ],
@@ -12724,6 +13081,7 @@
                   "ao",
                   "region",
                   "area",
+                  "territory",
                   "sector",
                   "nation"
                 ],
@@ -12808,6 +13166,7 @@
                               "ao",
                               "region",
                               "area",
+                              "territory",
                               "sector",
                               "nation"
                             ],
@@ -12889,6 +13248,7 @@
                   "ao",
                   "region",
                   "area",
+                  "territory",
                   "sector",
                   "nation"
                 ],
@@ -13009,6 +13369,7 @@
                       "ao",
                       "region",
                       "area",
+                      "territory",
                       "sector",
                       "nation"
                     ],
@@ -13076,6 +13437,7 @@
                 "ao",
                 "region",
                 "area",
+                "territory",
                 "sector",
                 "nation"
               ],
@@ -13218,6 +13580,7 @@
                                 "ao",
                                 "region",
                                 "area",
+                                "territory",
                                 "sector",
                                 "nation"
                               ],
@@ -13351,6 +13714,7 @@
                               "ao",
                               "region",
                               "area",
+                              "territory",
                               "sector",
                               "nation"
                             ],
@@ -13475,6 +13839,7 @@
                 "ao",
                 "region",
                 "area",
+                "territory",
                 "sector",
                 "nation"
               ],
@@ -13631,6 +13996,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -13739,6 +14105,7 @@
                           "ao",
                           "region",
                           "area",
+                          "territory",
                           "sector",
                           "nation"
                         ],
@@ -13817,6 +14184,7 @@
                                     "ao",
                                     "region",
                                     "area",
+                                    "territory",
                                     "sector",
                                     "nation"
                                   ],
@@ -14351,6 +14719,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -14590,6 +14959,7 @@
                                     "ao",
                                     "region",
                                     "area",
+                                    "territory",
                                     "sector",
                                     "nation"
                                   ],
@@ -14725,6 +15095,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
