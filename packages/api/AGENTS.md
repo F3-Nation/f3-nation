@@ -1,3 +1,14 @@
+# Testing
+
+`vitest.global-setup.ts` resets and re-seeds the database at `TEST_DATABASE_URL`
+(`f3nation_test` locally, `f3_test` in CI) before the suite runs. This covers
+`pnpm --filter @acme/api test`, `pnpm -C packages/api test`, and `turbo run
+test` — all of which load `.env` via `with-env` — so no external reset step is
+needed. A bare `vitest` invocation or most editor test runners bypass
+`with-env`; without `TEST_DATABASE_URL` set, the reset silently no-ops instead
+of running. `apps/api`'s characterization suite is unaffected; it still resets
+through Turbo's `reset-test-db` task.
+
 ## Error Handling
 
 Full rationale, the code-selection table, and the `catch`-block pattern:

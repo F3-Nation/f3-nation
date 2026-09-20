@@ -5,6 +5,8 @@ import {
   TEST_AO_1_ORG_ID,
   TEST_AO_2_ORG_ID,
   TEST_AREA_ORG_ID,
+  TEST_AREA_REGION_ORG_ID,
+  TEST_AREA_AO_ORG_ID,
   TEST_EDITOR_ROLE_ID,
   TEST_EDITOR_USER_ID,
   TEST_NATION_ORG_ID,
@@ -12,6 +14,10 @@ import {
   TEST_REGION_2_ORG_ID,
   TEST_REGION_3_ORG_ID,
   TEST_SECTOR_ORG_ID,
+  TEST_TERRITORY_ORG_ID,
+  TEST_TERRITORY_AREA_ORG_ID,
+  TEST_TERRITORY_REGION_ORG_ID,
+  TEST_TERRITORY_AO_ORG_ID,
 } from "@acme/shared/app/constants";
 import { EventTypes } from "@acme/shared/app/enums";
 
@@ -154,6 +160,54 @@ export const testSeed = async (db?: AppDb) => {
       logoUrl: "https://example.com/logo.png",
       website: "https://example.com",
       twitter: "@testorg",
+    },
+  ]);
+
+  // Preserve existing fixture edges while adding complete mixed-parent paths.
+  // Direct inserts bypass API parent-type validation; the AO-count trigger
+  // maintains counts at every tier.
+  await _db.insert(orgs).values([
+    {
+      id: TEST_TERRITORY_ORG_ID,
+      name: "Test Territory",
+      orgType: "territory",
+      parentId: TEST_SECTOR_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_TERRITORY_AREA_ORG_ID,
+      name: "Test Territory Area",
+      orgType: "area",
+      parentId: TEST_TERRITORY_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_TERRITORY_REGION_ORG_ID,
+      name: "Test Territory Region",
+      orgType: "region",
+      parentId: TEST_TERRITORY_AREA_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_TERRITORY_AO_ORG_ID,
+      name: "Test Territory AO",
+      orgType: "ao",
+      parentId: TEST_TERRITORY_REGION_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_AREA_REGION_ORG_ID,
+      name: "Test Area Region",
+      orgType: "region",
+      parentId: TEST_AREA_ORG_ID,
+      isActive: true,
+    },
+    {
+      id: TEST_AREA_AO_ORG_ID,
+      name: "Test Area AO",
+      orgType: "ao",
+      parentId: TEST_AREA_REGION_ORG_ID,
+      isActive: true,
     },
   ]);
 

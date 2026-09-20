@@ -42,7 +42,11 @@ import {
 import { Spinner } from "@acme/ui/spinner";
 import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
-import { EventInsertSchema } from "@acme/validators";
+import {
+  EVENT_DATE_ORDER_MESSAGE,
+  EventInsertSchema,
+  isEndDateBeforeStartDate,
+} from "@acme/validators";
 
 import gte from "lodash/gte";
 import {
@@ -61,6 +65,8 @@ import {
 } from "~/utils/store/modal";
 import { ControlledTimeInput } from "../time-input";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
+
+const NO_LOCATION = "__no_location__";
 
 const EventInsertForm = EventInsertSchema.extend({
   startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, {
@@ -134,6 +140,7 @@ export default function AdminWorkoutsModal({
       startTime: convertHHmmToHH_mm(event?.startTime ?? ""),
       endTime: convertHHmmToHH_mm(event?.endTime ?? ""),
       startDate: event?.startDate ?? "",
+      endDate: event?.endDate ?? null,
       dayOfWeek: event?.dayOfWeek ?? undefined,
       isActive: event?.isActive ?? true,
       highlight: event?.highlight ?? false,
@@ -191,6 +198,12 @@ export default function AdminWorkoutsModal({
         toast.error("End time must be after start time");
         return;
       }
+    }
+
+    if (isEndDateBeforeStartDate(data.startDate, data.endDate)) {
+      form.setError("endDate", { message: EVENT_DATE_ORDER_MESSAGE });
+      toast.error(EVENT_DATE_ORDER_MESSAGE);
+      return;
     }
 
     // Validate day of week
@@ -342,6 +355,7 @@ export default function AdminWorkoutsModal({
                               // If the current location's parentId is not the selected AO, then we need to update the location
                               const locationId = form.getValues("locationId");
                               if (
+                                locationId != null &&
                                 !regionLocations?.find(
                                   (l) => l.id === locationId,
                                 )
@@ -395,14 +409,27 @@ export default function AdminWorkoutsModal({
                         >
                           <FormLabel>Location</FormLabel>
                           <Select
-                            value={field.value?.toString()}
+                            value={
+                              field.value != null
+                                ? field.value.toString()
+                                : NO_LOCATION
+                            }
                             onValueChange={(value) => {
-                              console.log("locationId onValueChange", value);
-                              field.onChange(Number(value));
+                              if (value === NO_LOCATION) {
+                                field.onChange(null);
+                                return;
+                              }
+
+                              const locationId = safeParseInt(value);
+                              if (locationId == null) {
+                                toast.error("Invalid location");
+                                return;
+                              }
+                              field.onChange(locationId);
 
                               const selectedLocation =
                                 locations?.locations.find(
-                                  (location) => location.id === Number(value),
+                                  (location) => location.id === locationId,
                                 );
                               if (selectedLocation?.regionId != null) {
                                 form.setValue(
@@ -411,12 +438,14 @@ export default function AdminWorkoutsModal({
                                 );
                               }
                             }}
-                            defaultValue={field.value?.toString()}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Select a location" />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value={NO_LOCATION}>
+                                No Location
+                              </SelectItem>
                               {filteredLocations
                                 ?.slice()
                                 .sort(
@@ -547,6 +576,29 @@ export default function AdminWorkoutsModal({
                             type="date"
                             {...field}
                             value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="mb-4 w-1/2 px-2">
+                  <FormField
+                    control={form.control}
+                    name="endDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>End Date</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="End Date"
+                            type="date"
+                            {...field}
+                            value={field.value ?? ""}
+                            onChange={(e) =>
+                              field.onChange(e.target.value || null)
+                            }
                           />
                         </FormControl>
                         <FormMessage />

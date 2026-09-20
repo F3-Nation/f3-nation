@@ -127,6 +127,7 @@ While the API migration is in progress, some features still use `DbManager` from
 
 ```python
 from f3_data_models.utils import DbManager
+
 records = DbManager.find_records(EventTag, filters=[EventTag.org_id == org_id])
 ```
 
@@ -178,6 +179,7 @@ Infrastructure singletons follow this pattern:
 
 ```python
 _client: T | None = None
+
 
 def get_instance() -> T:
     global _client

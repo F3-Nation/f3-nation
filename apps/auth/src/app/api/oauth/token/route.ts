@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 import { exchangeAuthorizationCode, exchangeRefreshToken } from "~/lib/oauth";
 import { getCorsHeaders, handlePreflight } from "~/lib/cors";
+import { logError } from "~/lib/logging";
 import { rateLimit } from "~/lib/rate-limit";
 
 export async function OPTIONS(request: NextRequest) {
@@ -45,64 +46,84 @@ export async function POST(request: NextRequest) {
 
   const corsHeaders = await getCorsHeaders(request, resolvedClientId);
 
-  if (grantType === "authorization_code") {
-    const code = formData.get("code") as string | null;
-    const redirectUri = formData.get("redirect_uri") as string | null;
-    const codeVerifier = formData.get("code_verifier") as string | null;
+  try {
+    if (grantType === "authorization_code") {
+      const code = formData.get("code") as string | null;
+      const redirectUri = formData.get("redirect_uri") as string | null;
+      const codeVerifier = formData.get("code_verifier") as string | null;
 
-    if (!code || !redirectUri || !resolvedClientSecret) {
-      return NextResponse.json(
-        { error: "invalid_request" },
-        { status: 400, headers: corsHeaders },
-      );
+      // client_secret is intentionally not required here: public clients
+      // (is_public = true) authenticate with PKCE alone. Whether a secret is
+      // required for this client is decided in exchangeAuthorizationCode.
+      if (!code || !redirectUri) {
+        return NextResponse.json(
+          { error: "invalid_request" },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+
+      const result = await exchangeAuthorizationCode({
+        code,
+        clientId: resolvedClientId,
+        clientSecret: resolvedClientSecret ?? undefined,
+        redirectUri,
+        codeVerifier: codeVerifier ?? undefined,
+      });
+
+      if ("error" in result) {
+        return NextResponse.json(
+          { error: result.error },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+
+      return NextResponse.json(result, { headers: corsHeaders });
     }
 
-    const result = await exchangeAuthorizationCode({
-      code,
-      clientId: resolvedClientId,
-      clientSecret: resolvedClientSecret,
-      redirectUri,
-      codeVerifier: codeVerifier ?? undefined,
-    });
+    if (grantType === "refresh_token") {
+      const refreshToken = formData.get("refresh_token") as string | null;
 
-    if ("error" in result) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 400, headers: corsHeaders },
-      );
+      if (!refreshToken) {
+        return NextResponse.json(
+          { error: "invalid_request" },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+
+      const result = await exchangeRefreshToken({
+        refreshToken,
+        clientId: resolvedClientId,
+        clientSecret: resolvedClientSecret ?? undefined,
+      });
+
+      if ("error" in result) {
+        return NextResponse.json(
+          { error: result.error },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+
+      return NextResponse.json(result, { headers: corsHeaders });
     }
 
-    return NextResponse.json(result, { headers: corsHeaders });
+    return NextResponse.json(
+      { error: "unsupported_grant_type" },
+      { status: 400, headers: corsHeaders },
+    );
+  } catch (err) {
+    // Nothing above should throw in normal operation (both exchange
+    // functions return `{ error }` for expected rejections) — this is a
+    // backstop so a DB blip or signing failure returns an OAuth-shaped
+    // error with CORS headers instead of a bare framework 500 that native
+    // clients can't parse and that strips the origin the client needs.
+    logError(
+      "auth.oauth.token_endpoint_error",
+      { grantType, clientId: resolvedClientId },
+      err,
+    );
+    return NextResponse.json(
+      { error: "server_error" },
+      { status: 500, headers: corsHeaders },
+    );
   }
-
-  if (grantType === "refresh_token") {
-    const refreshToken = formData.get("refresh_token") as string | null;
-
-    if (!refreshToken || !resolvedClientSecret) {
-      return NextResponse.json(
-        { error: "invalid_request" },
-        { status: 400, headers: corsHeaders },
-      );
-    }
-
-    const result = await exchangeRefreshToken({
-      refreshToken,
-      clientId: resolvedClientId,
-      clientSecret: resolvedClientSecret,
-    });
-
-    if ("error" in result) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 400, headers: corsHeaders },
-      );
-    }
-
-    return NextResponse.json(result, { headers: corsHeaders });
-  }
-
-  return NextResponse.json(
-    { error: "unsupported_grant_type" },
-    { status: 400, headers: corsHeaders },
-  );
 }

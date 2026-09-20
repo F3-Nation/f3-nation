@@ -174,6 +174,8 @@ describe("AuthProvider + useAuth", () => {
     expect(result.current.user).toBeNull();
   });
 
+  // No assertion — passes iff no "update on unmounted" error is thrown.
+  // eslint-disable-next-line vitest/expect-expect
   it("cancels state update when component unmounts before ok response arrives", async () => {
     let resolveFetch!: (value: unknown) => void;
     fetchMock.mockReturnValue(
@@ -195,9 +197,10 @@ describe("AuthProvider + useAuth", () => {
           Promise.resolve({ user: { sub: "42", email: "me@f3nation.test" } }),
       });
     });
-    // No assertion needed — the test passes if no "update on unmounted" error occurs.
   });
 
+  // No assertion — passes iff no "update on unmounted" error is thrown.
+  // eslint-disable-next-line vitest/expect-expect
   it("cancels state update when component unmounts before non-ok response arrives", async () => {
     let resolveFetch!: (value: unknown) => void;
     fetchMock.mockReturnValue(
@@ -214,6 +217,8 @@ describe("AuthProvider + useAuth", () => {
     });
   });
 
+  // No assertion — passes iff no "update on unmounted" error is thrown.
+  // eslint-disable-next-line vitest/expect-expect
   it("cancels state update when component unmounts before fetch throws", async () => {
     let rejectFetch!: (err: unknown) => void;
     fetchMock.mockReturnValue(

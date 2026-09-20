@@ -119,8 +119,8 @@ describe.runIf(target.inProcess)("error envelopes (in-process only)", () => {
 });
 
 /**
- * Separate describe with its own warm-up so no case above pays the ~4s cost or
- * risks inheriting an exhausted counter. The limiter is a module-level
+ * Separate describe with its own warm-up so no case above pays the warm-up cost
+ * or risks inheriting an exhausted counter. The limiter is a module-level
  * singleton and `isolate: true` gives every file a fresh module registry, so
  * exhausting one IP here cannot affect another file.
  */

@@ -12,6 +12,7 @@ export default {
         "map",
         "me",
         "slackbot",
+        "analytics",
 
         // apps & packages (exist in both apps/ and packages/)
         "api",
@@ -19,6 +20,7 @@ export default {
 
         // packages
         "db",
+        "db-python",
         "env",
         "health",
         "mail",
@@ -37,6 +39,7 @@ export default {
         "scripts",
         "github",
         "tailwind",
+        "vitest",
 
         // cross-cutting
         "deps",

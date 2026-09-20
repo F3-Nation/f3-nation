@@ -2,18 +2,16 @@
 
 import type { DataType } from "~/utils/store/modal";
 import { ModalType, useOpenModal } from "~/utils/store/modal";
-import AdminAOsModal from "./admin-aos-modal";
+import AdminOrgEditModal from "./admin-org-edit-modal";
 import AdminApiKeysModal from "./admin-api-keys-modal";
 import AdminPositionsModal from "./admin-positions-modal";
-import AdminAreasModal from "./admin-areas-modal";
 import AdminDeleteModal from "./admin-delete-modal";
+import AdminEventInstancesModal from "./admin-event-instances-modal";
 import AdminEventTypesModal from "./admin-event-types-modal";
 import AdminLocationsModal from "./admin-locations-modal";
 import AdminManageAccessModal from "./admin-manage-access-modal";
-import AdminNationsModal from "./admin-nations-modal";
-import AdminRegionsModal from "./admin-regions-modal";
+import AdminOauthClientsModal from "./admin-oauth-clients-modal";
 import AdminRequestsModal from "./admin-requests-modal";
-import AdminSectorsModal from "./admin-sectors-modal";
 import AdminUsersModal from "./admin-users-modal";
 import AdminWorkoutsModal from "./admin-workouts-modal";
 import DeleteModal from "./delete-modal";
@@ -53,6 +51,12 @@ export const ModalSwitcher = ({
       return (
         <AdminWorkoutsModal data={data as DataType[ModalType.ADMIN_EVENTS]} />
       );
+    case ModalType.ADMIN_EVENT_INSTANCES:
+      return (
+        <AdminEventInstancesModal
+          data={data as DataType[ModalType.ADMIN_EVENT_INSTANCES]}
+        />
+      );
     case ModalType.ADMIN_EVENT_TYPES:
       return (
         <AdminEventTypesModal
@@ -61,6 +65,12 @@ export const ModalSwitcher = ({
       );
     case ModalType.ADMIN_API_KEYS:
       return <AdminApiKeysModal />;
+    case ModalType.ADMIN_OAUTH_CLIENTS:
+      return (
+        <AdminOauthClientsModal
+          data={data as DataType[ModalType.ADMIN_OAUTH_CLIENTS]}
+        />
+      );
     case ModalType.ADMIN_LOCATIONS:
       return (
         <AdminLocationsModal
@@ -69,27 +79,16 @@ export const ModalSwitcher = ({
           data={data as DataType[ModalType.ADMIN_LOCATIONS]}
         />
       );
-    case ModalType.ADMIN_NATIONS:
+    case ModalType.ADMIN_ORG: {
+      const orgData = data as DataType[ModalType.ADMIN_ORG];
       return (
-        <AdminNationsModal data={data as DataType[ModalType.ADMIN_NATIONS]} />
-      );
-    case ModalType.ADMIN_SECTORS:
-      return (
-        <AdminSectorsModal data={data as DataType[ModalType.ADMIN_SECTORS]} />
-      );
-    case ModalType.ADMIN_AREAS:
-      return <AdminAreasModal data={data as DataType[ModalType.ADMIN_AREAS]} />;
-    case ModalType.ADMIN_REGIONS:
-      return (
-        <AdminRegionsModal data={data as DataType[ModalType.ADMIN_REGIONS]} />
-      );
-    case ModalType.ADMIN_AOS:
-      return (
-        <AdminAOsModal
+        <AdminOrgEditModal
+          key={orgData.orgType}
+          {...orgData}
           isProd={runtimeConfig.isProd}
-          data={data as DataType[ModalType.ADMIN_AOS]}
         />
       );
+    }
     case ModalType.ADMIN_POSITIONS:
       return (
         <AdminPositionsModal

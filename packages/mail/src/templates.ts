@@ -174,7 +174,7 @@ export const templateRenderers: {
           <li>2 F3 Q Source Book</li>
           <li>1 F3 Stencil — "Worm's Coupon Maker"</li>
           <li>10 F3 Stickers</li>
-          <li>10 F3 Business Cards</li>
+          <li>100 F3 Business Cards</li>
         </ul>
         <p><strong>To claim your free bundle, here's what to do:</strong></p>
         <ol>

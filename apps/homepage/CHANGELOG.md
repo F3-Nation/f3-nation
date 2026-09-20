@@ -1,5 +1,71 @@
 # Changelog
 
+## [1.6.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.5.1...homepage@1.6.0) (2026-09-16)
+
+
+### Features
+
+* **homepage:** aos on org chart ([#997](https://github.com/F3-Nation/f3-nation/issues/997)) ([e4b36ca](https://github.com/F3-Nation/f3-nation/commit/e4b36ca629e3c7c5366468e2eae3720ad5ff28ec))
+
+
+### Bug Fixes
+
+* **homepage:** preserve org navigation across unknown tiers ([#1019](https://github.com/F3-Nation/f3-nation/issues/1019)) ([b616b6b](https://github.com/F3-Nation/f3-nation/commit/b616b6bc2ca0ba3f1ac97874300b1e7713ab2d64))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.3.1
+    * @acme/ui bumped to 0.1.6
+
+## [1.5.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.5.0...homepage@1.5.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **homepage:** updated ci build to allow me to put in env ([#994](https://github.com/F3-Nation/f3-nation/issues/994)) ([4441028](https://github.com/F3-Nation/f3-nation/commit/44410285df7235efa125e34803bdf6054bce56ec))
+
+## [1.5.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.2...homepage@1.5.0) (2026-09-11)
+
+
+### Features
+
+* **homepage:** added /org to home page ([#947](https://github.com/F3-Nation/f3-nation/issues/947)) ([d7e4f3f](https://github.com/F3-Nation/f3-nation/commit/d7e4f3f6620033cf5e2045b3d0cdf3b6b129564f))
+
+## [1.4.2](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.1...homepage@1.4.2) (2026-09-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/ui bumped to 0.1.5
+
+## [1.4.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.4.0...homepage@1.4.1) (2026-09-08)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/ui bumped to 0.1.4
+
+## [1.4.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.3.0...homepage@1.4.0) (2026-08-12)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @f3nation/health bumped to 1.1.0
+
 ## [1.3.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.2.3...homepage@1.3.0) (2026-07-14)
 
 

@@ -2,14 +2,21 @@
 
 import type { ReactNode } from "react";
 import { createContext, useContext, useMemo } from "react";
+import dayjs from "dayjs";
 
 import { DEFAULT_CENTER } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 
-import type { SparseF3Marker } from "~/utils/types";
+import type { SeriesException } from "@acme/shared/app/enums";
+
 import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
+import type { MapStatus, SparseF3Marker } from "~/utils/types";
 import { orpc, useQuery } from "~/orpc/react";
+import { dateToDayOfWeek } from "~/utils/date";
+import type { StatusInstanceSummary } from "~/utils/event-status-map";
+import { getMapEventStatus, instanceMapStatus } from "~/utils/event-status-map";
 import { filterData } from "~/utils/filtered-data";
+import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
 import { filterStore } from "~/utils/store/filter";
 import { mapStore } from "~/utils/store/map";
 
@@ -20,6 +27,101 @@ export type LocationMarkerWithDistance = SparseF3Marker & {
 export type AoGroupedLocationMarker = LocationMarkerWithDistance & {
   aoId: string;
 };
+
+interface UpcomingMapInstance {
+  id: number;
+  seriesId: number | null;
+  locationId: number | null;
+  startDate: string;
+  startTime: string | null;
+  seriesException: SeriesException | null;
+  name: string;
+  lat: number | null;
+  lon: number | null;
+  aoName: string | null;
+  aoLogo: string | null;
+  fullAddress: string | null;
+  eventTypes: { id: number; name: string }[];
+}
+
+const createSyntheticEventFromInstance = (
+  instance: UpcomingMapInstance,
+): SparseF3Marker["events"][number] => {
+  // Shared with the chip and "Updates" colorings so all three stay in step —
+  // this was an inline copy of the same ladder.
+  const mapStatus: MapStatus = instanceMapStatus(instance.seriesException);
+
+  return {
+    id: -instance.id,
+    name: instance.name,
+    dayOfWeek: dateToDayOfWeek(instance.startDate),
+    startTime: instance.startTime,
+    eventTypes: instance.eventTypes,
+    startDate: instance.startDate,
+    endDate: null,
+    aoName: instance.aoName ?? "",
+    aoLogo: instance.aoLogo,
+    mapStatus,
+  };
+};
+
+export function mergeUpcomingInstancesIntoMarkers({
+  locationMarkers,
+  upcomingInstancesData,
+}: {
+  locationMarkers: SparseF3Marker[];
+  upcomingInstancesData: UpcomingMapInstance[] | undefined;
+}) {
+  const markersByLocationId = new Map<number, SparseF3Marker>();
+  const locationIdsBySeriesId = new Map<number, Set<number>>();
+
+  for (const marker of locationMarkers) {
+    markersByLocationId.set(marker.id, marker);
+    for (const event of marker.events) {
+      if (event.id < 0) continue;
+      let locs = locationIdsBySeriesId.get(event.id);
+      if (!locs) {
+        locs = new Set<number>();
+        locationIdsBySeriesId.set(event.id, locs);
+      }
+      locs.add(marker.id);
+    }
+  }
+
+  for (const instance of upcomingInstancesData ?? []) {
+    if (
+      instance.locationId == null ||
+      instance.lat == null ||
+      instance.lon == null
+    )
+      continue;
+    if (
+      instance.seriesId != null &&
+      locationIdsBySeriesId.get(instance.seriesId)?.has(instance.locationId)
+    )
+      continue;
+
+    const instanceEvent = createSyntheticEventFromInstance(instance);
+    const existing = markersByLocationId.get(instance.locationId);
+
+    if (existing) {
+      existing.events.push(instanceEvent);
+      continue;
+    }
+
+    const marker: SparseF3Marker = {
+      id: instance.locationId,
+      aoName: instance.aoName ?? "",
+      logo: instance.aoLogo,
+      lat: instance.lat,
+      lon: instance.lon,
+      fullAddress: instance.fullAddress,
+      events: [instanceEvent],
+    };
+    markersByLocationId.set(instance.locationId, marker);
+    locationMarkers.push(marker);
+  }
+}
 
 const FilteredMapResultsContext = createContext<{
   nearbyLocationCenter: ReturnType<typeof mapStore.use.nearbyLocationCenter>;
@@ -49,6 +151,8 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
     }),
   );
 
+  const { instances: upcomingInstancesData } = useUpcomingInstances();
+
   const filters = filterStore.useBoundStore();
 
   /**
@@ -56,6 +160,23 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
    */
   const allLocationMarkersWithLatLngAndFilterData = useMemo(() => {
     if (!mapEventAndLocationData) return undefined;
+
+    const todayIso = dayjs().format("YYYY-MM-DD");
+
+    const instancesBySeriesId = new Map<number, StatusInstanceSummary[]>();
+
+    if (upcomingInstancesData) {
+      for (const instance of upcomingInstancesData) {
+        if (instance.seriesId != null) {
+          const list = instancesBySeriesId.get(instance.seriesId) ?? [];
+          list.push({
+            seriesException: instance.seriesException,
+            startDate: instance.startDate,
+          });
+          instancesBySeriesId.set(instance.seriesId, list);
+        }
+      }
+    }
 
     const allLocationMarkerFilterData = mapEventAndLocationData.map(
       (location) => {
@@ -67,7 +188,7 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
           lon: location[4],
           fullAddress: location[5],
           events: location[6].map((event) => {
-            return {
+            const eventObj = {
               id: event[0],
               name: event[1],
               dayOfWeek: event[2],
@@ -75,36 +196,29 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
               eventTypes: event[4],
               aoName: event[5],
               aoLogo: event[6],
+              startDate: event[7],
+              endDate: event[8],
+            };
+            return {
+              ...eventObj,
+              mapStatus: getMapEventStatus(
+                eventObj,
+                instancesBySeriesId,
+                todayIso,
+              ),
             };
           }),
         };
       },
     );
 
-    const locationIdToLatLng = allLocationMarkerFilterData.reduce(
-      (acc, location) => {
-        acc[location.id] = location;
-        return acc;
-      },
-      {} as Record<
-        number,
-        {
-          lat: number | null;
-          lon: number | null;
-          fullAddress: string | null;
-        }
-      >,
-    );
-
-    return allLocationMarkerFilterData.map((location) => {
-      return {
-        ...location,
-        lat: locationIdToLatLng[location.id]?.lat ?? null,
-        lon: locationIdToLatLng[location.id]?.lon ?? null,
-        fullAddress: locationIdToLatLng[location.id]?.fullAddress ?? null,
-      };
+    mergeUpcomingInstancesIntoMarkers({
+      locationMarkers: allLocationMarkerFilterData,
+      upcomingInstancesData,
     });
-  }, [mapEventAndLocationData]);
+
+    return allLocationMarkerFilterData;
+  }, [mapEventAndLocationData, upcomingInstancesData]);
 
   /**
    * Filter the location markers by the filters

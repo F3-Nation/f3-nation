@@ -400,6 +400,8 @@ export const requestRouter = {
 
       if (onlyMine) {
         const result = await getEditableOrgIdsForUser(ctx);
+        // Requests are scoped by non-AO regionId values, so retain the
+        // helper's non-AO editable set instead of expanding direct roots.
         editableOrgs = result.editableOrgs;
         isNationAdmin = result.isNationAdmin;
 

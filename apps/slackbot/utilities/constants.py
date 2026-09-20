@@ -281,9 +281,24 @@ ACHIEVEMENTS_ALPHA_TESTING_ORG_IDS = [
 ]
 ACHIEVEMENT_AWARD_HOUR_CST = int(os.environ.get("ACHIEVEMENT_AWARD_HOUR_CST", 9))
 
+
 class AlertLevel(StrEnum):
     DEFAULT = "default"
     INFO = "info"
     SUCCESS = "success"
     WARNING = "warning"
     ERROR = "error"
+
+
+MAX_CALENDAR_WEEKS = 3
+WEEK_LABELS = ["current", "next", "third"]
+WEEK_ALT_TEXT = {
+    "current": "This Week's Q Sheet",
+    "next": "Next Week's Q Sheet",
+    "third": "In Two Weeks' Q Sheet",
+}
+WEEK_SCHEDULE_LABELS = {
+    "current": "This week's schedule",
+    "next": "Next week's schedule",
+    "third": "In two weeks' schedule",
+}

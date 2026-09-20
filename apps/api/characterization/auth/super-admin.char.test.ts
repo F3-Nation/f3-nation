@@ -5,12 +5,11 @@ import { vi } from "vitest";
  * SUPER_ADMIN_API_KEY in an x-api-key header OR a nation-admin session — two
  * separate branches (packages/api/src/shared.ts), both pinned here.
  *
- * The handler's post-auth side effects are neutralized so an authorized request
- * settles as a clean 200 rather than a 500 that expectAuthorized would have to
- * be loosened to accept: revalidatePath() via the next/cache alias shim, and
- * the outbound webhook here. Auth resolution stays entirely real — only what
- * runs AFTER the guard is stubbed. The relative path is because @acme/api
- * exports no lib/* subpath.
+ * The handler's post-auth side effect (triggerMapAppRevalidation) is
+ * neutralized so an authorized request settles as a clean 200 rather than
+ * depending on a live Map app. Auth resolution stays entirely real — only
+ * what runs AFTER the guard is stubbed. The relative path is because
+ * @acme/api exports no lib/* subpath.
  */
 vi.mock("../../../../packages/api/src/lib/revalidate-map", () => ({
   triggerMapAppRevalidation: vi.fn().mockResolvedValue(undefined),

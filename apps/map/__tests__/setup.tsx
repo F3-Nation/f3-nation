@@ -18,6 +18,12 @@ vi.mock("@acme/auth", () => ({
   auth: vi.fn(),
 }));
 
+// Root `@sentry/nextjs` re-exports a webpack plugin that throws
+// "The URL must be of scheme file" under jsdom (`typeof document !==
+// "undefined"`). Keep every suite off the real package; tests that assert
+// captureException still replace this mock locally.
+vi.mock("@sentry/nextjs", async () => import("./mocks/sentry-nextjs"));
+
 // const mockedORPC = createORPCReact<AppRouter>({
 //   overrides: {
 //     useMutation: {

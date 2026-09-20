@@ -1,5 +1,135 @@
 # Changelog
 
+## [6.7.0](https://github.com/F3-Nation/f3-nation/compare/api@6.6.2...api@6.7.0) (2026-09-16)
+
+
+### Features
+
+* **homepage:** aos on org chart ([#997](https://github.com/F3-Nation/f3-nation/issues/997)) ([e4b36ca](https://github.com/F3-Nation/f3-nation/commit/e4b36ca629e3c7c5366468e2eae3720ad5ff28ec))
+
+
+### Bug Fixes
+
+* **api:** ordinal server-side parent-type validation in org.crupdate ([#1002](https://github.com/F3-Nation/f3-nation/issues/1002)) ([d4a6317](https://github.com/F3-Nation/f3-nation/commit/d4a6317b03b49abbbd61f1cfec96060e6ace7324))
+* **slackbot, api:** persisting tags on series and allowing removal ([#979](https://github.com/F3-Nation/f3-nation/issues/979)) ([807630d](https://github.com/F3-Nation/f3-nation/commit/807630d961b09d9934b7deac33aafc927135173c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.10.0
+    * @acme/shared bumped to 0.3.1
+  * devDependencies
+    * @acme/auth bumped to 0.2.6
+    * @acme/db bumped to 0.6.2
+
+## [6.6.2](https://github.com/F3-Nation/f3-nation/compare/api@6.6.1...api@6.6.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* **api:** hardening and hono ([#996](https://github.com/F3-Nation/f3-nation/issues/996)) ([cee88ea](https://github.com/F3-Nation/f3-nation/commit/cee88ead78f9075b0a7318ce73476d526d848968))
+
+## [6.6.1](https://github.com/F3-Nation/f3-nation/compare/api@6.6.0...api@6.6.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **db,ci:** tune Postgres client pool/timeouts and fix stale auth staging_url ([#901](https://github.com/F3-Nation/f3-nation/issues/901)) ([59ead05](https://github.com/F3-Nation/f3-nation/commit/59ead059226ecffaa3b928b67aa64753170fb613))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.1
+  * devDependencies
+    * @acme/auth bumped to 0.2.5
+    * @acme/db bumped to 0.6.1
+
+## [6.6.0](https://github.com/F3-Nation/f3-nation/compare/api@6.5.0...api@6.6.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/shared bumped to 0.3.0
+  * devDependencies
+    * @acme/auth bumped to 0.2.4
+    * @acme/db bumped to 0.6.0
+
+## [6.5.0](https://github.com/F3-Nation/f3-nation/compare/api@6.4.0...api@6.5.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+* **api,ci:** add Hono server entry hosting the existing oRPC handlers ([#890](https://github.com/F3-Nation/f3-nation/issues/890)) ([636aaaa](https://github.com/F3-Nation/f3-nation/commit/636aaaa5ce05f9b7def89719d1cb26202c9a5517))
+
+
+### Bug Fixes
+
+* **api:** add .output() schemas to event-tag router ([#902](https://github.com/F3-Nation/f3-nation/issues/902)) ([6aa08ca](https://github.com/F3-Nation/f3-nation/commit/6aa08caf611d8731483916561a27a728975b1ec8))
+* **api:** stop crupdate resetting isActive/highlight/isPrivate on partial updates ([#900](https://github.com/F3-Nation/f3-nation/issues/900)) ([f89b7f7](https://github.com/F3-Nation/f3-nation/commit/f89b7f7e8c0ccb3341ee98c644d7d98836180a4a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.8.0
+    * @acme/shared bumped to 0.2.0
+  * devDependencies
+    * @acme/auth bumped to 0.2.3
+    * @acme/db bumped to 0.5.0
+
+## [6.4.0](https://github.com/F3-Nation/f3-nation/compare/api@6.3.0...api@6.4.0) (2026-08-18)
+
+
+### Features
+
+* **auth:** issue an id_token on the authorization_code and refresh_token grants ([#749](https://github.com/F3-Nation/f3-nation/issues/749)) ([0a8a25d](https://github.com/F3-Nation/f3-nation/commit/0a8a25d635d618383d57669eff4415b32b6e3fef))
+
+
+### Bug Fixes
+
+* **api:** raise per-IP rate limit to 500 ([#850](https://github.com/F3-Nation/f3-nation/issues/850)) ([b8e320a](https://github.com/F3-Nation/f3-nation/commit/b8e320a30a6be2f8f79c912a6ae3cf3dedf86c91))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.0
+  * devDependencies
+    * @acme/auth bumped to 0.2.2
+    * @acme/db bumped to 0.4.1
+
+## [6.3.0](https://github.com/F3-Nation/f3-nation/compare/api@6.2.0...api@6.3.0) (2026-08-12)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+* **map:** add start date column to workouts table ([#807](https://github.com/F3-Nation/f3-nation/issues/807)) ([c49b48d](https://github.com/F3-Nation/f3-nation/commit/c49b48d6131e13454425d3ce0660e02093bba175))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+  * devDependencies
+    * @acme/db bumped to 0.4.0
+
 ## [6.2.0](https://github.com/F3-Nation/f3-nation/compare/api@6.1.3...api@6.2.0) (2026-08-05)
 
 

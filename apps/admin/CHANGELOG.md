@@ -1,5 +1,112 @@
 # Changelog
 
+## [2.5.3](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.2...admin@2.5.3) (2026-09-16)
+
+
+### Bug Fixes
+
+* **homepage:** preserve org navigation across unknown tiers ([#1019](https://github.com/F3-Nation/f3-nation/issues/1019)) ([b616b6b](https://github.com/F3-Nation/f3-nation/commit/b616b6bc2ca0ba3f1ac97874300b1e7713ab2d64))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.10.0
+    * @acme/shared bumped to 0.3.1
+    * @acme/ui bumped to 0.1.6
+    * @acme/validators bumped to 0.4.3
+
+## [2.5.2](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.1...admin@2.5.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* **api:** hardening and hono ([#996](https://github.com/F3-Nation/f3-nation/issues/996)) ([cee88ea](https://github.com/F3-Nation/f3-nation/commit/cee88ead78f9075b0a7318ce73476d526d848968))
+
+## [2.5.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.0...admin@2.5.1) (2026-09-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.1
+    * @acme/mail bumped to 0.1.3
+    * @acme/validators bumped to 0.4.2
+
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.4.0...admin@2.5.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/shared bumped to 0.3.0
+    * @acme/ui bumped to 0.1.5
+    * @acme/validators bumped to 0.4.1
+
+## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.3.1...admin@2.4.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+* **auth,db,admin,api:** better auth config for [#876](https://github.com/F3-Nation/f3-nation/issues/876) phase 3 ([#914](https://github.com/F3-Nation/f3-nation/issues/914)) ([4c77b90](https://github.com/F3-Nation/f3-nation/commit/4c77b904dab9a9864d1c9d98f6356e6f211bb086))
+
+
+### Bug Fixes
+
+* **admin:** make region filters depth-agnostic ([#951](https://github.com/F3-Nation/f3-nation/issues/951)) ([c61e4ca](https://github.com/F3-Nation/f3-nation/commit/c61e4cae21fa27cb43dd256763ce694f063fe9fe))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.8.0
+    * @acme/shared bumped to 0.2.0
+    * @acme/ui bumped to 0.1.4
+    * @acme/validators bumped to 0.4.0
+
+## [2.3.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.3.0...admin@2.3.1) (2026-08-18)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.7.0
+    * @acme/validators bumped to 0.3.1
+    * @f3nation/sso-next bumped to 0.2.1
+  * devDependencies
+    * @f3nation/sso bumped to 0.4.0
+
+## [2.3.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.2.0...admin@2.3.0) (2026-08-12)
+
+
+### Features
+
+* **map:** add start date column to workouts table ([#807](https://github.com/F3-Nation/f3-nation/issues/807)) ([c49b48d](https://github.com/F3-Nation/f3-nation/commit/c49b48d6131e13454425d3ce0660e02093bba175))
+* **sso:** new next wrapper for sso, partially completed ([#688](https://github.com/F3-Nation/f3-nation/issues/688)) ([8555b36](https://github.com/F3-Nation/f3-nation/commit/8555b3687808c26713f9b7b524e65296756d4504))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.6.0
+    * @acme/validators bumped to 0.3.0
+    * @f3nation/sso-next bumped to 0.2.0
+  * devDependencies
+    * @f3nation/sso bumped to 0.3.0
+
 ## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.1.3...admin@2.2.0) (2026-08-05)
 
 

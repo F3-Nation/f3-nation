@@ -104,7 +104,7 @@ the end user never authenticates.
 | Browse map, search, view location detail (via the map app) | Everyone, anonymous included                                    | —                                           |
 | Call map read procedures directly (no credential)          | Trusted callers holding the map API key; authenticated sessions | Unauthenticated direct calls (UNAUTHORIZED) |
 
-All callers are subject to an in-memory per-IP rate limit (~200 req/min per
+All callers are subject to an in-memory per-IP rate limit (~500 req/min per
 instance in production; requests without a forwarded client IP fall into a
 shared "anonymous" bucket) — a per-instance limit, not a global cap.
 

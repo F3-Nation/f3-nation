@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import {
@@ -33,14 +34,11 @@ export default function AdminDeleteModal({
     eventId?: number;
     locationId?: number;
     userId?: number;
+    eventInstanceId?: number;
   } | void>;
 
   switch (data.type) {
-    case DeleteType.NATION:
-    case DeleteType.SECTOR:
-    case DeleteType.AREA:
-    case DeleteType.REGION:
-    case DeleteType.AO:
+    case DeleteType.ORG:
       mutation = orpc.org.delete.call;
       break;
     case DeleteType.EVENT:
@@ -58,6 +56,9 @@ export default function AdminDeleteModal({
     case DeleteType.POSITION:
       mutation = orpc.position.delete.call;
       break;
+    case DeleteType.EVENT_INSTANCE:
+      mutation = orpc.eventInstance.delete.call;
+      break;
     default:
       throw new Error(`Invalid delete type: ${data.type}`);
   }
@@ -69,16 +70,12 @@ export default function AdminDeleteModal({
     try {
       await mutation({ id });
       toast.success(
-        `Successfully deactivated ${dataTypeToName(data.type).toLowerCase()}`,
+        `Successfully deactivated ${dataTypeToName(data).toLowerCase()}`,
       );
 
       // Invalidate queries and wait for completion so the table refreshes
       switch (data.type) {
-        case DeleteType.NATION:
-        case DeleteType.SECTOR:
-        case DeleteType.AREA:
-        case DeleteType.REGION:
-        case DeleteType.AO:
+        case DeleteType.ORG:
           await invalidateQueries("org");
           await invalidateQueries("map");
           break;
@@ -100,6 +97,10 @@ export default function AdminDeleteModal({
         case DeleteType.POSITION:
           await invalidateQueries("position");
           break;
+        case DeleteType.EVENT_INSTANCE:
+          await invalidateQueries("eventInstance");
+          await invalidateQueries("map");
+          break;
         default:
           throw new Error(`Invalid deactivate type: ${data.type}`);
       }
@@ -108,7 +109,7 @@ export default function AdminDeleteModal({
       closeModal();
     } catch (err) {
       console.error("deactivate-modal err", err);
-      const dataTypeName = dataTypeToName(data.type).toLowerCase();
+      const dataTypeName = dataTypeToName(data).toLowerCase();
       const errorMessage =
         err instanceof ORPCError && err.code === "UNAUTHORIZED"
           ? `You are not authorized to deactivate this ${dataTypeName}`
@@ -128,12 +129,12 @@ export default function AdminDeleteModal({
       >
         <DialogHeader>
           <DialogTitle className="text-center">
-            Deactivate {dataTypeToName(data.type)}
+            Deactivate {dataTypeToName(data)}
           </DialogTitle>
         </DialogHeader>
 
         <div className="my-6 w-full px-3">
-          {`Are you sure you want to deactivate this ${dataTypeToName(data.type)}?`}
+          {`Are you sure you want to deactivate this ${dataTypeToName(data)}?`}
         </div>
         <div className="mb-2 w-full px-2">
           <div className="flex space-x-4">
@@ -162,19 +163,11 @@ export default function AdminDeleteModal({
 }
 
 const dataTypeToName = (
-  dataType: DataType[ModalType.ADMIN_DELETE_CONFIRMATION]["type"],
+  data: DataType[ModalType.ADMIN_DELETE_CONFIRMATION],
 ) => {
-  switch (dataType) {
-    case DeleteType.NATION:
-      return "Nation";
-    case DeleteType.SECTOR:
-      return "Sector";
-    case DeleteType.AREA:
-      return "Area";
-    case DeleteType.REGION:
-      return "Region";
-    case DeleteType.AO:
-      return "AO";
+  switch (data.type) {
+    case DeleteType.ORG:
+      return orgTypeDisplay[data.orgType].label;
     case DeleteType.EVENT:
       return "Event";
     case DeleteType.EVENT_TYPE:
@@ -185,7 +178,9 @@ const dataTypeToName = (
       return "Location";
     case DeleteType.POSITION:
       return "Position";
+    case DeleteType.EVENT_INSTANCE:
+      return "Event Instance";
     default:
-      throw new Error(`Invalid deactivate type: ${dataType}`);
+      throw new Error(`Invalid deactivate type: ${data.type}`);
   }
 };

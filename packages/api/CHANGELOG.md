@@ -1,5 +1,141 @@
 # Changelog
 
+## [0.10.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.9.1...pkg-api@0.10.0) (2026-09-16)
+
+
+### Features
+
+* **homepage:** aos on org chart ([#997](https://github.com/F3-Nation/f3-nation/issues/997)) ([e4b36ca](https://github.com/F3-Nation/f3-nation/commit/e4b36ca629e3c7c5366468e2eae3720ad5ff28ec))
+
+
+### Bug Fixes
+
+* **api:** ordinal server-side parent-type validation in org.crupdate ([#1002](https://github.com/F3-Nation/f3-nation/issues/1002)) ([d4a6317](https://github.com/F3-Nation/f3-nation/commit/d4a6317b03b49abbbd61f1cfec96060e6ace7324))
+* **api:** parallelize profile relation queries ([#1016](https://github.com/F3-Nation/f3-nation/issues/1016)) ([24cbd11](https://github.com/F3-Nation/f3-nation/commit/24cbd11f5fc5403f2c3144a11b36cb50a16dd2e7))
+* **slackbot, api:** persisting tags on series and allowing removal ([#979](https://github.com/F3-Nation/f3-nation/issues/979)) ([807630d](https://github.com/F3-Nation/f3-nation/commit/807630d961b09d9934b7deac33aafc927135173c))
+
+
+### Performance Improvements
+
+* **api:** project region map fields ([#1006](https://github.com/F3-Nation/f3-nation/issues/1006)) ([d52a642](https://github.com/F3-Nation/f3-nation/commit/d52a6425ab644b0ad6b3ce52dde49dad678f63d8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.6
+    * @acme/db bumped to 0.6.2
+    * @acme/shared bumped to 0.3.1
+    * @acme/validators bumped to 0.4.3
+
+## [0.9.1](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.9.0...pkg-api@0.9.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **api:** return seriesException on calendar-home-schedule ([#942](https://github.com/F3-Nation/f3-nation/issues/942)) ([364edcd](https://github.com/F3-Nation/f3-nation/commit/364edcd15a62230c6a931cbb7c139b609e910055)), closes [#941](https://github.com/F3-Nation/f3-nation/issues/941)
+* **db:** bound how long a query waits behind a saturated connection pool ([#911](https://github.com/F3-Nation/f3-nation/issues/911)) ([d26f4cb](https://github.com/F3-Nation/f3-nation/commit/d26f4cbd2f57fba6ddcf6f5f6d7c66c5ece8abbe))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.5
+    * @acme/db bumped to 0.6.1
+    * @acme/mail bumped to 0.1.3
+    * @acme/validators bumped to 0.4.2
+
+## [0.9.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.8.0...pkg-api@0.9.0) (2026-09-10)
+
+
+### Features
+
+* **api,admin,db,shared:** add OAuth client admin UI ([#957](https://github.com/F3-Nation/f3-nation/issues/957)) ([f09c9c5](https://github.com/F3-Nation/f3-nation/commit/f09c9c5a5d0921833eec876fbcee102999ceed37))
+
+
+### Bug Fixes
+
+* **api:** replace fixed-depth ancestor-active check with recursive CTE ([#967](https://github.com/F3-Nation/f3-nation/issues/967)) ([cd6e1fe](https://github.com/F3-Nation/f3-nation/commit/cd6e1fe29dd270b19cbe7f463fb58cfac5f3aa58))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.4
+    * @acme/db bumped to 0.6.0
+    * @acme/shared bumped to 0.3.0
+    * @acme/validators bumped to 0.4.1
+
+## [0.8.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.7.0...pkg-api@0.8.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+
+
+### Bug Fixes
+
+* **api:** add .output() schemas to event-tag router ([#902](https://github.com/F3-Nation/f3-nation/issues/902)) ([6aa08ca](https://github.com/F3-Nation/f3-nation/commit/6aa08caf611d8731483916561a27a728975b1ec8))
+* **api:** stop crupdate resetting isActive/highlight/isPrivate on partial updates ([#900](https://github.com/F3-Nation/f3-nation/issues/900)) ([f89b7f7](https://github.com/F3-Nation/f3-nation/commit/f89b7f7e8c0ccb3341ee98c644d7d98836180a4a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.3
+    * @acme/db bumped to 0.5.0
+    * @acme/shared bumped to 0.2.0
+    * @acme/validators bumped to 0.4.0
+
+## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.6.0...pkg-api@0.7.0) (2026-08-18)
+
+
+### Features
+
+* **auth:** issue an id_token on the authorization_code and refresh_token grants ([#749](https://github.com/F3-Nation/f3-nation/issues/749)) ([0a8a25d](https://github.com/F3-Nation/f3-nation/commit/0a8a25d635d618383d57669eff4415b32b6e3fef))
+
+
+### Bug Fixes
+
+* **api:** raise per-IP rate limit to 500 ([#850](https://github.com/F3-Nation/f3-nation/issues/850)) ([b8e320a](https://github.com/F3-Nation/f3-nation/commit/b8e320a30a6be2f8f79c912a6ae3cf3dedf86c91))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.2
+    * @acme/db bumped to 0.4.1
+    * @acme/validators bumped to 0.3.1
+
+## [0.6.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.5.0...pkg-api@0.6.0) (2026-08-12)
+
+
+### Features
+
+* **health:** add /status to homepage and introduce shared package for reporting ([#657](https://github.com/F3-Nation/f3-nation/issues/657)) ([88e7547](https://github.com/F3-Nation/f3-nation/commit/88e754751e25461e25c7361c878c78e3902daad4))
+* **map:** add start date column to workouts table ([#807](https://github.com/F3-Nation/f3-nation/issues/807)) ([c49b48d](https://github.com/F3-Nation/f3-nation/commit/c49b48d6131e13454425d3ce0660e02093bba175))
+
+
+### Bug Fixes
+
+* **api:** require editor on current org when editing a position ([#814](https://github.com/F3-Nation/f3-nation/issues/814)) ([af7719a](https://github.com/F3-Nation/f3-nation/commit/af7719adac2934f20eee01b36bbd3d572f2d26a6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.1
+    * @acme/db bumped to 0.4.0
+    * @acme/validators bumped to 0.3.0
+    * @f3nation/health bumped to 1.1.0
+
 ## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.4.1...pkg-api@0.5.0) (2026-08-05)
 
 

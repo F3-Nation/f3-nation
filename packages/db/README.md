@@ -61,6 +61,15 @@ turbo pipeline.
 All scripts that hit the database load credentials from `packages/db/.env`
 (copied from `packages/db/.env.example` by `pnpm local:setup`).
 
+For an existing checkout, create `packages/db/.env` from the example and set
+its database URLs before running database scripts. `packages/api` continues to
+load `packages/env/.env`; keep its test URL aligned with `packages/db/.env`.
+
+`pnpm -C packages/db test` tests migrations, audit output, and repeated resets
+in a disposable database on the server specified by `TEST_DATABASE_URL`. The
+configured database name must end in `_test`, and the test role must be able
+to create databases. The suite drops only the temporary database it creates.
+
 ---
 
 ## Migrations
@@ -143,22 +152,35 @@ This preserves schema-level access control: granting read access to
 Every history table has the same columns regardless of which source table it
 mirrors:
 
-| Column        | Type        | Description                                                                          |
-| ------------- | ----------- | ------------------------------------------------------------------------------------ |
-| `id`          | bigserial   | History-row primary key                                                              |
-| `row_id`      | text        | PK of the changed row, colon-joined for composite PKs                                |
-| `op`          | char(1)     | `I` (insert), `U` (update), `D` (delete)                                             |
-| `changed_at`  | timestamptz | When the change was committed   
-| `old_row`     | jsonb       | Full row before the change; `NULL` on INSERT                                         |
-| `new_row`     | jsonb       | Full row after the change; `NULL` on DELETE                                          |
+| Column        | Type        | Description                                           |
+| ------------- | ----------- | ----------------------------------------------------- |
+| `id`          | bigserial   | History-row primary key                               |
+| `row_id`      | text        | PK of the changed row, colon-joined for composite PKs |
+| `op`          | char(1)     | `I` (insert), `U` (update), `D` (delete)              |
+| `changed_at`  | timestamptz | Transaction start time                                |
+| `changed_by`  | integer     | Acting user ID, or `NULL` until attribution is wired  |
+| `changed_via` | text        | Originating app, or `NULL` until attribution is wired |
+| `old_row`     | jsonb       | Full row before the change; `NULL` on INSERT          |
+| `new_row`     | jsonb       | Full row after the change; `NULL` on DELETE           |
 
 Table carries no foreign-key constraint so history survives source deletion.
+
+Composite `row_id` values follow primary-key column order, joined with `:`.
+Backslashes and colons inside a component are escaped as `\\` and `\:`;
+integer keys retain the format `5:42:7`. Single-column keys are stored unchanged.
+When a natural key changes (for example, a tag name), the update is indexed
+under the new key; its `old_row` snapshot contains the previous key.
+
+The local/test reset helper drops the audit helpers, all three history schemas,
+and the Codex schema along with the existing application schemas, so reseeded
+IDs cannot inherit history from an earlier run. Disabling tracking instead
+preserves history.
 
 ### No-op suppression
 
 An UPDATE that changes only bookkeeping columns produces no history row.
 `ignore_cols` lists the columns to exclude from the comparison — pass the
-table's own timestamp column name (`updated`, `updated_at`, `"updatedAt"`, etc.)
+table's own timestamp column name (`updated`, `updated_at`, `updatedAt`, etc.)
 plus any derived columns that change as a side-effect of other triggers (e.g.
 `ao_count` on `orgs`). There is no default; every `enable_tracking` call must
 be explicit.
@@ -172,7 +194,8 @@ value is replaced with a sentinel string before the history row is written:
 - `"[redacted: changed]"` — column value changed (visible only in `new_row`).
 
 This means credential rotation events are recorded without storing the
-credential itself.
+credential itself. Tracking redacts `public.api_keys.key` and
+`auth.oauth_clients.client_secret_hash`.
 
 ### Tracked tables
 

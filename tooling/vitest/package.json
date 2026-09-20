@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./coverage.ts"
+    ".": "./coverage.ts",
+    "./eslint": "./vitest.js"
   },
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -17,9 +18,11 @@
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "@vitest/eslint-plugin": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
     "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"

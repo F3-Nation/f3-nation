@@ -207,13 +207,13 @@ You should see output ending with:
 
 ### 3. (Optional) Add a Google Maps API key
 
-The app will start without this, but the map tiles won't render. To get one:
+You don't need a real key to build, run the tests, or pass `pnpm ci:local` — only to see the map itself. `pnpm local:setup` copies `.env.example`, whose placeholder value (`F3_GOOGLE_API_KEY=your-google-maps-api-key-here`) is enough to satisfy env validation; the apps start, but the map tiles won't render. Don't blank the variable out — the map and admin env schemas require it to be non-empty, so an empty value fails `pnpm dev` and `pnpm build`. To get a real key:
 
 1. Go to [console.cloud.google.com/google/maps-apis](https://console.cloud.google.com/google/maps-apis/)
 2. Create a project and enable **Maps JavaScript API** and **Places API (New)**
 3. Create an API key
-4. Set the key in both `apps/map/.env` and `apps/api/.env`:
-   `NEXT_PUBLIC_GOOGLE_API_KEY=your-key-here`
+4. Set the key in `apps/map/.env` (and in `apps/admin/.env` if you want map tiles in the admin UI):
+   `F3_GOOGLE_API_KEY=your-key-here`
 
 > **Troubleshooting AuthFailure:** If the map shows an "AuthFailure" error after adding your key, the API key likely has HTTP referrer restrictions that block `localhost`. In the Google Cloud Console, set **Application restrictions** to **None** (or add `http://localhost:3000/*` as an allowed HTTP referrer) for local development.
 
@@ -284,15 +284,16 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 Each app and shared package has its own `.env` file, copied from a `.env.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
 
-| Directory            | Purpose                                                            |
-| -------------------- | ------------------------------------------------------------------ |
-| `apps/api/.env`      | API app (Next.js on port 3001)                                     |
-| `apps/auth/.env`     | Auth app (Next.js on port 3004)                                    |
-| `apps/map/.env`      | Map app (Next.js on port 3000)                                     |
-| `apps/admin/.env`    | Admin app (Next.js on port 3002)                                   |
-| `apps/me/.env`       | Me app (Next.js on port 3003)                                      |
-| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                 |
-| `packages/env/.env`  | Shared backend env root (used by `packages/db` and `packages/api`) |
+| Directory            | Purpose                                            |
+| -------------------- | -------------------------------------------------- |
+| `apps/api/.env`      | API app (Next.js on port 3001)                     |
+| `apps/auth/.env`     | Auth app (Next.js on port 3004)                    |
+| `apps/map/.env`      | Map app (Next.js on port 3000)                     |
+| `apps/admin/.env`    | Admin app (Next.js on port 3002)                   |
+| `apps/me/.env`       | Me app (Next.js on port 3003)                      |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006) |
+| `packages/env/.env`  | Shared backend env root (used by `packages/api`)   |
+| `packages/db/.env`   | Database migration, seed, and test scripts         |
 
 Here's what each variable means:
 
@@ -348,9 +349,9 @@ These tell each Next.js app where to find the other apps. Don't change these unl
 
 ### Google Maps
 
-| Variable                     | Value      | Meaning                                                                      |
-| ---------------------------- | ---------- | ---------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key. App starts without it, but the map is blank. |
+| Variable            | Value      | Meaning                                                                                                                                                                                                |
+| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `F3_GOOGLE_API_KEY` | (your key) | Google Maps JavaScript API key, read by the map and admin apps. They start with the `.env.example` placeholder instead of a real key (the map is just blank), but an empty value fails env validation. |
 
 ---
 
@@ -577,4 +578,4 @@ cp apps/map/.env.example apps/map/.env
 # etc.
 ```
 
-Then add `NEXT_PUBLIC_GOOGLE_API_KEY` to `apps/map/.env` and `apps/api/.env` if you have one.
+Then add `F3_GOOGLE_API_KEY` to `apps/map/.env` (and `apps/admin/.env`) if you have one.

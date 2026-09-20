@@ -372,5 +372,3 @@ class DbManager:
         with session_scope(backend=backend) as session:
             records = session.execute(sql_query)
             return records
-
-

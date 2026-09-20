@@ -10,6 +10,8 @@ export default defineConfig({
     environment: "jsdom",
     env: { NODE_ENV: "test", SKIP_ENV_VALIDATION: "1" },
     include: ["src/**/*.test.{ts,tsx}", "__tests__/**/*.test.{ts,tsx}"],
+    // Sequential execution is more reliable for coverage accuracy.
+    fileParallelism: false,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
@@ -18,10 +20,10 @@ export default defineConfig({
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 8.38,
-        branches: 5.6,
-        functions: 3.77,
-        lines: 8.63,
+        statements: 33.08,
+        branches: 35.83,
+        functions: 28.63,
+        lines: 32.92,
       },
     },
     setupFiles: ["./vitest.setup.ts"],

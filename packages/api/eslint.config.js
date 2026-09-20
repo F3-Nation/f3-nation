@@ -1,11 +1,40 @@
 import baseConfig from "@acme/eslint-config/base";
+import drizzleConfig from "@acme/eslint-config/drizzle";
+import vitestConfig from "@acme/vitest-config/eslint";
 
 const ORPC_ERROR_MESSAGE =
   "Throw `new ORPCError(code, { message })` instead of a raw Error — oRPC masks non-ORPCError throws as an opaque 500 and drops the message. Use BAD_REQUEST for invalid/missing input, UNAUTHORIZED for permission checks (this codebase uses it for both unauthenticated and insufficient-role — see docs/AI_DEVELOPMENT_GUIDE.md#error-handling), NOT_FOUND for a missing referenced resource, and INTERNAL_SERVER_ERROR only for truly unexpected server state.";
 
 export default [
   ...baseConfig,
+  ...drizzleConfig,
+  ...vitestConfig,
   { ignores: ["vitest.config.ts", "__tests__", "coverage"] },
+  {
+    // See the load-bearing ordering comment in vitest.global-setup.ts: a
+    // static import here is hoisted above the NODE_ENV assignment and
+    // resolves getDbUrl() against DATABASE_URL instead of TEST_DATABASE_URL.
+    files: ["vitest.global-setup.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@acme/db",
+              message:
+                'Keep this a dynamic `await import("@acme/db/testing")` inside setup() — a static import resolves before NODE_ENV is set. See the load-bearing ordering comment in this file.',
+            },
+            {
+              name: "@acme/db/testing",
+              message:
+                'Keep this a dynamic `await import("@acme/db/testing")` inside setup() — a static import resolves before NODE_ENV is set. See the load-bearing ordering comment in this file.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     // oRPC masks any thrown value that isn't an ORPCError as an opaque 500
     // INTERNAL_SERVER_ERROR — the original message never reaches the client.

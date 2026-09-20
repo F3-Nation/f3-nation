@@ -51,10 +51,14 @@ class ApiAttendanceRepository:
                 attendance_type_ids=type_ids,
                 meta=attendance.meta,
             )
-        raw = result.get("attendance") or result.get("result") or {
-            **attendance.model_dump(),
-            "attendance_type_ids": type_ids,
-        }
+        raw = (
+            result.get("attendance")
+            or result.get("result")
+            or {
+                **attendance.model_dump(),
+                "attendance_type_ids": type_ids,
+            }
+        )
         return _parse_attendance(raw)
 
     def _create_planned(self, event_instance_id: int, user_id: int, type_ids: list[int]) -> AttendanceData:

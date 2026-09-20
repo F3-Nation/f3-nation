@@ -10,9 +10,15 @@ from application.attendance import CO_Q_TYPE_ID, HC_TYPE_ID, Q_TYPE_ID, Attendan
 from application.event_instance import EventInstanceData
 from application.preblast.service import PreblastService
 from features.calendar import get_preblast_action_blocks
-from features.calendar.event_preblast import build_preblast_info, handle_event_preblast_edit
+from features.calendar.event_preblast import (
+    PreblastInfo,
+    build_preblast_info,
+    get_preblast_channel,
+    handle_event_preblast_edit,
+)
 from features.calendar.preblast_views import PREBLAST_CHANNEL_SELECTOR, PreblastViews
 from utilities import constants
+from utilities.database.orm import SlackSettings
 from utilities.slack import actions
 from utilities.slack.sdk_orm import SdkBlockView
 
@@ -66,6 +72,26 @@ class PreblastViewsTest(unittest.TestCase):
             existing_preblast_ts=existing_preblast_ts,
             **kw,
         )
+
+    def test_get_preblast_channel_prefers_persisted_event_channel(self):
+        event = _event(meta={"preblast_channel_id": "CPOST", "slack_channel_id": "CEVENT"})
+        region = MagicMock(spec=SlackSettings)
+        region.default_preblast_destination = constants.CONFIG_DESTINATION_SPECIFIED["value"]
+        region.preblast_destination_channel = "CDEFAULT"
+
+        info = PreblastInfo(event_record=event, attendance_records=[], preblast_blocks=[], action_blocks=[])
+
+        self.assertEqual(get_preblast_channel(region, info), "CPOST")
+
+    def test_get_preblast_channel_uses_existing_fallbacks_without_persisted_channel(self):
+        event = _event(meta={"slack_channel_id": "CEVENT"})
+        region = MagicMock(spec=SlackSettings)
+        region.default_preblast_destination = constants.CONFIG_DESTINATION_SPECIFIED["value"]
+        region.preblast_destination_channel = "CDEFAULT"
+
+        info = PreblastInfo(event_record=event, attendance_records=[], preblast_blocks=[], action_blocks=[])
+
+        self.assertEqual(get_preblast_channel(region, info), "CEVENT")
 
     def test_build_preblast_form_returns_sdk_block_view(self):
         event = _event()
@@ -156,9 +182,7 @@ class PreblastViewsTest(unittest.TestCase):
         block_ids = [getattr(b, "block_id", None) for b in result.blocks]
         self.assertIn(actions.EVENT_PREBLAST_MOLESKINE_EDIT, block_ids)
         # Check that the initial value was set
-        rich_block = next(
-            b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT
-        )
+        rich_block = next(b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT)
         self.assertIsNotNone(rich_block.element.initial_value)
 
     def test_build_preblast_form_preloads_existing_coqs(self):
@@ -176,9 +200,7 @@ class PreblastViewsTest(unittest.TestCase):
             existing_preblast_ts=None,
             preblast_moleskin_template={"type": "rich_text", "elements": [{"type": "text", "text": "template"}]},
         )
-        rich_block = next(
-            b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT
-        )
+        rich_block = next(b for b in result.blocks if b.block_id == actions.EVENT_PREBLAST_MOLESKINE_EDIT)
         self.assertIsNotNone(rich_block.element.initial_value)
 
     def test_build_select_form_returns_sdk_block_view(self):
@@ -209,9 +231,7 @@ class PreblastViewsTest(unittest.TestCase):
         result = self._build_form(event, user_is_q=True)
 
         action_ids = [
-            getattr(element, "action_id", None)
-            for block in result.blocks
-            for element in getattr(block, "elements", [])
+            getattr(element, "action_id", None) for block in result.blocks for element in getattr(block, "elements", [])
         ]
 
         self.assertIn(actions.EVENT_PREBLAST_REMOVE_Q, action_ids)
@@ -340,11 +360,7 @@ class PreblastViewsTest(unittest.TestCase):
         }
         mock_get_user.return_value = MagicMock(user_id=coq_user_id)
 
-        body = {
-            "view": {
-                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
-            }
-        }
+        body = {"view": {"private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'}}
 
         handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
 
@@ -395,11 +411,7 @@ class PreblastViewsTest(unittest.TestCase):
             actions.EVENT_PREBLAST_COQS: [],
         }
 
-        body = {
-            "view": {
-                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
-            }
-        }
+        body = {"view": {"private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'}}
 
         handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
 
@@ -409,6 +421,33 @@ class PreblastViewsTest(unittest.TestCase):
             existing_q_user_id,
             [],
         )
+
+    @patch("features.calendar.event_preblast.extract_state_values")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    @patch("features.calendar.event_preblast._build_preblast_service")
+    def test_handle_event_preblast_edit_clears_existing_tags_when_selection_is_empty(
+        self,
+        mock_build_preblast_service,
+        mock_build_event_service,
+        mock_extract_state_values,
+    ):
+        event_id = 42
+        event = _event(id=event_id, event_tag_ids=[10, 20])
+
+        preblast_service = MagicMock()
+        preblast_service.build_update_command.return_value = object()
+        mock_build_preblast_service.return_value = preblast_service
+
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        mock_build_event_service.return_value = event_service
+        mock_extract_state_values.return_value = {actions.EVENT_PREBLAST_TAG: []}
+
+        body = {"view": {"private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'}}
+
+        handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+        self.assertEqual(preblast_service.build_update_command.call_args.kwargs["event_tag_ids"], [])
 
     @patch("features.calendar.event_preblast.update_submission_wait_view")
     @patch("features.calendar.event_preblast.get_user")
@@ -448,7 +487,7 @@ class PreblastViewsTest(unittest.TestCase):
         body = {
             "view": {
                 "id": "V_SUBMISSION_1",
-                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}',
             }
         }
 
@@ -512,7 +551,7 @@ class PreblastViewsTest(unittest.TestCase):
         body = {
             "view": {
                 "id": "V_SUBMISSION_2",
-                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}'
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}',
             }
         }
 
@@ -529,6 +568,70 @@ class PreblastViewsTest(unittest.TestCase):
         self.assertIn("<@USLACKCOQ>", kwargs["text"])
         self.assertEqual(kwargs["level"], constants.AlertLevel.ERROR)
         self.assertEqual(kwargs["view_id"], "V_SUBMISSION_2")
+
+
+class TestPreblastEditStartTimeIntegration(unittest.TestCase):
+    """Pins the parse → handler → service path that issue #730 broke.
+
+    Deliberately does NOT patch ``extract_state_values``: the bug lived in the
+    parser, and every other test in this file injects an already-parsed dict,
+    so the real payload shape was never exercised.
+    """
+
+    @patch("features.calendar.event_preblast.get_user")
+    @patch("features.calendar.event_preblast._build_attendance_service")
+    @patch("features.calendar.event_preblast._build_event_instance_service")
+    @patch("features.calendar.event_preblast._build_preblast_service")
+    def test_start_time_reaches_service_from_raw_payload(
+        self,
+        mock_build_preblast_service,
+        mock_build_event_service,
+        mock_build_attendance_service,
+        mock_get_user,
+    ):
+        event_id = 42
+        event = _event(id=event_id, start_time="0600")
+
+        preblast_service = MagicMock()
+        preblast_service.build_update_command.return_value = object()
+        preblast_service.save_event_update.return_value = event
+        mock_build_preblast_service.return_value = preblast_service
+
+        event_service = MagicMock()
+        event_service.get_by_id.return_value = event
+        mock_build_event_service.return_value = event_service
+
+        attendance_service = MagicMock()
+        attendance_service.get_planned_for_event_instance.return_value = []
+        mock_build_attendance_service.return_value = attendance_service
+
+        body = {
+            "view": {
+                "private_metadata": f'{{"event_instance_id": {event_id}, "preblast_ts": "None"}}',
+                "state": {
+                    "values": {
+                        actions.EVENT_PREBLAST_START_TIME: {
+                            actions.EVENT_PREBLAST_START_TIME: {
+                                "type": "timepicker",
+                                "selected_time": "05:30",
+                            }
+                        },
+                        actions.EVENT_PREBLAST_TITLE: {
+                            actions.EVENT_PREBLAST_TITLE: {
+                                "type": "plain_text_input",
+                                "value": "The Gauntlet",
+                            }
+                        },
+                    }
+                },
+            }
+        }
+
+        handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+        kwargs = preblast_service.build_update_command.call_args.kwargs
+        self.assertEqual(kwargs["start_time"], "0530")
+        self.assertEqual(kwargs["name"], "The Gauntlet")
 
 
 if __name__ == "__main__":

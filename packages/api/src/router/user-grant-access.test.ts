@@ -17,6 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 import type { Session } from "@acme/auth";
+import type { OrgType } from "@acme/shared/app/enums";
 import { eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
@@ -535,12 +536,12 @@ describe("User Router - Grant Access", () => {
     };
 
     // Helper to create test orgs
-    const createTestOrg = async (name: string, orgType = "region") => {
+    const createTestOrg = async (name: string, orgType: OrgType = "region") => {
       const [org] = await db
         .insert(schema.orgs)
         .values({
           name,
-          orgType: orgType as "region" | "area" | "sector" | "nation" | "ao",
+          orgType,
           isActive: true,
         })
         .returning();

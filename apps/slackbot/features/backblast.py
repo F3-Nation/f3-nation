@@ -254,13 +254,14 @@ def backblast_middleware(
                     slack_orm.ButtonElement(
                         label="New Unscheduled Event",
                         action=actions.BACKBLAST_NEW_BLANK_BUTTON,
-                        confirm=slack_orm.ConfirmObject(
-                            title="Are you sure?",
-                            text="This option should ONLY BE USED FOR UNSCHEDULED EVENTS that are not listed on the calendar. If this is for a normal, scheduled event, please select it from the lists above.",  # noqa
-                            confirm="Yes, I'm sure",
-                            deny="Whups, never mind",
-                            style="danger",
-                        ),
+                        # Temporarily disabled: Slack confirmation dialogs dismiss the parent modal (#984).
+                        # confirm=slack_orm.ConfirmObject(
+                        #     title="Are you sure?",
+                        #     text="This option should ONLY BE USED FOR UNSCHEDULED EVENTS that are not listed on the calendar. If this is for a normal, scheduled event, please select it from the lists above.",  # noqa
+                        #     confirm="Yes, I'm sure",
+                        #     deny="Whups, never mind",
+                        #     style="danger",
+                        # ),
                     ),
                 ]
             ),
