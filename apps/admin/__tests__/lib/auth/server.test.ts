@@ -219,6 +219,34 @@ describe("admin auth server helpers", () => {
 
     expect(user).not.toBeNull();
     expect(user?.roles).toEqual([]);
+    expect(logWarnMock).toHaveBeenCalledWith(
+      "admin.auth.roles_hydrate_failed",
+      {
+        message: "API down",
+      },
+    );
+  });
+
+  it("stringifies a non-Error rejection when hydrating roles fails", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "valid-token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue(validPayload);
+    // A fetch layer can reject with a plain value; the log must not become
+    // "[object Object]" or throw reading `.message` off a non-Error.
+    getMyProfileMock.mockRejectedValue("gateway timeout");
+
+    const { getSessionUser } = await import("~/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user).not.toBeNull();
+    expect(user?.roles).toEqual([]);
+    expect(logWarnMock).toHaveBeenCalledWith(
+      "admin.auth.roles_hydrate_failed",
+      {
+        message: "gateway timeout",
+      },
+    );
   });
 
   // -------------------------------------------------------------------------
