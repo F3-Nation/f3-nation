@@ -12,13 +12,20 @@ The script verifies the container's Compose project label, creates two uniquely
 named temporary databases, applies migrations through 0022, and inserts only
 synthetic organizations and positions. It dumps that populated database using
 `pg_dump -Fc`, restores the archive into the second database, and exercises the
-forward migration, rollback, reapplication, and rollback-refusal cases. It
-removes only its two temporary databases on exit and prints the retained
+forward migration, rollback, reapplication, and rollback-refusal cases. It then
+rehearses the rollback's Drizzle journal reconciliation in two further temporary
+databases built by the repository's real migration runner (`src/migrate.ts`, so
+`node` and installed dependencies are required): one shows that reconciling the
+journal alone does not bring Territory back, the other applies the recovery in
+[Restoring Territory after a rollback](#restoring-territory-after-a-rollback).
+It removes only its four temporary databases on exit and prints the retained
 synthetic archive/log directory. Existing development/test databases are not
 reset by this script.
 
 For an isolated container, set `TERRITORY_TEST_CONTAINER` to its name; it must
 still carry the `f3-local` Compose-project label and use the same local DB user.
+The journal stage connects from the host, so the container must publish
+PostgreSQL's port.
 Use the pinned PostgreSQL 18.6 image below. The rehearsal keeps a backend open
 across forward and reverse migration and verifies writes on that same backend.
 It also holds a conflicting lock to verify the forward timeout leaves the
@@ -138,13 +145,69 @@ Before a release rollback:
    `hash` (SHA-256 of the exact deployed SQL file) and `created_at = 1789505471619`
    (its `_journal.json` `when`); the 0026 row uses `created_at = 1789775437096`.
 5. Recycle application DB pools and PgBouncer server connections as for forward
-   migration, then resume only the coordinated application/migration versions. Retaining 0023
-   in a deployed migration directory while removing its journal entry causes
-   the next migration run to reapply it.
+   migration, then resume only the coordinated application/migration versions.
+   Removing 0023's journal entry does not make the runner apply it again; see
+   below before deploying any build that still contains 0023 through 0026.
 
 The local rehearsal verifies the schema rollback, not a production deployment
 or production journal mutation. Production rollback and exact journal SQL
 require the normal human release approval.
+
+### Restoring Territory after a rollback
+
+Drizzle's runner (`PgDialect.migrate`, read at `drizzle-orm` 0.45.2) compares each
+migration's journal `when` with the **newest** `created_at` in the journal table
+and runs only the migrations that are newer. It never checks whether an
+individual migration has a row. After step 4 the newest remaining row is 0025
+(`created_at = 1789695365192`), so on the next runner pass:
+
+- 0023 (`1789505471619`) is not selected, even though its row is gone and its file
+  is still in the migration directory. The schema keeps the five-member enum and
+  Territory creation fails.
+- 0026 (`1789775437096`) is newer than 0025 and runs again. It never references
+  Territory, so it applies cleanly to the five-member enum.
+- The runner still logs `Migration done`. It also exits zero after logging a
+  failure, so check the schema and journal rather than its output.
+
+Do not deploy a build that contains 0023 through 0026 to a rolled-back database
+and expect Territory to return. Restore it explicitly, in a maintenance window
+like the forward migration:
+
+1. Stop application writers and automated migration runners. Back up the database
+   and its journal. Confirm the enum has five members and the journal has the
+   0022, 0024, and 0025 rows and no 0023 row.
+2. Apply 0023's exact SQL and its journal row in **one transaction**, so the enum
+   change and the journal write succeed or fail together as they would under the
+   runner. Use the journal table name inspected in step 4 of the rollback:
+
+   ```sql
+   -- run with psql -1, after the exact contents of 0023_add_territory_org_type.sql
+   INSERT INTO drizzle."__drizzle_migrations_<database>" ("hash", "created_at")
+   VALUES ('<SHA-256 of the exact deployed 0023 file>', 1789505471619);
+   ```
+
+3. Verify the six enum values, both column types, index validity, and the 0023
+   journal row before resuming writers, then recycle application DB pools and
+   PgBouncer server connections as for forward migration.
+4. Deploy the coordinated build. The runner now finds only the migrations newer
+   than 0025 that are not yet applied (0026, when its row was removed) and applies
+   them in their original order.
+
+If a runner pass has already re-applied 0026, applying the same transaction
+afterwards also works, but 0023 replaces the enum that 0026's functions
+reference, so recycle every pooled connection. The rehearsal does not cover that
+ordering.
+
+The alternative is to ship Territory as a new migration with a fresh, later
+`when`. Its SQL must then also re-issue `update_org_ao_counts`,
+`recount_org_ao_counts`, `org_ao_count_expected`, and `org_ao_count_targets` (see
+[Future enum-recreation migrations](#future-enum-recreation-migrations)), and 0026 would run before it.
+The rehearsal does not cover this route, so it needs its own review.
+
+`verify-territory-migration.sh` rehearses the trap and the recovery above against
+databases built by the real runner, using the same journal edit as step 4. Those
+databases are fresh synthetic ones, so the production journal table name and any
+production-only drift still have to be checked on the actual target.
 
 ## Populated Territory rollout
 

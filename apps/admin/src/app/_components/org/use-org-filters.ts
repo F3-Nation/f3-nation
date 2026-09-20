@@ -44,6 +44,15 @@ const pruneToSectors = (
         );
       });
 
+// A selection counts only while its picker still offers it, so a refetch that
+// reparents or deactivates an org cannot leave a hidden, undeselectable filter.
+// Until the hierarchy loads there is nothing to judge against.
+const keepOffered = (selected: Org[], offered: Org[] | undefined) => {
+  if (!offered) return selected;
+  const offeredIds = new Set(offered.map((org) => org.id));
+  return selected.filter((org) => offeredIds.has(org.id));
+};
+
 // Preserve the Region reducer's atomic selection/pruning behavior from #920.
 const orgFilterReducer = (
   state: OrgFilterState,
@@ -94,8 +103,10 @@ const orgFilterReducer = (
 };
 
 export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
-  const [{ selectedAreas, selectedTerritories, selectedSectors }, dispatch] =
-    useReducer(orgFilterReducer, initialOrgFilterState);
+  const [pickedFilters, dispatch] = useReducer(
+    orgFilterReducer,
+    initialOrgFilterState,
+  );
   const [selectedRegions, setSelectedRegions] = useState<Org[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<IsActiveStatus[]>([
     "active",
@@ -129,6 +140,10 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
       ),
     [hierarchyOrgs],
   );
+  const selectedSectors = useMemo(
+    () => keepOffered(pickedFilters.selectedSectors, sectors),
+    [pickedFilters.selectedSectors, sectors],
+  );
   const selectedSectorIds = useMemo(
     () => new Set(selectedSectors.map((sector) => sector.id)),
     [selectedSectors],
@@ -150,6 +165,14 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
             isDescendantOfAny(territory, selectedSectorIds, orgById),
           ),
     [territories, orgById, selectedSectorIds],
+  );
+  const selectedAreas = useMemo(
+    () => keepOffered(pickedFilters.selectedAreas, availableAreas),
+    [pickedFilters.selectedAreas, availableAreas],
+  );
+  const selectedTerritories = useMemo(
+    () => keepOffered(pickedFilters.selectedTerritories, availableTerritories),
+    [pickedFilters.selectedTerritories, availableTerritories],
   );
   // A selected sector, and everything the loaded hierarchy places beneath it.
   const sectorAndDescendantIds = useMemo(

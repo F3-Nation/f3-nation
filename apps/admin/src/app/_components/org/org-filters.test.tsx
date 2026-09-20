@@ -388,6 +388,21 @@ describe("depth-agnostic admin organization filters", () => {
     expect(latestResultQuery()?.parentOrgIds).toEqual([directArea.id]);
   });
 
+  it("drops a selected area reparented out of the selected sector on refetch", () => {
+    const { rerender } = render(<OrgTable orgType="region" />);
+
+    fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
+    fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
+    expect(latestResultQuery()?.parentOrgIds).toEqual([nestedArea.id]);
+
+    mocks.hierarchyOrgs = mocks.hierarchyOrgs.map((org) =>
+      org.id === nestedArea.id ? { ...org, parentId: sectorTwo.id } : org,
+    );
+    rerender(<OrgTable orgType="region" />);
+
+    expect(latestResultQuery()?.parentOrgIds).toEqual([directArea.id]);
+  });
+
   it("filters areas through a territory parent", () => {
     mocks.resultOrgs = [nestedArea];
     render(<OrgTable orgType="area" />);
@@ -552,6 +567,53 @@ describe("territory-aware admin organization filters", () => {
     fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
 
     expect(latestResultQuery()?.parentOrgIds).toEqual([sectorTwoTerritory.id]);
+  });
+
+  it("drops a selected territory reparented out of the selected sector on refetch", () => {
+    const { rerender } = render(<OrgTable orgType="area" />);
+
+    fireEvent.click(screen.getByTestId(`sector-${sectorOne.id}`));
+    fireEvent.click(screen.getByTestId(`territory-${secondTerritory.id}`));
+    expect(latestResultQuery()?.parentOrgIds).toEqual([secondTerritory.id]);
+
+    mocks.hierarchyOrgs = mocks.hierarchyOrgs.map((org) =>
+      org.id === secondTerritory.id ? { ...org, parentId: sectorTwo.id } : org,
+    );
+    rerender(<OrgTable orgType="area" />);
+
+    expect(latestResultQuery()?.parentOrgIds).toEqual([
+      sectorOne.id,
+      territory.id,
+    ]);
+    expect(screen.queryByTestId(`territory-${secondTerritory.id}`)).toBeNull();
+  });
+
+  it("drops a selected territory that is deactivated on refetch", () => {
+    const { rerender } = render(<OrgTable orgType="area" />);
+
+    fireEvent.click(screen.getByTestId(`territory-${secondTerritory.id}`));
+    expect(latestResultQuery()?.parentOrgIds).toEqual([secondTerritory.id]);
+
+    mocks.hierarchyOrgs = mocks.hierarchyOrgs.map((org) =>
+      org.id === secondTerritory.id ? { ...org, isActive: false } : org,
+    );
+    rerender(<OrgTable orgType="area" />);
+
+    expect(latestResultQuery()?.parentOrgIds).toBeUndefined();
+  });
+
+  it("keeps a selected territory while its hierarchy is momentarily unavailable", () => {
+    const { rerender } = render(<OrgTable orgType="area" />);
+
+    fireEvent.click(screen.getByTestId(`territory-${secondTerritory.id}`));
+
+    mocks.hierarchyAvailable = false;
+    rerender(<OrgTable orgType="area" />);
+    expect(latestResultQuery()?.parentOrgIds).toEqual([secondTerritory.id]);
+
+    mocks.hierarchyAvailable = true;
+    rerender(<OrgTable orgType="area" />);
+    expect(latestResultQuery()?.parentOrgIds).toEqual([secondTerritory.id]);
   });
 
   it("resets territory selections with the other filters", () => {
