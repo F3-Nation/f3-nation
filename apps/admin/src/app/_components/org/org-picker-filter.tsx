@@ -11,28 +11,25 @@ import {
   CommandItem,
 } from "@acme/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
+import type { OrgType } from "@acme/shared/app/enums";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 
-import type { RouterOutputs } from "~/orpc/types";
-import { orpc, useQuery } from "~/orpc/react";
-import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
+import { isOrgSelected } from "./org-ancestry";
 
-type Org = RouterOutputs["org"]["accessible"]["orgs"][number];
-
-export const OrgFilter = ({
-  onOrgSelect,
-  selectedOrgs,
+export const OrgPickerFilter = <T extends { id: number; name: string }>({
+  orgType,
+  orgs,
+  selected,
+  onSelect,
 }: {
-  onOrgSelect: (org: Org) => void;
-  selectedOrgs: Org[];
+  orgType: OrgType;
+  orgs: T[] | undefined;
+  selected: T[];
+  onSelect: (org: T) => void;
 }) => {
-  const { data: accessibleOrgs } = useQuery(
-    orpc.org.accessible.queryOptions({
-      input: { orgTypes: AdminScopeOrgTypes },
-    }),
-  );
-
-  const orgs = accessibleOrgs?.orgs;
   const [open, setOpen] = useState(false);
+  const singular = orgTypeDisplay[orgType].label.toLowerCase();
+  const plural = orgTypeDisplay[orgType].pluralLabel.toLowerCase();
 
   return (
     <div className="max-w-80">
@@ -44,29 +41,29 @@ export const OrgFilter = ({
             aria-expanded={open}
             className="w-full justify-between"
           >
-            {selectedOrgs.length > 0
-              ? `${selectedOrgs.length} org${selectedOrgs.length > 1 ? "s" : ""} selected`
-              : "Filter by org"}
+            {selected.length > 0
+              ? `${selected.length} ${selected.length > 1 ? plural : singular} selected`
+              : `Filter by ${singular}`}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-full p-0">
           <Command>
-            <CommandInput placeholder="Search statuses..." />
-            <CommandEmpty>No statuses found.</CommandEmpty>
+            <CommandInput placeholder={`Search ${plural}...`} />
+            <CommandEmpty>No {plural} found.</CommandEmpty>
             <CommandGroup className="max-h-96 overflow-y-auto">
               {orgs?.map((org) => (
                 <CommandItem
                   key={org.id}
                   value={org.name}
                   onSelect={() => {
-                    onOrgSelect(org);
+                    onSelect(org);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      selectedOrgs.some((selected) => selected.id === org.id)
+                      isOrgSelected(selected, org)
                         ? "opacity-100"
                         : "opacity-0",
                     )}

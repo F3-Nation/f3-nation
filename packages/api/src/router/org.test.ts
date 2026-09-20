@@ -679,22 +679,23 @@ describe("Org Router", () => {
       ).rejects.toThrow(/Region.*AO/);
     });
 
-    it("persists and lists Territory but rejects Area creation and reparenting beneath it", async () => {
+    const blankFields = {
+      isActive: true,
+      email: null,
+      phone: null,
+      description: null,
+      website: null,
+      twitter: null,
+      facebook: null,
+      instagram: null,
+    };
+
+    const createSectorAndTerritory = async (
+      client: ReturnType<typeof createTestClient>,
+    ) => {
       const nation = await getOrCreateF3NationOrg();
-      await mockAuthWithSession(await createAdminSession());
-      const client = createTestClient();
-      const fields = {
-        isActive: true,
-        email: null,
-        phone: null,
-        description: null,
-        website: null,
-        twitter: null,
-        facebook: null,
-        instagram: null,
-      };
       const sector = await client.org.crupdate({
-        ...fields,
+        ...blankFields,
         name: `Territory Sector ${uniqueId()}`,
         orgType: "sector",
         parentId: nation.id,
@@ -702,45 +703,58 @@ describe("Org Router", () => {
       expect(sector.org).not.toBeNull();
       createdOrgIds.push(sector.org!.id);
       const territory = await client.org.crupdate({
-        ...fields,
+        ...blankFields,
         name: `Territory ${uniqueId()}`,
         orgType: "territory",
         parentId: sector.org!.id,
       });
       expect(territory.org?.orgType).toBe("territory");
       createdOrgIds.push(territory.org!.id);
-      await expect(
-        client.org.crupdate({
-          ...fields,
-          name: `Blocked Territory Area ${uniqueId()}`,
-          orgType: "area",
-          parentId: territory.org!.id,
-        }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-      const area = await client.org.crupdate({
-        ...fields,
+      return { sector: sector.org!, territory: territory.org! };
+    };
+
+    it("persists and lists Territory, allows Areas beneath it, and rejects a Territory beneath an Area", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const { sector, territory } = await createSectorAndTerritory(client);
+      const parentOf = async (id: number) =>
+        (await db.query.orgs.findFirst({ where: eq(schema.orgs.id, id) }))
+          ?.parentId;
+
+      const areaUnderTerritory = await client.org.crupdate({
+        ...blankFields,
         name: `Territory Area ${uniqueId()}`,
         orgType: "area",
-        parentId: sector.org!.id,
+        parentId: territory.id,
       });
-      expect(area.org?.parentId).toBe(sector.org!.id);
+      expect(areaUnderTerritory.org?.parentId).toBe(territory.id);
+      createdOrgIds.push(areaUnderTerritory.org!.id);
+
+      const area = await client.org.crupdate({
+        ...blankFields,
+        name: `Sector Area ${uniqueId()}`,
+        orgType: "area",
+        parentId: sector.id,
+      });
+      expect(area.org?.parentId).toBe(sector.id);
       createdOrgIds.push(area.org!.id);
-      await expect(
+
+      const moveArea = (parentId: number) =>
         client.org.crupdate({
-          ...fields,
+          ...blankFields,
           id: area.org!.id,
           name: area.org!.name,
           orgType: "area",
-          parentId: territory.org!.id,
-        }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-      const unchangedArea = await db.query.orgs.findFirst({
-        where: eq(schema.orgs.id, area.org!.id),
-      });
-      expect(unchangedArea?.parentId).toBe(sector.org!.id);
+          parentId,
+        });
+      await moveArea(territory.id);
+      expect(await parentOf(area.org!.id)).toBe(territory.id);
+      await moveArea(sector.id);
+      expect(await parentOf(area.org!.id)).toBe(sector.id);
+
       await expect(
         client.org.crupdate({
-          ...fields,
+          ...blankFields,
           name: `Invalid Territory ${uniqueId()}`,
           orgType: "territory",
           parentId: area.org!.id,
@@ -749,16 +763,61 @@ describe("Org Router", () => {
       const listed = await client.org.all({
         orgTypes: ["territory"],
         sorting: [{ id: "orgType", desc: false }],
-        searchTerm: territory.org!.name,
+        searchTerm: territory.name,
       });
       expect(listed.orgs).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({
-            id: territory.org!.id,
-            orgType: "territory",
-          }),
+          expect.objectContaining({ id: territory.id, orgType: "territory" }),
         ]),
       );
+    });
+
+    it("counts an Area's AOs in its Territory and Sector, following the Area between parents", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const { sector, territory } = await createSectorAndTerritory(client);
+      const create = async (
+        orgType: "area" | "region" | "ao",
+        parentId: number,
+      ) => {
+        const result = await client.org.crupdate({
+          ...blankFields,
+          name: `Count ${orgType} ${uniqueId()}`,
+          orgType,
+          parentId,
+        });
+        createdOrgIds.push(result.org!.id);
+        return result.org!;
+      };
+      const area = await create("area", territory.id);
+      const region = await create("region", area.id);
+      await create("ao", region.id);
+      const aoCountOf = async (
+        org: { id: number; name: string },
+        orgType: "sector" | "territory" | "area",
+      ) => {
+        const listed = await client.org.all({
+          orgTypes: [orgType],
+          searchTerm: org.name,
+        });
+        return listed.orgs.find((candidate) => candidate.id === org.id)
+          ?.aoCount;
+      };
+
+      expect(await aoCountOf(area, "area")).toBe(1);
+      expect(await aoCountOf(territory, "territory")).toBe(1);
+      expect(await aoCountOf(sector, "sector")).toBe(1);
+
+      await client.org.crupdate({
+        ...blankFields,
+        id: area.id,
+        name: area.name,
+        orgType: "area",
+        parentId: sector.id,
+      });
+
+      expect(await aoCountOf(territory, "territory")).toBe(0);
+      expect(await aoCountOf(sector, "sector")).toBe(1);
     });
 
     it("should accept creating an area parented directly to a sector (un-migrated case)", async () => {

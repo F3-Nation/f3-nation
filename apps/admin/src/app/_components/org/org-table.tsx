@@ -24,6 +24,7 @@ import { StatusFilter } from "../status-filter";
 import { RegionFilter } from "../region-filter";
 import { AreaFilter } from "./area-filter";
 import { SectorFilter } from "./sector-filter";
+import { TerritoryFilter } from "./territory-filter";
 import { orgAdminConfig } from "./org-admin-config";
 import { findAncestorByType } from "./org-ancestry";
 import { useOrgFilters } from "./use-org-filters";
@@ -43,7 +44,14 @@ function orgColumns(orgType: OrgType): TableOptions<Org>["columns"] {
       accessorKey: column.key,
       ...(column.id ? { id: column.id } : {}),
       meta: { name: column.label },
-      header: Header,
+      // The shared Header sorts through column.toggleSorting(), which ignores
+      // enableSorting, so a non-sortable column needs a plain label instead.
+      ...(column.sortable === false
+        ? {
+            enableSorting: false,
+            header: () => <div className="px-4">{column.label}</div>,
+          }
+        : { header: Header }),
       cell: column.parentType
         ? (cell: CellContext<Org, unknown>) => (
             <Cell>
@@ -165,12 +173,10 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
       data?.orgs.map((org) => {
         if (!config.displayAncestors) return org;
         const names: Record<string, string | undefined> = {};
-        let ancestor: Org | undefined = org;
+        // Each lookup starts from the row: an optional tier (an area with no
+        // territory) must not blank the tiers above it.
         for (const type of config.displayAncestors) {
-          ancestor = ancestor
-            ? findAncestorByType(ancestor, type, filters.orgById)
-            : undefined;
-          names[type] = ancestor?.name;
+          names[type] = findAncestorByType(org, type, filters.orgById)?.name;
         }
         return { ...org, ...names };
       }),
@@ -187,7 +193,9 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
     />
   );
   const extraFilters = [
-    ...(config.filters === "sector" || config.filters === "sectorArea"
+    ...(config.filters === "sector" ||
+    config.filters === "sectorTerritory" ||
+    config.filters === "sectorArea"
       ? [
           {
             label: "Sector",
@@ -196,6 +204,20 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
                 onSectorSelect={filters.handleSectorSelect}
                 selectedSectors={filters.selectedSectors}
                 sectors={filters.sectors}
+              />
+            ),
+          },
+        ]
+      : []),
+    ...(config.filters === "sectorTerritory"
+      ? [
+          {
+            label: "Territory",
+            control: (
+              <TerritoryFilter
+                onTerritorySelect={filters.handleTerritorySelect}
+                selectedTerritories={filters.selectedTerritories}
+                territories={filters.availableTerritories}
               />
             ),
           },

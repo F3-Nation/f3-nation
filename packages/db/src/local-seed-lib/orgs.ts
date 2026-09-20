@@ -3,7 +3,7 @@ import { schema } from "..";
 import type { AppDb } from "../client";
 import { findOrInsertOrg } from "./core";
 import type { OrgIds } from "./core";
-import { AOS, AREAS, NATION, REGIONS, SECTORS } from "./data";
+import { AOS, AREAS, NATION, REGIONS, SECTORS, TERRITORIES } from "./data";
 
 export async function seedOrgHierarchy(db: AppDb): Promise<OrgIds> {
   // 1. F3 Nation org (root — no parentId, specific log format)
@@ -40,20 +40,37 @@ export async function seedOrgHierarchy(db: AppDb): Promise<OrgIds> {
     );
   }
 
-  // 3. Areas
+  // 3. Territories. Direct inserts bypass API parent validation to exercise
+  // map traversal; the AO-count trigger maintains counts at every tier.
+  const territoryIds: Record<string, number> = {};
+  for (const { sectorName, ...territory } of TERRITORIES) {
+    const sectorId = sectorIds[sectorName];
+    if (!sectorId) throw new Error(`Sector not found: ${sectorName}`);
+    territoryIds[territory.name] = await findOrInsertOrg(
+      db,
+      { ...territory, parentId: sectorId },
+      "territory",
+    );
+  }
+
+  // 4. Areas may be parented by either a Sector or a Territory.
   const areaIds: Record<string, number> = {};
   for (const area of AREAS) {
-    const sectorId = sectorIds[area.sectorName];
-    if (!sectorId) throw new Error(`Sector not found: ${area.sectorName}`);
-    const { sectorName: _, ...areaData } = area;
+    const { sectorName, territoryName, ...areaData } = area;
+    const parentId =
+      territoryName !== undefined
+        ? territoryIds[territoryName]
+        : sectorIds[sectorName];
+    if (!parentId)
+      throw new Error(`Area parent not found: ${territoryName ?? sectorName}`);
     areaIds[area.name] = await findOrInsertOrg(
       db,
-      { ...areaData, parentId: sectorId },
+      { ...areaData, parentId },
       "area",
     );
   }
 
-  // 4. Regions
+  // 5. Regions
   const regionIds: Record<string, number> = {};
   for (const region of REGIONS) {
     const areaId = areaIds[region.areaName];
@@ -66,7 +83,7 @@ export async function seedOrgHierarchy(db: AppDb): Promise<OrgIds> {
     );
   }
 
-  // 5. AOs (org insertion only; locations + events are handled in events.ts)
+  // 6. AOs (org insertion only; locations + events are handled in events.ts)
   const aoIds: Record<string, number> = {};
   for (const ao of AOS) {
     const regionId = regionIds[ao.regionName];
@@ -86,5 +103,5 @@ export async function seedOrgHierarchy(db: AppDb): Promise<OrgIds> {
     );
   }
 
-  return { nationId, sectorIds, areaIds, regionIds, aoIds };
+  return { nationId, sectorIds, territoryIds, areaIds, regionIds, aoIds };
 }
