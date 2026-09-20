@@ -123,22 +123,16 @@ vi.mock("~/orpc/react", async () => ({
         }),
       },
     },
-    org: {
-      all: {
-        queryOptions: ({
-          input,
-          enabled,
-        }: {
-          input: unknown;
-          enabled: boolean;
-        }) => ({
-          queryKey: ["org", input],
-          queryFn: () => mocks.all(input),
-          enabled,
-        }),
-      },
-    },
   },
+}));
+
+// The org dropdown needs every editable org, so admin-positions-modal.tsx
+// pages through org.all via useFetchAllPages, calling the imperative
+// client directly rather than going through orpc.org.all's queryOptions --
+// route it to the same mocks.all so existing mocks.all.mockResolvedValue
+// setups still apply.
+vi.mock("~/orpc/client", () => ({
+  client: { org: { all: (input: unknown) => mocks.all(input) } },
 }));
 
 const clients: QueryClient[] = [];
