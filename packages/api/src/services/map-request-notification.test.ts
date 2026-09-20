@@ -8,9 +8,19 @@
  */
 
 import { ORPCError } from "@orpc/server";
-import { eq, schema } from "@acme/db";
+import { eq, inArray, schema } from "@acme/db";
 import { db } from "@acme/db/client";
-import { afterAll, describe, expect, it } from "vitest";
+import { mail, Templates } from "@acme/mail";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const ADMIN_REQUESTS_URL = "https://admin.example.test/requests";
+
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const sendTemplateMessages = vi.mocked(mail.sendTemplateMessages);
+
+vi.mock("../lib/admin-url", () => ({
+  getAdminRequestsUrl: () => ADMIN_REQUESTS_URL,
+}));
 
 import { uniqueId } from "../__tests__/test-utils";
 import { notifyMapChangeRequest } from "./map-request-notification";
@@ -18,6 +28,11 @@ import { notifyMapChangeRequest } from "./map-request-notification";
 describe("notifyMapChangeRequest", () => {
   const createdOrgIds: number[] = [];
   const createdRequestIds: string[] = [];
+  const createdUserIds: number[] = [];
+
+  beforeEach(() => {
+    sendTemplateMessages.mockClear();
+  });
 
   afterAll(async () => {
     for (const requestId of createdRequestIds.reverse()) {
@@ -25,6 +40,18 @@ describe("notifyMapChangeRequest", () => {
         await db
           .delete(schema.updateRequests)
           .where(eq(schema.updateRequests.id, requestId));
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    if (createdUserIds.length > 0) {
+      try {
+        await db
+          .delete(schema.rolesXUsersXOrg)
+          .where(inArray(schema.rolesXUsersXOrg.userId, createdUserIds));
+        await db
+          .delete(schema.users)
+          .where(inArray(schema.users.id, createdUserIds));
       } catch {
         // Ignore errors during cleanup
       }
@@ -82,6 +109,43 @@ describe("notifyMapChangeRequest", () => {
     expect(thrown).toBeInstanceOf(ORPCError);
     expect(thrown).toMatchObject({ code: "NOT_FOUND", message });
   };
+
+  it("emails region admins the absolute admin requests URL", async () => {
+    const region = await createOrg({ orgType: "region", parentId: null });
+    const request = await createRequest(region.id);
+
+    const [adminRole] = await db
+      .select({ id: schema.roles.id })
+      .from(schema.roles)
+      .where(eq(schema.roles.name, "admin"));
+    if (!adminRole) throw new Error("Admin role not found");
+    const [admin] = await db
+      .insert(schema.users)
+      .values({
+        email: `notify-admin-${uniqueId()}@example.com`,
+        f3Name: "Notify Admin",
+      })
+      .returning({ id: schema.users.id, email: schema.users.email });
+    if (!admin) throw new Error("Failed to create test admin");
+    createdUserIds.push(admin.id);
+    await db.insert(schema.rolesXUsersXOrg).values({
+      roleId: adminRole.id,
+      userId: admin.id,
+      orgId: region.id,
+    });
+
+    await notifyMapChangeRequest({ db, requestId: request.id });
+
+    expect(sendTemplateMessages).toHaveBeenCalledTimes(1);
+    expect(sendTemplateMessages).toHaveBeenCalledWith(
+      Templates.mapChangeRequest,
+      expect.objectContaining({
+        to: admin.email,
+        requestsUrl: ADMIN_REQUESTS_URL,
+        noAdminsNotice: false,
+      }),
+    );
+  });
 
   it("returns silently when the request does not exist", async () => {
     await expect(

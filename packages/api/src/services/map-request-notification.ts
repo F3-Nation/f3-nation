@@ -4,11 +4,11 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { AppDb } from "@acme/db/client";
 import type { OrgType, RegionRole } from "@acme/shared/app/enums";
 import { schema } from "@acme/db";
-import { env } from "@acme/env";
 import { requestTypeToTitle } from "@acme/shared/app/functions";
 
 import { mail, Templates } from "@acme/mail";
 
+import { getAdminRequestsUrl } from "../lib/admin-url";
 import { logError, logDebug, logInfo } from "../logger";
 
 /**
@@ -227,8 +227,7 @@ export const notifyMapChangeRequest = async ({
   }
 
   // Prepare email parameters
-  const adminBaseUrl = (env.NEXT_PUBLIC_ADMIN_URL ?? "").replace(/\/$/, "");
-  const requestsUrl = `${adminBaseUrl}/requests`;
+  const requestsUrl = getAdminRequestsUrl();
   const title = requestTypeToTitle(request.requestType);
 
   // Send emails
