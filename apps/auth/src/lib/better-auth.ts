@@ -60,6 +60,7 @@ import { eq } from "drizzle-orm";
 // own dynamic `await import("~/lib/db")` below for the actual runtime import.
 import type { db as authDbType } from "~/lib/db";
 
+import { getUserRoles } from "@acme/db";
 import {
   betterAuthAccount,
   betterAuthJwks,
@@ -73,9 +74,6 @@ import {
   betterAuthSession,
   betterAuthUser,
   betterAuthVerification,
-  orgs,
-  roles,
-  rolesXUsersXOrg,
   users,
 } from "@acme/db/schema/schema";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
@@ -334,25 +332,17 @@ let _auth: ReturnType<typeof createAuthInstance> | null = null;
 type AuthDb = typeof authDbType;
 
 /**
- * Same query shape as getSessionFromOAuthToken (packages/api/src/shared.ts),
- * kept as a standalone function — rather than inline in getAuth's
+ * Kept as a standalone function — rather than inline in getAuth's
  * `isNationAdmin` field — so it can be exercised against a live database in
- * tests without constructing a whole Better Auth instance.
+ * tests without constructing a whole Better Auth instance. The roles query
+ * itself lives in @acme/db's getUserRoles, shared with packages/api's
+ * getSessionFromJWT, so there's one place to change it, not two.
  */
 export async function isNationAdminForUser(
   database: AuthDb,
   f3UserId: number,
 ): Promise<boolean> {
-  const userRoles = await database
-    .select({
-      orgId: orgs.id,
-      orgName: orgs.name,
-      roleName: roles.name,
-    })
-    .from(rolesXUsersXOrg)
-    .innerJoin(orgs, eq(orgs.id, rolesXUsersXOrg.orgId))
-    .innerJoin(roles, eq(roles.id, rolesXUsersXOrg.roleId))
-    .where(eq(rolesXUsersXOrg.userId, f3UserId));
+  const userRoles = await getUserRoles(database, f3UserId);
   return isNationAdminFromSession({ roles: userRoles });
 }
 
