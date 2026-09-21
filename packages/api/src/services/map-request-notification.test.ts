@@ -231,6 +231,20 @@ describe("notifyMapChangeRequest", () => {
     );
   });
 
+  it("throws NOT_FOUND 'No admins/editors found' when no tier up to the nation has a recipient", async () => {
+    const nation = await createOrg({ orgType: "nation", parentId: null });
+    const sector = await createOrg({ orgType: "sector", parentId: nation.id });
+    const area = await createOrg({ orgType: "area", parentId: sector.id });
+    const region = await createOrg({ orgType: "region", parentId: area.id });
+    const request = await createRequest(region.id);
+
+    await expectNotFound(
+      request.id,
+      "No admins/editors found at any level, cannot notify",
+    );
+    expect(sendTemplateMessages).not.toHaveBeenCalled();
+  });
+
   describe("territory tier", () => {
     it("emails the area admin ahead of the territory admin", async () => {
       const tree = await createMixedOrgTree(createdOrgIds);
@@ -259,6 +273,37 @@ describe("notifyMapChangeRequest", () => {
           recipientRole: "admin",
           recipientOrg: tree.territory.name,
         }),
+      );
+    });
+
+    it("emails a territory editor when the territory has no admin", async () => {
+      const tree = await createMixedOrgTree(createdOrgIds);
+      const editorEmail = await addRole(tree.territory.id, "editor");
+      const request = await createRequest(tree.territoryBranch.region.id);
+
+      await notifyMapChangeRequest({ db, requestId: request.id });
+
+      expect(sentTo()).toEqual([editorEmail]);
+      expect(sendTemplateMessages).toHaveBeenCalledWith(
+        Templates.mapChangeRequest,
+        expect.objectContaining({
+          recipientRole: "editor",
+          recipientOrg: tree.territory.name,
+        }),
+      );
+    });
+
+    it("emails both the admin and the editor of a territory", async () => {
+      const tree = await createMixedOrgTree(createdOrgIds);
+      const adminEmail = await addRole(tree.territory.id, "admin");
+      const editorEmail = await addRole(tree.territory.id, "editor");
+      const request = await createRequest(tree.territoryBranch.region.id);
+
+      await notifyMapChangeRequest({ db, requestId: request.id });
+
+      expect(sentTo()).toHaveLength(2);
+      expect(sentTo()).toEqual(
+        expect.arrayContaining([adminEmail, editorEmail]),
       );
     });
 
@@ -392,6 +437,8 @@ describe("notifyMapChangeRequest", () => {
           direction: "ancestors",
           maxDepth: ORG_TREE_MAX_DEPTH,
           source: "map_request_notification",
+          startOrgId: bottomRegionId,
+          targetType: "area",
         }),
       );
     });

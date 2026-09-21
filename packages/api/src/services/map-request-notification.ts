@@ -97,8 +97,9 @@ const findParentOrgByType = async ({
       logError("api.org_tree.depth_limit_reached", {
         direction: "ancestors",
         maxDepth: ORG_TREE_MAX_DEPTH,
-        rootCount: 1,
         source: "map_request_notification",
+        startOrgId: orgId,
+        targetType: type,
       });
       return null;
     }
@@ -248,6 +249,12 @@ export const notifyMapChangeRequest = async ({
       });
     }
     recipients = nationTier.recipients;
+  }
+
+  if (recipients.length === 0) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "No admins/editors found at any level, cannot notify",
+    });
   }
 
   // Prepare email parameters

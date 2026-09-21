@@ -92,7 +92,9 @@ accurate while regions retain control over their own data.
   requests page. If the region has none, the request escalates region → area →
   territory → sector → nation and only the first tier with an editor/admin is
   emailed. A territory is optional: an area with no territory escalates
-  straight to its sector. A notification failure does not fail the submission.
+  straight to its sector. The walk needs an area above the region and a sector
+  above the area; if either is missing, or the nation has no editor/admin, no
+  email is sent. A notification failure does not fail the submission.
 
 ### Admin review
 
@@ -175,8 +177,8 @@ Tiers from `packages/api/src/shared.ts`; per-org scoping via
 6. Cross-region reject is denied, request stays pending (AC-15).
 7. Invalid form values never reach the API (AC-5).
 8. Escalation reaches a territory admin ahead of the sector admin, an area with
-   no territory skips to its sector, and the nation is the final fallback
-   (AC-10).
+   no territory skips to its sector, and the nation is the final fallback for a
+   region → area → sector chain (AC-10).
 
 ## 9. Observability
 
