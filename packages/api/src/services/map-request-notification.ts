@@ -10,6 +10,7 @@ import { mail, Templates } from "@acme/mail";
 
 import { getAdminRequestsUrl } from "../lib/admin-url";
 import { logError, logDebug, logInfo } from "../logger";
+import { ORG_TREE_MAX_DEPTH } from "../org-tree";
 
 /**
  * Interface for the notification parameters
@@ -72,7 +73,9 @@ export const getUsersWithRoles = async ({
 };
 
 /**
- * Finds the parent org with the given type
+ * Finds the nearest org of the given type at or above `orgId`. The walk is
+ * bounded by ORG_TREE_MAX_DEPTH and a visited set, so malformed parent links
+ * cannot loop forever.
  */
 const findParentOrgByType = async ({
   db,
@@ -82,29 +85,63 @@ const findParentOrgByType = async ({
   db: AppDb;
   orgId: number;
   type: OrgType;
-}): Promise<{ id: number; name: string; parentId: number | null } | null> => {
-  // First check if current org is of the required type
-  const [currentOrg] = await db
-    .select({
-      id: schema.orgs.id,
-      type: schema.orgs.orgType,
-      name: schema.orgs.name,
-      parentId: schema.orgs.parentId,
-    })
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
+}): Promise<Org | null> => {
+  const visited = new Set<number>();
+  let currentId: number | null = orgId;
 
-  if (!currentOrg) return null;
-  if (currentOrg.type === type)
-    return {
-      id: currentOrg.id,
-      name: currentOrg.name,
-      parentId: currentOrg.parentId,
-    };
+  for (let depth = 0; currentId !== null; depth++) {
+    if (depth > ORG_TREE_MAX_DEPTH) {
+      logError("api.org_tree.depth_limit_reached", {
+        direction: "ancestors",
+        maxDepth: ORG_TREE_MAX_DEPTH,
+        rootCount: 1,
+        source: "map_request_notification",
+      });
+      return null;
+    }
+    if (visited.has(currentId)) return null;
+    visited.add(currentId);
 
-  if (!currentOrg.parentId) return null;
+    const [currentOrg] = await db
+      .select({
+        id: schema.orgs.id,
+        type: schema.orgs.orgType,
+        name: schema.orgs.name,
+        parentId: schema.orgs.parentId,
+      })
+      .from(schema.orgs)
+      .where(eq(schema.orgs.id, currentId));
 
-  return findParentOrgByType({ db, orgId: currentOrg.parentId, type });
+    if (!currentOrg) return null;
+    if (currentOrg.type === type) {
+      return {
+        id: currentOrg.id,
+        name: currentOrg.name,
+        parentId: currentOrg.parentId,
+      };
+    }
+    currentId = currentOrg.parentId;
+  }
+
+  return null;
+};
+
+/**
+ * Finds the nearest org of the given type at or above `startOrgId` and loads
+ * its admins/editors. `org` is null when no such ancestor exists.
+ */
+const findTierRecipients = async ({
+  db,
+  startOrgId,
+  type,
+}: {
+  db: AppDb;
+  startOrgId: number;
+  type: OrgType;
+}) => {
+  const org = await findParentOrgByType({ db, orgId: startOrgId, type });
+  const recipients = org ? await getUsersWithRoles({ db, orgId: org.id }) : [];
+  return { org, recipients };
 };
 
 /**
@@ -136,20 +173,17 @@ export const notifyMapChangeRequest = async ({
     return;
   }
 
-  // Try to find region admins/editors
-  let recipients = await getUsersWithRoles({
-    db,
-    orgId: request.regionId,
-    roleNames: ["admin", "editor"],
-  });
+  // Escalate region → area → territory → sector → nation, notifying only the
+  // first tier that has admins/editors.
+  let recipients = await getUsersWithRoles({ db, orgId: request.regionId });
 
   let area: Org | null = null;
   let sector: Org | null = null;
-  let nation: Org | null = null;
   let noAdminsNotice = false;
 
   // If no recipients at region level, look for area level
   if (recipients.length === 0) {
+    noAdminsNotice = true;
     area = await findParentOrgByType({
       db,
       orgId: request.regionId,
@@ -162,38 +196,34 @@ export const notifyMapChangeRequest = async ({
       });
     }
 
-    const areaRecipients = await getUsersWithRoles({
-      db,
-      orgId: area.id,
-      roleNames: ["admin", "editor"],
-    });
-
-    recipients = areaRecipients;
-    noAdminsNotice = true;
+    recipients = await getUsersWithRoles({ db, orgId: area.id });
   }
 
-  // If still no recipients, look for sector level
+  // If still no recipients, look for territory (optional) then sector level
   if (recipients.length === 0) {
     if (!area?.parentId) {
       throw new ORPCError("NOT_FOUND", {
         message: "Area has no parent, cannot notify admins/editors",
       });
     }
-    sector = await findParentOrgByType({
+
+    // Both searches start at the area's parent: an area with no territory
+    // still has to reach its sector.
+    const territoryTier = await findTierRecipients({
       db,
-      orgId: area?.parentId,
-      type: "sector",
+      startOrgId: area.parentId,
+      type: "territory",
     });
+    recipients = territoryTier.recipients;
 
-    if (sector) {
-      const sectorRecipients = await getUsersWithRoles({
+    if (recipients.length === 0) {
+      const sectorTier = await findTierRecipients({
         db,
-        orgId: sector.id,
-        roleNames: ["admin", "editor"],
+        startOrgId: area.parentId,
+        type: "sector",
       });
-
-      recipients = sectorRecipients;
-      noAdminsNotice = true;
+      sector = sectorTier.org;
+      recipients = sectorTier.recipients;
     }
   }
 
@@ -204,26 +234,18 @@ export const notifyMapChangeRequest = async ({
         message: "Sector has no parent, cannot notify admins/editors",
       });
     }
-    nation = await findParentOrgByType({
+    const nationTier = await findTierRecipients({
       db,
-      orgId: sector?.parentId,
+      startOrgId: sector.parentId,
       type: "nation",
     });
 
-    if (nation) {
-      const nationRecipients = await getUsersWithRoles({
-        db,
-        orgId: nation.id,
-        roleNames: ["admin", "editor"],
-      });
-
-      recipients = nationRecipients;
-      noAdminsNotice = true;
-    } else {
+    if (!nationTier.org) {
       throw new ORPCError("NOT_FOUND", {
         message: "Nation not found, cannot notify admins/editors",
       });
     }
+    recipients = nationTier.recipients;
   }
 
   // Prepare email parameters
