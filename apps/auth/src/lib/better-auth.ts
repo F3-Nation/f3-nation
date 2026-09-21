@@ -157,17 +157,19 @@ export interface CreateAuthInstanceOptions {
    */
   isNationAdmin: (f3UserId: number) => Promise<boolean>;
   /**
-   * Gates every OAuth client mutation via oauth-provider's `clientPrivileges`
+   * Gates every OAuth client action via oauth-provider's `clientPrivileges`
    * hook — called with the attempted action, returns whether it's allowed.
-   * Production denies "create" (see F3_NATION_CLIENT_REFERENCE_ID's comment:
-   * dynamic self-serve client creation isn't part of the design, so no live
-   * session — nation admin or not — should be able to spin one up; letting
-   * that through would auto-tag whatever an admin creates as F3-managed via
-   * clientReference below, not just the intended F3-managed clients) and
-   * "configure-client-credentials-scopes" (unused). Everything else
-   * (read/update/delete/list/rotate) still relies on oauth-provider's own
-   * per-client ownership checks. Tests pass a permissive policy so fixtures
-   * can exercise client creation directly.
+   * Production is an allowlist of read/list/rotate (see
+   * allowProductionClientAction's comment): "create" is denied because
+   * dynamic self-serve client creation isn't part of the design (letting it
+   * through would auto-tag whatever an admin creates as F3-managed via
+   * clientReference below, not just the intended F3-managed clients), and
+   * "update"/"delete"/"configure-client-credentials-scopes" are denied
+   * because once a client is F3-managed, oauth-provider's own per-client
+   * ownership check no longer limits who can use them — every nation admin
+   * passes it — so those actions need this allowlist to stay closed
+   * instead. Tests pass a permissive policy so fixtures can exercise client
+   * creation directly.
    */
   allowClientAction: (
     action:
@@ -183,8 +185,8 @@ export interface CreateAuthInstanceOptions {
 
 // The stable "owner" identity for F3-Nation-managed OAuth clients — set as a
 // client's referenceId rather than a per-user userId, so any current or
-// future nation admin can manage and rotate the secret for a client one of
-// them created, not just whoever happened to create it. See oauthProvider's
+// future nation admin can read, list, and rotate the secret for a client one
+// of them created, not just whoever happened to create it. See oauthProvider's
 // clientReference option below.
 const F3_NATION_CLIENT_REFERENCE_ID = "f3-nation";
 
@@ -266,7 +268,7 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         // apps/auth/src/lib/oauth.ts's exchangeAuthorizationCode). Set
         // explicitly here anyway so the intent is documented, not implicit.
         clientRegistrationRequirePKCE: true,
-        // Any nation admin can manage/rotate a shared, F3-Nation-owned
+        // Any nation admin can read/list/rotate a shared, F3-Nation-owned
         // client instead of it being tied to whichever individual admin
         // happened to create it — see F3_NATION_CLIENT_REFERENCE_ID above.
         // A session that isn't a nation admin gets `undefined` here, so
@@ -347,16 +349,24 @@ export async function isNationAdminForUser(
 }
 
 /**
- * Production's allowClientAction policy — see CreateAuthInstanceOptions's
- * doc comment for why "create" and "configure-client-credentials-scopes"
- * are denied. Split out from getAuth() (which needs a live DB connection to
+ * Production's allowClientAction policy. An allowlist, not a denylist: once
+ * a client is F3-managed, "ownership" just means "is a nation admin" (see
+ * clientReference above), so `update` and `delete` aren't safe defaults to
+ * leave open. `update` covers redirect_uris in this version of
+ * oauth-provider — an admin could repoint an F3-managed client's
+ * redirect_uris at a URL they control, then rotate its secret, and
+ * intercept another F3 user's authorization code on their next sign-in. The
+ * only actions the stated goal (issuing a secret for an existing client)
+ * needs are read/list/rotate — everything else, including any future
+ * oauth-provider action, is denied by default rather than silently
+ * permitted. Split out from getAuth() (which needs a live DB connection to
  * construct at all) so this pure decision is independently testable.
  */
 export function allowProductionClientAction(
   action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
 ): Promise<boolean> {
   return Promise.resolve(
-    action !== "create" && action !== "configure-client-credentials-scopes",
+    action === "read" || action === "list" || action === "rotate",
   );
 }
 

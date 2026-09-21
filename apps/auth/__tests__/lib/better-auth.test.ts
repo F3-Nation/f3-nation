@@ -371,19 +371,17 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
 });
 
 describe("allowProductionClientAction", () => {
-  it("denies create and configure-client-credentials-scopes, allows everything else", async () => {
-    await expect(allowProductionClientAction("create")).resolves.toBe(false);
-    await expect(
-      allowProductionClientAction("configure-client-credentials-scopes"),
-    ).resolves.toBe(false);
-
+  it("allows only read, list, and rotate", async () => {
     for (const action of [
-      "read",
+      "create",
       "update",
       "delete",
-      "list",
-      "rotate",
+      "configure-client-credentials-scopes",
     ] as const) {
+      await expect(allowProductionClientAction(action)).resolves.toBe(false);
+    }
+
+    for (const action of ["read", "list", "rotate"] as const) {
       await expect(allowProductionClientAction(action)).resolves.toBe(true);
     }
   });
