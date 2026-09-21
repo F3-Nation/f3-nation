@@ -2,11 +2,11 @@ import { routes } from "./constants";
 import { OrgType } from "./enums";
 
 /**
- * Caps worst-case work for recursive hierarchy queries on unusually deep
- * trees. Each query handles cycles separately with a visited-path guard.
- * Twenty leaves substantial headroom above today's five-level tree; lowering
- * this below the real hierarchy depth would deny authorization or omit visible
- * results and emit api.org_tree.depth_limit_reached.
+ * Maximum parent edges followed by API and admin hierarchy traversals.
+ * Cycles are guarded separately with a visited path. Twenty leaves headroom
+ * above the six-tier hierarchy (five parent edges). At the cap, authorization
+ * and descendant walks deny or omit results and log api.org_tree.depth_limit_reached;
+ * ancestor sorting and Area display treat farther ancestors as missing without logging.
  */
 export const ORG_TREE_MAX_DEPTH = 20;
 

@@ -14,7 +14,10 @@ export interface OrgAdminConfig {
   filters:
     "none" | "status" | "sector" | "sectorTerritory" | "sectorArea" | "region";
   ancestorTypes?: OrgType[];
-  /** Additional persisted nodes needed for display traversal, not filter choices. */
+  /**
+   * Display-only traversal of irregular legacy/imported or directly written data.
+   * The API rejects new same-tier parenting; these nodes are not filter choices.
+   */
   intermediateTypes?: OrgType[];
   displayAncestors?: OrgType[];
   columns: {

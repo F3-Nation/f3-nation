@@ -138,13 +138,18 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
   Sector name and a blank Territory. Both headers request server sorting using
   `sectorName` and `territoryName` respectively. Ascending and descending sorting
   use the nearest matching ancestor's name before pagination; missing ancestors
-  are grouped last and ties have stable ordering across pages.
+  are grouped last and ties have stable ordering across pages. The API accepts
+  these two sort keys only when `orgTypes` is exactly `["area"]`; other type
+  selections are rejected to bound the cost of the correlated ancestor lookup.
 - **AC-9a** — GIVEN mixed, deep, inactive, or cyclic ancestor chains WHEN either
   ancestor sort is requested THEN traversal terminates, selects the nearest
   matching ancestor within 20 parent edges (excluding the row itself), and treats
   an absent or out-of-budget match as missing. Area display uses the same shared
   depth limit, leaving out-of-budget names blank. Its display lookup includes
-  persisted intermediate Areas, including inactive and off-page rows; these
+  persisted intermediate Areas from irregular legacy/imported or directly written
+  data, including inactive and off-page rows. AC-7 rejects creating such same-tier
+  relationships through the API; this is defensive read behavior, not a claim
+  that these rows currently exist in production. These
   additional nodes do not become filter choices or parent-filter IDs. Other tables
   retain their existing ancestor-display behavior. Existing filters and authorization
   scoping still apply; other tables retain their sort behavior.

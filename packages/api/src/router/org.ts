@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import type { SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 import {
@@ -19,6 +20,8 @@ import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import { ORG_ALL_SORT_IDS } from "@acme/shared/app/org-sorting";
+import type { OrgAllSortId } from "@acme/shared/app/org-sorting";
 import { OrgInsertSchema } from "@acme/validators";
 
 import { assertValidParentType } from "../assert-valid-parent-type";
@@ -82,7 +85,7 @@ const orgAllInputSchema = orgFilterSchema.extend({
     .optional()
     .describe("Number of organizations per page. Defaults to 10."),
   sorting: parseSorting().describe(
-    "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, parentOrgName, sectorName, territoryName, aoCount, lastAnnualReview, status, created.",
+    `Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: ${ORG_ALL_SORT_IDS.join(", ")}. sectorName and territoryName require orgTypes to be exactly ["area"].`,
   ),
 });
 
@@ -260,6 +263,18 @@ export const orgRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      // Correlated ancestor sorting is bounded to the Area table, not AO listings.
+      if (
+        input.sorting?.some(({ id }) =>
+          ["sectorName", "territoryName"].includes(id),
+        ) &&
+        (input.orgTypes.length !== 1 || input.orgTypes[0] !== "area")
+      ) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: 'Ancestor sorting requires orgTypes to be exactly ["area"].',
+        });
+      }
+
       const pageSize = input.pageSize ?? 10;
       const pageIndex = (input.pageIndex ?? 0) * pageSize;
       const usePagination =
@@ -296,7 +311,7 @@ export const orgRouter = {
           lastAnnualReview: org.lastAnnualReview,
           status: org.isActive,
           created: org.created,
-        },
+        } satisfies Record<OrgAllSortId, PgColumn | SQL>,
         "id",
         new Set([
           "parentOrgName",

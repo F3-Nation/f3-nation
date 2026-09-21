@@ -8,7 +8,7 @@ import {
   vi,
 } from "vitest";
 
-import { eq, schema } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 
 const mockLimit = vi.hoisted(() => vi.fn());
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
@@ -127,11 +127,87 @@ describe("organization ancestor sorting", () => {
     const filtered = await createTestClient().org.all({
       orgTypes: ["area"],
       searchTerm: prefix,
-      parentOrgIds: [alphaSector],
+      parentOrgIds: [zuluSector, alphaSector],
       sorting: [{ id: "sectorName", desc: false }],
     });
-    expect(filtered.orgs.map((org) => org.id)).toEqual([areas[2]]);
-    expect(filtered.total).toBe(1);
+    expect(filtered.orgs.map((org) => org.id)).toEqual([areas[2], areas[0]]);
+    expect(filtered.total).toBe(2);
+  });
+
+  it("sorts both ancestor keys in request order before the ID tie-break", async () => {
+    const result = await createTestClient().org.all({
+      orgTypes: ["area"],
+      searchTerm: prefix,
+      sorting: [
+        { id: "sectorName", desc: false },
+        { id: "territoryName", desc: true },
+      ],
+    });
+    expect(result.orgs.map((org) => org.id)).toEqual([
+      areas[1],
+      areas[5],
+      areas[2],
+      areas[3],
+      areas[0],
+      areas[4],
+    ]);
+  });
+
+  it.each([
+    undefined,
+    ["ao"],
+    ["region"],
+    ["area", "ao"],
+    ["area", "area"],
+  ] as const)(
+    "rejects ancestor sorting outside an exclusively Area request: %j",
+    async (orgTypes) => {
+      for (const id of ["sectorName", "territoryName"]) {
+        await expect(
+          createTestClient().org.all({
+            ...(orgTypes ? { orgTypes: [...orgTypes] } : {}),
+            sorting: [{ id, desc: false }],
+          }),
+        ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      }
+    },
+  );
+
+  it("keeps ID ties stable across pages independently of physical order", async () => {
+    const tied: number[] = [];
+    const parent = (await tree.get(areas[1]!)).parentId;
+    try {
+      for (let i = 0; i < 40; i++) {
+        tied.push(
+          (
+            await tree.create({
+              orgType: "area",
+              name: `${prefix}-ties ${i}`,
+              parentId: parent,
+            })
+          ).id,
+        );
+      }
+      // Fixture-only UPDATE moves the first tuple after its tied peers.
+      await db
+        .update(schema.orgs)
+        .set({ name: sql`${schema.orgs.name}` })
+        .where(eq(schema.orgs.id, tied[0]!));
+      const paged: number[] = [];
+      for (let pageIndex = 0; pageIndex < 8; pageIndex++) {
+        const result = await createTestClient().org.all({
+          orgTypes: ["area"],
+          searchTerm: `${prefix}-ties`,
+          sorting: [{ id: "territoryName", desc: true }],
+          pageIndex,
+          pageSize: 5,
+        });
+        paged.push(...result.orgs.map((org) => org.id));
+      }
+      expect(paged).toEqual(tied);
+    } finally {
+      for (const id of tied) await tree.remove(id);
+    }
   });
 
   it("keeps existing direct-parent sorting distinct from ancestor sorting", async () => {

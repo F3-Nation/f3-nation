@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { routes } from "@acme/shared/app/constants";
+import { ORG_ALL_SORT_IDS } from "@acme/shared/app/org-sorting";
 import { OrgType } from "@acme/shared/app/enums";
 import { orgTypeDisplay, orgTypesAbove } from "@acme/shared/app/org-hierarchy";
 import { orgAdminConfig, resolveOrgSegment } from "./org-admin-config";
@@ -80,4 +81,14 @@ describe("organization table ancestry configuration", () => {
       }
     }
   });
+});
+
+// API's mapping is exhaustively typed against the same list.
+it("uses supported API keys for every server-sorted ancestor column", () => {
+  for (const config of Object.values(orgAdminConfig)) {
+    if (!config.serverSorting) continue;
+    for (const column of config.columns) {
+      expect(ORG_ALL_SORT_IDS).toContain(column.id ?? column.key);
+    }
+  }
 });

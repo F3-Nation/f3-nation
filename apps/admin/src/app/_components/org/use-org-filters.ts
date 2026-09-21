@@ -127,7 +127,8 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
     }),
   );
   // Keep filter candidates unchanged while retaining intermediate nodes in the
-  // lookup used to traverse persisted same-tier ancestry.
+  // lookup for irregular legacy/imported or directly written same-tier ancestry.
+  // The API parent rule rejects creating these relationships.
   const hierarchyOrgs = useMemo(
     () =>
       hierarchyData?.orgs.filter((org) =>
