@@ -14,6 +14,8 @@ export interface OrgAdminConfig {
   filters:
     "none" | "status" | "sector" | "sectorTerritory" | "sectorArea" | "region";
   ancestorTypes?: OrgType[];
+  /** Additional persisted nodes needed for display traversal, not filter choices. */
+  intermediateTypes?: OrgType[];
   displayAncestors?: OrgType[];
   columns: {
     key: string;
@@ -68,6 +70,7 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     serverSorting: true,
     filters: "sectorTerritory",
     ancestorTypes: AdminAreaAncestorOrgTypes,
+    intermediateTypes: ["area"],
     displayAncestors: ["territory", "sector"],
     columns: [
       { key: "territory", id: "territoryName", label: "Territory" },

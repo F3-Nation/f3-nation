@@ -143,8 +143,10 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
   ancestor sort is requested THEN traversal terminates, selects the nearest
   matching ancestor within 20 parent edges (excluding the row itself), and treats
   an absent or out-of-budget match as missing. Area display uses the same shared
-  depth limit, leaving out-of-budget names blank. Other tables retain their
-  existing ancestor-display behavior. Existing filters and authorization
+  depth limit, leaving out-of-budget names blank. Its display lookup includes
+  persisted intermediate Areas, including inactive and off-page rows; these
+  additional nodes do not become filter choices or parent-filter IDs. Other tables
+  retain their existing ancestor-display behavior. Existing filters and authorization
   scoping still apply; other tables retain their sort behavior.
 - **AC-10** — GIVEN the Area table WHEN a Sector is selected in the filter THEN it
   requests Areas directly beneath that Sector and Areas beneath any of its

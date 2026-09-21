@@ -116,14 +116,28 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
   const [onlyMine, setOnlyMine] = useState(true);
   const { data: hierarchyData } = useQuery(
     orpc.org.all.queryOptions({
-      input: { orgTypes: config.ancestorTypes ?? [], statuses: IsActiveStatus },
+      input: {
+        orgTypes: [
+          ...(config.ancestorTypes ?? []),
+          ...(config.intermediateTypes ?? []),
+        ],
+        statuses: IsActiveStatus,
+      },
       enabled: !!config.ancestorTypes,
     }),
   );
-  const hierarchyOrgs = hierarchyData?.orgs;
+  // Keep filter candidates unchanged while retaining intermediate nodes in the
+  // lookup used to traverse persisted same-tier ancestry.
+  const hierarchyOrgs = useMemo(
+    () =>
+      hierarchyData?.orgs.filter((org) =>
+        config.ancestorTypes?.includes(org.orgType),
+      ),
+    [hierarchyData, config.ancestorTypes],
+  );
   const orgById = useMemo(
-    () => getOrgById(hierarchyOrgs ?? []),
-    [hierarchyOrgs],
+    () => getOrgById(hierarchyData?.orgs ?? []),
+    [hierarchyData],
   );
   const sectors = useMemo(
     () =>
