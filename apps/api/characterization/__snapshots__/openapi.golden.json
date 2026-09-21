@@ -11441,7 +11441,7 @@
               "default": [
                 "region"
               ],
-              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (ao, region, area, territory, sector, nation). Defaults to [region].",
               "items": {
                 "enum": [
                   "ao",
@@ -13202,7 +13202,7 @@
               "default": [
                 "region"
               ],
-              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (ao, region, area, territory, sector, nation). Defaults to [region].",
               "items": {
                 "enum": [
                   "ao",
