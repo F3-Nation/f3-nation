@@ -47,6 +47,7 @@ import {
 } from "~/orpc/react";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
+import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 export default function AdminManageAccessModal({
@@ -64,7 +65,7 @@ export default function AdminManageAccessModal({
   const { data: accessibleOrgsData, isLoading: isLoadingOrgs } = useQuery(
     orpc.org.accessible.queryOptions({
       input: {
-        orgTypes: ["region", "area", "sector", "nation"],
+        orgTypes: AdminScopeOrgTypes,
       },
     }),
   );

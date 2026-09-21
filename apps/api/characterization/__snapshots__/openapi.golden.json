@@ -11441,7 +11441,7 @@
               "default": [
                 "region"
               ],
-              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (ao, region, area, territory, sector, nation). Defaults to [region].",
               "items": {
                 "enum": [
                   "ao",
@@ -11538,7 +11538,7 @@
             "in": "query",
             "name": "sorting",
             "schema": {
-              "description": "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
+              "description": "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, parentOrgName, sectorName, territoryName, aoCount, lastAnnualReview, status, created. sectorName and territoryName require orgTypes to be exactly [\"area\"].",
               "items": {
                 "properties": {
                   "desc": {
@@ -13202,7 +13202,7 @@
               "default": [
                 "region"
               ],
-              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (ao, region, area, territory, sector, nation). Defaults to [region].",
               "items": {
                 "enum": [
                   "ao",

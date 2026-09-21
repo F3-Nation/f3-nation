@@ -14,13 +14,15 @@ import {
 } from "@acme/shared/app/constants";
 import { OrgType } from "@acme/shared/app/enums";
 import {
+  isPermittedOrgParent,
   isValidOrgTypeParent,
   orgTypeRank,
+  orgTypesAbove,
 } from "@acme/shared/app/org-hierarchy";
 import { describe, expect, it } from "vitest";
 
 import { assertValidParentType } from "./assert-valid-parent-type";
-import { db } from "./__tests__/test-utils";
+import { createOrgTree, db } from "./__tests__/test-utils";
 
 const NONEXISTENT_ORG_ID = 999999999;
 
@@ -61,6 +63,61 @@ describe("isValidOrgTypeParent (ordinal property)", () => {
   });
 });
 
+describe("isPermittedOrgParent", () => {
+  it("matches the ordinal rule for every pair except an AO's required parent", () => {
+    for (const parent of OrgType) {
+      for (const child of OrgType) {
+        const expected =
+          child === "ao"
+            ? parent === "region"
+            : isValidOrgTypeParent(parent, child);
+        expect(isPermittedOrgParent(parent, child)).toBe(expected);
+      }
+    }
+  });
+
+  it("accepts an area beneath either a sector or a territory", () => {
+    expect(isPermittedOrgParent("sector", "area")).toBe(true);
+    expect(isPermittedOrgParent("territory", "area")).toBe(true);
+  });
+
+  it("rejects a skip-level parent for an ao but not for other types", () => {
+    expect(isPermittedOrgParent("sector", "ao")).toBe(false);
+    expect(isPermittedOrgParent("nation", "region")).toBe(true);
+  });
+});
+
+describe("orgTypesAbove", () => {
+  it("returns exactly the types that may parent the given type, in enum order", () => {
+    for (const type of OrgType) {
+      expect(orgTypesAbove(type)).toEqual(
+        OrgType.filter((parent) => isValidOrgTypeParent(parent, type)),
+      );
+    }
+  });
+
+  it("includes territory between area and sector", () => {
+    expect(orgTypesAbove("ao")).toEqual([
+      "region",
+      "area",
+      "territory",
+      "sector",
+      "nation",
+    ]);
+    expect(orgTypesAbove("region")).toEqual([
+      "area",
+      "territory",
+      "sector",
+      "nation",
+    ]);
+    expect(orgTypesAbove("area")).toEqual(["territory", "sector", "nation"]);
+  });
+
+  it("returns nothing above the root", () => {
+    expect(orgTypesAbove("nation")).toEqual([]);
+  });
+});
+
 describe("assertValidParentType", () => {
   it("rejects assigning a parent to nation, without even looking up the parent", async () => {
     await expect(
@@ -90,6 +147,32 @@ describe("assertValidParentType", () => {
     await expect(
       assertValidParentType(db, TEST_NATION_ORG_ID, "area"),
     ).resolves.toBeUndefined();
+  });
+
+  it("resolves for an area parented to a territory", async () => {
+    const tree = createOrgTree();
+    try {
+      const territory = await tree.create({ orgType: "territory" });
+
+      await expect(
+        assertValidParentType(db, territory.id, "area"),
+      ).resolves.toBeUndefined();
+    } finally {
+      await tree.cleanup();
+    }
+  });
+
+  it("rejects a territory parented to an area", async () => {
+    const tree = createOrgTree();
+    try {
+      const area = await tree.create({ orgType: "area" });
+
+      await expect(
+        assertValidParentType(db, area.id, "territory"),
+      ).rejects.toThrow(/Territory.*Area/);
+    } finally {
+      await tree.cleanup();
+    }
   });
 
   it("rejects a skip-level parent for an ao, unlike other org types", async () => {

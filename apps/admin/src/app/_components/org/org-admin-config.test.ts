@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { routes } from "@acme/shared/app/constants";
+import { ORG_ALL_SORT_IDS } from "@acme/shared/app/org-sorting";
 import { OrgType } from "@acme/shared/app/enums";
-import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
-import { resolveOrgSegment } from "./org-admin-config";
+import { orgTypeDisplay, orgTypesAbove } from "@acme/shared/app/org-hierarchy";
+import { orgAdminConfig, resolveOrgSegment } from "./org-admin-config";
 
 // Keep this independent of orgTypeDisplay so an accidental configuration
 // collision with an existing non-org route cannot filter itself out.
@@ -44,4 +45,50 @@ describe("organization route boundary", () => {
       expect(resolveOrgSegment(segment)).toBeUndefined();
     },
   );
+});
+
+describe("organization table ancestry configuration", () => {
+  it.each(OrgType)("%s displays and fetches only types above it", (orgType) => {
+    const config = orgAdminConfig[orgType];
+    const above = orgTypesAbove(orgType);
+
+    for (const ancestor of config.displayAncestors ?? []) {
+      expect(above).toContain(ancestor);
+      expect(config.ancestorTypes).toContain(ancestor);
+    }
+    for (const ancestor of config.ancestorTypes ?? []) {
+      expect(above).toContain(ancestor);
+    }
+  });
+
+  it("filters territories by sector and areas by sector and territory", () => {
+    expect(orgAdminConfig.territory.filters).toBe("sector");
+    expect(orgAdminConfig.area.filters).toBe("sectorTerritory");
+    expect(orgAdminConfig.area.displayAncestors).toEqual([
+      "territory",
+      "sector",
+    ]);
+  });
+
+  it("maps only Area ancestors to the new server sort ids", () => {
+    for (const orgType of OrgType) {
+      const config = orgAdminConfig[orgType];
+      for (const ancestor of config.displayAncestors ?? []) {
+        const column = config.columns.find((item) => item.key === ancestor);
+        expect(column?.id).toBe(
+          orgType === "area" ? `${ancestor}Name` : undefined,
+        );
+      }
+    }
+  });
+});
+
+// API's mapping is exhaustively typed against the same list.
+it("uses supported API keys for every server-sorted ancestor column", () => {
+  for (const config of Object.values(orgAdminConfig)) {
+    if (!config.serverSorting) continue;
+    for (const column of config.columns) {
+      expect(ORG_ALL_SORT_IDS).toContain(column.id ?? column.key);
+    }
+  }
 });
