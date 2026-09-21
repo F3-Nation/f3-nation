@@ -14,14 +14,17 @@ export interface OrgAdminConfig {
   filters:
     "none" | "status" | "sector" | "sectorTerritory" | "sectorArea" | "region";
   ancestorTypes?: OrgType[];
+  /**
+   * Display-only traversal of irregular legacy/imported or directly written data.
+   * The API rejects new same-tier parenting; these nodes are not filter choices.
+   */
+  intermediateTypes?: OrgType[];
   displayAncestors?: OrgType[];
   columns: {
     key: string;
     label: string;
     id?: string;
     parentType?: OrgType;
-    /** False for a column resolved in the browser, which the server cannot sort. */
-    sortable?: boolean;
   }[];
   statusId: "status" | "isActive";
   aoCount: boolean;
@@ -70,10 +73,11 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     serverSorting: true,
     filters: "sectorTerritory",
     ancestorTypes: AdminAreaAncestorOrgTypes,
+    intermediateTypes: ["area"],
     displayAncestors: ["territory", "sector"],
     columns: [
-      { key: "territory", label: "Territory", sortable: false },
-      { key: "sector", label: "Sector", sortable: false },
+      { key: "territory", id: "territoryName", label: "Territory" },
+      { key: "sector", id: "sectorName", label: "Sector" },
     ],
     statusId: "status",
     aoCount: true,
