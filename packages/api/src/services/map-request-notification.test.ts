@@ -411,5 +411,30 @@ describe("notifyMapChangeRequest", () => {
       );
       expect(mockLogError).not.toHaveBeenCalled();
     });
+
+    it("treats a cycle that closes just past the depth limit as a cycle, not a depth overrun", async () => {
+      const root = await createOrg({ orgType: "region", parentId: null });
+      let bottomId = root.id;
+      for (let i = 1; i <= ORG_TREE_MAX_DEPTH; i++) {
+        const region = await createOrg({
+          orgType: "region",
+          parentId: bottomId,
+        });
+        bottomId = region.id;
+      }
+      // The walk from the bottom reaches the root at the depth limit, then
+      // loops straight back to the bottom one step beyond it.
+      await db
+        .update(schema.orgs)
+        .set({ parentId: bottomId })
+        .where(eq(schema.orgs.id, root.id));
+      const request = await createRequest(bottomId);
+
+      await expectNotFound(
+        request.id,
+        "Area not found, cannot notify admins/editors",
+      );
+      expect(mockLogError).not.toHaveBeenCalled();
+    });
   });
 });

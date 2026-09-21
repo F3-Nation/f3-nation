@@ -90,6 +90,9 @@ const findParentOrgByType = async ({
   let currentId: number | null = orgId;
 
   for (let depth = 0; currentId !== null; depth++) {
+    // Check for a cycle first so one closing past the depth limit is not
+    // reported as a depth overrun.
+    if (visited.has(currentId)) return null;
     if (depth > ORG_TREE_MAX_DEPTH) {
       logError("api.org_tree.depth_limit_reached", {
         direction: "ancestors",
@@ -99,7 +102,6 @@ const findParentOrgByType = async ({
       });
       return null;
     }
-    if (visited.has(currentId)) return null;
     visited.add(currentId);
 
     const [currentOrg] = await db
