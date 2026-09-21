@@ -23,10 +23,6 @@ const config: KnipConfig = {
   ignoreDependencies: ["@turbo/gen", "dotenv"],
   ignoreBinaries: ["uv"],
   workspaces: {
-    "packages/db": {
-      // Invoked by the disposable-container shell runner, not normal Vitest.
-      entry: ["maintenance/repair-submission-ids.test.ts"],
-    },
     ".": {
       // scripts/lint-staged.mjs spawns the eslint binary by path, so the root
       // devDependency is never a static import knip can follow.

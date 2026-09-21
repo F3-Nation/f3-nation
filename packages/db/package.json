@@ -11,7 +11,6 @@
   },
   "license": "AGPL-3.0-or-later",
   "scripts": {
-    "test:repair": "bash maintenance/test-repair.sh",
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
