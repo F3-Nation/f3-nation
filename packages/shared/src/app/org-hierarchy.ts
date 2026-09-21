@@ -1,6 +1,15 @@
 import { routes } from "./constants";
 import { OrgType } from "./enums";
 
+/**
+ * Maximum parent edges followed by API and admin hierarchy traversals.
+ * Cycles are guarded separately with a visited path. Twenty leaves headroom
+ * above the six-tier hierarchy (five parent edges). At the cap, authorization
+ * and descendant walks deny or omit results and log api.org_tree.depth_limit_reached;
+ * ancestor sorting and Area display treat farther ancestors as missing without logging.
+ */
+export const ORG_TREE_MAX_DEPTH = 20;
+
 // routeSegment strips the leading "/" from a routes.admin.* __path so
 // orgTypeDisplay derives from the single route source of truth instead of
 // restating each segment as its own literal.

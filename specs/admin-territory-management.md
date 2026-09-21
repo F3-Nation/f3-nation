@@ -20,6 +20,7 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
 
 - Issue #924; epic #855. Design rationale:
   [ADR 0003](../docs/adr/0003-depth-agnostic-org-hierarchy.md).
+- Issue #1041 restores Area sorting by resolved Sector and Territory.
 - Builds on [`territory-org-type.md`](territory-org-type.md), which added the
   Territory type, basic page, and a temporary API gate rejecting an Area beneath a
   Territory, and on [`admin-generic-org-management.md`](admin-generic-org-management.md),
@@ -61,8 +62,13 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
   than from hand-written tier lists.
 - Ancestor columns are resolved by walking the loaded hierarchy independently for
   each ancestor type, so a missing optional tier (no Territory) does not blank the
-  tiers above it. Because the server can sort only by the direct parent's name, the
-  resolved-ancestor columns on the Area table are not server-sortable.
+  tiers above it. The Area table sorts these columns on the server using the
+  nearest matching ancestor, before pagination. Traversal includes inactive
+  ancestors, excludes the row itself, guards cycles, and stops after
+  `ORG_TREE_MAX_DEPTH` parent edges. A missing match sorts last in either direction.
+  Ancestor sorts append ascending organization ID as a tie-breaker unless the
+  caller already supplies an ID sort; all other requested sort keys keep priority.
+  Existing sorts and other table configurations retain their behavior.
 - AO counts are recomputed from source rows for every affected ancestor, never
   incremented. The recount walks up from the changed organization (and, for a
   move, from its old parent), then counts each affected count-carrying ancestor's
@@ -129,7 +135,24 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
 - **AC-9** — GIVEN the Area table WHEN an Area sits under a Territory THEN its row
   shows both the Territory name and the Sector name (resolved through the
   Territory); WHEN an Area sits directly under a Sector THEN its row shows the
-  Sector name and a blank Territory. Neither column is server-sortable.
+  Sector name and a blank Territory. Both headers request server sorting using
+  `sectorName` and `territoryName` respectively. Ascending and descending sorting
+  use the nearest matching ancestor's name before pagination; missing ancestors
+  are grouped last and ties have stable ordering across pages. The API accepts
+  these two sort keys only when `orgTypes` is exactly `["area"]`; other type
+  selections are rejected to bound the cost of the correlated ancestor lookup.
+- **AC-9a** — GIVEN mixed, deep, inactive, or cyclic ancestor chains WHEN either
+  ancestor sort is requested THEN traversal terminates, selects the nearest
+  matching ancestor within 20 parent edges (excluding the row itself), and treats
+  an absent or out-of-budget match as missing. Area display uses the same shared
+  depth limit, leaving out-of-budget names blank. Its display lookup includes
+  persisted intermediate Areas from irregular legacy/imported or directly written
+  data, including inactive and off-page rows. AC-7 rejects creating such same-tier
+  relationships through the API; this is defensive read behavior, not a claim
+  that these rows currently exist in production. These
+  additional nodes do not become filter choices or parent-filter IDs. Other tables
+  retain their existing ancestor-display behavior. Existing filters and authorization
+  scoping still apply; other tables retain their sort behavior.
 - **AC-10** — GIVEN the Area table WHEN a Sector is selected in the filter THEN it
   requests Areas directly beneath that Sector and Areas beneath any of its
   Territories; WHEN a Territory is also selected THEN only that Territory's direct
