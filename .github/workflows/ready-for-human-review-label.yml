@@ -2,8 +2,8 @@ name: Ready for human review label
 
 # Reconciles the `ready for human review` label across every open PR. Polls on
 # a schedule rather than reacting to events: no single GitHub Actions trigger
-# fires for all four conditions this label tracks (draft state, merge
-# conflicts, required check conclusions, bot review-thread resolution), and an
+# fires for all four conditions this label tracks (draft state, required
+# check conclusions, bot review-thread resolution, merge conflicts), and an
 # event-driven handler would also need `pull_request_target` to write labels on
 # fork PRs. A schedule sidesteps both problems, at the cost of up to ~24h
 # latency in both directions -- accepted per #932.
@@ -11,9 +11,11 @@ name: Ready for human review label
 # Condition 3 is scoped to bot review threads only, not every unresolved
 # thread -- see BOT_LOGINS in the companion script for why.
 #
-# Condition 4 (no merge conflicts) removes the label only when GitHub reports
-# `mergeable: CONFLICTING`. A PR that is merely behind its base, or whose
-# mergeability GitHub hasn't computed yet, is not treated as conflicted.
+# Condition 4 (no merge conflicts) fails only when GitHub reports
+# `mergeable: CONFLICTING`, which removes the label (or withholds it). A PR
+# that is merely behind its base is not treated as conflicted. One whose
+# mergeability GitHub hasn't computed yet (`UNKNOWN`) is never newly labeled
+# and never loses its label for conflicts; the next run re-checks.
 
 on:
   schedule:
@@ -166,7 +168,8 @@ jobs:
             // read -- `mergeStateStatus` folds in ruleset gates (required
             // reviews, unresolved threads, being behind), none of which are
             // merge conflicts. Still UNKNOWN after the retries is returned as
-            // is and never counts as a conflict; the next run re-checks.
+            // is: it never counts as a conflict, but the caller won't add the
+            // label on it; the next run re-checks.
             const MERGEABLE_ATTEMPTS = 3;
             const MERGEABLE_RETRY_MS = 2000;
             const fetchMergeable = async (prNumber) => {
@@ -185,7 +188,8 @@ jobs:
                 if (attempt < MERGEABLE_ATTEMPTS) await sleep(MERGEABLE_RETRY_MS);
               }
               core.warning(
-                `PR #${prNumber}: mergeability still UNKNOWN after ${MERGEABLE_ATTEMPTS} attempts; treating as no conflict.`,
+                `PR #${prNumber}: mergeability still UNKNOWN after ` +
+                  `${MERGEABLE_ATTEMPTS} attempts; not adding the label.`,
               );
               return mergeable;
             };
@@ -208,6 +212,7 @@ jobs:
                 // fails; `desired` stays false unless neither trips.
                 let desired = false;
                 let skipReason = null;
+                let mergeabilityUnknown = false;
                 if (pr.draft) {
                   skipReason = 'draft';
                   result.conflicts = 'skipped (draft)';
@@ -217,7 +222,8 @@ jobs:
                     skipReason = 'conflicts';
                     result.conflicts = 'conflicts';
                   } else {
-                    result.conflicts = mergeable === 'UNKNOWN' ? 'unknown' : 'none';
+                    mergeabilityUnknown = mergeable === 'UNKNOWN';
+                    result.conflicts = mergeabilityUnknown ? 'unknown' : 'none';
                   }
                 }
 
@@ -258,6 +264,10 @@ jobs:
 
                 if (desired === hasLabel) {
                   result.outcome = hasLabel ? 'already labeled' : 'already unlabeled';
+                } else if (desired && mergeabilityUnknown) {
+                  // Adding is the harmful direction while mergeability is
+                  // unknown; removals are unaffected.
+                  result.outcome = 'skipped (mergeability unknown)';
                 } else if (dryRun) {
                   result.outcome = desired ? 'would add' : 'would remove';
                 } else if (desired) {
