@@ -11,7 +11,10 @@ import {
   createAuthInstance,
   memoryAdapter,
 } from "../../src/lib/better-auth";
-import type { MemoryDB } from "../../src/lib/better-auth";
+import type {
+  CreateAuthInstanceOptions,
+  MemoryDB,
+} from "../../src/lib/better-auth";
 
 const BASE_URL = "http://localhost:3999";
 const BASE_PATH = "/api/auth2";
@@ -338,13 +341,13 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     ).rejects.toMatchObject({ status: "UNAUTHORIZED" });
   });
 
-  it("denies client creation under production's allowClientAction policy, even for a nation admin (#1046 review finding)", async () => {
-    // clientReference alone can't tell "one of the two F3-managed clients"
-    // apart from any other client a nation admin happens to create — it
-    // only ever sees the calling session, never the client being created.
-    // Production closes that gap by denying "create" outright via
-    // allowProductionClientAction instead; this wires the real function in,
-    // not a re-declared copy of its policy.
+  it("denies client creation under production's allowClientAction policy, even for a nation admin", async () => {
+    // clientReference alone can't tell an F3-managed client apart from any
+    // other client a nation admin happens to create — it only ever sees the
+    // calling session, never the client being created. Production closes
+    // that gap by denying "create" outright via allowProductionClientAction
+    // instead; this wires the real function in, not a re-declared copy of
+    // its policy.
     const memoryDb: MemoryDB = {};
     const options = {
       baseURL: BASE_URL,
@@ -367,6 +370,82 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     await expect(createConfidentialClient(auth, token)).rejects.toMatchObject({
       status: "UNAUTHORIZED",
     });
+  });
+
+  it("lets a nation admin rotate an F3-managed client's secret under production's allowlist, but denies update and delete", async () => {
+    const emailToF3UserId: Record<string, number> = {
+      "admin-creator@f3nation.test": 801,
+      "admin-rotator@f3nation.test": 802,
+    };
+    // Swapped after creation, below — models the real production path,
+    // where a client only ever gets F3_NATION_CLIENT_REFERENCE_ID via a
+    // provisioning script (permissive policy stands in for that here),
+    // and every actual session-driven action against it goes through
+    // production's real allowProductionClientAction.
+    let currentPolicy: (
+      action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
+    ) => Promise<boolean> = () => Promise.resolve(true);
+
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: (email: string) =>
+        Promise.resolve(emailToF3UserId[email] ?? null),
+      isNationAdmin: () => Promise.resolve(true),
+      allowClientAction: (
+        action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
+      ) => currentPolicy(action),
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const creatorToken = await signInAndGetToken(
+      auth,
+      "admin-creator@f3nation.test",
+    );
+    const client = await createConfidentialClient(auth, creatorToken);
+
+    currentPolicy = allowProductionClientAction;
+
+    const rotatorToken = await signInAndGetToken(
+      auth,
+      "admin-rotator@f3nation.test",
+    );
+    const authHeaders = { authorization: `Bearer ${rotatorToken}` };
+
+    const rotated = await auth.api.rotateClientSecret({
+      headers: authHeaders,
+      body: { client_id: client.client_id },
+    });
+    expect(rotated.client_secret).toBeTruthy();
+    expect(rotated.client_secret).not.toBe(client.client_secret);
+
+    await expect(
+      auth.api.updateOAuthClient({
+        headers: authHeaders,
+        body: {
+          client_id: client.client_id,
+          update: {
+            redirect_uris: ["https://attacker.example.com/callback"],
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ status: "UNAUTHORIZED" });
+
+    await expect(
+      auth.api.deleteOAuthClient({
+        headers: authHeaders,
+        body: { client_id: client.client_id },
+      }),
+    ).rejects.toMatchObject({ status: "UNAUTHORIZED" });
   });
 });
 

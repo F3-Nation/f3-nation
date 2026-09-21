@@ -59,6 +59,7 @@ import { eq } from "drizzle-orm";
 // its DATABASE_* env requirement) as a module-load side effect. See getAuth's
 // own dynamic `await import("~/lib/db")` below for the actual runtime import.
 import type { db as authDbType } from "~/lib/db";
+import { logInfo, logWarn } from "~/lib/logging";
 
 import { getUserRoles } from "@acme/db";
 import {
@@ -276,22 +277,18 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         // (session.user.id) for any client that admin creates for
         // themselves.
         //
-        // This callback only ever sees the calling session — oauth-provider
-        // never hands it the client being created/mutated — so it can't by
-        // itself tell an intended F3-managed client apart from any other
-        // client a nation admin happens to create. Relying on it alone at
-        // creation time would auto-share every client any nation admin
-        // creates. allowClientAction below closes that by denying client
-        // creation outright in production, so this callback's create-time
-        // return value only matters for oauth-provider's already-permissive
-        // test/dev paths.
+        // This callback only ever sees the calling session, never the
+        // client being created/mutated, so it can't tell an intended
+        // F3-managed client apart from any other client a nation admin
+        // happens to create — see allowClientAction's doc comment above for
+        // why production denies "create" outright instead of relying on
+        // this callback alone. This callback's create-time return value
+        // only matters where a caller injects a permissive allowClientAction
+        // (the test fixtures) — production never takes that path.
         //
-        // There is deliberately no live process today for a nation admin to
-        // create an F3-managed client through this instance — production
-        // denies "create" unconditionally (see allowClientAction). An
-        // F3-managed client's referenceId has to be set directly, by a
+        // An F3-managed client's referenceId has to be set directly, by a
         // provisioning script writing to the database, before this callback
-        // (or a rotate/update call) can ever apply to it.
+        // (or a rotate call) can ever apply to it.
         clientReference: async ({ user }) => {
           if (!user) return undefined;
           const f3UserId = Number(user.id);
@@ -301,7 +298,27 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
             : undefined;
         },
         // See allowClientAction's doc comment above.
-        clientPrivileges: ({ action }) => options.allowClientAction(action),
+        clientPrivileges: async ({ action, user }) => {
+          const allowed = await options.allowClientAction(action);
+          // Denials and non-read attempts are worth an audit trail — an
+          // action here hands out or replaces an app's credentials, and
+          // oauth-provider itself doesn't log the UNAUTHORIZED it throws
+          // when this returns false. This hook runs before oauth-provider's
+          // own ownership check, so an "attempted" log records an attempt,
+          // not necessarily a success.
+          if (!allowed) {
+            logWarn("auth.oauth_client.action_denied", {
+              action,
+              userId: user?.id,
+            });
+          } else if (action !== "read" && action !== "list") {
+            logInfo("auth.oauth_client.action_attempted", {
+              action,
+              userId: user?.id,
+            });
+          }
+          return allowed;
+        },
         // Deliberately no storeClientSecret override — prefers Better
         // Auth's own default secret hashing over matching the hand-rolled
         // server's sha256 scheme, even though it means confidential clients
@@ -335,10 +352,10 @@ type AuthDb = typeof authDbType;
 
 /**
  * Kept as a standalone function — rather than inline in getAuth's
- * `isNationAdmin` field — so it can be exercised against a live database in
- * tests without constructing a whole Better Auth instance. The roles query
- * itself lives in @acme/db's getUserRoles, shared with packages/api's
- * getSessionFromJWT, so there's one place to change it, not two.
+ * `isNationAdmin` field — so it can be unit-tested with a stubbed db without
+ * constructing a whole Better Auth instance. The roles query itself lives
+ * in @acme/db's getUserRoles, shared with packages/api's getSessionFromJWT,
+ * so there's one place to change it, not two.
  */
 export async function isNationAdminForUser(
   database: AuthDb,
