@@ -31,15 +31,17 @@ import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
+const DEFAULT_ORG_TYPES = ["region"] as const satisfies readonly OrgType[];
+
 // Shared filter schema for orgs (used by both `all` and `count` endpoints)
 const orgFilterSchema = z.object({
   orgTypes: arrayOrSingle(z.enum(OrgType))
     .refine((val) => val.length >= 1, {
       message: "At least one orgType is required",
     })
-    .default(["region"])
+    .default([...DEFAULT_ORG_TYPES])
     .describe(
-      `Filter organizations by type. Returns orgs matching ANY of the given types (${OrgType.join(", ")}). Defaults to [region].`,
+      `Filter organizations by type. Returns orgs matching ANY of the given types (${OrgType.join(", ")}). Defaults to [${DEFAULT_ORG_TYPES.join(", ")}].`,
     ),
   searchTerm: z
     .string()
@@ -50,7 +52,7 @@ const orgFilterSchema = z.object({
   statuses: arrayOrSingle(z.enum(IsActiveStatus))
     .optional()
     .describe(
-      "Filter organizations by status. Matches orgs with ANY of the given statuses (active, inactive).",
+      `Filter organizations by status. Matches orgs with ANY of the given statuses (${IsActiveStatus.join(", ")}).`,
     ),
   parentOrgIds: arrayOrSingle(z.coerce.number())
     .optional()
