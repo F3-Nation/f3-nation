@@ -165,11 +165,11 @@ export interface CreateAuthInstanceOptions {
    * dynamic self-serve client creation isn't part of the design, so no live
    * session — nation admin or not — should be able to spin one up; letting
    * that through would auto-tag whatever an admin creates as F3-managed via
-   * clientReference below, not just the two intended clients — the gap
-   * #1046's review caught) and "configure-client-credentials-scopes"
-   * (unused). Everything else (read/update/delete/list/rotate) still relies
-   * on oauth-provider's own per-client ownership checks. Tests pass a
-   * permissive policy so fixtures can exercise client creation directly.
+   * clientReference below, not just the intended F3-managed clients) and
+   * "configure-client-credentials-scopes" (unused). Everything else
+   * (read/update/delete/list/rotate) still relies on oauth-provider's own
+   * per-client ownership checks. Tests pass a permissive policy so fixtures
+   * can exercise client creation directly.
    */
   allowClientAction: (
     action:
@@ -183,12 +183,11 @@ export interface CreateAuthInstanceOptions {
   ) => Promise<boolean>;
 }
 
-// The stable "owner" identity for F3-Nation-managed OAuth clients (apps/admin,
-// apps/me) — set as a client's referenceId rather than a per-user userId, so
-// any current or future nation admin can manage and rotate the secret for a
-// client one of them created, not just whoever happened to create it. See
-// oauthProvider's clientReference option below, and #876 Phase 3's
-// client-secret-issuance question this resolves.
+// The stable "owner" identity for F3-Nation-managed OAuth clients — set as a
+// client's referenceId rather than a per-user userId, so any current or
+// future nation admin can manage and rotate the secret for a client one of
+// them created, not just whoever happened to create it. See oauthProvider's
+// clientReference option below.
 const F3_NATION_CLIENT_REFERENCE_ID = "f3-nation";
 
 /**
@@ -269,25 +268,30 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         // apps/auth/src/lib/oauth.ts's exchangeAuthorizationCode). Set
         // explicitly here anyway so the intent is documented, not implicit.
         clientRegistrationRequirePKCE: true,
-        // Any nation admin can manage/rotate the shared, F3-Nation-owned
-        // clients (apps/admin, apps/me) instead of each one being tied to
-        // whichever individual admin happened to create it — see
-        // F3_NATION_CLIENT_REFERENCE_ID above. A session that isn't a
-        // nation admin gets `undefined` here, so oauth-provider falls back
-        // to its normal per-user ownership (session.user.id) for any client
-        // that admin creates for themselves.
+        // Any nation admin can manage/rotate a shared, F3-Nation-owned
+        // client instead of it being tied to whichever individual admin
+        // happened to create it — see F3_NATION_CLIENT_REFERENCE_ID above.
+        // A session that isn't a nation admin gets `undefined` here, so
+        // oauth-provider falls back to its normal per-user ownership
+        // (session.user.id) for any client that admin creates for
+        // themselves.
         //
         // This callback only ever sees the calling session — oauth-provider
         // never hands it the client being created/mutated — so it can't by
-        // itself tell "one of the two intended F3-managed clients" apart
-        // from any other client a nation admin happens to create. Relying
-        // on it alone at creation time would auto-share every client any
-        // nation admin creates, not just apps/admin and apps/me (the gap
-        // #1046's review caught). allowClientAction below closes that by
-        // denying client creation outright in production — the two real
-        // clients get provisioned out-of-band instead, with referenceId set
-        // directly — so this callback's create-time return value only
-        // matters for oauth-provider's already-permissive test/dev paths.
+        // itself tell an intended F3-managed client apart from any other
+        // client a nation admin happens to create. Relying on it alone at
+        // creation time would auto-share every client any nation admin
+        // creates. allowClientAction below closes that by denying client
+        // creation outright in production, so this callback's create-time
+        // return value only matters for oauth-provider's already-permissive
+        // test/dev paths.
+        //
+        // There is deliberately no live process today for a nation admin to
+        // create an F3-managed client through this instance — production
+        // denies "create" unconditionally (see allowClientAction). An
+        // F3-managed client's referenceId has to be set directly, by a
+        // provisioning script writing to the database, before this callback
+        // (or a rotate/update call) can ever apply to it.
         clientReference: async ({ user }) => {
           if (!user) return undefined;
           const f3UserId = Number(user.id);
