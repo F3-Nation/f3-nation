@@ -437,8 +437,6 @@ describe("notifyMapChangeRequest", () => {
           direction: "ancestors",
           maxDepth: ORG_TREE_MAX_DEPTH,
           source: "map_request_notification",
-          startOrgId: bottomRegionId,
-          targetType: "area",
         }),
       );
     });

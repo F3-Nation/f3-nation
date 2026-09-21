@@ -97,9 +97,8 @@ const findParentOrgByType = async ({
       logError("api.org_tree.depth_limit_reached", {
         direction: "ancestors",
         maxDepth: ORG_TREE_MAX_DEPTH,
+        rootCount: 1,
         source: "map_request_notification",
-        startOrgId: orgId,
-        targetType: type,
       });
       return null;
     }
