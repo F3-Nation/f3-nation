@@ -4,6 +4,7 @@
     "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json"
   },
   "include": [
+    "maintenance",
     "src",
     "drizzle.config.ts",
     "drizzle/relations.ts",
