@@ -69,16 +69,15 @@ describe("organization table ancestry configuration", () => {
     ]);
   });
 
-  it("never ties a resolved-ancestor column to a server sort id", () => {
+  it("maps only Area ancestors to the new server sort ids", () => {
     for (const orgType of OrgType) {
       const config = orgAdminConfig[orgType];
       for (const ancestor of config.displayAncestors ?? []) {
         const column = config.columns.find((item) => item.key === ancestor);
-        expect(column?.id).toBeUndefined();
+        expect(column?.id).toBe(
+          orgType === "area" ? `${ancestor}Name` : undefined,
+        );
       }
     }
-    expect(
-      orgAdminConfig.area.columns.every((column) => column.sortable === false),
-    ).toBe(true);
   });
 });

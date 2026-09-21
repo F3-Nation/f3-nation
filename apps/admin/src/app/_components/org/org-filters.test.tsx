@@ -342,6 +342,14 @@ describe("depth-agnostic admin organization filters", () => {
     expect(latestResultQuery()?.parentOrgIds).toEqual([nestedArea.id]);
   });
 
+  it("removes only the deselected Area from a Region table filter", () => {
+    render(<OrgTable orgType="region" />);
+    fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
+    fireEvent.click(screen.getByTestId(`area-${secondSectorArea.id}`));
+    fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
+    expect(latestResultQuery()?.parentOrgIds).toEqual([secondSectorArea.id]);
+  });
+
   it("retains directly selected areas when the last sector is deselected", () => {
     render(<OrgTable orgType="region" />);
 
@@ -572,6 +580,14 @@ describe("territory-aware admin organization filters", () => {
 
     fireEvent.click(screen.getByTestId(`territory-${sectorTwoTerritory.id}`));
 
+    expect(latestResultQuery()?.parentOrgIds).toEqual([sectorTwoTerritory.id]);
+  });
+
+  it("removes only the deselected Territory from an Area table filter", () => {
+    render(<OrgTable orgType="area" />);
+    fireEvent.click(screen.getByTestId(`territory-${secondTerritory.id}`));
+    fireEvent.click(screen.getByTestId(`territory-${sectorTwoTerritory.id}`));
+    fireEvent.click(screen.getByTestId(`territory-${secondTerritory.id}`));
     expect(latestResultQuery()?.parentOrgIds).toEqual([sectorTwoTerritory.id]);
   });
 

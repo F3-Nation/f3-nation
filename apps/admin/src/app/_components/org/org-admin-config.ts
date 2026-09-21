@@ -20,8 +20,6 @@ export interface OrgAdminConfig {
     label: string;
     id?: string;
     parentType?: OrgType;
-    /** False for a column resolved in the browser, which the server cannot sort. */
-    sortable?: boolean;
   }[];
   statusId: "status" | "isActive";
   aoCount: boolean;
@@ -72,8 +70,8 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     ancestorTypes: AdminAreaAncestorOrgTypes,
     displayAncestors: ["territory", "sector"],
     columns: [
-      { key: "territory", label: "Territory", sortable: false },
-      { key: "sector", label: "Sector", sortable: false },
+      { key: "territory", id: "territoryName", label: "Territory" },
+      { key: "sector", id: "sectorName", label: "Sector" },
     ],
     statusId: "status",
     aoCount: true,

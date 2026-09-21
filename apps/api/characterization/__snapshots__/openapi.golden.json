@@ -11538,7 +11538,7 @@
             "in": "query",
             "name": "sorting",
             "schema": {
-              "description": "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
+              "description": "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, parentOrgName, sectorName, territoryName, aoCount, lastAnnualReview, status, created.",
               "items": {
                 "properties": {
                   "desc": {
