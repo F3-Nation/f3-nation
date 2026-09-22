@@ -1,17 +1,22 @@
-# ADR 0003: Retire PgBouncer in favor of bounded direct connections
+# ADR 0004: Retire PgBouncer in favor of bounded direct connections
 
-- **Status:** Proposed
-- **Date:** 2026-08-11
-- **Deciders:** TBD
+- **Status:** Accepted
+- **Date:** 2026-08-11 (investigation) · accepted 2026-09-22
+- **Deciders:** @dnishiyama, with the removal direction agreed by @taterhead247
+  on [#176](https://github.com/F3-Nation/f3-nation/issues/176) 2026-08-25
 - **Related:** [#176](https://github.com/F3-Nation/f3-nation/issues/176)
   (document PgBouncer), [`docs/PGBOUNCER.md`](../PGBOUNCER.md) (what exists
-  today)
+  today), [#901](https://github.com/F3-Nation/f3-nation/pull/901) and
+  [#911](https://github.com/F3-Nation/f3-nation/pull/911) (the pool bounds this
+  ADR depends on, both merged 2026-09-11)
 
 ## Summary
 
-**Recommendation: retire PgBouncer.** Connect `api`, `map`, and `admin`
-directly to Cloud SQL through the Cloud SQL connector, with connection limits
-enforced in the application instead of in a pooler.
+**Decision: retire PgBouncer.** Connect the TypeScript apps — `api`, `map`,
+`admin`, and `me` — directly to Cloud SQL through the Cloud SQL connector, with
+connection limits enforced in the application instead of in a pooler. Cut over
+behind monitors that can see connection pressure, one service at a time, and
+roll back on any alarm.
 
 The reasoning, each expanded below:
 
@@ -35,7 +40,8 @@ The reasoning, each expanded below:
 6. **[Retiring it closes six open problems at once.](#6-what-retiring-it-buys)**
    It also lets us re-enable TLS and prepared statements.
 7. **[The migration has a strict order and an instant rollback.](#7-migration-sequence)**
-   Bound the pools, add the alert, migrate, run both paths for a week, then
+   Bound the pools, stand up the monitors and baseline them against the current
+   architecture, migrate one service at a time, run both paths for a week, then
    delete.
 8. **[One open question should be settled first.](#8-open-question)** The
    88-connection peak exceeds PgBouncer's own cap, so some of it is already
@@ -110,8 +116,10 @@ fronts only part of the fleet:
 | `cloudsqladmin`       | `127.0.0.1` — Cloud SQL's own agent                             |
 
 Two application workloads already connect directly and have not caused
-problems. The proposal is to make the remaining three match them, not to invent
-a new pattern.
+problems. The proposal is to make the rest match them, not to invent a new
+pattern. ("The rest" is four services, not three: `me` does not depend on
+`@acme/db` directly, but it reaches it transitively through `@acme/api` and so
+carries its own `DATABASE_URL`.)
 
 This also corrects a common mental model: "everything goes through the pooler"
 has not been true for some time.
@@ -179,24 +187,66 @@ of work. Spent on a component that, per §1, is relieving no measurable pressure
 
 The order is load-bearing. Each step must land before the next begins.
 
-1. **Bound the application pool.** Set an explicit `max` on the `postgres.js`
-   client (3–5 is ample at `containerConcurrency: 80`, where a Node process
-   still runs one query at a time per request), and set a deliberate `maxScale`
-   per service instead of inheriting 100. Verify the arithmetic against 400,
-   including the direct connectors from §3. Example that fits: 3 services ×
-   `maxScale` 20 × `max` 5 = 300, leaving 100 of headroom.
-2. **Add the connection alert.** Alert on `num_backends` against 400 for
-   `f3data`. A threshold near 60% (240) would have stayed silent across the
-   entire measured window while still catching a leak. This must exist _before_
-   the pooler is removed — otherwise one change removes both the guardrail and
-   the alarm.
-3. **Migrate `api`, `map`, and `admin` to the Cloud SQL connector**, matching
-   how `auth` already connects. Re-enable SSL in `getDbUrl()` and drop
-   `prepare: false`. Test the prepared-statement change deliberately: it is a
-   real behavior change, not a flag flip.
+1. **Bound the application pool.** ✅ **Done** — [#901](https://github.com/F3-Nation/f3-nation/pull/901)
+   set `max: 5`, `idle_timeout: 20`, `connect_timeout: 10` on the `postgres.js`
+   client and gave each service a deliberate `--max-instances` instead of
+   inheriting 100. [#911](https://github.com/F3-Nation/f3-nation/pull/911) added
+   the client-side queue timeout, which is pooler-agnostic and carries over
+   unchanged. Retune `--max-instances` to 15 at cutover: 4 services × 15 ×
+   `max` 5 = 300, leaving ~100 under the 400 ceiling for the direct connectors
+   from §3.
+2. **Put the monitors in place, and let them run against the _current_
+   architecture first.** Removing the pooler removes the last automatic ceiling
+   on connections; something has to hold that job afterward, and it has to be
+   proven before the change, not after. Three monitors, all in Sentry (org
+   `f3-nation`, project `maps-nextjs`):
+   - **Uptime monitor on a database-backed health endpoint.** `/v1/ping` returns
+     `{alive: true}` without touching Postgres, so it would stay green through a
+     total database outage. Add a `db` check (`select 1`, 1s timeout) to
+     `@f3nation/health` — the package already has the contract and timeout
+     machinery — expose `/health` on `api`, `map`, `admin`, and `me`, and return
+     503 when that check is `down`. One monitor per service per environment,
+     1-minute interval, alarm after 3 consecutive failures.
+   - **Cron monitor on the connection budget.** A Cloud Run Job on Cloud
+     Scheduler, every 5 minutes, samples `pg_stat_activity` and checks in with
+     Sentry — `error` when total backends reach 240 (60% of 400, a threshold
+     that would have stayed silent across the entire measured window). Group the
+     sample by `client_addr` and attach it as check-in context; that also
+     settles §8. Keep a Cloud Monitoring alert on `num_backends` alongside it: a
+     cron monitor is only as alive as its job, and the platform alert is the
+     independent backstop.
+   - **Issue alert on connection-failure signatures** — `CONNECT_TIMEOUT`,
+     `ECONNREFUSED`, `sorry, too many clients already`, `terminating
+connection`, and #911's query timeout — above 5 events in 5 minutes. Note
+     that `apps/admin` and `apps/me` have no Sentry SDK today, so this monitor
+     is blind to two of the four services until one is added.
+
+   Hold here until every monitor has been green for 48 hours against today's
+   PgBouncer topology. That baseline is the point: a monitor that has never been
+   observed reporting _normal_ cannot be trusted to report _abnormal_.
+
+3. **Migrate `api`, `map`, `admin`, and `me` to the Cloud SQL connector**,
+   matching how `auth` already connects. Staging first, all four, soaked for a
+   week — then deliberately induce connection pressure and confirm each monitor
+   alarms and a rollback recovers. Production follows one service per day, `api`
+   first, each cutover watched actively for an hour and soaked 24 hours before
+   the next.
+
+   **Any monitor alarming rolls that service back**, stops the sequence, and the
+   cause gets diagnosed before it resumes. Latency p95 more than 50% above the
+   24-hour pre-cutover baseline counts as an alarm.
+
+   Re-enabling SSL in `getDbUrl()` and dropping `prepare: false` are _not_ part
+   of the cutover — they land in step 5, so that a rollback during step 3 is
+   only ever a connection-string change. The prepared-statement switch is a real
+   behavior change, not a flag flip, and deserves its own PR and its own test.
+
 4. **Run both paths for a week.** PgBouncer stays up and reachable throughout.
-5. **Delete**, in this order: the VM, the `pgbouncer` firewall rule, and the
-   `34.172.230.30` entry in Cloud SQL's authorized networks.
+5. **Delete**, in this order: the VM (stopped for 30 days first), the
+   `pgbouncer` firewall rule, and the `34.172.230.30` entry in Cloud SQL's
+   authorized networks. Then the cleanup PR: `prepare: true`, SSL back on,
+   Cloud SQL `sslMode` tightened, and the 400-connection budget arithmetic
+   written somewhere visible in the repository.
 
 ### Rollback
 
@@ -209,10 +259,36 @@ Note that two services currently pin the pooler's raw IP (`34.172.230.30`)
 rather than its DNS name. Normalizing those first makes both the cutover and the
 rollback a single consistent change.
 
+Faster, where it works: `DATABASE_URL` is configured on the Cloud Run service
+out of band — `_deploy-cloudrun.yml` passes only `image` and `flags` to
+`deploy-cloudrun` and never sets `env_vars` or `secrets` — so the connection
+string is baked into the revision, and rollback is a traffic shift measured in
+seconds rather than a redeploy measured in minutes:
+
+```bash
+gcloud run services update-traffic <service> \
+  --to-revisions <pre-cutover-revision>=100 \
+  --region us-central1 --project <project>
+```
+
+**Confirm this before the first production cutover.** If `DATABASE_URL` turns
+out to be a Secret Manager reference pinned to `:latest` rather than a literal
+environment variable, the container re-reads the secret at start and a revision
+rollback restores nothing — rollback then falls back to editing the secret and
+redeploying. Which of the two is true determines what "roll back on alarm"
+actually costs, so it is worth the five minutes to check.
+
+Two things must stay untouched for any of this to work: the PgBouncer VM keeps
+running and keeps its entry in Cloud SQL's authorized networks, and the `6432`
+firewall rule stays open until decommission. Closing that rule early — it is a
+legitimate finding in its own right — would remove the rollback path.
+
 ## 8. Open question
 
 **The 88-connection peak is unattributed, and it should be attributed before
-step 3.**
+step 3.** Step 2 now answers it as a side effect: the connection-budget job
+samples `pg_stat_activity` grouped by `client_addr` every five minutes, so the
+48-hour baseline produces the attribution before any traffic moves.
 
 88 backends on `f3_prod` exceeds PgBouncer's own `max_db_connections = 40`, so
 the pooler cannot be the source of all of it. Two explanations, not mutually
