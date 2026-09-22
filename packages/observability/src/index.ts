@@ -119,7 +119,9 @@ export async function captureException(
     // Never propagate — but always leave a trace so a pipeline failure
     // doesn't look identical to "no errors occurred." console.error, not
     // logError: this function IS the logger's errorReporter target, so
-    // logError here would re-enter it.
+    // logError here would re-enter it. One of the three documented
+    // exceptions to AGENTS.md's no-console rule — see
+    // docs/OBSERVABILITY_PLAN.md §6.
     console.error("observability.capture_exception_failed", reportErr);
   }
 }

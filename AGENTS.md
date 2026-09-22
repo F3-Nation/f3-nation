@@ -57,6 +57,12 @@ Reusable agent skills (procedural runbooks in the
   [`@acme/logger`](packages/logger/README.md), imported via the app's
   `lib/logging`. Reserve the raw `logger` for request-scoped children
   (`logger.child({ requestId })`).
+  - One carve-out: the error-reporting pipeline's own failure paths —
+    `@acme/observability`, and `global-error.tsx`, which is browser-only
+    where pino does not run. `logError` there would re-enter the reporter
+    that just failed, so those sites use `console.error` deliberately and
+    each says so in a comment. Nothing else gets this exemption; see
+    [`docs/OBSERVABILITY_PLAN.md`](docs/OBSERVABILITY_PLAN.md).
 - Signature is `(event, ctx, err)` — **`event` first**, unlike pino's native
   methods. `event` is a fixed dot-namespaced literal
   (`<area>.<feature>.<outcome>`, `snake_case` segments); per-occurrence data goes

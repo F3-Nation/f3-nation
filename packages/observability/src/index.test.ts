@@ -261,3 +261,73 @@ describe("registerLoggerErrorReporter", () => {
     expect(reported.stack).toBe(original.stack);
   });
 });
+
+describe("registerLoggerErrorReporter redaction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("redacts sensitive context before it leaves the process", async () => {
+    const { registerObservability, registerLoggerErrorReporter } =
+      await freshModule();
+    registerObservability(config);
+    registerLoggerErrorReporter();
+    const reporter = setErrorReporterMock.mock.calls[0]?.[0] as (
+      event: string,
+      ctx: Record<string, unknown>,
+      err?: unknown,
+    ) => void;
+
+    reporter("api.auth.failed", {
+      orgId: 7,
+      authorization: "Bearer abc123",
+      request: { headers: { cookie: "session=xyz" } },
+    });
+
+    await vi.waitFor(() => {
+      expect(captureExceptionImmediateMock).toHaveBeenCalled();
+    });
+    const [, , properties] = captureExceptionImmediateMock.mock.calls[0] as [
+      Error,
+      undefined,
+      Record<string, unknown>,
+    ];
+    expect(properties.orgId).toBe(7);
+    expect(properties.authorization).toBe("[redacted]");
+    // Nested values are stringified into the attribute, so assert on the
+    // serialized form rather than the object shape.
+    expect(JSON.stringify(properties)).not.toContain("abc123");
+    expect(JSON.stringify(properties)).not.toContain("session=xyz");
+  });
+});
+
+describe("flushObservability", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("is a no-op before registerObservability is called", async () => {
+    const { flushObservability } = await freshModule();
+    await expect(flushObservability()).resolves.toBeUndefined();
+  });
+
+  it("resolves after a registered pipeline flushes", async () => {
+    const { registerObservability, captureException, flushObservability } =
+      await freshModule();
+    registerObservability(config);
+    await captureException(new Error("boom"));
+
+    await expect(flushObservability()).resolves.toBeUndefined();
+  });
+
+  it("resolves rather than rejecting when the flush itself fails", async () => {
+    const { registerObservability, flushObservability } = await freshModule();
+    registerObservability(config);
+    captureExceptionImmediateMock.mockRejectedValueOnce(
+      new Error("posthog down"),
+    );
+
+    // Shutdown must never be blocked or diverted by the error tracker.
+    await expect(flushObservability(50)).resolves.toBeUndefined();
+  });
+});

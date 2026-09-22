@@ -23,10 +23,10 @@ export default defineConfig({
         // covered) out of this app into @acme/observability — the remaining
         // src denominator has proportionally more uncovered bootstrap code.
         autoUpdate: true,
-        statements: 99.02,
+        statements: 99.11,
         branches: 100,
-        functions: 94.11,
-        lines: 99,
+        functions: 94.73,
+        lines: 99.09,
       },
     },
     exclude: [

@@ -7,15 +7,17 @@ import { coverageConfigDefaults } from "vitest/config";
  * thresholds. Generalized globs cover filename variants across apps
  * (next.config.ts vs .js, postcss.config.mjs vs .cjs).
  *
- * instrumentation.ts stays here even though it wires up error capture: since
- * the OTel rework it is init boilerplate delegating to @acme/observability,
- * where the testable logic (captureException, registerLoggerErrorReporter)
- * lives — see packages/observability/src/index.test.ts.
+ * instrumentation.ts / instrumentation-client.ts are deliberately NOT listed
+ * here. They were, as init boilerplate, but they carry real decisions worth
+ * pinning: the Node-runtime guard, reporter registration, `onRequestError`
+ * reporting the static route template rather than the resolved path (a PII
+ * rule), and the client's masking + environment-tagging posture. Only map and
+ * api have these files and both are now covered — see
+ * `apps/{api,map}/__tests__/instrumentation.test.ts` and
+ * `apps/map/__tests__/instrumentation-client.test.ts`.
  */
 export const bootstrapCoverageExclude = [
   "**/next.config.{js,ts,mjs}",
-  "**/instrumentation.ts",
-  "**/instrumentation-client.ts",
   "**/tailwind.config.{js,ts,cjs,mjs}",
   "**/postcss.config.{js,ts,cjs,mjs}",
   "**/middleware.{js,ts}",

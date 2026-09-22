@@ -17,14 +17,15 @@ export default defineConfig({
       include: coverageInclude,
       exclude: coverageExclude,
       thresholds: {
-        // Lowered when the OTel rework moved posthog-server.ts (fully
-        // covered) out of this app into @acme/observability — the remaining
-        // src denominator has proportionally more uncovered bootstrap code.
+        // The OTel rework moved posthog-server.ts out of this app into
+        // @acme/observability, then brought instrumentation.ts and
+        // instrumentation-client.ts back into the denominator with tests of
+        // their own (see tooling/vitest/coverage.ts) — net upward.
         autoUpdate: true,
-        statements: 27.89,
-        branches: 27.07,
-        functions: 22.1,
-        lines: 27.91,
+        statements: 28.73,
+        branches: 27.66,
+        functions: 22.82,
+        lines: 28.73,
       },
     },
     exclude: [

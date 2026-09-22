@@ -112,7 +112,9 @@ export class PostHogExceptionExporter implements LogRecordExporter {
       // to "no errors occurred." Deliberately console.error, not logError:
       // this exporter sits at the bottom of the logger's errorReporter
       // bridge, so logError here would re-enter it via
-      // packages/logger/src/index.ts's reportable().
+      // packages/logger/src/index.ts's reportable(). One of the three
+      // documented exceptions to AGENTS.md's no-console rule — see
+      // docs/OBSERVABILITY_PLAN.md §6.
       console.error("posthog.capture_exception_failed", reportErr);
     }
   }

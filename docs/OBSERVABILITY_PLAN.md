@@ -36,6 +36,7 @@
 - [3. PostHog vs Sentry (free tier, 2026)](#3-posthog-vs-sentry-free-tier-2026)
 - [4. Phased rollout](#4-phased-rollout)
 - [5. Human-owned callouts](#5-human-owned-callouts)
+- [6. The `console.error` carve-out](#6-the-consoleerror-carve-out)
 
 ---
 
@@ -394,3 +395,33 @@ blockAllMedia: false` in `apps/map/src/instrumentation-client.ts` means
    introduces an in-process counter, queue, or cache used as a source of truth
    is an automatic reject
    ([`AI_DEVELOPMENT_GUIDE.md`](AI_DEVELOPMENT_GUIDE.md) rule 5).
+
+---
+
+## 6. The `console.error` carve-out
+
+[`AGENTS.md`](../AGENTS.md) says never `console.*`. Three sites in this
+workstream break that rule on purpose:
+
+| Site | Why |
+| --- | --- |
+| `packages/observability/src/index.ts` (`captureException` catch) | This function *is* the logger's `errorReporter` target. `logError` here re-enters it — infinite recursion. |
+| `packages/observability/src/posthog-exporter.ts` (export-failure catch) | Same pipeline, one layer down: the exporter's own failure cannot be reported through the exporter. |
+| `apps/map/src/app/global-error.tsx` (report-failure catch) | Browser-only, last-resort UI with no error boundary above it. `@acme/logger` is pino — it does not run here, so there is no approved alternative. |
+
+Each is wrapped so the secondary failure can never escape, and each carries a
+comment naming this section.
+
+Why not silence them instead? Because then a pipeline outage — a blocked
+ingest host, an expired key, a PostHog incident — is indistinguishable from
+"no errors occurred", which is the exact failure mode error tracking exists to
+prevent. A console line is a weak signal, but it is the only one available
+from inside the reporter's own failure path.
+
+Why no ESLint exemption? There is no `no-console` rule in
+`tooling/eslint/base.js` to exempt from — the convention is enforced by review,
+not lint. Adding a disable directive would trip `reportUnusedDisableDirectives`
+and fail the lint job.
+
+**This list is exhaustive.** A new `console.*` outside these three files is a
+review reject, not a precedent.
