@@ -252,7 +252,7 @@ export const MDTable = <T,>(params: MDTableProps<T>) => {
                         column.toggleVisibility(!!value)
                       }
                     >
-                      {column.id}
+                      {column.columnDef.meta?.name ?? column.id}
                     </DropdownMenuCheckboxItem>
                   );
                 })}

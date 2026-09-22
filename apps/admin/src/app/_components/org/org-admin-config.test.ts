@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { routes } from "@acme/shared/app/constants";
+import { ORG_ALL_SORT_IDS } from "@acme/shared/app/org-sorting";
 import { OrgType } from "@acme/shared/app/enums";
 import { orgTypeDisplay, orgTypesAbove } from "@acme/shared/app/org-hierarchy";
 import { orgAdminConfig, resolveOrgSegment } from "./org-admin-config";
@@ -69,16 +70,25 @@ describe("organization table ancestry configuration", () => {
     ]);
   });
 
-  it("never ties a resolved-ancestor column to a server sort id", () => {
+  it("maps only Area ancestors to the new server sort ids", () => {
     for (const orgType of OrgType) {
       const config = orgAdminConfig[orgType];
       for (const ancestor of config.displayAncestors ?? []) {
         const column = config.columns.find((item) => item.key === ancestor);
-        expect(column?.id).toBeUndefined();
+        expect(column?.id).toBe(
+          orgType === "area" ? `${ancestor}Name` : undefined,
+        );
       }
     }
-    expect(
-      orgAdminConfig.area.columns.every((column) => column.sortable === false),
-    ).toBe(true);
   });
+});
+
+// API's mapping is exhaustively typed against the same list.
+it("uses supported API keys for every server-sorted ancestor column", () => {
+  for (const config of Object.values(orgAdminConfig)) {
+    if (!config.serverSorting) continue;
+    for (const column of config.columns) {
+      expect(ORG_ALL_SORT_IDS).toContain(column.id ?? column.key);
+    }
+  }
 });

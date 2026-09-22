@@ -63,13 +63,16 @@ export const findAncestorByType = <T extends OrgHierarchyNode>(
   org: T,
   orgType: (typeof OrgType)[number],
   orgById: ReadonlyMap<number, T>,
+  maxDepth = Infinity,
 ) => {
   const visited = new Set<number>([org.id]);
   let parentId = org.parentId;
+  let depth = 0;
 
-  while (parentId !== null) {
+  while (parentId !== null && depth < maxDepth) {
     if (visited.has(parentId)) return undefined;
 
+    depth += 1;
     visited.add(parentId);
     const parent = orgById.get(parentId);
     if (!parent) return undefined;
