@@ -1,8 +1,10 @@
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
 from utilities.constants import ENABLE_DEBUGGING
@@ -930,6 +932,7 @@ class BlockView:
         parent_metadata: dict = None,
         close_button_text: str = "Close",
         notify_on_close: bool = False,
+        raise_on_error: bool = False,
     ) -> dict:
         blocks = self.as_form_field()
 
@@ -952,7 +955,21 @@ class BlockView:
                 res = client.views_update(external_id=actions.DEBUG_FORM_EXTERNAL_ID, view=view)
             else:
                 res = client.views_update(view_id=view_id, view=view)
-        except Exception:
+        except SlackApiError as exc:
+            logging.getLogger(__name__).error(
+                "slack.modal.update_failed error=%s",
+                exc.response.get("error"),
+            )
+            if raise_on_error:
+                raise
+            res = None
+        except Exception as exc:
+            logging.getLogger(__name__).error(
+                "slack.modal.update_failed exception_type=%s",
+                type(exc).__name__,
+            )
+            if raise_on_error:
+                raise
             # TODO: handle "not found" errors; post new instead of update?
             res = None
 

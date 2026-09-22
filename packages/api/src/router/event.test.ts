@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, inArray, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -42,6 +42,7 @@ describe("Event Router", () => {
   // Track created entities for cleanup
   const createdEventIds: number[] = [];
   const createdEventTypeIds: number[] = [];
+  const createdEventTagIds: number[] = [];
   const createdLocationIds: number[] = [];
   const createdOrgIds: number[] = [];
 
@@ -69,6 +70,21 @@ describe("Event Router", () => {
       for (const eventTypeId of createdEventTypeIds.reverse()) {
         try {
           await cleanup.eventType(eventTypeId);
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+      for (const eventTagId of createdEventTagIds.reverse()) {
+        try {
+          await db
+            .delete(schema.eventTagsXEvents)
+            .where(eq(schema.eventTagsXEvents.eventTagId, eventTagId));
+          await db
+            .delete(schema.eventTagsXEventInstances)
+            .where(eq(schema.eventTagsXEventInstances.eventTagId, eventTagId));
+          await db
+            .delete(schema.eventTags)
+            .where(eq(schema.eventTags.id, eventTagId));
         } catch {
           // Ignore errors during cleanup
         }
@@ -164,6 +180,31 @@ describe("Event Router", () => {
     return eventType;
   };
 
+  const createTestEventTag = async () => {
+    const [eventTag] = await db
+      .insert(schema.eventTags)
+      .values({ name: `Test Event Tag ${uniqueId()}`, isActive: true })
+      .returning();
+    if (eventTag) createdEventTagIds.push(eventTag.id);
+    return eventTag;
+  };
+
+  const createScopedEventTag = async (
+    specificOrgId: number,
+    isActive = true,
+  ) => {
+    const [eventTag] = await db
+      .insert(schema.eventTags)
+      .values({
+        name: `Scoped Event Tag ${uniqueId()}`,
+        specificOrgId,
+        isActive,
+      })
+      .returning();
+    if (eventTag) createdEventTagIds.push(eventTag.id);
+    return eventTag;
+  };
+
   describe("all", () => {
     it("should include events without a location (locationId null)", async () => {
       const session = await createAdminSession();
@@ -247,6 +288,50 @@ describe("Event Router", () => {
 
       expect(result.events?.length).toBeGreaterThanOrEqual(1);
       expect(result.events?.length).toBeLessThanOrEqual(50);
+    });
+
+    it("should include events without a location (locationId null)", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create region");
+
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+
+      const [created] = await db
+        .insert(schema.events)
+        .values({
+          name: `Map No Location Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+
+      if (created) {
+        createdEventIds.push(created.id);
+      }
+
+      const client = createTestClient();
+      const result = await client.map.event.all({
+        aoIds: [ao.id],
+        pageIndex: 0,
+        pageSize: 50,
+        statuses: ["active"],
+      });
+
+      const rovingEvent = result.events?.find((e) => e.id === created?.id);
+      expect(rovingEvent).toBeDefined();
+      expect(rovingEvent?.locationId).toBeNull();
+      expect(rovingEvent?.locationName).toBeNull();
+      expect(rovingEvent?.location).toBeNull();
     });
 
     it("should return response shape without pre-existing data", async () => {
@@ -912,6 +997,405 @@ describe("Event Router", () => {
       }
     });
 
+    it("should persist event tags and expose them in event reads", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const tags = [await createTestEventTag(), await createTestEventTag()];
+      const eventType = await createTestEventType();
+      if (!tags[0] || !tags[1] || !eventType) return;
+      const tagIds = [tags[0].id, tags[1].id];
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+      const client = createTestClient();
+      const created = await client.event.crupdate({
+        name: `Tagged Series ${uniqueId()}`,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate: "2026-01-01",
+        endDate: "2026-03-31",
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        eventTagIds: [tagIds[0]!, tagIds[1]!, tagIds[0]!],
+        email: null,
+      });
+      if (!created.event) return;
+      createdEventIds.push(created.event.id);
+      const detail = await client.event.byId({ id: created.event.id });
+      expect(detail.event?.eventTagIds.sort()).toEqual(tagIds.sort());
+      const list = await client.event.all({
+        aoIds: [ao.id],
+        pageIndex: 0,
+        pageSize: 100,
+      });
+      expect(
+        list.events
+          .find((event) => event.id === created.event!.id)
+          ?.eventTagIds.sort(),
+      ).toEqual(tagIds.sort());
+    });
+
+    it("should clear series and future instance tags when explicitly cleared", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const tag = await createTestEventTag();
+      const eventType = await createTestEventType();
+      if (!tag || !eventType) return;
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+
+      const client = createTestClient();
+      const startDate = nextFutureMonday(1);
+      const endDate = nextFutureMonday(4);
+      const created = await client.event.crupdate({
+        name: `Clear Tagged Series ${uniqueId()}`,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate,
+        endDate,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        eventTagIds: [tag.id],
+        email: null,
+      });
+      if (!created.event) return;
+      createdEventIds.push(created.event.id);
+
+      const instancesBefore = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, created.event.id));
+      expect(instancesBefore.length).toBeGreaterThan(0);
+
+      await client.event.crupdate({
+        id: created.event.id,
+        name: created.event.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate,
+        endDate,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        eventTagIds: [],
+        email: null,
+      });
+
+      const eventTags = await db
+        .select()
+        .from(schema.eventTagsXEvents)
+        .where(eq(schema.eventTagsXEvents.eventId, created.event.id));
+      const instanceTags = await db
+        .select()
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          inArray(
+            schema.eventTagsXEventInstances.eventInstanceId,
+            instancesBefore.map((instance) => instance.id),
+          ),
+        );
+      expect(eventTags).toEqual([]);
+      expect(instanceTags).toEqual([]);
+    });
+
+    it("should preserve non-recurring event tags when omitted", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const tag = await createTestEventTag();
+      const eventType = await createTestEventType();
+      if (!tag || !eventType) return;
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Tagged Nonrecurring ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: null,
+          startDate: nextFutureMonday(1),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+      await db.insert(schema.eventTagsXEvents).values({
+        eventId: event.id,
+        eventTagId: tag.id,
+      });
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+
+      await createTestClient().event.crupdate({
+        id: event.id,
+        name: `${event.name} Updated`,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: null,
+        startTime: "0530",
+        endTime: "0615",
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: null,
+        recurrenceInterval: null,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      const tags = await db
+        .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
+        .from(schema.eventTagsXEvents)
+        .where(eq(schema.eventTagsXEvents.eventId, event.id));
+      expect(tags).toEqual([{ eventTagId: tag.id }]);
+    });
+
+    it.each([
+      ["nonexistent", 999999999],
+      ["inactive", "inactive"],
+      ["cross-region", "cross-region"],
+    ])(
+      "should reject %s tags without partial event mutations",
+      async (_label, tagCase) => {
+        const region = await createTestRegion();
+        if (!region) return;
+        const ao = await createTestAO(region.id);
+        if (!ao) return;
+        const otherRegion = await createTestRegion();
+        if (!otherRegion) return;
+        const tag = await createTestEventTag();
+        const parentRegionTag = await createScopedEventTag(region.id);
+        const inactiveTag = await createScopedEventTag(ao.id, false);
+        const crossRegionTag = await createScopedEventTag(otherRegion.id);
+        const eventType = await createTestEventType();
+        if (
+          !tag ||
+          !parentRegionTag ||
+          !inactiveTag ||
+          !crossRegionTag ||
+          !eventType
+        )
+          return;
+        const [event] = await db
+          .insert(schema.events)
+          .values({
+            name: `Invalid Tag Event ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: null,
+            dayOfWeek: null,
+            startDate: nextFutureMonday(1),
+            isActive: true,
+            highlight: false,
+            isPrivate: false,
+          })
+          .returning();
+        if (!event) return;
+        createdEventIds.push(event.id);
+        await db.insert(schema.eventTagsXEvents).values({
+          eventId: event.id,
+          eventTagId: tag.id,
+        });
+        await mockAuthWithSession(
+          createEditorSession({ orgId: ao.id, orgName: ao.name }),
+        );
+
+        const invalidTagId =
+          typeof tagCase === "number"
+            ? tagCase
+            : tagCase === "inactive"
+              ? inactiveTag.id
+              : crossRegionTag.id;
+        const error = await createTestClient()
+          .event.crupdate({
+            id: event.id,
+            name: `${event.name} Mutated?`,
+            aoId: ao.id,
+            regionId: region.id,
+            locationId: null,
+            dayOfWeek: null,
+            startTime: "0530",
+            endTime: "0615",
+            startDate: event.startDate,
+            endDate: null,
+            recurrencePattern: null,
+            recurrenceInterval: null,
+            indexWithinInterval: null,
+            highlight: false,
+            isActive: true,
+            eventTypeIds: [eventType.id],
+            eventTagIds: [invalidTagId],
+            email: null,
+          })
+          .then(
+            () => undefined,
+            (rejection: unknown) => rejection,
+          );
+        expect(error).toMatchObject({ code: "BAD_REQUEST" });
+
+        const [unchanged] = await db
+          .select({ name: schema.events.name })
+          .from(schema.events)
+          .where(eq(schema.events.id, event.id));
+        const associations = await db
+          .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
+          .from(schema.eventTagsXEvents)
+          .where(eq(schema.eventTagsXEvents.eventId, event.id));
+        expect(unchanged?.name).toBe(event.name);
+        expect(associations).toEqual([{ eventTagId: tag.id }]);
+      },
+    );
+
+    it("should accept nationwide and direct parent-region tags", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const nationwideTag = await createTestEventTag();
+      const parentRegionTag = await createScopedEventTag(region.id);
+      const eventType = await createTestEventType();
+      if (!nationwideTag || !parentRegionTag || !eventType) return;
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+      const result = await createTestClient().event.crupdate({
+        name: `Valid Scoped Tags ${uniqueId()}`,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: null,
+        startTime: "0530",
+        endTime: "0615",
+        startDate: nextFutureMonday(1),
+        endDate: null,
+        recurrencePattern: null,
+        recurrenceInterval: null,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        eventTagIds: [nationwideTag.id, parentRegionTag.id],
+        email: null,
+      });
+      if (result.event) {
+        createdEventIds.push(result.event.id);
+        const tags = await db
+          .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
+          .from(schema.eventTagsXEvents)
+          .where(eq(schema.eventTagsXEvents.eventId, result.event.id));
+        expect(tags.map(({ eventTagId }) => eventTagId).sort()).toEqual(
+          [nationwideTag.id, parentRegionTag.id].sort(),
+        );
+      }
+    });
+
+    it("should carry existing event tags onto instances when starting a series", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const tag = await createTestEventTag();
+      if (!tag) return;
+      const eventType = await createTestEventType();
+      if (!eventType) return;
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Converted Tagged Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: null,
+          startDate: nextFutureMonday(1),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+      await db.insert(schema.eventTagsXEvents).values({
+        eventId: event.id,
+        eventTagId: tag.id,
+      });
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+      const result = await createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      expect(result.event?.id).toBe(event.id);
+      const instances = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, event.id));
+      expect(instances.length).toBeGreaterThan(0);
+
+      const tags = await db
+        .select({ eventTagId: schema.eventTagsXEventInstances.eventTagId })
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          inArray(
+            schema.eventTagsXEventInstances.eventInstanceId,
+            instances.map((instance) => instance.id),
+          ),
+        );
+      expect(tags).toHaveLength(instances.length);
+      expect(tags.every(({ eventTagId }) => eventTagId === tag.id)).toBe(true);
+    });
+
     it("should require all mandatory fields", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -1430,7 +1914,6 @@ describe("Event Router", () => {
 
         if (!seriesEvent) return;
         createdEventIds.push(seriesEvent.id);
-
         // Create some instances
         const [instance1] = await db
           .insert(schema.eventInstances)
@@ -1510,6 +1993,9 @@ describe("Event Router", () => {
         const eventType = await createTestEventType();
         if (!eventType) return;
 
+        const eventTag = await createTestEventTag();
+        if (!eventTag) return;
+
         // Use dynamic dates so the series is always active relative to today
         const seriesStartDate = nextFutureMonday(1);
         const seriesEndDate = nextFutureMonday(12);
@@ -1536,6 +2022,10 @@ describe("Event Router", () => {
 
         if (!seriesEvent) return;
         createdEventIds.push(seriesEvent.id);
+        await db.insert(schema.eventTagsXEvents).values({
+          eventId: seriesEvent.id,
+          eventTagId: eventTag.id,
+        });
 
         // Create initial instance on Monday
         const [instance1] = await db
@@ -1602,6 +2092,27 @@ describe("Event Router", () => {
           .where(eq(schema.eventInstances.seriesId, seriesEvent.id));
 
         expect(newInstances.length).toBeGreaterThan(0);
+        const recreatedInstanceIds = newInstances.map(
+          (instance) => instance.id,
+        );
+        const recreatedTags = await db
+          .select()
+          .from(schema.eventTagsXEventInstances)
+          .where(
+            inArray(
+              schema.eventTagsXEventInstances.eventInstanceId,
+              recreatedInstanceIds,
+            ),
+          );
+        expect(
+          recreatedTags.every((tag) => tag.eventTagId === eventTag.id),
+        ).toBe(true);
+        expect(recreatedTags).toHaveLength(recreatedInstanceIds.length);
+        for (const instanceId of recreatedInstanceIds) {
+          expect(
+            recreatedTags.filter((tag) => tag.eventInstanceId === instanceId),
+          ).toHaveLength(1);
+        }
       });
 
       it("should create weekly instances when recurrencePattern is null (defaults to weekly)", async () => {

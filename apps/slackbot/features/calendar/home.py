@@ -31,7 +31,14 @@ from features.calendar.event_preblast import (
     post_hc_thread_reply,
 )
 from utilities import constants
-from utilities.constants import GCP_IMAGE_URL, LOCAL_DEVELOPMENT, S3_IMAGE_URL
+from utilities.constants import (
+    GCP_IMAGE_URL,
+    LOCAL_DEVELOPMENT,
+    MAX_CALENDAR_WEEKS,
+    S3_IMAGE_URL,
+    WEEK_LABELS,
+    WEEK_SCHEDULE_LABELS,
+)
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import CalendarHomeQuery, get_admin_users, get_aoq_users, home_schedule_query
 from utilities.helper_functions import (
@@ -44,6 +51,32 @@ from utilities.helper_functions import (
     sort_by_name,
 )
 from utilities.slack import actions, orm
+
+SLACK_MODAL_BLOCK_LIMIT = 100
+
+
+def _append_calendar_event_group(
+    blocks: list[orm.BaseBlock],
+    event_block: orm.SectionBlock,
+    event_date: datetime.date,
+    active_date: datetime.date | None,
+) -> tuple[datetime.date | None, bool]:
+    """Append a complete date/event group when it fits in Slack's modal limit."""
+    candidate_blocks: list[orm.BaseBlock] = []
+    if event_date != active_date:
+        candidate_blocks.extend(
+            [
+                orm.DividerBlock(),
+                orm.HeaderBlock(label=f":calendar: {event_date.strftime('%A, %B %d')}"),
+            ]
+        )
+    candidate_blocks.append(event_block)
+
+    if len(blocks) + len(candidate_blocks) > SLACK_MODAL_BLOCK_LIMIT:
+        return active_date, False
+
+    blocks.extend(candidate_blocks)
+    return event_date, True
 
 
 def handle_event_preblast_select_button(
@@ -218,15 +251,9 @@ def build_home_form(
     start_time = time.time()
 
     # Build the event list
-    active_date = datetime.date(2020, 1, 1)
-    block_count = 1
+    active_date: datetime.date | None = None
     for event in events:
         option_names: List[str] = []
-        if event.event.start_date != active_date:
-            active_date = event.event.start_date
-            blocks.append(orm.DividerBlock())
-            blocks.append(orm.HeaderBlock(label=f":calendar: {active_date.strftime('%A, %B %d')}"))
-            block_count += 2
         if event.event.series_exception == Series_Exception.closed:
             label = f"{event.org.name} {' / '.join(t.name for t in event.event_types)} - CLOSED :no_entry:"
             if user_is_admin:
@@ -234,8 +261,6 @@ def build_home_form(
             else:
                 option_names.append("Event Closed")
         else:
-            if block_count > 90:
-                break
             if not user_is_admin:
                 if event.user_q:
                     option_names.append("Edit Preblast")
@@ -268,16 +293,21 @@ def build_home_form(
                     option_names.append("Edit Preblast")
                 else:
                     option_names.append("Edit Backblast")
-        blocks.append(
-            orm.SectionBlock(
-                label=label,
-                element=orm.OverflowElement(
-                    action=f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}",
-                    options=orm.as_selector_options(option_names),
-                ),
-            )
+        event_block = orm.SectionBlock(
+            label=label,
+            element=orm.OverflowElement(
+                action=f"{actions.CALENDAR_HOME_EVENT}_{event.event.id}",
+                options=orm.as_selector_options(option_names),
+            ),
         )
-        block_count += 1
+        active_date, appended = _append_calendar_event_group(
+            blocks=blocks,
+            event_block=event_block,
+            event_date=event.event.start_date,
+            active_date=active_date,
+        )
+        if not appended:
+            break
 
     # TODO: add "next page" button
     form = orm.BlockView(blocks=blocks)
@@ -294,6 +324,7 @@ def build_home_form(
             callback_id=actions.CALENDAR_HOME_CALLBACK_ID,
             submit_button_text="None",
             parent_metadata=metadata,
+            raise_on_error=view_id == safe_get(body, actions.LOADING_ID),
         )
     else:
         form.post_modal(
@@ -316,61 +347,40 @@ def build_calendar_image_form(
     context: dict,
     region_record: SlackSettings,
 ):
-    this_week_valid = False
-    next_week_valid = False
-    if LOCAL_DEVELOPMENT:
+    num_weeks = safe_convert(region_record.calendar_weeks_shown, int) or 2
+    num_weeks = max(1, min(num_weeks, MAX_CALENDAR_WEEKS))
+    weeks = WEEK_LABELS[:num_weeks]
+
+    valid_weeks: List[str] = []
+    image_urls: dict[str, str] = {}
+    for week in weeks:
+        image_name = getattr(region_record, f"calendar_image_{week}", None)
+        if not image_name:
+            # No image generated yet - skip the (guaranteed to fail) HEAD request so we stay well
+            # inside the few seconds a Slack trigger_id stays valid.
+            continue
+        if LOCAL_DEVELOPMENT:
+            image_url = S3_IMAGE_URL.format(image_name=image_name)
+        else:
+            image_url = GCP_IMAGE_URL.format(bucket="f3nation-calendar-images", image_name=image_name)
         try:
-            this_week_valid = (
-                requests.head(S3_IMAGE_URL.format(image_name=region_record.calendar_image_current)).status_code == 200
-            )
-            next_week_valid = (
-                requests.head(S3_IMAGE_URL.format(image_name=region_record.calendar_image_next)).status_code == 200
-            )
+            valid = requests.head(image_url, timeout=2).status_code == 200
         except Exception as e:
-            logger.error(f"Error checking S3 image URLs: {e}")
-        if this_week_valid and next_week_valid:
-            this_week_url = S3_IMAGE_URL.format(
-                image_name=region_record.calendar_image_current or "default.png",
-            )
-            next_week_url = S3_IMAGE_URL.format(
-                image_name=region_record.calendar_image_next or "default.png",
-            )
-    else:
-        try:
-            this_week_valid = (
-                requests.head(
-                    GCP_IMAGE_URL.format(
-                        bucket="f3nation-calendar-images",
-                        image_name=region_record.calendar_image_current or "default.png",
-                    )
-                ).status_code
-                == 200
-            )
-            next_week_valid = (
-                requests.head(
-                    GCP_IMAGE_URL.format(
-                        bucket="f3nation-calendar-images",
-                        image_name=region_record.calendar_image_next or "default.png",
-                    )
-                ).status_code
-                == 200
-            )
-        except Exception as e:
-            logger.error(f"Error checking GCP image URLs: {e}")
-        if this_week_valid and next_week_valid:
-            this_week_url = GCP_IMAGE_URL.format(
-                bucket="f3nation-calendar-images",
-                image_name=region_record.calendar_image_current or "default.png",
-            )
-            next_week_url = GCP_IMAGE_URL.format(
-                bucket="f3nation-calendar-images",
-                image_name=region_record.calendar_image_next or "default.png",
-            )
-    if this_week_valid and next_week_valid:
+            logger.error(f"Error checking calendar image URL for {week} week: {e}")
+            valid = False
+        if valid:
+            valid_weeks.append(week)
+            image_urls[week] = image_url
+
+    if valid_weeks:
         blocks = [
-            orm.ImageBlock(label="This week's schedule", alt_text="Current", image_url=this_week_url),
-            orm.ImageBlock(label="Next week's schedule", alt_text="Next", image_url=next_week_url),
+            orm.ImageBlock(
+                label=WEEK_SCHEDULE_LABELS[week], alt_text=WEEK_SCHEDULE_LABELS[week], image_url=image_urls[week]
+            )
+            for week in valid_weeks
         ]
+        if len(valid_weeks) < len(weeks):
+            blocks.append(orm.SectionBlock(label="Some weeks are still generating and will appear here shortly."))
     else:
         blocks = [orm.SectionBlock(label="No calendar images available. Please wait for them to generate.")]
     form = orm.BlockView(blocks=blocks)

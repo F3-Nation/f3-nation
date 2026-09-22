@@ -56,6 +56,12 @@
       "path": "apps/slackbot",
       "release-type": "python"
     },
+    "apps/analytics": {
+      "component": "analytics",
+      "changelog-path": "CHANGELOG.md",
+      "path": "apps/analytics",
+      "release-type": "python"
+    },
     "packages/api": {
       "component": "pkg-api",
       "changelog-path": "CHANGELOG.md",

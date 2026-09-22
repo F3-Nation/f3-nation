@@ -1,5 +1,5 @@
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   closeModal,
@@ -9,9 +9,28 @@ import {
   useOpenModal,
 } from "~/utils/store/modal";
 
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => {
+  vi.runOnlyPendingTimers();
+  vi.useRealTimers();
+  document.body.style.pointerEvents = "";
+});
+
 describe("modal store", () => {
   beforeEach(() => {
     closeModal(undefined, "all");
+  });
+
+  it("restores page clicks after closing a modal", () => {
+    vi.runOnlyPendingTimers();
+    openModal(ModalType.ADMIN_USERS, { id: 1 });
+    document.body.style.pointerEvents = "none";
+
+    closeModal();
+
+    expect(document.body.style.pointerEvents).toBe("none");
+    vi.runOnlyPendingTimers();
+    expect(document.body.style.pointerEvents).toBe("auto");
   });
 
   it("opens a modal and returns the most recently opened one", () => {
@@ -62,5 +81,30 @@ describe("modal store", () => {
 
     const { result } = renderHook(() => useOpenModal());
     expect(result.current?.type).toBe(ModalType.ADMIN_USERS);
+  });
+});
+
+describe("organization editor stack identity", () => {
+  beforeEach(() => closeModal(undefined, "all"));
+
+  it("replaces the same organization type and restores a different type", () => {
+    openModal(ModalType.ADMIN_ORG, { orgType: "sector", id: 1 });
+    openModal(ModalType.ADMIN_ORG, { orgType: "area", id: 2 });
+    openModal(ModalType.ADMIN_ORG, { orgType: "area", id: 3 });
+    closeModal();
+    const { result } = renderHook(() => useOpenModal());
+    expect(result.current?.data).toEqual({ orgType: "sector", id: 1 });
+  });
+
+  it("targets a single organization type when closing", () => {
+    openModal(ModalType.ADMIN_USERS, { id: 9 });
+    openModal(ModalType.ADMIN_ORG, { orgType: "sector", id: 1 });
+    openModal(ModalType.ADMIN_ORG, { orgType: "area", id: 2 });
+    closeModal(undefined, { type: ModalType.ADMIN_ORG, orgType: "sector" });
+    const { result } = renderHook(() => useOpenModal());
+    expect(result.current?.data).toEqual({ orgType: "area", id: 2 });
+    closeModal();
+    const next = renderHook(() => useOpenModal());
+    expect(next.result.current?.type).toBe(ModalType.ADMIN_USERS);
   });
 });

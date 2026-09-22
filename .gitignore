@@ -49,6 +49,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 
+# Python generated artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
 # turbo
 .turbo
 

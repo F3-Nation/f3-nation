@@ -22,6 +22,9 @@ permissions: {}
 
 jobs:
   reconcile:
+    # Forks inherit the schedule trigger but have no CodeQL default-setup
+    # analysis, so listAlertsForRepo 404s and the job has nothing to do anyway.
+    if: github.repository_owner == 'F3-Nation'
     runs-on: ubuntu-latest
     permissions:
       contents: read # check out the shared renderer

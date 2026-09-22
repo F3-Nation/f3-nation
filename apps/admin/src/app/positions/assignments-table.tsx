@@ -35,19 +35,12 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@acme/ui/avatar";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
+import { compareAssignmentOrgs } from "./assignment-org-order";
+
 type AccessibleOrg = RouterOutputs["org"]["accessible"]["orgs"][number];
 type PositionWithAssignments =
   RouterOutputs["position"]["getAssignments"]["positions"][number];
 
-const ORG_TYPE_ORDER: Record<string, number> = {
-  nation: 0,
-  sector: 1,
-  area: 2,
-  region: 3,
-  ao: 4,
-};
-
-const ORG_TYPE_ORDER_FALLBACK = 99;
 const USER_SEARCH_PAGE_SIZE = 10;
 
 export const AssignmentsTable = () => {
@@ -61,13 +54,7 @@ export const AssignmentsTable = () => {
 
   const sortedOrgs = useMemo(() => {
     if (!orgs) return [];
-    return orgs.slice().sort((a, b) => {
-      const typeOrder =
-        (ORG_TYPE_ORDER[a.orgType] ?? ORG_TYPE_ORDER_FALLBACK) -
-        (ORG_TYPE_ORDER[b.orgType] ?? ORG_TYPE_ORDER_FALLBACK);
-      if (typeOrder !== 0) return typeOrder;
-      return a.name.localeCompare(b.name);
-    });
+    return orgs.slice().sort(compareAssignmentOrgs);
   }, [orgs]);
 
   const orgOptions = useMemo(

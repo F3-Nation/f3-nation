@@ -24,6 +24,7 @@ import { setErrorReporter } from "@acme/logger";
 
 import { ImmediateLogRecordProcessor } from "./immediate-processor";
 import { PostHogExceptionExporter } from "./posthog-exporter";
+import { sanitizeLogContext } from "./sanitize";
 
 export interface ObservabilityConfig {
   /** OTel `service.name` resource attribute, e.g. "api" or "map". */
@@ -124,11 +125,35 @@ export async function captureException(
 }
 
 /**
+ * Flush any in-flight exception reports, bounded by `timeoutMs`. For process
+ * shutdown (SIGTERM on Cloud Run): `captureException` already awaits its own
+ * delivery, but the fire-and-forget logger bridge does not, so a report
+ * emitted moments before shutdown can still be in flight. Never throws —
+ * shutdown must not be blocked or diverted by the error tracker.
+ */
+export async function flushObservability(timeoutMs = 2000): Promise<void> {
+  if (!provider) return;
+  try {
+    await Promise.race([
+      provider.forceFlush(),
+      new Promise<void>((resolve) => setTimeout(resolve, timeoutMs).unref()),
+    ]);
+  } catch {
+    // Swallow: a failed flush must not change the exit path.
+  }
+}
+
+/**
  * Bridge @acme/logger's `logError`/`logFatal` into the OTel exception
  * pipeline so structured error logs (pino → stdout) still reach an alertable
  * error tracker. Keeps the event name + context so events stay triageable,
  * and reports err-less error logs (config/validation failures) as synthetic
  * errors named after the event.
+ *
+ * Context is redacted by key name (see sanitize.ts) before it leaves the
+ * process: call sites aren't expected to pass secrets, but this bridge
+ * forwards arbitrary ctx to an external error tracker, so it's the last
+ * place to catch one.
  */
 export function registerLoggerErrorReporter(): void {
   setErrorReporter((event: string, ctx: LogContext, err?: unknown) => {
@@ -138,7 +163,7 @@ export function registerLoggerErrorReporter(): void {
     // ctx spread BEFORE event: a ctx key named "event" must not be able to
     // overwrite the canonical event identifier used for triage.
     void captureException(err ?? new Error(event), {
-      ...ctx,
+      ...sanitizeLogContext(ctx),
       event,
     });
   });

@@ -137,12 +137,15 @@ def get_preblast_channel(region_record: SlackSettings, preblast_info: PreblastIn
     """Return the Slack channel where the preblast should be posted.
 
     Fallback order is:
-    1. Event meta ``slack_channel_id``
-    2. Region default preblast destination channel
-    3. AO Slack channel from org meta
-    4. None
+    1. Persisted event meta ``preblast_channel_id``
+    2. Event meta ``slack_channel_id``
+    3. Region default preblast destination channel
+    4. AO Slack channel from org meta
+    5. None
     """
     event = preblast_info.event_record
+    if event.meta and event.meta.get("preblast_channel_id"):
+        return str(event.meta["preblast_channel_id"])
     if event.meta and event.meta.get("slack_channel_id"):
         return str(event.meta["slack_channel_id"])
     if (
@@ -360,17 +363,18 @@ def build_event_preblast_select_form(
                 orm.ButtonElement(
                     label="New Unscheduled Event",
                     action=actions.EVENT_PREBLAST_NEW_BUTTON,
-                    confirm=orm.ConfirmObject(
-                        title="Are you sure?",
-                        text=(
-                            "This option should ONLY BE USED FOR UNSCHEDULED EVENTS that are not listed on "
-                            "the calendar. If this is for a normal, scheduled event, please select it from "
-                            "the lists above."
-                        ),
-                        confirm="Yes, I'm sure",
-                        deny="Whups, never mind",
-                        style="danger",
-                    ),
+                    # Temporarily disabled: Slack confirmation dialogs dismiss the parent modal (#984).
+                    # confirm=orm.ConfirmObject(
+                    #     title="Are you sure?",
+                    #     text=(
+                    #         "This option should ONLY BE USED FOR UNSCHEDULED EVENTS that are not listed on "
+                    #         "the calendar. If this is for a normal, scheduled event, please select it from "
+                    #         "the lists above."
+                    #     ),
+                    #     confirm="Yes, I'm sure",
+                    #     deny="Whups, never mind",
+                    #     style="danger",
+                    # ),
                 ),
             ]
         ),
@@ -614,7 +618,7 @@ def handle_event_preblast_edit(
     start_time = start_time_raw.replace(":", "") if start_time_raw else None
 
     tag_raw = form_data.get(actions.EVENT_PREBLAST_TAG)
-    event_tag_ids = [int(t) for t in tag_raw] if tag_raw else []
+    event_tag_ids = [int(t) for t in tag_raw] if tag_raw is not None else None
 
     location_raw = form_data.get(actions.EVENT_PREBLAST_LOCATION)
     location_id = int(location_raw) if location_raw else None
@@ -627,7 +631,7 @@ def handle_event_preblast_edit(
         location_id=location_id,
         clear_location_id=location_id is None and event.location_id is not None,
         start_time=start_time,
-        event_tag_ids=event_tag_ids if event_tag_ids else None,
+        event_tag_ids=event_tag_ids,
         desired_channel_id=desired_channel,
         meta_updates=meta_updates if meta_updates else None,
     )

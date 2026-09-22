@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock ./
+COPY apps/analytics/pyproject.toml ./apps/analytics/pyproject.toml
 COPY packages/db-python ./packages/db-python
 COPY apps/slackbot ./apps/slackbot
 

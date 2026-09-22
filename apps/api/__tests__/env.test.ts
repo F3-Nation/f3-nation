@@ -1,39 +1,53 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// skipValidation's `||` chain short-circuits on CI in CI (CI=true is always set
-// there), so the SKIP_ENV_VALIDATION and npm_lifecycle_event operands never
-// naturally execute — stub each combination so both branches of every `||` run
-// regardless of the ambient CI env var.
+// `../src/env` reads process.env once at import time. Drive every operand in
+// the skipValidation `||` chain and the no-bypass case explicitly so behavior
+// is independent of the ambient CI environment.
 describe("env skipValidation", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
-    vi.resetModules();
   });
 
-  it("falls through to SKIP_ENV_VALIDATION when CI is unset", async () => {
+  async function importEnv() {
+    const mod = await import("../src/env");
+    return mod.env;
+  }
+
+  // AUTH_SECRET is required, so blanking it makes the import throw unless the
+  // bypass under test actually fired.
+  it("skips validation when running in CI (operand 1)", async () => {
+    vi.stubEnv("CI", "1");
+    vi.stubEnv("SKIP_ENV_VALIDATION", "");
+    vi.stubEnv("npm_lifecycle_event", "");
+    vi.stubEnv("AUTH_SECRET", "");
+    expect((await importEnv()).AUTH_SECRET).toBeFalsy();
+  });
+
+  it("skips validation when SKIP_ENV_VALIDATION is set (operand 2)", async () => {
     vi.stubEnv("CI", "");
     vi.stubEnv("SKIP_ENV_VALIDATION", "1");
-    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
-    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "");
+    vi.stubEnv("npm_lifecycle_event", "");
     vi.stubEnv("AUTH_SECRET", "");
-    vi.resetModules();
-
-    const { env } = await import("../src/env");
-
-    expect(env).toBeDefined();
+    expect((await importEnv()).AUTH_SECRET).toBeFalsy();
   });
 
-  it("falls through to npm_lifecycle_event when CI and SKIP_ENV_VALIDATION are unset", async () => {
+  it("skips validation for the lint lifecycle event (operand 3)", async () => {
     vi.stubEnv("CI", "");
     vi.stubEnv("SKIP_ENV_VALIDATION", "");
     vi.stubEnv("npm_lifecycle_event", "lint");
-    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
-    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "");
     vi.stubEnv("AUTH_SECRET", "");
-    vi.resetModules();
+    expect((await importEnv()).AUTH_SECRET).toBeFalsy();
+  });
 
-    const { env } = await import("../src/env");
-
-    expect(env).toBeDefined();
+  it("validates when no bypass is active", async () => {
+    vi.stubEnv("CI", "");
+    vi.stubEnv("SKIP_ENV_VALIDATION", "");
+    vi.stubEnv("npm_lifecycle_event", "");
+    vi.stubEnv("AUTH_SECRET", "");
+    await expect(importEnv()).rejects.toThrow();
   });
 });

@@ -4,7 +4,9 @@ from logging import Logger
 
 import requests
 from slack_sdk.models.blocks import ImageBlock, InputBlock, SectionBlock
-from slack_sdk.models.blocks.basic_components import ConfirmObject, PlainTextObject
+
+# from slack_sdk.models.blocks.basic_components import ConfirmObject  # Disabled for #984.
+from slack_sdk.models.blocks.basic_components import PlainTextObject
 from slack_sdk.models.blocks.block_elements import (
     ChannelSelectElement,
     FileInputElement,
@@ -100,16 +102,17 @@ class AoViews:
                 accessory=StaticSelectElement(
                     placeholder="Edit or Delete",
                     options=as_selector_options(names=["Edit", "Delete"]),
-                    confirm=ConfirmObject(
-                        title="Are you sure?",
-                        text=(
-                            "Are you sure you want to edit / delete this AO? "
-                            "This cannot be undone. Deleting an AO will also "
-                            "delete all associated series and events."
-                        ),
-                        confirm="Yes, I'm sure",
-                        deny="Whups, never mind",
-                    ),
+                    # Temporarily disabled: Slack confirmation dialogs dismiss the parent modal (#984).
+                    # confirm=ConfirmObject(
+                    #     title="Are you sure?",
+                    #     text=(
+                    #         "Are you sure you want to edit / delete this AO? "
+                    #         "This cannot be undone. Deleting an AO will also "
+                    #         "delete all associated series and events."
+                    #     ),
+                    #     confirm="Yes, I'm sure",
+                    #     deny="Whups, never mind",
+                    # ),
                     action_id=f"{actions.AO_EDIT_DELETE}_{a.id}",
                 ),
             )

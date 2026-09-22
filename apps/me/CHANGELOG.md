@@ -1,5 +1,54 @@
 # Changelog
 
+## [2.2.6](https://github.com/F3-Nation/f3-nation/compare/me@2.2.5...me@2.2.6) (2026-09-16)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.10.0
+    * @acme/shared bumped to 0.3.1
+    * @acme/ui bumped to 0.1.6
+
+## [2.2.5](https://github.com/F3-Nation/f3-nation/compare/me@2.2.4...me@2.2.5) (2026-09-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.1
+
+## [2.2.4](https://github.com/F3-Nation/f3-nation/compare/me@2.2.3...me@2.2.4) (2026-09-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.9.0
+    * @acme/shared bumped to 0.3.0
+    * @acme/ui bumped to 0.1.5
+
+## [2.2.3](https://github.com/F3-Nation/f3-nation/compare/me@2.2.2...me@2.2.3) (2026-09-08)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.8.0
+    * @acme/shared bumped to 0.2.0
+    * @acme/ui bumped to 0.1.4
+
+## [2.2.2](https://github.com/F3-Nation/f3-nation/compare/me@2.2.1...me@2.2.2) (2026-08-25)
+
+
+### Bug Fixes
+
+* **me:** move proxy.ts to src/ so Next.js actually loads it ([#866](https://github.com/F3-Nation/f3-nation/issues/866)) ([531bdd0](https://github.com/F3-Nation/f3-nation/commit/531bdd097e65abe6d583ae4e73dfe9495e5abb59))
+
 ## [2.2.1](https://github.com/F3-Nation/f3-nation/compare/me@2.2.0...me@2.2.1) (2026-08-18)
 
 

@@ -144,4 +144,4 @@ directory. Do not add a `coverage` block to `vitest.characterization.config.ts`.
 Tests and QA flows that require sign-in go through `apps/auth`'s email-based MFA
 against a local mail backend (no real inbox). See the
 [Testing Guidelines in AGENTS.md](../AGENTS.md) and
-[`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md).
+[`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) for the full recipe.
