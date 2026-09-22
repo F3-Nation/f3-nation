@@ -80,7 +80,10 @@ const findNearestRecipients = async ({
 }: {
   db: AppDb;
   regionId: number;
-}) => {
+}): Promise<{
+  recipients: Awaited<ReturnType<typeof getUsersWithRoles>>;
+  escalated: boolean;
+}> => {
   const visited = new Set<number>();
   let currentId: number | null = regionId;
 

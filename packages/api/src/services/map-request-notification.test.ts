@@ -232,7 +232,7 @@ describe("notifyMapChangeRequest", () => {
     );
   });
 
-  it("throws NOT_FOUND 'No admins/editors found' when no tier up to the nation has a recipient", async () => {
+  it("throws NOT_FOUND when no org up to the nation has admins/editors", async () => {
     const nation = await createOrg({ orgType: "nation", parentId: null });
     const sector = await createOrg({ orgType: "sector", parentId: nation.id });
     const area = await createOrg({ orgType: "area", parentId: sector.id });
@@ -366,34 +366,6 @@ describe("notifyMapChangeRequest", () => {
       }
     });
 
-    it("notifies the nearest ancestor with recipients regardless of its org type", async () => {
-      // A "region"-typed org standing in for a hypothetical future tier
-      // (e.g. a "district") wedged between two areas — the walk must not
-      // care what type an ancestor is, only whether it has recipients.
-      const grandparent = await createOrg({
-        orgType: "region",
-        parentId: null,
-      });
-      const admin = await addRole(grandparent.id, "admin");
-      const parentArea = await createOrg({
-        orgType: "area",
-        parentId: grandparent.id,
-      });
-      const childArea = await createOrg({
-        orgType: "area",
-        parentId: parentArea.id,
-      });
-      const region = await createOrg({
-        orgType: "region",
-        parentId: childArea.id,
-      });
-      const request = await createRequest(region.id);
-
-      await notifyMapChangeRequest({ db, requestId: request.id });
-
-      expect(sentTo()).toEqual([admin]);
-    });
-
     it("throws NOT_FOUND when a territory tops the hierarchy with no admins/editors anywhere", async () => {
       const territory = await createOrg({
         orgType: "territory",
@@ -424,6 +396,36 @@ describe("notifyMapChangeRequest", () => {
         request.id,
         "No admins/editors found at any level, cannot notify",
       );
+    });
+  });
+
+  describe("type-agnostic escalation", () => {
+    it("notifies the nearest ancestor with recipients regardless of its org type", async () => {
+      // A "region"-typed org sitting above two areas — a position no named
+      // tier occupies. The walk must not care what type an ancestor is,
+      // only whether it has recipients.
+      const grandparent = await createOrg({
+        orgType: "region",
+        parentId: null,
+      });
+      const admin = await addRole(grandparent.id, "admin");
+      const parentArea = await createOrg({
+        orgType: "area",
+        parentId: grandparent.id,
+      });
+      const childArea = await createOrg({
+        orgType: "area",
+        parentId: parentArea.id,
+      });
+      const region = await createOrg({
+        orgType: "region",
+        parentId: childArea.id,
+      });
+      const request = await createRequest(region.id);
+
+      await notifyMapChangeRequest({ db, requestId: request.id });
+
+      expect(sentTo()).toEqual([admin]);
     });
   });
 
