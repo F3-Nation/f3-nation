@@ -745,6 +745,52 @@ async function main(): Promise<void> {
       `${orphans?.n ?? "?"} orphaned rows`,
     );
 
+    // --- 5a. Unclassified-table gate ------------------------------------------
+    // The gate has fired for real (Better Auth schema drift), but only its
+    // pass path ran here. Add an unclassified table, plant a real-looking
+    // email the obfuscator would rewrite, re-run, and require a non-zero exit
+    // with the users table byte-for-byte unchanged (nothing written).
+    const [prior] = await sql<{ email: string }[]>`
+      SELECT email FROM users WHERE id = ${userId}`;
+    await sql`CREATE TABLE public._unclassified_gate_test (id int)`;
+    await sql`
+      UPDATE users SET email = 'gate-sentinel@example.com'
+      WHERE id = ${userId}`;
+    const usersHash = async () => {
+      const [row] = await sql<{ h: string }[]>`
+        SELECT md5(string_agg(u::text, '|' ORDER BY id)) AS h FROM users u`;
+      return row?.h ?? "";
+    };
+    const before = await usersHash();
+    const gateRun = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.ts",
+        "--allow-db",
+        DB_NAME,
+        "--i-understand-this-rewrites-data",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const after = await usersHash();
+    // Name the table in the reason, so an unrelated failure (bad env, a
+    // crash) can't pass for the gate.
+    const gateFired =
+      `${gateRun.stdout.toString()}${gateRun.stderr.toString()}`.includes(
+        "classified: public._unclassified_gate_test",
+      );
+    check(
+      "unclassified table aborts the run before any write",
+      gateRun.status !== 0 && gateFired && before === after,
+      `exit ${gateRun.status}, gate ${gateFired ? "fired" : "DID NOT FIRE"}, users ${before === after ? "unchanged" : "REWRITTEN"}`,
+    );
+    await sql`DROP TABLE public._unclassified_gate_test`;
+    await sql`UPDATE users SET email = ${prior?.email ?? ""} WHERE id = ${userId}`;
+
     // --- 5b. Post-load staging logins -----------------------------------------
     // Runs last: the routable address it adds would (correctly) trip the
     // email sweep above. Twice, to prove a re-run doesn't duplicate.
