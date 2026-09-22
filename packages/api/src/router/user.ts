@@ -13,7 +13,7 @@ interface RoleInput {
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
-import { logDebug } from "../logger";
+import { logDebug, logError } from "../logger";
 import {
   buildSingleUserQuery,
   buildUserListQuery,
@@ -467,7 +467,9 @@ export const userRouter = {
           .from(schema.users)
           .where(eq(schema.users.id, input.id));
         if (!existingUser) {
-          throw new Error("User not found");
+          throw new ORPCError("NOT_FOUND", {
+            message: "User not found",
+          });
         }
         user = existingUser;
       } else {
@@ -486,7 +488,9 @@ export const userRouter = {
 
           const insertedUser = result[0];
           if (!insertedUser) {
-            throw new Error("User not found");
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Failed to save user",
+            });
           }
           user = insertedUser;
         } catch (error) {
@@ -495,7 +499,17 @@ export const userRouter = {
               message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
             });
           }
-          throw error;
+          // The empty-result ORPCError thrown just above is already typed and
+          // client-safe, so it passes through untouched.
+          if (error instanceof ORPCError) throw error;
+          // Anything else is an unexpected DB/driver fault. Rethrowing it raw
+          // lets oRPC mask it as an opaque 500 and lose the cause, so log the
+          // original and surface a generic message that leaks no internals.
+          // No email in the log context — it is PII.
+          logError("api.user.insert_failed", { userId: input.id }, error);
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Unable to save user",
+          });
         }
       }
 
@@ -582,7 +596,12 @@ export const userRouter = {
           newRolesToInsert.map((role) => {
             const roleId = roleNameToId[role.roleName];
             if (roleId === undefined) {
-              throw new Error(`Role ${role.roleName} not found`);
+              // roleName is schema-constrained to "user"/"editor"/"admin", so
+              // this only fires if the roles table is missing its seeded
+              // rows — a server data-integrity problem, not a client error.
+              throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                message: `Role ${role.roleName} not found`,
+              });
             }
             return {
               userId: user.id,
@@ -643,7 +662,7 @@ export const userRouter = {
         .limit(1);
 
       if (!f3nationOrg) {
-        throw new ORPCError("UNAUTHORIZED", {
+        throw new ORPCError("NOT_FOUND", {
           message: "No F3 Nation record is found.",
         });
       }

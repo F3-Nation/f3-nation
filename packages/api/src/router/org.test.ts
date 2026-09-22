@@ -565,6 +565,590 @@ describe("Org Router", () => {
         }),
       ).rejects.toThrow("destination parent");
     });
+
+    it("should reject creating a region parented directly to an ao", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Ao Parent Attempt ${uniqueId()}`,
+          orgType: "ao",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!ao) {
+        throw new Error("Failed to create test ao");
+      }
+
+      createdOrgIds.push(ao.id);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          name: "Region Under Ao",
+          orgType: "region",
+          parentId: ao.id,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow(/Region.*AO/);
+    });
+
+    it("should reject moving a region to be parented by an ao", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const [sourceSector] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Move Reject Sector ${uniqueId()}`,
+          orgType: "sector",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!sourceSector) {
+        throw new Error("Failed to create source sector");
+      }
+
+      createdOrgIds.push(sourceSector.id);
+
+      const [destinationAo] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Move Reject Ao ${uniqueId()}`,
+          orgType: "ao",
+          parentId: sourceSector.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!destinationAo) {
+        throw new Error("Failed to create destination ao");
+      }
+
+      createdOrgIds.push(destinationAo.id);
+
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Move Reject Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: sourceSector.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!region) {
+        throw new Error("Failed to create test region");
+      }
+
+      createdOrgIds.push(region.id);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId: destinationAo.id,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow(/Region.*AO/);
+    });
+
+    const blankFields = {
+      isActive: true,
+      email: null,
+      phone: null,
+      description: null,
+      website: null,
+      twitter: null,
+      facebook: null,
+      instagram: null,
+    };
+
+    const createSectorAndTerritory = async (
+      client: ReturnType<typeof createTestClient>,
+    ) => {
+      const nation = await getOrCreateF3NationOrg();
+      const sector = await client.org.crupdate({
+        ...blankFields,
+        name: `Territory Sector ${uniqueId()}`,
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      expect(sector.org).not.toBeNull();
+      createdOrgIds.push(sector.org!.id);
+      const territory = await client.org.crupdate({
+        ...blankFields,
+        name: `Territory ${uniqueId()}`,
+        orgType: "territory",
+        parentId: sector.org!.id,
+      });
+      expect(territory.org?.orgType).toBe("territory");
+      createdOrgIds.push(territory.org!.id);
+      return { sector: sector.org!, territory: territory.org! };
+    };
+
+    it("persists and lists Territory, allows Areas beneath it, and rejects a Territory beneath an Area", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const { sector, territory } = await createSectorAndTerritory(client);
+      const parentOf = async (id: number) =>
+        (await db.query.orgs.findFirst({ where: eq(schema.orgs.id, id) }))
+          ?.parentId;
+
+      const areaUnderTerritory = await client.org.crupdate({
+        ...blankFields,
+        name: `Territory Area ${uniqueId()}`,
+        orgType: "area",
+        parentId: territory.id,
+      });
+      expect(areaUnderTerritory.org?.parentId).toBe(territory.id);
+      createdOrgIds.push(areaUnderTerritory.org!.id);
+
+      const area = await client.org.crupdate({
+        ...blankFields,
+        name: `Sector Area ${uniqueId()}`,
+        orgType: "area",
+        parentId: sector.id,
+      });
+      expect(area.org?.parentId).toBe(sector.id);
+      createdOrgIds.push(area.org!.id);
+
+      const moveArea = (parentId: number) =>
+        client.org.crupdate({
+          ...blankFields,
+          id: area.org!.id,
+          name: area.org!.name,
+          orgType: "area",
+          parentId,
+        });
+      await moveArea(territory.id);
+      expect(await parentOf(area.org!.id)).toBe(territory.id);
+      await moveArea(sector.id);
+      expect(await parentOf(area.org!.id)).toBe(sector.id);
+
+      await expect(
+        client.org.crupdate({
+          ...blankFields,
+          name: `Invalid Territory ${uniqueId()}`,
+          orgType: "territory",
+          parentId: area.org!.id,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      const listed = await client.org.all({
+        orgTypes: ["territory"],
+        sorting: [{ id: "orgType", desc: false }],
+        searchTerm: territory.name,
+      });
+      expect(listed.orgs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: territory.id, orgType: "territory" }),
+        ]),
+      );
+    });
+
+    it("counts an Area's AOs in its Territory and Sector, following the Area between parents", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const { sector, territory } = await createSectorAndTerritory(client);
+      const create = async (
+        orgType: "area" | "region" | "ao",
+        parentId: number,
+      ) => {
+        const result = await client.org.crupdate({
+          ...blankFields,
+          name: `Count ${orgType} ${uniqueId()}`,
+          orgType,
+          parentId,
+        });
+        createdOrgIds.push(result.org!.id);
+        return result.org!;
+      };
+      const area = await create("area", territory.id);
+      const region = await create("region", area.id);
+      await create("ao", region.id);
+      const aoCountOf = async (
+        org: { id: number; name: string },
+        orgType: "sector" | "territory" | "area",
+      ) => {
+        const listed = await client.org.all({
+          orgTypes: [orgType],
+          searchTerm: org.name,
+        });
+        return listed.orgs.find((candidate) => candidate.id === org.id)
+          ?.aoCount;
+      };
+
+      expect(await aoCountOf(area, "area")).toBe(1);
+      expect(await aoCountOf(territory, "territory")).toBe(1);
+      expect(await aoCountOf(sector, "sector")).toBe(1);
+
+      await client.org.crupdate({
+        ...blankFields,
+        id: area.id,
+        name: area.name,
+        orgType: "area",
+        parentId: sector.id,
+      });
+
+      expect(await aoCountOf(territory, "territory")).toBe(0);
+      expect(await aoCountOf(sector, "sector")).toBe(1);
+    });
+
+    it("should accept creating an area parented directly to a sector (un-migrated case)", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const [sector] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Area Parent Sector ${uniqueId()}`,
+          orgType: "sector",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!sector) {
+        throw new Error("Failed to create test sector");
+      }
+
+      createdOrgIds.push(sector.id);
+
+      const client = createTestClient();
+
+      const result = await client.org.crupdate({
+        name: `Area Under Sector ${uniqueId()}`,
+        orgType: "area",
+        parentId: sector.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+      });
+
+      expect(result.org).not.toBeNull();
+      expect(result.org?.orgType).toBe("area");
+
+      if (result.org) {
+        createdOrgIds.push(result.org.id);
+      }
+    });
+
+    it("should reject moving a region to be parented by another region (same-tier)", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const [sourceSector] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Same Tier Sector ${uniqueId()}`,
+          orgType: "sector",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!sourceSector) {
+        throw new Error("Failed to create source sector");
+      }
+
+      createdOrgIds.push(sourceSector.id);
+
+      const [targetRegion] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Target Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: sourceSector.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!targetRegion) {
+        throw new Error("Failed to create target region");
+      }
+
+      createdOrgIds.push(targetRegion.id);
+
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Region To Move ${uniqueId()}`,
+          orgType: "region",
+          parentId: sourceSector.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!region) {
+        throw new Error("Failed to create test region");
+      }
+
+      createdOrgIds.push(region.id);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId: targetRegion.id,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow(/Region.*Region/);
+    });
+
+    it("should reject creating a nation parented to another org", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          name: "Sub Nation Attempt",
+          orgType: "nation",
+          parentId: f3Nation.id,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow("Nation cannot have a parent organization");
+    });
+
+    it("should reject creating an ao parented directly to a sector (skip-level)", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const [sector] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Ao Skip Level Sector ${uniqueId()}`,
+          orgType: "sector",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!sector) {
+        throw new Error("Failed to create test sector");
+      }
+
+      createdOrgIds.push(sector.id);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          name: "Ao Under Sector",
+          orgType: "ao",
+          parentId: sector.id,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow(/AO.*Sector/);
+    });
+
+    it("should return NOT_FOUND when creating an org under a nonexistent parent", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          name: "Org Under Missing Parent",
+          orgType: "region",
+          parentId: 999999999,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow("Parent org not found");
+    });
+
+    it("should return NOT_FOUND when moving an org to a nonexistent destination parent", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const [sourceSector] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Missing Destination Sector ${uniqueId()}`,
+          orgType: "sector",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!sourceSector) {
+        throw new Error("Failed to create source sector");
+      }
+
+      createdOrgIds.push(sourceSector.id);
+
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Missing Destination Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: sourceSector.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!region) {
+        throw new Error("Failed to create test region");
+      }
+
+      createdOrgIds.push(region.id);
+
+      const client = createTestClient();
+
+      await expect(
+        client.org.crupdate({
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId: 999999999,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+        }),
+      ).rejects.toThrow("Parent org not found");
+    });
+
+    it("should successfully move an org to a different, hierarchy-valid parent", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const [sourceSector] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Move Success Source Sector ${uniqueId()}`,
+          orgType: "sector",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      const [destinationSector] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Move Success Destination Sector ${uniqueId()}`,
+          orgType: "sector",
+          parentId: f3Nation.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!sourceSector || !destinationSector) {
+        throw new Error("Failed to create test sectors");
+      }
+
+      createdOrgIds.push(sourceSector.id, destinationSector.id);
+
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Move Success Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: sourceSector.id,
+          isActive: true,
+        })
+        .returning();
+
+      if (!region) {
+        throw new Error("Failed to create test region");
+      }
+
+      createdOrgIds.push(region.id);
+
+      const client = createTestClient();
+
+      const result = await client.org.crupdate({
+        id: region.id,
+        name: region.name,
+        orgType: "region",
+        parentId: destinationSector.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+      });
+
+      expect(result.org).not.toBeNull();
+      expect(result.org?.parentId).toBe(destinationSector.id);
+    });
   });
 
   describe("mine", () => {

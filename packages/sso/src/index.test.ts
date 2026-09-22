@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AuthClient,
+  AuthError,
   createOAuthLoginFlowArtifacts,
   createOAuthState,
   isOAuthStateExpired,
@@ -75,11 +77,11 @@ describe("return path validation", () => {
 });
 
 describe("OAuth state expiration", () => {
-  it("uses a strict greater-than boundary at maxAgeMs", () => {
+  it("uses an inclusive boundary at maxAgeMs", () => {
     const state = { timestamp: 1_000 };
 
-    expect(isOAuthStateExpired(state, 100, 1_100)).toBe(false);
-    expect(isOAuthStateExpired(state, 100, 1_101)).toBe(true);
+    expect(isOAuthStateExpired(state, 100, 1_099)).toBe(false);
+    expect(isOAuthStateExpired(state, 100, 1_100)).toBe(true);
   });
 });
 
@@ -102,5 +104,65 @@ describe("OAuth login flow artifacts", () => {
       returnTo: "/profile",
       timestamp: 1_700_000_000_000,
     });
+  });
+});
+
+describe("AuthClient.exchangeCodeForToken", () => {
+  const client = new AuthClient({
+    clientId: "cid",
+    clientSecret: "secret",
+    redirectUri: "https://app.test/callback",
+    authServerUrl: "https://auth.test",
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("throws AuthError when the 200 response omits access_token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ token_type: "Bearer" }),
+      }),
+    );
+
+    await expect(
+      client.exchangeCodeForToken({ code: "code", codeVerifier: "verifier" }),
+    ).rejects.toThrow(AuthError);
+
+    await expect(
+      client.exchangeCodeForToken({ code: "code", codeVerifier: "verifier" }),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+});
+
+describe("AuthClient.refreshToken", () => {
+  const client = new AuthClient({
+    clientId: "cid",
+    clientSecret: "secret",
+    redirectUri: "https://app.test/callback",
+    authServerUrl: "https://auth.test",
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("throws AuthError when the 200 response omits access_token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ token_type: "Bearer" }),
+      }),
+    );
+
+    await expect(
+      client.refreshToken({ refreshToken: "rt" }),
+    ).rejects.toMatchObject({ code: "invalid_response" });
   });
 });

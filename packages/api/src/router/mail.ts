@@ -1,10 +1,11 @@
 // data comes from z.record(z.unknown()) — String() casts are intentional
 /* eslint-disable @typescript-eslint/no-base-to-string */
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import { env } from "@acme/env";
 import { mail, Templates } from "@acme/mail";
 
+import { getAdminRequestsUrl } from "../lib/admin-url";
 import { logError } from "../logger";
 import { nationAdminProcedure } from "../shared";
 
@@ -106,17 +107,13 @@ export const mailRouter = {
             description: String(data.description ?? "Test Description"),
           });
         } else if (template === Templates.mapChangeRequest) {
-          const adminBaseUrl = env.NEXT_PUBLIC_ADMIN_URL?.endsWith("/")
-            ? env.NEXT_PUBLIC_ADMIN_URL?.slice(0, -1)
-            : (env.NEXT_PUBLIC_ADMIN_URL ?? "");
-
           await mail.sendTemplateMessages(Templates.mapChangeRequest, {
             to,
             regionName: String(data.regionName ?? "Test Region"),
             workoutName: String(data.workoutName ?? "Test Workout"),
             requestType: String(data.requestType ?? "Update"),
             submittedBy: String(data.submittedBy ?? "Test User"),
-            requestsUrl: String(data.requestsUrl ?? `${adminBaseUrl}/requests`),
+            requestsUrl: String(data.requestsUrl ?? getAdminRequestsUrl()),
             noAdminsNotice: Boolean(data.noAdminsNotice),
             recipientRole: data.recipientRole
               ? String(data.recipientRole)
@@ -178,16 +175,12 @@ export const mailRouter = {
           description: String(data.description ?? "Test Description"),
         });
       } else if (template === Templates.mapChangeRequest) {
-        const adminBaseUrl = env.NEXT_PUBLIC_ADMIN_URL?.endsWith("/")
-          ? env.NEXT_PUBLIC_ADMIN_URL?.slice(0, -1)
-          : (env.NEXT_PUBLIC_ADMIN_URL ?? "");
-
         html = mail.getTemplate(Templates.mapChangeRequest, {
           regionName: String(data.regionName ?? "Test Region"),
           workoutName: String(data.workoutName ?? "Test Workout"),
           requestType: String(data.requestType ?? "Update"),
           submittedBy: String(data.submittedBy ?? "Test User"),
-          requestsUrl: String(data.requestsUrl ?? `${adminBaseUrl}/requests`),
+          requestsUrl: String(data.requestsUrl ?? getAdminRequestsUrl()),
           noAdminsNotice: Boolean(data.noAdminsNotice),
           recipientRole: data.recipientRole
             ? String(data.recipientRole)
@@ -197,7 +190,9 @@ export const mailRouter = {
             : undefined,
         });
       } else {
-        throw new Error("Unknown template");
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unknown template",
+        });
       }
 
       return { html };

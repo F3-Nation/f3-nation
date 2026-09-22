@@ -29,7 +29,7 @@ Flow:
 
 1. `GET /api/auth/login` creates a CSRF token and PKCE verifier.
 2. The route stores `oauth_csrf` and `oauth_code_verifier` as short-lived `httpOnly` cookies.
-3. The browser is redirected to the auth provider using `@acme/sso`.
+3. The browser is redirected to the auth provider using `@f3nation/sso`.
 4. The provider redirects back to `GET /api/auth/callback` with `code` and `state`.
 5. The callback validates the state timestamp, CSRF token, and PKCE verifier.
 6. The callback exchanges the code for OAuth tokens.

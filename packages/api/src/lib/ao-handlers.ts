@@ -1,8 +1,10 @@
+import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 
 import { schema } from "@acme/db";
 import { removeUndefinedFromObject } from "@acme/shared/common/functions";
 
+import { assertValidParentType } from "../assert-valid-parent-type";
 import type { Context } from "../shared";
 import { moveAOLocsToNewRegion } from "./move-ao-locs-to-new-region";
 
@@ -28,7 +30,13 @@ export const createAO = async (
   const normalizedAoName = aoName?.trim();
 
   if (!normalizedAoName || normalizedAoName.length < 2) {
-    throw new Error("AO name must be at least 2 characters");
+    throw new ORPCError("BAD_REQUEST", {
+      message: "AO name must be at least 2 characters",
+    });
+  }
+
+  if (regionId != null) {
+    await assertValidParentType(ctx.db, regionId, "ao");
   }
 
   const [ao] = await ctx.db
@@ -44,7 +52,10 @@ export const createAO = async (
     })
     .returning();
 
-  if (!ao) throw new Error("Failed to insert AO");
+  if (!ao)
+    throw new ORPCError("INTERNAL_SERVER_ERROR", {
+      message: "Failed to insert AO",
+    });
   return ao.id;
 };
 
@@ -61,11 +72,15 @@ export const updateAO = async (
     .where(eq(schema.orgs.id, id));
 
   if (!ao) {
-    throw new Error("Failed to find ao to update. Does the AO exist?");
+    throw new ORPCError("NOT_FOUND", {
+      message: "Failed to find ao to update. Does the AO exist?",
+    });
   }
 
   if (ao?.orgType !== "ao") {
-    throw new Error("Organization is not an AO");
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Organization is not an AO",
+    });
   }
 
   const set: Partial<typeof schema.orgs.$inferInsert> = {
@@ -79,13 +94,17 @@ export const updateAO = async (
     const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
     const newLocationIds: number[] = [];
 
-    if (params.parentId && params.parentId !== ao.parentId && ao.parentId) {
-      const result = await moveAOLocsToNewRegion(txCtx, {
-        aoId: ao.id,
-        oldRegionId: ao.parentId,
-        newRegionId: params.parentId,
-      });
-      newLocationIds.push(...result.newLocationIds);
+    if (params.parentId != null && params.parentId !== ao.parentId) {
+      await assertValidParentType(txCtx.db, params.parentId, "ao");
+
+      if (ao.parentId) {
+        const result = await moveAOLocsToNewRegion(txCtx, {
+          aoId: ao.id,
+          oldRegionId: ao.parentId,
+          newRegionId: params.parentId,
+        });
+        newLocationIds.push(...result.newLocationIds);
+      }
     }
 
     const [updatedAO] = await txCtx.db
@@ -95,7 +114,14 @@ export const updateAO = async (
       .returning();
 
     if (!updatedAO) {
-      throw new Error("Failed to update AO");
+      // The existence check above runs outside this transaction, so the AO can
+      // be deleted in between — reachable under multiple instances, not
+      // "unexpected server state". Same underlying condition as the NOT_FOUND
+      // above, so it gets the same code rather than a 500 the client can't act
+      // on by refreshing.
+      throw new ORPCError("NOT_FOUND", {
+        message: "Failed to find ao to update. Does the AO exist?",
+      });
     }
 
     return { ...updatedAO, newLocationIds };

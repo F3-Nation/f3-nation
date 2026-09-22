@@ -24,7 +24,7 @@
       "name": "F3 Nation",
       "url": "https://f3nation.com"
     },
-    "description": "# Authentication\n\nAll API endpoints require authentication via a Bearer token passed in the Authorization header.\n\n## Required Headers\n\nEvery request must include the following headers:\n\n### 1. Authorization Header (Required)\n```\nAuthorization: Bearer YOUR_API_KEY\n```\n\nThe Bearer token is an API key that represents programmatic access to the F3 Nation API. This key must be a valid, non-revoked API key that has not expired.\n\n### 2. Client Header (Required)\n```\nClient: your-app-identifier\n```\n\nThe `Client` header must be present and contain a string that identifies your application or service. This helps us track API usage and troubleshoot issues. Examples: `https://f3milwaukee.com/locations`, `gloom-scheduler`, `Tackles Postman`, etc.\n\n## Getting Started\n\n### Step 1: Generate an API Key\nNavigate to **https://map.f3nation.com/admin/api-keys** if you are an admin on a specific region or the F3 Nation organization. You can:\n- Create new API keys\n- Set expiration dates for security\n- View and revoke keys\n\n### Step 2: Configure Your Client\nUse the generated API key and a descriptive client identifier in your application:\n\n```bash\ncurl -X GET \"https://api.f3nation.com/v1/ping\" \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -H \"Client: my-app\"\n```\n\n### Step 3: Make API Calls\nInclude both headers in every request to the F3 Nation API.\n\n## Role-Based Access\n\nAPI keys inherit the roles and permissions of their owner. Access levels include:\n\n- **Editor**: Can view and modify data within assigned organizations\n- **Admin**: Same permissions as Editor, plus the ability to add/remove other Admins and Editors\n\nAs of February 1, 2026, regional admins can only create read-only API keys. If you want an API Key edit access to your region, you will need to contact an F3 Nation admin. Right now, regional edit access is highly restrcited. This is because the API is still new and there are almost certainly gaps in security - meaning that a region has the potential to mess up data for other regions.\n\n## Best Practices\n\n1. **Keep Keys Secure**: Never commit API keys to version control. Use environment variables instead.\n    a. Read-Only keys are an exception. We realize many regions use systems that require storing the key in a config file or in plain text on the front-end. Read-Only keys are much less risky to expose.\n2. **Use Expiration Dates**: Set expiration dates on keys to limit exposure window in case of compromise.\n\n## Error Handling\n\n- **401 Unauthorized**: Missing, invalid, revoked, or expired API key\n- **403 Forbidden**: Valid API key but insufficient permissions for the requested resource\n- **429 Too Many Requests**: Rate limit exceeded (200 requests per 60 seconds)",
+    "description": "# Authentication\n\nAll API endpoints require authentication via a Bearer token passed in the Authorization header.\n\n## Required Headers\n\nEvery request must include the following headers:\n\n### 1. Authorization Header (Required)\n```\nAuthorization: Bearer YOUR_API_KEY\n```\n\nThe Bearer token is an API key that represents programmatic access to the F3 Nation API. This key must be a valid, non-revoked API key that has not expired.\n\n### 2. Client Header (Required)\n```\nClient: your-app-identifier\n```\n\nThe `Client` header must be present and contain a string that identifies your application or service. This helps us track API usage and troubleshoot issues. Examples: `https://f3milwaukee.com/locations`, `gloom-scheduler`, `Tackles Postman`, etc.\n\n## Getting Started\n\n### Step 1: Generate an API Key\nNavigate to **https://admin.f3nation.com/api-keys** if you are an admin on a specific region or the F3 Nation organization. You can:\n- Create new API keys\n- Set expiration dates for security\n- View and revoke keys\n\n### Step 2: Configure Your Client\nUse the generated API key and a descriptive client identifier in your application:\n\n```bash\ncurl -X GET \"https://api.f3nation.com/v1/ping\" \\\n  -H \"Authorization: Bearer YOUR_API_KEY\" \\\n  -H \"Client: my-app\"\n```\n\n### Step 3: Make API Calls\nInclude both headers in every request to the F3 Nation API.\n\n## Role-Based Access\n\nAPI keys inherit the roles and permissions of their owner. Access levels include:\n\n- **Editor**: Can view and modify data within assigned organizations\n- **Admin**: Same permissions as Editor, plus the ability to add/remove other Admins and Editors\n\nAs of February 1, 2026, regional admins can only create read-only API keys. If you want an API Key edit access to your region, you will need to contact an F3 Nation admin. Right now, regional edit access is highly restrcited. This is because the API is still new and there are almost certainly gaps in security - meaning that a region has the potential to mess up data for other regions.\n\n## Best Practices\n\n1. **Keep Keys Secure**: Never commit API keys to version control. Use environment variables instead.\n    a. Read-Only keys are an exception. We realize many regions use systems that require storing the key in a config file or in plain text on the front-end. Read-Only keys are much less risky to expose.\n2. **Use Expiration Dates**: Set expiration dates on keys to limit exposure window in case of compromise.\n\n## Error Handling\n\n- **401 Unauthorized**: Missing, invalid, revoked, or expired API key\n- **403 Forbidden**: Valid API key but insufficient permissions for the requested resource\n- **429 Too Many Requests**: Rate limit exceeded (500 requests per 60 seconds)",
     "title": "F3 Nation API",
     "version": "0.0.0-characterization"
   },
@@ -3158,6 +3158,13 @@
                             ],
                             "description": "Event end time"
                           },
+                          "eventTagIds": {
+                            "description": "Event tag IDs",
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          },
                           "eventTypes": {
                             "description": "Event types",
                             "items": {
@@ -3188,6 +3195,10 @@
                               "type": "object"
                             },
                             "type": "array"
+                          },
+                          "highlight": {
+                            "description": "Whether the event is highlighted",
+                            "type": "boolean"
                           },
                           "id": {
                             "description": "Event ID",
@@ -3375,6 +3386,7 @@
                           "description",
                           "isActive",
                           "isPrivate",
+                          "highlight",
                           "parent",
                           "locationId",
                           "startDate",
@@ -3392,6 +3404,7 @@
                           "parents",
                           "regions",
                           "eventTypes",
+                          "eventTagIds",
                           "location"
                         ],
                         "type": "object"
@@ -3488,6 +3501,7 @@
                   "endDate": {
                     "anyOf": [
                       {
+                        "format": "date",
                         "type": "string"
                       },
                       {
@@ -3548,9 +3562,17 @@
                   "locationId": {
                     "anyOf": [
                       {
-                        "maximum": 2147483647,
-                        "minimum": 1,
-                        "type": "integer"
+                        "anyOf": [
+                          {
+                            "exclusiveMinimum": 0,
+                            "maximum": 2147483647,
+                            "minimum": -2147483648,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       {
                         "type": "null"
@@ -3641,6 +3663,7 @@
                     ]
                   },
                   "startDate": {
+                    "format": "date",
                     "type": "string"
                   },
                   "startTime": {
@@ -4017,9 +4040,48 @@
           {
             "allowEmptyValue": true,
             "allowReserved": true,
+            "explode": true,
+            "in": "query",
+            "name": "regionOrgIds",
+            "schema": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "style": "deepObject"
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "explode": true,
+            "in": "query",
+            "name": "aoOrgIds",
+            "schema": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "style": "deepObject"
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
             "in": "query",
             "name": "startDate",
             "schema": {
+              "description": "Inclusive lower bound on the instance start date (YYYY-MM-DD). Only instances starting on or after this date are returned.",
+              "type": "string"
+            }
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "in": "query",
+            "name": "startDateTo",
+            "schema": {
+              "description": "Inclusive upper bound on the instance start date (YYYY-MM-DD). Only instances starting on or before this date are returned.",
               "type": "string"
             }
           },
@@ -4155,7 +4217,15 @@
                     ]
                   },
                   "eventTypeId": {
+                    "description": "Deprecated: use `eventTypeIds`. A single event type id.",
                     "type": "number"
+                  },
+                  "eventTypeIds": {
+                    "description": "Event types to associate. An empty array clears the association; omit the field to leave it untouched.",
+                    "items": {
+                      "type": "number"
+                    },
+                    "type": "array"
                   },
                   "fngCount": {
                     "anyOf": [
@@ -4168,18 +4238,15 @@
                     ]
                   },
                   "highlight": {
-                    "default": false,
                     "type": "boolean"
                   },
                   "id": {
                     "type": "number"
                   },
                   "isActive": {
-                    "default": true,
                     "type": "boolean"
                   },
                   "isPrivate": {
-                    "default": false,
                     "type": "boolean"
                   },
                   "locationId": {
@@ -4876,12 +4943,94 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTags": {
+                      "items": {
+                        "properties": {
+                          "color": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag color",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag description",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "description": "Event tag ID",
+                            "maximum": 2147483647,
+                            "minimum": -2147483648,
+                            "type": "integer"
+                          },
+                          "isActive": {
+                            "description": "Whether the event tag is active",
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "description": "Event tag name",
+                            "type": "string"
+                          },
+                          "specificOrgId": {
+                            "anyOf": [
+                              {
+                                "description": "Org this tag is specific to, if any",
+                                "maximum": 2147483647,
+                                "minimum": -2147483648,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "specificOrgName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Name of the org this tag is specific to, if any"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "color",
+                          "specificOrgId",
+                          "isActive",
+                          "specificOrgName"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "totalCount": {
+                      "description": "Total number of event tags matching the filter",
+                      "type": "number"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTags",
+                    "totalCount"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -4970,12 +5119,85 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTag": {
+                      "items": {
+                        "properties": {
+                          "color": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag color",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "created": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag description",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "description": "Event tag ID",
+                            "maximum": 2147483647,
+                            "minimum": -2147483648,
+                            "type": "integer"
+                          },
+                          "isActive": {
+                            "description": "Whether the event tag is active",
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "description": "Event tag name",
+                            "type": "string"
+                          },
+                          "specificOrgId": {
+                            "anyOf": [
+                              {
+                                "description": "Org this tag is specific to, if any",
+                                "maximum": 2147483647,
+                                "minimum": -2147483648,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "updated": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "color",
+                          "created",
+                          "updated",
+                          "specificOrgId",
+                          "isActive"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTag"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5010,12 +5232,16 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTagId": {
+                      "description": "The unique identifier of the event tag that was deleted",
+                      "type": "number"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTagId"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5048,12 +5274,82 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTag": {
+                      "properties": {
+                        "color": {
+                          "anyOf": [
+                            {
+                              "description": "Event tag color",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "created": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "anyOf": [
+                            {
+                              "description": "Event tag description",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "description": "Event tag ID",
+                          "maximum": 2147483647,
+                          "minimum": -2147483648,
+                          "type": "integer"
+                        },
+                        "isActive": {
+                          "description": "Whether the event tag is active",
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "description": "Event tag name",
+                          "type": "string"
+                        },
+                        "specificOrgId": {
+                          "anyOf": [
+                            {
+                              "description": "Org this tag is specific to, if any",
+                              "maximum": 2147483647,
+                              "minimum": -2147483648,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "updated": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "description",
+                        "color",
+                        "created",
+                        "updated",
+                        "specificOrgId",
+                        "isActive"
+                      ],
+                      "type": "object"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTag"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -5097,12 +5393,85 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {},
-                    {
-                      "not": {}
+                  "properties": {
+                    "eventTags": {
+                      "items": {
+                        "properties": {
+                          "color": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag color",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "created": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "description": "Event tag description",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "description": "Event tag ID",
+                            "maximum": 2147483647,
+                            "minimum": -2147483648,
+                            "type": "integer"
+                          },
+                          "isActive": {
+                            "description": "Whether the event tag is active",
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "description": "Event tag name",
+                            "type": "string"
+                          },
+                          "specificOrgId": {
+                            "anyOf": [
+                              {
+                                "description": "Org this tag is specific to, if any",
+                                "maximum": 2147483647,
+                                "minimum": -2147483648,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "updated": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "color",
+                          "created",
+                          "updated",
+                          "specificOrgId",
+                          "isActive"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
-                  ]
+                  },
+                  "required": [
+                    "eventTags"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -6154,6 +6523,17 @@
                               ],
                               "description": "Event email"
                             },
+                            "endDate": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Event end date"
+                            },
                             "endTime": {
                               "anyOf": [
                                 {
@@ -6164,6 +6544,13 @@
                                 }
                               ],
                               "description": "Event end time"
+                            },
+                            "eventTagIds": {
+                              "description": "Event tag IDs",
+                              "items": {
+                                "type": "number"
+                              },
+                              "type": "array"
                             },
                             "eventTypes": {
                               "description": "Event types",
@@ -6295,6 +6682,7 @@
                             "location",
                             "locationId",
                             "startDate",
+                            "endDate",
                             "dayOfWeek",
                             "startTime",
                             "endTime",
@@ -6305,7 +6693,8 @@
                             "isPrivate",
                             "aos",
                             "regions",
-                            "eventTypes"
+                            "eventTypes",
+                            "eventTagIds"
                           ],
                           "type": "object"
                         },
@@ -8048,6 +8437,17 @@
                             ],
                             "description": "Event contact email"
                           },
+                          "endDate": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Event end date"
+                          },
                           "endTime": {
                             "anyOf": [
                               {
@@ -8288,6 +8688,7 @@
                           "parent",
                           "locationId",
                           "startDate",
+                          "endDate",
                           "dayOfWeek",
                           "startTime",
                           "endTime",
@@ -8521,6 +8922,19 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             }
                           ],
                           "type": "array"
@@ -8699,6 +9113,17 @@
                                     ],
                                     "description": "Event description"
                                   },
+                                  "endDate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Date the event stops recurring, or null when open-ended"
+                                  },
                                   "endTime": {
                                     "anyOf": [
                                       {
@@ -8737,6 +9162,17 @@
                                     "description": "Event name",
                                     "type": "string"
                                   },
+                                  "startDate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Date the event starts recurring"
+                                  },
                                   "startTime": {
                                     "anyOf": [
                                       {
@@ -8756,6 +9192,8 @@
                                   "dayOfWeek",
                                   "startTime",
                                   "endTime",
+                                  "startDate",
+                                  "endDate",
                                   "eventTypes",
                                   "aoId",
                                   "aoLogo",
@@ -9364,6 +9802,268 @@
           }
         },
         "summary": "Get regions with coordinates",
+        "tags": [
+          "map.location"
+        ]
+      }
+    },
+    "/v1/map/location/upcoming-instances": {
+      "get": {
+        "description": "Returns event instances in the next 30 days that have a series exception (closed, different-time, miscellaneous), are standalone one-off events (no seriesId), or belong to a series but sit at a different location than their parent event (including a parent with no fixed location). Used for map pin status flagging.",
+        "operationId": "map.location.upcomingInstances",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Upcoming event instances for map pin status flagging",
+                  "items": {
+                    "properties": {
+                      "aoLogo": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "AO logo URL"
+                      },
+                      "aoName": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "AO name"
+                      },
+                      "endTime": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Instance end time"
+                      },
+                      "eventTypes": {
+                        "description": "Event types, empty array when none are linked",
+                        "items": {
+                          "properties": {
+                            "id": {
+                              "description": "Event type ID",
+                              "type": "number"
+                            },
+                            "name": {
+                              "description": "Event type name",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "fullAddress": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Address assembled from the location columns"
+                      },
+                      "highlight": {
+                        "description": "Whether the instance is highlighted",
+                        "type": "boolean"
+                      },
+                      "id": {
+                        "description": "Event instance ID",
+                        "type": "number"
+                      },
+                      "lat": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Location latitude"
+                      },
+                      "locationAddress": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Street address"
+                      },
+                      "locationAddress2": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Street address line 2"
+                      },
+                      "locationCity": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "City"
+                      },
+                      "locationCountry": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Country"
+                      },
+                      "locationId": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Location ID, null when the instance has no location"
+                      },
+                      "locationState": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "State"
+                      },
+                      "lon": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Location longitude"
+                      },
+                      "name": {
+                        "description": "Instance name",
+                        "type": "string"
+                      },
+                      "seriesException": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "closed",
+                              "different-time",
+                              "miscellaneous"
+                            ],
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Series exception type, null when not an exception"
+                      },
+                      "seriesId": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Parent series event ID, null for one-off instances"
+                      },
+                      "startDate": {
+                        "description": "Instance start date (YYYY-MM-DD)",
+                        "type": "string"
+                      },
+                      "startTime": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Instance start time"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "seriesId",
+                      "locationId",
+                      "startDate",
+                      "startTime",
+                      "endTime",
+                      "seriesException",
+                      "highlight",
+                      "name",
+                      "lat",
+                      "lon",
+                      "aoName",
+                      "aoLogo",
+                      "locationAddress",
+                      "locationAddress2",
+                      "locationCity",
+                      "locationState",
+                      "locationCountry",
+                      "eventTypes",
+                      "fullAddress"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get upcoming event instance exceptions and one-off events",
         "tags": [
           "map.location"
         ]
@@ -10454,6 +11154,275 @@
         ]
       }
     },
+    "/v1/oauth-client": {
+      "get": {
+        "description": "List every OAuth client registered against the Better Auth instance. Never returns client secrets. Requires F3 Nation admin role.",
+        "operationId": "oauthClient.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "clients": {
+                      "items": {
+                        "properties": {
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disabled": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "isPublic": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "redirectUris": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "scopes": {
+                            "anyOf": [
+                              {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "updatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "clientId",
+                          "name",
+                          "redirectUris",
+                          "scopes",
+                          "isPublic",
+                          "disabled",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "clients"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List OAuth clients",
+        "tags": [
+          "oauth-client"
+        ]
+      }
+    },
+    "/v1/oauth-client/{clientId}": {
+      "patch": {
+        "description": "Update an OAuth client's name, redirect URIs, scopes, or enabled state. At least one of those fields must be provided in addition to clientId. Never returns the client secret. Requires F3 Nation admin role.",
+        "operationId": "oauthClient.update",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "in": "path",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "disabled": {
+                    "description": "Enable/disable — the only supported way to deactivate a client. There is no delete: docs/AI_GUARDRAILS.md requires a soft delete when one exists.",
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "redirectUris": {
+                    "items": {
+                      "format": "uri",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "scopes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "client": {
+                      "properties": {
+                        "clientId": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "disabled": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "isPublic": {
+                          "type": "boolean"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "redirectUris": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "scopes": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "updatedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "clientId",
+                        "name",
+                        "redirectUris",
+                        "scopes",
+                        "isPublic",
+                        "disabled",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "client"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Update an OAuth client",
+        "tags": [
+          "oauth-client"
+        ]
+      }
+    },
     "/v1/org": {
       "get": {
         "description": "Get a paginated list of organizations (regions, areas, AOs, etc.) filtered by type, status, and other criteria. Supports searching, sorting, and pagination. Organizations are organized hierarchically.",
@@ -10472,12 +11441,13 @@
               "default": [
                 "region"
               ],
-              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (ao, region, area, territory, sector, nation). Defaults to [region].",
               "items": {
                 "enum": [
                   "ao",
                   "region",
                   "area",
+                  "territory",
                   "sector",
                   "nation"
                 ],
@@ -10568,7 +11538,7 @@
             "in": "query",
             "name": "sorting",
             "schema": {
-              "description": "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
+              "description": "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, parentOrgName, sectorName, territoryName, aoCount, lastAnnualReview, status, created. sectorName and territoryName require orgTypes to be exactly [\"area\"].",
               "items": {
                 "properties": {
                   "desc": {
@@ -10723,6 +11693,7 @@
                               "ao",
                               "region",
                               "area",
+                              "territory",
                               "sector",
                               "nation"
                             ],
@@ -10757,6 +11728,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -10850,7 +11822,7 @@
         ]
       },
       "post": {
-        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → region → area → ao).",
+        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → territory → area → region → ao).",
         "operationId": "org.crupdate",
         "parameters": [
           {
@@ -11026,6 +11998,7 @@
                       "ao",
                       "region",
                       "area",
+                      "territory",
                       "sector",
                       "nation"
                     ],
@@ -11228,6 +12201,7 @@
                                 "ao",
                                 "region",
                                 "area",
+                                "territory",
                                 "sector",
                                 "nation"
                               ],
@@ -11364,12 +12338,17 @@
                                       "description": "Location latitude",
                                       "type": "number"
                                     },
+                                    "locationId": {
+                                      "description": "Location ID",
+                                      "type": "number"
+                                    },
                                     "longitude": {
                                       "description": "Location longitude",
                                       "type": "number"
                                     }
                                   },
                                   "required": [
+                                    "locationId",
                                     "latitude",
                                     "longitude",
                                     "eventCount",
@@ -11404,6 +12383,7 @@
                                         "ao",
                                         "region",
                                         "area",
+                                        "territory",
                                         "sector",
                                         "nation"
                                       ],
@@ -11435,6 +12415,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -11469,6 +12450,334 @@
           }
         },
         "summary": "List org chart orgs",
+        "tags": [
+          "Org Chart"
+        ]
+      }
+    },
+    "/v1/org-chart/aos": {
+      "get": {
+        "description": "Return active AOs whose name matches the query, each with its region and busiest active location so the map can navigate to it.",
+        "operationId": "orgChart.aos",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "in": "query",
+            "name": "searchTerm",
+            "required": true,
+            "schema": {
+              "description": "AO name search term (minimum 2 characters)",
+              "minLength": 2,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "aos": {
+                      "items": {
+                        "properties": {
+                          "eventCount": {
+                            "description": "Active events for this AO at that location",
+                            "type": "number"
+                          },
+                          "id": {
+                            "description": "AO org ID",
+                            "type": "number"
+                          },
+                          "latitude": {
+                            "description": "Location latitude",
+                            "type": "number"
+                          },
+                          "locationId": {
+                            "description": "Busiest active location ID",
+                            "type": "number"
+                          },
+                          "longitude": {
+                            "description": "Location longitude",
+                            "type": "number"
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "AO name"
+                          },
+                          "regionId": {
+                            "description": "Parent region org ID",
+                            "type": "number"
+                          },
+                          "regionName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Parent region name"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "regionId",
+                          "regionName",
+                          "locationId",
+                          "latitude",
+                          "longitude",
+                          "eventCount"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "aos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Search AOs by name",
+        "tags": [
+          "Org Chart"
+        ]
+      }
+    },
+    "/v1/org-chart/location/{locationId}": {
+      "get": {
+        "description": "Return all AOs with active events at the given location, along with their leadership positions.",
+        "operationId": "orgChart.byLocation",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "in": "path",
+            "name": "locationId",
+            "required": true,
+            "schema": {
+              "description": "The location ID to look up AOs for",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "aos": {
+                      "items": {
+                        "properties": {
+                          "email": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "eventCount": {
+                            "description": "Active events at this location",
+                            "type": "number"
+                          },
+                          "facebook": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "description": "AO org ID",
+                            "type": "number"
+                          },
+                          "instagram": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "logoUrl": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "positions": {
+                            "items": {
+                              "properties": {
+                                "avatarUrl": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "f3Name": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "positionId": {
+                                  "type": "number"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "userId": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "positionId",
+                                "title",
+                                "userId",
+                                "f3Name",
+                                "avatarUrl"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "twitter": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "website": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email",
+                          "website",
+                          "twitter",
+                          "facebook",
+                          "instagram",
+                          "logoUrl",
+                          "eventCount",
+                          "positions"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "latitude": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "locationId": {
+                      "type": "number"
+                    },
+                    "locationName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "longitude": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "locationId",
+                    "locationName",
+                    "latitude",
+                    "longitude",
+                    "aos"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get AOs at a location",
         "tags": [
           "Org Chart"
         ]
@@ -11552,6 +12861,7 @@
                         "ao",
                         "region",
                         "area",
+                        "territory",
                         "sector",
                         "nation"
                       ],
@@ -11737,6 +13047,7 @@
                   "ao",
                   "region",
                   "area",
+                  "territory",
                   "sector",
                   "nation"
                 ],
@@ -11815,6 +13126,7 @@
                               "ao",
                               "region",
                               "area",
+                              "territory",
                               "sector",
                               "nation"
                             ],
@@ -11890,12 +13202,13 @@
               "default": [
                 "region"
               ],
-              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+              "description": "Filter organizations by type. Returns orgs matching ANY of the given types (ao, region, area, territory, sector, nation). Defaults to [region].",
               "items": {
                 "enum": [
                   "ao",
                   "region",
                   "area",
+                  "territory",
                   "sector",
                   "nation"
                 ],
@@ -12016,6 +13329,7 @@
                       "ao",
                       "region",
                       "area",
+                      "territory",
                       "sector",
                       "nation"
                     ],
@@ -12083,6 +13397,7 @@
                 "ao",
                 "region",
                 "area",
+                "territory",
                 "sector",
                 "nation"
               ],
@@ -12225,6 +13540,7 @@
                                 "ao",
                                 "region",
                                 "area",
+                                "territory",
                                 "sector",
                                 "nation"
                               ],
@@ -12358,6 +13674,7 @@
                               "ao",
                               "region",
                               "area",
+                              "territory",
                               "sector",
                               "nation"
                             ],
@@ -12482,6 +13799,7 @@
                 "ao",
                 "region",
                 "area",
+                "territory",
                 "sector",
                 "nation"
               ],
@@ -12634,6 +13952,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -12742,6 +14061,7 @@
                           "ao",
                           "region",
                           "area",
+                          "territory",
                           "sector",
                           "nation"
                         ],
@@ -12820,6 +14140,7 @@
                                     "ao",
                                     "region",
                                     "area",
+                                    "territory",
                                     "sector",
                                     "nation"
                                   ],
@@ -13354,6 +14675,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -13593,6 +14915,7 @@
                                     "ao",
                                     "region",
                                     "area",
+                                    "territory",
                                     "sector",
                                     "nation"
                                   ],
@@ -13728,6 +15051,7 @@
                                   "ao",
                                   "region",
                                   "area",
+                                  "territory",
                                   "sector",
                                   "nation"
                                 ],
@@ -17905,6 +19229,411 @@
         ]
       }
     },
+    "/v1/status": {
+      "get": {
+        "description": "Returns aggregated status for contract and external monitors, cached for 60 seconds.",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "generatedAt": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "data": {
+                                "properties": {
+                                  "checks": {
+                                    "items": {
+                                      "properties": {
+                                        "details": {
+                                          "additionalProperties": {},
+                                          "propertyNames": {
+                                            "type": "string"
+                                          },
+                                          "type": "object"
+                                        },
+                                        "id": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "latencyMs": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "message": {
+                                          "type": "string"
+                                        },
+                                        "severity": {
+                                          "default": "warning",
+                                          "enum": [
+                                            "critical",
+                                            "warning",
+                                            "info"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "status": {
+                                          "enum": [
+                                            "ok",
+                                            "degraded",
+                                            "down"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "status"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "minItems": 1,
+                                    "type": "array"
+                                  },
+                                  "contractVersion": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "durationMs": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "notes": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "service": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "ok",
+                                      "degraded",
+                                      "down"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "timestamp": {
+                                    "format": "date-time",
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "service",
+                                  "version",
+                                  "contractVersion",
+                                  "status",
+                                  "timestamp",
+                                  "durationMs",
+                                  "checks"
+                                ],
+                                "type": "object"
+                              },
+                              "ok": {
+                                "const": true
+                              },
+                              "source": {
+                                "const": "contract"
+                              },
+                              "status": {
+                                "enum": [
+                                  "ok",
+                                  "degraded",
+                                  "down"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "const": "contract"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "url",
+                                  "source"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "source",
+                              "status",
+                              "target",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "details": {
+                                "additionalProperties": {},
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
+                              "ok": {
+                                "const": false
+                              },
+                              "reason": {
+                                "enum": [
+                                  "unreachable",
+                                  "invalid_json",
+                                  "invalid_contract",
+                                  "unsupported_contract_version",
+                                  "invalid_monitor_config"
+                                ],
+                                "type": "string"
+                              },
+                              "source": {
+                                "const": "contract"
+                              },
+                              "status": {
+                                "const": "down"
+                              },
+                              "target": {
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "const": "contract"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "url",
+                                  "source"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "source",
+                              "status",
+                              "target",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "data": {
+                                "properties": {
+                                  "incidents": {
+                                    "type": "number"
+                                  },
+                                  "provider": {
+                                    "const": "slack"
+                                  },
+                                  "providerStatus": {
+                                    "type": "string"
+                                  },
+                                  "timestamp": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "providerStatus",
+                                  "timestamp",
+                                  "incidents"
+                                ],
+                                "type": "object"
+                              },
+                              "ok": {
+                                "const": true
+                              },
+                              "source": {
+                                "const": "external"
+                              },
+                              "status": {
+                                "enum": [
+                                  "ok",
+                                  "degraded",
+                                  "down"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "properties": {
+                                  "apiUrl": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "provider": {
+                                    "const": "slack"
+                                  },
+                                  "source": {
+                                    "const": "external"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "url",
+                                  "source",
+                                  "provider",
+                                  "apiUrl"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "source",
+                              "status",
+                              "target",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "details": {
+                                "additionalProperties": {},
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
+                              "ok": {
+                                "const": false
+                              },
+                              "reason": {
+                                "enum": [
+                                  "unreachable",
+                                  "invalid_json",
+                                  "invalid_contract",
+                                  "unsupported_contract_version",
+                                  "invalid_monitor_config"
+                                ],
+                                "type": "string"
+                              },
+                              "source": {
+                                "const": "external"
+                              },
+                              "status": {
+                                "const": "down"
+                              },
+                              "target": {
+                                "properties": {
+                                  "apiUrl": {
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "provider": {
+                                    "const": "slack"
+                                  },
+                                  "source": {
+                                    "const": "external"
+                                  },
+                                  "url": {
+                                    "format": "uri",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "url",
+                                  "source",
+                                  "provider",
+                                  "apiUrl"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "source",
+                              "status",
+                              "target",
+                              "reason"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "ttlSeconds": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "generatedAt",
+                    "ttlSeconds",
+                    "results"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [],
+        "summary": "Aggregated status",
+        "tags": [
+          "status"
+        ]
+      }
+    },
     "/v1/user": {
       "get": {
         "description": "Get a paginated list of users with optional filtering by role, status, and organization. Includes PII fields (email, phone, emergency contacts) if includePii is true and the user is an F3 Nation admin.",
@@ -20154,6 +21883,10 @@
     {
       "description": "Slack and F3 Nation Slack app integration endpoints for managing content",
       "name": "slack"
+    },
+    {
+      "description": "Service status and health check endpoints",
+      "name": "status"
     }
   ],
   "x-tagGroups": [
@@ -20199,6 +21932,12 @@
       "name": "Slack",
       "tags": [
         "slack"
+      ]
+    },
+    {
+      "name": "Status",
+      "tags": [
+        "status"
       ]
     }
   ]

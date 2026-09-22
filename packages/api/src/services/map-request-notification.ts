@@ -1,13 +1,14 @@
+import { ORPCError } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 
 import type { AppDb } from "@acme/db/client";
 import type { OrgType, RegionRole } from "@acme/shared/app/enums";
 import { schema } from "@acme/db";
-import { env } from "@acme/env";
 import { requestTypeToTitle } from "@acme/shared/app/functions";
 
 import { mail, Templates } from "@acme/mail";
 
+import { getAdminRequestsUrl } from "../lib/admin-url";
 import { logError, logDebug, logInfo } from "../logger";
 
 /**
@@ -156,7 +157,9 @@ export const notifyMapChangeRequest = async ({
     });
 
     if (!area) {
-      throw new Error("Area not found, cannot notify admins/editors");
+      throw new ORPCError("NOT_FOUND", {
+        message: "Area not found, cannot notify admins/editors",
+      });
     }
 
     const areaRecipients = await getUsersWithRoles({
@@ -172,7 +175,9 @@ export const notifyMapChangeRequest = async ({
   // If still no recipients, look for sector level
   if (recipients.length === 0) {
     if (!area?.parentId) {
-      throw new Error("Area has no parent, cannot notify admins/editors");
+      throw new ORPCError("NOT_FOUND", {
+        message: "Area has no parent, cannot notify admins/editors",
+      });
     }
     sector = await findParentOrgByType({
       db,
@@ -195,7 +200,9 @@ export const notifyMapChangeRequest = async ({
   // If still no recipients, look for nation level
   if (recipients.length === 0) {
     if (!sector?.parentId) {
-      throw new Error("Sector has no parent, cannot notify admins/editors");
+      throw new ORPCError("NOT_FOUND", {
+        message: "Sector has no parent, cannot notify admins/editors",
+      });
     }
     nation = await findParentOrgByType({
       db,
@@ -213,13 +220,14 @@ export const notifyMapChangeRequest = async ({
       recipients = nationRecipients;
       noAdminsNotice = true;
     } else {
-      throw new Error("Nation not found, cannot notify admins/editors");
+      throw new ORPCError("NOT_FOUND", {
+        message: "Nation not found, cannot notify admins/editors",
+      });
     }
   }
 
   // Prepare email parameters
-  const adminBaseUrl = (env.NEXT_PUBLIC_ADMIN_URL ?? "").replace(/\/$/, "");
-  const requestsUrl = `${adminBaseUrl}/requests`;
+  const requestsUrl = getAdminRequestsUrl();
   const title = requestTypeToTitle(request.requestType);
 
   // Send emails

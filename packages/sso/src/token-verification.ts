@@ -3,6 +3,7 @@ import type { JWTPayload } from "jose";
 
 export interface AccessTokenPayload extends JWTPayload {
   sub: string;
+  token_use: "access";
   email?: string;
   name?: string;
   exp?: number;
@@ -343,6 +344,12 @@ export function isAccessTokenPayload(
   return (
     typeof payload?.sub === "string" &&
     payload.sub.length > 0 &&
+    // ID Tokens share this issuer's signing key, kid, and issuer with
+    // access tokens, so nothing about the signature tells them apart —
+    // without this, an ID Token (meant to be safe to expose client-side)
+    // would pass every other check here and be treated as a valid access
+    // token by any relying-party app using this shared verifier.
+    payload.token_use === "access" &&
     (payload.email === undefined || typeof payload.email === "string") &&
     (payload.name === undefined || typeof payload.name === "string") &&
     (payload.scope === undefined || typeof payload.scope === "string") &&

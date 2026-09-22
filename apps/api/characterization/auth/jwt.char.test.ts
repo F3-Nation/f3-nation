@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 
 import { FIXTURE_KID } from "../global-setup";
-import { generateForeignKey, signFixtureJwt } from "../fixtures/jwt";
+import {
+  generateForeignKey,
+  signFixtureIdToken,
+  signFixtureJwt,
+} from "../fixtures/jwt";
 import { createFixtureUser } from "../fixtures/users";
 import { req, target } from "../transport";
 import { expectAuthorized, expectUnauthorized } from "./verdict";
@@ -82,6 +86,17 @@ describe.runIf(target.inProcess)("JWT resolution", () => {
       "Unauthorized",
     );
   });
+
+  it("rejects an ID Token used as a bearer credential", async () => {
+    // Same signing key, kid, and issuer as a real access token — only
+    // token_use differs. Without the token_use check in getSessionFromJWT,
+    // this would authorize just like a real access token does above.
+    const token = await signFixtureIdToken({ sub: user.userId });
+    await expectUnauthorized(
+      await target.invoke(jwtReq(6, token)),
+      "Unauthorized",
+    );
+  });
 });
 
 // The other half of the producer/mirror drift guard: apps/auth's own test pins
@@ -99,6 +114,7 @@ describe("fixture token shape", () => {
       "iss",
       "scope",
       "sub",
+      "token_use",
     ]);
   });
 

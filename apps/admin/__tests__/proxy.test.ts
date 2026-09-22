@@ -6,29 +6,42 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
 } from "~/lib/auth/constants";
 
-const verifyAccessTokenMock = vi.fn();
-const refreshTokenMock = vi.fn();
-const logDebugMock = vi.fn();
-const logWarnMock = vi.fn();
-
-// Minimal AuthError matching the real class so instanceof checks in the proxy work.
-class AuthError extends Error {
-  code: string;
-  statusCode?: number;
-  constructor(message: string, code: string, statusCode?: number) {
-    super(message);
-    this.name = "AuthError";
-    this.code = code;
-    this.statusCode = statusCode;
+const {
+  verifyAccessTokenMock,
+  refreshTokenMock,
+  logDebugMock,
+  logWarnMock,
+  AuthError,
+} = vi.hoisted(() => {
+  // Minimal AuthError matching the real class so instanceof checks in the proxy work.
+  class AuthError extends Error {
+    code: string;
+    statusCode?: number;
+    constructor(message: string, code: string, statusCode?: number) {
+      super(message);
+      this.name = "AuthError";
+      this.code = code;
+      this.statusCode = statusCode;
+    }
   }
-}
+  return {
+    verifyAccessTokenMock: vi.fn(),
+    refreshTokenMock: vi.fn(),
+    logDebugMock: vi.fn(),
+    logWarnMock: vi.fn(),
+    AuthError,
+  };
+});
 
-vi.mock("@acme/sso", () => ({
+vi.mock("@f3nation/sso-next", async (importActual) => ({
+  ...(await importActual<Record<string, unknown>>()),
   verifyAccessToken: verifyAccessTokenMock,
   AuthError,
 }));
 
-vi.mock("~/lib/auth/oauth", () => ({ refreshToken: refreshTokenMock }));
+vi.mock("~/lib/auth/oauth", () => ({
+  sso: { refreshToken: refreshTokenMock },
+}));
 
 vi.mock("~/env", () => ({
   env: {
@@ -159,5 +172,24 @@ describe("proxy middleware", () => {
     expect(await response.json()).toEqual({ error: "unauthorized" });
     // Cookies must not be cleared on a non-navigation failure
     expect(response.headers.get("set-cookie")).toBeNull();
+  });
+});
+
+describe("organization and unknown route authentication", () => {
+  it.each([
+    "/the-nation",
+    "/sectors",
+    "/areas",
+    "/regions",
+    "/aos",
+    "/unknown-org",
+    "/arbitrary-path",
+    "/positions",
+  ])("retains login redirect for %s without credentials", async (path) => {
+    const response = await proxy(makeRequest(path));
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/api/auth/login");
+    expect(location.searchParams.get("returnTo")).toBe(path);
   });
 });

@@ -1,0 +1,47 @@
+# How to contribute
+
+F3 Nation is a volunteer organization invigorating male community leadership in our local communities (https://f3nation.com). Since its start in 2001, it has grown to thousands of weekly workouts affecting tens of thousands of men. From the beginning enterprising men started building technology to support the mission in their area. A lot of great apps and content were generated. Around 2024, a concerted effort was started to consolidate some of the enterprise-minded apps into a holistic ecosystem. And here we are.
+
+F3 is free. All the contributors are volunteers. Reviews will be slower than you'd like. We're glad you're here!
+
+We expect everyone here — contributors, reviewers, and maintainers alike — to communicate with respect and good faith. If you experience or witness behavior that doesn't meet that bar, reach out to a codeowner.
+
+## Local Development
+
+All the apps in this monorepo can be developed and tested locally. See [LOCAL_DEV_DOCKER.md](LOCAL_DEV_DOCKER.md) for instructions on how to set up a local environment. Coding conventions, commands, and the full contributor reference live in [AGENTS.md](../AGENTS.md).
+
+## Submitting Changes
+
+1. Fork the repository into your own account, then create a branch from `main`.
+1. Make something awesome. Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): subject`) — see [AGENTS.md](../AGENTS.md#commit-message-convention) for allowed types and scopes. This is enforced locally by a commit hook.
+1. Submit a PR against the F3-Nation `main` branch in **DRAFT**. Your PR title must also follow Conventional Commits format (`type(scope): subject`) — it's checked by [pr-title.yml](../.github/workflows/pr-title.yml), since our release process parses the title rather than individual commits. Fill in the PR template with a plain-language summary up top — many reviewers are volunteers without deep context on your change.
+   - First PR to this repo? GitHub holds the CI workflows at `action_required` until a maintainer approves the run. That's a GitHub setting for first-time contributors, not a problem with your PR — give it a day, then ask in the F3 developers Slack if it's still waiting.
+1. Run `pnpm ci:local` locally — it chains the same steps CI runs — then make sure all Checks pass once pushed. Catching issues locally is faster than waiting on CI.
+   - The test step can rewrite `vitest.config.ts` coverage thresholds in the workspaces it ran — apps and packages alike (they ratchet upward). That's expected — commit the updated config with your change, and never lower a threshold by hand. See [AGENTS.md](../AGENTS.md) for the rules.
+1. Mark the PR as **Ready for review**. At this point, a number of AI bots will run and provide feedback (see "Use of AI" below).
+   - CodeRabbit doesn't review drafts. It posts a "Draft PR not reviewed" notice while your PR is still a draft — that's normal; its review arrives once you mark the PR ready.
+1. Address all review comments. Reply to each comment stating what you did to fix it or why you're not going to fix it.
+1. If AI suggests something that is out of the scope of the PR, create an Issue to track it, add the Issue number to the comment reply, and resolve it.
+1. Once all comments are resolved, add the `ready for human review` label if you have `write` access to the repo. A Codeowner will review.
+   - Don't have `write` access, or forgot to add it? A scheduled workflow ([`ready-for-human-review-label.yml`](../.github/workflows/ready-for-human-review-label.yml)) applies the label automatically once your PR is out of draft, has no merge conflicts with `main`, all required checks are green, and the AI review bots' threads are resolved — it runs daily, so there can be up to a day's delay. The same workflow also removes the label if any of those stop being true (e.g. a new commit resets checks to pending, or `main` moves ahead and your branch now has merge conflicts), even if you added it by hand. Only actual merge conflicts count: a branch that is merely behind `main`, or unresolved threads from human reviewers, won't remove the label. A maintainer can trigger it manually for a fresher check.
+   - Small, self-evident PRs (a one-line fix, a doc correction) are sometimes approved and merged by a codeowner before the label is ever applied. That's fine — the label is a review-queue signal, not a required check.
+
+## Use of AI
+
+AI tools are welcome for writing code, tests, and PR descriptions. You're responsible for understanding, testing, and reviewing anything AI-generated before you submit it. See [AI_DEVELOPMENT_GUIDE.md](AI_DEVELOPMENT_GUIDE.md) and [AI_GUARDRAILS.md](AI_GUARDRAILS.md) for the guardrails our own AI agents follow.
+
+## Choosing which Issues to work on
+
+Short answer: work on whatever interests you. Any improvement you can make will be appreciated, even if there's not a current Issue for it.
+
+New to the project? Issues labeled [`good first issue`](https://github.com/F3-Nation/f3-nation/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) are a good place to start; [`help wanted`](https://github.com/F3-Nation/f3-nation/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) issues are ones we'd love a hand with.
+
+Some issues are checklists of small, independent items — each one is meant to be its own PR. Comment on the issue to claim an item before you start, and once your PR merges, comment again with the PR number and what you verified. Contributors can't tick boxes in someone else's issue, so a maintainer will check it off from your comment.
+
+If you're looking to drive along the roadmap with us, check out the Issues project board: https://github.com/orgs/F3-Nation/projects/4
+
+The board is organized by Priority and then Effort. Priority options are Urgent, High, Medium, and Low. The higher on the list you can work, the more impactful it could be.
+
+## Slack for F3 Developers
+
+We have a Slack workspace for F3 developers to discuss topics and issues. If you would like an invite, reach out to a codeowner and we can send you an invite.

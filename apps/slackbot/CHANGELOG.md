@@ -2,6 +2,110 @@
 
 <!-- version list -->
 
+## [2.5.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.5.0...slackbot@2.5.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **deps:** update dependency pillow-heif to &gt;=1.7.0,&lt;1.8.0 ([#1009](https://github.com/F3-Nation/f3-nation/issues/1009)) ([aa4958d](https://github.com/F3-Nation/f3-nation/commit/aa4958d72098a03206c8649e8234e05512e5bdf8))
+* **slackbot, api:** persisting tags on series and allowing removal ([#979](https://github.com/F3-Nation/f3-nation/issues/979)) ([807630d](https://github.com/F3-Nation/f3-nation/commit/807630d961b09d9934b7deac33aafc927135173c))
+* **slackbot:** fixing calendar send script pandas error ([#990](https://github.com/F3-Nation/f3-nation/issues/990)) ([47bf01f](https://github.com/F3-Nation/f3-nation/commit/47bf01f9f55d38e1d356a132a7e9a9029abb9099))
+
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.3...slackbot@2.5.0) (2026-09-11)
+
+
+### Features
+
+* **slackbot:** configurable 2 or 3 week calendar display ([#829](https://github.com/F3-Nation/f3-nation/issues/829)) ([1ba2dd5](https://github.com/F3-Nation/f3-nation/commit/1ba2dd52d06996a9bece59c777b491d1d613005e))
+* **slackbot:** now setting `seriesException=different-time` on time change ([#989](https://github.com/F3-Nation/f3-nation/issues/989)) ([cd5008e](https://github.com/F3-Nation/f3-nation/commit/cd5008e3275d1e44194b22f35a37e0a7a5217960))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#959](https://github.com/F3-Nation/f3-nation/issues/959)) ([7f45d87](https://github.com/F3-Nation/f3-nation/commit/7f45d876ab3c2d587feb84098d9d7ed2436527e3))
+
+## [2.4.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.2...slackbot@2.4.3) (2026-09-10)
+
+
+### Bug Fixes
+
+* **slackbot:** temporarily disable broken confirmation dialogs ([#985](https://github.com/F3-Nation/f3-nation/issues/985)) ([8a51eb3](https://github.com/F3-Nation/f3-nation/commit/8a51eb31c16106d265a4339d42b8ce85c23cd326))
+
+## [2.4.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.1...slackbot@2.4.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **ci:** resolve Cloud Run job image digest using exact tag match via jq ([#982](https://github.com/F3-Nation/f3-nation/issues/982)) ([c884180](https://github.com/F3-Nation/f3-nation/commit/c884180e6d9f52dfe822a1a74e5e569d25fe44ce))
+
+## [2.4.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.4.0...slackbot@2.4.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **slackbot, analytics:** hotfix for a couple of build steps ([#975](https://github.com/F3-Nation/f3-nation/issues/975)) ([46eebb7](https://github.com/F3-Nation/f3-nation/commit/46eebb711aad369dff38dad208da813fb3c6c9cd))
+
+## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.2...slackbot@2.4.0) (2026-09-08)
+
+
+### Features
+
+* **admin:** add event tags and instances management modals ([#493](https://github.com/F3-Nation/f3-nation/issues/493)) ([f80ce91](https://github.com/F3-Nation/f3-nation/commit/f80ce91edc00de91d2f1c8c12a557d883fadfac8))
+* **repo:** added analytics app ([#800](https://github.com/F3-Nation/f3-nation/issues/800)) ([f7c5123](https://github.com/F3-Nation/f3-nation/commit/f7c512377d93f051495a1ab8ca793af13f3667ec))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#861](https://github.com/F3-Nation/f3-nation/issues/861)) ([419ac1e](https://github.com/F3-Nation/f3-nation/commit/419ac1eb5c93c8d472f1f03362e1440d8278594e))
+
+## [2.3.2](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.1...slackbot@2.3.2) (2026-08-27)
+
+
+### Bug Fixes
+
+* **slackbot:** fixing HC button on non-default channel posting ([#895](https://github.com/F3-Nation/f3-nation/issues/895)) ([aa3fac7](https://github.com/F3-Nation/f3-nation/commit/aa3fac7eebacfe764cb035a9d37ecb516cd798f1))
+
+## [2.3.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.3.0...slackbot@2.3.1) (2026-08-25)
+
+
+### Bug Fixes
+
+* **slackbot:** prevent calendar modal block overflow ([#881](https://github.com/F3-Nation/f3-nation/issues/881)) ([faf7807](https://github.com/F3-Nation/f3-nation/commit/faf7807e8bd41fa6392f40787e4b5059899c470a))
+
+## [2.3.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.2.1...slackbot@2.3.0) (2026-08-18)
+
+
+### Features
+
+* **slackbot:** upgrade to python 3.13 and many dependencies ([#847](https://github.com/F3-Nation/f3-nation/issues/847)) ([9d1d13a](https://github.com/F3-Nation/f3-nation/commit/9d1d13a840b74380d7aca6742ff363a5baf7bc0b))
+
+
+### Bug Fixes
+
+* **api:** raise per-IP rate limit to 500 ([#850](https://github.com/F3-Nation/f3-nation/issues/850)) ([b8e320a](https://github.com/F3-Nation/f3-nation/commit/b8e320a30a6be2f8f79c912a6ae3cf3dedf86c91))
+* **slackbot,repo:** make python checks skip cleanly and fix macOS lint bug ([#828](https://github.com/F3-Nation/f3-nation/issues/828)) ([1deaba1](https://github.com/F3-Nation/f3-nation/commit/1deaba1eb57f44e19e9bec8c2883bfbade782069))
+* **slackbot:** acknowledging requests prior to sending loading modal ([#846](https://github.com/F3-Nation/f3-nation/issues/846)) ([8daf80f](https://github.com/F3-Nation/f3-nation/commit/8daf80f8a0a5610216978a3e6c718447ad41b19a))
+* **slackbot:** read selected_time/selected_date for picker elements ([#816](https://github.com/F3-Nation/f3-nation/issues/816)) ([8f3d6fc](https://github.com/F3-Nation/f3-nation/commit/8f3d6fc9610fa839df64b66434d7d929b3355bd9))
+
+## [2.2.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.2.0...slackbot@2.2.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* **slackbot:** truncate long Strava activity button labels ([#810](https://github.com/F3-Nation/f3-nation/issues/810)) ([e6d6f84](https://github.com/F3-Nation/f3-nation/commit/e6d6f84841f299bf283adb65ccc307a63e41dc4b))
+
+## [2.2.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.3...slackbot@2.2.0) (2026-08-05)
+
+
+### Features
+
+* **slackbot:** adding kotter reports ([#703](https://github.com/F3-Nation/f3-nation/issues/703)) ([4b4c9bb](https://github.com/F3-Nation/f3-nation/commit/4b4c9bbe6d5896482aec199cdd8adc98a0785d03))
+
+
+### Bug Fixes
+
+* **deps:** update dependency pillow-heif to v1 [security] ([#773](https://github.com/F3-Nation/f3-nation/issues/773)) ([6cf133d](https://github.com/F3-Nation/f3-nation/commit/6cf133dddc8c1b5e232c94917ed637d016fa47a1))
+
 ## [2.1.3](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.1.2...slackbot@2.1.3) (2026-07-27)
 
 

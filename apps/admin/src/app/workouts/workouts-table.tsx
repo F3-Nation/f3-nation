@@ -29,6 +29,7 @@ import { Cell, Header } from "@acme/ui/table";
 
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
+import { formatDateOrEmpty } from "~/utils/event-dates";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { AOSFilter } from "../_components/ao-filter";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
@@ -207,6 +208,22 @@ const columns: TableOptions<WorkoutEvent>["columns"] = [
     accessorFn: (row) => dayOfWeekToShortDayOfWeek(row.dayOfWeek ?? "sunday"),
     header: Header,
     cell: Cell,
+  },
+  {
+    accessorKey: "startDate",
+    meta: { name: "Start Date" },
+    header: Header,
+    cell: (cell) => (
+      <Cell {...cell}>{formatDateOrEmpty(cell.row.original.startDate)}</Cell>
+    ),
+  },
+  {
+    accessorKey: "endDate",
+    meta: { name: "End Date" },
+    header: Header,
+    cell: (cell) => (
+      <Cell {...cell}>{formatDateOrEmpty(cell.row.original.endDate)}</Cell>
+    ),
   },
   {
     accessorKey: "isActive",

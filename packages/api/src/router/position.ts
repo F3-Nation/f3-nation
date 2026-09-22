@@ -13,6 +13,8 @@ import {
   schema,
   sql,
 } from "@acme/db";
+import { OrgType } from "@acme/shared/app/enums";
+import { arrayOrSingle } from "@acme/shared/app/functions";
 import {
   AddPositionAssignmentSchema,
   GetAllPositionAssignmentsSchema,
@@ -24,7 +26,6 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { editorProcedure, protectedProcedure } from "../shared";
-import { arrayOrSingle } from "@acme/shared/app/functions";
 
 export const positionRouter = {
   /**
@@ -48,7 +49,7 @@ export const positionRouter = {
             ),
           /** Filter by org type level (ao, region, etc.) */
           orgType: z
-            .enum(["ao", "region", "area", "sector", "nation"])
+            .enum(OrgType)
             .optional()
             .describe("Filter by org type level (ao, region, etc.)"),
           /** Only get org-specific positions (exclude nation-wide) */
@@ -122,7 +123,7 @@ export const positionRouter = {
                 .nullable()
                 .describe("Organization name (null for national positions)"),
               orgType: z
-                .enum(["ao", "region", "area", "sector", "nation"])
+                .enum(OrgType)
                 .nullable()
                 .describe("Organization type level"),
               isActive: z.boolean().describe("Whether the position is active"),
@@ -146,10 +147,15 @@ export const positionRouter = {
         const result = await getEditableOrgIdsForUser(ctx);
         isNationAdmin = result.isNationAdmin;
 
-        if (!isNationAdmin && result.editableOrgs.length > 0) {
-          const editableIds = result.editableOrgs.map((o) => o.id);
-          const descendantIds = await getDescendantOrgIds(ctx.db, editableIds);
-          editableOrgIds = [...new Set([...editableIds, ...descendantIds])];
+        if (!isNationAdmin && result.editableRootOrgIds.length > 0) {
+          editableOrgIds = await getDescendantOrgIds(
+            ctx.db,
+            result.editableRootOrgIds,
+          );
+        }
+
+        if (!isNationAdmin && editableOrgIds.length === 0) {
+          return { positions: [], totalCount: 0 };
         }
       }
 
@@ -264,7 +270,7 @@ export const positionRouter = {
                 .describe("Position description"),
               orgId: z.number().nullable().describe("Organization ID"),
               orgType: z
-                .enum(["ao", "region", "area", "sector", "nation"])
+                .enum(OrgType)
                 .nullable()
                 .describe("Organization type level"),
               isActive: z.boolean().describe("Whether the position is active"),
@@ -323,7 +329,7 @@ export const positionRouter = {
               .nullable()
               .describe("Organization name (resolved from orgId)"),
             orgType: z
-              .enum(["ao", "region", "area", "sector", "nation"])
+              .enum(OrgType)
               .nullable()
               .describe("Organization type level"),
             isActive: z.boolean().describe("Whether the position is active"),
@@ -401,7 +407,7 @@ export const positionRouter = {
                 .describe("Position description"),
               orgId: z.number().nullable().describe("Organization ID"),
               orgType: z
-                .enum(["ao", "region", "area", "sector", "nation"])
+                .enum(OrgType)
                 .nullable()
                 .describe("Organization type level"),
               isActive: z.boolean().describe("Whether the position is active"),
@@ -540,7 +546,7 @@ export const positionRouter = {
             description: z.string().nullable().describe("Position description"),
             orgId: z.number().nullable().describe("Organization ID"),
             orgType: z
-              .enum(["ao", "region", "area", "sector", "nation"])
+              .enum(OrgType)
               .nullable()
               .describe("Organization type level"),
             isActive: z.boolean().describe("Whether the position is active"),
@@ -552,47 +558,107 @@ export const positionRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      // For editing, check permission on the position's org
-      // For creating, check permission on the target org
-      const targetOrgId = input.orgId;
+      // When editing, verify the caller can modify the position's *current* org
+      // before we ever look at where they want to move it.
+      if (input.id !== undefined) {
+        const [existingPosition] = await ctx.db
+          .select({ orgId: schema.positions.orgId })
+          .from(schema.positions)
+          .where(eq(schema.positions.id, input.id));
 
-      if (!targetOrgId) {
-        // Creating a global position requires nation-level permissions
-        const [nationOrg] = await ctx.db
-          .select({ id: schema.orgs.id })
-          .from(schema.orgs)
-          .where(eq(schema.orgs.orgType, "nation"));
-
-        if (!nationOrg) {
+        if (!existingPosition) {
           throw new ORPCError("NOT_FOUND", {
-            message: "Nation organization not found",
+            message: "Position not found",
           });
         }
 
-        const roleCheckResult = await checkHasRoleOnOrg({
-          orgId: nationOrg.id,
-          session: ctx.session,
-          db: ctx.db,
-          roleName: "editor",
-        });
+        // Assume only one nation org will exist
+        if (!existingPosition.orgId) {
+          const [nationOrg] = await ctx.db
+            .select({ id: schema.orgs.id })
+            .from(schema.orgs)
+            .where(eq(schema.orgs.orgType, "nation"));
 
-        if (!roleCheckResult.success) {
-          throw new ORPCError("UNAUTHORIZED", {
-            message: "You are not authorized to create global positions",
+          if (!nationOrg) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message:
+                "Position has no associated org, which means it belongs to the nation, but the nation could not be located.",
+            });
+          }
+
+          const roleCheckResult = await checkHasRoleOnOrg({
+            orgId: nationOrg.id,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
           });
+
+          if (!roleCheckResult.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to edit global positions",
+            });
+          }
+        } else {
+          const roleCheckResult = await checkHasRoleOnOrg({
+            orgId: existingPosition.orgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
+          });
+
+          if (!roleCheckResult.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to edit this position",
+            });
+          }
         }
-      } else {
-        const roleCheckResult = await checkHasRoleOnOrg({
-          orgId: targetOrgId,
-          session: ctx.session,
-          db: ctx.db,
-          roleName: "editor",
-        });
+      }
 
-        if (!roleCheckResult.success) {
-          throw new ORPCError("UNAUTHORIZED", {
-            message: "You are not authorized to manage positions for this org",
+      // Check permission on the target org when creating, or when explicitly
+      // rescoping. Pure field edits (orgId absent from payload) skip this —
+      // the current-org check above already authorized the caller.
+      if (input.id === undefined || input.orgId !== undefined) {
+        const targetOrgId = input.orgId;
+
+        if (!targetOrgId) {
+          // Creating a global position requires nation-level permissions
+          const [nationOrg] = await ctx.db
+            .select({ id: schema.orgs.id })
+            .from(schema.orgs)
+            .where(eq(schema.orgs.orgType, "nation"));
+
+          if (!nationOrg) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Nation organization not found",
+            });
+          }
+
+          const roleCheckResult = await checkHasRoleOnOrg({
+            orgId: nationOrg.id,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
           });
+
+          if (!roleCheckResult.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to create global positions",
+            });
+          }
+        } else {
+          const roleCheckResult = await checkHasRoleOnOrg({
+            orgId: targetOrgId,
+            session: ctx.session,
+            db: ctx.db,
+            roleName: "editor",
+          });
+
+          if (!roleCheckResult.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message:
+                "You are not authorized to manage positions for this org",
+            });
+          }
         }
       }
 
@@ -956,10 +1022,10 @@ export const positionRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const { editableOrgs, isNationAdmin } =
+      const { editableRootOrgIds, isNationAdmin } =
         await getEditableOrgIdsForUser(ctx);
 
-      if (!isNationAdmin && editableOrgs.length === 0) {
+      if (!isNationAdmin && editableRootOrgIds.length === 0) {
         return { assignments: [] };
       }
 
@@ -967,14 +1033,10 @@ export const positionRouter = {
 
       // Scope to editable orgs (unless nation admin)
       if (!isNationAdmin) {
-        const editableOrgIds = editableOrgs.map((o) => o.id);
-        const descendantOrgIds = await getDescendantOrgIds(
-          ctx.db,
-          editableOrgIds,
-        );
-        const allOrgIds = [
-          ...new Set([...editableOrgIds, ...descendantOrgIds]),
-        ];
+        const allOrgIds = await getDescendantOrgIds(ctx.db, editableRootOrgIds);
+        if (allOrgIds.length === 0) {
+          return { assignments: [] };
+        }
         conditions.push(inArray(schema.positionsXOrgsXUsers.orgId, allOrgIds));
       }
 

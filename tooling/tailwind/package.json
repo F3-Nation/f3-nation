@@ -6,7 +6,7 @@
   "exports": {
     "./web.css": "./web.css"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",

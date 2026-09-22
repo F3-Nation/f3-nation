@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  AppWindow,
   BadgeCheck,
+  CalendarClock,
   Earth,
   CircleSmall,
   CirclePile,
   Globe,
   KeyRound,
+  LandPlot,
   Mail,
   MapPin,
   PersonStanding,
@@ -20,6 +23,8 @@ import {
 } from "lucide-react";
 
 import { routes } from "@acme/shared/app/constants";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import { orgAdminTypes } from "./org/org-admin-config";
 import { cn } from "@acme/ui";
 
 import { useAuth } from "~/utils/hooks/use-auth";
@@ -45,6 +50,8 @@ type NavLink =
       type: "section";
       nationAdminOnly?: boolean;
     };
+
+const orgIcons = { CircleSmall, CirclePile, Earth, LandPlot, Globe, Shield };
 
 export const AdminNavLinks = ({
   className,
@@ -101,41 +108,26 @@ export const AdminNavLinks = ({
       type: "link",
     },
     {
+      href: routes.admin.eventInstances.__path,
+      icon: CalendarClock,
+      label: "Event instances",
+      type: "link",
+    },
+    {
       href: routes.admin.locations.__path,
       icon: MapPin,
       label: "Locations",
       type: "link",
     },
-    {
-      href: routes.admin.aos.__path,
-      icon: CircleSmall,
-      label: "AOs",
-      type: "link",
-    },
-    {
-      href: routes.admin.regions.__path,
-      icon: CirclePile,
-      label: "Regions",
-      type: "link",
-    },
-    {
-      href: routes.admin.areas.__path,
-      icon: Earth,
-      label: "Areas",
-      type: "link",
-    },
-    {
-      href: routes.admin.sectors.__path,
-      icon: Globe,
-      label: "Sectors",
-      type: "link",
-    },
-    {
-      href: routes.admin.theNation.__path,
-      icon: Shield,
-      label: "The Nation",
-      type: "link",
-    },
+    ...orgAdminTypes.map((orgType) => {
+      const display = orgTypeDisplay[orgType];
+      return {
+        href: `/${display.routeSegment}`,
+        icon: orgIcons[display.icon],
+        label: display.pluralLabel,
+        type: "link" as const,
+      };
+    }),
     {
       label: "Applications",
       type: "section",
@@ -162,6 +154,16 @@ export const AdminNavLinks = ({
       icon: Mail,
       label: "Email Test",
       type: "link",
+      nationAdminOnly: true,
+    },
+    {
+      href: routes.admin.oauthClients.__path,
+      icon: AppWindow,
+      label: "OAuth Clients",
+      type: "link",
+      // Unlike API Keys, OAuth clients aren't org-scoped — a client can
+      // mint SSO tokens for the whole nation, so this stays nation-admin
+      // only rather than following apiKeys' org-scoped placement above.
       nationAdminOnly: true,
     },
   ];

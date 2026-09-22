@@ -6,6 +6,7 @@ import { and, desc, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { logError } from "../logger";
 import { adminProcedure } from "../shared";
 
 const createApiKeySchema = z.object({
@@ -258,7 +259,13 @@ export const apiKeyRouter = {
           })
           .returning();
 
-        if (apiKey && roles.length > 0) {
+        if (!apiKey) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Unable to generate unique API key",
+          });
+        }
+
+        if (roles.length > 0) {
           // Get role IDs for all unique role names
           const roleNames = [...new Set(roles.map((r) => r.roleName))];
           const roleRecords = await ctx.db
@@ -268,19 +275,14 @@ export const apiKeyRouter = {
 
           const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
 
-          // Verify all roles exist
-          for (const roleName of roleNames) {
-            if (!roleMap.has(roleName)) {
-              throw new Error(`Role "${roleName}" not found`);
-            }
-          }
-
           // Insert org associations with roles
           await ctx.db.insert(schema.rolesXApiKeysXOrg).values(
             roles.map((role) => {
               const roleId = roleMap.get(role.roleName);
-              if (!roleId) {
-                throw new Error(`Role "${role.roleName}" not found`);
+              if (roleId == null) {
+                throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                  message: `Role "${role.roleName}" not found`,
+                });
               }
               return {
                 roleId,
@@ -291,19 +293,24 @@ export const apiKeyRouter = {
           );
         }
 
-        if (apiKey) {
-          return { ...apiKey, secret: generatedKey };
-        }
+        return { ...apiKey, secret: generatedKey };
       } catch (error) {
         if (isUniqueError(error)) {
           throw new ORPCError("INTERNAL_SERVER_ERROR", {
             message: "Unable to generate unique API key. Please try again.",
           });
         }
-        throw error;
+        // An ORPCError raised inside the try (e.g. the missing-role lookup) is
+        // already typed and client-safe, so it passes through untouched.
+        if (error instanceof ORPCError) throw error;
+        // Anything else is an unexpected DB/driver fault. Rethrowing it raw
+        // lets oRPC mask it as an opaque 500 and lose the cause, so log the
+        // original and surface a generic message that leaks no internals.
+        logError("api.api_key.create_failed", { name: input.name }, error);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unable to create API key",
+        });
       }
-
-      throw new Error("Unable to generate unique API key");
     }),
   revoke: adminProcedure
     .input(revokeApiKeySchema)

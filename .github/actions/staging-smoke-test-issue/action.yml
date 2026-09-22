@@ -1,0 +1,188 @@
+name: Update staging smoke-test tracker issue
+description: >-
+  Creates or updates the single open "staging-smoke-test" tracking issue,
+  writing/replacing this app's own section so every app's checklist lives
+  in one issue instead of one issue per deploy.
+
+inputs:
+  service_name:
+    description: "Human-readable service name for the section heading (e.g. f3-map)"
+    required: true
+  version:
+    description: "Deployed version"
+    required: true
+  staging_url:
+    description: "Public staging URL for this app, if any"
+    required: false
+    default: ""
+  app_key:
+    description: >-
+      Section key matching a "## <app_key>" heading in
+      .github/smoke-tests/checklists.md (e.g. map, slackbot)
+    required: true
+  app_label:
+    description: "Existing 'app: X' label to apply to the tracker issue"
+    required: false
+    default: ""
+  github_token:
+    description: "Token with issues:write on this repo"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        SERVICE_NAME: ${{ inputs.service_name }}
+        VERSION: ${{ inputs.version }}
+        STAGING_URL: ${{ inputs.staging_url }}
+        APP_KEY: ${{ inputs.app_key }}
+        APP_LABEL: ${{ inputs.app_label }}
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const fs = require("fs");
+
+          const CHECKLISTS_FILE = ".github/smoke-tests/checklists.md";
+          const appName = process.env.APP_KEY;
+          const serviceName = process.env.SERVICE_NAME;
+          const version = process.env.VERSION;
+          const stagingUrl = process.env.STAGING_URL;
+          const appLabel = process.env.APP_LABEL;
+
+          // Split checklists.md into { key -> body } on "## <key>" headings.
+          const raw = fs.readFileSync(CHECKLISTS_FILE, "utf8");
+          const headingRe = /^##\s+(\S+)\s*$/gm;
+          const heads = [];
+          let m;
+          while ((m = headingRe.exec(raw)) !== null) {
+            heads.push({ key: m[1], start: m.index, headingEnd: headingRe.lastIndex });
+          }
+          const sections = new Map(
+            heads.map(({ key, headingEnd }, i) => {
+              const end = i + 1 < heads.length ? heads[i + 1].start : raw.length;
+              return [key, raw.slice(headingEnd, end).trim()];
+            }),
+          );
+
+          const checklist = sections.get(appName);
+          if (!checklist) {
+            core.setFailed(`No "## ${appName}" section found in ${CHECKLISTS_FILE}`);
+            return;
+          }
+
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const now = new Date().toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+
+          const startMarker = `<!-- smoke-test:${appName}:start -->`;
+          const endMarker = `<!-- smoke-test:${appName}:end -->`;
+          const section = [
+            startMarker,
+            `### ${serviceName} — \`${version}\` (deployed ${now})`,
+            stagingUrl ? `Staging URL: ${stagingUrl}\n` : "",
+            checklist,
+            endMarker,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          const HEADER = [
+            "## Staging smoke test tracker",
+            "",
+            "Auto-updated after each app's staging deploy — one section per app. " +
+              "Check items off as you verify them on Staging. When everything below " +
+              "is checked, close this issue; the next staging deploy opens a fresh one.",
+            "",
+            "---",
+          ].join("\n");
+
+          const open = await github.paginate(github.rest.issues.listForRepo, {
+            owner,
+            repo,
+            state: "open",
+            labels: "staging-smoke-test",
+            sort: "created",
+            direction: "desc",
+            per_page: 100,
+          });
+          // listForRepo also returns pull requests carrying this label; only
+          // real issues are valid trackers.
+          const trackerIssues = open.filter((candidate) => !candidate.pull_request);
+
+          if (trackerIssues.length === 0) {
+            const labels = ["staging-smoke-test"];
+            if (appLabel) labels.push(appLabel);
+            const created = await github.rest.issues.create({
+              owner,
+              repo,
+              title: "Staging smoke test tracker",
+              body: `${HEADER}\n\n${section}\n`,
+              labels,
+            });
+            core.info(`Created tracker issue #${created.data.number}`);
+            return;
+          }
+
+          // Nothing serializes concurrent deploy-triggered jobs against each
+          // other (see the workflow caller for why), so another job can race
+          // this one to update the same tracker issue. Read-modify-write in a
+          // loop and verify our own section actually stuck after each write;
+          // retry on conflict instead of trusting a single update call.
+          const issueNumber = trackerIssues[0].number;
+          const blockRe = new RegExp(`${startMarker}[\\s\\S]*?${endMarker}`);
+          const MAX_ATTEMPTS = 5;
+          let wrote = false;
+
+          for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            const { data: current } = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber,
+            });
+            const currentBody = current.body ?? "";
+            const body = blockRe.test(currentBody)
+              ? currentBody.replace(blockRe, section)
+              : `${currentBody.trimEnd()}\n\n${section}\n`;
+
+            await github.rest.issues.update({ owner, repo, issue_number: issueNumber, body });
+
+            const { data: verify } = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber,
+            });
+            if ((verify.body ?? "").includes(section)) {
+              wrote = true;
+              if (appLabel) {
+                const existingLabels = verify.labels.map((l) => (typeof l === "string" ? l : l.name));
+                if (!existingLabels.includes(appLabel)) {
+                  await github.rest.issues.addLabels({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    labels: [appLabel],
+                  });
+                }
+              }
+              break;
+            }
+
+            core.warning(
+              `Attempt ${attempt}/${MAX_ATTEMPTS}: a concurrent deploy's write clobbered the ` +
+                `"${appName}" section on tracker issue #${issueNumber}; retrying`,
+            );
+            const backoffMs = 1000 * attempt + Math.floor(Math.random() * 1000);
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          }
+
+          if (!wrote) {
+            core.setFailed(
+              `Could not write the "${appName}" section to tracker issue #${issueNumber} after ` +
+                `${MAX_ATTEMPTS} attempts — concurrent deploys kept clobbering each other's ` +
+                `updates. Re-run this job.`,
+            );
+            return;
+          }
+
+          core.info(`Updated tracker issue #${issueNumber} (section: ${appName})`);

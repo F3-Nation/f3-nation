@@ -165,6 +165,10 @@ export const routes = {
       __path: "/sectors",
       __auth: "editor",
     },
+    territories: {
+      __path: "/territories",
+      __auth: "editor",
+    },
     areas: {
       __path: "/areas",
       __auth: "editor",
@@ -193,6 +197,10 @@ export const routes = {
       __path: "/api-keys",
       __auth: "admin",
     },
+    oauthClients: {
+      __path: "/oauth-clients",
+      __auth: "admin",
+    },
     locations: {
       __path: "/locations",
       __auth: "editor",
@@ -207,6 +215,10 @@ export const routes = {
     },
     positions: {
       __path: "/positions",
+      __auth: "editor",
+    },
+    eventInstances: {
+      __path: "/event-instances",
       __auth: "editor",
     },
     emailTest: {
@@ -483,6 +495,12 @@ export const TEST_SECTOR_ORG_ID = 5;
 export const TEST_AREA_ORG_ID = 6;
 export const TEST_AO_1_ORG_ID = 7;
 export const TEST_AO_2_ORG_ID = 8;
+export const TEST_TERRITORY_ORG_ID = 9;
+export const TEST_TERRITORY_AREA_ORG_ID = 10;
+export const TEST_TERRITORY_REGION_ORG_ID = 11;
+export const TEST_TERRITORY_AO_ORG_ID = 12;
+export const TEST_AREA_REGION_ORG_ID = 13;
+export const TEST_AREA_AO_ORG_ID = 14;
 export const TEST_REGION_1_LOCATION_ID = 21;
 export const TEST_REGION_1_AO_ID = 22;
 export const TEST_EDITOR_USER_ID = 1;

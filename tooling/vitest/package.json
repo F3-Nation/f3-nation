@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./coverage.ts"
+    ".": "./coverage.ts",
+    "./eslint": "./vitest.js"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
@@ -17,9 +18,11 @@
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "@vitest/eslint-plugin": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
     "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"

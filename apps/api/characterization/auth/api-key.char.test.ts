@@ -56,6 +56,7 @@ describe.runIf(target.inProcess)("API key resolution", () => {
       [adminKey, noRoleKey, expiredKey].map((f) => f?.cleanup()),
     );
     const failed = results.filter((r) => r.status === "rejected");
+    // eslint-disable-next-line vitest/no-standalone-expect -- intentional: asserts in afterAll, not a test block
     expect(
       failed,
       `fixture cleanup leaked rows: ${JSON.stringify(failed)}`,

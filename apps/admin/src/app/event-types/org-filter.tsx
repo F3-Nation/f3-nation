@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 
 import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
+import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
 
 type Org = RouterOutputs["org"]["accessible"]["orgs"][number];
 
@@ -26,7 +27,7 @@ export const OrgFilter = ({
 }) => {
   const { data: accessibleOrgs } = useQuery(
     orpc.org.accessible.queryOptions({
-      input: { orgTypes: ["area", "sector", "region", "nation"] },
+      input: { orgTypes: AdminScopeOrgTypes },
     }),
   );
 

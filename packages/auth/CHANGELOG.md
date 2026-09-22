@@ -1,5 +1,76 @@
 # Changelog
 
+## [0.2.6](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.5...pkg-auth@0.2.6) (2026-09-16)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.6.2
+    * @acme/shared bumped to 0.3.1
+
+## [0.2.5](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.4...pkg-auth@0.2.5) (2026-09-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.6.1
+
+## [0.2.4](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.3...pkg-auth@0.2.4) (2026-09-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.6.0
+    * @acme/shared bumped to 0.3.0
+
+## [0.2.3](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.2...pkg-auth@0.2.3) (2026-09-08)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.5.0
+    * @acme/shared bumped to 0.2.0
+
+## [0.2.2](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.1...pkg-auth@0.2.2) (2026-08-18)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.4.1
+
+## [0.2.1](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.0...pkg-auth@0.2.1) (2026-08-12)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.4.0
+
+## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.1.5...pkg-auth@0.2.0) (2026-08-05)
+
+
+### Features
+
+* **repo:** ai-native sdlc — previews, e2e, ai review/triage ([#685](https://github.com/F3-Nation/f3-nation/issues/685)) ([1c66c22](https://github.com/F3-Nation/f3-nation/commit/1c66c228727c9fbc4c5575f42e41c5b2576267be))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.3.0
+
 ## [0.1.5](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.1.4...pkg-auth@0.1.5) (2026-07-26)
 
 

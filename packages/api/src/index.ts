@@ -12,12 +12,14 @@ import { locationRouter } from "./router/location";
 import { mailRouter } from "./router/mail";
 import { mapRouter } from "./router/map/index";
 import { meRouter } from "./router/me";
+import { oauthClientRouter } from "./router/oauth-client";
 import { orgChartRouter } from "./router/org-chart";
 import { orgRouter } from "./router/org";
 import { pingRouter } from "./router/ping";
 import { positionRouter } from "./router/position";
 import { requestRouter } from "./router/request";
 import { slackRouter } from "./router/slack";
+import { statusRouter } from "./router/status";
 import { userRouter } from "./router/user";
 
 // Re-export webhook event types for external use
@@ -36,10 +38,12 @@ export const router = os.prefix(API_PREFIX_V1).router({
   location: os.prefix("/location").router(locationRouter),
   map: os.prefix("/map").router(mapRouter),
   me: os.prefix("/me").router(meRouter),
+  oauthClient: os.prefix("/oauth-client").router(oauthClientRouter),
   orgChart: os.prefix("/org-chart").router(orgChartRouter),
   org: os.prefix("/org").router(orgRouter),
   position: os.prefix("/position").router(positionRouter),
   request: os.prefix("/request").router(requestRouter),
   slack: os.prefix("/slack").router(slackRouter),
+  status: os.router(statusRouter),
   user: os.prefix("/user").router(userRouter),
 });

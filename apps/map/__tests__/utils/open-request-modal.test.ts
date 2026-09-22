@@ -1,5 +1,5 @@
 import type { RequestType } from "@acme/shared/app/enums";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // --- Hoisted spies / mock state -------------------------------------------
 const h = vi.hoisted(() => {
@@ -107,6 +107,7 @@ const run = (type: RequestType, overrides = {}) =>
   openRequestModal({ type, ...BASE_PARAMS, ...overrides });
 
 beforeEach(() => {
+  vi.useFakeTimers();
   vi.clearAllMocks();
   h.getSession.mockResolvedValue({ email: "tester@example.com" });
   h.getQueryData.mockReturnValue({ location: LOCATION });
@@ -115,6 +116,15 @@ beforeEach(() => {
     modifiedLocationMarkers: {},
     center: { lat: 0, lng: 0 },
   };
+});
+
+afterEach(() => {
+  try {
+    // closeModal schedules DOM cleanup; finish it before jsdom is torn down.
+    vi.runOnlyPendingTimers();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 describe("openRequestModal – request type -> modal type mapping", () => {

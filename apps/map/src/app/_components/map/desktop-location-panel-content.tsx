@@ -12,6 +12,8 @@ import {
   formatTime,
   getShortDayOfWeek,
   LocationEditButtons,
+  resolveAoId,
+  useEditableEventId,
 } from "./location-edit-buttons";
 
 export const DesktopLocationPanelContent = () => {
@@ -30,14 +32,25 @@ export const DesktopLocationPanelContent = () => {
     }),
   );
 
-  // Get AO name and selected event name
+  const editableEventId = useEditableEventId({
+    selectedEventId: panelEventId,
+    events: locationData?.location?.events,
+  });
+
+  // Get AO name and selected event name. Label the edit buttons with the event
+  // they actually act on, which for a temporary change is the resolved parent
+  // series rather than the instance.
   const aoName = locationData?.location?.parentName ?? "AO";
   const selectedEvent = locationData?.location?.events.find(
-    (event) => event.id === panelEventId,
+    (event) => event.id === editableEventId,
   );
   const modalAOIds = locationData?.location?.events.map((e) => e.aoId);
-  const aoId = selectedEvent?.aoId ?? modalAOIds?.[0] ?? null;
+  const aoId = resolveAoId({
+    selectedEventAoId: selectedEvent?.aoId,
+    eventAoIds: modalAOIds,
+  });
   const eventName = selectedEvent?.name ?? "Workout";
+  const showEditButtons = aoId != null;
 
   // Get short day of week and format time
   const shortDayOfWeek = getShortDayOfWeek(selectedEvent?.dayOfWeek);
@@ -66,11 +79,11 @@ export const DesktopLocationPanelContent = () => {
       </button>
 
       {/* Edit buttons at the top */}
-      {mode === "edit" && (
+      {mode === "edit" && showEditButtons && (
         <div className="mb-4">
           <LocationEditButtons
             locationId={panelLocationId}
-            eventId={panelEventId}
+            eventId={editableEventId}
             aoName={aoName}
             aoId={aoId}
             eventName={eventName}

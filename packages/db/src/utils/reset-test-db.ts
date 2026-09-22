@@ -5,6 +5,13 @@ import { reset } from "../reset";
 import { testSeed } from "../test-seed";
 import { createDatabaseIfNotExists, getDb, getDbUrl } from "./functions";
 
+export { createDbClient } from "./functions";
+// Exported for integration tests (packages/api), which run against a real
+// Postgres — the wrapper's behavior depends on postgres-js internals (lazy
+// dispatch, out-of-band CancelRequest) that mocks cannot meaningfully pin.
+export { withQueryTimeout } from "./query-timeout";
+export { resolveQueryTimeoutMs } from "./functions";
+
 const shouldSkipReset = () => {
   if (
     process.env.SKIP_RESET_TEST_DB === "1" ||
@@ -56,7 +63,7 @@ export const resetTestDb = async (params?: {
   // If we have arg `--reset` then we should reset the database
   if (shouldReset) {
     console.log("Resetting database");
-    await reset();
+    await reset(params?.db);
   }
 
   console.log("Migrating database", databaseName, {

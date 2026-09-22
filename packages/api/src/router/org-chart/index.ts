@@ -1,7 +1,19 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import { and, asc, countDistinct, eq, isNotNull, schema, sql } from "@acme/db";
+import {
+  aliasedTable,
+  and,
+  asc,
+  countDistinct,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  schema,
+  sql,
+} from "@acme/db";
 import { OrgType } from "@acme/shared/app/enums";
 
 import { protectedProcedure } from "../../shared";
@@ -62,6 +74,7 @@ export const orgChartRouter = {
               activeLocations: z
                 .array(
                   z.object({
+                    locationId: z.number().describe("Location ID"),
                     latitude: z.number().describe("Location latitude"),
                     longitude: z.number().describe("Location longitude"),
                     eventCount: z
@@ -96,6 +109,14 @@ export const orgChartRouter = {
           aoCount: countDistinct(schema.events.orgId),
         })
         .from(schema.events)
+        .innerJoin(
+          schema.orgs,
+          and(
+            eq(schema.orgs.id, schema.events.orgId),
+            eq(schema.orgs.orgType, "ao"),
+            eq(schema.orgs.isActive, true),
+          ),
+        )
         .where(
           and(
             eq(schema.events.isActive, true),
@@ -111,7 +132,6 @@ export const orgChartRouter = {
           latitude: schema.locations.latitude,
           longitude: schema.locations.longitude,
           eventCount: countDistinct(schema.events.id),
-          aoCount: sql<number>`0`,
         })
         .from(schema.locations)
         .innerJoin(
@@ -120,6 +140,14 @@ export const orgChartRouter = {
             eq(schema.events.locationId, schema.locations.id),
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
+          ),
+        )
+        .innerJoin(
+          schema.orgs,
+          and(
+            eq(schema.orgs.id, schema.events.orgId),
+            eq(schema.orgs.orgType, "ao"),
+            eq(schema.orgs.isActive, true),
           ),
         )
         .where(
@@ -191,13 +219,10 @@ export const orgChartRouter = {
         aoCountsByLocation.map((row) => [row.locationId, Number(row.aoCount)]),
       );
 
-      for (const summary of locationSummaries) {
-        summary.aoCount = aoCountMap.get(summary.locationId) ?? 0;
-      }
-
       const activeLocationsByOrg = new Map<
         number,
         {
+          locationId: number;
           latitude: number;
           longitude: number;
           eventCount: number;
@@ -211,29 +236,16 @@ export const orgChartRouter = {
         }
 
         const eventCount = Number(summary.eventCount ?? 0);
-        const aoCount = Number(summary.aoCount ?? 0);
+        const aoCount = aoCountMap.get(summary.locationId) ?? 0;
 
         const existing = activeLocationsByOrg.get(summary.orgId) ?? [];
-        const match = existing.find(
-          (location) =>
-            location.latitude === summary.latitude &&
-            location.longitude === summary.longitude,
-        );
-
-        if (match) {
-          match.eventCount += eventCount;
-          // For co-located venues, aoCount is already distinct per location
-          // To avoid overcounting the same AO across multiple co-located locations,
-          // we take the maximum instead of summing
-          match.aoCount = Math.max(match.aoCount, aoCount);
-        } else {
-          existing.push({
-            latitude: summary.latitude,
-            longitude: summary.longitude,
-            eventCount,
-            aoCount,
-          });
-        }
+        existing.push({
+          locationId: summary.locationId,
+          latitude: summary.latitude,
+          longitude: summary.longitude,
+          eventCount,
+          aoCount,
+        });
         activeLocationsByOrg.set(summary.orgId, existing);
       }
 
@@ -351,7 +363,10 @@ export const orgChartRouter = {
         )
         .innerJoin(
           schema.users,
-          eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+          and(
+            eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+            eq(schema.users.status, "active"),
+          ),
         )
         .where(eq(schema.positionsXOrgsXUsers.orgId, input.orgId))
         .orderBy(asc(schema.positions.name), asc(schema.users.f3Name));
@@ -372,7 +387,10 @@ export const orgChartRouter = {
         )
         .innerJoin(
           schema.users,
-          eq(schema.users.id, schema.rolesXUsersXOrg.userId),
+          and(
+            eq(schema.users.id, schema.rolesXUsersXOrg.userId),
+            eq(schema.users.status, "active"),
+          ),
         )
         .where(eq(schema.rolesXUsersXOrg.orgId, input.orgId))
         .orderBy(asc(schema.roles.name), asc(schema.users.f3Name));
@@ -402,5 +420,328 @@ export const orgChartRouter = {
           avatarUrl: role.avatarUrl,
         })),
       };
+    }),
+
+  byLocation: protectedProcedure
+    .input(
+      z.object({
+        locationId: z.coerce
+          .number()
+          .describe("The location ID to look up AOs for"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/location/{locationId}",
+      tags: ["Org Chart"],
+      summary: "Get AOs at a location",
+      description:
+        "Return all AOs with active events at the given location, along with their leadership positions.",
+    })
+    .output(
+      z.object({
+        locationId: z.number(),
+        locationName: z.string().nullable(),
+        latitude: z.number().nullable(),
+        longitude: z.number().nullable(),
+        aos: z.array(
+          z.object({
+            id: z.number().describe("AO org ID"),
+            name: z.string().nullable(),
+            email: z.string().nullable(),
+            website: z.string().nullable(),
+            twitter: z.string().nullable(),
+            facebook: z.string().nullable(),
+            instagram: z.string().nullable(),
+            logoUrl: z.string().nullable(),
+            eventCount: z.number().describe("Active events at this location"),
+            positions: z.array(
+              z.object({
+                positionId: z.number(),
+                title: z.string(),
+                userId: z.number(),
+                f3Name: z.string().nullable(),
+                avatarUrl: z.string().nullable(),
+              }),
+            ),
+          }),
+        ),
+      }),
+    )
+    .handler(async ({ context: ctx, input }) => {
+      const [location] = await ctx.db
+        .select({
+          id: schema.locations.id,
+          name: schema.locations.name,
+          latitude: schema.locations.latitude,
+          longitude: schema.locations.longitude,
+        })
+        .from(schema.locations)
+        .where(
+          and(
+            eq(schema.locations.id, input.locationId),
+            eq(schema.locations.isActive, true),
+          ),
+        );
+
+      if (!location) {
+        throw new ORPCError("NOT_FOUND", { message: "Location not found" });
+      }
+
+      const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const aoRows = await ctx.db
+        .select({
+          id: aoOrg.id,
+          name: aoOrg.name,
+          email: aoOrg.email,
+          website: aoOrg.website,
+          twitter: aoOrg.twitter,
+          facebook: aoOrg.facebook,
+          instagram: aoOrg.instagram,
+          logoUrl: aoOrg.logoUrl,
+          eventCount: countDistinct(schema.events.id),
+        })
+        .from(schema.events)
+        .innerJoin(
+          aoOrg,
+          and(
+            eq(aoOrg.id, schema.events.orgId),
+            eq(aoOrg.orgType, "ao"),
+            eq(aoOrg.isActive, true),
+          ),
+        )
+        .where(
+          and(
+            eq(schema.events.locationId, input.locationId),
+            eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
+          ),
+        )
+        .groupBy(
+          aoOrg.id,
+          aoOrg.name,
+          aoOrg.email,
+          aoOrg.website,
+          aoOrg.twitter,
+          aoOrg.facebook,
+          aoOrg.instagram,
+          aoOrg.logoUrl,
+        )
+        .orderBy(asc(aoOrg.name));
+
+      if (aoRows.length === 0) {
+        return {
+          locationId: location.id,
+          locationName: location.name,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          aos: [],
+        };
+      }
+
+      const aoIds = aoRows.map((ao) => ao.id);
+      const positionRows = await ctx.db
+        .select({
+          orgId: schema.positionsXOrgsXUsers.orgId,
+          positionId: schema.positions.id,
+          title: schema.positions.name,
+          userId: schema.users.id,
+          f3Name: schema.users.f3Name,
+          avatarUrl: schema.users.avatarUrl,
+        })
+        .from(schema.positionsXOrgsXUsers)
+        .innerJoin(
+          schema.positions,
+          and(
+            eq(schema.positions.id, schema.positionsXOrgsXUsers.positionId),
+            eq(schema.positions.isActive, true),
+          ),
+        )
+        .innerJoin(
+          schema.users,
+          and(
+            eq(schema.users.id, schema.positionsXOrgsXUsers.userId),
+            eq(schema.users.status, "active"),
+          ),
+        )
+        .where(inArray(schema.positionsXOrgsXUsers.orgId, aoIds))
+        .orderBy(asc(schema.positions.name), asc(schema.users.f3Name));
+
+      const positionsByOrgId = new Map<number, typeof positionRows>();
+      for (const row of positionRows) {
+        const list = positionsByOrgId.get(row.orgId) ?? [];
+        list.push(row);
+        positionsByOrgId.set(row.orgId, list);
+      }
+
+      return {
+        locationId: location.id,
+        locationName: location.name,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        aos: aoRows.map((ao) => ({
+          id: ao.id,
+          name: ao.name,
+          email: ao.email,
+          website: ao.website,
+          twitter: ao.twitter,
+          facebook: ao.facebook,
+          instagram: ao.instagram,
+          logoUrl: ao.logoUrl,
+          eventCount: Number(ao.eventCount),
+          positions: (positionsByOrgId.get(ao.id) ?? []).map((p) => ({
+            positionId: p.positionId,
+            title: p.title,
+            userId: p.userId,
+            f3Name: p.f3Name,
+            avatarUrl: p.avatarUrl,
+          })),
+        })),
+      };
+    }),
+
+  aos: protectedProcedure
+    .input(
+      z.object({
+        searchTerm: z
+          .string()
+          .min(2)
+          .describe("AO name search term (minimum 2 characters)"),
+      }),
+    )
+    .route({
+      method: "GET",
+      path: "/aos",
+      tags: ["Org Chart"],
+      summary: "Search AOs by name",
+      description:
+        "Return active AOs whose name matches the query, each with its region and busiest active location so the map can navigate to it.",
+    })
+    .output(
+      z.object({
+        aos: z.array(
+          z.object({
+            id: z.number().describe("AO org ID"),
+            name: z.string().nullable().describe("AO name"),
+            regionId: z.number().describe("Parent region org ID"),
+            regionName: z.string().nullable().describe("Parent region name"),
+            locationId: z.number().describe("Busiest active location ID"),
+            latitude: z.number().describe("Location latitude"),
+            longitude: z.number().describe("Location longitude"),
+            eventCount: z
+              .number()
+              .describe("Active events for this AO at that location"),
+          }),
+        ),
+      }),
+    )
+    .handler(async ({ context: ctx, input }) => {
+      const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const regionOrg = aliasedTable(schema.orgs, "region_org");
+
+      // Rank exact and prefix matches ahead of substring matches so an exact
+      // name match isn't excluded by the 12-result cap in favor of unrelated
+      // substring hits that sort earlier alphabetically.
+      const matchRank = sql<number>`
+        case
+          when lower(${aoOrg.name}) = lower(${input.searchTerm}) then 0
+          when ${aoOrg.name} ilike ${`${input.searchTerm}%`} then 1
+          else 2
+        end
+      `;
+
+      // One row per (AO, location); ordered so the busiest location leads each
+      // AO, then reduced to that single location below.
+      const rows = await ctx.db
+        .select({
+          id: aoOrg.id,
+          name: aoOrg.name,
+          regionId: regionOrg.id,
+          regionName: regionOrg.name,
+          locationId: schema.locations.id,
+          latitude: schema.locations.latitude,
+          longitude: schema.locations.longitude,
+          eventCount: countDistinct(schema.events.id),
+        })
+        .from(schema.events)
+        .innerJoin(
+          aoOrg,
+          and(
+            eq(aoOrg.id, schema.events.orgId),
+            eq(aoOrg.orgType, "ao"),
+            eq(aoOrg.isActive, true),
+          ),
+        )
+        .innerJoin(
+          regionOrg,
+          and(
+            eq(regionOrg.id, aoOrg.parentId),
+            eq(regionOrg.orgType, "region"),
+            eq(regionOrg.isActive, true),
+          ),
+        )
+        .innerJoin(
+          schema.locations,
+          and(
+            eq(schema.locations.id, schema.events.locationId),
+            eq(schema.locations.isActive, true),
+            isNotNull(schema.locations.latitude),
+            isNotNull(schema.locations.longitude),
+          ),
+        )
+        .where(
+          and(
+            eq(schema.events.isActive, true),
+            eq(schema.events.isPrivate, false),
+            ilike(aoOrg.name, `%${input.searchTerm}%`),
+          ),
+        )
+        .groupBy(
+          aoOrg.id,
+          aoOrg.name,
+          regionOrg.id,
+          regionOrg.name,
+          schema.locations.id,
+          schema.locations.latitude,
+          schema.locations.longitude,
+        )
+        .orderBy(
+          asc(matchRank),
+          asc(aoOrg.name),
+          desc(countDistinct(schema.events.id)),
+        )
+        .limit(200);
+
+      // Keep only the busiest location per AO (first row wins), cap results.
+      interface AoSearchHit {
+        id: number;
+        name: string | null;
+        regionId: number;
+        regionName: string | null;
+        locationId: number;
+        latitude: number;
+        longitude: number;
+        eventCount: number;
+      }
+      const seen = new Set<number>();
+      const aos: AoSearchHit[] = [];
+      for (const row of rows) {
+        if (seen.has(row.id)) continue;
+        if (row.latitude === null || row.longitude === null) continue;
+        seen.add(row.id);
+        aos.push({
+          id: row.id,
+          name: row.name,
+          regionId: row.regionId,
+          regionName: row.regionName,
+          locationId: row.locationId,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          eventCount: Number(row.eventCount),
+        });
+        if (aos.length >= 12) break;
+      }
+
+      return { aos };
     }),
 };

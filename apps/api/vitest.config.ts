@@ -1,27 +1,28 @@
 import { coverageExclude, coverageInclude } from "@acme/vitest-config";
-import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [react()],
   resolve: { tsconfigPaths: true },
   test: {
     globals: true,
-    environment: "jsdom",
+    environment: "node",
     env: { NODE_ENV: "test" },
-    setupFiles: ["__tests__/setup.tsx"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
       include: coverageInclude,
-      exclude: coverageExclude,
+      // server.ts and instrument.ts are hand-verified process bootstrap (Sentry
+      // init, @hono/node-server serve(), SIGTERM handling) — same category as
+      // the instrumentation.ts they replace, which bootstrapCoverageExclude
+      // already excludes for every app.
+      exclude: [...coverageExclude, "src/server.ts", "src/instrument.ts"],
       thresholds: {
         autoUpdate: true,
-        statements: 90.62,
-        branches: 93.18,
-        functions: 80,
-        lines: 90.62,
+        statements: 99.02,
+        branches: 100,
+        functions: 94.11,
+        lines: 99,
       },
     },
     exclude: [
@@ -31,10 +32,5 @@ export default defineConfig({
       "**/cypress/**",
       "**/.{idea,git,cache,output,temp}/**",
     ],
-    server: {
-      deps: {
-        inline: ["vitest-canvas-mock", "jest-canvas-mock"],
-      },
-    },
   },
 });

@@ -177,7 +177,6 @@ export const parseSorting = () =>
   z.preprocess(
     (val) => {
       if (val === undefined || val === null) return undefined;
-      console.log("val", val);
       // If it's an array of strings (happens when query params are split)
       // Try to join them and parse as JSON
       if (Array.isArray(val) && val.every((v) => typeof v === "string")) {
@@ -197,7 +196,6 @@ export const parseSorting = () =>
 
       // If it's a string, parse it as JSON
       if (typeof val === "string") {
-        console.log("val is string");
         try {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-return
           return JSON.parse(val);

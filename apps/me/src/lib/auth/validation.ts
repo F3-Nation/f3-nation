@@ -1,4 +1,4 @@
-import { isSafeReturnPath, sanitizeReturnPath } from "@acme/sso";
+import { isSafeReturnPath, sanitizeReturnPath } from "@f3nation/sso-next";
 
 /**
  * Validate that a return-to path is safe (relative, no open-redirect).

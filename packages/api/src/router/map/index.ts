@@ -1,5 +1,4 @@
 import { os } from "@orpc/server";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { MailService, Templates } from "@acme/mail";
@@ -29,10 +28,7 @@ export const mapRouter = os.router({
         "Trigger cache revalidation. Auth: nation admin session OR x-api-key header with SUPER_ADMIN_API_KEY",
     })
     .handler(async () => {
-      // Revalidate API app cache
-      revalidatePath("/");
-
-      // Also trigger Map app revalidation via HTTP - API and Map are separate Next.js instances
+      // Trigger Map app revalidation via HTTP - API and Map are separate Next.js instances
       await triggerMapAppRevalidation();
 
       return { success: true };

@@ -45,7 +45,7 @@ src/
 └── lib/
     ├── auth/
     │   ├── constants.ts    — Cookie names, TTLs
-    │   ├── oauth.ts        — AuthClient wrapper (@acme/sso)
+    │   ├── oauth.ts        — AuthClient wrapper (@f3nation/sso)
     │   ├── tokens.ts       — Access token parsing/expiry helpers
     │   ├── server.ts       — getSessionUser(), requireAuth(), requireAccessToken()
     │   └── AuthProvider.tsx — Client-side auth context

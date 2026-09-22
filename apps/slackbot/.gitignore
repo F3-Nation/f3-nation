@@ -156,5 +156,4 @@ env.json
 
 # manifest files
 app_manifest.yaml
-app_manifest.json
 lt_output.txt

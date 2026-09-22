@@ -1,6 +1,6 @@
 {
   "name": "f3-map",
-  "version": "7.0.9",
+  "version": "7.3.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -26,7 +26,6 @@
     "@acme/tailwind-config": "workspace:*",
     "@acme/ui": "workspace:*",
     "@acme/validators": "workspace:*",
-    "@auth/core": "catalog:",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/tanstack-query": "catalog:",
@@ -41,7 +40,6 @@
     "dotenv-cli": "catalog:",
     "geist": "catalog:",
     "lodash": "catalog:",
-    "lottie-react": "catalog:",
     "lucide-react": "catalog:",
     "next": "catalog:",
     "next-auth": "catalog:",

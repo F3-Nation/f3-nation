@@ -200,6 +200,10 @@ file.arrayBuffer()` on untrusted input.
 - Duplicated logic that has drifted between apps (e.g. two copies of an auth
   helper where only one was fixed).
 - Dead code, commented-out prod branches, `TODO`/`FIXME` on security paths.
+- Raw `throw new Error(...)` in a `packages/api/src/router` handler instead of
+  a typed `ORPCError`, or an inline ESLint disable suppressing the rule that
+  catches it. Policy and rationale:
+  [`AGENTS.md` § API Error Handling](../AGENTS.md#api-error-handling).
 
 ---
 

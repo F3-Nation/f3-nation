@@ -114,7 +114,17 @@ describe("signAccessToken", () => {
       "iss",
       "scope",
       "sub",
+      "token_use",
     ]);
+  });
+
+  it("stamps token_use so this can never be verified as an ID Token", async () => {
+    const token = await signSample();
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, { issuer: ISSUER });
+
+    expect(payload.token_use).toBe("access");
   });
 
   it("serializes sub as a numeric string, not a number", async () => {
@@ -133,6 +143,211 @@ describe("signAccessToken", () => {
     // id that survives that round-trip.
     expect(typeof payload.sub).toBe("string");
     expect(payload.sub).toBe("9007199254740991");
+  });
+});
+
+describe("signIdToken", () => {
+  async function signSampleId(
+    overrides: Partial<Parameters<JwtModule["signIdToken"]>[0]> = {},
+  ) {
+    return jwt.signIdToken({
+      sub: 4242,
+      clientId: "f3-map",
+      scope: "openid profile email",
+      expiresInSeconds: 900,
+      name: "PermVac",
+      picture: "https://example.com/avatar.jpg",
+      email: "producer@example.com",
+      emailVerified: true,
+      ...overrides,
+    });
+  }
+
+  it("signs a token that verifies against the published JWKS, audienced to the requesting client", async () => {
+    const token = await signSampleId();
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+      algorithms: ["RS256"],
+    });
+
+    expect(payload.sub).toBe("4242");
+    expect(payload.aud).toBe("f3-map");
+    expect(payload.name).toBe("PermVac");
+    expect(payload.picture).toBe("https://example.com/avatar.jpg");
+    expect(payload.email).toBe("producer@example.com");
+    expect(payload.email_verified).toBe(true);
+  });
+
+  it("omits profile claims when profile scope wasn't granted", async () => {
+    const token = await signSampleId({ scope: "openid email" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.name).toBeUndefined();
+    expect(payload.picture).toBeUndefined();
+    expect(payload.email).toBe("producer@example.com");
+  });
+
+  it("omits email claims when email scope wasn't granted", async () => {
+    const token = await signSampleId({ scope: "openid profile" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.email).toBeUndefined();
+    expect(payload.email_verified).toBeUndefined();
+    expect(payload.name).toBe("PermVac");
+  });
+
+  it("emits only sub/iss/aud/exp/iat/token_use with a bare openid scope", async () => {
+    const token = await signSampleId({ scope: "openid" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(Object.keys(payload).sort()).toEqual([
+      "aud",
+      "exp",
+      "iat",
+      "iss",
+      "sub",
+      "token_use",
+    ]);
+  });
+
+  it("stamps token_use so this can never be verified as an access token", async () => {
+    const token = await signSampleId();
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.token_use).toBe("id");
+  });
+
+  it("omits (rather than nulls) optional claims the user has no value for", async () => {
+    const token = await signSampleId({
+      scope: "openid profile email",
+      name: null,
+      picture: null,
+      email: null,
+    });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect("name" in payload).toBe(false);
+    expect("picture" in payload).toBe(false);
+    expect("email" in payload).toBe(false);
+    expect("email_verified" in payload).toBe(false);
+  });
+
+  it("stamps the RS256 header and kid the API resolves keys by", async () => {
+    const token = await signSampleId();
+
+    expect(decodeProtectedHeader(token)).toEqual({
+      alg: "RS256",
+      kid: "f3-auth-1",
+    });
+  });
+
+  it("echoes the nonce claim verbatim when one was supplied", async () => {
+    const token = await signSampleId({ nonce: "abc-123-replay-guard" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.nonce).toBe("abc-123-replay-guard");
+  });
+
+  it("omits (rather than nulls) the nonce claim when none was supplied", async () => {
+    const token = await signSampleId({ nonce: null });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect("nonce" in payload).toBe(false);
+  });
+
+  it("converts a persisted ISO authTime into the auth_time NumericDate claim", async () => {
+    const token = await signSampleId({ authTime: "2026-01-01T00:00:00.000Z" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.auth_time).toBe(
+      Math.floor(new Date("2026-01-01T00:00:00.000Z").getTime() / 1000),
+    );
+  });
+
+  it("converts the real driver-shape authTime (no T, no offset) to the same auth_time as its ISO equivalent", async () => {
+    // This is the shape drizzle-orm's postgres-js driver actually returns
+    // for a `timestamp` (no tz) column — a transparent parser passes the
+    // raw Postgres wire text through unchanged, not a re-serialized ISO
+    // string. Guards against new Date() silently parsing this as local
+    // server time instead of UTC.
+    const token = await signSampleId({ authTime: "2026-01-01 00:00:00.000" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect(payload.auth_time).toBe(
+      Math.floor(new Date("2026-01-01T00:00:00.000Z").getTime() / 1000),
+    );
+  });
+
+  it("omits auth_time when unknown, rather than guessing at iat", async () => {
+    const token = await signSampleId({ authTime: null });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect("auth_time" in payload).toBe(false);
+  });
+
+  it("tolerates a garbled authTime value by omitting the claim instead of signing NaN", async () => {
+    const token = await signSampleId({ authTime: "not-a-real-date" });
+    const keySet = createLocalJWKSet(await jwt.getJWKS());
+
+    const { payload } = await jwtVerify(token, keySet, {
+      issuer: ISSUER,
+      audience: "f3-map",
+    });
+
+    expect("auth_time" in payload).toBe(false);
   });
 });
 

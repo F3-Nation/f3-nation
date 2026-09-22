@@ -1,7 +1,8 @@
-import { createEnv } from "@t3-oss/env-nextjs";
+import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
 export const env = createEnv({
+  clientPrefix: "NEXT_PUBLIC_",
   shared: {
     NODE_ENV: z
       .enum(["development", "production", "test"])
@@ -36,12 +37,16 @@ export const env = createEnv({
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
   /**
-   * Destructure all variables from `process.env` to make sure they aren't tree-shaken away.
+   * env-core has no bundler integration, so every var (client and server) must be
+   * listed explicitly here — unlike env-nextjs, server vars aren't auto-filled.
    */
-  experimental__runtimeEnv: {
+  runtimeEnvStrict: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
+    AUTH_SECRET: process.env.AUTH_SECRET,
+    DATABASE_URL: process.env.DATABASE_URL,
+    TEST_DATABASE_URL: process.env.TEST_DATABASE_URL,
   },
   skipValidation:
     !!process.env.CI ||
