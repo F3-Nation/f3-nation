@@ -5,8 +5,8 @@
 - **Deciders:** @dnishiyama, with the removal direction agreed by @taterhead247
   on [#176](https://github.com/F3-Nation/f3-nation/issues/176) 2026-08-25
 - **Related:** [#176](https://github.com/F3-Nation/f3-nation/issues/176)
-  (document PgBouncer), [`docs/PGBOUNCER.md`](../PGBOUNCER.md) (what exists
-  today), [#901](https://github.com/F3-Nation/f3-nation/pull/901) and
+  (document PgBouncer), [How it used to be](#how-it-used-to-be) (the PgBouncer
+  setup as found, recorded at the end of this ADR), [#901](https://github.com/F3-Nation/f3-nation/pull/901) and
   [#911](https://github.com/F3-Nation/f3-nation/pull/911) (the pool bounds this
   ADR depends on, both merged 2026-09-11)
 - **Depends on:** [#767](https://github.com/F3-Nation/f3-nation/pull/767)
@@ -168,7 +168,8 @@ size pools this way; the repository does not currently follow its own guidance.
 
 ## 5. What keeping it would cost
 
-`docs/PGBOUNCER.md` §8 has the full list. The material items:
+[How it used to be](#how-it-used-to-be) records the setup these come from. The
+material items:
 
 | Problem                                                                      | Why it matters                                               |
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -261,7 +262,8 @@ The order is load-bearing. Each step must land before the next begins.
    endpoint per app, and a monitor per service per environment. At this traffic
    `api` is never idle, so the failure alert fires on real errors within about a
    minute. Worth revisiting if a cutover ever has to happen during a quiet
-   window.
+   window. (This supersedes the first draft of this plan, which made a `db`
+   check in `@f3nation/health` the first piece of monitoring work.)
 
 3. **Migrate `api` and `map` to the Cloud SQL connector**, matching how `auth`
    already connects. Staging first — which also proves the socket syntax and
@@ -272,7 +274,11 @@ The order is load-bearing. Each step must land before the next begins.
 
    **Any monitor alarming rolls that service back**, stops the sequence, and the
    cause gets diagnosed before it resumes. Latency p95 more than 50% above the
-   24-hour pre-cutover baseline counts as an alarm.
+   24-hour pre-cutover baseline counts as an alarm. That one is checked by hand,
+   not alerted: during the watch hour, the person running the cutover compares
+   the service's Cloud Run `run.googleapis.com/request_latencies` p95 against
+   the same metric's p95 over the 24 hours before cutover. It only matters while
+   someone is watching, so it does not earn a standing alert policy.
 
    Re-enabling SSL in `getDbUrl()` and dropping `prepare: false` are _not_ part
    of the cutover — they land in step 5, so that a rollback during step 3 is
@@ -338,7 +344,7 @@ older revision re-reads the same `:latest` secret and gets the new value. Traffi
 shifting is not a rollback path until the version is pinned.
 
 One consequence for staffing: whoever watches the monitors during a cutover must
-also be able to run that script for that service. "Roll back on alarm" is not a
+also be able to run those two commands for that service. "Roll back on alarm" is not a
 plan if the alarm and the authority to act on it sit with different people.
 
 Two things must stay untouched for any of this to work: the PgBouncer VM keeps
@@ -348,10 +354,12 @@ legitimate finding in its own right — would remove the rollback path.
 
 ## 8. Open question
 
-**The 88-connection peak is unattributed, and it should be attributed before
-step 3.** Step 2 now answers it as a side effect: the connection-budget job
-samples `pg_stat_activity` grouped by `client_addr` every five minutes, so the
-24-hour baseline produces the attribution before any traffic moves.
+**The 88-connection peak is unattributed, and attributing it is a gate on
+step 3.** During step 2's 24-hour baseline, run the `pg_stat_activity`
+breakdown by `client_addr` from §1 by hand — at minimum once across the
+03:45 UTC window where the peak landed and once during weekday daytime traffic —
+and record the split before any traffic moves. There is no scheduled sampler;
+a handful of manual samples in the right windows is enough to answer it.
 
 88 backends on `f3_prod` exceeds PgBouncer's own `max_db_connections = 40`, so
 the pooler cannot be the source of all of it. Two explanations, not mutually
@@ -415,3 +423,90 @@ restart itself unattended. "Working today" is not the same as "safe to leave."
   Cloud SQL IAM database authentication is a separate migration, not in scope here.
 - Production connection behavior matches every other environment.
 - Six open infrastructure problems close without being individually fixed.
+
+## How it used to be
+
+The PgBouncer setup as found on 2026-08-11, read off the live VM and `gcloud`.
+Kept here, rather than as a standalone doc, because it only needs to outlive
+the migration — it is what steps 3–5 roll back to and then delete.
+
+```
+Cloud Run  f3-api / f3-map        DATABASE_URL → :6432
+    │  TCP 6432, public internet, no TLS
+    ▼
+GCE VM  f3data-pgbouncer-vm       project f3data · us-central1-c · e2-micro
+        10.128.0.4 / 34.172.230.30 (reserved static "pgbouncer")
+        DNS pgbouncer.prod.db.f3nation.com
+    │  TCP 5432, no TLS
+    ▼
+Cloud SQL  f3data                 POSTGRES_18 · db-custom-2-8192 · 35.239.19.124
+```
+
+**The box.** Created by hand 2025-04-23; no Terraform, startup script, or
+config management. PgBouncer 1.16.1 from Ubuntu 22.04's apt package, run by a
+SysV init script (`/etc/init.d/pgbouncer`, not a systemd unit) as `postgres`.
+`unattended-upgrades` is on. Production only — staging, local, and previews
+never had a pooler.
+
+**The config**, `/etc/pgbouncer/pgbouncer.ini`, comments stripped:
+
+```ini
+[databases]
+* = host=35.239.19.124 port=5432
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+auth_type = md5
+auth_file = /etc/pgbouncer/userlist.txt
+pool_mode = transaction
+max_client_conn = 1000
+default_pool_size = 20
+min_pool_size = 5
+reserve_pool_size = 10
+server_reset_query = DISCARD ALL
+server_check_query = SELECT 1
+ignore_startup_parameters = extra_float_digits
+pidfile = /var/run/postgresql/pgbouncer.pid
+unix_socket_dir = /var/run/pgbouncer
+max_db_connections = 40
+server_lifetime = 3600
+idle_transaction_timeout = 60
+client_idle_timeout = 300
+log_disconnections = 1
+```
+
+Three lines carried the weight. `max_db_connections = 40` was the real ceiling
+on server connections (§4). `pool_mode = transaction` is what forced
+`prepare: false` and ruled out session state. The `* =` wildcard forwards any
+requested database name to Cloud SQL's hardcoded IP. `userlist.txt` holds MD5
+hashes for `api`, `map`, and `postgres`, which PgBouncer passes through to
+Cloud SQL. `unix_socket_dir` points at a directory that does not survive a
+boot and no `admin_users` is set, so the admin console (`SHOW POOLS`) was
+unreachable; with no `logfile` or syslog and the daemon detached, nothing was
+logged after April 2025.
+
+**What it forced on the application**, undone in step 5's cleanup PR:
+
+- `getDbUrl()` in `packages/db/src/utils/functions.ts` sets `useSsl = false`
+  (`// Remove SSL to enable PGBouncer to work`).
+- `docs/AI_DEVELOPMENT_GUIDE.md` requires `prepare: false` under transaction
+  pooling.
+
+**What wires it in**, which is exactly what step 5 removes:
+
+- Cloud SQL `f3data` authorized network `34.172.230.30`, labelled
+  `PG Bouncer?`. The other five entries are Datastream's.
+- Firewall rule `pgbouncer` in `f3data`: TCP 6432 from `0.0.0.0/0`, no target
+  tags.
+- The `DATABASE_URL` secret in `f3-api-app` and `f3-map-app`, shaped
+  `postgres://<user>:<password>@<pgbouncer host or IP>:6432/f3_prod`.
+
+**Getting to it while it still exists:**
+
+```bash
+gcloud compute ssh f3data-pgbouncer-vm --project f3data --zone us-central1-c
+sudo systemctl status pgbouncer        # redirected through the SysV script
+sudo ss -lntp | grep 6432
+nc -vz pgbouncer.prod.db.f3nation.com 6432   # reachability from outside
+```
