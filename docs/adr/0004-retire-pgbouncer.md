@@ -39,7 +39,7 @@ The reasoning, each expanded below:
    open to the internet.
 6. **[Retiring it closes six open problems at once.](#6-what-retiring-it-buys)**
    It also lets us re-enable TLS and prepared statements.
-7. **[The migration has a strict order and an instant rollback.](#7-migration-sequence)**
+7. **[The migration has a strict order and a one-command rollback.](#7-migration-sequence)**
    Bound the pools, stand up the monitors and baseline them against the current
    architecture, migrate one service at a time, run both paths for a week, then
    delete.
