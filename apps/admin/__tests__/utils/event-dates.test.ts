@@ -16,4 +16,12 @@ describe("formatDateOrEmpty", () => {
     expect(formatDateOrEmpty(null)).toBe("");
     expect(formatDateOrEmpty(undefined)).toBe("");
   });
+
+  it("falls back to Date parsing when the string isn't full calendar parts", () => {
+    // "2026" splits on "-" into a single part, so month/day are NaN and the
+    // year && month && day guard is false — this exercises that fallback arm.
+    expect(formatDateOrEmpty("2026")).toBe(
+      new Date("2026").toLocaleDateString(),
+    );
+  });
 });
