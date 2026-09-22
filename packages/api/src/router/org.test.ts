@@ -39,7 +39,7 @@ const nextFutureMonday = (n: number): string => {
 describe("Org Router", () => {
   // Track created orgs for cleanup
   const createdOrgIds: number[] = [];
-  // Track created users for cleanup (only the accessible/in-memory-pagination
+  // Track created users for cleanup (only the accessible/non-nation-admin
   // tests need a real DB-backed user — everything else uses a purely mocked
   // session)
   const createdUserIds: number[] = [];
@@ -237,7 +237,7 @@ describe("Org Router", () => {
       };
     };
 
-    it("paginates the non-nation-admin (in-memory slice) branch when only pageSize is sent", async () => {
+    it("paginates the non-nation-admin branch when only pageSize is sent", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const prefix = `AccessibleTest-${uniqueId()}`;
       const orgIds: number[] = [];
@@ -258,9 +258,9 @@ describe("Org Router", () => {
 
       // A direct editor role on each of the 3 orgs — this user is not a
       // nation admin, so org.accessible resolves them through
-      // getEditableOrgIdsForUser and slices the result in memory rather
-      // than via a SQL LIMIT, a distinct code path from the "all" tests
-      // above (which only exercise the SQL-paginated nation-admin branch).
+      // getEditableOrgIdsForUser, a distinct code path from the "all" tests
+      // above (which only exercise the nation-admin branch). Both branches
+      // paginate via SQL LIMIT/OFFSET.
       const session = await createDbBackedEditorSession(orgIds);
       await mockAuthWithSession(session);
 
@@ -275,6 +275,47 @@ describe("Org Router", () => {
       expect(orgIds).toEqual(
         expect.arrayContaining(page.orgs.map((o) => o.id)),
       );
+    });
+
+    it("returns every editable org exactly once when paging through with pageIndex", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const prefix = `AccessiblePagingTest-${uniqueId()}`;
+      const orgIds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `${prefix} Region ${i}`,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        orgIds.push(org.id);
+      }
+
+      const session = await createDbBackedEditorSession(orgIds);
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      // Pages of 2 across 5 orgs: 3 requests, last one partial. Sorting
+      // pushed into SQL (this PR) still needs the asc(id) tiebreaker to
+      // guarantee this — with a non-unique sort key and no tiebreaker, a
+      // caller paging through separate requests (e.g. useFetchAllPages)
+      // could see the same org twice or skip one entirely.
+      const seenIds: number[] = [];
+      for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+        const page = await client.org.accessible({ pageIndex, pageSize: 2 });
+        expect(page.total).toBe(5);
+        seenIds.push(...page.orgs.map((o) => o.id));
+      }
+
+      expect(seenIds).toHaveLength(5);
+      expect(new Set(seenIds).size).toBe(5);
+      expect(seenIds.sort()).toEqual(orgIds.slice().sort());
     });
   });
 

@@ -529,14 +529,34 @@ export const orgRouter = {
           ? await getDescendantOrgIds(ctx.db, editableRootOrgIds)
           : [];
 
-      // Query full org details for all editable orgs. orderBy(id) makes this
-      // deterministic across separate requests -- without it, Postgres is
-      // free to return these rows in a different order each time (no
-      // guaranteed order without ORDER BY), which would let the in-memory
-      // sort below break ties differently per page request and duplicate or
-      // drop orgs when a caller (e.g. useFetchAllPages) pages through this
-      // route across multiple requests.
-      const editableOrgsData = await ctx.db
+      const editableOrgsWhere = and(
+        inArray(schema.orgs.id, editableOrgIds),
+        input?.orgTypes?.length
+          ? inArray(schema.orgs.orgType, input.orgTypes)
+          : undefined,
+      );
+
+      // asc(id) is appended as a final tiebreaker, same reasoning as the F3
+      // Nation branch above -- without one, offset pagination across
+      // separate requests (e.g. useFetchAllPages) could return the same org
+      // on two pages or skip one entirely. Falls back to ordering by id
+      // alone (ascending) when the caller supplies no sorting, matching
+      // this endpoint's longstanding default.
+      const sortedColumns =
+        input?.sorting && input.sorting.length > 0
+          ? getSortingColumns(
+              input.sorting,
+              {
+                id: schema.orgs.id,
+                name: schema.orgs.name,
+                orgType: schema.orgs.orgType,
+                parentId: schema.orgs.parentId,
+              },
+              "id",
+            ).concat(asc(schema.orgs.id))
+          : [asc(schema.orgs.id)];
+
+      const editableOrgsQuery = ctx.db
         .select({
           id: schema.orgs.id,
           name: schema.orgs.name,
@@ -544,79 +564,37 @@ export const orgRouter = {
           parentId: schema.orgs.parentId,
         })
         .from(schema.orgs)
-        .where(
-          and(
-            inArray(schema.orgs.id, editableOrgIds),
-            input?.orgTypes?.length
-              ? inArray(schema.orgs.orgType, input.orgTypes)
-              : undefined,
-          ),
-        )
-        .orderBy(schema.orgs.id);
+        .where(editableOrgsWhere);
 
-      const allAssignedOrgs = editableOrgsData.map((org) => ({
+      const totalQuery = ctx.db
+        .select({ count: count(schema.orgs.id) })
+        .from(schema.orgs)
+        .where(editableOrgsWhere);
+
+      const [totalResult] = await totalQuery;
+      const total = totalResult?.count ?? 0;
+
+      // Sort/offset/limit pushed into SQL rather than loading every
+      // editable org into memory and slicing -- useFetchAllPages (the
+      // caller this endpoint's pagination exists for) requests one page at
+      // a time, so an in-memory sort-then-slice here re-fetched and
+      // re-sorted the entire dataset on every single page request.
+      const editableOrgsData = usePagination
+        ? await withPagination(
+            editableOrgsQuery.$dynamic(),
+            sortedColumns,
+            offset,
+            limit,
+          )
+        : await editableOrgsQuery.orderBy(...sortedColumns).limit(limit);
+
+      const paginatedOrgs = editableOrgsData.map((org) => ({
         id: org.id,
         name: org.name,
         orgType: org.orgType,
         parentId: org.parentId,
         roles: directRolesMap.get(String(org.id)) ?? [],
       }));
-
-      // Sort the orgs array manually since we're working with in-memory data
-      const sortedOrgs = [...allAssignedOrgs];
-      if (input?.sorting && input.sorting.length > 0) {
-        sortedOrgs.sort((a, b) => {
-          for (const sort of input.sorting ?? []) {
-            let aVal: string | number | null;
-            let bVal: string | number | null;
-
-            switch (sort.id) {
-              case "id":
-                aVal = a.id;
-                bVal = b.id;
-                break;
-              case "name":
-                aVal = a.name;
-                bVal = b.name;
-                break;
-              case "orgType":
-                aVal = a.orgType;
-                bVal = b.orgType;
-                break;
-              case "parentId":
-                aVal = a.parentId;
-                bVal = b.parentId;
-                break;
-              default:
-                continue;
-            }
-
-            if (aVal === null && bVal === null) continue;
-            if (aVal === null) return sort.desc ? 1 : -1;
-            if (bVal === null) return sort.desc ? -1 : 1;
-
-            const comparison =
-              typeof aVal === "string" && typeof bVal === "string"
-                ? aVal.localeCompare(bVal)
-                : aVal < bVal
-                  ? -1
-                  : aVal > bVal
-                    ? 1
-                    : 0;
-
-            if (comparison !== 0) {
-              return sort.desc ? -comparison : comparison;
-            }
-          }
-          return 0;
-        });
-      }
-
-      // Apply pagination
-      const total = sortedOrgs.length;
-      const paginatedOrgs = usePagination
-        ? sortedOrgs.slice(offset, offset + limit)
-        : sortedOrgs.slice(0, limit);
 
       return {
         orgs: paginatedOrgs,
