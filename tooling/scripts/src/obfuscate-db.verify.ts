@@ -76,6 +76,9 @@ const EMPTY_TABLES = [
 
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 const ALLOWED_EMAIL_SUFFIX = "@obfuscated.f3nation.dev";
+// Retina-image filenames (logo@2x.png) are email-shaped; not PII. Keep this
+// in sync with the same guard in obfuscate-db.verify-target.ts.
+const IMAGE_DENSITY_SUFFIX = /@\dx\.(?:png|jpe?g|gif|webp|svg)$/i;
 
 function run(cmd: string, args: string[], env?: Record<string, string>) {
   console.log(`\n$ ${cmd} ${args.join(" ")}`);
@@ -295,6 +298,15 @@ async function plantSyntheticPii(
     VALUES (${ao.id}, true, false, current_date, 'Mention-Only Beatdown',
       '{"type": "mrkdwn", "text": "<@U0REALSLACK> led 20 burpees"}')`;
 
+  // The pipe form Slack emits when the readable name is inlined, plus an
+  // enterprise-grid `W` member id. Both the id and the display name after
+  // the pipe are real PII and must not survive.
+  await sql`
+    INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+      name, backblast)
+    VALUES (${ao.id}, true, false, current_date, 'Pipe-Mention Beatdown',
+      'Q was <@U0PIPEFORM|bob.smith>, co-Q <@W0GRIDUSER|Grid Person>.')`;
+
   await sql`
     INSERT INTO slack_users (slack_id, user_name, email, is_admin, is_owner,
       is_bot, slack_team_id, strava_access_token, strava_refresh_token,
@@ -302,6 +314,14 @@ async function plantSyntheticPii(
     VALUES ('U0REALSLACK', 'Jane Doe', 'jane@example.com', false, false,
       false, 'T0TEAM', 'strava-access-secret', 'strava-refresh-secret',
       'https://avatars.slack.com/jane.png')`;
+
+  // Retina-density asset filename: email-shaped but not PII, and untouched
+  // by the obfuscator (orgs.logo_url is not a scrubbed column). Exercises
+  // the IMAGE_DENSITY_SUFFIX guard in sweepForEmails rather than leaving it
+  // as an untested mirror of the one in obfuscate-db.verify-target.ts.
+  await sql`
+    UPDATE orgs SET logo_url = 'https://cdn.f3nation.com/logo@2x.png'
+    WHERE id = ${region.id}`;
 
   console.log("  Planted user, session, tokens, api key, request, backblast.");
   return { userId: user.id };
@@ -356,6 +376,7 @@ async function sweepForEmails(
       const texts = isJson ? stringLeaves(JSON.parse(row.v), []) : [row.v];
       for (const text of texts) {
         for (const match of text.match(EMAIL_REGEX) ?? []) {
+          if (IMAGE_DENSITY_SUFFIX.test(match)) continue;
           if (!match.toLowerCase().endsWith(ALLOWED_EMAIL_SUFFIX)) {
             violations.push(`${qualified}.${col.column_name}: ${match}`);
           }
@@ -540,6 +561,32 @@ async function main(): Promise<void> {
       "Slack mention in JSON scrubbed with no email present",
       mentionOk,
       mentionRow?.backblast_rich ?? "missing",
+    );
+
+    const [pipeRow] = await sql<{ backblast: string | null }[]>`
+      SELECT backblast FROM event_instances
+      WHERE name = 'Pipe-Mention Beatdown' LIMIT 1`;
+    const pipeText = pipeRow?.backblast ?? "";
+    const pipeOk =
+      !!pipeRow?.backblast &&
+      // Neither member id survives...
+      !pipeText.includes("U0PIPEFORM") &&
+      !pipeText.includes("W0GRIDUSER") &&
+      // ...nor the display name Slack inlined after the pipe...
+      !pipeText.includes("bob.smith") &&
+      !pipeText.includes("Grid Person") &&
+      // ...and the replacement emits the bare form, so no pipe remains.
+      !pipeText.includes("|") &&
+      (pipeText.match(/<@U[A-Z0-9]+>/g) ?? []).length === 2;
+    check("piped/enterprise Slack mentions scrubbed", pipeOk, pipeText);
+
+    const [logoRow] = await sql<{ logo_url: string | null }[]>`
+      SELECT logo_url FROM orgs
+      WHERE logo_url LIKE '%@2x.png' LIMIT 1`;
+    check(
+      "retina asset filename survives the email sweep (not PII)",
+      logoRow?.logo_url === "https://cdn.f3nation.com/logo@2x.png",
+      logoRow?.logo_url ?? "missing",
     );
 
     // FK spot-check: every attendance row still resolves to a user + instance.

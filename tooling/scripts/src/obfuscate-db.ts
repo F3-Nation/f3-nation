@@ -178,7 +178,13 @@ const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // NOT cover real names (pax_names/q_name) appearing in free text with no
 // accompanying "@" — that's a separate, unresolved gap (see backblast_rich
 // scrub call sites) that needs a name-substitution pass, not a regex.
-const SLACK_MENTION_REGEX = /<@(U[A-Z0-9]+)>/g;
+//
+// Both documented mention forms are matched: `<@U0REALSLACK>` and the
+// pipe form `<@U0REALSLACK|display name>`, which Slack emits whenever the
+// readable name is inlined. Enterprise-grid member ids use a `W` prefix.
+// The display name after the pipe is itself real PII, so it is dropped
+// rather than rewritten — the replacement always emits the bare form.
+const SLACK_MENTION_REGEX = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
 
 function isAllowlistedEmail(email: string): boolean {
   const lower = email.toLowerCase();
@@ -631,20 +637,25 @@ async function obfuscate(sql: Sql): Promise<void> {
     },
     transform: (row) => {
       const email = str(row.email);
-      if (
+      // A committed dev fixture keeps the identity fields local login reads
+      // back (email / names / phone). The "null out" columns below are not
+      // identity — they're PII with no fake substitute — so they are cleared
+      // even for fixtures, in case a fixture row picked up real values during
+      // local testing. Mirrors the slack_users rule.
+      const isLocalFixture =
         PRESERVE_LOCAL_SEED &&
-        email?.toLowerCase().endsWith(LOCAL_SEED_EMAIL_SUFFIX)
-      ) {
-        return null; // committed dev fixture — keep the whole row
-      }
+        !!email?.toLowerCase().endsWith(LOCAL_SEED_EMAIL_SUFFIX);
       const changes: Row = {};
-      if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
-      for (const col of ["f3_name", "first_name", "last_name"]) {
-        const v = str(row[col]);
-        if (v) changes[col] = fakeName(`${col}:${v}`);
+      if (!isLocalFixture) {
+        if (email && !isAllowlistedEmail(email))
+          changes.email = fakeEmail(email);
+        for (const col of ["f3_name", "first_name", "last_name"]) {
+          const v = str(row[col]);
+          if (v) changes[col] = fakeName(`${col}:${v}`);
+        }
+        const phone = str(row.phone);
+        if (phone) changes.phone = fakePhone(phone);
       }
-      const phone = str(row.phone);
-      if (phone) changes.phone = fakePhone(phone);
       for (const col of [
         "avatar_url",
         "emergency_contact",
@@ -696,7 +707,9 @@ async function obfuscate(sql: Sql): Promise<void> {
       // user_name) intact even under --preserve-local-seed, but Strava
       // tokens are secrets, not fixture identity — always null those out
       // regardless, in case a fixture row ever picked up a real token
-      // value during local testing.
+      // value during local testing. avatar_url gets the same treatment: a
+      // personal photo URL is unrelated PII that no local login path reads,
+      // so preserving the fixture is never a reason to keep it.
       const changes: Row = {};
       if (!isLocalFixture) {
         const slackId = str(row.slack_id);
@@ -706,9 +719,9 @@ async function obfuscate(sql: Sql): Promise<void> {
         if (email && !isAllowlistedEmail(email)) {
           changes.email = fakeEmail(email);
         }
-        if (row.avatar_url !== null) changes.avatar_url = null;
       }
       for (const col of [
+        "avatar_url",
         "strava_access_token",
         "strava_refresh_token",
         "strava_expires_at",
