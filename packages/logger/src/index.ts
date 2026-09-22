@@ -22,6 +22,29 @@ const levelToSeverity: Record<string, string> = {
 
 export type LogContext = Record<string, unknown>;
 
+// Drizzle adds source SQL and bind values to database errors. When an audit
+// failure occurs anywhere in the cause chain, replace the whole error with a
+// fresh message/SQLSTATE-only error. Original stacks, causes and driver fields
+// are discarded; unrelated errors pass through unchanged.
+function safeAuditError<T>(error: T): T | Error {
+  let cause: unknown = error;
+  const seen = new Set<unknown>();
+  while (cause instanceof Error && !seen.has(cause)) {
+    seen.add(cause);
+    if (cause.message === "Audit history capture failed") {
+      const code =
+        "code" in cause &&
+        typeof cause.code === "string" &&
+        /^[0-9A-Z]{5}$/.test(cause.code)
+          ? cause.code
+          : undefined;
+      return Object.assign(new Error("Audit history capture failed"), { code });
+    }
+    cause = cause.cause;
+  }
+  return error;
+}
+
 /**
  * Optional process-global error sink. Apps with Sentry register a reporter here
  * at startup (see each app's instrumentation) so that everything logged via
@@ -72,7 +95,9 @@ export function createLogger(
     // Keep the existing `event` field name (the custom logger's dot-namespaced
     // identifier) as pino's message key rather than the default `msg`.
     messageKey: "event",
-    serializers: { err: pino.stdSerializers.err },
+    serializers: {
+      err: (err: Error) => pino.stdSerializers.err(safeAuditError(err)),
+    },
   };
 
   let logger: Logger;
@@ -103,6 +128,7 @@ export function createLogger(
   const reportable =
     (level: "error" | "fatal") =>
     (event: string, ctx: LogContext = {}, err?: unknown) => {
+      err = safeAuditError(err);
       logger[level]({ ...ctx, ...(err !== undefined ? { err } : {}) }, event);
       // Never let a failing reporter (e.g. the Sentry bridge) throw out of a
       // log call and break request flow. Report the failure via raw pino so we

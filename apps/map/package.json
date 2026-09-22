@@ -80,6 +80,7 @@
     "jsdom": "catalog:",
     "postcss": "catalog:",
     "postcss-load-config": "catalog:",
+    "postgres": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
