@@ -83,3 +83,6 @@ pr.md
 
 # A spot to keep scripts, skills, and docs just for you
 .personal/
+
+# superpowers subagent-driven-development scratch workspaces
+.superpowers/
