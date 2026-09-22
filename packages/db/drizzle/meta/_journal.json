@@ -190,6 +190,13 @@
       "when": 1789775437096,
       "tag": "0026_depth_agnostic_ao_counts",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790093288166,
+      "tag": "0027_codex_schema",
+      "breakpoints": true
     }
   ]
 }

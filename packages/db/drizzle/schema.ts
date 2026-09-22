@@ -1621,12 +1621,15 @@ export const betterAuthOauthClientAssertion = authProviderSchema.table(
 );
 
 // ─── codex schema ────────────────────────────────────────────────────────────
-// Mirrors the standalone Codex database's `codex` schema exactly as captured by
-// pg_dump. Known rough edges (missing primary keys, camelCase columns on
-// `tags`, the `timestamp`/`references` reserved-word names) are reproduced
-// faithfully and left for a follow-up cleanup PR. Note: `serial` names the
-// references sequence `references_id_seq` rather than the dump's
-// `codex_references_id_seq` — a cosmetic difference for that later cleanup.
+// Mirrors the standalone Codex database's `codex` schema as captured by
+// pg_dump, plus a primary key on every table (required by audit history's
+// `audit.enable_tracking`, which derives row_id from pg_constraint). The PKs
+// were applied to prod as `app_codex` on 2026-09-22 — the migration's
+// CREATE TABLE IF NOT EXISTS is a no-op there and only bootstraps fresh
+// dev/CI/test databases. Remaining rough edges (camelCase columns on `tags`,
+// the `timestamp`/`references` reserved-word names) are reproduced faithfully.
+// Note: `serial` names the references sequence `references_id_seq` rather
+// than the dump's `codex_references_id_seq` — a cosmetic difference.
 
 export const codexSchema = pgSchema("codex");
 
@@ -1638,8 +1641,11 @@ export const codexAdmins = codexSchema.table("admins", {
 });
 
 // `references` is a reserved word; kept as the literal table name from the dump.
+// Legacy table (empty in prod): its integer from/to ids predate `entries`
+// moving to text ids and are NOT joinable to `codexEntries.id` — the live
+// relationship table is `codexEntryReferences` below.
 export const codexReferences = codexSchema.table("references", {
-  id: serial("id").notNull(),
+  id: serial("id").primaryKey().notNull(),
   fromEntryId: integer("from_entry_id").notNull(),
   toEntryId: integer("to_entry_id").notNull(),
   context: varchar("context"),
@@ -1648,7 +1654,7 @@ export const codexReferences = codexSchema.table("references", {
 });
 
 export const codexEntries = codexSchema.table("entries", {
-  id: text("id").notNull(),
+  id: text("id").primaryKey().notNull(),
   title: text("title").notNull(),
   definition: text("definition").notNull(),
   type: text("type").notNull(),
@@ -1662,7 +1668,7 @@ export const codexEntries = codexSchema.table("entries", {
 export const codexEntryReferences = codexSchema.table(
   "entry_references",
   {
-    id: integer("id").notNull(),
+    id: integer("id").primaryKey().notNull(),
     sourceEntryId: text("source_entry_id").notNull(),
     targetEntryId: text("target_entry_id").notNull(),
     context: text("context"),
@@ -1682,14 +1688,19 @@ export const codexEntryTags = codexSchema.table(
     tagId: text("tag_id").notNull(),
   },
   (t) => [
-    unique("unique_entry_tag").on(t.entryId, t.tagId),
+    // The pre-existing UNIQUE (entry_id, tag_id) is redundant with this PK
+    // (Postgres drops such a duplicate at CREATE TABLE time); it was dropped
+    // in prod alongside the PK so both environments match.
+    primaryKey({ name: "entry_tags_pkey", columns: [t.entryId, t.tagId] }),
     index("idx_entry_tags_tag_id").on(t.tagId),
   ],
 );
 
 export const codexTags = codexSchema.table("tags", {
   name: text("name").notNull(),
-  id: varchar("id"),
+  // The app keys tags by this uuid/slug string and entry_tags.tag_id points at
+  // it, so it is the PK (not `name`, which can be edited).
+  id: varchar("id").primaryKey(),
   createdAt: timestamp("createdAt", {
     withTimezone: true,
     mode: "string",
@@ -1701,7 +1712,7 @@ export const codexTags = codexSchema.table("tags", {
 });
 
 export const codexUserSubmissions = codexSchema.table("user_submissions", {
-  id: integer("id").generatedAlwaysAsIdentity(),
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   submissionType: text("submission_type").notNull(),
   data: jsonb("data").notNull(),
   submitterName: text("submitter_name"),
