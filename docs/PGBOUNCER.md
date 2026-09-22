@@ -147,6 +147,15 @@ some of the fleet:
 So the "everything goes through the pooler" mental model is already false. Two app
 workloads connect straight to Cloud SQL today.
 
+> **Update, 2026-09-22.** Re-sampling the same query shows **no `admin` backends at
+> all** — only `api` and `map` still reach Postgres through the pooler. `apps/admin`
+> and `apps/me` import `@acme/api` as `import type { router }`; they are oRPC HTTP
+> clients that call the API over `F3_API_BASE_URL` and open no database connection.
+> The running `f3-admin` production service has no `DATABASE_URL` in its environment.
+> The `f3-admin` / `prd` entry in Doppler is a leftover credential that nothing reads
+> and should be deleted. Everything below about `f3-admin`'s instance counts and
+> connection share describes 2026-08-11 and is retained as the measurement of record.
+
 ### Measured load (30 days, Cloud Monitoring)
 
 Metric `cloudsql.googleapis.com/database/postgresql/num_backends`, hourly `ALIGN_MAX`:

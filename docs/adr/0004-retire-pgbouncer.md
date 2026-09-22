@@ -12,8 +12,8 @@
 
 ## Summary
 
-**Decision: retire PgBouncer.** Connect the TypeScript apps — `api`, `map`,
-`admin`, and `me` — directly to Cloud SQL through the Cloud SQL connector, with
+**Decision: retire PgBouncer.** Connect the two services that actually use it —
+`api` and `map` — directly to Cloud SQL through the Cloud SQL connector, with
 connection limits enforced in the application instead of in a pooler. Cut over
 behind monitors that can see connection pressure, one service at a time, and
 roll back on any alarm.
@@ -107,19 +107,31 @@ application now does it natively.
 Grouping `pg_stat_activity` on `f3_prod` by `client_addr` shows the pooler
 fronts only part of the fleet:
 
-| Client                | Reaches Postgres via                                            |
-| --------------------- | --------------------------------------------------------------- |
-| `api`, `map`, `admin` | `client_addr = 34.172.230.30` → **through PgBouncer**           |
-| `app_auth`            | no `client_addr` → **direct**, via the Cloud SQL connector      |
-| `f3slackbot`          | no `client_addr` → **direct**                                   |
-| `datastream_user`     | `34.67.234.134` → direct (BigQuery CDC, own authorized network) |
-| `cloudsqladmin`       | `127.0.0.1` — Cloud SQL's own agent                             |
+| Client            | Reaches Postgres via                                            |
+| ----------------- | --------------------------------------------------------------- |
+| `api`, `map`      | `client_addr = 34.172.230.30` → **through PgBouncer**           |
+| `app_auth`        | no `client_addr` → **direct**, via the Cloud SQL connector      |
+| `f3slackbot`      | no `client_addr` → **direct**                                   |
+| `datastream_user` | `34.67.234.134` → direct (BigQuery CDC, own authorized network) |
+| `cloudsqladmin`   | `127.0.0.1` — Cloud SQL's own agent                             |
 
 Two application workloads already connect directly and have not caused
-problems. The proposal is to make the rest match them, not to invent a new
-pattern. ("The rest" is four services, not three: `me` does not depend on
-`@acme/db` directly, but it reaches it transitively through `@acme/api` and so
-carries its own `DATABASE_URL`.)
+problems. The proposal is to make the remaining two match them, not to invent a
+new pattern.
+
+**Only `api` and `map` are in scope.** The August sample of this table also
+showed an `admin` backend; re-checked 2026-09-22, it is gone. `apps/admin` and
+`apps/me` import `@acme/api` as `import type { router }` — they are oRPC HTTP
+clients that call the API over `F3_API_BASE_URL` and never open a database
+connection. Three confirmations: the running `f3-admin` production service has
+no `DATABASE_URL` in its environment at all; Doppler has no `f3-me` project and
+returns nothing for `f3-me`/`f3-auth`; and a live `pg_stat_activity` sample
+shows no `admin` backends. `apps/map` does connect —
+`apps/map/src/orpc/client.server.ts` imports `router` as a _value_, so the
+router runs in-process there.
+
+Leftover from when `admin` did connect: Doppler `f3-admin` / `prd` still holds a
+live production database credential that nothing consumes. Delete it.
 
 This also corrects a common mental model: "everything goes through the pooler"
 has not been true for some time.
@@ -192,45 +204,46 @@ The order is load-bearing. Each step must land before the next begins.
    client and gave each service a deliberate `--max-instances` instead of
    inheriting 100. [#911](https://github.com/F3-Nation/f3-nation/pull/911) added
    the client-side queue timeout, which is pooler-agnostic and carries over
-   unchanged. Retune `--max-instances` to 15 at cutover: 4 services × 15 ×
-   `max` 5 = 300, leaving ~100 under the 400 ceiling for the direct connectors
-   from §3.
+   unchanged. Retune `--max-instances` to 15 at cutover: 2 services × 15 ×
+   `max` 5 = 150, comfortably under the 400 ceiling alongside the direct
+   connectors from §3.
 2. **Put the monitors in place, and let them run against the _current_
    architecture first.** Removing the pooler removes the last automatic ceiling
    on connections; something has to hold that job afterward, and it has to be
-   proven before the change, not after. Three monitors, all in Sentry (org
-   `f3-nation`, project `maps-nextjs`):
-   - **Uptime monitor on a database-backed health endpoint.** `/v1/ping` returns
-     `{alive: true}` without touching Postgres, so it would stay green through a
-     total database outage. Add a `db` check (`select 1`, 1s timeout) to
-     `@f3nation/health` — the package already has the contract and timeout
-     machinery — expose `/health` on `api`, `map`, `admin`, and `me`, and return
-     503 when that check is `down`. One monitor per service per environment,
-     1-minute interval, alarm after 3 consecutive failures.
+   proven before the change, not after. Two monitors:
    - **Cron monitor on the connection budget.** A Cloud Run Job on Cloud
      Scheduler, every 5 minutes, samples `pg_stat_activity` and checks in with
      Sentry — `error` when total backends reach 240 (60% of 400, a threshold
      that would have stayed silent across the entire measured window). Group the
      sample by `client_addr` and attach it as check-in context; that also
-     settles §8. Keep a Cloud Monitoring alert on `num_backends` alongside it: a
-     cron monitor is only as alive as its job, and the platform alert is the
-     independent backstop.
+     settles §8. A failed connection is a failed check-in, so this covers
+     database reachability as well as connection creep. Keep a Cloud Monitoring
+     alert on `num_backends` alongside it: a cron monitor is only as alive as
+     its job, and the platform alert is the independent backstop.
    - **Issue alert on connection-failure signatures** — `CONNECT_TIMEOUT`,
      `ECONNREFUSED`, `sorry, too many clients already`, `terminating
-connection`, and #911's query timeout — above 5 events in 5 minutes. Note
-     that `apps/admin` and `apps/me` have no Sentry SDK today, so this monitor
-     is blind to two of the four services until one is added.
+connection`, and #911's query timeout — above 5 events in 5 minutes.
+     Config only; both in-scope services already have `@sentry/nextjs`.
 
-   Hold here until every monitor has been green for 48 hours against today's
-   PgBouncer topology. That baseline is the point: a monitor that has never been
-   observed reporting _normal_ cannot be trusted to report _abnormal_.
+   A third tier was considered and dropped: an uptime monitor on a
+   database-backed `/health` endpoint. It would detect a silent failure about
+   two minutes sooner, at the cost of a `db` check in `@f3nation/health`, a new
+   endpoint per app, and a monitor per service per environment. At this traffic
+   `api` is never idle, so the issue alert fires on real failures within about a
+   minute. Worth revisiting if a cutover ever happens during a quiet window.
 
-3. **Migrate `api`, `map`, `admin`, and `me` to the Cloud SQL connector**,
-   matching how `auth` already connects. Staging first, all four, soaked for a
-   week — then deliberately induce connection pressure and confirm each monitor
-   alarms and a rollback recovers. Production follows one service per day, `api`
-   first, each cutover watched actively for an hour and soaked 24 hours before
-   the next.
+   Hold here until both monitors have been green for 24 hours against today's
+   PgBouncer topology — long enough to cover the 03:45 UTC batch window where
+   §8's unexplained peak landed. That baseline is the point: a monitor that has
+   never been observed reporting _normal_ cannot be trusted to report
+   _abnormal_.
+
+3. **Migrate `api` and `map` to the Cloud SQL connector**, matching how `auth`
+   already connects. Staging first — which also proves the socket syntax and
+   lets `f3data-nonprod`'s `0.0.0.0/0` authorized network close later — then
+   deliberately induce connection pressure and confirm both monitors alarm and a
+   rollback recovers. Production follows one service per day, `api` first, each
+   cutover watched actively for an hour and soaked 24 hours before the next.
 
    **Any monitor alarming rolls that service back**, stops the sequence, and the
    cause gets diagnosed before it resumes. Latency p95 more than 50% above the
@@ -251,32 +264,40 @@ connection`, and #911's query timeout — above 5 events in 5 minutes. Note
 ### Rollback
 
 Through step 4, cutover is a `DATABASE_URL` swap per service — from the Cloud
-SQL connector back to `pgbouncer.prod.db.f3nation.com:6432` — with the VM still
-running and still in the authorized-network list. Rollback is a redeploy, not a
-rebuild.
+SQL connector back to the pooler — with the VM still running and still in the
+authorized-network list. Rollback is a config push, not a rebuild.
 
-Note that two services currently pin the pooler's raw IP (`34.172.230.30`)
-rather than its DNS name. Normalizing those first makes both the cutover and the
-rollback a single consistent change.
-
-Faster, where it works: `DATABASE_URL` is configured on the Cloud Run service
-out of band — `_deploy-cloudrun.yml` passes only `image` and `flags` to
-`deploy-cloudrun` and never sets `env_vars` or `secrets` — so the connection
-string is baked into the revision, and rollback is a traffic shift measured in
-seconds rather than a redeploy measured in minutes:
+Both directions use the mechanism the repository already has.
+`_deploy-cloudrun.yml` deliberately never sets `env_vars` or `secrets`
+(see the comment at line 197); config reaches Cloud Run through
+`apps/<app>/scripts/cloud-run-env.sh` reading a gitignored
+`.env.cloud-run.<env>`. So the cutover is a one-line edit plus:
 
 ```bash
-gcloud run services update-traffic <service> \
-  --to-revisions <pre-cutover-revision>=100 \
-  --region us-central1 --project <project>
+bash apps/api/scripts/cloud-run-env.sh --env prod
 ```
 
-**Confirm this before the first production cutover.** If `DATABASE_URL` turns
-out to be a Secret Manager reference pinned to `:latest` rather than a literal
-environment variable, the container re-reads the secret at start and a revision
-rollback restores nothing — rollback then falls back to editing the secret and
-redeploying. Which of the two is true determines what "roll back on alarm"
-actually costs, so it is worth the five minutes to check.
+and the rollback is the same command after putting the old string back.
+Budget **one to two minutes**, including the new revision.
+
+Two properties of that script shape the plan:
+
+- It pushes `DATABASE_URL` as `--update-secrets DATABASE_URL=DATABASE_URL:latest`.
+  **A Cloud Run revision rollback therefore restores nothing** — an older
+  revision re-reads the same `:latest` secret and gets the new value. Traffic
+  shifting is not a rollback path here.
+- After adding a new secret version it **destroys every previous version**. The
+  prior connection string does not survive the cutover anywhere in GCP.
+
+**So the rollback value must be captured before each flip and kept outside the
+system being changed.** Doppler holds the current strings today (`f3-api` on the
+raw IP `34.172.230.30:6432`, `f3-map` on `pgbouncer.prod.db.f3nation.com:6432`);
+read them with `doppler secrets get DATABASE_URL --project f3-api --config prd
+--plain` and record them in the cutover ticket before touching anything.
+
+One consequence for staffing: whoever watches the monitors during a cutover must
+also be able to run that script for that service. "Roll back on alarm" is not a
+plan if the alarm and the authority to act on it sit with different people.
 
 Two things must stay untouched for any of this to work: the PgBouncer VM keeps
 running and keeps its entry in Cloud SQL's authorized networks, and the `6432`
