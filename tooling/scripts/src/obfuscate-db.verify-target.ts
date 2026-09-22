@@ -33,6 +33,8 @@ const OBFUSCATED_EMAIL_DOMAIN = "obfuscated.f3nation.dev";
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // Retina-image filenames (logo@2x.png) are email-shaped; not PII.
 const IMAGE_DENSITY_SUFFIX = /@\dx\.(?:png|jpe?g|gif|webp|svg)$/i;
+// Matches only when the last domain label is 2+ letters, i.e. a real TLD.
+const NON_EMAIL_TLD_GUARD = /\.[A-Za-z]{2,}$/;
 
 // Slack mention syntax, both documented forms, including enterprise-grid `W`
 // ids. Keep in sync with SLACK_MENTION_REGEX in obfuscate-db.ts.
@@ -165,6 +167,10 @@ async function sweepForEmails(sql: Sql): Promise<void> {
           }
           for (const match of text.match(EMAIL_REGEX) ?? []) {
             if (IMAGE_DENSITY_SUFFIX.test(match)) continue;
+            // Real TLDs are alphabetic. Double-encoded JSON leaves a literal
+            // "\n" before an @handle ("\n@F.3."), which the regex reads as
+            // local part "n" at domain "F.3" (real-data finding 2026-09-22).
+            if (!NON_EMAIL_TLD_GUARD.test(match)) continue;
             if (match.toLowerCase().endsWith(`@${OBFUSCATED_EMAIL_DOMAIN}`)) {
               continue;
             }
@@ -348,11 +354,12 @@ async function main(): Promise<void> {
         FROM auth.better_auth_oauth_client`;
       for (const r of rows) if (r.u) clientTargets.push(r.u);
     }
-    if (await tableExists(sql, "auth.oauth_clients")) {
+    for (const table of ["auth.oauth_clients", "auth.oauth_client"]) {
+      if (!(await tableExists(sql, table))) continue;
       const rows = await sql<
         { redirect_uris: string; allowed_origin: string }[]
       >`
-        SELECT redirect_uris, allowed_origin FROM auth.oauth_clients`;
+        SELECT redirect_uris, allowed_origin FROM ${sql(table)}`;
       for (const r of rows) {
         clientTargets.push(r.allowed_origin);
         try {

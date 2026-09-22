@@ -691,37 +691,40 @@ async function obfuscate(sql: Sql): Promise<void> {
           SET client_secret_hash = encode(sha256(('revoked:' || id)::bytea), 'hex')`,
   });
 
-  // Same prod -> staging repoint as better_auth_oauth_client (toStagingUri).
+  // Same prod -> staging repoint as better_auth_oauth_client (toStagingUri),
+  // for both the plural table and the legacy singular one (same columns).
   // redirect_uris is a JSON array in a text column; allowed_origin is NOT
   // NULL, so an F3 origin with no staging twin becomes '' (matches no origin).
-  await transformTable(sql, {
-    table: "auth.oauth_clients",
-    pk: "id",
-    columns: ["redirect_uris", "allowed_origin"],
-    actions: {
-      redirect_uris: "prod -> staging hosts (json)",
-      allowed_origin: "prod -> staging host",
-    },
-    transform(row) {
-      const changes: Row = {};
-      let uris: unknown;
-      try {
-        uris = JSON.parse(row.redirect_uris as string);
-      } catch {
-        uris = null;
-      }
-      if (Array.isArray(uris) && uris.every((u) => typeof u === "string")) {
-        const mapped = toStagingUris(uris);
-        if (!sameStrings(mapped, uris)) {
-          changes.redirect_uris = JSON.stringify(mapped);
+  for (const table of ["auth.oauth_clients", "auth.oauth_client"]) {
+    await transformTable(sql, {
+      table,
+      pk: "id",
+      columns: ["redirect_uris", "allowed_origin"],
+      actions: {
+        redirect_uris: "prod -> staging hosts (json)",
+        allowed_origin: "prod -> staging host",
+      },
+      transform(row) {
+        const changes: Row = {};
+        let uris: unknown;
+        try {
+          uris = JSON.parse(row.redirect_uris as string);
+        } catch {
+          uris = null;
         }
-      }
-      const origin = row.allowed_origin as string;
-      const mappedOrigin = toStagingUri(origin) ?? "";
-      if (mappedOrigin !== origin) changes.allowed_origin = mappedOrigin;
-      return changes;
-    },
-  });
+        if (Array.isArray(uris) && uris.every((u) => typeof u === "string")) {
+          const mapped = toStagingUris(uris);
+          if (!sameStrings(mapped, uris)) {
+            changes.redirect_uris = JSON.stringify(mapped);
+          }
+        }
+        const origin = row.allowed_origin as string;
+        const mappedOrigin = toStagingUri(origin) ?? "";
+        if (mappedOrigin !== origin) changes.allowed_origin = mappedOrigin;
+        return changes;
+      },
+    });
+  }
 
   // ---- auth.oauth_client (singular, legacy): plaintext secret ---------------
   await runSetBased(sql, {
@@ -987,6 +990,7 @@ async function obfuscate(sql: Sql): Promise<void> {
     pk: "id",
     columns: [
       "email",
+      "name",
       "description",
       "preblast",
       "backblast",
@@ -996,6 +1000,9 @@ async function obfuscate(sql: Sql): Promise<void> {
     ],
     actions: {
       email: "obfuscate (email)",
+      // Real-data finding 2026-09-22: the slackbot titles some instances
+      // after a Slack mention ("Q: <@U…>"), so name carries real Slack ids.
+      name: "scrub emails (text)",
       description: "scrub emails (text)",
       preblast: "scrub emails (text)",
       backblast: "scrub emails (text)",
@@ -1004,6 +1011,7 @@ async function obfuscate(sql: Sql): Promise<void> {
       meta: "scrub emails (json)",
     },
     where: sql`email IS NOT NULL
+      OR name LIKE ${likeEmail}
       OR description LIKE ${likeEmail}
       OR preblast LIKE ${likeEmail}
       OR backblast LIKE ${likeEmail}
@@ -1014,7 +1022,7 @@ async function obfuscate(sql: Sql): Promise<void> {
       const changes: Row = {};
       const email = str(row.email);
       if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
-      for (const col of ["description", "preblast", "backblast"]) {
+      for (const col of ["name", "description", "preblast", "backblast"]) {
         const v = str(row[col]);
         if (v) {
           const scrubbed = scrubText(v);
