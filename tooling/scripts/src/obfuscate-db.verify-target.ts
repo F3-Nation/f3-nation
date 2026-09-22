@@ -59,6 +59,14 @@ const EMPTY_TABLES = [
   "auth.session",
   "auth.verification_tokens",
   "auth.verificationToken",
+  "auth.better_auth_oauth_access_token",
+  "auth.better_auth_oauth_refresh_token",
+  "auth.better_auth_oauth_consent",
+  "auth.better_auth_oauth_client_assertion",
+  "auth.better_auth_session",
+  "auth.better_auth_account",
+  "auth.better_auth_verification",
+  "auth.better_auth_jwks",
 ];
 
 type Sql = postgres.Sql;

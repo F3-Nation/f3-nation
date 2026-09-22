@@ -72,6 +72,14 @@ const EMPTY_TABLES = [
   "auth.oauth_access_tokens",
   "auth.oauth_refresh_tokens",
   "auth.email_mfa_codes",
+  "auth.better_auth_oauth_access_token",
+  "auth.better_auth_oauth_refresh_token",
+  "auth.better_auth_oauth_consent",
+  "auth.better_auth_oauth_client_assertion",
+  "auth.better_auth_session",
+  "auth.better_auth_account",
+  "auth.better_auth_verification",
+  "auth.better_auth_jwks",
 ];
 
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
@@ -314,6 +322,32 @@ async function plantSyntheticPii(
     VALUES ('U0REALSLACK', 'Jane Doe', 'jane@example.com', false, false,
       false, 'T0TEAM', 'strava-access-secret', 'strava-refresh-secret',
       'https://avatars.slack.com/jane.png')`;
+
+  // Better Auth shadow row, 1:1 with the users row above. f3_user_id is a
+  // GENERATED ALWAYS column ((id)::integer) with an FK to users.id and a
+  // CHECK that id is a canonical positive integer, so it cannot be inserted
+  // and an "orphan" shadow row is not constructible -- every row here is
+  // reachable by migration 0025's email-sync trigger. That is exactly what
+  // makes this fixture worth planting: it proves the trigger and the
+  // obfuscator agree, and that name/image (which no trigger touches) are
+  // cleared by the script itself.
+  await sql`
+    INSERT INTO auth.better_auth_user (id, name, email, email_verified, image,
+      created_at, updated_at)
+    VALUES (${String(user.id)}, 'Jane Doe', 'jane@example.com', true,
+      'https://example.com/jane-shadow.jpg', now(), now())`;
+
+  // A Better Auth OAuth client. Without this the contacts/metadata/secret
+  // jobs run against 0 rows every time -- and `contacts` is a text[], the
+  // only array column this script scrubs, so it is the least-like-anything-
+  // else code path in the file.
+  await sql`
+    INSERT INTO auth.better_auth_oauth_client (id, client_id, client_secret,
+      name, redirect_uris, contacts, metadata)
+    VALUES ('synthetic-client', 'synthetic-client-id', 'super-secret-value',
+      'Synthetic Client', ARRAY['https://example.com/cb'],
+      ARRAY['admin@example.com', 'ops@example.com'],
+      '{"owner_email": "carl@aol.com"}')`;
 
   // Retina-density asset filename: email-shaped but not PII, and untouched
   // by the obfuscator (orgs.logo_url is not a scrubbed column). Exercises
@@ -579,6 +613,62 @@ async function main(): Promise<void> {
       !pipeText.includes("|") &&
       (pipeText.match(/<@U[A-Z0-9]+>/g) ?? []).length === 2;
     check("piped/enterprise Slack mentions scrubbed", pipeOk, pipeText);
+
+    const [shadow] = await sql<
+      { id: string; name: string; email: string; image: string | null }[]
+    >`
+      SELECT id, name, email, image FROM auth.better_auth_user
+      WHERE id = ${String(userId)} LIMIT 1`;
+    const shadowOk =
+      !!shadow &&
+      shadow.email.endsWith(ALLOWED_EMAIL_SUFFIX) &&
+      !shadow.name.includes("Jane Doe") &&
+      shadow.image === null;
+    check(
+      "better_auth_user shadow row obfuscated (name/image by the script)",
+      shadowOk,
+      shadow ? `${shadow.email} / ${shadow.name} / ${shadow.image}` : "missing",
+    );
+
+    // The trigger and the obfuscator must agree, or a staging sign-in lands on
+    // a shadow row whose email no longer matches users.email and the user is
+    // locked out -- the exact failure migration 0025 exists to prevent.
+    const [triggerMatch] = await sql<{ matched: boolean }[]>`
+      SELECT (u.email = b.email) AS matched
+      FROM users u JOIN auth.better_auth_user b ON b.f3_user_id = u.id
+      WHERE u.id = ${userId} LIMIT 1`;
+    check(
+      "users.email and its better_auth_user shadow still agree",
+      triggerMatch?.matched === true,
+      String(triggerMatch?.matched),
+    );
+
+    const [client] = await sql<
+      {
+        contacts: string[] | null;
+        metadata: string | null;
+        client_secret: string | null;
+        expected_secret: string;
+      }[]
+    >`
+      SELECT contacts, metadata::text AS metadata, client_secret,
+        encode(sha256(('revoked:' || id)::bytea), 'hex') AS expected_secret
+      FROM auth.better_auth_oauth_client WHERE id = 'synthetic-client' LIMIT 1`;
+    const clientOk =
+      !!client &&
+      (client.contacts ?? []).length === 2 &&
+      (client.contacts ?? []).every((c) => c.endsWith(ALLOWED_EMAIL_SUFFIX)) &&
+      !!client.metadata &&
+      !client.metadata.includes("carl@aol.com") &&
+      client.metadata.includes(ALLOWED_EMAIL_SUFFIX) &&
+      client.client_secret === client.expected_secret;
+    check(
+      "better_auth_oauth_client contacts[]/metadata scrubbed, secret invalidated",
+      clientOk,
+      client
+        ? `${(client.contacts ?? []).join(",")} | ${client.metadata} | secret ${client.client_secret === client.expected_secret ? "invalidated" : "INTACT"}`
+        : "missing",
+    );
 
     const [logoRow] = await sql<{ logo_url: string | null }[]>`
       SELECT logo_url FROM orgs

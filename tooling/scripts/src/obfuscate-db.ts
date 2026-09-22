@@ -495,6 +495,20 @@ const TOUCHED_TABLES = new Set([
   "auth.oauth_access_token",
   "auth.oauth_refresh_tokens",
   "auth.oauth_refresh_token",
+  // Better Auth (migration 0022-0025, issue #876 phase 3). All 12 tables
+  // classified below; see docs/STAGING_REFRESH.md for the per-column call.
+  "auth.better_auth_user",
+  "auth.better_auth_session",
+  "auth.better_auth_account",
+  "auth.better_auth_verification",
+  "auth.better_auth_jwks",
+  "auth.better_auth_oauth_client",
+  "auth.better_auth_oauth_client_assertion",
+  "auth.better_auth_oauth_client_resource",
+  "auth.better_auth_oauth_resource",
+  "auth.better_auth_oauth_consent",
+  "auth.better_auth_oauth_access_token",
+  "auth.better_auth_oauth_refresh_token",
   "auth.email_mfa_codes",
   "auth.email_mfa_code",
   "auth.oauth_clients",
@@ -566,6 +580,34 @@ async function obfuscate(sql: Sql): Promise<void> {
     "auth.email_mfa_code",
     "auth.session",
     "auth.verificationToken",
+  ]);
+
+  // Better Auth's secret-bearing tables. Grouped for the same reason as the
+  // singular family above — oauth_refresh_token/oauth_access_token FK to
+  // better_auth_session and to each other.
+  //
+  // - better_auth_session:            token + ip_address + user_agent
+  // - better_auth_account:            access_token/refresh_token/id_token AND
+  //                                   a `password` column
+  // - better_auth_verification:       `identifier` is the email, `value` the
+  //                                   OTP/verification token
+  // - better_auth_jwks:               `private_key` — the signing keys for
+  //                                   every token the auth app issues. These
+  //                                   must never exist outside prod; Better
+  //                                   Auth generates a fresh keypair on demand
+  //                                   when the table is empty.
+  // - better_auth_oauth_consent:      per-user grant state, meaningless once
+  //                                   the tokens it authorised are gone
+  // - better_auth_oauth_client_assertion: JTI replay guard, ephemeral by design
+  await truncateTables(sql, [
+    "auth.better_auth_oauth_access_token",
+    "auth.better_auth_oauth_refresh_token",
+    "auth.better_auth_oauth_consent",
+    "auth.better_auth_oauth_client_assertion",
+    "auth.better_auth_session",
+    "auth.better_auth_account",
+    "auth.better_auth_verification",
+    "auth.better_auth_jwks",
   ]);
 
   // ---- api_keys: delete (cascades roles_x_api_keys_x_org) -------------------
@@ -1110,6 +1152,135 @@ async function obfuscate(sql: Sql): Promise<void> {
     transform(row) {
       const v = row.hospital_name as string | null;
       return v ? { hospital_name: fakeName(`hospital_name:${v}`) } : null;
+    },
+  });
+
+  // ---- auth.better_auth_user -------------------------------------------------
+  // Better Auth's shadow identity row, 1:1 with public.users. `id` is
+  // String(public.users.id) (see apps/auth/src/lib/better-auth.ts's
+  // databaseHooks.user.create.before), NOT an email — unlike the legacy
+  // auth.user below — so it is a join key, not PII. It is preserved, and has
+  // to be: f3_user_id is GENERATED ALWAYS AS ((id)::integer) STORED with an FK
+  // to users.id, a unique constraint, and a CHECK that id matches
+  // '^[1-9][0-9]*$' (migration 0024). Rewriting id would break all four.
+  //
+  // ORDERING NOTE: this must run AFTER the public.users transform, and does.
+  // Migration 0025 installs an AFTER UPDATE OF email trigger on public.users
+  // (auth.sync_better_auth_user_email) that rewrites better_auth_user.email
+  // for the matching f3_user_id. Because f3_user_id is generated from id and
+  // FK-enforced, EVERY row here is reachable by that trigger — so by the time
+  // this job runs the emails are already fake and the allowlist guard makes
+  // the email pass a no-op rather than faking a fake.
+  //
+  // The email pass is kept anyway as defence in depth, because the trigger is
+  // not guaranteed to have run on the copy we are pointed at: a dump/restore
+  // that replays data with session_replication_role = replica, a target
+  // restored before migration 0025, or anyone dropping the trigger, all
+  // silently leave the real email here. `name` and `image` have no trigger at
+  // all and are always this job's work.
+  await transformTable(sql, {
+    table: "auth.better_auth_user",
+    pk: "id",
+    columns: ["name", "email", "image"],
+    actions: {
+      name: "obfuscate (name)",
+      email: "obfuscate (email) (trigger-synced rows are already done)",
+      image: "null out",
+    },
+    transform(row) {
+      const changes: Row = {};
+      const name = str(row.name);
+      if (name) changes.name = fakeName(`better_auth_user:${name}`);
+      const email = str(row.email);
+      // Better Auth lowercases every email it writes, and so does the trigger;
+      // fakeEmail's output is already lowercase, so this stays consistent with
+      // the users.email value it shadows.
+      if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
+      if (row.image !== null) changes.image = null;
+      return changes;
+    },
+  });
+
+  // ---- auth.better_auth_oauth_client -----------------------------------------
+  // Registered OAuth clients are kept (staging needs its client registrations
+  // to exist), with the secret invalidated the same way auth.oauth_clients is.
+  // `contacts` is RFC 7591's administrative-contact array — real email
+  // addresses, and a text[] rather than text, so it needs element-wise
+  // scrubbing. `jwks`/`jwks_uri` hold the CLIENT's public key set, which is
+  // public by definition and left alone.
+  await transformTable(sql, {
+    table: "auth.better_auth_oauth_client",
+    pk: "id",
+    columns: ["contacts", "metadata"],
+    actions: {
+      contacts: "scrub emails (text[])",
+      metadata: "scrub emails (json)",
+    },
+    transform(row) {
+      const changes: Row = {};
+      const contacts = row.contacts as string[] | null;
+      if (Array.isArray(contacts) && contacts.length > 0) {
+        const scrubbed = contacts.map((c) =>
+          typeof c === "string" ? scrubText(c) : c,
+        );
+        if (scrubbed.some((c, i) => c !== contacts[i])) {
+          changes.contacts = scrubbed;
+        }
+      }
+      if (row.metadata !== null) {
+        const scrubbed = scrubJson(row.metadata);
+        if (scrubbed !== row.metadata) {
+          changes.metadata = JSON.stringify(scrubbed);
+        }
+      }
+      return changes;
+    },
+  });
+
+  await runSetBased(sql, {
+    table: "auth.better_auth_oauth_client",
+    column: "client_secret",
+    action: "invalidate",
+    countWhere: sql`client_secret IS NOT NULL`,
+    update: sql`UPDATE auth.better_auth_oauth_client
+        SET client_secret = encode(sha256(('revoked:' || id)::bytea), 'hex')
+        WHERE client_secret IS NOT NULL`,
+  });
+
+  // ---- auth.better_auth_oauth_resource / _client_resource --------------------
+  // Resource-server and client-resource registrations: configuration, not
+  // personal data, but both carry free-form jsonb that operators can put
+  // anything into, so the json columns get the same scrub as every other meta.
+  await transformTable(sql, {
+    table: "auth.better_auth_oauth_resource",
+    pk: "id",
+    columns: ["custom_claims", "metadata"],
+    actions: {
+      custom_claims: "scrub emails (json)",
+      metadata: "scrub emails (json)",
+    },
+    transform(row) {
+      const changes: Row = {};
+      for (const col of ["custom_claims", "metadata"]) {
+        if (row[col] === null) continue;
+        const scrubbed = scrubJson(row[col]);
+        if (scrubbed !== row[col]) changes[col] = JSON.stringify(scrubbed);
+      }
+      return changes;
+    },
+  });
+
+  await transformTable(sql, {
+    table: "auth.better_auth_oauth_client_resource",
+    pk: "id",
+    columns: ["metadata"],
+    actions: { metadata: "scrub emails (json)" },
+    transform(row) {
+      if (row.metadata === null) return null;
+      const scrubbed = scrubJson(row.metadata);
+      return scrubbed === row.metadata
+        ? null
+        : { metadata: JSON.stringify(scrubbed) };
     },
   });
 
