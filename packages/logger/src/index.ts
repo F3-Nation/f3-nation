@@ -99,7 +99,12 @@ export function createLogger(
   }
 
   // error and fatal share the same shape: attach the optional `err` and fan
-  // out to the process-global error sink (PostHog) so nothing is lost.
+  // out to whatever reporter has been registered. Deliberately not named
+  // after a vendor — this package assumes no particular tracker; the apps
+  // register @acme/observability's OTel reporter (see the README).
+  // Delivery is BEST EFFORT, not guaranteed: the reporter is invoked
+  // synchronously and never awaited, and a failure is swallowed below rather
+  // than thrown into request flow — docs/LOGGING.md says the same.
   const reportable =
     (level: "error" | "fatal") =>
     (event: string, ctx: LogContext = {}, err?: unknown) => {

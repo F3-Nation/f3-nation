@@ -49,7 +49,14 @@
     # client PostHog is simply disabled (see instrumentation-client.ts).
     ARG NEXT_PUBLIC_POSTHOG_KEY
     ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
-    ARG NEXT_PUBLIC_POSTHOG_SESSION_RECORDING
+    # Defaulted, NOT bare: a bare `ARG` expands to an EMPTY STRING when no
+    # --build-arg is supplied, and the ENV below then bakes "" into the client
+    # bundle. env.ts validates this as z.enum(["true","false"]).optional(),
+    # which accepts an ABSENT var but rejects "" — and the browser has neither
+    # CI nor SKIP_ENV_VALIDATION set, so t3-env throws on import of ~/env and
+    # the app white-screens. preview-env.yml builds this image without the arg,
+    # so this default is load-bearing, not cosmetic.
+    ARG NEXT_PUBLIC_POSTHOG_SESSION_RECORDING=false
     ENV NEXT_PUBLIC_POSTHOG_SESSION_RECORDING=$NEXT_PUBLIC_POSTHOG_SESSION_RECORDING
 
     # `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
