@@ -340,13 +340,13 @@ async function main(): Promise<void> {
 
     // No kept OAuth client may still send a code, logout, or CORS grant to a
     // production F3 host (anything under f3nation.com not prefixed staging.).
-    const oauthUris: string[] = [];
+    const clientTargets: string[] = [];
     if (await tableExists(sql, "auth.better_auth_oauth_client")) {
       const rows = await sql<{ u: string | null }[]>`
         SELECT unnest(redirect_uris || coalesce(post_logout_redirect_uris, '{}')
           || ARRAY[backchannel_logout_uri]) AS u
         FROM auth.better_auth_oauth_client`;
-      for (const r of rows) if (r.u) oauthUris.push(r.u);
+      for (const r of rows) if (r.u) clientTargets.push(r.u);
     }
     if (await tableExists(sql, "auth.oauth_clients")) {
       const rows = await sql<
@@ -354,19 +354,19 @@ async function main(): Promise<void> {
       >`
         SELECT redirect_uris, allowed_origin FROM auth.oauth_clients`;
       for (const r of rows) {
-        oauthUris.push(r.allowed_origin);
+        clientTargets.push(r.allowed_origin);
         try {
           const parsed: unknown = JSON.parse(r.redirect_uris);
           if (Array.isArray(parsed)) {
             for (const u of parsed)
-              if (typeof u === "string") oauthUris.push(u);
+              if (typeof u === "string") clientTargets.push(u);
           }
         } catch {
-          oauthUris.push(r.redirect_uris);
+          clientTargets.push(r.redirect_uris);
         }
       }
     }
-    const prodUris = oauthUris.filter((u) => {
+    const prodTargets = clientTargets.filter((u) => {
       try {
         const host = new URL(u).hostname.toLowerCase();
         const isF3 = host === "f3nation.com" || host.endsWith(".f3nation.com");
@@ -375,13 +375,15 @@ async function main(): Promise<void> {
         return false;
       }
     });
+    // Counts only, same rule as the email sweep: never echo values.
+    const checkedCount = Number(clientTargets.length);
+    const prodCount = Number(prodTargets.length);
     check(
       "no OAuth client URI points at production",
-      prodUris.length === 0,
-      prodUris.length === 0
-        ? `${oauthUris.length} URIs checked`
-        : // Count only, same rule as the email sweep: never echo values.
-          `${prodUris.length} of ${oauthUris.length} URIs point at a production F3 host`,
+      prodCount === 0,
+      prodCount === 0
+        ? `${checkedCount} URIs checked`
+        : `${prodCount} of ${checkedCount} URIs point at a production F3 host`,
     );
 
     const [orphans] = await sql<{ n: number }[]>`
