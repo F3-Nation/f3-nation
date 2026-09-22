@@ -92,9 +92,12 @@ accurate while regions retain control over their own data.
   requests page. If the region has none, the request escalates region → area →
   territory → sector → nation and only the first tier with an editor/admin is
   emailed. A territory is optional: an area with no territory escalates
-  straight to its sector. The walk needs an area above the region and a sector
-  above the area; if either is missing, or the nation has no editor/admin, no
-  email is sent. A notification failure does not fail the submission.
+  straight to its sector. If escalation is needed beyond the region, an area
+  ancestor is required. If neither the area nor an optional territory has
+  recipients, a sector ancestor is required. If escalation reaches nation and
+  no nation ancestor or eligible recipients exist, no email is sent. Once a
+  tier has recipients, higher tiers are not checked. A notification failure
+  does not fail the submission.
 
 ### Admin review
 
