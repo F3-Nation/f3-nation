@@ -1,15 +1,23 @@
 -- `codex` is a separately-provisioned schema (owned by app_codex, granted to
 -- group_readonly / group_developers_codex) that already exists in prod with
 -- every table, primary key and constraint below (applied as app_codex on
--- 2026-09-22). The migration role does not own those tables, so nothing here
--- may touch an existing object: CREATE SCHEMA / CREATE TABLE use IF NOT EXISTS
--- (no-op when present), and the two indexes are created only if absent via a
--- to_regclass check — plain CREATE INDEX IF NOT EXISTS checks table ownership
--- *before* the existence short-circuit and would fail as a non-owner. Requires
--- CREATE on the database (for CREATE SCHEMA IF NOT EXISTS) and CREATE on schema
--- codex. Supported states: codex fully absent (fresh dev/CI/test → bootstrapped)
--- or fully present (prod → no-op). Partial provisioning is not reconciled.
-CREATE SCHEMA IF NOT EXISTS "codex";
+-- 2026-09-22). The migration role does not own those objects, so nothing here
+-- may touch an existing one. Postgres runs the privilege check *before* the
+-- IF NOT EXISTS short-circuit for CREATE SCHEMA (needs CREATE on the database)
+-- and CREATE INDEX (needs table ownership), so those two are guarded with
+-- catalog lookups (pg_namespace / to_regclass) instead; CREATE TABLE IF NOT
+-- EXISTS only needs CREATE on the schema and is used as-is. Supported states:
+-- codex fully absent (fresh dev/CI/test → bootstrapped) or fully present
+-- (prod → no-op, verified as app_codex in a rolled-back transaction). Partial
+-- provisioning is not reconciled.
+DO $$
+BEGIN
+	-- CREATE SCHEMA IF NOT EXISTS checks CREATE-on-database *before* the existence
+	-- short-circuit, so guard on pg_namespace to stay a true no-op when present.
+	IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'codex') THEN
+		CREATE SCHEMA "codex";
+	END IF;
+END $$;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "codex"."admins" (
 	"id" serial PRIMARY KEY NOT NULL,
