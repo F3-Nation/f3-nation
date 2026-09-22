@@ -97,9 +97,23 @@ by regex, replaced with the same deterministic fakes.
 ## PII inventory
 
 Classification legend — **OBFUSCATE**: deterministic fake; **SCRUB**: regex
-replacement of email-shaped strings with deterministic fakes; **NULL OUT**:
-set to NULL; **TRUNCATE/DELETE**: rows removed (secrets don't belong in
-staging); **KEEP**: non-PII, left untouched.
+replacement of email-shaped strings **and Slack mention syntax** with
+deterministic fakes; **NULL OUT**: set to NULL; **TRUNCATE/DELETE**: rows
+removed (secrets don't belong in staging); **KEEP**: non-PII, left untouched.
+
+> **Known limit of SCRUB — read this before approving a load.** SCRUB is
+> regex-based. It removes email-shaped strings and Slack mentions
+> (`<@U…>` and the pipe form `<@U…|display name>`, including enterprise-grid
+> `W…` ids). It does **not** remove real personal names that appear in free
+> text with no `@` alongside them. The slackbot writes exactly that: a
+> `backblast` body is assembled as `Q: {q_name} … PAX: {pax_names} …` from
+> `users.f3_name` (see `apps/slackbot/features/backblast.py`). So after a run
+> `users.f3_name` holds a fake, but a backblast naming that person still
+> carries their real F3 name — and because `attendance.user_id` is preserved
+> by design, the fake↔real mapping is joinable by anyone who reads the text.
+> Closing this needs a name-substitution pass, not a regex, and it is **not**
+> in this script today. Read the SCRUB rows below as "de-identified for
+> emails and Slack ids", not "de-identified".
 
 ### `public` schema
 
@@ -136,8 +150,8 @@ staging); **KEEP**: non-PII, left untouched.
 | `events`                                                                                                          | `description`                                                | SCRUB                     |                                                                                                                                      |
 | `events`                                                                                                          | `meta` (json)                                                | SCRUB                     |                                                                                                                                      |
 | `event_instances`                                                                                                 | `email`                                                      | OBFUSCATE (email)         |                                                                                                                                      |
-| `event_instances`                                                                                                 | `description`, `preblast`, `backblast`                       | SCRUB                     | Free text authored by users                                                                                                          |
-| `event_instances`                                                                                                 | `preblast_rich`, `backblast_rich`, `meta` (json)             | SCRUB                     |                                                                                                                                      |
+| `event_instances`                                                                                                 | `description`, `preblast`, `backblast`                       | SCRUB                     | Free text authored by users. Emails + Slack mentions only — real names survive, see the SCRUB limit above                            |
+| `event_instances`                                                                                                 | `preblast_rich`, `backblast_rich`, `meta` (json)             | SCRUB                     | Slack Block Kit. Emails + Slack mentions only — real names survive, see the SCRUB limit above                                        |
 | `update_requests`                                                                                                 | `submitted_by`, `reviewed_by`                                | OBFUSCATE (email)         | Submitter/reviewer contact                                                                                                           |
 | `update_requests`                                                                                                 | `event_contact_email`, `location_contact_email`              | OBFUSCATE (email)         |                                                                                                                                      |
 | `update_requests`                                                                                                 | `event_description`, `location_description`                  | SCRUB                     |                                                                                                                                      |

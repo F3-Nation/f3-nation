@@ -33,6 +33,15 @@ const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // Retina-image filenames (logo@2x.png) are email-shaped; not PII.
 const IMAGE_DENSITY_SUFFIX = /@\dx\.(?:png|jpe?g|gif|webp|svg)$/i;
 
+// Slack mention syntax, both documented forms, including enterprise-grid `W`
+// ids. Keep in sync with SLACK_MENTION_REGEX in obfuscate-db.ts.
+const SLACK_MENTION_REGEX = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
+// A mention the obfuscator rewrote looks like `<@U` + uppercase hex from
+// fakeSlackId. A real Slack id almost always carries a letter outside A-F
+// (U024BE7LH) or the enterprise `W` prefix, so anything not matching this
+// shape is a mention that survived un-rewritten.
+const OBFUSCATED_SLACK_ID = /^U[0-9A-F]{8,}$/;
+
 const EMPTY_TABLES = [
   "public.auth_sessions",
   "public.auth_verification_tokens",
@@ -119,6 +128,7 @@ async function sweepForEmails(sql: Sql): Promise<void> {
         OR c.udt_name = 'citext')`;
 
   const violations: string[] = [];
+  const mentionViolations: string[] = [];
   const LIMIT = 40;
   for (const col of columns) {
     if (violations.length >= LIMIT) break;
@@ -134,6 +144,16 @@ async function sweepForEmails(sql: Sql): Promise<void> {
       for (const row of rows as unknown as { v: string }[]) {
         const texts = isJson ? stringLeaves(JSON.parse(row.v), []) : [row.v];
         for (const text of texts) {
+          // Slack ids join straight to attendance.user_id, so one that
+          // survived scrubbing re-links a faked user to their real identity.
+          // Same rule as below: record the location, never the value.
+          for (const m of text.matchAll(SLACK_MENTION_REGEX)) {
+            if (OBFUSCATED_SLACK_ID.test(m[1]!)) continue;
+            mentionViolations.push(
+              `${col.table_schema}.${col.table_name}.${col.column_name}`,
+            );
+            break;
+          }
           for (const match of text.match(EMAIL_REGEX) ?? []) {
             if (IMAGE_DENSITY_SUFFIX.test(match)) continue;
             if (match.toLowerCase().endsWith(`@${OBFUSCATED_EMAIL_DOMAIN}`)) {
@@ -157,6 +177,14 @@ async function sweepForEmails(sql: Sql): Promise<void> {
     violations.length === 0
       ? `0 non-obfuscated emails across ${columns.length} text/json columns (public + auth)`
       : `${violations.length}${violations.length >= LIMIT ? "+" : ""} leaked: ${violations.slice(0, 5).join("; ")}`,
+  );
+  const uniqueMentions = [...new Set(mentionViolations)];
+  check(
+    "Slack id sweep",
+    uniqueMentions.length === 0,
+    uniqueMentions.length === 0
+      ? `0 un-rewritten Slack mentions across ${columns.length} text/json columns (public + auth)`
+      : `${uniqueMentions.length} column(s) carry a real Slack id: ${uniqueMentions.slice(0, 5).join("; ")}`,
   );
 }
 
