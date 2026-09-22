@@ -1,12 +1,12 @@
 -- `codex` is a separately-provisioned schema (owned by app_codex, granted to
 -- group_readonly / group_developers_codex) that already exists in prod with
--- every table and primary key below (PKs applied as app_codex on 2026-09-22).
--- The migration role does not own those tables, so nothing here may touch an
--- existing object: CREATE SCHEMA / CREATE TABLE use IF NOT EXISTS (no-op when
--- present), and the two indexes are created only if absent via a to_regclass
--- check — plain CREATE INDEX IF NOT EXISTS checks table ownership *before*
--- the existence short-circuit and would fail as a non-owner. Requires CREATE
--- on the database (for CREATE SCHEMA IF NOT EXISTS) and CREATE on schema
+-- every table, primary key and constraint below (applied as app_codex on
+-- 2026-09-22). The migration role does not own those tables, so nothing here
+-- may touch an existing object: CREATE SCHEMA / CREATE TABLE use IF NOT EXISTS
+-- (no-op when present), and the two indexes are created only if absent via a
+-- to_regclass check — plain CREATE INDEX IF NOT EXISTS checks table ownership
+-- *before* the existence short-circuit and would fail as a non-owner. Requires
+-- CREATE on the database (for CREATE SCHEMA IF NOT EXISTS) and CREATE on schema
 -- codex. Supported states: codex fully absent (fresh dev/CI/test → bootstrapped)
 -- or fully present (prod → no-op). Partial provisioning is not reconciled.
 CREATE SCHEMA IF NOT EXISTS "codex";
@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS "codex"."tags" (
 	"name" text NOT NULL,
 	"id" varchar PRIMARY KEY NOT NULL,
 	"createdAt" timestamp with time zone DEFAULT now(),
-	"updatedAt" timestamp with time zone DEFAULT now()
+	"updatedAt" timestamp with time zone DEFAULT now(),
+	CONSTRAINT "tags_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "codex"."user_submissions" (

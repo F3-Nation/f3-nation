@@ -1697,7 +1697,8 @@ export const codexEntryTags = codexSchema.table(
 );
 
 export const codexTags = codexSchema.table("tags", {
-  name: text("name").notNull(),
+  // The app upserts tags with ON CONFLICT (name); unique on all rows in prod.
+  name: text("name").notNull().unique("tags_name_unique"),
   // The app keys tags by this uuid/slug string and entry_tags.tag_id points at
   // it, so it is the PK (not `name`, which can be edited).
   id: varchar("id").primaryKey(),
