@@ -18753,7 +18753,7 @@
                   },
                   "icon_url": {
                     "description": "The URL of the icon to display as the sender of the Slack message. This is optional and must be a valid HTTPS URL.",
-                    "pattern": "^https:\\/\\/.*",
+                    "format": "uri",
                     "type": "string"
                   },
                   "metadata": {
