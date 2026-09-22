@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 
 import type { AppDb } from "@acme/db/client";
-import type { OrgType, RegionRole } from "@acme/shared/app/enums";
+import type { RegionRole } from "@acme/shared/app/enums";
 import { schema } from "@acme/db";
 import { requestTypeToTitle } from "@acme/shared/app/functions";
 
@@ -18,12 +18,6 @@ import { ORG_TREE_MAX_DEPTH } from "../org-tree";
 interface NotifyMapChangeRequestParams {
   db: AppDb;
   requestId: string;
-}
-
-interface Org {
-  id: number;
-  name: string;
-  parentId: number | null;
 }
 
 /**
@@ -73,26 +67,27 @@ export const getUsersWithRoles = async ({
 };
 
 /**
- * Finds the nearest org of the given type at or above `orgId`. The walk is
- * bounded by ORG_TREE_MAX_DEPTH and a visited set, so malformed parent links
- * cannot loop forever.
+ * Finds admins/editors for `regionId` or, if it has none, the nearest
+ * ancestor that does — walking up the org hierarchy one org at a time
+ * regardless of org type. Bounded by ORG_TREE_MAX_DEPTH and a visited set,
+ * so malformed parent links (including cycles) cannot loop forever.
+ * `escalated` is true whenever the recipients came from an ancestor rather
+ * than `regionId` itself.
  */
-const findParentOrgByType = async ({
+const findNearestRecipients = async ({
   db,
-  orgId,
-  type,
+  regionId,
 }: {
   db: AppDb;
-  orgId: number;
-  type: OrgType;
-}): Promise<Org | null> => {
+  regionId: number;
+}) => {
   const visited = new Set<number>();
-  let currentId: number | null = orgId;
+  let currentId: number | null = regionId;
 
   for (let depth = 0; currentId !== null; depth++) {
     // Check for a cycle first so one closing past the depth limit is not
     // reported as a depth overrun.
-    if (visited.has(currentId)) return null;
+    if (visited.has(currentId)) return { recipients: [], escalated: true };
     if (depth > ORG_TREE_MAX_DEPTH) {
       logError("api.org_tree.depth_limit_reached", {
         direction: "ancestors",
@@ -100,50 +95,25 @@ const findParentOrgByType = async ({
         rootCount: 1,
         source: "map_request_notification",
       });
-      return null;
+      return { recipients: [], escalated: true };
     }
     visited.add(currentId);
 
+    const recipients = await getUsersWithRoles({ db, orgId: currentId });
+    if (recipients.length > 0) {
+      return { recipients, escalated: currentId !== regionId };
+    }
+
     const [currentOrg] = await db
-      .select({
-        id: schema.orgs.id,
-        type: schema.orgs.orgType,
-        name: schema.orgs.name,
-        parentId: schema.orgs.parentId,
-      })
+      .select({ parentId: schema.orgs.parentId })
       .from(schema.orgs)
       .where(eq(schema.orgs.id, currentId));
 
-    if (!currentOrg) return null;
-    if (currentOrg.type === type) {
-      return {
-        id: currentOrg.id,
-        name: currentOrg.name,
-        parentId: currentOrg.parentId,
-      };
-    }
+    if (!currentOrg) return { recipients: [], escalated: true };
     currentId = currentOrg.parentId;
   }
 
-  return null;
-};
-
-/**
- * Finds the nearest org of the given type at or above `startOrgId` and loads
- * its admins/editors. `org` is null when no such ancestor exists.
- */
-const findTierRecipients = async ({
-  db,
-  startOrgId,
-  type,
-}: {
-  db: AppDb;
-  startOrgId: number;
-  type: OrgType;
-}) => {
-  const org = await findParentOrgByType({ db, orgId: startOrgId, type });
-  const recipients = org ? await getUsersWithRoles({ db, orgId: org.id }) : [];
-  return { org, recipients };
+  return { recipients: [], escalated: true };
 };
 
 /**
@@ -161,7 +131,6 @@ export const notifyMapChangeRequest = async ({
       id: schema.updateRequests.id,
       regionId: schema.updateRequests.regionId,
       regionName: schema.orgs.name,
-      regionParentId: schema.orgs.parentId,
       eventName: schema.updateRequests.eventName,
       submittedBy: schema.updateRequests.submittedBy,
       requestType: schema.updateRequests.requestType,
@@ -175,80 +144,11 @@ export const notifyMapChangeRequest = async ({
     return;
   }
 
-  // Escalate region → area → territory → sector → nation, notifying only the
-  // first tier that has admins/editors.
-  let recipients = await getUsersWithRoles({ db, orgId: request.regionId });
-
-  let area: Org | null = null;
-  let sector: Org | null = null;
-  let noAdminsNotice = false;
-
-  // If no recipients at region level, look for area level
-  if (recipients.length === 0) {
-    noAdminsNotice = true;
-    area = await findParentOrgByType({
-      db,
-      orgId: request.regionId,
-      type: "area",
-    });
-
-    if (!area) {
-      throw new ORPCError("NOT_FOUND", {
-        message: "Area not found, cannot notify admins/editors",
-      });
-    }
-
-    recipients = await getUsersWithRoles({ db, orgId: area.id });
-  }
-
-  // If still no recipients, look for territory (optional) then sector level
-  if (recipients.length === 0) {
-    if (!area?.parentId) {
-      throw new ORPCError("NOT_FOUND", {
-        message: "Area has no parent, cannot notify admins/editors",
-      });
-    }
-
-    // Both searches start at the area's parent: an area with no territory
-    // still has to reach its sector.
-    const territoryTier = await findTierRecipients({
-      db,
-      startOrgId: area.parentId,
-      type: "territory",
-    });
-    recipients = territoryTier.recipients;
-
-    if (recipients.length === 0) {
-      const sectorTier = await findTierRecipients({
-        db,
-        startOrgId: area.parentId,
-        type: "sector",
-      });
-      sector = sectorTier.org;
-      recipients = sectorTier.recipients;
-    }
-  }
-
-  // If still no recipients, look for nation level
-  if (recipients.length === 0) {
-    if (!sector?.parentId) {
-      throw new ORPCError("NOT_FOUND", {
-        message: "Sector has no parent, cannot notify admins/editors",
-      });
-    }
-    const nationTier = await findTierRecipients({
-      db,
-      startOrgId: sector.parentId,
-      type: "nation",
-    });
-
-    if (!nationTier.org) {
-      throw new ORPCError("NOT_FOUND", {
-        message: "Nation not found, cannot notify admins/editors",
-      });
-    }
-    recipients = nationTier.recipients;
-  }
+  // Escalate up the org hierarchy, one org at a time, notifying the first
+  // one — regardless of its org type — that has admins/editors.
+  const { recipients, escalated: noAdminsNotice } = await findNearestRecipients(
+    { db, regionId: request.regionId },
+  );
 
   if (recipients.length === 0) {
     throw new ORPCError("NOT_FOUND", {

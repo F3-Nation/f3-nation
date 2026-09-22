@@ -2,9 +2,10 @@
  * Tests for notifyMapChangeRequest escalation and error handling.
  *
  * When a region has nobody to notify, the request escalates up the org
- * hierarchy (area → territory → sector → nation). Territory is optional: an
- * area with no territory skips straight to sector. When the walk dead-ends it
- * should surface a typed ORPCError("NOT_FOUND", ...) rather than a raw Error,
+ * hierarchy one ancestor at a time until it finds one with admins/editors —
+ * the walk does not care what type an ancestor is, only whether it has
+ * recipients. When the walk reaches the root with nobody eligible it
+ * surfaces a typed ORPCError("NOT_FOUND", ...) rather than a raw Error,
  * since oRPC would otherwise mask the latter as an opaque 500 and drop the
  * message.
  */
@@ -185,28 +186,28 @@ describe("notifyMapChangeRequest", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("throws NOT_FOUND 'Area not found' when a parentless region has no admins/editors", async () => {
+  it("throws NOT_FOUND when a parentless region has no admins/editors and no parent", async () => {
     const region = await createOrg({ orgType: "region", parentId: null });
     const request = await createRequest(region.id);
 
     await expectNotFound(
       request.id,
-      "Area not found, cannot notify admins/editors",
+      "No admins/editors found at any level, cannot notify",
     );
   });
 
-  it("throws NOT_FOUND 'Area has no parent' when the area is the top of the hierarchy", async () => {
+  it("throws NOT_FOUND when the top of a two-level hierarchy has no admins/editors", async () => {
     const area = await createOrg({ orgType: "area", parentId: null });
     const region = await createOrg({ orgType: "region", parentId: area.id });
     const request = await createRequest(region.id);
 
     await expectNotFound(
       request.id,
-      "Area has no parent, cannot notify admins/editors",
+      "No admins/editors found at any level, cannot notify",
     );
   });
 
-  it("throws NOT_FOUND 'Sector has no parent' when no sector exists above the area", async () => {
+  it("throws NOT_FOUND when a three-level hierarchy has no admins/editors anywhere", async () => {
     const top = await createOrg({ orgType: "region", parentId: null });
     const area = await createOrg({ orgType: "area", parentId: top.id });
     const region = await createOrg({ orgType: "region", parentId: area.id });
@@ -214,11 +215,11 @@ describe("notifyMapChangeRequest", () => {
 
     await expectNotFound(
       request.id,
-      "Sector has no parent, cannot notify admins/editors",
+      "No admins/editors found at any level, cannot notify",
     );
   });
 
-  it("throws NOT_FOUND 'Nation not found' when no nation exists above the sector", async () => {
+  it("throws NOT_FOUND when a four-level hierarchy has no admins/editors anywhere", async () => {
     const top = await createOrg({ orgType: "region", parentId: null });
     const sector = await createOrg({ orgType: "sector", parentId: top.id });
     const area = await createOrg({ orgType: "area", parentId: sector.id });
@@ -227,7 +228,7 @@ describe("notifyMapChangeRequest", () => {
 
     await expectNotFound(
       request.id,
-      "Nation not found, cannot notify admins/editors",
+      "No admins/editors found at any level, cannot notify",
     );
   });
 
@@ -365,7 +366,35 @@ describe("notifyMapChangeRequest", () => {
       }
     });
 
-    it("throws NOT_FOUND 'Sector has no parent' when a territory tops the hierarchy with no sector", async () => {
+    it("notifies the nearest ancestor with recipients regardless of its org type", async () => {
+      // A "region"-typed org standing in for a hypothetical future tier
+      // (e.g. a "district") wedged between two areas — the walk must not
+      // care what type an ancestor is, only whether it has recipients.
+      const grandparent = await createOrg({
+        orgType: "region",
+        parentId: null,
+      });
+      const admin = await addRole(grandparent.id, "admin");
+      const parentArea = await createOrg({
+        orgType: "area",
+        parentId: grandparent.id,
+      });
+      const childArea = await createOrg({
+        orgType: "area",
+        parentId: parentArea.id,
+      });
+      const region = await createOrg({
+        orgType: "region",
+        parentId: childArea.id,
+      });
+      const request = await createRequest(region.id);
+
+      await notifyMapChangeRequest({ db, requestId: request.id });
+
+      expect(sentTo()).toEqual([admin]);
+    });
+
+    it("throws NOT_FOUND when a territory tops the hierarchy with no admins/editors anywhere", async () => {
       const territory = await createOrg({
         orgType: "territory",
         parentId: null,
@@ -376,11 +405,11 @@ describe("notifyMapChangeRequest", () => {
 
       await expectNotFound(
         request.id,
-        "Sector has no parent, cannot notify admins/editors",
+        "No admins/editors found at any level, cannot notify",
       );
     });
 
-    it("throws NOT_FOUND 'Nation not found' when no nation exists above a territory-bearing tree", async () => {
+    it("throws NOT_FOUND when no ancestor in a territory-bearing tree has admins/editors", async () => {
       const top = await createOrg({ orgType: "region", parentId: null });
       const sector = await createOrg({ orgType: "sector", parentId: top.id });
       const territory = await createOrg({
@@ -393,7 +422,7 @@ describe("notifyMapChangeRequest", () => {
 
       await expectNotFound(
         request.id,
-        "Nation not found, cannot notify admins/editors",
+        "No admins/editors found at any level, cannot notify",
       );
     });
   });
@@ -411,13 +440,13 @@ describe("notifyMapChangeRequest", () => {
       return parentId;
     };
 
-    it("finds an area exactly at the depth limit", async () => {
+    it("reaches an area exactly at the depth limit and finds it has no recipients", async () => {
       const bottomRegionId = await createAreaAbove(ORG_TREE_MAX_DEPTH);
       const request = await createRequest(bottomRegionId);
 
       await expectNotFound(
         request.id,
-        "Area has no parent, cannot notify admins/editors",
+        "No admins/editors found at any level, cannot notify",
       );
       expect(mockLogError).not.toHaveBeenCalled();
     });
@@ -428,7 +457,7 @@ describe("notifyMapChangeRequest", () => {
 
       await expectNotFound(
         request.id,
-        "Area not found, cannot notify admins/editors",
+        "No admins/editors found at any level, cannot notify",
       );
       expect(mockLogError).toHaveBeenCalledTimes(1);
       expect(mockLogError).toHaveBeenCalledWith(
@@ -452,7 +481,7 @@ describe("notifyMapChangeRequest", () => {
 
       await expectNotFound(
         request.id,
-        "Area not found, cannot notify admins/editors",
+        "No admins/editors found at any level, cannot notify",
       );
       expect(mockLogError).not.toHaveBeenCalled();
     });
@@ -477,7 +506,7 @@ describe("notifyMapChangeRequest", () => {
 
       await expectNotFound(
         request.id,
-        "Area not found, cannot notify admins/editors",
+        "No admins/editors found at any level, cannot notify",
       );
       expect(mockLogError).not.toHaveBeenCalled();
     });
