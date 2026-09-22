@@ -745,6 +745,42 @@ async function main(): Promise<void> {
       `${orphans?.n ?? "?"} orphaned rows`,
     );
 
+    // --- 5b. Post-load staging logins -----------------------------------------
+    // Runs last: the routable address it adds would (correctly) trip the
+    // email sweep above. Twice, to prove a re-run doesn't duplicate.
+    const loginEmail = "staging-login@example.com";
+    for (let i = 0; i < 2; i++) {
+      run(
+        "pnpm",
+        [
+          "-F",
+          "@acme/scripts",
+          "exec",
+          "tsx",
+          "src/seed-staging-logins.ts",
+          "--allow-db",
+          DB_NAME,
+          "--login",
+          `${loginEmail}:admin`,
+        ],
+        childEnv,
+      );
+    }
+    const [login] = await sql<{ users: number; admin_grants: number }[]>`
+      SELECT
+        (SELECT count(*)::int FROM users WHERE email = ${loginEmail}) AS users,
+        (SELECT count(*)::int FROM roles_x_users_x_org rxo
+          JOIN users u ON u.id = rxo.user_id
+          JOIN roles r ON r.id = rxo.role_id
+          JOIN orgs o ON o.id = rxo.org_id
+          WHERE u.email = ${loginEmail} AND r.name = 'admin'
+            AND o.org_type = 'nation') AS admin_grants`;
+    check(
+      "staging login seeded once, nation admin",
+      login?.users === 1 && login.admin_grants === 1,
+      `${login?.users ?? "?"} user row(s), ${login?.admin_grants ?? "?"} nation-admin grant(s)`,
+    );
+
     // --- 6. Verdict -----------------------------------------------------------
     const failed = results.filter((r) => !r.pass);
     console.log("\n=== VERIFICATION SUMMARY ===");

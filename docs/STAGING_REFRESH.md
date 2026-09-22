@@ -33,8 +33,28 @@ and loading the result into staging (`f3data-nonprod`).
      there, run `obfuscate-db.ts` against it, `pg_dump` the result.
    - The local-docker option keeps the un-obfuscated copy off shared
      infrastructure entirely and matches how the script was verified.
+     Before obfuscating, check that the dump is not _ahead_ of the branch
+     you are running from: compare the applied migrations in the restored copy
+     (`drizzle.__drizzle_migrations`) with `packages/db/drizzle/`. A dump that
+     is behind is fine (absent tables are skipped); one that is ahead has
+     tables this script has never classified, and the coverage gate refuses
+     the run before it writes anything. Better to know before booking the window.
 3. **Load**: restore the _obfuscated_ dump into `f3data-nonprod`.
-4. **Destroy** the intermediate instance and both the raw and intermediate
+4. **Seed sign-in identities** on staging. The refresh truncates every
+   session and leaves every address at `@obfuscated.f3nation.dev`, so no one
+   can receive an email code. Name a few routable addresses at run time
+   (nothing is committed; no real user's row is un-obfuscated):
+
+   ```bash
+   DATABASE_URL=postgresql://...staging... pnpm -F @acme/scripts seed-staging-logins -- \
+     --allow-db <staging-db-name> --login you@example.com:admin
+   ```
+
+   Role is `admin`, `editor` or `none`, granted on the nation org. Run this
+   on staging only, never on the intermediate copy, where
+   `obfuscate-db:verify-target`'s email sweep would (correctly) flag it.
+
+5. **Destroy** the intermediate instance and both the raw and intermediate
    dumps. Only the obfuscated dump may outlive the run.
 
 The seed for per-PR preview databases (`.github/workflows/preview-env.yml`)
