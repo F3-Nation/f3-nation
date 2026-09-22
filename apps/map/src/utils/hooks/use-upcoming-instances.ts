@@ -37,11 +37,25 @@ export function useUpcomingInstances({ enabled }: { enabled?: boolean } = {}) {
     // Gate on the env flag — the same stable signal instrumentation-client.ts
     // uses to decide whether to init posthog-js at all.
     if (!env.NEXT_PUBLIC_POSTHOG_KEY) return;
-    // PostHog takes flat properties rather than Sentry's `tags` bag; keep the
-    // same `event` name so existing triage queries carry over.
-    posthog.captureException(error, {
-      event: "map.upcoming_instances.fetch_failed",
-    });
+    // This hook's whole reason for existing is that a failed fetch here must
+    // NOT take down the map (it opts out of the app-wide throwOnError). A
+    // throw from captureException itself — ingest host blocked by an
+    // ad-blocker or privacy list — would do exactly that, from inside an
+    // effect, turning a degraded decoration into a broken page. Same
+    // reasoning and same shape as global-error.tsx's guard.
+    try {
+      // PostHog takes flat properties rather than Sentry's `tags` bag; keep
+      // the same `event` name so existing triage queries carry over.
+      posthog.captureException(error, {
+        event: "map.upcoming_instances.fetch_failed",
+      });
+    } catch {
+      // Swallowed deliberately, and without a console.error: unlike the
+      // reporter's own failure paths (docs/OBSERVABILITY_PLAN.md §6), this is
+      // ordinary app code with a working logger available — but it runs in the
+      // browser where @acme/logger (pino) does not. Dropping one decoration's
+      // error report is the right trade against breaking the map.
+    }
   }, [error]);
 
   return { instances: data, isUnavailable: isError };

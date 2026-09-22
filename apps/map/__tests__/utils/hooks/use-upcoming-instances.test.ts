@@ -125,4 +125,23 @@ describe("useUpcomingInstances", () => {
 
     expect(captureException).toHaveBeenCalledTimes(2);
   });
+
+  it("survives a throwing reporter rather than taking the map down with it", () => {
+    // The hook exists precisely so a failed fetch can't replace a working map
+    // with the global error page. An ad-blocker making captureException throw
+    // must not reintroduce that failure by the back door.
+    captureException.mockImplementationOnce(() => {
+      throw new Error("ingest host blocked");
+    });
+    queryResult.current = {
+      data: undefined,
+      isError: true,
+      error: new Error("500"),
+    };
+
+    expect(() => renderHook(() => useUpcomingInstances())).not.toThrow();
+
+    const { result } = renderHook(() => useUpcomingInstances());
+    expect(result.current.isUnavailable).toBe(true);
+  });
 });
