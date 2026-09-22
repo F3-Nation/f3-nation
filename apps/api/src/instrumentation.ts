@@ -1,9 +1,44 @@
-import * as Sentry from "@sentry/nextjs";
+import type { Instrumentation } from "next";
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    await import("../sentry.server.config");
+    const { registerObservability, registerLoggerErrorReporter } =
+      await import("@acme/observability");
+    const { env } = await import("~/env");
+    registerObservability({
+      serviceName: "api",
+      environment: env.NEXT_PUBLIC_CHANNEL,
+      posthog: { apiKey: env.NEXT_PUBLIC_POSTHOG_KEY },
+    });
+    registerLoggerErrorReporter();
   }
 }
 
-export const onRequestError = Sentry.captureRequestError;
+// Report uncaught server-side request errors through the OTel exception
+// pipeline (PostHog error tracking today — see @acme/observability).
+export const onRequestError: Instrumentation.onRequestError = async (
+  err,
+  request,
+  context,
+) => {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { captureException } = await import("@acme/observability");
+    await captureException(err, {
+      // Report the STATIC route template (e.g. "/v1/request/id/[id]"), never
+      // the resolved request path — the resolved path can carry ids, tokens,
+      // query strings, or PII. The route template is low-cardinality and safe.
+      route: context.routePath,
+      routerKind: context.routerKind,
+      method: request.method,
+    });
+  } else {
+    // Nothing runs on the edge in this app since the map-app skeleton (and
+    // its middleware) was deleted, but the Node observability pipeline can't
+    // run there — if an edge surface ever reappears, log the drop so it's a
+    // known gap instead of a silent one.
+    console.error("instrumentation.request_error_uncaptured", {
+      runtime: process.env.NEXT_RUNTIME,
+      route: context.routePath,
+    });
+  }
+};
