@@ -9,6 +9,9 @@
   today), [#901](https://github.com/F3-Nation/f3-nation/pull/901) and
   [#911](https://github.com/F3-Nation/f3-nation/pull/911) (the pool bounds this
   ADR depends on, both merged 2026-09-11)
+- **Blocked on:** [#767](https://github.com/F3-Nation/f3-nation/pull/767)
+  (OpenTelemetry + PostHog error transport) — the migration does not start until
+  it merges; see §7 step 2
 
 ## Summary
 
@@ -229,6 +232,9 @@ connection`, and #911's pool-wait/execution timeout, emitted as `Query exceeded
      — above 5 events in 5 minutes.
      Config only; both in-scope services already have `@sentry/nextjs`.
 
+     **This alert is why the migration waits on
+     [#767](https://github.com/F3-Nation/f3-nation/pull/767)** — see below.
+
    A third tier was considered and dropped: an uptime monitor on a
    database-backed `/health` endpoint. It would detect a silent failure about
    two minutes sooner, at the cost of a `db` check in `@f3nation/health`, a new
@@ -241,6 +247,21 @@ connection`, and #911's pool-wait/execution timeout, emitted as `Query exceeded
    §8's unexplained peak landed. That baseline is the point: a monitor that has
    never been observed reporting _normal_ cannot be trusted to report
    _abnormal_.
+
+   **Dependency: this step waits for
+   [#767](https://github.com/F3-Nation/f3-nation/pull/767) to merge.** That PR
+   moves error reporting from the Sentry SDK onto OpenTelemetry with a PostHog
+   adapter — it is the transport the issue alert above is built on. Building the
+   alert in Sentry and then changing the transport underneath it would leave the
+   cutover watched by a rule pointed at a pipe nothing writes to, and the failure
+   mode is silent: the alert simply never fires. So the alert gets built against
+   whatever error backend #767 leaves in place, after it lands.
+
+   Two qualifications. The connection-budget cron monitor does **not** depend on
+   #767 — the job reports to Sentry directly and is unaffected by how application
+   errors are transported, so it can be built and baselined in parallel. And if
+   #767 is abandoned rather than merged, this dependency lapses: the alert is
+   built in Sentry exactly as described above.
 
 3. **Migrate `api` and `map` to the Cloud SQL connector**, matching how `auth`
    already connects. Staging first — which also proves the socket syntax and
