@@ -1,7 +1,8 @@
 import "~/instrument";
 
 import { serve } from "@hono/node-server";
-import * as Sentry from "@sentry/node";
+
+import { flushObservability } from "@acme/observability";
 
 import { app } from "~/app";
 import { logError, logInfo } from "~/lib/logging";
@@ -38,14 +39,12 @@ process.on("SIGTERM", () => {
 
   server.close((err) => {
     clearTimeout(forceExit);
-    void Sentry.flush(2000)
-      .catch(() => undefined)
-      .finally(() => {
-        if (err) {
-          logError("api.server.shutdown_error", {}, err);
-          process.exit(1);
-        }
-        process.exit(0);
-      });
+    void flushObservability(2000).finally(() => {
+      if (err) {
+        logError("api.server.shutdown_error", {}, err);
+        process.exit(1);
+      }
+      process.exit(0);
+    });
   });
 });

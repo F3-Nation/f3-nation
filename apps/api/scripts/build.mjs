@@ -22,24 +22,17 @@ const outDir = join(appDir, "dist");
  * Left to Node's own resolution at runtime rather than inlined.
  *
  * `pino`/`pino-pretty` because pino-pretty drives a `thread-stream` worker,
- * which spawns from a real file path a bundle cannot provide; `@sentry/node`
- * because its OpenTelemetry auto-instrumentation patches modules through
- * `import-in-the-middle`, which only works on modules Node resolves itself;
- * and `postgres` for the same reason as `@sentry/node` — its dedicated
- * `postgresJsIntegration` only fires if `postgres` is still a real module
- * resolution Node performs, not code inlined into the bundle. Without this,
- * DB spans silently stop appearing in Sentry (queries still work; only the
- * tracing data is lost).
+ * which spawns from a real file path a bundle cannot provide; and `postgres`
+ * because OpenTelemetry auto-instrumentation patches modules through
+ * `import-in-the-middle`, which only works on modules Node resolves itself,
+ * not on code inlined into the bundle. Nothing reads those DB spans today —
+ * traces/metrics arrive with the observability baseline (F3-88) — but keeping
+ * it external means enabling them later doesn't also require rediscovering
+ * this build constraint.
  * `thread-stream` never appears in the graph once pino is external; it is listed
  * so a future direct import cannot silently get inlined.
  */
-const EXTERNAL = [
-  "pino",
-  "pino-pretty",
-  "thread-stream",
-  "@sentry/node",
-  "postgres",
-];
+const EXTERNAL = ["pino", "pino-pretty", "thread-stream", "postgres"];
 
 /**
  * Shipped in the generated runtime package.json, resolved from the workspace
@@ -51,7 +44,6 @@ const EXTERNAL = [
 const RUNTIME_DEPS = {
   pino: join(repoRoot, "packages/logger"),
   "pino-pretty": join(repoRoot, "packages/logger"),
-  "@sentry/node": appDir,
   postgres: join(repoRoot, "packages/db"),
 };
 
@@ -130,8 +122,8 @@ rmSync(outDir, { recursive: true, force: true });
 
 await esbuild.build({
   // instrument.ts is a separate output so the container can preload it
-  // (`node --import ./dist/instrument.js dist/server.js`). Sentry's
-  // OpenTelemetry hooks must register before Node resolves the modules they
+  // (`node --import ./dist/instrument.js dist/server.js`). OpenTelemetry
+  // hooks must register before Node resolves the modules they
   // patch, which an in-file import cannot achieve — see the comment in
   // src/instrument.ts. `splitting` keeps the two outputs sharing one copy of
   // every common module: without it each would carry its own @acme/logger
