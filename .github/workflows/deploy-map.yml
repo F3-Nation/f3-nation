@@ -41,8 +41,19 @@ jobs:
       staging_url: https://staging.map.f3nation.com
       prod_url: https://map.f3nation.com
       revalidate_after_deploy: true
+      # `|| 'false'` is load-bearing, not defensive noise: when the repo
+      # variable is unset this expression yields an EMPTY STRING, and an
+      # explicitly-passed empty input overrides the reusable workflow's
+      # `default: "false"` rather than falling back to it. That empty string
+      # reaches env.ts as NEXT_PUBLIC_POSTHOG_SESSION_RECORDING="", which
+      # z.enum(["true","false"]).optional() rejects — and since it is inlined
+      # into the CLIENT bundle, where skipValidation's CI/SKIP_ENV_VALIDATION
+      # escape hatches are both absent, it throws in the browser on import.
+      posthog_session_recording: ${{ vars.POSTHOG_SESSION_RECORDING || 'false' }}
       smoke_test_app: map
       app_label: "app: map"
       # Bound instances x per-instance db pool below the pooler's client
       # ceiling — sizing rationale in docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
       flags: "--max-instances=25"
+    secrets:
+      posthog_key: ${{ secrets.POSTHOG_KEY }}
