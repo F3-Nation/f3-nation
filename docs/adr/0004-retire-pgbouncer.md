@@ -30,9 +30,9 @@ The reasoning, each expanded below:
 3. **[The direct path is already running in production.](#3-the-direct-path-is-already-running-in-production)**
    `app_auth` and the Slack bot connect straight to Cloud SQL today. This is not
    a migration into the unknown.
-4. **[The only thing PgBouncer still provides is a connection ceiling.](#4-what-pgbouncer-actually-provides-today)**
-   That ceiling exists because the application sets no pool limit of its own. It
-   belongs in the driver, not on a VM.
+4. **[The only thing PgBouncer provided was a connection ceiling.](#4-what-pgbouncer-provided-before-901)**
+   That ceiling existed because the application set no pool limit of its own. It
+   belongs in the driver, not on a VM — which is where #901 has since put it.
 5. **[Keeping it costs more than removing it.](#5-what-keeping-it-would-cost)**
    The pooler is the least-managed component in the stack: an unmanaged zonal
    single point of failure with no logs, no admin access, no IaC, and a port
@@ -136,9 +136,11 @@ live production database credential that nothing consumes. Delete it.
 This also corrects a common mental model: "everything goes through the pooler"
 has not been true for some time.
 
-## 4. What PgBouncer actually provides today
+## 4. What PgBouncer provided before #901
 
-One thing: a hard ceiling on connections to Postgres.
+One thing: a hard ceiling on connections to Postgres. This section describes the
+state at investigation time (2026-08-11); #901 has since moved that ceiling into
+the driver, which is what makes step 1 of §7 already complete.
 
 ```ini
 max_db_connections = 40     # server connections to f3_prod, across all pools
@@ -146,34 +148,34 @@ max_client_conn = 1000      # client connections into PgBouncer
 pool_mode = transaction
 ```
 
-That ceiling matters because the application has none of its own:
+That ceiling mattered because the application had none of its own:
 
 ```ts
 // packages/db/src/utils/functions.ts:28
 const client = postgres(databaseUrl, sslOptions); // no `max` → driver default of 10
 ```
 
-Ten connections per instance, and `f3-admin` permits `maxScale: 100` — a
+Ten connections per instance, and `f3-admin` permitted `maxScale: 100` — a
 theoretical 1000 connections from a single service against a 400-connection
-database. `max_db_connections = 40` is the only reason that is safe.
+database. `max_db_connections = 40` was the only reason that was safe.
 
-So the pooler is compensating for a missing configuration value. The fix is to
-set the value. `docs/AI_DEVELOPMENT_GUIDE.md` already instructs contributors to
+So the pooler was compensating for a missing configuration value. The fix was to
+set the value, which #901 did. `docs/AI_DEVELOPMENT_GUIDE.md` already instructs contributors to
 size pools this way; the repository does not currently follow its own guidance.
 
 ## 5. What keeping it would cost
 
 `docs/PGBOUNCER.md` §8 has the full list. The material items:
 
-| Problem                                                                      | Why it matters                                          |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Single hand-built `e2-micro`, one zone, no IaC, no health check, no autoheal | Losing it takes all pooled production traffic offline   |
-| Port 6432 open to `0.0.0.0/0`, no target tags                                | Credentials are the only barrier from the open internet |
-| No TLS on either hop                                                         | Credentials and rows cross the internet in plaintext    |
-| No logging since April 2025 — no logfile, no syslog, no journal              | No record of auth failures, disconnects, or pool waits  |
-| Admin console unreachable (`unix_socket_dir` does not survive boot)          | `SHOW POOLS` is unavailable during an incident          |
-| PgBouncer 1.16.1 (2021), `auth_type = md5`                                   | Years of upstream fixes missing; MD5 is deprecated      |
-| `unattended-upgrades` enabled on an unmanaged box                            | It can restart itself with nobody watching and no logs  |
+| Problem                                                                      | Why it matters                                               |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Single hand-built `e2-micro`, one zone, no IaC, no health check, no autoheal | Losing it takes all pooled production traffic offline        |
+| Port 6432 open to `0.0.0.0/0`, no target tags                                | Credentials are the only barrier from the open internet      |
+| No TLS on either hop                                                         | Credentials and rows cross the internet in plaintext         |
+| No logging since April 2025 — no logfile, no syslog, no journal              | No record of auth failures, disconnects, or pool waits       |
+| Admin console unreachable (`unix_socket_dir` does not survive boot)          | `SHOW POOLS` is unavailable during an incident               |
+| PgBouncer 1.16.1 (2021), `auth_type = md5`                                   | Years of upstream fixes missing; MD5 is deprecated           |
+| `unattended-upgrades` enabled on an unmanaged box                            | A package upgrade can restart the pooler unwatched, unlogged |
 
 Making that infrastructure trustworthy — IaC, a managed instance group or
 managed pooler, TLS, logging, admin access, a version upgrade — is several days
@@ -183,8 +185,8 @@ of work. Spent on a component that, per §1, is relieving no measurable pressure
 
 - Removes the single point of failure entirely, rather than making it redundant.
 - Removes the public 6432 listener and the `0.0.0.0/0` firewall rule.
-- Removes both plaintext hops: the Cloud SQL connector encrypts and
-  IAM-authenticates on its own.
+- Removes both plaintext hops: the Cloud SQL connector establishes an encrypted
+  tunnel that is authorized by IAM (`roles/cloudsql.client`).
 - Lets `getDbUrl()` stop forcing `useSsl = false` — the comment there reads
   `// Remove SSL to enable PGBouncer to work`.
 - Lets the driver use prepared statements again. Transaction pooling is what
@@ -222,7 +224,9 @@ The order is load-bearing. Each step must land before the next begins.
      its job, and the platform alert is the independent backstop.
    - **Issue alert on connection-failure signatures** — `CONNECT_TIMEOUT`,
      `ECONNREFUSED`, `sorry, too many clients already`, `terminating
-connection`, and #911's query timeout — above 5 events in 5 minutes.
+connection`, and #911's pool-wait/execution timeout, emitted as `Query exceeded
+<n>ms pool-wait/execution timeout` (`packages/db/src/utils/query-timeout.ts`)
+     — above 5 events in 5 minutes.
      Config only; both in-scope services already have `@sentry/nextjs`.
 
    A third tier was considered and dropped: an uptime monitor on a
@@ -289,11 +293,19 @@ Two properties of that script shape the plan:
 - After adding a new secret version it **destroys every previous version**. The
   prior connection string does not survive the cutover anywhere in GCP.
 
-**So the rollback value must be captured before each flip and kept outside the
-system being changed.** Doppler holds the current strings today (`f3-api` on the
-raw IP `34.172.230.30:6432`, `f3-map` on `pgbouncer.prod.db.f3nation.com:6432`);
-read them with `doppler secrets get DATABASE_URL --project f3-api --config prd
---plain` and record them in the cutover ticket before touching anything.
+**So a recoverable copy of the pre-cutover value has to exist outside Secret
+Manager before each flip** — but it should not be pasted into a ticket, a commit,
+or a chat log, because that creates a second uncontrolled copy of a production
+credential that outlives the migration.
+
+Use Doppler as the break-glass instead. It already holds these values under access
+control and retains version history, so rolling back means reading the prior value
+out of Doppler at the moment it is needed rather than keeping a copy anywhere.
+Before each cutover, confirm the Doppler entry for that service still points at the
+pooler (`f3-api` at the raw IP `34.172.230.30:6432`, `f3-map` at
+`pgbouncer.prod.db.f3nation.com:6432` — the hosts are not secret, the credentials
+in front of them are), and record in the cutover ticket only _where_ the rollback
+value lives, never the value itself.
 
 One consequence for staffing: whoever watches the monitors during a cutover must
 also be able to run that script for that service. "Roll back on alarm" is not a
@@ -309,7 +321,7 @@ legitimate finding in its own right — would remove the rollback path.
 **The 88-connection peak is unattributed, and it should be attributed before
 step 3.** Step 2 now answers it as a side effect: the connection-budget job
 samples `pg_stat_activity` grouped by `client_addr` every five minutes, so the
-48-hour baseline produces the attribution before any traffic moves.
+24-hour baseline produces the attribution before any traffic moves.
 
 88 backends on `f3_prod` exceeds PgBouncer's own `max_db_connections = 40`, so
 the pooler cannot be the source of all of it. Two explanations, not mutually
@@ -367,6 +379,9 @@ restart itself unattended. "Working today" is not the same as "safe to leave."
 **Improvements:**
 
 - One fewer VM, one fewer public listener, one fewer failure domain.
-- Encrypted, IAM-authenticated database access on every path.
+- Encrypted, IAM-authorized database access on every path. Note the distinction:
+  the connector authorizes the _connection_ via IAM and encrypts it, but the
+  database still authenticates the _session_ with a username and password secret.
+  Cloud SQL IAM database authentication is a separate migration, not in scope here.
 - Production connection behavior matches every other environment.
 - Six open infrastructure problems close without being individually fixed.

@@ -4,14 +4,16 @@ How F3 Nation pools Postgres connections in production: what PgBouncer is, where
 runs, how to reach it, how to check on it, and what breaks when it goes down.
 
 > **Scope.** PgBouncer is **production only**. Staging, local dev, and PR preview
-> environments all talk to Postgres directly. See [Environments](#environments).
+> environments all talk to Postgres directly. See [Environments](#4-environments).
 
 ---
 
 ## 1. Why it exists
 
-Cloud Run scales horizontally: every instance of `f3-api`, `f3-map`, and `f3-admin`
-opens its own pool of Postgres connections. Postgres allocates a full backend process
+Cloud Run scales horizontally: every instance of an app that holds a `DATABASE_URL`
+opens its own pool of Postgres connections. When PgBouncer was introduced that was
+`f3-api`, `f3-map`, and `f3-admin`; as of 2026-09-22 it is `f3-api` and `f3-map` only
+(see the 2026-09-22 update note below). Postgres allocates a full backend process
 per connection, so `instances × pool_size` can exhaust the database long before CPU or
 memory is the limit. Cloud SQL caps `max_connections` by tier.
 
@@ -23,7 +25,7 @@ transaction (transaction pooling).
 ```
 ┌──────────────────────────────────────┐
 │ Cloud Run (per app project)          │
-│   f3-api / f3-map / f3-admin         │
+│   f3-api / f3-map                    │
 │   DATABASE_URL → :6432               │
 └───────────────┬──────────────────────┘
                 │ TCP 6432 (public internet, no TLS)
@@ -67,7 +69,10 @@ transaction (transaction pooling).
 | Network tags      | `http-server`, `https-server`                                                                                                                                                 |
 
 The VM also has `unattended-upgrades` enabled (`APT::Periodic::Unattended-Upgrade "1"`),
-which is why an unscheduled reboot/restart can happen without anyone touching it.
+so a package upgrade can restart the `pgbouncer` service without anyone touching it.
+Note this enables unattended _upgrades_, not unattended _reboots_ —
+`Unattended-Upgrade::Automatic-Reboot` was not checked, so whether the box also reboots
+itself is unverified.
 
 Firewall rule `pgbouncer` (project `f3data`, VPC `default`) allows **TCP 6432 from
 `0.0.0.0/0`** — no target tags, so it applies to every VM in the project. See
@@ -136,13 +141,13 @@ depends on session state (see [App-side constraints](#5-app-side-constraints)).
 `pg_stat_activity` on `f3_prod`, grouped by `client_addr`, shows the pooler fronts only
 some of the fleet:
 
-| Client                                     | Reaches Postgres via                                                                        |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `api`, `map` (and `admin`) — `postgres.js` | `client_addr = 34.172.230.30` → **through PgBouncer**                                       |
-| `app_auth` — `postgres.js`                 | no `client_addr` → **direct** (Cloud SQL socket / connector)                                |
-| `f3slackbot`                               | no `client_addr` → **direct**                                                               |
-| `datastream_user`                          | `client_addr = 34.67.234.134` → **direct** (BigQuery CDC, its own authorized-network entry) |
-| `cloudsqladmin`                            | `127.0.0.1` — Cloud SQL's own agent                                                         |
+| Client                       | Reaches Postgres via                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------- |
+| `api`, `map` — `postgres.js` | `client_addr = 34.172.230.30` → **through PgBouncer**                                       |
+| `app_auth` — `postgres.js`   | no `client_addr` → **direct** (Cloud SQL socket / connector)                                |
+| `f3slackbot`                 | no `client_addr` → **direct**                                                               |
+| `datastream_user`            | `client_addr = 34.67.234.134` → **direct** (BigQuery CDC, its own authorized-network entry) |
+| `cloudsqladmin`              | `127.0.0.1` — Cloud SQL's own agent                                                         |
 
 So the "everything goes through the pooler" mental model is already false. Two app
 workloads connect straight to Cloud SQL today.
@@ -187,16 +192,24 @@ referenced in the F3 Plane ticket for "PgBouncer VM is an unmanaged zonal SPOF".
 
 The original reason was serverless: connection-per-invocation churn. That is gone —
 every app is a Cloud Run container and `packages/db/src/client.ts` memoizes one
-`postgres.js` client per process. But **PgBouncer is currently the only ceiling on
-connections**: `packages/db/src/utils/functions.ts:28` calls `postgres(databaseUrl,
-sslOptions)` with no `max`, so the driver default of 10 applies, and `f3-admin` alone
-allows `maxScale: 100` — a theoretical 1000 connections from one service against a
-400-connection database. `max_db_connections = 40` is what makes that safe.
+`postgres.js` client per process.
 
-Going direct is viable, but only after the ceiling moves into the app: set an explicit
-`max` on the postgres-js client (3–5 is ample at `containerConcurrency: 80`), bound
-`maxScale` per service, and attach through the Cloud SQL connector rather than the
-public IP. Tracked as a decision on the SPOF ticket in Plane.
+**As measured on 2026-08-11, PgBouncer was the only ceiling on connections:**
+`packages/db/src/utils/functions.ts` called `postgres(databaseUrl, sslOptions)` with no
+`max`, so the driver default of 10 applied, and `f3-admin` alone allowed `maxScale: 100`
+— a theoretical 1000 connections from one service against a 400-connection database.
+`max_db_connections = 40` is what made that safe.
+
+> **Update, 2026-09-11.** [#901](https://github.com/F3-Nation/f3-nation/pull/901) moved
+> that ceiling into the driver: `max: 5`, `idle_timeout: 20`, `connect_timeout: 10`, plus
+> a deliberate `--max-instances` per service instead of inheriting 100.
+> [#911](https://github.com/F3-Nation/f3-nation/pull/911) added a client-side queue
+> timeout. So PgBouncer is no longer the only ceiling, and the paragraph above describes
+> the pre-#901 state. (Even unchanged, `maxScale: 100 × max 5` would be 500, not 1000.)
+
+Going direct is viable now that the ceiling lives in the app. The remaining work is to
+attach through the Cloud SQL connector rather than the public IP — see
+[ADR 0004](adr/0004-retire-pgbouncer.md).
 
 ### Where the connection strings live
 
@@ -251,9 +264,17 @@ Also avoid, on pooled connections:
 - Session-level temp tables
 - `WITH HOLD` cursors
 
-And when sizing app pools: `instances × pool_max` must stay under PgBouncer's
-`max_client_conn`, and PgBouncer's `default_pool_size` must stay under Cloud SQL's
-`max_connections`.
+And when sizing app pools, both ceilings are **shared across every service**, so the
+arithmetic is a sum and not a per-service check:
+
+- The sum over all services of `instances × pool_max` must stay under PgBouncer's
+  `max_client_conn = 1000` (client-side connections into the pooler).
+- PgBouncer's `max_db_connections = 40` caps _server_ connections to `f3_prod` across
+  all pools combined, and that total must stay under Cloud SQL's `max_connections = 400`
+  alongside the direct connectors listed earlier in this section.
+- `default_pool_size = 20` is per `(user, database)` pool, not a global limit — with
+  `api`, `map`, and `admin` as distinct users it is `max_db_connections` that binds
+  first, not this.
 
 ---
 
@@ -488,7 +509,7 @@ uptime check and no alerting on this VM or on PgBouncer today.**
 | 9   | **No logs at all.** No `logfile`, no syslog, no journal, daemonized.                                                                                             | No record of auth failures, disconnect storms, or pool waits. Fix in [§7](#logging-is-currently-off).                                                                           |
 | 10  | **PgBouncer 1.16.1** (Ubuntu 22.04 stock, released 2021) with `auth_type = md5`.                                                                                 | Years of upstream fixes missing; MD5 auth is deprecated in favor of SCRAM.                                                                                                      |
 | 11  | **Wildcard `[databases] * =`** forwards any requested database name to prod Cloud SQL, with the Cloud SQL **IP hardcoded**.                                      | No per-database allowlist; and a Cloud SQL IP change silently breaks prod until someone edits the .ini by hand.                                                                 |
-| 12  | `unattended-upgrades` is on, on a single unmanaged box.                                                                                                          | An automatic package upgrade or reboot can restart the pooler with no one watching and no logs to show for it.                                                                  |
+| 12  | `unattended-upgrades` is on, on a single unmanaged box.                                                                                                          | An automatic package upgrade can restart the pooler with no one watching and no logs to show for it. (Automatic-Reboot not verified — see [§2](#2-where-it-lives).)             |
 | 13  | Boot disk is 10 GB and the VM runs the default compute service account with broad default scopes.                                                                | Minor, but it is not least-privilege.                                                                                                                                           |
 
 ---
@@ -497,8 +518,10 @@ uptime check and no alerting on this VM or on PgBouncer today.**
 
 ### "The site is down / everything is a database error"
 
-1. `nc -vz pgbouncer.prod.db.f3nation.com 6432` — if it fails, the VM or the service is
-   down. Check the instance is `RUNNING`, then SSH in and
+1. `nc -vz pgbouncer.prod.db.f3nation.com 6432` — if it fails, the endpoint is
+   unreachable, which is not the same as the service being down: DNS, the firewall rule,
+   or any network fault between you and the VM produces the same result. Narrow it with
+   the next two checks. Confirm the instance is `RUNNING`, then SSH in and
    `sudo systemctl status pgbouncer` / `ps -C pgbouncer` / `sudo ss -lntp | grep 6432`.
 2. If PgBouncer is up, you want `SHOW POOLS;` — high `cl_waiting` means clients are
    queued and the pool (capped at `max_db_connections = 40`) is the bottleneck.
@@ -521,8 +544,9 @@ There is no automation today. Until [gap #1](#8-known-gaps--risks) is closed:
 1. Snapshot `/etc/pgbouncer/` off the current box **before** you need it.
 2. A replacement must keep external IP `34.172.230.30` (it is in Cloud SQL's authorized
    networks) or you must add the new IP there first.
-3. Install `pgbouncer` from apt, restore `pgbouncer.ini` + `userlist.txt`, `chown
-postgres`, enable the init script, open 6432.
+3. Install `pgbouncer` from apt, restore `pgbouncer.ini` + `userlist.txt`, then
+   `sudo chown postgres:postgres /etc/pgbouncer/pgbouncer.ini /etc/pgbouncer/userlist.txt`
+   and `sudo chmod 640` on both, enable the init script, open 6432.
 
 ### "Cloud SQL maintenance window"
 
