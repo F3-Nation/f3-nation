@@ -9,9 +9,9 @@
   today), [#901](https://github.com/F3-Nation/f3-nation/pull/901) and
   [#911](https://github.com/F3-Nation/f3-nation/pull/911) (the pool bounds this
   ADR depends on, both merged 2026-09-11)
-- **Blocked on:** [#767](https://github.com/F3-Nation/f3-nation/pull/767)
-  (OpenTelemetry + PostHog error transport) — the migration does not start until
-  it merges; see §7 step 2
+- **Depends on:** [#767](https://github.com/F3-Nation/f3-nation/pull/767)
+  (OpenTelemetry + PostHog error transport) — **merged 2026-09-22**, which is
+  what the monitoring in §7 step 2 is built on
 
 ## Summary
 
@@ -215,32 +215,39 @@ The order is load-bearing. Each step must land before the next begins.
 2. **Put the monitors in place, and let them run against the _current_
    architecture first.** Removing the pooler removes the last automatic ceiling
    on connections; something has to hold that job afterward, and it has to be
-   proven before the change, not after. Two monitors:
-   - **Cron monitor on the connection budget.** A Cloud Run Job on Cloud
-     Scheduler, every 5 minutes, samples `pg_stat_activity` and checks in with
-     Sentry — `error` when total backends reach 240 (60% of 400, a threshold
-     that would have stayed silent across the entire measured window). Group the
-     sample by `client_addr` and attach it as check-in context; that also
-     settles §8. A failed connection is a failed check-in, so this covers
-     database reachability as well as connection creep. Keep a Cloud Monitoring
-     alert on `num_backends` alongside it: a cron monitor is only as alive as
-     its job, and the platform alert is the independent backstop.
-   - **Issue alert on connection-failure signatures** — `CONNECT_TIMEOUT`,
-     `ECONNREFUSED`, `sorry, too many clients already`, `terminating
-connection`, and #911's pool-wait/execution timeout, emitted as `Query exceeded
-<n>ms pool-wait/execution timeout` (`packages/db/src/utils/query-timeout.ts`)
-     — above 5 events in 5 minutes.
-     Config only; both in-scope services already have `@sentry/nextjs`.
+   proven before the change, not after.
 
-     **This alert is why the migration waits on
-     [#767](https://github.com/F3-Nation/f3-nation/pull/767)** — see below.
+   #767 merged on 2026-09-22 and removed `@sentry/nextjs` from both `api` and
+   `map`. Application errors now travel the OpenTelemetry logs pipeline and land
+   in **PostHog error tracking** as `$exception` events
+   (`packages/observability/src/posthog-exporter.ts`), stamped with
+   `environment` and `service.name`. The original decision said "Sentry
+   monitors"; Sentry no longer exists in these services, so the same two
+   monitors are built on what replaced it. Two monitors:
 
-   A third tier was considered and dropped: an uptime monitor on a
-   database-backed `/health` endpoint. It would detect a silent failure about
-   two minutes sooner, at the cost of a `db` check in `@f3nation/health`, a new
-   endpoint per app, and a monitor per service per environment. At this traffic
-   `api` is never idle, so the issue alert fires on real failures within about a
-   minute. Worth revisiting if a cutover ever happens during a quiet window.
+   - **Connection-budget alert — Cloud Monitoring.** Alert policy on
+     `cloudsql.googleapis.com/database/postgresql/num_backends` for
+     `f3data`, firing at **240 backends** (60% of `max_connections = 400`, a
+     threshold that would have stayed silent across the entire measured 30-day
+     window while still catching a leak). This is the direct replacement for
+     `max_db_connections = 40` and needs no code: Cloud SQL exports the metric
+     natively.
+
+     An earlier draft built this as a Cloud Run Job checking in to a Sentry cron
+     monitor. With Sentry gone, the job's only remaining value is attribution —
+     `num_backends` is a single number and cannot say _which_ client is holding
+     the connections. Run the `pg_stat_activity` breakdown by `client_addr`
+     manually during the baseline window instead (it is the query in §1); that
+     answers §8 without standing up a scheduled job to maintain.
+
+   - **Connection-failure alert — PostHog.** Alert on `$exception` events whose
+     message matches the connection-failure class — `CONNECT_TIMEOUT`,
+     `ECONNREFUSED`, `ENOTFOUND`, `sorry, too many clients already`,
+     `terminating connection`, and #911's pool-wait/execution timeout, emitted
+     as `Query exceeded <n>ms pool-wait/execution timeout`
+     (`packages/db/src/utils/query-timeout.ts`) — filtered to
+     `environment = production`, firing above 5 events in 5 minutes. Config
+     only; both in-scope services already report through the exporter.
 
    Hold here until both monitors have been green for 24 hours against today's
    PgBouncer topology — long enough to cover the 03:45 UTC batch window where
@@ -248,20 +255,13 @@ connection`, and #911's pool-wait/execution timeout, emitted as `Query exceeded
    never been observed reporting _normal_ cannot be trusted to report
    _abnormal_.
 
-   **Dependency: this step waits for
-   [#767](https://github.com/F3-Nation/f3-nation/pull/767) to merge.** That PR
-   moves error reporting from the Sentry SDK onto OpenTelemetry with a PostHog
-   adapter — it is the transport the issue alert above is built on. Building the
-   alert in Sentry and then changing the transport underneath it would leave the
-   cutover watched by a rule pointed at a pipe nothing writes to, and the failure
-   mode is silent: the alert simply never fires. So the alert gets built against
-   whatever error backend #767 leaves in place, after it lands.
-
-   Two qualifications. The connection-budget cron monitor does **not** depend on
-   #767 — the job reports to Sentry directly and is unaffected by how application
-   errors are transported, so it can be built and baselined in parallel. And if
-   #767 is abandoned rather than merged, this dependency lapses: the alert is
-   built in Sentry exactly as described above.
+   A third tier was considered and dropped: an uptime monitor on a
+   database-backed `/health` endpoint. It would detect a silent failure roughly
+   two minutes sooner, at the cost of a `db` check in `@f3nation/health`, a new
+   endpoint per app, and a monitor per service per environment. At this traffic
+   `api` is never idle, so the failure alert fires on real errors within about a
+   minute. Worth revisiting if a cutover ever has to happen during a quiet
+   window.
 
 3. **Migrate `api` and `map` to the Cloud SQL connector**, matching how `auth`
    already connects. Staging first — which also proves the socket syntax and
@@ -292,41 +292,50 @@ Through step 4, cutover is a `DATABASE_URL` swap per service — from the Cloud
 SQL connector back to the pooler — with the VM still running and still in the
 authorized-network list. Rollback is a config push, not a rebuild.
 
-Both directions use the mechanism the repository already has.
-`_deploy-cloudrun.yml` deliberately never sets `env_vars` or `secrets`
-(see the comment at line 197); config reaches Cloud Run through
-`apps/<app>/scripts/cloud-run-env.sh` reading a gitignored
-`.env.cloud-run.<env>`. So the cutover is a one-line edit plus:
+Config reaches Cloud Run separately from code: `_deploy-cloudrun.yml` deliberately
+never sets `env_vars` or `secrets` (see the comment at line 197). `DATABASE_URL` is
+a Secret Manager reference — confirmed on both services — so the swap is a Secret
+Manager operation plus a revision roll, and **not** a git tag or a rebuild.
+
+**Do not use `apps/<app>/scripts/cloud-run-env.sh` for this.** It exists for
+initial service setup and is a liability afterwards, for two independent reasons:
+
+- It pushes **every** variable from the operator's local `.env.cloud-run.<env>`.
+  If that file has drifted from what the service is actually running — and there
+  is no guarantee it hasn't — a one-line `DATABASE_URL` change silently rewrites
+  everything else alongside it.
+- After adding a new secret version it **destroys every previous version**
+  (`gcloud secrets versions destroy`, keeping only the newest). That deletes the
+  exact value a rollback needs. Both `DATABASE_URL` secrets currently sit at
+  version 1 with nothing behind them, which is this behaviour showing its work.
+
+Use scoped commands instead, and **pin the service to an explicit secret version
+rather than `:latest`**:
 
 ```bash
-bash apps/api/scripts/cloud-run-env.sh --env prod
+# cutover: add the new value as a new version, then point the service at it
+printf '%s' "$NEW_URL" | gcloud secrets versions add DATABASE_URL \
+  --project <app-project> --data-file=-
+gcloud run services update <service> --region us-central1 \
+  --project <app-project> --update-secrets DATABASE_URL=DATABASE_URL:<new-version>
+
+# rollback: point back at the previous version
+gcloud run services update <service> --region us-central1 \
+  --project <app-project> --update-secrets DATABASE_URL=DATABASE_URL:<old-version>
 ```
 
-and the rollback is the same command after putting the old string back.
-Budget **one to two minutes**, including the new revision.
+This is a better rollback than the plan started with. Nothing destroys the old
+version, so the pre-cutover value stays retrievable in Secret Manager for as long
+as the migration runs; rollback is one command and a revision roll, roughly a
+minute. It also removes the earlier need to stash the connection string somewhere
+outside the system — the value never has to be read out, copied into a ticket, or
+pasted into a chat log, so no second uncontrolled copy of a production credential
+is created. Record the _version number_ to roll back to; that is not a secret.
 
-Two properties of that script shape the plan:
-
-- It pushes `DATABASE_URL` as `--update-secrets DATABASE_URL=DATABASE_URL:latest`.
-  **A Cloud Run revision rollback therefore restores nothing** — an older
-  revision re-reads the same `:latest` secret and gets the new value. Traffic
-  shifting is not a rollback path here.
-- After adding a new secret version it **destroys every previous version**. The
-  prior connection string does not survive the cutover anywhere in GCP.
-
-**So a recoverable copy of the pre-cutover value has to exist outside Secret
-Manager before each flip** — but it should not be pasted into a ticket, a commit,
-or a chat log, because that creates a second uncontrolled copy of a production
-credential that outlives the migration.
-
-Use Doppler as the break-glass instead. It already holds these values under access
-control and retains version history, so rolling back means reading the prior value
-out of Doppler at the moment it is needed rather than keeping a copy anywhere.
-Before each cutover, confirm the Doppler entry for that service still points at the
-pooler (`f3-api` at the raw IP `34.172.230.30:6432`, `f3-map` at
-`pgbouncer.prod.db.f3nation.com:6432` — the hosts are not secret, the credentials
-in front of them are), and record in the cutover ticket only _where_ the rollback
-value lives, never the value itself.
+Note the pinning matters in its own right: while the reference is
+`DATABASE_URL:latest`, a Cloud Run revision rollback restores nothing, because an
+older revision re-reads the same `:latest` secret and gets the new value. Traffic
+shifting is not a rollback path until the version is pinned.
 
 One consequence for staffing: whoever watches the monitors during a cutover must
 also be able to run that script for that service. "Roll back on alarm" is not a
