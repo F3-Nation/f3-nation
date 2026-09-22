@@ -343,11 +343,26 @@ async function plantSyntheticPii(
   // else code path in the file.
   await sql`
     INSERT INTO auth.better_auth_oauth_client (id, client_id, client_secret,
-      name, redirect_uris, contacts, metadata)
+      name, redirect_uris, post_logout_redirect_uris, backchannel_logout_uri,
+      contacts, metadata)
     VALUES ('synthetic-client', 'synthetic-client-id', 'super-secret-value',
-      'Synthetic Client', ARRAY['https://example.com/cb'],
+      'Synthetic Client',
+      ARRAY['https://example.com/cb', 'https://map.f3nation.com/api/auth/callback',
+        'https://pax-vault.f3nation.com/cb', 'http://localhost:3000/cb'],
+      ARRAY['https://auth.f3nation.com/logged-out'],
+      'https://admin.f3nation.com/api/auth/backchannel',
       ARRAY['admin@example.com', 'ops@example.com'],
       '{"owner_email": "carl@aol.com"}')`;
+
+  // A legacy (NextAuth-era) client with prod URIs: redirect_uris is a JSON
+  // array in a text column and allowed_origin is a bare origin, so both
+  // exercise different code than the text[] columns above.
+  await sql`
+    INSERT INTO auth.oauth_clients (id, name, client_secret_hash,
+      redirect_uris, allowed_origin)
+    VALUES ('synthetic-legacy-client', 'Synthetic Legacy', 'x',
+      '["https://me.f3nation.com/api/auth/callback","https://regions.f3nation.com/cb"]',
+      'https://me.f3nation.com')`;
 
   // Retina-density asset filename: email-shaped but not PII, and untouched
   // by the obfuscator (orgs.logo_url is not a scrubbed column). Exercises
@@ -668,6 +683,45 @@ async function main(): Promise<void> {
       client
         ? `${(client.contacts ?? []).join(",")} | ${client.metadata} | secret ${client.client_secret === client.expected_secret ? "invalidated" : "INTACT"}`
         : "missing",
+    );
+
+    // Prod F3 hosts repointed at staging, unknown F3 prod hosts dropped,
+    // third-party and localhost URIs untouched, bare origin kept bare.
+    const [uris] = await sql<
+      {
+        redirect_uris: string[];
+        post_logout_redirect_uris: string[] | null;
+        backchannel_logout_uri: string | null;
+      }[]
+    >`
+      SELECT redirect_uris, post_logout_redirect_uris, backchannel_logout_uri
+      FROM auth.better_auth_oauth_client WHERE id = 'synthetic-client'`;
+    const [legacy] = await sql<
+      { redirect_uris: string; allowed_origin: string }[]
+    >`
+      SELECT redirect_uris, allowed_origin FROM auth.oauth_clients
+      WHERE id = 'synthetic-legacy-client'`;
+    const expectedRedirects = [
+      "https://example.com/cb",
+      "https://staging.map.f3nation.com/api/auth/callback",
+      "http://localhost:3000/cb",
+    ];
+    const urisOk =
+      !!uris &&
+      JSON.stringify(uris.redirect_uris) ===
+        JSON.stringify(expectedRedirects) &&
+      JSON.stringify(uris.post_logout_redirect_uris) ===
+        JSON.stringify(["https://staging.auth2.f3nation.com/logged-out"]) &&
+      uris.backchannel_logout_uri ===
+        "https://staging.admin.f3nation.com/api/auth/backchannel" &&
+      !!legacy &&
+      legacy.redirect_uris ===
+        JSON.stringify(["https://staging.me.f3nation.com/api/auth/callback"]) &&
+      legacy.allowed_origin === "https://staging.me.f3nation.com";
+    check(
+      "OAuth client URIs repointed prod -> staging",
+      urisOk,
+      `${JSON.stringify(uris)} | ${JSON.stringify(legacy)}`,
     );
 
     const [logoRow] = await sql<{ logo_url: string | null }[]>`

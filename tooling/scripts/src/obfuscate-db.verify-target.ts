@@ -16,7 +16,8 @@
  *   3. users.email / auth.user (email, email-as-id, image) fully obfuscated.
  *   4. Deterministic cross-table mapping still joins.
  *   5. auth.oauth_client(s) secrets invalidated.
- *   6. attendance FK integrity.
+ *   6. No kept OAuth client URI points at a production F3 host.
+ *   7. attendance FK integrity.
  *
  * Usage:
  *   DATABASE_URL=postgresql://… pnpm -F @acme/scripts obfuscate-db:verify-target
@@ -335,6 +336,51 @@ async function main(): Promise<void> {
       checkedAny
         ? `${pluralSecretsLive} plural / ${singularSecretsLive} singular live secrets`
         : "absent (neither oauth client table in this schema — skipped)",
+    );
+
+    // No kept OAuth client may still send a code, logout, or CORS grant to a
+    // production F3 host (anything under f3nation.com not prefixed staging.).
+    const oauthUris: string[] = [];
+    if (await tableExists(sql, "auth.better_auth_oauth_client")) {
+      const rows = await sql<{ u: string | null }[]>`
+        SELECT unnest(redirect_uris || coalesce(post_logout_redirect_uris, '{}')
+          || ARRAY[backchannel_logout_uri]) AS u
+        FROM auth.better_auth_oauth_client`;
+      for (const r of rows) if (r.u) oauthUris.push(r.u);
+    }
+    if (await tableExists(sql, "auth.oauth_clients")) {
+      const rows = await sql<
+        { redirect_uris: string; allowed_origin: string }[]
+      >`
+        SELECT redirect_uris, allowed_origin FROM auth.oauth_clients`;
+      for (const r of rows) {
+        oauthUris.push(r.allowed_origin);
+        try {
+          const parsed: unknown = JSON.parse(r.redirect_uris);
+          if (Array.isArray(parsed)) {
+            for (const u of parsed)
+              if (typeof u === "string") oauthUris.push(u);
+          }
+        } catch {
+          oauthUris.push(r.redirect_uris);
+        }
+      }
+    }
+    const prodUris = oauthUris.filter((u) => {
+      try {
+        const host = new URL(u).hostname.toLowerCase();
+        const isF3 = host === "f3nation.com" || host.endsWith(".f3nation.com");
+        return isF3 && !host.startsWith("staging.");
+      } catch {
+        return false;
+      }
+    });
+    check(
+      "no OAuth client URI points at production",
+      prodUris.length === 0,
+      prodUris.length === 0
+        ? `${oauthUris.length} URIs checked`
+        : prodUris.slice(0, 5).join(", "),
     );
 
     const [orphans] = await sql<{ n: number }[]>`

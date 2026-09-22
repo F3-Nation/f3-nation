@@ -264,6 +264,58 @@ function addSummary(
   summary.push({ table, column, action, rows });
 }
 
+// ---------------------------------------------------------------------------
+// OAuth client URIs: prod -> staging
+// ---------------------------------------------------------------------------
+// Kept OAuth clients arrive with prod redirect / logout URIs, so a flow
+// started in staging would hand its code (or POST its backchannel logout) to
+// production. Known F3 app hosts map to their staging twins (hostnames from
+// the deploy-*.yml staging_url values). Any other *.f3nation.com host that
+// isn't already staging has no known twin and is dropped. Third-party hosts
+// and localhost are left alone: they are not F3 production, and the
+// invalidated client secret already stops a staging code being exchanged.
+const F3_DOMAIN = "f3nation.com";
+const STAGING_HOST_BY_PROD: Record<string, string> = {
+  "auth.f3nation.com": "staging.auth2.f3nation.com",
+  "auth2.f3nation.com": "staging.auth2.f3nation.com",
+  "api.f3nation.com": "staging.api.f3nation.com",
+  "admin.f3nation.com": "staging.admin.f3nation.com",
+  "map.f3nation.com": "staging.map.f3nation.com",
+  "me.f3nation.com": "staging.me.f3nation.com",
+};
+
+/** The staging form of `uri`, the uri unchanged, or null to drop it. */
+function toStagingUri(uri: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    return uri; // custom scheme / not a URL: nothing host-shaped to rewrite
+  }
+  const host = url.hostname.toLowerCase();
+  const staging = STAGING_HOST_BY_PROD[host];
+  if (staging) {
+    // Splice the host rather than url.toString(): that would append a "/" to
+    // a bare origin, and allowed_origin is compared exactly.
+    const at = uri.toLowerCase().indexOf(host, uri.indexOf("//") + 2);
+    return uri.slice(0, at) + staging + uri.slice(at + host.length);
+  }
+  const isF3 = host === F3_DOMAIN || host.endsWith(`.${F3_DOMAIN}`);
+  if (isF3 && !host.startsWith("staging.")) return null;
+  return uri;
+}
+
+function toStagingUris(uris: string[]): string[] {
+  return uris.flatMap((u) => {
+    const mapped = toStagingUri(u);
+    return mapped === null ? [] : [mapped];
+  });
+}
+
+function sameStrings(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
 /**
  * Row-based transform: stream a table in pk-keyset batches, apply `transform`
  * (returns the changed columns, or null when nothing changes), write updates,
@@ -637,6 +689,38 @@ async function obfuscate(sql: Sql): Promise<void> {
           WHERE id NOT LIKE '%-local'`
       : sql`UPDATE auth.oauth_clients
           SET client_secret_hash = encode(sha256(('revoked:' || id)::bytea), 'hex')`,
+  });
+
+  // Same prod -> staging repoint as better_auth_oauth_client (toStagingUri).
+  // redirect_uris is a JSON array in a text column; allowed_origin is NOT
+  // NULL, so an F3 origin with no staging twin becomes '' (matches no origin).
+  await transformTable(sql, {
+    table: "auth.oauth_clients",
+    pk: "id",
+    columns: ["redirect_uris", "allowed_origin"],
+    actions: {
+      redirect_uris: "prod -> staging hosts (json)",
+      allowed_origin: "prod -> staging host",
+    },
+    transform(row) {
+      const changes: Row = {};
+      let uris: unknown;
+      try {
+        uris = JSON.parse(row.redirect_uris as string);
+      } catch {
+        uris = null;
+      }
+      if (Array.isArray(uris) && uris.every((u) => typeof u === "string")) {
+        const mapped = toStagingUris(uris);
+        if (!sameStrings(mapped, uris)) {
+          changes.redirect_uris = JSON.stringify(mapped);
+        }
+      }
+      const origin = row.allowed_origin as string;
+      const mappedOrigin = toStagingUri(origin) ?? "";
+      if (mappedOrigin !== origin) changes.allowed_origin = mappedOrigin;
+      return changes;
+    },
   });
 
   // ---- auth.oauth_client (singular, legacy): plaintext secret ---------------
@@ -1207,17 +1291,38 @@ async function obfuscate(sql: Sql): Promise<void> {
   // `contacts` is RFC 7591's administrative-contact array — real email
   // addresses, and a text[] rather than text, so it needs element-wise
   // scrubbing. `jwks`/`jwks_uri` hold the CLIENT's public key set, which is
-  // public by definition and left alone.
+  // public by definition and left alone. Redirect and logout URIs are
+  // repointed at staging (see toStagingUri).
   await transformTable(sql, {
     table: "auth.better_auth_oauth_client",
     pk: "id",
-    columns: ["contacts", "metadata"],
+    columns: [
+      "contacts",
+      "metadata",
+      "redirect_uris",
+      "post_logout_redirect_uris",
+      "backchannel_logout_uri",
+    ],
     actions: {
       contacts: "scrub emails (text[])",
       metadata: "scrub emails (json)",
+      redirect_uris: "prod -> staging hosts (text[])",
+      post_logout_redirect_uris: "prod -> staging hosts (text[])",
+      backchannel_logout_uri: "prod -> staging host",
     },
     transform(row) {
       const changes: Row = {};
+      for (const col of ["redirect_uris", "post_logout_redirect_uris"]) {
+        const uris = row[col] as string[] | null;
+        if (!Array.isArray(uris)) continue;
+        const mapped = toStagingUris(uris);
+        if (!sameStrings(mapped, uris)) changes[col] = mapped;
+      }
+      const backchannel = row.backchannel_logout_uri as string | null;
+      if (backchannel !== null) {
+        const mapped = toStagingUri(backchannel);
+        if (mapped !== backchannel) changes.backchannel_logout_uri = mapped;
+      }
       const contacts = row.contacts as string[] | null;
       if (Array.isArray(contacts) && contacts.length > 0) {
         const scrubbed = contacts.map((c) =>
