@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -198,7 +199,12 @@ describe("Territory positions", () => {
     expect(screen.queryByRole("option", { name: "Nation" })).toBeNull();
   });
 
-  it("loads an existing Territory position with its type selected", async () => {
+  it("preserves the existing Territory selection when fetched options arrive", async () => {
+    let resolveOrgs!: (value: unknown) => void;
+    const orgLookup = new Promise((resolve) => {
+      resolveOrgs = resolve;
+    });
+    mocks.all.mockReturnValue(orgLookup);
     mocks.byId.mockResolvedValue({
       position: {
         id: 7,
@@ -219,6 +225,23 @@ describe("Territory positions", () => {
       expect(
         screen.getByLabelText<HTMLSelectElement>("Organization").value,
       ).toBe("42"),
+    );
+    // The persisted position provides a fallback before the org query resolves.
+    expect(
+      screen.getByRole("option", { name: "Example Territory" }),
+    ).toBeTruthy();
+    await act(async () => {
+      resolveOrgs({ orgs: [{ id: 42, name: "Fetched Territory" }] });
+      await orgLookup;
+    });
+    // A distinct fetched label proves the query result rendered; the fallback
+    // alone must not let this test finish before option loading completes.
+    await screen.findByRole("option", { name: "Fetched Territory" });
+    expect(
+      screen.queryByRole("option", { name: "Example Territory" }),
+    ).toBeNull();
+    expect(screen.getByLabelText<HTMLSelectElement>("Organization").value).toBe(
+      "42",
     );
   });
 

@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import type { CellContext, TableOptions } from "@tanstack/react-table";
 import type { OrgType } from "@acme/shared/app/enums";
-import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import {
+  ORG_TREE_MAX_DEPTH,
+  orgTypeDisplay,
+} from "@acme/shared/app/org-hierarchy";
 import type { SortingSchema } from "@acme/validators";
 import { Button } from "@acme/ui/button";
 import {
@@ -44,14 +47,7 @@ function orgColumns(orgType: OrgType): TableOptions<Org>["columns"] {
       accessorKey: column.key,
       ...(column.id ? { id: column.id } : {}),
       meta: { name: column.label },
-      // The shared Header sorts through column.toggleSorting(), which ignores
-      // enableSorting, so a non-sortable column needs a plain label instead.
-      ...(column.sortable === false
-        ? {
-            enableSorting: false,
-            header: () => <div className="px-4">{column.label}</div>,
-          }
-        : { header: Header }),
+      header: Header,
       cell: column.parentType
         ? (cell: CellContext<Org, unknown>) => (
             <Cell>
@@ -176,11 +172,16 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
         // Each lookup starts from the row: an optional tier (an area with no
         // territory) must not blank the tiers above it.
         for (const type of config.displayAncestors) {
-          names[type] = findAncestorByType(org, type, filters.orgById)?.name;
+          names[type] = findAncestorByType(
+            org,
+            type,
+            filters.orgById,
+            orgType === "area" ? ORG_TREE_MAX_DEPTH : undefined,
+          )?.name;
         }
         return { ...org, ...names };
       }),
-    [data, config, filters.orgById],
+    [data, config, filters.orgById, orgType],
   );
   const columns = useMemo(() => orgColumns(orgType), [orgType]);
   const status = (

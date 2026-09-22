@@ -342,6 +342,14 @@ describe("depth-agnostic admin organization filters", () => {
     expect(latestResultQuery()?.parentOrgIds).toEqual([nestedArea.id]);
   });
 
+  it("removes only the deselected Area from a Region table filter", () => {
+    render(<OrgTable orgType="region" />);
+    fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
+    fireEvent.click(screen.getByTestId(`area-${secondSectorArea.id}`));
+    fireEvent.click(screen.getByTestId(`area-${nestedArea.id}`));
+    expect(latestResultQuery()?.parentOrgIds).toEqual([secondSectorArea.id]);
+  });
+
   it("retains directly selected areas when the last sector is deselected", () => {
     render(<OrgTable orgType="region" />);
 
@@ -437,6 +445,7 @@ describe("depth-agnostic admin organization filters", () => {
       "territory",
       "sector",
       "nation",
+      "area",
     ]);
   });
 
@@ -575,6 +584,14 @@ describe("territory-aware admin organization filters", () => {
     expect(latestResultQuery()?.parentOrgIds).toEqual([sectorTwoTerritory.id]);
   });
 
+  it("removes only the deselected Territory from an Area table filter", () => {
+    render(<OrgTable orgType="area" />);
+    fireEvent.click(screen.getByTestId(`territory-${secondTerritory.id}`));
+    fireEvent.click(screen.getByTestId(`territory-${sectorTwoTerritory.id}`));
+    fireEvent.click(screen.getByTestId(`territory-${secondTerritory.id}`));
+    expect(latestResultQuery()?.parentOrgIds).toEqual([sectorTwoTerritory.id]);
+  });
+
   it("prunes selected territories that are no longer beneath a selected sector", () => {
     render(<OrgTable orgType="area" />);
 
@@ -688,4 +705,81 @@ describe("territory-aware admin organization filters", () => {
     expect(data).toContain('"territory":"Territory"');
     expect(data).toContain('"sector":"Sector One"');
   });
+});
+
+describe("Area display through persisted intermediate Areas", () => {
+  beforeEach(() => {
+    mocks.hierarchyAvailable = true;
+    mocks.queryInputs = [];
+  });
+
+  it.each(["sector", "territory"] as const)(
+    "resolves %s through an inactive Area outside the current result page",
+    (ancestorType) => {
+      const ancestor = {
+        id: 900,
+        parentId: null,
+        orgType: ancestorType,
+        name: "Resolved ancestor",
+        isActive: true,
+      };
+      const intermediate = {
+        id: 901,
+        parentId: 900,
+        orgType: "area",
+        name: "Off-page Area",
+        isActive: false,
+      };
+      const row = {
+        id: 902,
+        parentId: 901,
+        orgType: "area",
+        name: "Visible Area",
+        isActive: true,
+      };
+      mocks.hierarchyOrgs = [ancestor, intermediate];
+      mocks.resultOrgs = [row];
+      render(<OrgTable orgType="area" />);
+      expect(JSON.parse(screen.getByTestId("table-data").textContent)).toEqual([
+        { ...row, [ancestorType]: ancestor.name },
+      ]);
+      if (ancestorType === "sector") {
+        fireEvent.click(screen.getByTestId("sector-900"));
+        expect(latestResultQuery()?.parentOrgIds).toEqual([900]);
+      }
+    },
+  );
+
+  it.each([20, 21])(
+    "keeps the display depth limit with %i Area parent edges",
+    (depth) => {
+      const ancestor = {
+        id: 900,
+        parentId: null,
+        orgType: "sector",
+        name: "Boundary Sector",
+        isActive: true,
+      };
+      const intermediates = Array.from({ length: depth - 1 }, (_, i) => ({
+        id: i + 1,
+        parentId: i === depth - 2 ? ancestor.id : i + 2,
+        orgType: "area",
+        name: "Intermediate",
+        isActive: true,
+      }));
+      const row = {
+        id: 902,
+        parentId: 1,
+        orgType: "area",
+        name: "Visible Area",
+        isActive: true,
+      };
+      mocks.hierarchyOrgs = [ancestor, ...intermediates];
+      mocks.resultOrgs = [row];
+      render(<OrgTable orgType="area" />);
+      expect(JSON.parse(screen.getByTestId("table-data").textContent)).toEqual([
+        depth === 20 ? { ...row, sector: ancestor.name } : row,
+      ]);
+    },
+  );
 });
