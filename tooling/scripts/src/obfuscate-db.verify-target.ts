@@ -380,7 +380,8 @@ async function main(): Promise<void> {
       prodUris.length === 0,
       prodUris.length === 0
         ? `${oauthUris.length} URIs checked`
-        : prodUris.slice(0, 5).join(", "),
+        : // Count only, same rule as the email sweep: never echo values.
+          `${prodUris.length} of ${oauthUris.length} URIs point at a production F3 host`,
     );
 
     const [orphans] = await sql<{ n: number }[]>`
