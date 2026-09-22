@@ -46,11 +46,11 @@ function safeAuditError<T>(error: T): T | Error {
 }
 
 /**
- * Optional process-global error sink. Apps with Sentry register a reporter here
- * at startup (see each app's instrumentation) so that everything logged via
- * `logError` anywhere in the process still reaches Sentry — replacing the
- * `console.error` path that `captureConsoleIntegration` used to catch before
- * logs moved to pino/stdout.
+ * Optional process-global error sink. Apps with an error tracker (PostHog)
+ * register a reporter here at startup (see each app's instrumentation) so
+ * that everything logged via `logError` anywhere in the process still reaches
+ * the tracker — replacing the `console.error` path that error-tracking SDKs
+ * used to catch before logs moved to pino/stdout.
  *
  * The reporter receives the full payload — the `event` name, structured `ctx`,
  * and the optional `err` — so it can preserve triage context and report
@@ -124,13 +124,18 @@ export function createLogger(
   }
 
   // error and fatal share the same shape: attach the optional `err` and fan
-  // out to the process-global error sink (Sentry) so nothing is lost.
+  // out to whatever reporter has been registered. Deliberately not named
+  // after a vendor — this package assumes no particular tracker; the apps
+  // register @acme/observability's OTel reporter (see the README).
+  // Delivery is BEST EFFORT, not guaranteed: the reporter is invoked
+  // synchronously and never awaited, and a failure is swallowed below rather
+  // than thrown into request flow — docs/LOGGING.md says the same.
   const reportable =
     (level: "error" | "fatal") =>
     (event: string, ctx: LogContext = {}, err?: unknown) => {
       err = safeAuditError(err);
       logger[level]({ ...ctx, ...(err !== undefined ? { err } : {}) }, event);
-      // Never let a failing reporter (e.g. the Sentry bridge) throw out of a
+      // Never let a failing reporter (e.g. the PostHog bridge) throw out of a
       // log call and break request flow. Report the failure via raw pino so we
       // don't re-enter the reporter.
       if (errorReporter) {

@@ -1,44 +1,61 @@
-// This file configures the initialization of Sentry on the client.
-// The added config here will be used whenever a users loads a page in their browser.
-// https://docs.sentry.io/platforms/javascript/guides/nextjs/
+// This file configures the initialization of PostHog on the client (error
+// tracking + product analytics). It runs whenever a user loads a page in
+// their browser. Everything is a silent no-op when no key is configured.
+// https://posthog.com/docs/libraries/next-js
 
-import * as Sentry from "@sentry/nextjs";
+import posthog from "posthog-js";
 
-function getSentryEnvironment(): string {
-  const hostname = window.location.hostname;
-  if (hostname === "map.f3nation.com") return "production";
+import { env } from "~/env";
+
+// map has no client-exposed channel env var (the channel lives server-side as
+// F3_CHANNEL), so derive it from the hostname — the same approach the removed
+// Sentry config used — mapped onto the F3_CHANNEL vocabulary.
+function environmentFromHostname(hostname: string): string {
+  if (hostname === "map.f3nation.com") return "prod";
   if (hostname.includes("staging")) return "staging";
-  return "development";
+  if (hostname === "localhost" || hostname === "127.0.0.1") return "local";
+  return "dev";
 }
 
-if (typeof window !== "undefined" && process.env.NODE_ENV === "production") {
-  Sentry.init({
-    dsn: "https://7174fea65c117ea4b71977da953bb4d9@o4509266839797760.ingest.us.sentry.io/4509270283714560",
+if (env.NEXT_PUBLIC_POSTHOG_KEY) {
+  posthog.init(env.NEXT_PUBLIC_POSTHOG_KEY, {
+    api_host: "https://us.i.posthog.com",
 
-    // Add optional integrations for additional features
-    integrations: [
-      Sentry.replayIntegration({
-        maskAllText: true,
-        blockAllMedia: true,
-      }),
-    ],
+    // PostHog's current recommended Next.js setup. Without this, capture_pageview
+    // falls back to its legacy default (true), which only fires a pageview on
+    // the initial page load — for the map's heavily-navigated in-app routing,
+    // every subsequent client-side transition would produce no pageview event
+    // at all. "2025-05-24" switches capture_pageview to "history_change",
+    // which correctly fires on client-side navigations too.
+    defaults: "2025-05-24",
 
-    // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-    tracesSampleRate: 1,
+    // Error tracking: autocapture unhandled exceptions / unhandled promise
+    // rejections as $exception events.
+    capture_exceptions: true,
 
-    // Define how likely Replay events are sampled.
-    // This sets the sample rate to be 10%. You may want this to be 100% while
-    // in development and sample at a lower rate in production
-    replaysSessionSampleRate: 0.1,
+    // Privacy: never send raw on-page text with autocaptured events.
+    mask_all_text: true,
 
-    // Define how likely Replay events are sampled when an error occurs.
-    replaysOnErrorSampleRate: 1.0,
+    // Session recording is opt-in via env flag — previews/sandbox must never
+    // record. When enabled, inputs stay masked (the update-request form
+    // carries names and emails). `mask_all_text` above only governs
+    // autocapture — replay has its own separate masking config, so
+    // maskTextSelector is required too or rendered page text would be
+    // stored unmasked in the recording (this app's old Sentry replay config
+    // had maskAllText: true; this restores that same coverage under PostHog).
+    disable_session_recording:
+      env.NEXT_PUBLIC_POSTHOG_SESSION_RECORDING !== "true",
+    session_recording: {
+      maskAllInputs: true,
+      maskTextSelector: "*",
+    },
+  });
 
-    // Setting this option to true will print useful information to the console while you're setting up Sentry.
-    debug: false,
-
-    environment: getSentryEnvironment(),
+  // Tag every client-side event (incl. autocaptured $exception) with the
+  // deployment channel, mirroring the server pipeline's canonical
+  // `environment` property — without it, errors from prod and previews are
+  // indistinguishable in PostHog (the removed Sentry config tagged this too).
+  posthog.register({
+    environment: environmentFromHostname(window.location.hostname),
   });
 }
-
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
