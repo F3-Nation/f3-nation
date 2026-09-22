@@ -59,6 +59,35 @@ describe("captureException", () => {
     expect(properties).toMatchObject({ environment: "ci", route: "/v1/test" });
   });
 
+  it("stamps the configured service.name onto the event", async () => {
+    // End-to-end through the REAL LoggerProvider (only posthog-node is
+    // mocked): service.name is a Resource attribute, not a record attribute,
+    // so this is the only test that proves the resource actually reaches the
+    // exporter. Both apps share one PostHog project, so this property is the
+    // only thing separating an "api" error from a "map" one.
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability({ ...config, serviceName: "map" });
+    await captureException(new Error("boom"));
+    const [, , properties] = captureExceptionImmediateMock.mock.calls[0] as [
+      Error,
+      undefined,
+      Record<string, unknown>,
+    ];
+    expect(properties["service.name"]).toBe("map");
+  });
+
+  it("callers cannot spoof service.name", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(new Error("boom"), { "service.name": "map" });
+    const [, , properties] = captureExceptionImmediateMock.mock.calls[0] as [
+      Error,
+      undefined,
+      Record<string, unknown>,
+    ];
+    expect(properties["service.name"]).toBe("api");
+  });
+
   it("preserves the original error name for grouping", async () => {
     const { registerObservability, captureException } = await freshModule();
     registerObservability(config);

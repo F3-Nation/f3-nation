@@ -17,8 +17,23 @@ vi.mock("posthog-node", () => ({ PostHog: PostHogMock }));
 
 import { PostHogExceptionExporter } from "./posthog-exporter";
 
-function record(attributes: Record<string, unknown>): ReadableLogRecord {
-  return { attributes } as unknown as ReadableLogRecord;
+// Records reaching a real exporter always carry the LoggerProvider's Resource
+// (that is where service.name lives — see registerObservability), so the
+// helper models one by default. Pass `null` to model a resource-less record
+// from a foreign emitter.
+function record(
+  attributes: Record<string, unknown>,
+  resourceAttributes: Record<string, unknown> | null = {
+    "service.name": "api",
+  },
+): ReadableLogRecord {
+  return {
+    attributes,
+    resource:
+      resourceAttributes === null
+        ? undefined
+        : { attributes: resourceAttributes },
+  } as unknown as ReadableLogRecord;
 }
 
 function exportRecords(
@@ -93,6 +108,64 @@ describe("PostHogExceptionExporter", () => {
     await exportRecords(exporter, [record({ "exception.message": "boom" })]);
     const [reported] = captureExceptionImmediateMock.mock.calls[0] as [Error];
     expect(reported.stack).toBeDefined();
+  });
+
+  it("carries the resource's service.name onto the event", async () => {
+    const exporter = new PostHogExceptionExporter({
+      apiKey: "test-key",
+      environment: "ci",
+    });
+    await exportRecords(exporter, [
+      record(
+        { "exception.message": "boom", userId: "u1" },
+        {
+          "service.name": "map",
+        },
+      ),
+    ]);
+    expect(captureExceptionImmediateMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      undefined,
+      { userId: "u1", "service.name": "map", environment: "ci" },
+    );
+  });
+
+  it("cannot be spoofed by a record attribute named service.name", async () => {
+    const exporter = new PostHogExceptionExporter({
+      apiKey: "test-key",
+      environment: "ci",
+    });
+    await exportRecords(exporter, [
+      record(
+        { "exception.message": "boom", "service.name": "not-me" },
+        {
+          "service.name": "api",
+        },
+      ),
+    ]);
+    const [, , properties] = captureExceptionImmediateMock.mock.calls[0] as [
+      Error,
+      undefined,
+      Record<string, unknown>,
+    ];
+    expect(properties["service.name"]).toBe("api");
+  });
+
+  it("omits service.name entirely for a resource-less record", async () => {
+    const exporter = new PostHogExceptionExporter({
+      apiKey: "test-key",
+      environment: "ci",
+    });
+    await exportRecords(exporter, [
+      record({ "exception.message": "boom" }, null),
+    ]);
+    const [, , properties] = captureExceptionImmediateMock.mock.calls[0] as [
+      Error,
+      undefined,
+      Record<string, unknown>,
+    ];
+    expect(properties).not.toHaveProperty("service.name");
+    expect(properties.environment).toBe("ci");
   });
 
   it("honors a custom PostHog host", async () => {

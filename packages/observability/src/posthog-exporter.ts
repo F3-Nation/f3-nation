@@ -15,6 +15,7 @@ import {
   ATTR_EXCEPTION_MESSAGE,
   ATTR_EXCEPTION_STACKTRACE,
   ATTR_EXCEPTION_TYPE,
+  ATTR_SERVICE_NAME,
 } from "@opentelemetry/semantic-conventions";
 import { PostHog } from "posthog-node";
 
@@ -100,10 +101,24 @@ export class PostHogExceptionExporter implements LogRecordExporter {
       if (typeof stacktrace === "string" && stacktrace)
         error.stack = stacktrace;
 
-      // environment spread AFTER the record attributes: a caller-supplied
-      // "environment" key must not be able to overwrite the canonical one.
+      // Both apps report into one PostHog project (single shared POSTHOG_KEY),
+      // so without this every $exception is distinguishable only by
+      // environment — "api" and "map" errors comingle, the exact Sentry
+      // problem docs/OBSERVABILITY_PLAN.md set out to fix. service.name lives
+      // on the OTel Resource (set once in registerObservability), not on the
+      // record's attributes, so it has to be lifted across explicitly.
+      // Omitted rather than sent as undefined when a foreign emitter produces
+      // a resource-less record, so PostHog never shows an empty facet value.
+      const serviceName = record.resource?.attributes[ATTR_SERVICE_NAME];
+
+      // service.name and environment are spread AFTER the record attributes:
+      // a caller-supplied key of either name must not be able to overwrite
+      // the canonical one.
       await this.getClient().captureExceptionImmediate(error, undefined, {
         ...rest,
+        ...(serviceName === undefined
+          ? {}
+          : { [ATTR_SERVICE_NAME]: serviceName }),
         environment: this.options.environment,
       });
     } catch (reportErr) {
