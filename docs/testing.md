@@ -36,7 +36,7 @@ import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 
 - **`coverageInclude`** — the whole-`src` glob (keeps untested files counted).
 - **`coverageExclude`** — Vitest's built-in excludes plus non-testable
-  bootstrap/config files (Sentry init, `next.config.*`, `instrumentation*`,
+  bootstrap/config files (PostHog init, `next.config.*`, `instrumentation*`,
   Tailwind/PostCSS config, `middleware.*`). Those files would otherwise sit in
   the denominator at 0% and break thresholds on every edit.
 
