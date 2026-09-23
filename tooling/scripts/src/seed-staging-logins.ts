@@ -27,7 +27,10 @@
  *
  * Usage:
  *   DATABASE_URL=... pnpm -F @acme/scripts seed-staging-logins -- \
- *     --allow-db <database-name> [--region Boone]
+ *     --allow-db <database-name> [--region Boone] \
+ *     [--mailbox staging@f3nation.com]
+ *
+ * --mailbox is the shared group the codes go to; each login is a +tag on it.
  *
  * Re-running is safe: an existing user keeps its row and gains any missing
  * role.
@@ -36,8 +39,7 @@ import postgres from "postgres";
 
 import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
 
-const MAILBOX = "staging";
-const MAIL_DOMAIN = "f3nation.com";
+const DEFAULT_MAILBOX = "staging@f3nation.com";
 const DEFAULT_REGION = "Boone";
 
 interface Org {
@@ -69,9 +71,10 @@ function slug(name: string): string {
  * staging+nation@ for the nation, staging+<org-slug>@ below it. The bare
  * staging@ address is the shared group every login's code is delivered to.
  */
-function loginEmail(org: Org): string {
+function loginEmail(mailbox: string, org: Org): string {
+  const [local, domain] = mailbox.split("@") as [string, string];
   const tag = org.org_type === "nation" ? "nation" : slug(org.name);
-  return `${MAILBOX}+${tag}@${MAIL_DOMAIN}`;
+  return `${local}+${tag}@${domain}`;
 }
 
 async function main(): Promise<void> {
@@ -95,6 +98,12 @@ async function main(): Promise<void> {
     );
   }
   const regionName = flagValue("--region") ?? DEFAULT_REGION;
+  const mailbox = (flagValue("--mailbox") ?? DEFAULT_MAILBOX).toLowerCase();
+  if (!/^[a-z0-9._-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(mailbox)) {
+    throw new Error(
+      `--mailbox "${mailbox}" must be a plain group address (no +tag).`,
+    );
+  }
 
   const sql = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
   try {
@@ -141,7 +150,7 @@ async function main(): Promise<void> {
 
     await sql.begin(async (tx) => {
       for (const org of orgs) {
-        const email = loginEmail(org);
+        const email = loginEmail(mailbox, org);
         const [user] = await tx<{ id: number }[]>`
           INSERT INTO users (email, f3_name, first_name, last_name,
             email_verified)

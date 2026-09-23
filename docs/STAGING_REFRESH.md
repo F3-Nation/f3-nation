@@ -49,7 +49,7 @@ and loading the result into staging (`f3data-nonprod`).
 
    ```bash
    DATABASE_URL=postgresql://...staging... pnpm -F @acme/scripts seed-staging-logins -- \
-     --allow-db <staging-db-name> [--region Boone]
+     --allow-db <staging-db-name> [--region Boone] [--mailbox staging@f3nation.com]
    ```
 
    | Sign in as                      | Admin of                     |
@@ -60,7 +60,7 @@ and loading the result into staging (`f3data-nonprod`).
    | `staging+boone@f3nation.com`    | the region                   |
    | `staging+<ao>@f3nation.com`     | its first active AO, by name |
 
-   Tags are the org name lowercased with punctuation turned into `-` (on
+   `--mailbox` swaps the group (each login is a `+tag` on it). Tags are the org name lowercased with punctuation turned into `-` (on
    staging today: `north-carolina`, `nc-mountain`, `boone`, `bees-nest`).
    Nothing personal is committed and no real user's row is un-obfuscated.
    Run this on staging only, never on the intermediate copy, where
