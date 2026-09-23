@@ -42,8 +42,9 @@ and loading the result into staging (`f3data-nonprod`).
 3. **Load**: restore the _obfuscated_ dump into `f3data-nonprod`.
 4. **Seed sign-in identities** on staging. The refresh truncates every
    session and leaves every address at `@obfuscated.f3nation.dev`, so no one
-   can receive an email code. The seed adds one admin per org level on the
-   shared `admin@f3nation.com` mailbox (plus-addressed), following one
+   can receive an email code. The seed adds one admin per org level, all
+   plus-addressed onto the shared `staging@f3nation.com` Google Group, so
+   everyone in the group receives every login's code. It follows one
    region's chain up to the nation:
 
    ```bash
@@ -51,15 +52,15 @@ and loading the result into staging (`f3data-nonprod`).
      --allow-db <staging-db-name> [--region Boone]
    ```
 
-   | Sign in as                    | Admin of                     |
-   | ----------------------------- | ---------------------------- |
-   | `admin@f3nation.com`          | the nation                   |
-   | `admin+<sector>@f3nation.com` | the region's sector          |
-   | `admin+<area>@f3nation.com`   | the region's area            |
-   | `admin+boone@f3nation.com`    | the region                   |
-   | `admin+<ao>@f3nation.com`     | its first active AO, by name |
+   | Sign in as                      | Admin of                     |
+   | ------------------------------- | ---------------------------- |
+   | `staging+nation@f3nation.com`   | the nation                   |
+   | `staging+<sector>@f3nation.com` | the region's sector          |
+   | `staging+<area>@f3nation.com`   | the region's area            |
+   | `staging+boone@f3nation.com`    | the region                   |
+   | `staging+<ao>@f3nation.com`     | its first active AO, by name |
 
-   Slugs are the org name lowercased with punctuation turned into `-` (on
+   Tags are the org name lowercased with punctuation turned into `-` (on
    staging today: `north-carolina`, `nc-mountain`, `boone`, `bees-nest`).
    Nothing personal is committed and no real user's row is un-obfuscated.
    Run this on staging only, never on the intermediate copy, where

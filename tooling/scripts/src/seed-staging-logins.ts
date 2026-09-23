@@ -4,14 +4,15 @@
  * A refresh leaves staging with no way in: sessions are truncated and every
  * users.email is an unroutable @obfuscated.f3nation.dev address, so the auth
  * app's email-OTP can't deliver a code to anyone. This adds one admin per org
- * level on shared, plus-addressed F3 mailboxes, so nothing personal is
- * committed to this (public) repo and no real user's row is un-obfuscated:
+ * level, all plus-addressed onto the shared staging@f3nation.com group, so
+ * everyone on the team receives every login's code, nothing personal is
+ * committed to this (public) repo, and no real user's row is un-obfuscated:
  *
- *   admin@f3nation.com                 nation admin
- *   admin+<sector>@f3nation.com        sector admin   (e.g. admin+north-carolina)
- *   admin+<area>@f3nation.com          area admin     (e.g. admin+nc-mountain)
- *   admin+<region>@f3nation.com        region admin   (e.g. admin+boone)
- *   admin+<ao>@f3nation.com            AO admin       (first active AO, by name)
+ *   staging+nation@f3nation.com          nation admin
+ *   staging+<sector>@f3nation.com        sector admin  (e.g. staging+north-carolina)
+ *   staging+<area>@f3nation.com          area admin    (e.g. staging+nc-mountain)
+ *   staging+<region>@f3nation.com        region admin  (e.g. staging+boone)
+ *   staging+<ao>@f3nation.com            AO admin      (first active AO, by name)
  *
  * The chain is read from the database: the named region, every ancestor
  * up to the nation (territory too, where one exists), and one of its AOs.
@@ -35,7 +36,7 @@ import postgres from "postgres";
 
 import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
 
-const MAILBOX = "admin";
+const MAILBOX = "staging";
 const MAIL_DOMAIN = "f3nation.com";
 const DEFAULT_REGION = "Boone";
 
@@ -64,11 +65,13 @@ function slug(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** admin@ for the nation, admin+<org-slug>@ for everything below it. */
+/**
+ * staging+nation@ for the nation, staging+<org-slug>@ below it. The bare
+ * staging@ address is the shared group every login's code is delivered to.
+ */
 function loginEmail(org: Org): string {
-  return org.org_type === "nation"
-    ? `${MAILBOX}@${MAIL_DOMAIN}`
-    : `${MAILBOX}+${slug(org.name)}@${MAIL_DOMAIN}`;
+  const tag = org.org_type === "nation" ? "nation" : slug(org.name);
+  return `${MAILBOX}+${tag}@${MAIL_DOMAIN}`;
 }
 
 async function main(): Promise<void> {

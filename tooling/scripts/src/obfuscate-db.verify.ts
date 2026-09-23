@@ -809,8 +809,8 @@ async function main(): Promise<void> {
         childEnv,
       );
     }
-    // One admin@ login per level of Boone's chain (nation has the bare
-    // mailbox, everything else a +slug), each admin of exactly that org.
+    // One staging+<tag>@ login per level of Boone's chain (staging+nation for
+    // the nation), each admin of exactly that org.
     const logins = await sql<
       { email: string; org_type: string; org_name: string; grants: number }[]
     >`
@@ -820,11 +820,11 @@ async function main(): Promise<void> {
       JOIN roles_x_users_x_org rxo ON rxo.user_id = u.id
       JOIN roles r ON r.id = rxo.role_id AND r.name = 'admin'
       JOIN orgs o ON o.id = rxo.org_id
-      WHERE u.email LIKE 'admin%@f3nation.com'
+      WHERE u.email LIKE 'staging+%@f3nation.com'
       GROUP BY u.email, o.org_type, o.name`;
     const byEmail = new Map(logins.map((l) => [l.email, l]));
-    const nationLogin = byEmail.get("admin@f3nation.com");
-    const regionLogin = byEmail.get("admin+boone@f3nation.com");
+    const nationLogin = byEmail.get("staging+nation@f3nation.com");
+    const regionLogin = byEmail.get("staging+boone@f3nation.com");
     const loginsOk =
       nationLogin?.org_type === "nation" &&
       regionLogin?.org_type === "region" &&
