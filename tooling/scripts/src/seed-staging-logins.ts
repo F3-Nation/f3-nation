@@ -3,9 +3,18 @@
  *
  * A refresh leaves staging with no way in: sessions are truncated and every
  * users.email is an unroutable @obfuscated.f3nation.dev address, so the auth
- * app's email-OTP can't deliver a code to anyone. This adds a few users with
- * routable addresses the operator names on the command line, so nothing real
- * is committed to this (public) repo and no real user's row is un-obfuscated.
+ * app's email-OTP can't deliver a code to anyone. This adds one admin per org
+ * level on shared, plus-addressed F3 mailboxes, so nothing personal is
+ * committed to this (public) repo and no real user's row is un-obfuscated:
+ *
+ *   admin@f3nation.com                 nation admin
+ *   admin+<sector>@f3nation.com        sector admin   (e.g. admin+north-carolina)
+ *   admin+<area>@f3nation.com          area admin     (e.g. admin+nc-mountain)
+ *   admin+<region>@f3nation.com        region admin   (e.g. admin+boone)
+ *   admin+<ao>@f3nation.com            AO admin       (first active AO, by name)
+ *
+ * The chain is read from the database: the named region, every ancestor
+ * up to the nation (territory too, where one exists), and one of its AOs.
  *
  * Run it against STAGING after the obfuscated dump is loaded, never against
  * the intermediate copy: obfuscate-db:verify-target's email sweep would
@@ -17,23 +26,24 @@
  *
  * Usage:
  *   DATABASE_URL=... pnpm -F @acme/scripts seed-staging-logins -- \
- *     --allow-db <database-name> \
- *     --login you@example.com:admin [--login other@example.com:editor] ...
+ *     --allow-db <database-name> [--region Boone]
  *
- * Role is admin, editor, or none, granted on the nation-level org. Re-running
- * is safe: an existing user keeps its row and gains any missing role.
+ * Re-running is safe: an existing user keeps its row and gains any missing
+ * role.
  */
 import postgres from "postgres";
 
 import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
 
-const OBFUSCATED_EMAIL_DOMAIN = "obfuscated.f3nation.dev";
-const ROLES = ["admin", "editor", "none"] as const;
-type Role = (typeof ROLES)[number];
+const MAILBOX = "admin";
+const MAIL_DOMAIN = "f3nation.com";
+const DEFAULT_REGION = "Boone";
 
-interface Login {
-  email: string;
-  role: Role;
+interface Org {
+  id: number;
+  name: string;
+  org_type: string;
+  parent_id: number | null;
 }
 
 const argv = process.argv.slice(2);
@@ -46,33 +56,19 @@ function flagValue(name: string): string | undefined {
   return undefined;
 }
 
-function flagValues(name: string): string[] {
-  const values: string[] = [];
-  argv.forEach((a, i) => {
-    if (a.startsWith(`${name}=`)) values.push(a.slice(name.length + 1));
-    else if (a === name && argv[i + 1] !== undefined) values.push(argv[i + 1]!);
-  });
-  return values;
+function slug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-function parseLogin(raw: string): Login {
-  const sep = raw.lastIndexOf(":");
-  const email = (sep === -1 ? raw : raw.slice(0, sep)).trim().toLowerCase();
-  const role = (sep === -1 ? "none" : raw.slice(sep + 1).trim()) as Role;
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    throw new Error(`--login "${raw}": not an email address`);
-  }
-  if (email.endsWith(`@${OBFUSCATED_EMAIL_DOMAIN}`)) {
-    throw new Error(
-      `--login "${raw}": @${OBFUSCATED_EMAIL_DOMAIN} can't receive a sign-in code`,
-    );
-  }
-  if (!ROLES.includes(role)) {
-    throw new Error(
-      `--login "${raw}": role must be one of ${ROLES.join(", ")}`,
-    );
-  }
-  return { email, role };
+/** admin@ for the nation, admin+<org-slug>@ for everything below it. */
+function loginEmail(org: Org): string {
+  return org.org_type === "nation"
+    ? `${MAILBOX}@${MAIL_DOMAIN}`
+    : `${MAILBOX}+${slug(org.name)}@${MAIL_DOMAIN}`;
 }
 
 async function main(): Promise<void> {
@@ -95,10 +91,7 @@ async function main(): Promise<void> {
       `Refusing to run: database name "${allowDb}" is (or looks like) production.`,
     );
   }
-  const logins = flagValues("--login").map(parseLogin);
-  if (logins.length === 0) {
-    throw new Error("Nothing to do: pass at least one --login <email>:<role>.");
-  }
+  const regionName = flagValue("--region") ?? DEFAULT_REGION;
 
   const sql = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
   try {
@@ -110,48 +103,64 @@ async function main(): Promise<void> {
       );
     }
 
-    // Fail closed on an ambiguous nation org rather than grant admin on the
+    // Fail closed on an ambiguous region rather than grant admin on the
     // wrong one.
-    const nations = await sql<{ id: number }[]>`
-      SELECT id FROM orgs WHERE org_type = 'nation' ORDER BY id`;
-    if (nations.length !== 1) {
+    const regions = await sql<Org[]>`
+      SELECT id, name, org_type::text AS org_type, parent_id FROM orgs
+      WHERE org_type = 'region' AND lower(name) = lower(${regionName})`;
+    if (regions.length !== 1) {
       throw new Error(
-        `Expected exactly one nation org, found ${nations.length}; refusing to guess which to grant roles on.`,
+        `Expected exactly one region named "${regionName}", found ${regions.length}.`,
       );
     }
-    const nationId = nations[0]!.id;
-    const roleRows = await sql<{ id: number; name: string }[]>`
-      SELECT id, name::text AS name FROM roles`;
-    const roleIds = new Map(roleRows.map((r) => [r.name, r.id]));
+    const chain = await sql<Org[]>`
+      WITH RECURSIVE up AS (
+        SELECT id, name, org_type::text AS org_type, parent_id, 0 AS depth
+        FROM orgs WHERE id = ${regions[0]!.id}
+        UNION ALL
+        SELECT o.id, o.name, o.org_type::text, o.parent_id, up.depth + 1
+        FROM orgs o JOIN up ON o.id = up.parent_id)
+      SELECT id, name, org_type, parent_id FROM up ORDER BY depth DESC`;
+    if (chain[0]?.org_type !== "nation") {
+      throw new Error(
+        `"${regionName}" does not roll up to a nation org; refusing to guess.`,
+      );
+    }
+    const [ao] = await sql<Org[]>`
+      SELECT id, name, org_type::text AS org_type, parent_id FROM orgs
+      WHERE org_type = 'ao' AND is_active AND parent_id = ${regions[0]!.id}
+      ORDER BY name, id LIMIT 1`;
+    const orgs = ao ? [...chain, ao] : chain;
+
+    const [adminRole] = await sql<{ id: number }[]>`
+      SELECT id FROM roles WHERE name = 'admin'`;
+    if (!adminRole) throw new Error(`No "admin" row in roles`);
 
     await sql.begin(async (tx) => {
-      for (const login of logins) {
+      for (const org of orgs) {
+        const email = loginEmail(org);
         const [user] = await tx<{ id: number }[]>`
           INSERT INTO users (email, f3_name, first_name, last_name,
             email_verified)
-          VALUES (${login.email}, 'Staging Login', 'Staging', ${login.role},
-            timezone('utc'::text, now()))
+          VALUES (${email}, ${`Staging Admin (${org.name})`}, 'Staging',
+            ${`${org.org_type} admin`}, timezone('utc'::text, now()))
           ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
           RETURNING id`;
-        if (!user) throw new Error(`Insert returned no row for a --login`);
-        if (login.role !== "none") {
-          const roleId = roleIds.get(login.role);
-          if (roleId === undefined) {
-            throw new Error(`No "${login.role}" row in roles`);
-          }
-          await tx`
-            INSERT INTO roles_x_users_x_org (role_id, user_id, org_id)
-            SELECT ${roleId}, ${user.id}, ${nationId}
-            WHERE NOT EXISTS (
-              SELECT 1 FROM roles_x_users_x_org
-              WHERE role_id = ${roleId} AND user_id = ${user.id}
-                AND org_id = ${nationId})`;
-        }
-        console.log(`  ✓ user ${user.id}: ${login.email} (${login.role})`);
+        if (!user) throw new Error(`Insert returned no row for ${email}`);
+        await tx`
+          INSERT INTO roles_x_users_x_org (role_id, user_id, org_id)
+          SELECT ${adminRole.id}, ${user.id}, ${org.id}
+          WHERE NOT EXISTS (
+            SELECT 1 FROM roles_x_users_x_org
+            WHERE role_id = ${adminRole.id} AND user_id = ${user.id}
+              AND org_id = ${org.id})`;
+        console.log(
+          `  ✓ user ${user.id}: ${email} — admin of ${org.org_type} "${org.name}"`,
+        );
       }
     });
     console.log(
-      `Seeded ${logins.length} staging login(s) in "${allowDb}". Sign in via email code at the staging auth app.`,
+      `Seeded ${orgs.length} staging admin login(s) in "${allowDb}". Sign in via email code at the staging auth app.`,
     );
   } finally {
     await sql.end();

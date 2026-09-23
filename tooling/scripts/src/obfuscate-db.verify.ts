@@ -792,9 +792,8 @@ async function main(): Promise<void> {
     await sql`UPDATE users SET email = ${prior?.email ?? ""} WHERE id = ${userId}`;
 
     // --- 5b. Post-load staging logins -----------------------------------------
-    // Runs last: the routable address it adds would (correctly) trip the
+    // Runs last: the routable addresses it adds would (correctly) trip the
     // email sweep above. Twice, to prove a re-run doesn't duplicate.
-    const loginEmail = "staging-login@example.com";
     for (let i = 0; i < 2; i++) {
       run(
         "pnpm",
@@ -806,25 +805,36 @@ async function main(): Promise<void> {
           "src/seed-staging-logins.ts",
           "--allow-db",
           DB_NAME,
-          "--login",
-          `${loginEmail}:admin`,
         ],
         childEnv,
       );
     }
-    const [login] = await sql<{ users: number; admin_grants: number }[]>`
-      SELECT
-        (SELECT count(*)::int FROM users WHERE email = ${loginEmail}) AS users,
-        (SELECT count(*)::int FROM roles_x_users_x_org rxo
-          JOIN users u ON u.id = rxo.user_id
-          JOIN roles r ON r.id = rxo.role_id
-          JOIN orgs o ON o.id = rxo.org_id
-          WHERE u.email = ${loginEmail} AND r.name = 'admin'
-            AND o.org_type = 'nation') AS admin_grants`;
+    // One admin@ login per level of Boone's chain (nation has the bare
+    // mailbox, everything else a +slug), each admin of exactly that org.
+    const logins = await sql<
+      { email: string; org_type: string; org_name: string; grants: number }[]
+    >`
+      SELECT u.email, o.org_type::text AS org_type, o.name AS org_name,
+        count(*)::int AS grants
+      FROM users u
+      JOIN roles_x_users_x_org rxo ON rxo.user_id = u.id
+      JOIN roles r ON r.id = rxo.role_id AND r.name = 'admin'
+      JOIN orgs o ON o.id = rxo.org_id
+      WHERE u.email LIKE 'admin%@f3nation.com'
+      GROUP BY u.email, o.org_type, o.name`;
+    const byEmail = new Map(logins.map((l) => [l.email, l]));
+    const nationLogin = byEmail.get("admin@f3nation.com");
+    const regionLogin = byEmail.get("admin+boone@f3nation.com");
+    const loginsOk =
+      nationLogin?.org_type === "nation" &&
+      regionLogin?.org_type === "region" &&
+      regionLogin.org_name === "Boone" &&
+      logins.every((l) => l.grants === 1) &&
+      new Set(logins.map((l) => l.email)).size === logins.length;
     check(
-      "staging login seeded once, nation admin",
-      login?.users === 1 && login.admin_grants === 1,
-      `${login?.users ?? "?"} user row(s), ${login?.admin_grants ?? "?"} nation-admin grant(s)`,
+      "staging admin logins seeded once per org level",
+      loginsOk,
+      logins.map((l) => `${l.email}=${l.org_type}`).join(", "),
     );
 
     // --- 6. Verdict -----------------------------------------------------------

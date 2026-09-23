@@ -42,16 +42,27 @@ and loading the result into staging (`f3data-nonprod`).
 3. **Load**: restore the _obfuscated_ dump into `f3data-nonprod`.
 4. **Seed sign-in identities** on staging. The refresh truncates every
    session and leaves every address at `@obfuscated.f3nation.dev`, so no one
-   can receive an email code. Name a few routable addresses at run time
-   (nothing is committed; no real user's row is un-obfuscated):
+   can receive an email code. The seed adds one admin per org level on the
+   shared `admin@f3nation.com` mailbox (plus-addressed), following one
+   region's chain up to the nation:
 
    ```bash
    DATABASE_URL=postgresql://...staging... pnpm -F @acme/scripts seed-staging-logins -- \
-     --allow-db <staging-db-name> --login you@example.com:admin
+     --allow-db <staging-db-name> [--region Boone]
    ```
 
-   Role is `admin`, `editor` or `none`, granted on the nation org. Run this
-   on staging only, never on the intermediate copy, where
+   | Sign in as                    | Admin of                     |
+   | ----------------------------- | ---------------------------- |
+   | `admin@f3nation.com`          | the nation                   |
+   | `admin+<sector>@f3nation.com` | the region's sector          |
+   | `admin+<area>@f3nation.com`   | the region's area            |
+   | `admin+boone@f3nation.com`    | the region                   |
+   | `admin+<ao>@f3nation.com`     | its first active AO, by name |
+
+   Slugs are the org name lowercased with punctuation turned into `-` (on
+   staging today: `north-carolina`, `nc-mountain`, `boone`, `bees-nest`).
+   Nothing personal is committed and no real user's row is un-obfuscated.
+   Run this on staging only, never on the intermediate copy, where
    `obfuscate-db:verify-target`'s email sweep would (correctly) flag it.
 
 5. **Destroy** the intermediate instance and both the raw and intermediate
