@@ -111,8 +111,10 @@ BEGIN
 	INTO missing
 	FROM (VALUES
 		('admins', 'admins_pkey'),
+		('admins', 'admins_email_unique'),
 		('entries', 'entries_pkey'),
 		('entry_references', 'entry_references_pkey'),
+		('entry_references', 'unique_source_target'),
 		('entry_tags', 'entry_tags_pkey'),
 		('references', 'references_pkey'),
 		('tags', 'tags_pkey'),

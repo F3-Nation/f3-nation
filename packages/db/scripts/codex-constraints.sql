@@ -34,6 +34,12 @@ DO $$ BEGIN
 END $$;
 
 DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'codex.admins'::regclass AND conname = 'admins_email_unique') THEN
+    ALTER TABLE codex.admins ADD CONSTRAINT admins_email_unique UNIQUE (email);
+  END IF;
+END $$;
+
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'codex.entries'::regclass AND contype = 'p') THEN
     ALTER TABLE codex.entries ADD CONSTRAINT entries_pkey PRIMARY KEY (id);
   END IF;
@@ -42,6 +48,12 @@ END $$;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'codex.entry_references'::regclass AND contype = 'p') THEN
     ALTER TABLE codex.entry_references ADD CONSTRAINT entry_references_pkey PRIMARY KEY (id);
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'codex.entry_references'::regclass AND conname = 'unique_source_target') THEN
+    ALTER TABLE codex.entry_references ADD CONSTRAINT unique_source_target UNIQUE (source_entry_id, target_entry_id);
   END IF;
 END $$;
 
