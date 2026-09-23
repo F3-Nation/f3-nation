@@ -22,8 +22,17 @@ journal alone does not bring Territory back, and two apply the recovery in
 [Restoring Territory after a rollback](#restoring-territory-after-a-rollback),
 one before and one after a runner pass has re-applied 0026. Each recovery checks
 the live `update_org_ao_counts()` body, not just the enum and journal.
-It removes only its five temporary databases on exit and prints the retained
-synthetic archive/log directory. Existing development/test databases are not
+Two more databases restored from the archive cover the deploy itself. One seeds
+journal rows through 0022 and lets the runner apply 0023 onward as a single
+transaction, as staging and production do: first while another session holds a
+lock that makes 0026 time out (nothing from the batch may survive), then to
+completion. Only in that shape does Postgres forbid a later migration from
+using `'territory'` before 0023 commits; a fresh database is exempt because it
+creates `org_type` in the same transaction. A negative control shows the check
+fires. The other database confirms 0023 refuses a `territory` label that
+already exists in the wrong position. The script creates three per-run roles
+for view owners and grants, and removes only its seven temporary databases and
+those roles on exit, printing the retained synthetic archive/log directory. Existing development/test databases are not
 reset by this script, and the runner is pinned away from `TEST_DATABASE_URL`, so
 a `NODE_ENV=test` shell cannot redirect it onto another database.
 
@@ -33,11 +42,12 @@ The journal stage connects from the host, so the container must publish
 PostgreSQL's port.
 Use the pinned PostgreSQL 18.6 image below. The rehearsal keeps a backend open
 across forward and reverse migration and verifies writes on that same backend.
-It runs the forward migration while another session holds a lock on `orgs` and
-`positions` to verify it needs no table lock, re-runs it to verify it is
-idempotent, checks that every view keeps its definition, owner, grants, options,
-and comment in both directions, and tests rollback refusal without a
-command-line `ON_ERROR_STOP` flag.
+It runs the forward migration while another session holds the lock ordinary
+writes take on `orgs` and `positions` to verify it does not block writers,
+re-runs it to verify it is idempotent, checks that every view keeps its
+definition, owner, grantees, options, and comment in both directions (with the
+caller's default privileges in effect during rollback), and tests rollback
+refusal without a command-line `ON_ERROR_STOP` flag.
 
 ### Views over org_type
 
@@ -165,8 +175,12 @@ the type, so unlike the forward migration it rewrites both tables and takes
 `ACCESS EXCLUSIVE` locks; schedule a maintenance window. It finds every view
 that depends on `org_type`, directly or through another view, drops it, and
 recreates it afterwards with the same definition, options, owner, grants, and
-comment. It refuses to proceed if such a view is materialized or has triggers,
-rules, column comments, or column grants, since it cannot recreate those. The
+comment. Grants are replayed as the view's owner, so a grant originally made by
+another role comes back with the owner as grantor, and any default privileges
+of the role running the script are removed from the recreated views. It refuses
+to proceed if such a view is materialized, has triggers, rules, column comments,
+column grants, or column defaults, or sits 20 or more views deep, since it
+cannot recreate those. The
 role running it must be able to drop those views and grant on them, which in
 practice means the views' owner. Recycle application DB pools and PgBouncer
 server connections afterwards, since the recreated type has a new OID. The file sets `\set ON_ERROR_STOP on`
@@ -201,8 +215,9 @@ Before a release rollback:
    The usual name is `drizzle."__drizzle_migrations_<database>"`. Match the 0023 row on
    `hash` (SHA-256 of the exact deployed SQL file) and `created_at = 1789505471619`
    (its `_journal.json` `when`); the 0026 row uses `created_at = 1789775437096`.
-5. Recycle application DB pools and PgBouncer server connections as for forward
-   migration, then resume only the coordinated application/migration versions.
+5. Recycle application DB pools and PgBouncer server connections, since the
+   rollback recreated `org_type` with a new OID, then resume only the
+   coordinated application/migration versions.
    Removing 0023's journal entry does not make the runner apply it again; see
    below before deploying any build that still contains 0023 through 0026.
 
@@ -312,13 +327,14 @@ active status, or type while the trigger is disabled or bypassed. An
 
 ### Future enum-recreation migrations
 
-Prefer `ALTER TYPE ... ADD VALUE ... BEFORE/AFTER` when adding a value; it avoids
-everything below. Removing or renaming values requires recreating the type,
+Prefer `ALTER TYPE ... ADD VALUE ... BEFORE/AFTER` when adding a value and
+`ALTER TYPE ... RENAME VALUE` when renaming one; both work in place and avoid
+everything below. Removing or reordering values requires recreating the type,
 which must also drop and recreate the dependent views listed in
 [Views over org_type](#views-over-org_type), as the rollback script does.
 
 `update_org_ao_counts`, `recount_org_ao_counts`, `org_ao_count_expected`, and
 `org_ao_count_targets` reference `org_type`. A migration that recreates the enum
 must re-issue each with `CREATE OR REPLACE`, alongside the connection recycling
-described above, so long-lived sessions do not keep plans for the old enum type.
+described in [Operator-led rollback](#operator-led-rollback), so long-lived sessions do not keep plans for the old enum type.
 Adding a tier between Nation and AO needs no change to their type lists.

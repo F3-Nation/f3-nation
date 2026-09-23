@@ -54,12 +54,24 @@ DECLARE
   v record;
   caller_search_path text := current_setting('search_path');
 BEGIN
+  -- The depth cap bounds the recursion above in case views reference each
+  -- other in a cycle; a chain that reaches it may not be fully captured.
+  IF EXISTS (SELECT 1 FROM org_type_dependent_views WHERE depth >= 20) THEN
+    RAISE EXCEPTION 'org_type has a view dependency chain 20 or more levels deep; recreate it by hand';
+  END IF;
   IF EXISTS (SELECT 1 FROM org_type_dependent_views WHERE relkind <> 'v')
-    OR EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid IN (SELECT oid FROM org_type_dependent_views))
-    OR EXISTS (SELECT 1 FROM pg_rewrite WHERE ev_class IN (SELECT oid FROM org_type_dependent_views) AND rulename <> '_RETURN')
-    OR EXISTS (SELECT 1 FROM pg_description WHERE objoid IN (SELECT oid FROM org_type_dependent_views) AND objsubid <> 0)
-    OR EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid IN (SELECT oid FROM org_type_dependent_views) AND attacl IS NOT NULL) THEN
-    RAISE EXCEPTION 'org_type has a dependent materialized view, or a view with triggers, rules, column comments, or column grants; recreate it by hand';
+    OR EXISTS (SELECT 1 FROM pg_trigger
+      WHERE tgrelid IN (SELECT oid FROM org_type_dependent_views))
+    OR EXISTS (SELECT 1 FROM pg_rewrite
+      WHERE ev_class IN (SELECT oid FROM org_type_dependent_views) AND rulename <> '_RETURN')
+    OR EXISTS (SELECT 1 FROM pg_description
+      WHERE objoid IN (SELECT oid FROM org_type_dependent_views) AND objsubid <> 0)
+    OR EXISTS (SELECT 1 FROM pg_attribute
+      WHERE attrelid IN (SELECT oid FROM org_type_dependent_views) AND attacl IS NOT NULL)
+    OR EXISTS (SELECT 1 FROM pg_attrdef
+      WHERE adrelid IN (SELECT oid FROM org_type_dependent_views)) THEN
+    RAISE EXCEPTION 'org_type has a dependent materialized view, or a view with triggers, rules, '
+      'column comments, column grants, or column defaults; recreate it by hand';
   END IF;
   -- Schema-qualify every name in the captured definitions.
   PERFORM set_config('search_path', 'pg_catalog', true);
@@ -88,6 +100,16 @@ BEGIN
       CASE WHEN v.reloptions IS NULL THEN '' ELSE format(' WITH (%s)', array_to_string(v.reloptions, ', ')) END,
       v.definition);
     EXECUTE format('ALTER VIEW %s OWNER TO %I', v.name, v.owner);
+    -- CREATE VIEW applied the caller's default privileges; drop every grant
+    -- they added so the view ends up with only its captured ACL.
+    FOR g IN
+      SELECT DISTINCT a.grantee
+      FROM pg_class c, aclexplode(c.relacl) a
+      WHERE c.oid = v.name::regclass AND a.grantee <> c.relowner
+    LOOP
+      EXECUTE format('REVOKE ALL ON %s FROM %s CASCADE', v.name,
+        CASE WHEN g.grantee = 0 THEN 'PUBLIC' ELSE quote_ident(pg_get_userbyid(g.grantee)) END);
+    END LOOP;
     IF v.relacl IS NOT NULL THEN
       EXECUTE format('REVOKE ALL ON %s FROM PUBLIC, %I', v.name, v.owner);
       FOR g IN
