@@ -17,12 +17,12 @@ Only INSERT, UPDATE and DELETE are captured. TRUNCATE and writes with triggers
 disabled are not captured. Runtime roles must not have TRUNCATE privileges or
 permission to disable/bypass triggers; verify those grants during preflight.
 
-The migration grants schema USAGE and history SELECT to `group_readonly` if that
-existing role is present. It never creates production roles or memberships.
-Absence is supported for disposable/local databases; it is not proof that a
-production deployment is ready. Confirm the actual reader role and grants
-before release. Re-enablement reapplies the owner/reader ACL policy and removes
-other direct table and column history grants. It preserves all collected history.
+The migration does not grant history access to reader roles, including
+`group_readonly`, or create production roles or memberships. The database operator
+grants schema USAGE and history-table SELECT separately to the intended readers.
+Re-enablement removes non-owner direct table and column history grants, so the
+operator must reapply intended reader grants afterward. It preserves all collected
+history.
 
 The helpers use invoker privileges and are executable only by their owner.
 Operators should assume the designated migration-owner role. The capture
@@ -95,7 +95,7 @@ concurrent CI activity and hardware affect these numbers.
    primary-key order, configured columns, absence of conflicting audit objects,
    source ownership, migration owner and runtime writer roles. Checked-in schema
    metadata and local measurements do not substitute for this inventory.
-2. Confirm `group_readonly` is the intended reader role. Review inherited role
+2. Select and manually provision the intended reader role. Review inherited role
    memberships and default ACLs, not just direct grants. Verify the operator can
    own all source/history objects and can create triggers/functions.
 3. Measure representative write rates, payload sizes and retention/storage cost.

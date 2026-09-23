@@ -202,12 +202,7 @@ BEGIN
     WHERE n.nspname = hist_schema AND x.grantee <> owner_id AND x.privilege_type = 'CREATE'
   LOOP EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM %s', hist_schema, grantee); END LOOP;
   EXECUTE format('REVOKE ALL ON SCHEMA %I FROM PUBLIC', hist_schema);
-  -- The existing reader role is granted only when present. Local tests use
-  -- synthetic roles; deployment must verify the real role before release.
-  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'group_readonly') THEN
-    EXECUTE format('GRANT USAGE ON SCHEMA %I TO group_readonly', hist_schema);
-    EXECUTE format('GRANT SELECT ON TABLE %I.%I TO group_readonly', hist_schema, tbl);
-  END IF;
+  -- Reader access is granted separately by the database operator.
   IF EXISTS (SELECT FROM pg_trigger WHERE tgrelid = target AND tgname = 'zz_audit_' || tbl
     AND tgfoid <> 'audit.log_change()'::regprocedure) THEN
     RAISE EXCEPTION 'audit.enable_tracking: incompatible existing trigger';

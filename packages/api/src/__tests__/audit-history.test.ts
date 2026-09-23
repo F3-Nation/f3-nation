@@ -796,12 +796,6 @@ describe("audit history migration (#664)", () => {
       await tx.execute(
         sql`GRANT INSERT, UPDATE, DELETE, SELECT ON audit_fixture.rows TO audit_test_writer`,
       );
-      await tx.execute(sql`DO $$ BEGIN
-      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='group_readonly') THEN
-        CREATE ROLE group_readonly NOLOGIN;
-      END IF;
-    END $$`);
-      await tx.execute(sql`GRANT group_readonly TO audit_test_reader`);
       // Give the writer real history access first so only the helper's ACL
       // cleanup can remove it; schema-level denial cannot satisfy these checks.
       await tx.execute(
@@ -816,7 +810,7 @@ describe("audit history migration (#664)", () => {
       await tx.execute(
         sql`GRANT SELECT (new_row) ON public_history.users TO audit_test_denied`,
       );
-      // Exercise the real helper's conditional reader grants for every table.
+      // Re-enable tracking to verify cleanup of non-owner history grants.
       for (const table of tables) {
         const columns = await tx.execute<{
           updated: boolean;
@@ -843,6 +837,15 @@ describe("audit history migration (#664)", () => {
           sql`SELECT has_any_column_privilege('audit_test_writer', ${`public_history.${table}`}, 'UPDATE') AS writable`,
         );
         expect(acl?.writable).toBe(false);
+        await tx.transaction(async (sp) => {
+          await sp.execute(sql`SET LOCAL ROLE audit_test_reader`);
+          await rejected(sp, sql`SELECT 1 FROM public_history.${name}`);
+          await sp.execute(sql`RESET ROLE`);
+        });
+        // Model the operator's separate, explicit reader provisioning.
+        await tx.execute(
+          sql`GRANT SELECT ON public_history.${name} TO audit_test_reader`,
+        );
         await tx.transaction(async (sp) => {
           await sp.execute(sql`SET LOCAL ROLE audit_test_reader`);
           await sp.execute(sql`SELECT 1 FROM public_history.${name} LIMIT 1`);

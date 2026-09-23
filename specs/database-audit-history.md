@@ -164,7 +164,8 @@ across primary-key changes.
   mutation writes a tracked row THEN history is captured without an added audit call.
 - **AC-33** — GIVEN a migrated test database WHEN an authorized direct SQL
   mutation writes a tracked row THEN history is captured without an added audit call.
-- **AC-34** — GIVEN the reader role WHEN it selects history THEN SELECT succeeds
+- **AC-34** — GIVEN an operator has explicitly granted the reader role history
+  access WHEN it selects history THEN SELECT succeeds
   for each of the 26 tables.
 - **AC-35** — GIVEN a role without history access WHEN it selects history THEN
   access is denied for each of the 26 tables.
@@ -242,8 +243,11 @@ Attribution settings are informational, not proof of identity or authorization.
 | Directly insert/update/delete history            | Designated administrative owner only; automatic inserts through the trigger        | Ordinary application writers and read-only users |
 | Enable/disable tracking or change history schema | Designated migration owner/operator                                                | Ordinary application writers and read-only users |
 
-The existing read-only role must receive sister-schema USAGE and history-table
-SELECT. Test access for all 26 tables. Do not infer effective permissions from
+The database operator grants sister-schema USAGE and history-table SELECT
+manually; the migration must not automatically grant access to an existing
+read-only role. Re-enablement removes non-owner direct history grants, so intended
+reader grants must be reapplied manually afterward. Test access before and after
+manual provisioning for all 26 tables. Do not infer effective permissions from
 role names alone. Elevated trigger functions use a fixed safe search path;
 helper and history grants must not expose general administrative privileges.
 Database owners can alter history: this is not a tamper-proof security ledger.
@@ -321,9 +325,9 @@ cleanup requires a separate decision. Obtain human migration approval.
   and map request form; no authorization comparison was found in repository
   consumers. It is masked because retaining the value is unnecessary for
   history. This does not change source-table behavior or API authorization.
-- Verify the existing group_readonly role, runtime source writers and migration
-  owner before deployment. The migration grants history SELECT to group_readonly
-  when that role exists; it does not create production roles or grant role membership.
+- Reader access is provisioned manually by the database operator. The migration
+  does not grant history access to group_readonly or other reader roles, create
+  production roles, or grant role membership.
 - Ask the team for feedback on fail-the-source-write behavior with the implementation.
 - Production migration approval, representative production sizing and retention
   ownership remain release decisions; local tests do not establish production readiness.
