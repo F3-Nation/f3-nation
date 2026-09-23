@@ -10,7 +10,9 @@ bash packages/db/scripts/verify-territory-migration.sh
 
 The script verifies the container's Compose project label, creates two uniquely
 named temporary databases, applies migrations through 0022, and inserts only
-synthetic organizations and positions. It dumps that populated database using
+synthetic organizations and positions, plus views over `org_type` that mirror
+the ones staging and production carry outside the migrations (see
+[Views over org_type](#views-over-org_type)). It dumps that populated database using
 `pg_dump -Fc`, restores the archive into the second database, and exercises the
 forward migration, rollback, reapplication, and rollback-refusal cases. It then
 rehearses the rollback's Drizzle journal reconciliation in three further temporary
@@ -31,13 +33,60 @@ The journal stage connects from the host, so the container must publish
 PostgreSQL's port.
 Use the pinned PostgreSQL 18.6 image below. The rehearsal keeps a backend open
 across forward and reverse migration and verifies writes on that same backend.
-It also holds a conflicting lock to verify the forward timeout leaves the
-original schema/data intact, and tests rollback refusal without a command-line
-`ON_ERROR_STOP` flag.
+It runs the forward migration while another session holds a lock on `orgs` and
+`positions` to verify it needs no table lock, re-runs it to verify it is
+idempotent, checks that every view keeps its definition, owner, grants, options,
+and comment in both directions, and tests rollback refusal without a
+command-line `ON_ERROR_STOP` flag.
+
+### Views over org_type
+
+Staging and production have views that no repository migration creates, owned
+by the database's operator role. As of September 23, 2026:
+
+- `public.event_instance_expanded` exists in both and depends on
+  `orgs.org_type` and on the `org_type` type itself (it joins on
+  `'ao'::org_type` and `'region'::org_type`). Its definitions differ slightly
+  between the two environments.
+- `public.attendance_expanded` exists in production only and does not reference
+  `org_type`.
+
+Postgres refuses to change a column's type, or drop a type, while a view
+depends on it. The first version of 0023 recreated the enum (columns cast to
+`text`, `DROP TYPE`, `CREATE TYPE`, cast back), so it would have failed on both
+environments with `cannot alter type of a column used by a view or rule`. Local
+and CI databases are built only from migrations and have no such views, which
+is why the rehearsal did not catch it. The rehearsal now creates equivalent
+fixture views.
+
+0023 now uses `ALTER TYPE ... ADD VALUE 'territory' BEFORE 'sector'`. That keeps
+the type's OID, so dependent views, the index, and cached plans are untouched.
+It gives the same declared order and the same comparison and `ORDER BY`
+behaviour as recreating the type. Only the internal `pg_enum.enumsortorder`
+differs (3.5 rather than an integer), and nothing in the repository reads it.
+The rollback must still recreate the type, so it drops and recreates the
+dependent views itself; see [Operator-led rollback](#operator-led-rollback).
+
+To list what depends on `org_type` in a target database:
+
+```sql
+SELECT DISTINCT r.ev_class::regclass AS view
+FROM pg_depend d JOIN pg_rewrite r ON r.oid = d.objid
+WHERE d.classid = 'pg_rewrite'::regclass
+  AND ((d.refclassid = 'pg_type'::regclass AND d.refobjid = 'public.org_type'::regtype)
+    OR (d.refclassid = 'pg_class'::regclass
+      AND d.refobjid IN ('public.orgs'::regclass, 'public.positions'::regclass)
+      AND d.refobjsubid = (SELECT attnum FROM pg_attribute
+        WHERE attrelid = d.refobjid AND attname = 'org_type')));
+```
+
+Views stacked on these (a view selecting from `event_instance_expanded`, say)
+are not listed but are handled by the rollback script.
 
 ### Evidence — September 15–16, 2026
 
-The initial rehearsal passed against the existing local `postgres:18.4-trixie`
+This evidence covers the first, enum-recreating version of 0023, which predates
+the view fixtures above. The initial rehearsal passed against the existing local `postgres:18.4-trixie`
 container. A subsequent rehearsal also passed against the exact PostgreSQL 18.6
 image pinned by Compose and CI:
 
@@ -74,15 +123,16 @@ account for those limitations rather than treating this as production verificati
 
 ## Forward migration deployment
 
-Schedule a maintenance window for 0023 and coordinate application writers before
-running it. Converting both columns to text and back rewrites the tables and
-takes `ACCESS EXCLUSIVE` locks; waiting for those locks can also queue application
-queries. The migration sets `SET LOCAL lock_timeout = '3s'` before acquiring
-locks. Drizzle applies the pending batch in one transaction, so this setting
-also applies to any later migrations in that batch until the transaction ends.
-Review the complete pending batch before deployment. Verify the effective
-`statement_timeout` separately and size it using target-environment rehearsal;
-the synthetic test does not establish a production duration budget.
+0023 only adds an enum value. It does not rewrite `orgs` or `positions`, take
+table locks, or touch views, the index, or functions, so it needs no maintenance
+window of its own. Review the complete pending batch before deployment, since
+Drizzle applies it in one transaction and later migrations may have their own
+requirements (0026 sets `lock_timeout` and backfills AO counts).
+
+Postgres will not let a value added by `ADD VALUE` be used before its
+transaction commits. Because Drizzle runs the whole pending batch in one
+transaction, no migration in the same batch may reference `'territory'`. None
+of 0024 through 0026 does (0026 compares `org_type::text`).
 
 From the repository root, use `env -u CI pnpm db:migrate` with the separately
 approved target configured through the repository's `with-env` helper. Never
@@ -99,23 +149,27 @@ to test the SQL in a transaction; it does not execute or fault-test the Drizzle
 runner itself. Recheck that transaction boundary when changing the runner or
 upgrading Drizzle. Do not execute the forward SQL as separate autocommit steps.
 
-If lock acquisition or a statement fails, investigate the blocker and confirm
-the schema and journal state before retrying. Verify the six enum values, both
-column types, index validity, and the applied 0023 journal entry before resuming
-writers; command completion alone is not evidence that the migration applied.
-The migration refreshes the known `update_org_ao_counts()` trigger function to
-invalidate its cached enum references. Before resuming writers, recycle database
-connections for every application, including SQLAlchemy pools and PgBouncer's
-server connections. Restarting application clients alone does not necessarily
-replace PgBouncer's PostgreSQL backends. This covers production-only functions
-or cached statements that the repository rehearsal cannot inventory.
-Production execution still requires the normal target and command approval.
+If a statement fails, confirm the schema and journal state before retrying.
+Verify the six enum values in order and the applied 0023 journal entry;
+command completion alone is not evidence that the migration applied. Existing
+connections pick up the new value without recycling, since the type's OID does
+not change. Production execution still requires the normal target and command
+approval.
 
 ## Operator-led rollback
 
 `rollback-territory-org-type.sql` runs transactionally, locks both dependent
 tables, refuses to proceed if either contains Territory, and reconstructs the
-original five-member enum and index. The file sets `\set ON_ERROR_STOP on`
+original five-member enum and index. Removing an enum value requires recreating
+the type, so unlike the forward migration it rewrites both tables and takes
+`ACCESS EXCLUSIVE` locks; schedule a maintenance window. It finds every view
+that depends on `org_type`, directly or through another view, drops it, and
+recreates it afterwards with the same definition, options, owner, grants, and
+comment. It refuses to proceed if such a view is materialized or has triggers,
+rules, column comments, or column grants, since it cannot recreate those. The
+role running it must be able to drop those views and grant on them, which in
+practice means the views' owner. Recycle application DB pools and PgBouncer
+server connections afterwards, since the recreated type has a new OID. The file sets `\set ON_ERROR_STOP on`
 itself so a refusal exits nonzero even when the caller omits the flag.
 Run with `psql -X -v ON_ERROR_STOP=1`
 against an explicitly approved target. The SQL intentionally lives outside the
@@ -173,8 +227,7 @@ individual migration has a row. After step 4 the newest remaining row is 0025
   failure, so check the schema and journal rather than its output.
 
 Do not deploy a build that contains 0023 through 0026 to a rolled-back database
-and expect Territory to return. Restore it explicitly, in a maintenance window
-like the forward migration:
+and expect Territory to return. Restore it explicitly:
 
 1. Stop application writers and automated migration runners. Back up the database
    and its journal. Confirm the enum has five members and the journal has the
@@ -189,9 +242,7 @@ like the forward migration:
    VALUES ('<SHA-256 of the exact deployed 0023 file>', 1789505471619);
    ```
 
-3. Verify the six enum values, both column types, index validity, and the 0023
-   journal row before resuming writers, then recycle application DB pools and
-   PgBouncer server connections as for forward migration.
+3. Verify the six enum values and the 0023 journal row before resuming writers.
 4. Deploy the coordinated build. The runner now finds only the migrations newer
    than 0025 that are not yet applied (0026, when its row was removed) and applies
    them in their original order. Afterwards confirm the live trigger is 0026's;
@@ -201,31 +252,13 @@ like the forward migration:
    SELECT pg_get_functiondef('public.update_org_ao_counts'::regproc) ILIKE '%great_grandparent%';
    ```
 
-If a runner pass has already re-applied 0026, do **not** apply the transaction
-above unchanged. 0023 also defines `update_org_ao_counts()`, with the old
-fixed-depth body, so applying it over the re-applied 0026 puts that trigger back:
-an AO under Sector, Territory, Area, and Region would stop updating the Sector's
-count, and intermediate moves and deactivations would stop triggering recounts.
-The runner never repairs this, because 0026 stays recorded as applied. Add one
-statement to the same transaction, removing 0026's row exactly as in step 4 of the
-rollback (match `hash` and `created_at = 1789775437096`):
-
-```sql
-DELETE FROM drizzle."__drizzle_migrations_<database>"
-WHERE "hash" = '<SHA-256 of the exact deployed 0026 file>'
-  AND "created_at" = 1789775437096;
-```
-
-The runner then re-applies 0026 after 0023. Its functions are `CREATE OR REPLACE`
-and its backfill is idempotent, so this restores the depth-agnostic trigger and
-recounts. Verify with the trigger check in step 4, and recycle every pooled
-connection, because 0023 replaces the enum that 0026's functions reference.
+If a runner pass has already re-applied 0026, the same transaction still
+applies. 0023 only adds the enum value, so it leaves 0026's depth-agnostic
+trigger in place; confirm with the trigger check in step 4.
 
 The alternative is to ship Territory as a new migration with a fresh, later
-`when`. Its SQL must then also re-issue `update_org_ao_counts`,
-`recount_org_ao_counts`, `org_ao_count_expected`, and `org_ao_count_targets` (see
-[Future enum-recreation migrations](#future-enum-recreation-migrations)), and 0026 would run before it.
-The rehearsal does not cover this route, so it needs its own review.
+`when` containing the same `ADD VALUE` statement. The rehearsal does not cover
+this route, so it needs its own review.
 
 `verify-territory-migration.sh` rehearses the trap and both recovery orderings above
 against databases built by the real runner, using the same journal edit as step 4. Those
@@ -278,6 +311,11 @@ active status, or type while the trigger is disabled or bypassed. An
 `false` value does not.
 
 ### Future enum-recreation migrations
+
+Prefer `ALTER TYPE ... ADD VALUE ... BEFORE/AFTER` when adding a value; it avoids
+everything below. Removing or renaming values requires recreating the type,
+which must also drop and recreate the dependent views listed in
+[Views over org_type](#views-over-org_type), as the rollback script does.
 
 `update_org_ao_counts`, `recount_org_ao_counts`, `org_ao_count_expected`, and
 `org_ao_count_targets` reference `org_type`. A migration that recreates the enum

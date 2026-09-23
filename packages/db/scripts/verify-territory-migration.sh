@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Rehearse #923 using synthetic data restored from a real pg_dump archive, then
-# rehearse the rollback's Drizzle journal reconciliation and Territory recovery
+# Rehearse the territory migration using synthetic data restored from a real
+# pg_dump archive, then rehearse the rollback's Drizzle journal reconciliation and Territory recovery
 # with the repository's real migration runner (needs node and installed deps).
 set -euo pipefail
 
@@ -54,7 +54,25 @@ SELECT 'Synthetic position ' || n, ((n-1)%5000)+1,
        (ARRAY['ao','region','area','sector','nation',NULL])[((n-1)%6)+1]::org_type,
        n % 7 <> 0
 FROM generate_series(1, 6000) n;
+-- Staging and production carry views over org_type that no migration creates;
+-- these mirror their dependency shape (column and enum-literal references, plus a
+-- view stacked on top) so a migration that trips over them fails here first.
+CREATE VIEW public.event_instance_expanded WITH (security_barrier = false) AS
+SELECT ei.id, o0.id AS ao_org_id, COALESCE(o1.id, o2.id) AS region_org_id
+FROM event_instances ei
+LEFT JOIN orgs o0 ON ei.org_id = o0.id AND o0.org_type = 'ao'::org_type
+LEFT JOIN orgs o1 ON ei.org_id = o1.id AND o1.org_type = 'region'::org_type
+LEFT JOIN orgs o2 ON o0.parent_id = o2.id AND o2.org_type = 'region'::org_type;
+CREATE VIEW public.event_instance_region_counts AS
+SELECT region_org_id, count(*) AS events FROM public.event_instance_expanded GROUP BY 1;
+GRANT SELECT ON public.event_instance_expanded TO PUBLIC;
+COMMENT ON VIEW public.event_instance_expanded IS 'Synthetic fixture';
 CREATE SCHEMA verification;
+CREATE TABLE verification.views_before AS
+SELECT c.relname, pg_get_viewdef(c.oid) AS definition, c.relacl::text AS acl,
+       c.reloptions::text AS options, pg_get_userbyid(c.relowner) AS owner,
+       obj_description(c.oid, 'pg_class') AS comment
+FROM pg_class c WHERE c.relkind = 'v' AND c.relnamespace = 'public'::regnamespace;
 CREATE TABLE verification.orgs_before AS SELECT to_jsonb(o) AS row FROM orgs o;
 CREATE TABLE verification.positions_before AS SELECT to_jsonb(p) AS row FROM positions p;
 CREATE TABLE verification.index_before AS
@@ -89,6 +107,13 @@ BEGIN
     AND ((table_name = 'orgs' AND is_nullable = 'NO') OR (table_name = 'positions' AND is_nullable = 'YES'))) <> 2 THEN
     RAISE EXCEPTION 'Column type or nullability changed';
   END IF;
+  IF (SELECT count(*) FROM verification.views_before) <> 2 OR EXISTS (
+    (SELECT * FROM verification.views_before
+     EXCEPT SELECT c.relname, pg_get_viewdef(c.oid), c.relacl::text, c.reloptions::text,
+       pg_get_userbyid(c.relowner), obj_description(c.oid, 'pg_class')
+     FROM pg_class c WHERE c.relkind = 'v' AND c.relnamespace = 'public'::regnamespace)) THEN
+    RAISE EXCEPTION 'Dependent view missing or changed';
+  END IF;
 END $$;
 SELECT 'preserved' AS result, (SELECT count(*) FROM orgs) AS orgs,
        (SELECT count(*) FROM positions) AS positions;
@@ -103,8 +128,9 @@ rollback() {
   docker exec -i "$container" psql -X -U f3local -d "${1:-$restore_db}" < "$repo_root/packages/db/scripts/rollback-territory-org-type.sql"
 }
 
-# Keep one backend alive across each enum replacement: fresh connections cannot
-# detect cached PL/pgSQL expressions that still reference the old enum OID.
+# Keep one backend alive across forward and rollback: fresh connections cannot
+# detect a stale enum cache or cached PL/pgSQL expressions that still reference
+# the old enum OID after rollback recreates the type.
 mkfifo "$artifact_dir/session.in"
 psql_db "$restore_db" < "$artifact_dir/session.in" > "$artifact_dir/session.log" 2>&1 &
 session_pid=$!
@@ -129,17 +155,17 @@ session_step() {
 
 verify '{ao,region,area,sector,nation}'
 session_step warm "INSERT INTO orgs (id, name, org_type, is_active) VALUES (900002, 'Persistent session fixture', 'sector', true); DELETE FROM orgs WHERE id = 900002;"
-session_step locked 'BEGIN; LOCK TABLE orgs IN ACCESS SHARE MODE;'
-if forward > "$artifact_dir/lock-timeout.log" 2>&1; then
-  echo 'Forward migration unexpectedly bypassed the held lock' >&2
-  exit 1
-fi
-if ! grep -q 'canceling statement due to lock timeout' "$artifact_dir/lock-timeout.log"; then
-  echo "Forward migration failed for an unexpected reason; see $artifact_dir" >&2
+# The forward migration must not need table locks: it succeeds while another
+# session holds a lock that any table rewrite would wait on.
+session_step locked 'BEGIN; LOCK TABLE orgs, positions IN ACCESS SHARE MODE; SELECT count(*) FROM event_instance_expanded;'
+if ! { echo "SET LOCAL lock_timeout = '3s';"; cat "$repo_root/packages/db/drizzle/0023_add_territory_org_type.sql"; } \
+  | psql_db "$restore_db" -1 > "$artifact_dir/forward-while-locked.log" 2>&1; then
+  echo "Forward migration waited on or failed under a table lock; see $artifact_dir" >&2
   exit 1
 fi
 session_step unlocked 'COMMIT;'
-verify '{ao,region,area,sector,nation}'
+verify '{ao,region,area,territory,sector,nation}'
+# Re-running is a no-op.
 forward
 session_step forward_ok "INSERT INTO orgs (id, name, org_type, is_active) VALUES (900002, 'Persistent session fixture', 'territory', true); UPDATE orgs SET is_active = false WHERE id = 900002; DELETE FROM orgs WHERE id = 900002;"
 verify '{ao,region,area,territory,sector,nation}'
@@ -215,25 +241,18 @@ assert_state() {
 journal_has() {
   [[ "$(query "$1" "SELECT count(*) FROM $(journal_table "$1") WHERE created_at = $(migration_when "$2")")" == 1 ]]
 }
-# 0023 defines update_org_ao_counts() with the old fixed-depth body and 0026
-# replaces it with the depth-agnostic one. Enum and row counts cannot show which
-# is live, so assert on the function body.
+# The rollback restores update_org_ao_counts() with the old fixed-depth body and
+# 0026 replaces it with the depth-agnostic one. Enum and row counts cannot show
+# which is live, so assert on the function body.
 assert_depth_agnostic_trigger() {
   [[ "$(query "$1" "SELECT pg_get_functiondef('public.update_org_ao_counts'::regproc) ILIKE '%great_grandparent%'")" == f ]] \
     || fail "$1: update_org_ao_counts() is the old fixed-depth trigger"
 }
-# 0023's exact SQL plus its journal row, for one transaction. With "remove-0026"
-# it also removes 0026's row so the runner re-applies 0026 afterwards.
+# 0023's exact SQL plus its journal row, for one transaction.
 recovery_sql() {
-  local table
-  table="$(journal_table "$1")"
   cat "$(migration_file 0023)"
   printf '\nINSERT INTO %s (hash, created_at) VALUES ('"'%s'"', %s);\n' \
-    "$table" "$(migration_hash 0023)" "$(migration_when 0023)"
-  if [[ "${2:-}" == remove-0026 ]]; then
-    printf "DELETE FROM %s WHERE created_at = %s AND hash = '%s';\n" \
-      "$table" "$(migration_when 0026)" "$(migration_hash 0026)"
-  fi
+    "$(journal_table "$1")" "$(migration_hash 0023)" "$(migration_when 0023)"
 }
 
 # Migrate with the real runner, roll back, and reconcile the journal exactly as
@@ -271,14 +290,12 @@ assert_state "$journal_recovery_db" "$territory_enum" "$migration_count"
 psql_db "$journal_recovery_db" -c "INSERT INTO orgs (id, name, org_type, is_active) VALUES (900003, 'Recovered territory', 'territory', true); DELETE FROM orgs WHERE id = 900003;" > /dev/null
 
 # Out of order: a runner pass already re-applied 0026 before Territory is
-# restored. 0023 alone would put its old fixed-depth trigger back over 0026's and
-# the runner would never repair it (0026 stays journaled), so the same
-# transaction also removes 0026's row and the runner re-applies 0026 afterwards.
+# restored. 0023 only adds the enum value, so it leaves 0026's trigger in place.
 rolled_back_journal_db "$journal_reapplied_db"
 run_runner "$journal_reapplied_db"
-recovery_sql "$journal_reapplied_db" remove-0026 | psql_db "$journal_reapplied_db" -1 > "$artifact_dir/recovery-reapplied.log"
+recovery_sql "$journal_reapplied_db" | psql_db "$journal_reapplied_db" -1 > "$artifact_dir/recovery-reapplied.log"
 run_runner "$journal_reapplied_db"
 assert_state "$journal_reapplied_db" "$territory_enum" "$migration_count"
 assert_depth_agnostic_trigger "$journal_reapplied_db"
 
-echo "PASS: forward, rollback, persistent-session writes, lock timeout, data/index preservation, both refusal cases, and the Drizzle journal trap and both recovery orderings. Synthetic artifacts: $artifact_dir"
+echo "PASS: forward, rollback, persistent-session writes, no table locks on forward, idempotent forward, data/index/view preservation, both refusal cases, and the Drizzle journal trap and both recovery orderings. Synthetic artifacts: $artifact_dir"
