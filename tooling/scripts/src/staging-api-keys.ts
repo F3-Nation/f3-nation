@@ -11,16 +11,16 @@
  * load and restores them afterwards, so key values never leave the database:
  *
  *   --stash    copy api_keys + roles_x_api_keys_x_org into refresh_keep.*
- *   --restore  put them back after the load, owned by --owner-email (the old
- *              owner ids now point at unrelated obfuscated prod users), then
- *              drop refresh_keep
+ *   --restore  put them back after the load and drop refresh_keep. Each key
+ *              keeps its owner id (ids carry over from prod); pass
+ *              --owner-email to re-own them all instead
  *
  * Usage (staging, around the load):
  *   DATABASE_URL=... pnpm -F @acme/scripts staging-api-keys -- \
  *     --allow-db <staging-db-name> --stash
- *   ... truncate + load + seed-staging-logins ...
+ *   ... truncate + load ...
  *   DATABASE_URL=... pnpm -F @acme/scripts staging-api-keys -- \
- *     --allow-db <staging-db-name> --restore --owner-email staging+nation@f3nation.com
+ *     --allow-db <staging-db-name> --restore [--owner-email <user email>]
  */
 import postgres from "postgres";
 
@@ -61,9 +61,6 @@ async function main(): Promise<void> {
     throw new Error("Pass exactly one of --stash or --restore.");
   }
   const ownerEmail = flagValue("--owner-email")?.toLowerCase();
-  if (restore && !ownerEmail) {
-    throw new Error("--restore needs --owner-email <seeded nation login>.");
-  }
 
   const sql = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
   try {
@@ -100,15 +97,20 @@ async function main(): Promise<void> {
     }
 
     await sql.begin(async (tx) => {
-      const [owner] = await tx<{ id: number }[]>`
-        SELECT id FROM public.users WHERE email = ${ownerEmail!}`;
-      if (!owner) {
+      if (ownerEmail) {
+        const [owner] = await tx<{ id: number }[]>`
+          SELECT id FROM public.users WHERE email = ${ownerEmail}`;
+        if (!owner) throw new Error(`No user ${ownerEmail} in the target.`);
+        await tx`UPDATE refresh_keep.api_keys SET owner_id = ${owner.id}`;
+      }
+      const orphans = await tx<{ id: number }[]>`
+        SELECT k.id FROM refresh_keep.api_keys k
+        WHERE NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = k.owner_id)`;
+      if (orphans.length > 0) {
         throw new Error(
-          `No user ${ownerEmail}; run seed-staging-logins before --restore.`,
+          `${orphans.length} stashed key(s) have an owner id the loaded copy doesn't have; re-run with --owner-email <user email>.`,
         );
       }
-      // Re-own in the stash first, so a stale owner id can never trip the FK.
-      await tx`UPDATE refresh_keep.api_keys SET owner_id = ${owner.id}`;
       const keys = await tx`
         INSERT INTO public.api_keys SELECT * FROM refresh_keep.api_keys
         ON CONFLICT (id) DO NOTHING
@@ -130,7 +132,7 @@ async function main(): Promise<void> {
           GREATEST((SELECT max(id) FROM public.api_keys), 1))`;
       await tx`DROP SCHEMA refresh_keep CASCADE`;
       console.log(
-        `Restored ${keys.length} API key(s) and ${grants.length} grant(s), owned by ${ownerEmail}.`,
+        `Restored ${keys.length} API key(s) and ${grants.length} grant(s)${ownerEmail ? `, owned by ${ownerEmail}` : ""}.`,
       );
     });
   } finally {

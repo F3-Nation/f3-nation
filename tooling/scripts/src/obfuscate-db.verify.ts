@@ -8,7 +8,7 @@
  * --preserve-local-seed, then asserts:
  *
  *   1. No email-shaped string anywhere (public + auth schemas) except
- *      @obfuscated.f3nation.dev.
+ *      the shared email sink (dev.staging-email-sink+<tag>@f3nation.com).
  *   2. Sessions / verification tokens / OAuth artifacts / api_keys are empty.
  *   3. Referential integrity: row counts unchanged for kept tables, and the
  *      same source email maps to the same fake across tables
@@ -83,7 +83,14 @@ const EMPTY_TABLES = [
 ];
 
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
-const ALLOWED_EMAIL_SUFFIX = "@obfuscated.f3nation.dev";
+// The obfuscator's default --email-sink; every rewritten address is a +tag on it.
+const SINK_PREFIX = "dev.staging-email-sink+";
+const SINK_SUFFIX = "@f3nation.com";
+
+function isSinkAddress(email: string): boolean {
+  const lower = email.toLowerCase();
+  return lower.startsWith(SINK_PREFIX) && lower.endsWith(SINK_SUFFIX);
+}
 // Retina-image filenames (logo@2x.png) are email-shaped; not PII. Keep this
 // in sync with the same guard in obfuscate-db.verify-target.ts.
 const IMAGE_DENSITY_SUFFIX = /@\dx\.(?:png|jpe?g|gif|webp|svg)$/i;
@@ -426,7 +433,7 @@ async function sweepForEmails(
       for (const text of texts) {
         for (const match of text.match(EMAIL_REGEX) ?? []) {
           if (IMAGE_DENSITY_SUFFIX.test(match)) continue;
-          if (!match.toLowerCase().endsWith(ALLOWED_EMAIL_SUFFIX)) {
+          if (!isSinkAddress(match)) {
             violations.push(`${qualified}.${col.column_name}: ${match}`);
           }
         }
@@ -592,6 +599,21 @@ async function main(): Promise<void> {
         : countDetails.join("; "),
     );
 
+    const [named] = await sql<
+      {
+        f3_name: string | null;
+        first_name: string | null;
+        last_name: string | null;
+      }[]
+    >`SELECT f3_name, first_name, last_name FROM users WHERE id = ${userId}`;
+    check(
+      "planted user renamed to F3/First/Last <id>",
+      named?.f3_name === `F3 ${userId}` &&
+        named.first_name === `First ${userId}` &&
+        named.last_name === `Last ${userId}`,
+      `${named?.f3_name} / ${named?.first_name} / ${named?.last_name}`,
+    );
+
     // Deterministic cross-table consistency: jane@example.com must map to the
     // same fake in users.email and update_requests.submitted_by.
     const [fakeUser] = await sql<{ email: string }[]>`
@@ -602,7 +624,7 @@ async function main(): Promise<void> {
     check(
       "deterministic cross-table email mapping",
       fakeUser?.email === request?.submitted_by &&
-        (fakeUser?.email.endsWith(ALLOWED_EMAIL_SUFFIX) ?? false),
+        fakeUser?.email === `${SINK_PREFIX}${userId}${SINK_SUFFIX}`,
       `users.email=${fakeUser?.email} vs update_requests.submitted_by=${request?.submitted_by}`,
     );
 
@@ -612,7 +634,7 @@ async function main(): Promise<void> {
     const backblastOk =
       !!instance?.backblast &&
       !instance.backblast.includes("bob.smith@yahoo.com") &&
-      instance.backblast.includes(ALLOWED_EMAIL_SUFFIX);
+      instance.backblast.includes(SINK_PREFIX);
     check(
       "free-text backblast scrubbed",
       backblastOk,
@@ -656,7 +678,7 @@ async function main(): Promise<void> {
       WHERE id = ${String(userId)} LIMIT 1`;
     const shadowOk =
       !!shadow &&
-      shadow.email.endsWith(ALLOWED_EMAIL_SUFFIX) &&
+      isSinkAddress(shadow.email) &&
       !shadow.name.includes("Jane Doe") &&
       shadow.image === null;
     check(
@@ -692,10 +714,10 @@ async function main(): Promise<void> {
     const clientOk =
       !!client &&
       (client.contacts ?? []).length === 2 &&
-      (client.contacts ?? []).every((c) => c.endsWith(ALLOWED_EMAIL_SUFFIX)) &&
+      (client.contacts ?? []).every((c) => isSinkAddress(c)) &&
       !!client.metadata &&
       !client.metadata.includes("carl@aol.com") &&
-      client.metadata.includes(ALLOWED_EMAIL_SUFFIX) &&
+      client.metadata.includes(SINK_PREFIX) &&
       client.client_secret === client.expected_secret;
     check(
       "better_auth_oauth_client contacts[]/metadata scrubbed, secret invalidated",
@@ -811,52 +833,6 @@ async function main(): Promise<void> {
     await sql`DROP TABLE public._unclassified_gate_test`;
     await sql`UPDATE users SET email = ${prior?.email ?? ""} WHERE id = ${userId}`;
 
-    // --- 5b. Post-load staging logins -----------------------------------------
-    // Runs last: the routable addresses it adds would (correctly) trip the
-    // email sweep above. Twice, to prove a re-run doesn't duplicate.
-    for (let i = 0; i < 2; i++) {
-      run(
-        "pnpm",
-        [
-          "-F",
-          "@acme/scripts",
-          "exec",
-          "tsx",
-          "src/seed-staging-logins.ts",
-          "--allow-db",
-          DB_NAME,
-        ],
-        childEnv,
-      );
-    }
-    // One staging+<tag>@ login per level of Boone's chain (staging+nation for
-    // the nation), each admin of exactly that org.
-    const logins = await sql<
-      { email: string; org_type: string; org_name: string; grants: number }[]
-    >`
-      SELECT u.email, o.org_type::text AS org_type, o.name AS org_name,
-        count(*)::int AS grants
-      FROM users u
-      JOIN roles_x_users_x_org rxo ON rxo.user_id = u.id
-      JOIN roles r ON r.id = rxo.role_id AND r.name = 'admin'
-      JOIN orgs o ON o.id = rxo.org_id
-      WHERE u.email LIKE 'staging+%@f3nation.com'
-      GROUP BY u.email, o.org_type, o.name`;
-    const byEmail = new Map(logins.map((l) => [l.email, l]));
-    const nationLogin = byEmail.get("staging+nation@f3nation.com");
-    const regionLogin = byEmail.get("staging+boone@f3nation.com");
-    const loginsOk =
-      nationLogin?.org_type === "nation" &&
-      regionLogin?.org_type === "region" &&
-      regionLogin.org_name === "Boone" &&
-      logins.every((l) => l.grants === 1) &&
-      new Set(logins.map((l) => l.email)).size === logins.length;
-    check(
-      "staging admin logins seeded once per org level",
-      loginsOk,
-      logins.map((l) => `${l.email}=${l.org_type}`).join(", "),
-    );
-
     // --- 5c. Restore the stashed API keys --------------------------------------
     run(
       "pnpm",
@@ -869,27 +845,20 @@ async function main(): Promise<void> {
         "--allow-db",
         DB_NAME,
         "--restore",
-        "--owner-email",
-        "staging+nation@f3nation.com",
       ],
       childEnv,
     );
-    const [keysAfter] = await sql<
-      { n: number; owned: number; stash: boolean }[]
-    >`
+    const [keysAfter] = await sql<{ n: number; stash: boolean }[]>`
       SELECT count(*)::int AS n,
-        count(*) FILTER (WHERE owner_id = (SELECT id FROM users
-          WHERE email = 'staging+nation@f3nation.com'))::int AS owned,
         to_regnamespace('refresh_keep') IS NOT NULL AS stash
       FROM api_keys`;
     check(
-      "target API keys survive the refresh, owned by the nation login",
+      "target API keys survive the refresh",
       (keysBefore?.n ?? 0) > 0 &&
         !!keysAfter &&
         keysAfter.n === keysBefore?.n &&
-        keysAfter.owned === keysAfter.n &&
         !keysAfter.stash,
-      `${keysBefore?.n ?? "?"} stashed, ${keysAfter?.n ?? "?"} restored, ${keysAfter?.owned ?? "?"} re-owned, stash ${keysAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
+      `${keysBefore?.n ?? "?"} stashed, ${keysAfter?.n ?? "?"} restored, stash ${keysAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
     );
 
     // --- 6. Verdict -----------------------------------------------------------

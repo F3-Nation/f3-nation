@@ -66,38 +66,20 @@ and loading the result into staging (`f3data-nonprod`).
      them `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
      them validated in one transaction took over an hour and lost its
      connection.
-   - After step 4, put the keys back:
+   - After the load, put the keys back. Each keeps its owner id (ids carry
+     over from prod); `--owner-email` re-owns them all if an owner is gone:
 
      ```bash
-     pnpm -F @acme/scripts staging-api-keys -- --allow-db <staging-db-name> \
-       --restore --owner-email staging+nation@f3nation.com
+     pnpm -F @acme/scripts staging-api-keys -- --allow-db <staging-db-name> --restore
      ```
 
-4. **Seed sign-in identities** on staging. The refresh truncates every
-   session and leaves every address at `@obfuscated.f3nation.dev`, so no one
-   can receive an email code. The seed adds one admin per org level, all
-   plus-addressed onto the shared `staging@f3nation.com` Google Group, so
-   everyone in the group receives every login's code. It follows one
-   region's chain up to the nation:
-
-   ```bash
-   DATABASE_URL=postgresql://...staging... pnpm -F @acme/scripts seed-staging-logins -- \
-     --allow-db <staging-db-name> [--region Boone] [--mailbox staging@f3nation.com]
-   ```
-
-   | Sign in as                      | Admin of                     |
-   | ------------------------------- | ---------------------------- |
-   | `staging+nation@f3nation.com`   | the nation                   |
-   | `staging+<sector>@f3nation.com` | the region's sector          |
-   | `staging+<area>@f3nation.com`   | the region's area            |
-   | `staging+boone@f3nation.com`    | the region                   |
-   | `staging+<ao>@f3nation.com`     | its first active AO, by name |
-
-   `--mailbox` swaps the group (each login is a `+tag` on it). Tags are the org name lowercased with punctuation turned into `-` (on
-   staging today: `north-carolina`, `nc-mountain`, `boone`, `bees-nest`).
-   Nothing personal is committed and no real user's row is un-obfuscated.
-   Run this on staging only, never on the intermediate copy, where
-   `obfuscate-db:verify-target`'s email sweep would (correctly) flag it.
+4. **Sign in as anyone.** Every address is rewritten onto one shared
+   Google Group, `dev.staging-email-sink@f3nation.com`, plus-addressed
+   per row: a user's email is `dev.staging-email-sink+<users.id>@f3nation.com`.
+   Sign in to staging with any user's id-based address (e.g. `+4` for user 4) and the code lands in the group. Staging's system email (map change
+   requests, region notifications) reaches the group too, so it can be
+   audited end to end. No accounts are fabricated, so there is nothing to
+   drift when orgs change. `--email-sink` points it at a different group.
 
 5. **Destroy** the intermediate instance and both the raw and intermediate
    dumps. Only the obfuscated dump may outlive the run.
@@ -143,18 +125,27 @@ a sandbox database stays usable for local login after obfuscation. It is
 
 ### Determinism
 
-All fakes are derived from `sha256(salt + input)` with the required
-`OBFUSCATION_SALT` secret, so:
+Users are rebuilt from their id; everything else is derived from
+`sha256(salt + input)` with the required `OBFUSCATION_SALT` secret, so:
 
-- the same input value maps to the same fake **everywhere** — a user's email
-  in `users.email`, `update_requests.submitted_by`, and inside a JSON `meta`
-  blob all become the same `user-<hash8>@obfuscated.f3nation.dev`, preserving
+- a user's email maps to the same fake **everywhere**: in `users.email`,
+  `update_requests.submitted_by`, and inside a JSON `meta` blob it becomes
+  `dev.staging-email-sink+<users.id>@f3nation.com`, preserving
   relational/analytical consistency;
 - repeated refreshes are diff-friendly (same prod value → same staging value
   across runs, as long as the salt doesn't change).
 
-Formats: emails → `user-<hash8>@obfuscated.f3nation.dev`, names →
-`F3 User <hash6>`, phones → `555-<hash3>-<hash4>`, Slack IDs →
+Formats (sink = `dev.staging-email-sink@f3nation.com`):
+
+| Value                                                                                        | Becomes                                                                 |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `users.f3_name` / `first_name` / `last_name`                                                 | `F3 <id>` / `First <id>` / `Last <id>` (nulls stay null)                |
+| a user's email, anywhere                                                                     | `sink+<users.id>`                                                       |
+| a non-user email on a row (org, location, event, event instance, Slack user, update request) | `sink+<table>-<row id>`, e.g. `+org-12`, `+slack-34`, `+request-<uuid>` |
+| a non-user email in free text                                                                | `sink+ext-<hash8>`                                                      |
+| other names (Slack users not linked to a user, hospital names)                               | `F3 User <hash6>` (a linked Slack user is `F3 <user_id>`)               |
+
+Phones → `555-<hash3>-<hash4>`, Slack IDs →
 `U<HASH8>` (lengthened on collision). Free-text contact/emergency fields are
 nulled. JSON/meta and free-text columns are scrubbed of email-shaped strings
 by regex, replaced with the same deterministic fakes.
@@ -297,14 +288,9 @@ legacy. Two things are specific to them:
   it faking a fake). **Do not reorder those two jobs** — and do not delete the
   email pass either: it is the only thing standing behind the trigger if the
   target was restored in a way that skipped it.
-- **Nobody can sign in to staging after a refresh.** Truncating
-  `better_auth_session` / `_account` / `_verification` logs everyone out, and
-  every remaining `users.email` is an unroutable `@obfuscated.f3nation.dev`
-  address, so the email-OTP flow cannot deliver a code. This is the same
-  property the pre-existing `auth_sessions` / `api_keys` truncation already
-  had; it is called out here because Better Auth makes it total. Staging needs
-  a seeded test identity (or `--preserve-local-seed`-style fixtures) as a
-  separate step — see the Hard human gate.
+- **Sessions don't survive a refresh.** Truncating `better_auth_session` /
+  `_account` / `_verification` logs everyone out. Sign back in as any user
+  through the shared sink (step 4 of the pipeline).
 
 ## Verification
 
@@ -322,7 +308,8 @@ legacy. Two things are specific to them:
    and a backblast with embedded emails, a Slack user with Strava tokens.
 3. Runs the obfuscator (without `--preserve-local-seed`), then asserts:
    - **zero** email-shaped strings in any text/json column of the `public`
-     and `auth` schemas except `@obfuscated.f3nation.dev`;
+     and `auth` schemas except `dev.staging-email-sink+<tag>@f3nation.com`;
+   - every user is renamed to `F3/First/Last <id>` and emailed at `sink+<id>`;
    - sessions/tokens/api-key tables are empty;
    - row counts of all kept tables are unchanged (referential integrity);
    - the same source email maps to the same fake across tables;

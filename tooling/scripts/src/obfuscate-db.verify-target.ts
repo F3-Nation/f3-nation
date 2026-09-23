@@ -8,7 +8,7 @@
  *
  * Checks:
  *   1. Email sweep — no email-shaped string anywhere in public+auth outside
- *      @obfuscated.f3nation.dev (json columns are walked structurally; the
+ *      the shared email sink (sink+<tag>@) (json columns are walked structurally; the
  *      serialized form false-positives on escape-adjacent Slack handles).
  *   2. Secret/session/token tables are empty — both the repo's own NextAuth
  *      adapter's plural names and the legacy singular ones (2026-07-10
@@ -20,7 +20,8 @@
  *   7. attendance FK integrity.
  *
  * Usage:
- *   DATABASE_URL=postgresql://… pnpm -F @acme/scripts obfuscate-db:verify-target
+ *   DATABASE_URL=postgresql://… pnpm -F @acme/scripts obfuscate-db:verify-target \
+ *     [--email-sink=<group@domain>]
  *
  * Databases whose name contains "prod" are refused: pointing this at an
  * un-obfuscated database would print raw PII into the console.
@@ -29,7 +30,21 @@ import postgres from "postgres";
 
 import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
 
-const OBFUSCATED_EMAIL_DOMAIN = "obfuscated.f3nation.dev";
+// Must match the --email-sink the obfuscator ran with (same default).
+const EMAIL_SINK = (
+  process.argv
+    .slice(2)
+    .find((a) => a.startsWith("--email-sink="))
+    ?.slice("--email-sink=".length) ?? "dev.staging-email-sink@f3nation.com"
+).toLowerCase();
+const [SINK_LOCAL, SINK_DOMAIN] = EMAIL_SINK.split("@") as [string, string];
+
+function isSinkAddress(email: string): boolean {
+  const lower = email.toLowerCase();
+  return (
+    lower.startsWith(`${SINK_LOCAL}+`) && lower.endsWith(`@${SINK_DOMAIN}`)
+  );
+}
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // Retina-image filenames (logo@2x.png) are email-shaped; not PII.
 const IMAGE_DENSITY_SUFFIX = /@\dx\.(?:png|jpe?g|gif|webp|svg)$/i;
@@ -171,7 +186,7 @@ async function sweepForEmails(sql: Sql): Promise<void> {
             // "\n" before an @handle ("\n@F.3."), which the regex reads as
             // local part "n" at domain "F.3" (real-data finding 2026-09-22).
             if (!NON_EMAIL_TLD_GUARD.test(match)) continue;
-            if (match.toLowerCase().endsWith(`@${OBFUSCATED_EMAIL_DOMAIN}`)) {
+            if (isSinkAddress(match)) {
               continue;
             }
             // Never print the matched value itself: this script exists to
@@ -257,14 +272,26 @@ async function main(): Promise<void> {
       check(`${table} empty`, n === 0, `${n} rows`);
     }
 
+    // Every user's address is exactly sink+<their id>.
     const [usersBad] = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM users
       WHERE email IS NOT NULL
-        AND email !~ ('^user-[0-9a-f]{8,}@' || ${OBFUSCATED_EMAIL_DOMAIN} || '$')`;
+        AND lower(email) <> (${SINK_LOCAL} || '+' || id || '@' || ${SINK_DOMAIN})`;
     check(
-      "users.email all obfuscated shape",
+      "users.email is sink+<id> for every user",
       usersBad?.n === 0,
       `${usersBad?.n} nonconforming`,
+    );
+
+    const [namesBad] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM users
+      WHERE (f3_name IS NOT NULL AND f3_name <> 'F3 ' || id)
+         OR (first_name IS NOT NULL AND first_name <> 'First ' || id)
+         OR (last_name IS NOT NULL AND last_name <> 'Last ' || id)`;
+    check(
+      "user names are F3/First/Last <id>",
+      namesBad?.n === 0,
+      `${namesBad?.n} nonconforming`,
     );
 
     // Both naming generations are optional — only one family exists in any
@@ -276,8 +303,10 @@ async function main(): Promise<void> {
     if (await tableExists(sql, "auth.user")) {
       const [authUserBad] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM auth."user"
-        WHERE (email IS NOT NULL AND email NOT LIKE '%@' || ${OBFUSCATED_EMAIL_DOMAIN})
-           OR (id LIKE '%@%' AND id NOT LIKE '%@' || ${OBFUSCATED_EMAIL_DOMAIN})
+        WHERE (email IS NOT NULL
+            AND lower(email) NOT LIKE ${SINK_LOCAL} || '+%@' || ${SINK_DOMAIN})
+           OR (id LIKE '%@%'
+            AND lower(id) NOT LIKE ${SINK_LOCAL} || '+%@' || ${SINK_DOMAIN})
            OR image IS NOT NULL`;
       check(
         "auth.user obfuscated (incl. email-as-id)",

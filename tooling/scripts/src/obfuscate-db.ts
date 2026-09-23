@@ -24,6 +24,9 @@
  *   --i-understand-this-rewrites-data    Explicit acknowledgement that the
  *                                        target database will be rewritten.
  *   --dry-run                            Report what would change, write nothing.
+ *   --email-sink <group@domain>          Shared group every email is rewritten
+ *                                        onto (default
+ *                                        dev.staging-email-sink@f3nation.com).
  *   --preserve-local-seed                Keep the committed local dev fixtures
  *                                        intact: users @f3local.dev, api_keys
  *                                        local-*, oauth clients *-local.
@@ -75,7 +78,27 @@ const PRESERVE_LOCAL_SEED = argv.includes("--preserve-local-seed");
 let SALT: string;
 
 const LOCAL_SEED_EMAIL_SUFFIX = "@f3local.dev";
-const OBFUSCATED_EMAIL_DOMAIN = "obfuscated.f3nation.dev";
+// Every email ends up at one shared Google Group, plus-addressed per row, so
+// staging can send real mail end to end without reaching a real person, and
+// anyone in the group can sign in as any user (the code lands in the group).
+// A user's address is keyed on users.id so it's easy to trace; see fakeEmail.
+const DEFAULT_EMAIL_SINK = "dev.staging-email-sink@f3nation.com";
+const EMAIL_SINK = (
+  flagValue("--email-sink") ?? DEFAULT_EMAIL_SINK
+).toLowerCase();
+let SINK_LOCAL: string;
+let SINK_DOMAIN: string;
+
+function sinkAddress(tag: string): string {
+  return `${SINK_LOCAL}+${tag}@${SINK_DOMAIN}`;
+}
+
+function isSinkAddress(email: string): boolean {
+  const lower = email.toLowerCase();
+  return (
+    lower.startsWith(`${SINK_LOCAL}+`) && lower.endsWith(`@${SINK_DOMAIN}`)
+  );
+}
 
 // sha256 hex digests are 64 chars — a collision-lengthening loop that keeps
 // growing `length` past this stops changing its output and would spin
@@ -96,18 +119,29 @@ function hashDigits(input: string, length: number): string {
     .padStart(length, "0");
 }
 
-// Memoized email mapping. users.email is UNIQUE, so on the (unlikely) chance
-// two distinct inputs collide at 8 hex chars, deterministically lengthen the
-// hash for the later input until the fake is unique within this run.
+// Real email (lowercased) -> users.id, read from the target before any
+// transform runs. An address that belongs to a user becomes that user's
+// sink+<id> address everywhere it appears (update requests, Slack users,
+// free text), so cross-table relationships survive. On a target that was
+// already obfuscated the lookup keys are the old fakes, which were applied
+// consistently, so the same mapping holds.
+const userIdByEmail = new Map<string, number>();
+
+// Addresses with no user: a caller with a row passes a tag naming where it
+// came from (org-12, slack-34); free text gets ext-<hash>, memoized and
+// lengthened on collision so one real address has one fake per run.
 const emailFakes = new Map<string, string>();
 const emailFakesInUse = new Map<string, string>();
 
-function fakeEmail(original: string): string {
+function fakeEmail(original: string, tag?: string): string {
   const key = original.trim().toLowerCase();
+  const userId = userIdByEmail.get(key);
+  if (userId !== undefined) return sinkAddress(String(userId));
+  if (tag) return sinkAddress(tag);
   const existing = emailFakes.get(key);
   if (existing) return existing;
   let length = 8;
-  let fake = `user-${hashHex(key, length)}@${OBFUSCATED_EMAIL_DOMAIN}`;
+  let fake = sinkAddress(`ext-${hashHex(key, length)}`);
   while (emailFakesInUse.has(fake) && emailFakesInUse.get(fake) !== key) {
     length += 4;
     if (length > MAX_HASH_HEX_LENGTH) {
@@ -115,7 +149,7 @@ function fakeEmail(original: string): string {
         `fakeEmail: exhausted hash length disambiguating "${key}"`,
       );
     }
-    fake = `user-${hashHex(key, length)}@${OBFUSCATED_EMAIL_DOMAIN}`;
+    fake = sinkAddress(`ext-${hashHex(key, length)}`);
   }
   emailFakes.set(key, fake);
   emailFakesInUse.set(fake, key);
@@ -187,8 +221,10 @@ const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 const SLACK_MENTION_REGEX = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
 
 function isAllowlistedEmail(email: string): boolean {
+  // Already a sink address: final. (Old @obfuscated.f3nation.dev fakes are
+  // NOT allowlisted: an in-place run over an earlier refresh remaps them.)
+  if (isSinkAddress(email)) return true;
   const lower = email.toLowerCase();
-  if (lower.endsWith(`@${OBFUSCATED_EMAIL_DOMAIN}`)) return true;
   if (PRESERVE_LOCAL_SEED && lower.endsWith(LOCAL_SEED_EMAIL_SUFFIX)) {
     return true;
   }
@@ -366,16 +402,24 @@ async function transformTable(
     if (rows.length === 0) break;
     cursor = rows[rows.length - 1]?.[pk] as string | number;
 
+    // Rows that change the same set of columns are written together, one
+    // statement per group, instead of one round trip per row: a remote
+    // target (staging through the Cloud SQL proxy) would otherwise spend
+    // hours on latency alone.
+    const groups = new Map<string, Row[]>();
     for (const row of rows) {
       const changes = transform(row);
       if (!changes || Object.keys(changes).length === 0) continue;
-      for (const col of Object.keys(changes)) {
-        counts[col] = (counts[col] ?? 0) + 1;
-      }
-      if (!DRY_RUN) {
-        await sql`
-          UPDATE ${sql(table)} SET ${sql(changes)}
-          WHERE ${sql(pk)} = ${row[pk] as string | number}`;
+      const cols = Object.keys(changes).sort();
+      for (const col of cols) counts[col] = (counts[col] ?? 0) + 1;
+      const key = cols.join(",");
+      const group = groups.get(key) ?? [];
+      group.push({ ...changes, [pk]: row[pk] });
+      groups.set(key, group);
+    }
+    if (!DRY_RUN) {
+      for (const [key, group] of groups) {
+        await writeGroup(sql, table, pk, key.split(","), group);
       }
     }
     if (rows.length < BATCH) break;
@@ -384,6 +428,77 @@ async function transformTable(
   for (const [col, action] of Object.entries(actions)) {
     addSummary(table, col, action, counts[col] ?? 0);
   }
+}
+
+const columnTypeCache = new Map<string, Map<string, string>>();
+
+async function columnTypes(
+  sql: Sql,
+  table: string,
+): Promise<Map<string, string>> {
+  const cached = columnTypeCache.get(table);
+  if (cached) return cached;
+  const rows = await sql<{ name: string; type: string }[]>`
+    SELECT attname AS name, format_type(atttypid, atttypmod) AS type
+    FROM pg_attribute
+    WHERE attrelid = ${quoteQualified(table)}::regclass
+      AND attnum > 0 AND NOT attisdropped`;
+  const types = new Map(rows.map((r) => [r.name, r.type]));
+  columnTypeCache.set(table, types);
+  return types;
+}
+
+function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+function quoteQualified(table: string): string {
+  return table.split(".").map(quoteIdent).join(".");
+}
+
+/**
+ * One UPDATE for a group of rows changing the same columns, typed through
+ * jsonb_to_recordset so arrays, citext and json columns convert exactly as
+ * the per-row driver path did. json/jsonb changes arrive JSON.stringify'd
+ * from the transforms; they are parsed back so they land as JSON, not as a
+ * JSON string.
+ */
+async function writeGroup(
+  sql: Sql,
+  table: string,
+  pk: string,
+  cols: string[],
+  group: Row[],
+): Promise<void> {
+  const types = await columnTypes(sql, table);
+  const typeOf = (col: string): string => {
+    const t = types.get(col);
+    if (!t) throw new Error(`writeGroup: ${table}.${col} has no type`);
+    return t;
+  };
+  const payload = group.map((r) => {
+    const out: Row = { [pk]: r[pk] };
+    for (const col of cols) {
+      const v = r[col];
+      const t = typeOf(col);
+      out[col] =
+        (t === "json" || t === "jsonb") && typeof v === "string"
+          ? (JSON.parse(v) as unknown)
+          : v;
+    }
+    return out;
+  });
+  const defs = [pk, ...cols]
+    .map((c) => `${quoteIdent(c)} ${typeOf(c)}`)
+    .join(", ");
+  const sets = cols.map((c) => `${quoteIdent(c)} = v.${quoteIdent(c)}`);
+  await sql.unsafe(
+    `UPDATE ${quoteQualified(table)} AS t SET ${sets.join(", ")}
+     FROM jsonb_to_recordset($1::jsonb) AS v(${defs})
+     WHERE t.${quoteIdent(pk)} = v.${quoteIdent(pk)}`,
+    // sql.json: postgres.js encodes it once for the jsonb param.
+    [sql.json(payload as postgres.JSONValue)],
+  );
 }
 
 /** Set-based single statement (NULL-outs, regenerations, overwrites). */
@@ -600,6 +715,13 @@ async function obfuscate(sql: Sql): Promise<void> {
 
   await assertFullCoverage(sql);
 
+  // Read before any transform rewrites users.email: every later fakeEmail()
+  // call maps a user's address to that user's sink+<id>.
+  for (const row of await sql<{ id: number; email: string }[]>`
+    SELECT id, email FROM users WHERE email IS NOT NULL`) {
+    userIdByEmail.set(row.email.trim().toLowerCase(), row.id);
+  }
+
   // ---- secrets: sessions, tokens, OAuth artifacts — truncate FIRST ----------
   // Deliberately runs before the PII transforms below (not after, as an
   // earlier version of this script did): none of these truncates/deletes
@@ -776,11 +898,20 @@ async function obfuscate(sql: Sql): Promise<void> {
         !!email?.toLowerCase().endsWith(LOCAL_SEED_EMAIL_SUFFIX);
       const changes: Row = {};
       if (!isLocalFixture) {
-        if (email && !isAllowlistedEmail(email))
-          changes.email = fakeEmail(email);
-        for (const col of ["f3_name", "first_name", "last_name"]) {
+        // Identity is rebuilt from users.id so any row is easy to trace back:
+        // "F3 <id>", "First <id>", "Last <id>", sink+<id>. Null names stay
+        // null (the apps treat a missing name differently from a present one).
+        const id = String(row.id);
+        const target = sinkAddress(id);
+        if (email !== target) changes.email = target;
+        const byCol: Record<string, string> = {
+          f3_name: `F3 ${id}`,
+          first_name: `First ${id}`,
+          last_name: `Last ${id}`,
+        };
+        for (const [col, value] of Object.entries(byCol)) {
           const v = str(row[col]);
-          if (v) changes[col] = fakeName(`${col}:${v}`);
+          if (v && v !== value) changes[col] = value;
         }
       }
       // Phone is faked even for fixtures: local login keys on email and
@@ -810,6 +941,7 @@ async function obfuscate(sql: Sql): Promise<void> {
     pk: "id",
     columns: [
       "slack_id",
+      "user_id",
       "user_name",
       "email",
       "avatar_url",
@@ -847,9 +979,15 @@ async function obfuscate(sql: Sql): Promise<void> {
         const slackId = str(row.slack_id);
         if (slackId) changes.slack_id = fakeSlackId(slackId);
         const userName = str(row.user_name);
-        if (userName) changes.user_name = fakeName(`slack:${userName}`);
+        const linkedUser =
+          typeof row.user_id === "number" ? String(row.user_id) : null;
+        if (userName) {
+          changes.user_name = linkedUser
+            ? `F3 ${linkedUser}`
+            : fakeName(`slack:${userName}`);
+        }
         if (email && !isAllowlistedEmail(email)) {
-          changes.email = fakeEmail(email);
+          changes.email = fakeEmail(email, `slack-${String(row.id)}`);
         }
       }
       for (const col of [
@@ -909,7 +1047,9 @@ async function obfuscate(sql: Sql): Promise<void> {
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
-      if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
+      if (email && !isAllowlistedEmail(email)) {
+        changes.email = fakeEmail(email, `org-${String(row.id)}`);
+      }
       const phone = str(row.phone);
       if (phone) changes.phone = fakePhone(phone);
       // Real-data finding (2026-07-10): "website" fields carry typed-in email
@@ -944,7 +1084,9 @@ async function obfuscate(sql: Sql): Promise<void> {
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
-      if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
+      if (email && !isAllowlistedEmail(email)) {
+        changes.email = fakeEmail(email, `location-${String(row.id)}`);
+      }
       const description = str(row.description);
       if (description) {
         const scrubbed = scrubText(description);
@@ -973,7 +1115,9 @@ async function obfuscate(sql: Sql): Promise<void> {
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
-      if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
+      if (email && !isAllowlistedEmail(email)) {
+        changes.email = fakeEmail(email, `event-${String(row.id)}`);
+      }
       const description = str(row.description);
       if (description) {
         const scrubbed = scrubText(description);
@@ -1024,7 +1168,9 @@ async function obfuscate(sql: Sql): Promise<void> {
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
-      if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
+      if (email && !isAllowlistedEmail(email)) {
+        changes.email = fakeEmail(email, `event-instance-${String(row.id)}`);
+      }
       for (const col of ["name", "description", "preblast", "backblast"]) {
         const v = str(row[col]);
         if (v) {
@@ -1080,7 +1226,9 @@ async function obfuscate(sql: Sql): Promise<void> {
         if (!v || isAllowlistedEmail(v)) continue;
         // submitted_by/reviewed_by hold emails in practice; fall back to a
         // name-shaped fake if a value isn't email-shaped.
-        changes[col] = v.includes("@") ? fakeEmail(v) : fakeName(v);
+        changes[col] = v.includes("@")
+          ? fakeEmail(v, `request-${String(row.id)}`)
+          : fakeName(v);
       }
       for (const col of [
         "event_description",
@@ -1227,11 +1375,19 @@ async function obfuscate(sql: Sql): Promise<void> {
     },
     transform(row) {
       const changes: Row = {};
+      const email = row.email as string | null;
+      // Legacy rows for a real user take that user's id-based identity.
+      const userId = email
+        ? userIdByEmail.get(email.trim().toLowerCase())
+        : undefined;
       for (const col of ["name", "f3_name", "hospital_name"]) {
         const v = row[col] as string | null;
-        if (v) changes[col] = fakeName(`${col}:${v}`);
+        if (!v) continue;
+        changes[col] =
+          userId !== undefined && col !== "hospital_name"
+            ? `F3 ${userId}`
+            : fakeName(`${col}:${v}`);
       }
-      const email = row.email as string | null;
       if (email && !isAllowlistedEmail(email)) changes.email = fakeEmail(email);
       if (row.image !== null) changes.image = null;
       return changes;
@@ -1285,7 +1441,8 @@ async function obfuscate(sql: Sql): Promise<void> {
     transform(row) {
       const changes: Row = {};
       const name = str(row.name);
-      if (name) changes.name = fakeName(`better_auth_user:${name}`);
+      // id is String(users.id) by construction (see migration 0025).
+      if (name) changes.name = `F3 ${String(row.id)}`;
       const email = str(row.email);
       // Better Auth lowercases every email it writes, and so does the trigger;
       // fakeEmail's output is already lowercase, so this stays consistent with
@@ -1436,7 +1593,7 @@ async function obfuscate(sql: Sql): Promise<void> {
             `auth.user.id disambiguation: exhausted hash length for "${id}"`,
           );
         }
-        fake = `user-${hashHex(id, length)}@${OBFUSCATED_EMAIL_DOMAIN}`;
+        fake = sinkAddress(`ext-${hashHex(id, length)}`);
       }
       // Register the (possibly disambiguated) fake in the same map fakeEmail()
       // itself uses, so a later fakeEmail() call can't independently generate
@@ -1518,6 +1675,17 @@ async function main(): Promise<void> {
     );
   }
   SALT = salt;
+
+  const sinkMatch = /^([a-z0-9._-]+)@([a-z0-9-]+(?:\.[a-z0-9-]+)+)$/.exec(
+    EMAIL_SINK,
+  );
+  if (!sinkMatch) {
+    throw new Error(
+      `Refusing to run: --email-sink "${EMAIL_SINK}" must be a plain group address (no +tag).`,
+    );
+  }
+  SINK_LOCAL = sinkMatch[1]!;
+  SINK_DOMAIN = sinkMatch[2]!;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {

@@ -17,7 +17,6 @@
     "obfuscate-db:verify": "tsx ./src/obfuscate-db.verify.ts",
     "obfuscate-db:verify-target": "pnpm with-env tsx ./src/obfuscate-db.verify-target.ts",
     "script": "pnpm with-env tsx ./src/script.ts",
-    "seed-staging-logins": "pnpm with-env tsx ./src/seed-staging-logins.ts",
     "staging-api-keys": "pnpm with-env tsx ./src/staging-api-keys.ts",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e ../../.env --"
