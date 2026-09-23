@@ -2,6 +2,7 @@ from datetime import date
 from pathlib import Path
 
 import duckdb
+import pytest
 
 from analytics.materializations import select_materializations
 from analytics.schema_registry import SCHEMAS_BY_NAME
@@ -144,6 +145,85 @@ def test_all_analytics_views_materialize_and_validate_populated_and_empty_parque
         assert tuple(column.name for column in artifacts.schema_evidence.columns) == tuple(
             column.name for column in SCHEMAS_BY_NAME[definition.name].columns
         )
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["event_info", "future_event_info", "attendance_info", "missing_backblasts"],
+)
+def test_connector_shaped_metadata_materializes_with_registry_schema(tmp_path: Path, name: str):
+    db = fixture()
+    db.execute("ALTER TABLE pg.public.event_instances ALTER COLUMN meta TYPE VARCHAR")
+    db.execute("ALTER TABLE pg.public.orgs ALTER COLUMN meta TYPE VARCHAR")
+    db.execute("ALTER TABLE pg.public.attendance ALTER COLUMN meta TYPE VARCHAR")
+    db.execute("UPDATE pg.public.event_instances SET meta = NULL WHERE id = 1")
+    db.execute("UPDATE pg.public.event_instances SET meta = 'null' WHERE id = 4")
+    db.execute("UPDATE pg.public.orgs SET meta = 'null' WHERE id = 50")
+    db.execute("UPDATE pg.public.orgs SET meta = NULL WHERE id = 40")
+    db.execute("UPDATE pg.public.attendance SET meta = NULL WHERE id = 13")
+    db.execute("UPDATE pg.public.attendance SET meta = 'null' WHERE id = 14")
+
+    definition = next(item for item in select_materializations(None, product="analytics") if item.name == name)
+    artifacts = materialize(db, tmp_path / name, definition, PARAMS[0], PARAMS[1])
+
+    assert artifacts.schema_evidence is not None
+    assert tuple(
+        (column.name, column.duckdb_type, column.nullable) for column in artifacts.schema_evidence.columns
+    ) == tuple((column.name, column.duckdb_type, column.nullable) for column in SCHEMAS_BY_NAME[name].columns)
+    if name == "event_info":
+        values = db.execute(
+            "SELECT id, meta, ao_meta, region_meta FROM read_parquet(?) ORDER BY id",
+            [str(artifacts.parquet_files[0])],
+        ).fetchall()
+        assert values == [(1, None, "null", None), (4, "null", "null", None)]
+    elif name == "attendance_info":
+        values = db.execute(
+            "SELECT id, attendance_meta FROM read_parquet(?) ORDER BY id",
+            [str(artifacts.parquet_files[0])],
+        ).fetchall()
+        assert values == [(13, None), (14, "null")]
+
+
+@pytest.mark.parametrize(
+    ("name", "table", "column", "row_id"),
+    [
+        ("event_info", "event_instances", "meta", 1),
+        ("future_event_info", "event_instances", "meta", 3),
+        ("attendance_info", "attendance", "meta", 13),
+    ],
+)
+def test_connector_shaped_invalid_metadata_json_fails(name: str, table: str, column: str, row_id: int):
+    db = fixture()
+    db.execute("ALTER TABLE pg.public.event_instances ALTER COLUMN meta TYPE VARCHAR")
+    db.execute("ALTER TABLE pg.public.orgs ALTER COLUMN meta TYPE VARCHAR")
+    db.execute("ALTER TABLE pg.public.attendance ALTER COLUMN meta TYPE VARCHAR")
+    db.execute(f"UPDATE pg.public.{table} SET {column} = 'not-json' WHERE id = ?", [row_id])
+
+    with pytest.raises(duckdb.ConversionException):
+        run(db, name)
+
+
+def test_attendance_materializes_with_enum_user_status(tmp_path: Path):
+    db = fixture()
+    db.execute("ALTER TABLE pg.public.users ALTER COLUMN status TYPE ENUM('active') USING status::ENUM('active')")
+    db.execute("INSERT INTO pg.public.attendance VALUES (15, 99, 2, '{}', NULL, NULL, false)")
+
+    definition = next(
+        item for item in select_materializations(None, product="analytics") if item.name == "attendance_info"
+    )
+    artifacts = materialize(db, tmp_path / "attendance_info_enum", definition, PARAMS[0], PARAMS[1])
+
+    assert artifacts.schema_evidence is not None
+    assert tuple(
+        (column.name, column.duckdb_type, column.nullable) for column in artifacts.schema_evidence.columns
+    ) == tuple(
+        (column.name, column.duckdb_type, column.nullable) for column in SCHEMAS_BY_NAME["attendance_info"].columns
+    )
+    values = db.execute(
+        "SELECT id, user_statusa FROM read_parquet(?) ORDER BY id",
+        [str(artifacts.parquet_files[0])],
+    ).fetchall()
+    assert values == [(13, "active"), (14, "active"), (15, None)]
 
 
 def test_each_query_uses_two_parameters_and_exact_projection():

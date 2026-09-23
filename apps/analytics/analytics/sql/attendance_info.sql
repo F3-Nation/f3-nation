@@ -9,7 +9,7 @@ attendance_type_aggregate AS (
     JOIN pg.public.attendance_types t ON t.id = x.attendance_type_id
     GROUP BY x.attendance_id
 )
-SELECT a.id, a.user_id, a.event_instance_id, a.meta AS attendance_meta,
+SELECT a.id, a.user_id, a.event_instance_id, CAST(a.meta AS JSON) AS attendance_meta,
        a.created, a.updated, att.q_ind, att.coq_ind,
        u.f3_name, u.home_region_id, hr.name AS home_region_name,
        u.avatar_url, u.status AS user_statusa, ei.start_date
