@@ -767,7 +767,7 @@ async function obfuscate(sql: Sql): Promise<void> {
     transform: (row) => {
       const email = str(row.email);
       // A committed dev fixture keeps the identity fields local login reads
-      // back (email / names / phone). The "null out" columns below are not
+      // back (email / names). The "null out" columns below are not
       // identity — they're PII with no fake substitute — so they are cleared
       // even for fixtures, in case a fixture row picked up real values during
       // local testing. Mirrors the slack_users rule.
@@ -782,9 +782,12 @@ async function obfuscate(sql: Sql): Promise<void> {
           const v = str(row[col]);
           if (v) changes[col] = fakeName(`${col}:${v}`);
         }
-        const phone = str(row.phone);
-        if (phone) changes.phone = fakePhone(phone);
       }
+      // Phone is faked even for fixtures: local login keys on email and
+      // names only, and a fixture can pick up a real number through the
+      // editable profile.
+      const phone = str(row.phone);
+      if (phone) changes.phone = fakePhone(phone);
       for (const col of [
         "avatar_url",
         "emergency_contact",
