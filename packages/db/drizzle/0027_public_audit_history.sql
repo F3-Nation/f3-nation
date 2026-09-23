@@ -23,6 +23,12 @@ BEGIN
   -- Column names are frozen in trigger arguments. Refuse stale masking after
   -- a rename/drop instead of retaining the sensitive value under a new name.
   row_j := COALESCE(new_j, old_j);
+  -- Frozen key names must still identify every component, including after DDL.
+  FOREACH col IN ARRAY pk_cols LOOP
+    IF (row_j ->> col) IS NULL THEN
+      RAISE EXCEPTION 'audit.log_change: primary key column missing';
+    END IF;
+  END LOOP;
   FOREACH col IN ARRAY redact_cols LOOP
     IF NOT (row_j ? col) THEN
       RAISE EXCEPTION 'audit.log_change: redacted column missing';
@@ -130,7 +136,8 @@ BEGIN
   IF hist IS NULL THEN
     EXECUTE format('CREATE TABLE %I.%I (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-      row_id text NOT NULL, op char(1) NOT NULL,
+      row_id text NOT NULL, op char(1) NOT NULL
+        CONSTRAINT audit_history_op CHECK (op IN (''I'', ''U'', ''D'')),
       changed_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
       changed_by integer, changed_via text, old_row jsonb, new_row jsonb
     )', hist_schema, tbl);
@@ -141,7 +148,9 @@ BEGIN
   ELSE
     -- Never silently adopt an unrelated or structurally modified relation.
     IF NOT EXISTS (SELECT FROM pg_class WHERE oid = hist AND relkind = 'r'
-      AND relowner = owner_id AND NOT relrowsecurity AND NOT relispartition)
+      AND relowner = owner_id AND relpersistence = 'p'
+      AND NOT relrowsecurity AND NOT relispartition)
+      OR EXISTS (SELECT FROM pg_rewrite WHERE ev_class = hist)
       OR obj_description(hist, 'pg_class') IS DISTINCT FROM 'audit-history-v1'
       OR (SELECT array_agg(attname::text || ':' || atttypid::regtype::text || ':' || attnotnull::text
         ORDER BY attnum) FROM pg_attribute WHERE attrelid = hist AND attnum > 0 AND NOT attisdropped)
@@ -150,7 +159,11 @@ BEGIN
           'changed_via:text:false', 'old_row:jsonb:false', 'new_row:jsonb:false']
       OR NOT EXISTS (SELECT FROM pg_attribute WHERE attrelid = hist AND attname = 'id' AND attidentity = 'a')
       OR NOT EXISTS (SELECT FROM pg_constraint WHERE conrelid = hist AND contype = 'p' AND conkey = ARRAY[1]::smallint[])
-      OR EXISTS (SELECT FROM pg_constraint WHERE conrelid = hist AND contype NOT IN ('p', 'n'))
+      OR NOT EXISTS (SELECT FROM pg_constraint WHERE conrelid = hist
+        AND conname = 'audit_history_op' AND contype = 'c' AND convalidated
+        AND pg_get_expr(conbin, conrelid) = '(op = ANY (ARRAY[''I''::bpchar, ''U''::bpchar, ''D''::bpchar]))')
+      OR EXISTS (SELECT FROM pg_constraint WHERE conrelid = hist AND contype NOT IN ('p', 'n')
+        AND NOT (contype = 'c' AND conname = 'audit_history_op'))
       OR NOT EXISTS (SELECT FROM pg_attrdef WHERE adrelid = hist AND adnum = 4
         AND pg_get_expr(adbin, adrelid) = 'transaction_timestamp()')
       OR NOT EXISTS (SELECT FROM pg_index WHERE indrelid = hist AND indisvalid AND indisready

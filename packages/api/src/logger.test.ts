@@ -1,4 +1,6 @@
 import { createLogger, setErrorReporter } from "@acme/logger";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => {
@@ -7,6 +9,37 @@ afterEach(() => {
 });
 
 describe("shared audit diagnostic boundary", () => {
+  it("serializes sanitized errors through real pino and child loggers", async () => {
+    const { stdout, stderr } = await promisify(execFile)(
+      process.execPath,
+      ["--import", "tsx", "src/__tests__/fixtures/audit-log-output.ts"],
+      { env: { ...process.env, NODE_ENV: "production" }, timeout: 10000 },
+    );
+    expect(stderr).toBe("");
+    expect(stdout).not.toContain("synthetic-secret");
+    const records = stdout
+      .trim()
+      .split("\n")
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            err: { message: string; code?: string; cause?: unknown };
+            event: string;
+          },
+      );
+    expect(records).toHaveLength(4);
+    expect(records.map((record) => record.event)).toEqual([
+      "audit.serializer.direct",
+      "audit.serializer.child",
+      "audit.serializer.direct",
+      "audit.serializer.child",
+    ]);
+    for (const [index, record] of records.entries()) {
+      expect(record.err.message).toBe("Audit history capture failed");
+      expect(record.err.cause).toBeUndefined();
+      expect(record.err.code).toBe(index < 2 ? "23514" : undefined);
+    }
+  });
   it.each(["error", "fatal"] as const)(
     "sanitizes %s for every logger instance before pino and the reporter",
     (level) => {

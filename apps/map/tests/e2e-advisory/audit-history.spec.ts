@@ -1,23 +1,23 @@
 import { randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 import postgres from "postgres";
 
 import { TestId } from "@acme/shared/common/enums";
+import { test } from "../audit-stack";
 
 // This database connection belongs to the test runner, never the browser.
-// Remote previews without direct DB access report this local verification gap.
-const databaseUrl = process.env.E2E_AUDIT_DATABASE_URL;
+// The dedicated local fixture owns the database and both app servers.
+test.skip(
+  process.env.E2E_AUDIT_LOCAL !== "1",
+  "Run test:e2e:audit for an owned disposable local stack",
+);
 
 test("audit AC-3/32: map submission creates masked database history", async ({
   page,
   context,
+  auditStack,
 }) => {
-  test.skip(
-    !databaseUrl,
-    "E2E_AUDIT_DATABASE_URL must identify the disposable map/API database",
-  );
-  if (!databaseUrl) return;
-  const client = postgres(databaseUrl, {
+  const client = postgres(auditStack.databaseUrl, {
     max: 1,
     prepare: false,
     connection: { default_transaction_read_only: true },

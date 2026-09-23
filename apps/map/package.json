@@ -15,6 +15,7 @@
     "test": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest --run --coverage \"$@\"",
     "test:e2e": "playwright test --project=blocking",
     "test:e2e:advisory": "playwright test --project=advisory",
+    "test:e2e:audit": "E2E_AUDIT_LOCAL=1 playwright test --config playwright.audit.config.ts",
     "test:watch": "SKIP_ENV_VALIDATION=1 pnpm with-env vitest -w \"$@\"",
     "with-env": "dotenv -e .env --"
   },

@@ -2,6 +2,7 @@ import { sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { createLogger, setErrorReporter } from "@acme/logger";
 import { describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 
 import {
   db,
@@ -11,34 +12,49 @@ import {
   cleanup,
 } from "./test-utils";
 
-const tables = [
-  "users",
-  "roles",
-  "permissions",
-  "api_keys",
-  "roles_x_users_x_org",
-  "roles_x_permissions",
-  "roles_x_api_keys_x_org",
-  "orgs",
-  "positions",
-  "positions_x_orgs_x_users",
-  "orgs_x_slack_spaces",
-  "locations",
-  "events",
-  "event_instances",
-  "event_types",
-  "event_tags",
-  "events_x_event_types",
-  "event_tags_x_events",
-  "event_instances_x_event_types",
-  "event_tags_x_event_instances",
-  "attendance",
-  "attendance_types",
-  "attendance_x_attendance_types",
-  "achievements",
-  "achievements_x_users",
-  "update_requests",
-].sort();
+// Literal approved spec matrix: [primary key in declared order, ignore, redact].
+// Do not derive this expectation from the schema or migration under test.
+const approvedTracking = {
+  achievements: [["id"], ["updated"], []],
+  achievements_x_users: [
+    ["achievement_id", "user_id", "award_year", "award_period"],
+    [],
+    [],
+  ],
+  api_keys: [["id"], ["updated"], ["key"]],
+  attendance: [["id"], ["updated"], []],
+  attendance_types: [["id"], ["updated"], []],
+  attendance_x_attendance_types: [
+    ["attendance_id", "attendance_type_id"],
+    [],
+    [],
+  ],
+  event_instances: [["id"], ["updated"], []],
+  event_instances_x_event_types: [
+    ["event_instance_id", "event_type_id"],
+    [],
+    [],
+  ],
+  event_tags: [["id"], ["updated"], []],
+  event_tags_x_event_instances: [["event_instance_id", "event_tag_id"], [], []],
+  event_tags_x_events: [["event_id", "event_tag_id"], [], []],
+  event_types: [["id"], ["updated"], []],
+  events: [["id"], ["updated"], []],
+  events_x_event_types: [["event_id", "event_type_id"], [], []],
+  locations: [["id"], ["updated"], []],
+  orgs: [["id"], ["updated", "ao_count"], []],
+  orgs_x_slack_spaces: [["org_id", "slack_space_id"], [], []],
+  permissions: [["id"], ["updated"], []],
+  positions: [["id"], ["updated"], []],
+  positions_x_orgs_x_users: [["position_id", "org_id", "user_id"], [], []],
+  roles: [["id"], ["updated"], []],
+  roles_x_api_keys_x_org: [["role_id", "api_key_id", "org_id"], [], []],
+  roles_x_permissions: [["role_id", "permission_id"], [], []],
+  roles_x_users_x_org: [["role_id", "user_id", "org_id"], [], []],
+  update_requests: [["id"], ["updated"], ["token"]],
+  users: [["id"], ["updated"], []],
+} satisfies Record<string, [string[], string[], string[]]>;
+const tables = Object.keys(approvedTracking).sort();
 type Tx = Parameters<Parameters<AppDb["transaction"]>[0]>[0];
 interface History extends Record<string, unknown> {
   row_id: string;
@@ -90,6 +106,30 @@ async function rejected(
 }
 
 describe("audit history migration (#664)", () => {
+  it("deploys the approved primary-key, ignore and redaction options for every table", async () => {
+    const rows = await db.execute<{ name: string; args: string }>(sql`
+      SELECT c.relname AS name, encode(t.tgargs, 'hex') AS args
+      FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE t.tgfoid='audit.log_change()'::regprocedure AND n.nspname='public'
+      ORDER BY c.relname`);
+    expect(
+      rows.map(({ name, args }) => ({
+        name,
+        args: Buffer.from(args, "hex")
+          .toString("utf8")
+          .split("\0")
+          .slice(0, -1),
+      })),
+    ).toEqual(
+      Object.entries(approvedTracking)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([name, options]) => ({
+          name,
+          args: options.map((columns) => `{${columns.join(",")}}`),
+        })),
+    );
+  });
   it("activates exactly the approved tables after the real reset/migration chain", async () => {
     const rows = await db.execute<{ name: string; triggers: number }>(sql`
       SELECT c.relname AS name, count(t.oid)::int AS triggers
@@ -219,6 +259,116 @@ describe("audit history migration (#664)", () => {
       );
       expect(uuids[0]?.row_id).toBe(id);
     }));
+
+  it.each(["rename", "drop", "null"])(
+    "fails closed on stale composite keys (%s)",
+    async (change) =>
+      fixture(async (tx) => {
+        await tx.execute(
+          sql`CREATE TABLE audit_fixture.keys (a int, b int, updated int, PRIMARY KEY (a,b))`,
+        );
+        await tx.execute(
+          sql`SELECT audit.enable_tracking('audit_fixture.keys', ARRAY['updated'])`,
+        );
+        await tx.execute(sql`INSERT INTO audit_fixture.keys VALUES (1,2,0)`);
+        if (change === "rename") {
+          await tx.execute(
+            sql`ALTER TABLE audit_fixture.keys RENAME COLUMN b TO renamed`,
+          );
+        } else if (change === "drop") {
+          await tx.execute(
+            sql`ALTER TABLE audit_fixture.keys DROP COLUMN b CASCADE`,
+          );
+        } else {
+          await tx.execute(
+            sql`ALTER TABLE audit_fixture.keys DROP CONSTRAINT keys_pkey`,
+          );
+          await tx.execute(
+            sql`ALTER TABLE audit_fixture.keys ALTER COLUMN b DROP NOT NULL`,
+          );
+        }
+        for (const statement of [
+          change === "null"
+            ? sql`UPDATE audit_fixture.keys SET b=NULL`
+            : change === "rename"
+              ? sql`INSERT INTO audit_fixture.keys VALUES (3,4,0)`
+              : sql`INSERT INTO audit_fixture.keys VALUES (3,0)`,
+          change === "null"
+            ? sql`INSERT INTO audit_fixture.keys (a) VALUES (3)`
+            : sql`UPDATE audit_fixture.keys SET updated=1`,
+          ...(change === "null" ? [] : [sql`DELETE FROM audit_fixture.keys`]),
+        ])
+          await rejected(tx, statement, "Audit history capture failed");
+        const rows = await tx.execute(sql`SELECT * FROM audit_fixture.keys`);
+        expect(rows).toHaveLength(1);
+        const historyRows = await tx.execute(
+          sql`SELECT row_id FROM audit_fixture_history.keys`,
+        );
+        expect(historyRows).toEqual([{ row_id: "1:2" }]);
+        if (change === "rename") {
+          await tx.execute(
+            sql`SELECT audit.enable_tracking('audit_fixture.keys', ARRAY['updated'])`,
+          );
+          await tx.execute(sql`UPDATE audit_fixture.keys SET renamed=4`);
+          const repaired = await tx.execute(
+            sql`SELECT row_id FROM audit_fixture_history.keys ORDER BY id`,
+          );
+          expect(repaired).toEqual([{ row_id: "1:2" }, { row_id: "1:4" }]);
+        }
+      }),
+  );
+
+  it("enforces the operation constraint and rejects missing or weakened constraints on re-enable", async () =>
+    fixture(async (tx) => {
+      await expect(
+        tx.transaction(async (sp) => {
+          await sp.execute(
+            sql`INSERT INTO audit_fixture_history.rows (row_id, op) VALUES ('1','X')`,
+          );
+        }),
+      ).rejects.toMatchObject({ cause: { code: "23514" } });
+      await tx.execute(
+        sql`SELECT audit.enable_tracking('audit_fixture.rows', ARRAY['updated'], ARRAY['secret'])`,
+      );
+      await tx.execute(
+        sql`ALTER TABLE audit_fixture_history.rows DROP CONSTRAINT audit_history_op`,
+      );
+      await rejected(
+        tx,
+        sql`SELECT audit.enable_tracking('audit_fixture.rows')`,
+        "audit.enable_tracking: incompatible history object",
+      );
+      await tx.execute(
+        sql`ALTER TABLE audit_fixture_history.rows ADD CONSTRAINT audit_history_op CHECK (op IN ('I','U','D','X'))`,
+      );
+      await rejected(
+        tx,
+        sql`SELECT audit.enable_tracking('audit_fixture.rows')`,
+        "audit.enable_tracking: incompatible history object",
+      );
+    }));
+
+  it.each(["rewrite", "unlogged"])(
+    "rejects a history table changed to %s on re-enable",
+    async (change) =>
+      fixture(async (tx) => {
+        expect.assertions(1);
+        if (change === "rewrite") {
+          await tx.execute(
+            sql`CREATE RULE discard_history AS ON INSERT TO audit_fixture_history.rows DO INSTEAD NOTHING`,
+          );
+        } else {
+          await tx.execute(
+            sql`ALTER TABLE audit_fixture_history.rows SET UNLOGGED`,
+          );
+        }
+        await rejected(
+          tx,
+          sql`SELECT audit.enable_tracking('audit_fixture.rows', ARRAY['updated'], ARRAY['secret'])`,
+          "audit.enable_tracking: incompatible history object",
+        );
+      }),
+  );
 
   it("rejects missing keys, invalid/conflicting options and incompatible objects atomically", async () =>
     fixture(async (tx) => {
@@ -594,23 +744,43 @@ describe("audit history migration (#664)", () => {
     const { default: postgres } = await import("postgres");
     const { env } = await import("@acme/env");
     const client = postgres(env.TEST_DATABASE_URL!, { max: 1, prepare: false });
+    const namespace = `audit_attribution_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    let created = false;
     try {
+      await client`CREATE SCHEMA ${client(namespace)}`;
+      created = true;
+      await client`CREATE TABLE ${client(namespace)}.rows (id integer PRIMARY KEY)`;
+      await client`SELECT audit.enable_tracking(${`${namespace}.rows`}::regclass)`;
+      let id = 0;
       for (const abort of [false, true]) {
         try {
           await client.begin(async (c) => {
             await c`SELECT set_config('app.user_id','7',true), set_config('app.source','test',true)`;
+            await c`INSERT INTO ${c(namespace)}.rows VALUES (${++id})`;
+            const attributed =
+              await c`SELECT changed_by, changed_via FROM ${c(`${namespace}_history`)}.rows WHERE row_id=${String(id)}`;
+            expect(attributed).toMatchObject([
+              { changed_by: 7, changed_via: "test" },
+            ]);
             if (abort) throw rollback;
           });
         } catch (error) {
           if (error !== rollback) throw error;
         }
+        await client`INSERT INTO ${client(namespace)}.rows VALUES (${++id})`;
         const rows =
-          await client`SELECT nullif(current_setting('app.user_id',true),'') AS uid,
-          nullif(current_setting('app.source',true),'') AS source`;
-        expect(rows[0]).toMatchObject({ uid: null, source: null });
+          await client`SELECT changed_by, changed_via FROM ${client(`${namespace}_history`)}.rows WHERE row_id=${String(id)}`;
+        expect(rows).toMatchObject([{ changed_by: null, changed_via: null }]);
       }
     } finally {
-      await client.end();
+      try {
+        if (created) {
+          await client`DROP SCHEMA ${client(namespace)} CASCADE`;
+          await client`DROP SCHEMA IF EXISTS ${client(`${namespace}_history`)} CASCADE`;
+        }
+      } finally {
+        await client.end();
+      }
     }
   });
 

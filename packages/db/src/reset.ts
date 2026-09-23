@@ -19,6 +19,16 @@ export const reset = async (db?: AppDb) => {
   if (process.env.CI && !isTest) return;
 
   const isTestDB = databaseName?.endsWith("_test");
+  // Check the actual client before ANY destructive DDL, including interactive
+  // resets. A loopback URL alone may be a tunnel to a non-disposable database.
+  const [connectedDb] = await dbToUse.execute<{
+    current_database: string;
+    disposable_marker: string | null;
+  }>(sql`SELECT current_database(),
+    shobj_description(oid, 'pg_database') AS disposable_marker
+    FROM pg_database WHERE datname = current_database()`);
+  const connectedDbName = connectedDb?.current_database;
+  const matchesConfiguredDatabase = connectedDbName === databaseName;
 
   // wait for confirmation from the command line
   if (isTest) {
@@ -27,12 +37,11 @@ export const reset = async (db?: AppDb) => {
     // the URL, not the live connection) isn't enough before destructive
     // schema operations run against `dbToUse`. Confirm the client we're
     // actually about to drop schemas on is itself a "_test" database.
-    const [connectedDb] = await dbToUse.execute<{
-      current_database: string;
-    }>(sql`SELECT current_database()`);
-    const connectedDbName = connectedDb?.current_database;
-
-    if (!isTestDB || !connectedDbName?.endsWith("_test")) {
+    if (
+      !isTestDB ||
+      !connectedDbName?.endsWith("_test") ||
+      !matchesConfiguredDatabase
+    ) {
       // Automated/non-interactive callers (e.g. Vitest globalSetup) only
       // ever intend to reset a "_test" database. Falling through to the
       // stdin prompt below would hang forever with no TTY to answer it.
@@ -42,11 +51,21 @@ export const reset = async (db?: AppDb) => {
     }
     console.log("Bypassing confirmation for test database");
   } else {
+    const target = new URL(databaseUrl);
+    if (
+      !matchesConfiguredDatabase ||
+      !["localhost", "127.0.0.1", "[::1]"].includes(target.hostname) ||
+      connectedDb?.disposable_marker !== "f3-disposable-local-v1"
+    ) {
+      throw new Error(
+        "Refusing reset: target is not a verified disposable local database. Use pnpm local:setup to provision the local Docker database.",
+      );
+    }
     // Only printed for the interactive path: the full URL can carry
     // credentials, and the automated (isTest) branches above never read
     // this prompt, so it must not run unconditionally on every reset.
     process.stdout.write(
-      `Resetting database ${databaseUrl} ARE YOU SURE? (y/n): `,
+      `Resetting disposable database ${databaseName}, including all audit history. ARE YOU SURE? (y/n): `,
     );
     const confirmation = await new Promise((resolve) => {
       process.stdin.once("data", (data) => {
@@ -101,6 +120,7 @@ if (require.main === module) {
   void reset()
     .then(() => console.log("Reset done"))
     .catch((e) => {
+      process.exitCode = 1;
       console.log("Reset failed", e);
     })
     .finally(() => {

@@ -68,11 +68,18 @@ a local test administrator. The fixture schemas, roles and rows roll back.
 Source writes in the API integration case commit, then are deleted; their
 masked history remains until the next test reset.
 
-The advisory Playwright case uses a running local/preview map/API stack and
-`E2E_AUDIT_DATABASE_URL` pointing to that stack's disposable database. The test
-uses a read-only connection to check stored history; no history endpoint is
-added. A remote preview without direct database access cannot run that assertion
-and reports the case skipped. Run it locally before review.
+Run `direnv exec . pnpm --filter f3-map test:e2e:audit` with Docker available.
+The advisory Playwright case owns a temporary PostgreSQL container and fresh
+map/API processes on allocated loopback ports. It migrates and seeds that database,
+then uses a read-only connection to check stored history. It never uses supplied
+`E2E_BASE_URL` or `E2E_AUDIT_DATABASE_URL` targets. Teardown stops its processes and
+removes its container and data, including history, on success or failure.
+The ordinary advisory suite skips this case unless `E2E_AUDIT_LOCAL=1` selects
+the owned local fixture. No history endpoint is added. Logs remain in a private
+`f3-audit-e2e-*` temporary directory for diagnosis. Do not run this alongside
+other Next dev processes in the same checkout (Next holds a per-app dev lock).
+Playwright reports and failure artifacts live under
+`apps/map/node_modules/.cache/audit-e2e/`, outside the source lint scope.
 
 ## Deployment preflight (human review required)
 
@@ -122,6 +129,15 @@ Do not roll back by dropping history schemas or deleting migration journal
 entries. History deletion, restoration, or sanitizing previously captured data
 requires a separate reviewed operation. Local/test reset is intentionally
 separate: it destroys the disposable dataset and its history before rerunning
-migrations. Drizzle's existing default public-only schema filter already excludes
+migrations. Before any schema drop, automated resets verify that the actual
+database matches the configured `_test` database. Interactive resets do not require
+an `_test` name: they instead require a matching database name, a loopback URL and
+the database comment `f3-disposable-local-v1`, followed by confirmation explicitly
+covering history deletion. The marker is installed on the development database
+by `scripts/docker/init-db.sql` when Docker first initializes a volume, and by
+`pnpm local:setup` directly through the local Docker container for existing volumes.
+A refused or failed reset exits unsuccessfully. A localhost URL alone is
+insufficient. Never mark a shared or production database disposable.
+Drizzle's existing default public-only schema filter already excludes
 the migration-owned audit/history schemas from push/pull management. This feature
 does not broaden that tooling scope to auth.
