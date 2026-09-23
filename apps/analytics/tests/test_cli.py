@@ -8,24 +8,21 @@ import pytest
 
 import analytics.cli as cli
 import analytics.diagnostics as diagnostics
-from analytics.publication import CatalogConflictError
-from analytics.settings import CatalogSettings, SettingsError
+from analytics.publication import PointerConflictError
+from analytics.settings import PointerSettings, SettingsError
 
 
-def test_rollback_command_requires_explicit_pinned_manifest_and_cas(monkeypatch):
+def test_rollback_command_requires_explicit_product_release_and_generation(monkeypatch):
     calls = []
     events = []
 
     class Publisher:
-        @classmethod
-        def from_catalog(cls, client, settings):
+        def __init__(self, client, settings, **_kwargs):
             calls.append((client, settings))
-            return cls()
 
-        def rollback_catalog(self, metageneration, *, release_manifest_uri, release_manifest_generation, emit=None):
-            calls.append((metageneration, release_manifest_uri, release_manifest_generation))
-            if emit:
-                emit("analytics.etl.catalog_committed_unconfirmed", {"operation": "rollback"})
+        def rollback_pointer(self, release_id, *, expected_generation, source_order, producer_revision, created_at):
+            calls.append((release_id, expected_generation, source_order, producer_revision, created_at))
+            return {"releaseId": release_id, "releaseSequence": 4}
 
     monkeypatch.setenv("ANALYTICS_ENVIRONMENT", "nonprod")
     monkeypatch.setenv("ANALYTICS_CATALOG_BUCKET", "f3-analytics-nonprod")
@@ -45,30 +42,31 @@ def test_rollback_command_requires_explicit_pinned_manifest_and_cas(monkeypatch)
         "argv",
         [
             "analytics-etl",
-            "rollback-catalog",
-            "--release-manifest-uri",
-            "gs://bucket/release.json",
-            "--release-manifest-generation",
-            "42",
-            "--catalog-metageneration",
+            "rollback-pointer",
+            "--product",
+            "analytics",
+            "--release-id",
+            "retained-release",
+            "--expected-generation",
             "7",
         ],
     )
 
     assert cli.main() == 0
-    assert calls[0][1] == CatalogSettings("nonprod", "f3-analytics-nonprod")
-    assert calls[1] == ("7", "gs://bucket/release.json", "42")
-    assert events[0] == ("analytics.etl.catalog_committed_unconfirmed", {"operation": "rollback"})
+    assert calls[0][1].bucket_name == "f3-analytics-nonprod"
+    assert calls[1][0:2] == ("retained-release", "7")
+    assert events[0][0] == "analytics.etl.pointer_rollback_succeeded"
+    assert events[0][1]["pointer_release_sequence"] == 4
+    assert "pointer_generation" not in events[0][1]
 
 
-def test_rollback_command_returns_failure_on_catalog_cas_conflict(monkeypatch):
+def test_rollback_command_returns_failure_on_pointer_cas_conflict(monkeypatch):
     class Publisher:
-        @classmethod
-        def from_catalog(cls, *_args):
-            return cls()
+        def __init__(self, *_args, **_kwargs):
+            pass
 
-        def rollback_catalog(self, *_args, **_kwargs):
-            raise CatalogConflictError({"stage": "catalog_rollback"})
+        def rollback_pointer(self, *_args, **_kwargs):
+            raise PointerConflictError("conflict")
 
     monkeypatch.setenv("ANALYTICS_ENVIRONMENT", "nonprod")
     monkeypatch.setenv("ANALYTICS_CATALOG_BUCKET", "f3-analytics-nonprod")
@@ -86,12 +84,12 @@ def test_rollback_command_returns_failure_on_catalog_cas_conflict(monkeypatch):
         "argv",
         [
             "analytics-etl",
-            "rollback-catalog",
-            "--release-manifest-uri",
-            "u",
-            "--release-manifest-generation",
-            "1",
-            "--catalog-metageneration",
+            "rollback-pointer",
+            "--product",
+            "pax-vault",
+            "--release-id",
+            "release",
+            "--expected-generation",
             "2",
         ],
     )
@@ -99,19 +97,58 @@ def test_rollback_command_returns_failure_on_catalog_cas_conflict(monkeypatch):
     assert cli.main() == 1
 
 
-def test_catalog_settings_reject_missing_or_wrong_target_without_database_config():
+def test_pointer_settings_reject_missing_or_wrong_bucket_without_database_config():
     with pytest.raises(SettingsError, match="ANALYTICS_CATALOG_BUCKET"):
-        CatalogSettings.from_env({"ANALYTICS_ENVIRONMENT": "nonprod"})
+        PointerSettings.from_env({"ANALYTICS_ENVIRONMENT": "nonprod"})
     with pytest.raises(SettingsError, match="does not match"):
-        CatalogSettings.from_env(
-            {"ANALYTICS_ENVIRONMENT": "production", "ANALYTICS_CATALOG_BUCKET": "f3-analytics-nonprod"}
+        PointerSettings.from_env(
+            {
+                "ANALYTICS_ENVIRONMENT": "production",
+                "ANALYTICS_CATALOG_BUCKET": "f3-analytics-nonprod",
+                "ANALYTICS_PRODUCER_REVISION": "release-abc",
+            }
         )
     assert (
-        CatalogSettings.from_env(
+        PointerSettings.from_env(
             {"ANALYTICS_ENVIRONMENT": "nonprod", "ANALYTICS_CATALOG_BUCKET": "f3-analytics-nonprod"}
-        ).catalog_object
-        == "parquets/catalog.json"
+        ).bucket_name
+        == "f3-analytics-nonprod"
     )
+
+
+def test_run_defaults_to_both_products_and_continues_after_first_failure(monkeypatch):
+    from analytics.materializations import PRODUCTS
+    from analytics.pipeline import BatchRunError
+
+    settings = SimpleNamespace(environment="test")
+    attempted = []
+    run_ids = []
+    selector_products = []
+    logger = SimpleNamespace(info=lambda *args, **kwargs: None, error=lambda *args, **kwargs: None)
+
+    def fake_run(_settings, _client, *, run_id, product, **_kwargs):
+        attempted.append(product)
+        run_ids.append(run_id)
+        if product == PRODUCTS[0]:
+            raise BatchRunError({"dataset": RuntimeError("failure")})
+
+    def select(_names, *, product):
+        selector_products.append(product)
+        if product == PRODUCTS[0]:
+            raise ValueError("Pax Vault SQL unavailable")
+        return ()
+
+    monkeypatch.setattr(cli, "JsonLogger", lambda: logger)
+    monkeypatch.setattr(cli.Settings, "from_env", lambda: settings)
+    monkeypatch.setattr(cli, "_storage_client", lambda: object())
+    monkeypatch.setattr(cli, "select_materializations", select)
+    monkeypatch.setattr("analytics.pipeline.run", fake_run)
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "run"])
+
+    assert cli.main() == 1
+    assert selector_products == list(PRODUCTS)
+    assert attempted == [PRODUCTS[1]]
+    assert len(set(run_ids)) == 1
 
 
 def test_diagnostics_command_logs_completion_on_success(monkeypatch):

@@ -1,380 +1,301 @@
 # Analytics ETL GCP provisioning
 
-This manual bootstrap guide is not live-state validation. Platform, security,
-database, analytics, and consumer owners must approve the exact grants and
-production release. See the [ETL spec](../specs/analytics-parquet-etl.md) for
-the data contract and [ETL operations](ANALYTICS_ETL_OPERATIONS.md) for
-recovery. Use [GCP_APP_SETUP](GCP_APP_SETUP.md) for generic Cloud Run setup and
-shared WIF guidance; do not recreate its shared WIF pool/provider.
+This is a human-reviewed provisioning checklist, not live-state validation.
+Platform, security, database, analytics, and consumer owners must approve the
+actual grants and production release. No IAM commands have been executed, and
+this document does not assert that any role, binding, service account, bucket,
+schedule, or API configuration is present. See the
+[`analytics-parquet-etl` spec](../specs/analytics-parquet-etl.md),
+[`pax-vault-parquet-etl` spec](../specs/pax-vault-parquet-etl.md), and
+[operations guide](ANALYTICS_ETL_OPERATIONS.md) for contracts and gates. Use
+[`GCP_APP_SETUP.md`](GCP_APP_SETUP.md) for shared Cloud Run and WIF setup; do
+not recreate the shared WIF pool/provider.
 
-## Fixed contract
+## Product and environment targets
 
 Both jobs use project `f3data`, region `us-central1`, and Artifact Registry
-repository `cloud-run-builds`. Nonprod is job `analytics-etl-nonprod`, Cloud SQL
-`f3data-nonprod`, database `f3_staging`, and bucket
-`gs://f3-analytics-nonprod`. Production is job `analytics-etl`, Cloud SQL
-`f3data`, database `f3_prod`, and bucket `gs://f3-analytics`. Published objects
-are under `parquets/releases/<run-id>/<dataset>/`; the fixed catalog is
-`parquets/catalog.json`.
-Runtime SAs are `analytics-etl-nonprod@f3data.iam.gserviceaccount.com` and
-`analytics-etl@f3data.iam.gserviceaccount.com`. Nonprod is manual only;
-production is scheduled daily. Jobs have one task, parallelism one, zero task
-retries, and a 60-minute timeout. CI builds once and deploys by digest; it does
-not grant IAM or create schedules.
+repository `cloud-run-builds`.
 
-## 1. Prerequisites and APIs
+| Environment | Job                     | Cloud SQL/database              | Bucket                      |
+| ----------- | ----------------------- | ------------------------------- | --------------------------- |
+| Nonprod     | `analytics-etl-nonprod` | `f3data-nonprod` / `f3_staging` | `gs://f3-analytics-nonprod` |
+| Production  | `analytics-etl`         | `f3data` / `f3_prod`            | `gs://f3-analytics`         |
 
-Use Bash from the repository root with authenticated `gcloud` and `gh`, and an
-operator account authorized for `f3data`, `f3-github`, Cloud SQL, Secret
-Manager, and the buckets. Never create service-account keys. Obtain explicit
-approval for sensitive output and for production load, freshness/SLO,
-retention, encryption, rollback, and consumer access. Confirm both Cloud SQL
-instances and the existing `github-actions` pool and `github` provider in
-`f3-github`; this guide does not claim that they exist.
+The bucket has independent roots and pointers:
 
-```bash
-set -euo pipefail
-PROJECT_ID="f3data"
-REGION="us-central1"
-WIF_PROJECT="f3-github"
-GITHUB_REPOSITORY="F3-Nation/f3-nation"
-NONPROD_JOB="analytics-etl-nonprod"
-PROD_JOB="analytics-etl"
-NONPROD_BUCKET="f3-analytics-nonprod"
-PROD_BUCKET="f3-analytics"
-NONPROD_RUNTIME_SA="analytics-etl-nonprod@${PROJECT_ID}.iam.gserviceaccount.com"
-PROD_RUNTIME_SA="analytics-etl@${PROJECT_ID}.iam.gserviceaccount.com"
-SCHEDULER_SA="analytics-scheduler@${PROJECT_ID}.iam.gserviceaccount.com"
-printf '%s\n' "project=$PROJECT_ID region=$REGION jobs=$NONPROD_JOB,$PROD_JOB"
-```
+| Product     | Exact datasets                                                                                                        | Release prefix                              | Mutable pointer                   |
+| ----------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------- |
+| `pax-vault` | `pv_regions`, `pv_pax`, `pv_kotter`, `pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`, `pv_events` | `<bucket>/pax-vault/releases/<release-id>/` | `<bucket>/pax-vault/current.json` |
+| `analytics` | `event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`                                            | `<bucket>/analytics/releases/<release-id>/` | `<bucket>/analytics/current.json` |
 
-```bash
-gcloud services enable artifactregistry.googleapis.com cloudscheduler.googleapis.com iam.googleapis.com iamcredentials.googleapis.com logging.googleapis.com run.googleapis.com secretmanager.googleapis.com serviceusage.googleapis.com sqladmin.googleapis.com sts.googleapis.com storage.googleapis.com --project="$PROJECT_ID"
-gcloud services enable cloudresourcemanager.googleapis.com iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com --project="$WIF_PROJECT"
-gcloud iam workload-identity-pools describe github-actions --location=global --project="$WIF_PROJECT"
-gcloud iam workload-identity-pools providers describe github --location=global --workload-identity-pool=github-actions --project="$WIF_PROJECT"
-```
+Pax Vault uses `pv-release.v2`; Analytics uses `analytics-release.v1`. Each
+pointer selects only its product release. Runtime `run` defaults to both
+products sequentially, with independent run IDs and pointer CAS; `--product`
+selects one product. Each selected publication must include its exact full
+dataset set. There is no shared catalog, shared product root, or ongoing
+dual-publishing of a legacy pointer. Keep the old serving path/data
+until external consumer owners approve cutover; do not keep publishing both
+after cutover.
 
-## 2. Artifact Registry
+The current jobs are designed with one task, parallelism one, zero task retries,
+and a 60-minute timeout. Nonprod is manual; production is scheduled daily.
+Deployment builds once and promotes an immutable image digest. Application
+deployment does not create IAM grants or schedules. `ANALYTICS_PRODUCER_REVISION`
+is a validated safe slug recorded in the release and pointer; production
+requires it. The pointer operator CLI currently reads the validated bucket
+from `ANALYTICS_CATALOG_BUCKET` despite the legacy variable name.
 
-Create the repository only if absent; never delete/recreate it. The workflow
-uses image `analytics-etl` in this repository.
+## 1. Prerequisites and review
 
-```bash
-gcloud artifacts repositories describe cloud-run-builds --location="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1 || gcloud artifacts repositories create cloud-run-builds --repository-format=docker --location="$REGION" --project="$PROJECT_ID" --description='Cloud Run deployment images'
-```
+Use Bash from the repository root with authenticated `gcloud`/`gh` as approved.
+Never create service-account keys. Confirm the existing project, Cloud SQL
+instances, Artifact Registry, shared WIF pool/provider, and bucket settings
+before any change; this document makes no existence claim. Do not use a naive
+bucket lifecycle age rule capable of deleting `current.json`, a selected
+release, or retained previous data.
 
-## 3. WIF deployers and GitHub environments
+Required release approvals include:
 
-Prefer separate deployment identities. Names are operator choices; they are not
-runtime or Scheduler identities.
+- External consumer compatibility for every serving and rollback-eligible
+  consumer version, followed by consumer-owner cutover approval.
+- Security review of product data, private/event/email sensitivity, consumer
+  access, invocation boundaries, secrets, and object replacement permissions.
+- Source query plans, read volume, sequential source-boundary behavior, load,
+  runtime, and freshness/SLO review for all 13 datasets.
+- Human approval of IAM, bucket encryption/retention, rollback, and the
+  generation-aware cleanup design.
 
-```bash
-NONPROD_DEPLOY_NAME="ANALYTICS-NONPROD-DEPLOY"
-PROD_DEPLOY_NAME="ANALYTICS-PROD-DEPLOY"
-NONPROD_DEPLOY_SA="${NONPROD_DEPLOY_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-PROD_DEPLOY_SA="${PROD_DEPLOY_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-gcloud iam service-accounts create "$NONPROD_DEPLOY_NAME" --display-name='Analytics nonprod GitHub deployer' --project="$PROJECT_ID"
-gcloud iam service-accounts create "$PROD_DEPLOY_NAME" --display-name='Analytics production GitHub deployer' --project="$PROJECT_ID"
-```
+Production release is **BLOCKED**. The focused Phase 2 review passed for
+controlled nonprod testing only; it is not production review or signoff. No
+production IAM/deployment action or live production validation is claimed.
+Synthetic tests do not satisfy production gates.
 
-Grant only approved deployment access: Run deploy, service-account use,
-Service Usage Viewer, and Artifact Registry write. Constrain to named jobs and
-the repository where supported. Production promotion in this same project
-also requires AR read.
+### API, Artifact Registry, and WIF preflight
 
-```bash
-for SA in "$NONPROD_DEPLOY_SA" "$PROD_DEPLOY_SA"; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${SA}" --role=roles/run.admin
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${SA}" --role=roles/iam.serviceAccountUser
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${SA}" --role=roles/serviceusage.serviceUsageViewer
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${SA}" --role=roles/artifactregistry.writer
-done
-WIF_PROJECT_NUMBER="$(gcloud projects describe "$WIF_PROJECT" --format='value(projectNumber)')"
-WIF_PRINCIPAL="principalSet://iam.googleapis.com/projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/attribute.repository/${GITHUB_REPOSITORY}"
-gcloud iam service-accounts add-iam-policy-binding "$NONPROD_DEPLOY_SA" --role=roles/iam.workloadIdentityUser --member="$WIF_PRINCIPAL" --project="$PROJECT_ID"
-gcloud iam service-accounts add-iam-policy-binding "$PROD_DEPLOY_SA" --role=roles/iam.workloadIdentityUser --member="$WIF_PRINCIPAL" --project="$PROJECT_ID"
-```
+Review required APIs in `f3data` (`artifactregistry`, `cloudscheduler`, `iam`,
+`iamcredentials`, `logging`, `run`, `secretmanager`, `serviceusage`, `sqladmin`,
+`sts`, `storage`) and the WIF support APIs in `f3-github`. Enable a missing API
+only after the project owner approves. Check—not recreate—the shared
+`github-actions` WIF pool and `github` provider. Check the `cloud-run-builds`
+Artifact Registry repository in `us-central1`; create it only if platform
+owners approve and it is confirmed absent. Never delete/recreate the repository.
+The image is named `analytics-etl` and is built/promoted by the tagged workflow.
 
-Create the nonprod environment without protection rules. Create/update
-production with the current GitHub user as a required reviewer, then set only
-variables (WIF means no GitHub credential secret).
+GitHub environments are `analytics-nonprod` and `analytics-production`; WIF
+environment variables are `WIF_PROVIDER` and `WIF_SA`. Do not store
+service-account keys. Follow the shared setup guide for provider/repository
+conditions. Deployment identities are not runtime or Scheduler identities. The
+Analytics tagged workflow defaults to staging only (`deploy_prod=false`).
+Enabling production deployment later requires a separate reviewed workflow
+change; do not bypass this default. Do not assume a production environment
+reviewer is currently configured. Verify environment protection at deployment
+time and tie its approval to recorded evidence for the unattended-invocation
+gate below.
 
-```bash
-GH_REPO="$GITHUB_REPOSITORY"
-NONPROD_GH_ENV="analytics-nonprod"
-PROD_GH_ENV="analytics-production"
-WIF_PROVIDER="projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/providers/github"
-gh api "repos/${GH_REPO}/environments/${NONPROD_GH_ENV}" --method PUT
-REVIEWER_ID="$(gh api user -q '.id')"
-[[ "$REVIEWER_ID" =~ ^[0-9]+$ ]]
-gh api "repos/${GH_REPO}/environments/${PROD_GH_ENV}" --method PUT --input - <<EOF
-{
-  "reviewers": [{ "type": "User", "id": ${REVIEWER_ID} }]
-}
-EOF
-gh variable set WIF_PROVIDER --env "$NONPROD_GH_ENV" --repo "$GH_REPO" --body "$WIF_PROVIDER"
-gh variable set WIF_SA --env "$NONPROD_GH_ENV" --repo "$GH_REPO" --body "$NONPROD_DEPLOY_SA"
-gh variable set WIF_PROVIDER --env "$PROD_GH_ENV" --repo "$GH_REPO" --body "$WIF_PROVIDER"
-gh variable set WIF_SA --env "$PROD_GH_ENV" --repo "$GH_REPO" --body "$PROD_DEPLOY_SA"
-```
+### Cloud SQL, database roles, and secrets
 
-The tag trigger is `analytics@*`; CI waits for its checks, builds once, deploys
-nonprod, then reaches the production environment gate.
+Cloud Run must use `/cloudsql/f3data:us-central1:f3data-nonprod` for nonprod and
+`/cloudsql/f3data:us-central1:f3data` for production. A database owner creates
+or verifies one dedicated read-only database login/role per environment. It
+must have no INSERT, UPDATE, DELETE, DDL, ownership, or administrative
+privileges. Review required Cloud SQL connector/client access for the runtime
+identity and verify write denial in nonprod; do not claim the grants exist
+without checking actual IAM and database state.
 
-## 4. Runtime SAs and role matrix
+Secret names are `analytics-etl-nonprod-database-user`,
+`analytics-etl-nonprod-database-password`, `analytics-etl-database-user`, and
+`analytics-etl-database-password`. A human operator provisions/rotates versions
+and grants accessor only to the corresponding runtime identity. Use an
+interactive non-echoing input path for values. Never place values in workflows,
+command arguments, shell history, logs, or source control. Validate nonprod
+after rotation before any production change.
 
-```bash
-gcloud iam service-accounts create analytics-etl-nonprod --display-name='Analytics ETL nonprod runtime' --project="$PROJECT_ID"
-gcloud iam service-accounts create analytics-etl --display-name='Analytics ETL production runtime' --project="$PROJECT_ID"
-```
+## 2. Deployment identities and runtime identities
 
-| Identity           | Minimum grant and scope                                                                                                       | Explicitly excluded                                               |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Nonprod runtime    | Cloud SQL Client on `f3data`; accessor on its two secrets; approved GCS release create/get plus exact catalog metadata update | Production, DB write/DDL/admin, object deletion/content overwrite |
-| Production runtime | Same grants, restricted to production resources and release prefix/catalog object                                             | Nonprod, DB write/DDL/admin, object deletion/content overwrite    |
-| Scheduler          | `roles/run.invoker` on `analytics-etl` only                                                                                   | Storage, secrets, deploy, Scheduler admin                         |
-| PAX Vault consumer | Separate get-only catalog reader and release reader bindings                                                                  | Write, catalog mutation, end-user access                          |
-| GitHub deployer    | Run deploy, SA use, AR build/promote, usage viewer                                                                            | Runtime data, Scheduler admin, Owner/Editor                       |
+GitHub deployment identities are separate from runtime identities. The GitHub
+environments `analytics-nonprod` and `analytics-production` provide WIF settings.
+The production environment is intended to require human approval; verify its
+current protection/reviewer configuration at deployment time rather than
+assuming it is enabled. Runtime identities
+are separate for each environment (the established names are
+`analytics-etl-nonprod@f3data.iam.gserviceaccount.com` and
+`analytics-etl@f3data.iam.gserviceaccount.com`). The Scheduler identity is
+invoker-only for the production job. Do not grant runtime data permissions to
+the deployer or scheduler.
 
-Never grant runtime SAs `roles/editor`, bucket admin, or database admin.
+Use the existing shared WIF configuration and approved least-privilege deploy
+roles. Restrict deployment access to the intended repository, named jobs,
+runtime service accounts, and image repository where supported. Do not grant
+Owner/Editor or runtime bucket/database access to deployment identities.
 
-## 5. Cloud SQL IAM and database roles
+Before a production image deployment, inventory enabled Cloud Scheduler jobs
+and every other unattended invocation path capable of starting the updated
+production `analytics-etl` job. Verify that no enabled path can run it. If one
+exists, either obtain human approval to suspend it and confirm suspension, or
+complete all production release gates before deploying while accepting that an
+immediate run may occur. Attach this evidence and disposition to the GitHub
+production reviewer approval. This documentation does not assert that a
+reviewer, Scheduler suspension, or invocation-path inventory currently exists.
 
-```bash
-for SA in "$NONPROD_RUNTIME_SA" "$PROD_RUNTIME_SA" "$NONPROD_DEPLOY_SA" "$PROD_DEPLOY_SA"; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${SA}" --role=roles/cloudsql.client
-done
-```
+The owner-reviewed bootstrap order is: confirm APIs/repository and target
+resources; create missing nonprod/production runtime identities and separately
+approved deploy/Scheduler identities; provision dedicated read-only database
+roles and matching secret versions; approve exact product-root and pointer IAM;
+configure the GitHub environment WIF values/protection; deploy the immutable
+digest; then separately approve nonprod execution and production schedule. Each
+step is an operator action with its own review. Do not treat a command template
+or this sequence as evidence that any step has run.
 
-The deployers additionally need Service Usage Viewer (already included above’s
-deployment matrix). A database owner must create/verify one dedicated login
-and approved read-only role per database. Exact SQL is intentionally not
-prescribed: schema ownership, table/future-table grants, and migrations are
-human-owned. The roles must have no INSERT, UPDATE, DELETE, DDL, ownership,
-admin privileges, or access to other databases.
+## 3. Required IAM boundaries (not verified)
 
-```text
-NONPROD_LOGIN=<approved_nonprod_database_login>
-NONPROD_READ_ROLE=<approved_nonprod_read_only_role>
-PROD_LOGIN=<approved_prod_database_login>
-PROD_READ_ROLE=<approved_prod_read_only_role>
-# Database owner: apply approved read-only grants to f3_staging and f3_prod.
-```
+The following are permission requirements for security/platform owners to
+validate against the actual GCS API behavior and bucket configuration. They are
+not instructions to execute blanket project/bucket grants.
 
-The workflow uses sockets `/cloudsql/f3data:us-central1:f3data-nonprod` and
-`/cloudsql/f3data:us-central1:f3data`. Verify write denial in nonprod.
+| Principal                 | Required access                                                                                                                                                                                                                                                                                                  | Explicitly excluded                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Runtime producer          | Read-only database role; accessor on only matching environment secrets; `storage.objects.get` and `storage.objects.create` on approved immutable product release prefixes; pointer read/create/content-replacement on only each approved product's `current.json` when the runtime is authorized to publish both | Database write/DDL/admin; release delete or overwrite; unrelated bucket/product access; broad bucket admin |
+| Product consumer          | `storage.objects.get` on that product's fixed pointer and approved release prefix                                                                                                                                                                                                                                | Write, pointer mutation, other product access unless approved, end-user direct access                      |
+| Pointer rollback operator | Separately approved pointer read and exact-key content-replacement permissions; read retained release chain                                                                                                                                                                                                      | Release mutation/deletion; broad bucket update/delete                                                      |
+| Scheduler                 | `roles/run.invoker` on production `analytics-etl` only                                                                                                                                                                                                                                                           | Storage, database, secrets, deploy, Scheduler administration                                               |
+| GitHub deployer           | Reviewed build/deploy and service-account-use permissions                                                                                                                                                                                                                                                        | Runtime data, database, Scheduler administration, Owner/Editor                                             |
 
-## 6. Secret Manager
+`storage.objects.update` is a metadata permission and is **not sufficient** to
+replace pointer content. GCS replacement of an existing object commonly requires
+`storage.objects.create` and may require `storage.objects.delete` in addition to
+`storage.objects.get`, subject to the actual API/bucket semantics. Security must
+test and determine the minimum effective permissions before granting anything.
+If delete is required for CAS replacement, an exact-object condition constrains
+the object name only: IAM cannot require the client to use an
+`if_generation_match` precondition. A delete grant on the exact pointer still
+allows deletion of that object outside the publisher's CAS flow. Security owners
+must explicitly assess and accept that risk, audit the permission, and never
+grant delete on release prefixes or across a whole bucket. Release objects
+remain immutable; only the product's `current.json` is replaced. Record the
+reviewed permission test and effective binding; this guide does not claim
+either has been verified.
 
-Workflow names are nonprod `analytics-etl-nonprod-database-user` and
-`analytics-etl-nonprod-database-password`; production
-`analytics-etl-database-user` and `analytics-etl-database-password`.
-
-```bash
-create_secret_if_missing() { local NAME="$1"; gcloud secrets describe "$NAME" --project="$PROJECT_ID" >/dev/null 2>&1 || gcloud secrets create "$NAME" --replication-policy=automatic --project="$PROJECT_ID"; }
-for SECRET in analytics-etl-nonprod-database-user analytics-etl-nonprod-database-password analytics-etl-database-user analytics-etl-database-password; do create_secret_if_missing "$SECRET"; done
-SECRET_NAME="<ONE_SECRET_NAME_FROM_TABLE>"
-read -r -s -p 'Approved secret value (will not echo): ' SECRET_VALUE; printf '\n'
-printf '%s' "$SECRET_VALUE" | gcloud secrets versions add "$SECRET_NAME" --data-file=- --project="$PROJECT_ID"
-unset SECRET_VALUE SECRET_NAME
-```
-
-Grant accessor only on matching secrets (repeat with the production pair and
-`PROD_RUNTIME_SA`):
-
-```bash
-for SECRET in analytics-etl-nonprod-database-user analytics-etl-nonprod-database-password; do
-  gcloud secrets add-iam-policy-binding "$SECRET" --member="serviceAccount:${NONPROD_RUNTIME_SA}" --role=roles/secretmanager.secretAccessor --project="$PROJECT_ID"
-done
-```
-
-Never place values in workflow files, this document, logs, shell history, or
-source control. After rotation, add a version, validate nonprod, approve
-production, then revoke the old version.
-
-## 7. GCS buckets and prefix IAM
-
-Verify owner-approved location, retention, encryption/key, lifecycle, and
-existence. Do not create absent buckets with guessed settings.
-
-```bash
-gcloud storage buckets describe "gs://$NONPROD_BUCKET" --project="$PROJECT_ID"
-gcloud storage buckets describe "gs://$PROD_BUCKET" --project="$PROJECT_ID"
-```
-
-The publisher needs reviewed `storage.objects.get` and `create` on release
-paths, but not delete or content overwrite. No bucket-level object listing is
-required; consumers resolve objects from the pinned manifests.
-`storage.objects.update` is needed only for metadata patches to the fixed
-catalog object. Predefined `roles/storage.objectUser` is broader than the
-contract. Platform must create separate custom roles omitting delete and broad
-object update.
-
-```bash
-GCS_PUBLISHER_ROLE_ID="analyticsReleaseAccess"
-PUBLISHER_ROLE="projects/${PROJECT_ID}/roles/${GCS_PUBLISHER_ROLE_ID}"
-gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" \
-  --project="$PROJECT_ID" \
-  --member="serviceAccount:${NONPROD_RUNTIME_SA}" \
-  --role="$PUBLISHER_ROLE" \
-  --condition='title=Analytics nonprod release objects,expression=resource.name.startsWith("projects/_/buckets/f3-analytics-nonprod/objects/parquets/releases/")'
-gcloud storage buckets add-iam-policy-binding "gs://$PROD_BUCKET" \
-  --project="$PROJECT_ID" \
-  --member="serviceAccount:${PROD_RUNTIME_SA}" \
-  --role="$PUBLISHER_ROLE" \
-  --condition='title=Analytics production release objects,expression=resource.name.startsWith("projects/_/buckets/f3-analytics/objects/parquets/releases/")'
-```
-
-Grant catalog metadata update separately, with an exact object condition; do
-not add update to the release-prefix binding:
-
-```bash
-PUBLISHER_CATALOG_ROLE="projects/${PROJECT_ID}/roles/analyticsCatalogMetadata"
-gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" \
-  --member="serviceAccount:${NONPROD_RUNTIME_SA}" --role="$PUBLISHER_CATALOG_ROLE" \
-  --condition='title=Analytics nonprod catalog only,expression=resource.name=="projects/_/buckets/f3-analytics-nonprod/objects/parquets/catalog.json"'
-gcloud storage buckets add-iam-policy-binding "gs://$PROD_BUCKET" \
-  --member="serviceAccount:${PROD_RUNTIME_SA}" --role="$PUBLISHER_CATALOG_ROLE" \
-  --condition='title=Analytics production catalog only,expression=resource.name=="projects/_/buckets/f3-analytics/objects/parquets/catalog.json"'
-```
-
-`analyticsCatalogMetadata` is an owner-created custom role containing only
-catalog get/create/update permissions required for metadata CAS. Neither role
-contains delete permission or permits replacing existing release content.
-
-Grant PAX Vault two separate get-only custom reader bindings: one exact
-`parquets/catalog.json` object and one `parquets/releases/` prefix. Do not grant
-`storage.objects.list` or use a broad bucket viewer role. The exact resource
-conditions are:
+The exact conditional resource names to evaluate are:
 
 ```text
-projects/_/buckets/<bucket>/objects/parquets/catalog.json
-projects/_/buckets/<bucket>/objects/parquets/releases/
+projects/_/buckets/f3-analytics-nonprod/objects/pax-vault/current.json
+projects/_/buckets/f3-analytics-nonprod/objects/analytics/current.json
+projects/_/buckets/f3-analytics/objects/pax-vault/current.json
+projects/_/buckets/f3-analytics/objects/analytics/current.json
+projects/_/buckets/<environment-bucket>/objects/pax-vault/releases/
+projects/_/buckets/<environment-bucket>/objects/analytics/releases/
 ```
 
-Security must approve uniform access, encryption, audit retention, and
-GC/retention. Consumers cannot mutate catalog metadata.
+The runtime CLI default runs both products, so its approved identity needs only
+the reviewed operations for both roots and both exact pointer keys. If policy
+uses separate product identities, configure an explicit product-specific
+execution boundary before assigning narrower grants. Never grant
+`storage.objects.update` or `storage.objects.delete` over an entire bucket as a
+shortcut.
 
-For the approved PAX Vault identity, grant those two get-only roles separately
-(the roles contain `storage.objects.get` and no list permission):
+Consumers resolve paths from pointers/manifests and generally need object reads,
+not bucket listing. Verify any additional client-required permissions rather
+than granting broad predefined storage roles. Operators must review whether
+their rollback tooling has precisely the required pointer replacement access.
 
-```bash
-PAX_VAULT_SA="<approved-pax-vault-service-account>"
-PAX_CATALOG_READER_ROLE="projects/${PROJECT_ID}/roles/analyticsCatalogReader"
-PAX_RELEASE_READER_ROLE="projects/${PROJECT_ID}/roles/analyticsReleaseReader"
-gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" \
-  --member="serviceAccount:${PAX_VAULT_SA}" --role="$PAX_CATALOG_READER_ROLE" \
-  --condition='title=PAX catalog read,expression=resource.name=="projects/_/buckets/f3-analytics-nonprod/objects/parquets/catalog.json"'
-gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" \
-  --member="serviceAccount:${PAX_VAULT_SA}" --role="$PAX_RELEASE_READER_ROLE" \
-  --condition='title=PAX release read,expression=resource.name.startsWith("projects/_/buckets/f3-analytics-nonprod/objects/parquets/releases/")'
-```
+Database owners create/verify distinct nonprod/production login roles with no
+INSERT, UPDATE, DELETE, DDL, ownership, administrative privilege, or unrelated
+database access. Cloud Run uses approved Cloud SQL Unix sockets. Security owns
+secret versioning, network path, encryption/key ownership, and audit retention.
+Never place credential values in this document, workflow files, logs, or source
+control.
 
-Repeat the two bindings for the production bucket only after the production
-consumer gate. Replace the placeholder identity with the approved external
-owner's identity; do not grant these roles to the producer runtime account.
+## 4. Retention and garbage collection
 
-## 8. Ordered consumer/IAM migration
+Provisioning requirements:
 
-This migration is human-approved and must be performed separately for nonprod
-and production. PAX Vault owners own the consumer rollout; analytics/platform
-owners own producer validation. Retain legacy consumer-read access until the
-consumer has proven the new catalog chain; the broad legacy runtime binding is
-removed earlier, before isolation validation.
+- Current and retained previous valid releases: at least one day.
+- Ordinary completed releases: at least 14 days.
+- Abandoned/incomplete prefixes: minimum age of 14 days before cleanup is
+  considered.
+- Never delete the current release or any retained rollback-eligible release.
 
-1. **Preflight PAX Vault.** With the catalog absent, verify that the consumer
-   can use its approved legacy pointer compatibility path and that it can read
-   a generation-pinned release manifest and its nine dataset manifests. Record
-   the compatibility result and the external owner.
-2. **Install replacement bindings.** Add the release-data get/create binding and the
-   exact-catalog get/create/update binding above. Do not grant update or delete
-   on release data; do not grant bucket object listing.
-3. **Remove broad runtime access.** Remove the runtime service account's broad
-   legacy `analyticsBucketAccess` binding now, before producer execution or
-   permission validation. Keep any legacy consumer read access needed for the
-   compatibility period. Preserve the prior IAM policy as the approved,
-   reversible rollback artifact.
-4. **Validate permissions.** As the producer and consumer identities, verify
-   allowed/denied operations against both environments. Confirm catalog
-   metadata update is limited to
-   `projects/_/buckets/<bucket>/objects/parquets/catalog.json`.
-5. **Deploy and run nonprod.** Deploy the immutable producer, execute one
-   complete nonprod batch, and verify that `release.json` is written last and
-   catalog CAS succeeds.
-6. **Validate the pinned chain.** Independently read catalog metadata, fetch
-   the pinned release manifest generation, and verify exactly nine pinned
-   dataset manifests and their object generations/checksums.
-7. **Switch PAX Vault.** After consumer-owner approval, switch discovery to
-   catalog metadata and monitor one complete consumption cycle.
-8. **Remove legacy consumer access when safe.** After the switch and
-   verification, remove only obsolete legacy consumer access, if approved.
+Do **not** set a naive object-age lifecycle deletion rule over either product
+root or bucket: age alone cannot identify the live pointer or rollback chain.
+Automated garbage collection is not implemented. Any future cleanup must be a
+separately privileged, generation-aware process with explicit human approval,
+and must resolve/preserve both product pointers and retained previous releases.
+The publisher does not delete releases.
 
-If migration fails, stop at the last safe step and restore the prior runtime or
-consumer IAM binding from the recorded policy snapshot, with human approval.
-This rollback changes IAM only; it does not overwrite or delete any GCS object.
-If catalog metadata was already activated, use the documented generation-pinned
-metadata-CAS rollback and retain its source high-water value.
+## 5. Scheduler
 
-## 9. Jobs and production Scheduler
+Nonprod has no schedule. Production's approved daily schedule is provisioned
+separately from application deployment. A human supplies the reviewed cron,
+IANA timezone, and invoker identity; do not invent defaults. The existing
+`scripts/provision-analytics-scheduler.sh` is an operator tool, not part of the
+ETL job. Before enabling it, validate the OAuth `jobs:run` target, zero retry
+policy, identity, timezone, and a completed execution. Record the approver,
+change, and validation evidence. Never provision IAM or schedules as a side
+effect of deploying an application image.
 
-The tagged workflow supplies runtime SA, SQL settings, secrets, resources,
-timeout, and retries. Inspect after deploy:
+## 6. Staging, cutover, and recovery gates
 
-```bash
-gcloud run jobs describe "$NONPROD_JOB" --region="$REGION" --project="$PROJECT_ID"
-gcloud run jobs describe "$PROD_JOB" --region="$REGION" --project="$PROJECT_ID"
-gcloud iam service-accounts create analytics-scheduler --display-name='Analytics ETL production scheduler' --project="$PROJECT_ID"
-gcloud run jobs add-iam-policy-binding "$PROD_JOB" --region="$REGION" --project="$PROJECT_ID" --member="serviceAccount:${SCHEDULER_SA}" --role=roles/run.invoker
-```
+Before production approval, the owner-run staging exercise must cover both
+products and verify exact dataset membership, independent bucket-root paths,
+generation-pinned reads/checksums, create-only immutable writes, canonical
+manifest chains, golden replay, pointer CAS first-create/update races, and
+retained-previous rollback. The checked-in synthetic integration test uses real
+DuckDB Parquet and a fake generation-aware GCS client; it is not real GCS/IAM or
+external-consumer evidence.
 
-Supply an approved cron and IANA timezone; there is no default. The repository
-script is idempotent, creates/updates an OAuth POST to `jobs:run`, and sets zero
-retries.
+Use this human-reviewed order for each environment/product:
 
-```bash
-CRON='<APPROVED_DAILY_CRON>'
-TIME_ZONE='<APPROVED_IANA_TIME_ZONE>'
-bash scripts/provision-analytics-scheduler.sh --project="$PROJECT_ID" --region="$REGION" --job="$PROD_JOB" --service-account="$SCHEDULER_SA" --cron="$CRON" --time-zone="$TIME_ZONE"
-bash scripts/provision-analytics-scheduler.sh --project="$PROJECT_ID" --region="$REGION" --job="$PROD_JOB" --service-account="$SCHEDULER_SA" --cron="$CRON" --time-zone="$TIME_ZONE" --status
-```
+1. Before any production deployment, inventory enabled Cloud Scheduler jobs
+   and every other unattended invocation path capable of starting the updated
+   production `analytics-etl` job. Verify no enabled path can trigger it. If one
+   exists, either obtain human approval to suspend it and confirm suspension, or
+   complete all production release gates before deploying while accepting an
+   immediate run. Tie production environment reviewer approval to this recorded
+   evidence and disposition; do not assume a reviewer is currently configured.
+2. The Analytics tagged workflow defaults to staging-only (`deploy_prod=false`).
+   Enabling production deployment later requires a separate reviewed workflow
+   change; do not bypass that default.
+3. Consumer owners document the serving release and verify read support for the
+   proposed contract/schema before the pointer is exposed.
+4. Security approves product-specific consumer reads and producer access to
+   only approved release roots and exact pointer keys. Validate allowed and
+   denied operations against the target bucket; do not rely on role names alone.
+5. Run one complete staging release and independently validate every manifest,
+   generation, checksum, schema, object count, candidate golden, pointer CAS,
+   and race/recovery outcome.
+6. Consumer owners validate staging/activation against the pointer chain and
+   give explicit cutover approval. Keep the previous serving path/data intact
+   through this step.
+7. Switch the consumer to the product pointer. Do not dual-publish a legacy
+   pointer after the switch. Remove obsolete legacy consumer access only after
+   separate human approval and successful observation of the new serving path.
 
-Pause/resume only by approved decision; required arguments remain mandatory:
+If the consumer cannot read the new contract, do not advance production
+`current.json`; retain the old serving path until remediation and re-review.
+After cutover, pointer rollback is a separate operator action to the validated
+retained previous release, not a reason to restore concurrent legacy publishing.
 
-```bash
-bash scripts/provision-analytics-scheduler.sh --project="$PROJECT_ID" --region="$REGION" --job="$PROD_JOB" --service-account="$SCHEDULER_SA" --cron="$CRON" --time-zone="$TIME_ZONE" --pause
-bash scripts/provision-analytics-scheduler.sh --project="$PROJECT_ID" --region="$REGION" --job="$PROD_JOB" --service-account="$SCHEDULER_SA" --cron="$CRON" --time-zone="$TIME_ZONE" --resume
-```
+The old serving path remains available until external consumer owners validate
+and sign off on the product pointer chains and cutover. After approval, cut over
+to the selected product pointer without ongoing dual-publishing. Rollback is a
+validated CAS to the pointer's retained previous release only; sequence
+increments and source high-water order does not decrease. Preserve release
+content. Record product, previous/current release IDs, pointer generations,
+sequence, approval, and outcome.
 
-Nonprod has no schedule. After approval, execute manually and record approver,
-reason, digest/revision, start time, and outcome:
+## 7. Current status and ownership
 
-```bash
-gcloud run jobs execute "$NONPROD_JOB" --project="$PROJECT_ID" --region="$REGION" --wait
-```
+Production publication remains **BLOCKED** until external consumer
+compatibility, security/IAM, source-load, unattended-invocation, staged
+race/rollback, retention, and cutover gates are explicitly approved. The focused
+Phase 2 review passed for controlled nonprod testing only; it is not production
+review or signoff. No production IAM/deployment action or live production
+validation is claimed.
 
-## 10. Verification and ownership
-
-- [ ] Owners verified APIs, shared WIF repository condition, AR repository,
-      fixed targets, immutable digest promotion, and GitHub protection.
-- [ ] Deployers cannot read runtime data; runtime SAs are distinct and scoped
-      to their own SQL, secrets, and GCS prefix; Scheduler is invoker-only.
-- [ ] Database owner approved read-only roles, measured all nine nonprod query
-      plans/read volume, and demonstrated write/DDL/admin denial.
-- [ ] Secret versions/access and bucket prefix/no-delete conditions are checked
-      without exposing values; consumer access and alerts are approved.
-- [ ] Nonprod run verifies socket access, validation, immutable release objects,
-      last-object release commit, catalog metadata CAS/source ordering,
-      failure isolation, and alerts.
-- [ ] Scheduler OAuth target, identity, cron/timezone, zero retries, and a
-      completed execution are checked separately before production.
-- [ ] Approvals, digest, evidence, rollback, retention, and recovery decisions
-      are recorded. These steps do not claim live validation.
-
-CI/CD owns CI gates, amd64 build, AR push, digest resolution/promotion, Cloud
-Run Job deployment, and the GitHub production approval gate. Platform,
-security, database, analytics, and consumer owners own APIs, WIF, IAM, database
-roles, secrets, buckets, alerts, load/SLO, and release approval. Operators own
-approved nonprod execution, Scheduler provisioning/pause/resume/status,
-evidence, and recovery. Application deployment must not create IAM or schedules;
-green CI is not live-state validation.
+CI/CD owns tests, image build/digest promotion, and Cloud Run deployment under
+the GitHub environment gate. Platform/security/database/analytics/consumer
+owners own actual IAM, database roles, secrets, bucket controls, source/load and
+security reviews, and release approval. Operators own approved nonprod runs,
+separately approved Scheduler provisioning, evidence, and recovery. Provisioning
+review must verify actual resource state; documentation and green synthetic
+tests are not that verification.

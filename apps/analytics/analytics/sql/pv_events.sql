@@ -27,7 +27,9 @@ org_chain AS (
     FROM org_ancestors GROUP BY source_id
 ),
 events AS (
-    SELECT ei.id, ei.start_date, ei.name, ei.pax_count, ei.fng_count, ei.org_id, ei.is_active, ei.meta,
+    SELECT ei.id, ei.start_date, ei.name, ei.description, ei.preblast, ei.preblast_rich,
+           ei.backblast, ei.backblast_rich, CAST(ei.meta AS JSON) AS meta,
+           ei.pax_count, ei.fng_count, ei.org_id, ei.is_active,
            c.* EXCLUDE (source_id)
     FROM pg.public.event_instances ei
     JOIN org_chain c ON c.source_id = ei.org_id
@@ -100,6 +102,8 @@ attendance_lists AS (
 )
 SELECT p.refreshed_at, e.id AS event_id, e.start_date AS event_date, e.name AS event_name,
        e.pax_count, e.fng_count,
+       e.description, e.preblast, CAST(e.preblast_rich AS JSON) AS preblast_rich,
+       e.backblast, CAST(e.backblast_rich AS JSON) AS backblast_rich, e.meta,
        e.ao_org_id, e.ao_name, e.region_org_id, e.region_name,
        e.area_org_id, e.area_name, e.territory_org_id, e.territory_name, e.sector_org_id, e.sector_name,
        COALESCE(et.first_f_ind, 0) AS first_f_ind, COALESCE(et.second_f_ind, 0) AS second_f_ind,

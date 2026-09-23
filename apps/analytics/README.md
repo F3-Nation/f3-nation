@@ -1,14 +1,27 @@
-# Analytics region-roster ETL
+# Analytics DuckDB/Parquet ETL
 
-The analytics job reads PostgreSQL through DuckDB's read-only PostgreSQL
-attachment, writes Parquet, and publishes one immutable nine-dataset batch to
-GCS. Objects and dataset manifests live under
-`parquets/releases/<run-id>/<dataset>/`; `release.json` is written last as the
-commit record. A fixed `parquets/catalog.json` has immutable empty content and
-metadata-only, metageneration-CAS discovery fields. There are no per-dataset
-leases or `current.json` pointers.
+The CLI publishes two independent products to the configured GCS bucket. Pax
+Vault contains exactly nine datasets (`pv_regions`, `pv_pax`, `pv_kotter`,
+`pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`,
+`pv_events`) beneath `pax-vault/releases/<release-id>/` and uses only
+`pax-vault/current.json`. Analytics contains exactly four datasets
+(`event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`)
+beneath `analytics/releases/<release-id>/` and uses only
+`analytics/current.json`. Each product has its own release IDs, contract,
+immutable manifests, pointer, sequence, and retention. A `release.json` and all
+dataset objects are validated before the one product pointer is replaced by
+GCS object-generation CAS; there is no shared catalog or cross-product root.
+
+`analytics-etl run` without `--product` runs Pax Vault and Analytics separately,
+with separate run IDs and pointers. Choose one explicitly with
+`--product=pax-vault` or `--product=analytics`. A publication run must include
+the exact complete dataset set for the selected product; materialization
+subsets are not publishable. `export-local` retains its explicit
+`--product` selection and is not a publication path.
+
 DuckDB's PostgreSQL extension is loaded from an explicit prebundled path; the
-runtime never runs `INSTALL`.
+runtime never runs `INSTALL`. Source reads are sequential per dataset and are
+not a shared database snapshot.
 
 The ETL disables DuckDB PostgreSQL filter pushdown as a read-only correctness
 workaround for the extension's `Unsupported table filter type` compatibility
@@ -21,26 +34,32 @@ never accepted as environment or CLI output targets.
 `local` and `test` are explicit nonprod aliases only. Cloud Run uses the
 matching Cloud SQL Unix socket; local connectivity requires separate operator
 approval.
+`ANALYTICS_PRODUCER_REVISION` is a validated safe slug recorded in release and
+pointer metadata; production configuration requires it.
 
-Only the exact approved nine-dataset registry may publish or advance the
-global catalog; subset runs are rejected before source access. If a dataset or
-validation fails, no release or catalog metadata is committed. Reruns create a
-new immutable run; lifecycle policy cleans unreachable staged objects.
+The product pointer is the only mutable publication object. Consumers resolve
+one pointer, then read its pinned release manifest, dataset manifests, Parquet,
+and candidate count goldens by generation. A stale source-order candidate is
+rejected; rollback is limited to the validated retained previous release and
+advances pointer sequence without lowering source high-water order. See
+[`docs/ANALYTICS_ETL_OPERATIONS.md`](../../docs/ANALYTICS_ETL_OPERATIONS.md) for
+the operator procedure and retention/IAM requirements.
 
-Consumers read catalog metadata, retrieve the pinned release manifest
-generation, then consume exactly its nine pinned dataset manifests and listed
-object generations. Source order is the logical batch-start ordering value,
-not a database-wide snapshot; it is monotonic and stale runs fail safely. A human
-rollback may select the retained previous generation-pinned release through the
-explicit catalog metadata-CAS operation, retaining the source high-water mark.
-PAX Vault compatibility and rollout are external consumer-owner dependencies
-and must be verified before catalog activation.
+Publication in production is **blocked**. The focused Phase 2 review passed for
+controlled nonprod testing only; it is not a production review or signoff. No
+production IAM/deployment action or live production validation is claimed.
+External consumer compatibility/security signoff, source-plan/load review,
+production IAM, staging race/rollback validation, unattended-invocation review,
+and consumer cutover remain release gates. Keep the prior serving path and data
+until consumer owners sign off; after cutover, do not continue dual-publishing
+pointers. A synthetic DuckDB/fake-GCS integration test is not live SQL, IAM, or
+GCS evidence.
 
 ## Local testing (safe and offline by default)
 
 The normal local path does not need cloud credentials, a database, Cloud SQL,
 Google ADC, or a DuckDB extension. It uses synthetic DuckDB fixtures and
-mocked GCS client. Prerequisites are Python 3.12+, `uv`, and a
+mocked GCS client. Prerequisites are Python 3.13+, `uv`, and a
 checkout of this repository. From the repository root, install dependencies and
 run the unit tests and lint:
 
@@ -61,7 +80,7 @@ approved datasets `pv_kotter` and `pv_events` only. It loads each production
 SQL resource once into a temporary DuckDB table, copies only that table to a
 short-lived local Parquet file, and reads the file back using a fresh
 read-only PostgreSQL-attached connection per dataset. It never creates a GCS
-client, publishes, commits a catalog, or runs the ETL pipeline:
+client, publishes, commits a product pointer, or runs the ETL pipeline:
 
 ```bash
 ANALYTICS_ENVIRONMENT=local \
@@ -168,7 +187,7 @@ local-parquet phase. Each successful phase emits a fixed-context
 `diagnostic_phase_succeeded` event; failures emit `diagnostic_phase_failed`
 with only the probe, phase, sample limit, and exception type.
 
-Diagnostics never create a GCS client, publisher, release, or catalog object,
+Diagnostics never create a GCS client, publisher, release, or pointer object,
 and never call the ETL pipeline or materialization code. Probe failures are
 isolated by fresh connections, so one failed phase does not prevent later
 probes. Logs contain only fixed probe/phase context, counts, the source sample
@@ -182,7 +201,7 @@ connection. It requires `ANALYTICS_ENVIRONMENT=local`, a validated local
 PostgreSQL configuration, and an existing absolute output directory that is
 not a symlink. Each invocation creates a unique persistent run directory below
 that directory; `--materialization` may be repeated and is registry-validated.
-It never creates a GCS client, publisher, or catalog publication.
+It never creates a GCS client, publisher, or pointer publication.
 The destination must have no group or other permissions (`chmod 700`); the CLI
 rejects permissive directories.
 
@@ -203,8 +222,11 @@ to run the publishing `run` command.
 ## Optional live end-to-end run
 
 This is a publication test, not a harmless sandbox run. A local CLI `run`
-reads the approved nonprod database and publishes to the approved nonprod GCS
-prefix. Run it only with explicit approval from
+reads the approved nonprod database and publishes separate releases/pointers
+under the approved nonprod product roots. Without `--product` it runs both
+products in sequence, each with its own release ID and CAS. Add
+`--product=pax-vault` or `--product=analytics` to run one product only. Run it
+only with explicit approval from
 the responsible security/platform and analytics operators. It requires real
 read-only PostgreSQL credentials, approved database connectivity, a real signed
 DuckDB 1.5.5 `postgres_scanner` extension at the configured version/platform
@@ -324,7 +346,8 @@ ANALYTICS_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/analytics.env.XXXXXX")"
 trap 'rm -f "$ANALYTICS_ENV_FILE"' EXIT
 cp apps/analytics/.env.example "$ANALYTICS_ENV_FILE"
 # Edit "$ANALYTICS_ENV_FILE"; set the two absolute DuckDB paths from above,
-# set the approved nonprod values, and do not commit this file.
+# set the approved nonprod values and a validated ANALYTICS_PRODUCER_REVISION
+# where required, and do not commit this file.
 unset ANALYTICS_POSTGRES_SOCKET_DIR
 set -a; . "$ANALYTICS_ENV_FILE"; set +a
 unset ANALYTICS_POSTGRES_SOCKET_DIR
@@ -352,7 +375,7 @@ Verify the targets remain exactly the approved nonprod values, then run:
 ANALYTICS_ENVIRONMENT=local \
   uv --directory apps/analytics run analytics-etl preflight
 ANALYTICS_ENVIRONMENT=local \
-  uv --directory apps/analytics run analytics-etl run
+  uv --directory apps/analytics run analytics-etl run --product=pax-vault
 ```
 
 The local CLI uses the current checkout and the caller's ADC; it is not the
@@ -372,19 +395,31 @@ Cloud Run execution is a separate operation from running the local CLI.
 
 Before enabling production:
 
-1. Run `actionlint` for the deployment workflows.
-2. Create the approved nonprod/production runtime identities, Scheduler invoker
+1. The Analytics tagged deployment is staging-only by default
+   (`deploy_prod=false`). Enabling production deployment later requires a
+   separate reviewed workflow change; do not bypass that default.
+2. Before any production image deployment, inventory enabled Cloud Scheduler
+   jobs and every other unattended invocation path that can trigger the updated
+   `analytics-etl` job. Verify no enabled path can run it. If one exists, either
+   obtain human approval to suspend it and confirm suspension, or complete all
+   production release gates before deploying while accepting that it may run
+   immediately. Tie production GitHub environment reviewer approval to recorded
+   evidence of this check and its disposition. Do not assume a reviewer is
+   currently configured; verify the environment policy.
+3. Run `actionlint` for the deployment workflows.
+4. Create the approved nonprod/production runtime identities, Scheduler invoker
    identity, read-only database roles, Secret Manager versions, and narrowly
    scoped GCS IAM bindings. See
    [`docs/ANALYTICS_ETL_OPERATIONS.md`](../../docs/ANALYTICS_ETL_OPERATIONS.md).
-3. Deploy and manually execute `analytics-etl-nonprod`; verify Unix-socket
+5. Deploy and manually execute `analytics-etl-nonprod`; verify Unix-socket
    access, database write denial, immutable release objects, last-object
-   `release.json` commit, catalog metadata CAS, and source-order behavior.
-4. Verify failed-release, stale-run, rollback, and alert handling with the configured log
+   `release.json` validation, product-specific pointer generation CAS, and
+   source-order behavior.
+6. Verify failed-release, stale-run, rollback, and alert handling with the configured log
    alerts before approving production.
-5. Provision the production Scheduler at `0 6 * * *` UTC with
-   `scripts/provision-analytics-scheduler.sh`, then confirm its OAuth dispatch
-   and the completed Cloud Run execution separately.
+7. After human approval of the daily cron and timezone, provision the production
+   Scheduler with `scripts/provision-analytics-scheduler.sh`, then confirm its
+   OAuth dispatch and the completed Cloud Run execution separately.
 
 ## Docker
 

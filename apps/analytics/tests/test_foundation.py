@@ -34,6 +34,39 @@ def extension_env(tmp_path):
 def test_settings_validate_paths(tmp_path):
     settings = Settings.from_env(extension_env(tmp_path))
     assert settings.environment == "test"
+    assert settings.producer_revision == "unknown"
+    assert (
+        Settings(
+            settings.environment,
+            settings.extension_directory,
+            settings.postgres_extension_path,
+            settings.postgres_socket_dir,
+            settings.postgres_host,
+            settings.postgres_port,
+            settings.postgres_user,
+            settings.postgres_password,
+            settings.postgres_database,
+        ).producer_revision
+        == "unknown"
+    )
+
+
+def test_settings_validate_producer_revision_and_require_it_in_production(tmp_path):
+    values = extension_env(tmp_path)
+    values["ANALYTICS_PRODUCER_REVISION"] = "release-abc.1"
+    assert Settings.from_env(values).producer_revision == "release-abc.1"
+
+    values["ANALYTICS_PRODUCER_REVISION"] = "../unsafe"
+    with pytest.raises(SettingsError, match="safe slug"):
+        Settings.from_env(values)
+
+    production = extension_env(tmp_path) | {
+        "ANALYTICS_ENVIRONMENT": "production",
+        "ANALYTICS_POSTGRES_SOCKET_DIR": "/cloudsql/f3data:us-central1:f3data",
+        "ANALYTICS_POSTGRES_DATABASE": "f3_prod",
+    }
+    with pytest.raises(SettingsError, match="required in production"):
+        Settings.from_env(production)
 
 
 def test_settings_reject_missing_extension(tmp_path):
@@ -70,7 +103,11 @@ def test_settings_derive_publication_targets_from_registry(tmp_path):
     from analytics.materializations import MATERIALIZATION_REGISTRY
 
     assert settings.target(MATERIALIZATION_REGISTRY["pv_regions"]) == (
-        "gs://f3-analytics-nonprod/parquets/pv_regions",
+        "gs://f3-analytics-nonprod/pax-vault/pv_regions",
+        "",
+    )
+    assert settings.target(MATERIALIZATION_REGISTRY["event_info"]) == (
+        "gs://f3-analytics-nonprod/analytics/event_info",
         "",
     )
 
@@ -136,6 +173,7 @@ def test_production_rejects_tcp_configuration(tmp_path):
         {
             "ANALYTICS_ENVIRONMENT": "production",
             "ANALYTICS_POSTGRES_DATABASE": "f3_prod",
+            "ANALYTICS_PRODUCER_REVISION": "release-abc.1",
             "ANALYTICS_POSTGRES_HOST": "localhost",
             "ANALYTICS_POSTGRES_PORT": "5433",
         }
@@ -152,9 +190,10 @@ def test_production_target_is_distinct_and_socket_pinned(tmp_path):
             "ANALYTICS_ENVIRONMENT": "production",
             "ANALYTICS_POSTGRES_SOCKET_DIR": "/cloudsql/f3data:us-central1:f3data",
             "ANALYTICS_POSTGRES_DATABASE": "f3_prod",
+            "ANALYTICS_PRODUCER_REVISION": "release-abc.1",
         }
     )
-    assert Settings.from_env(values).environment == "production"
+    assert Settings.from_env(values).producer_revision == "release-abc.1"
     values["ANALYTICS_ENVIRONMENT"] = "Prod!"
     with pytest.raises(SettingsError):
         Settings.from_env(values)
@@ -547,7 +586,9 @@ def test_cli_batch_failure_has_deterministic_structured_event(monkeypatch, tmp_p
             )
         ),
     )
-    monkeypatch.setattr("sys.argv", ["analytics-etl", "run", "--materialization", "pv_regions"])
+    monkeypatch.setattr(
+        "sys.argv", ["analytics-etl", "run", "--product", "pax-vault", "--materialization", "pv_regions"]
+    )
 
     assert main() == 1
     stderr = capsys.readouterr().err

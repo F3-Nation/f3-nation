@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import argparse
 import os
-from typing import Mapping
+from datetime import datetime, timezone
+from typing import Mapping, cast
 
 from google.cloud import storage  # type: ignore[import-untyped]
 from google.cloud.storage import Client as StorageClient  # type: ignore[import-untyped]
 
 from .duckdb import connect
 from .logging import JsonLogger
-from .materializations import select_materializations
+from .materializations import PRODUCTS, select_materializations
 from .publication import GcsPublisher
 from .run_id import RunId
-from .settings import CatalogSettings, Settings
+from .settings import PointerSettings, Settings
 
 
 def cloud_run_context(environ: Mapping[str, str]) -> dict[str, str]:
@@ -38,6 +39,8 @@ def main() -> int:
     preflight = commands.add_parser("preflight", help="validate configuration")
     run_parser = commands.add_parser("run", help="publish approved materializations")
     export_parser = commands.add_parser("export-local", help="write approved materializations to local disk")
+    run_parser.add_argument("--product", choices=PRODUCTS)
+    export_parser.add_argument("--product", choices=PRODUCTS, default="pax-vault")
     commands.add_parser("diagnostics", help="run bounded read-only ETL diagnostics")
     full_query_parser = commands.add_parser(
         "diagnostics-full-query", help="run approved full-query read-only diagnostics"
@@ -50,10 +53,10 @@ def main() -> int:
     )
     commands.add_parser("diagnostics-staged-events", help="run approved staged pv_events diagnostic")
     commands.add_parser("diagnostics-ctas-events", help="run approved CTAS pv_events diagnostic")
-    rollback_parser = commands.add_parser("rollback-catalog", help="CAS-select the retained previous release")
-    rollback_parser.add_argument("--release-manifest-uri", required=True)
-    rollback_parser.add_argument("--release-manifest-generation", required=True)
-    rollback_parser.add_argument("--catalog-metageneration", required=True)
+    rollback_parser = commands.add_parser("rollback-pointer", help="CAS-select the retained previous release")
+    rollback_parser.add_argument("--product", choices=PRODUCTS, required=True)
+    rollback_parser.add_argument("--expected-generation", required=True)
+    rollback_parser.add_argument("--release-id", required=True)
     for command_parser in (preflight, run_parser, export_parser):
         command_parser.add_argument(
             "--materialization", action="append", dest="command_materializations", metavar="NAME"
@@ -71,23 +74,41 @@ def main() -> int:
     logger = JsonLogger()
     run_id = RunId.create()
     try:
+        selected_product = getattr(args, "product", None) or "pax-vault"
+        if args.command == "run" and materialization_names and args.product is None:
+            parser.error("--product is required when selecting materializations for run")
         selected = (
             ()
-            if args.command in ("diagnostics-full-query", "diagnostics-staged-events", "diagnostics-ctas-events")
-            else select_materializations(tuple(materialization_names) if materialization_names else None)
+            if args.command
+            in (
+                "diagnostics-full-query",
+                "diagnostics-staged-events",
+                "diagnostics-ctas-events",
+                "rollback-pointer",
+                "run",
+            )
+            else select_materializations(
+                tuple(materialization_names) if materialization_names else None,
+                **({"product": selected_product} if args.command in ("run", "export-local") else {}),
+            )
         )
-        if args.command == "rollback-catalog":
-            catalog_settings = CatalogSettings.from_env()
-            catalog = GcsPublisher.from_catalog(_storage_client(), catalog_settings).rollback_catalog(
-                args.catalog_metageneration,
-                release_manifest_uri=args.release_manifest_uri,
-                release_manifest_generation=args.release_manifest_generation,
-                emit=lambda event, context: logger.info(event, **context),
+        if args.command == "rollback-pointer":
+            pointer_settings = PointerSettings.from_env()
+            rollback_time = datetime.now(timezone.utc).isoformat()
+            rollback_order = str(RunId.create())
+            pointer = GcsPublisher(
+                _storage_client(), cast(Settings, pointer_settings), product=args.product
+            ).rollback_pointer(
+                args.release_id,
+                expected_generation=args.expected_generation,
+                source_order=rollback_order,
+                producer_revision=pointer_settings.producer_revision,
+                created_at=rollback_time,
             )
             logger.info(
-                "analytics.etl.catalog_rollback_succeeded",
-                catalog_metageneration=str(getattr(catalog, "metageneration", args.catalog_metageneration)),
-                release_manifest_generation=args.release_manifest_generation,
+                "analytics.etl.pointer_rollback_succeeded",
+                pointer_release_sequence=pointer["releaseSequence"],
+                release_id=args.release_id,
             )
         elif args.command == "preflight":
             settings = Settings.from_env()
@@ -105,6 +126,7 @@ def main() -> int:
                 Path(args.command_output_dir),
                 materializations=tuple(item.name for item in selected),
                 run_id=str(run_id),
+                product=selected_product,
             )
         elif args.command == "diagnostics":
             from .diagnostics import run_diagnostics
@@ -170,34 +192,49 @@ def main() -> int:
         else:
             from .pipeline import BatchRunError, run
 
-            try:
-                settings = Settings.from_env()
-                run(
-                    settings,
-                    _storage_client(),
-                    logger=logger,
-                    run_id=str(run_id),
-                    execution_context=cloud_run_context(os.environ),
-                    materializations=tuple(item.name for item in selected),
-                )
-            except BatchRunError as error:
-                dataset_failures = [
-                    {"materialization": name, "type": type(failure).__name__}
-                    for name, failure in sorted(error.failures.items())
-                ]
-                cleanup_failures = [
-                    {"materialization": name, "cleanup": cleanup, "type": type(failure).__name__}
-                    for name, cleanups in sorted(error.cleanup_failures.items())
-                    for cleanup, failure in sorted(cleanups.items())
-                ]
-                logger.error(
-                    "analytics.etl.cli_batch_failed",
-                    run_id=str(run_id),
-                    dataset_failure_count=len(dataset_failures),
-                    dataset_failures=dataset_failures,
-                    cleanup_failure_count=len(cleanup_failures),
-                    cleanup_failures=cleanup_failures,
-                )
+            settings = Settings.from_env()
+            products = (args.product,) if args.product else PRODUCTS
+            failed = False
+            for product in products:
+                product_run_id = str(RunId.create())
+                try:
+                    product_materializations = select_materializations(
+                        tuple(materialization_names) if materialization_names else None,
+                        product=product,
+                    )
+                    run(
+                        settings,
+                        _storage_client(),
+                        logger=logger,
+                        run_id=product_run_id,
+                        execution_context=cloud_run_context(os.environ),
+                        materializations=tuple(item.name for item in product_materializations),
+                        product=product,
+                    )
+                except BatchRunError as error:
+                    failed = True
+                    dataset_failures = [
+                        {"materialization": name, "type": type(failure).__name__}
+                        for name, failure in sorted(error.failures.items())
+                    ]
+                    cleanup_failures = [
+                        {"materialization": name, "cleanup": cleanup, "type": type(failure).__name__}
+                        for name, cleanups in sorted(error.cleanup_failures.items())
+                        for cleanup, failure in sorted(cleanups.items())
+                    ]
+                    logger.error(
+                        "analytics.etl.cli_batch_failed",
+                        run_id=product_run_id,
+                        product=product,
+                        dataset_failure_count=len(dataset_failures),
+                        dataset_failures=dataset_failures,
+                        cleanup_failure_count=len(cleanup_failures),
+                        cleanup_failures=cleanup_failures,
+                    )
+                except Exception as error:
+                    failed = True
+                    logger.error("analytics.etl.cli_product_failed", error, run_id=product_run_id, product=product)
+            if failed:
                 return 1
         return 0
     except Exception as error:  # CLI boundary: report failure and return a shell-friendly status.

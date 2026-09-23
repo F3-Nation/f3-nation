@@ -13,8 +13,8 @@ SQL = (Path(__file__).parents[1] / "analytics" / "sql" / "pv_events.sql").read_t
 def test_events_uses_explicit_event_and_attendance_projections():
     assert "SELECT ei.*" not in SQL
     assert "SELECT a.*" not in SQL
-    assert "preblast" not in SQL
-    assert "backblast" not in SQL
+    assert "preblast" in SQL
+    assert "backblast" in SQL
 
 
 def source():
@@ -25,7 +25,8 @@ def source():
     c.execute(
         "CREATE TABLE pg.public.event_instances(id INTEGER, org_id INTEGER, is_active BOOLEAN, pax_count INTEGER, "
         "fng_count INTEGER, meta JSON, name VARCHAR, start_date DATE, end_date DATE, "
-        "highlight BOOLEAN, is_private BOOLEAN)"
+        "highlight BOOLEAN, is_private BOOLEAN, description VARCHAR, preblast VARCHAR, preblast_rich JSON, "
+        "backblast VARCHAR, backblast_rich JSON)"
     )
     c.execute("CREATE TABLE pg.public.event_instances_x_event_types(event_instance_id INTEGER, event_type_id INTEGER)")
     c.execute(
@@ -50,11 +51,22 @@ def source():
         ],
     )
     c.executemany(
-        "INSERT INTO pg.public.event_instances VALUES (?, ?, true, 10, 2, ?, ?, ?, NULL, true, false)",
+        "INSERT INTO pg.public.event_instances VALUES (?, ?, true, 10, 2, ?, ?, ?, NULL, true, false, ?, ?, ?, ?, ?)",
         [
-            (1, 5, "{}", "Workout", "2026-01-01"),
-            (2, 5, "{}", "No plans", "2026-01-02"),
-            (3, 5, "{}", "Ghosts", "2026-01-03"),
+            (
+                1,
+                5,
+                "{}",
+                "Workout",
+                "2026-01-01",
+                "Workout description",
+                "Plan",
+                '{"blocks":[]}',
+                "Blast",
+                '{"text":"Blast"}',
+            ),
+            (2, 5, "{}", "No plans", "2026-01-02", None, None, None, None, None),
+            (3, 5, "{}", "Ghosts", "2026-01-03", None, None, None, None, None),
         ],
     )
     c.executemany("INSERT INTO pg.public.event_instances_x_event_types VALUES (?, ?)", [(1, 1), (1, 2)])
@@ -101,6 +113,12 @@ def test_events_contract_and_materialization(tmp_path: Path):
         "event_name",
         "pax_count",
         "fng_count",
+        "description",
+        "preblast",
+        "preblast_rich",
+        "backblast",
+        "backblast_rich",
+        "meta",
         "ao_org_id",
         "ao_name",
         "region_org_id",
@@ -119,12 +137,18 @@ def test_events_contract_and_materialization(tmp_path: Path):
         "attendance",
     ]
     row = c.execute("SELECT * FROM read_parquet(?) WHERE event_id = 1", [str(out)]).fetchone()
-    assert row[1:19] == (
+    assert row[1:25] == (
         1,
         date(2026, 1, 1),
         "Workout",
         10,
         2,
+        "Workout description",
+        "Plan",
+        '{"blocks":[]}',
+        "Blast",
+        '{"text":"Blast"}',
+        "{}",
         5,
         "AO",
         4,
@@ -139,12 +163,12 @@ def test_events_contract_and_materialization(tmp_path: Path):
         0,
         1,
     )
-    assert row[19] == [
+    assert row[25] == [
         {"id": 2, "name": "Bible", "description": "Study", "event_category": "third_f"},
         {"id": 1, "name": "Run", "description": "Running", "event_category": "first_f"},
     ]
-    assert row[20] == [{"id": 7, "name": "Morning", "description": "Morning workout"}]
-    assert row[21] == [
+    assert row[26] == [{"id": 7, "name": "Morning", "description": "Morning workout"}]
+    assert row[27] == [
         {
             "user_id": 1,
             "f3_name": "Alpha",
@@ -193,13 +217,13 @@ def test_events_resolve_tiers_beyond_six_and_keep_direct_area_territory_nullable
     c.execute("INSERT INTO pg.public.orgs VALUES (9, 8, 'Direct AO', 'ao')")
     c.execute(
         "INSERT INTO pg.public.event_instances VALUES "
-        "(4, 9, true, 3, 1, '{}', 'Direct', '2026-01-04', NULL, true, false)"
+        "(4, 9, true, 3, 1, '{}', 'Direct', '2026-01-04', NULL, true, false, NULL, NULL, NULL, NULL, NULL)"
     )
     rows = c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"]).fetchall()
     deep = next(row for row in rows if row[1] == 1)
-    assert deep[14:16] == (1, "Sector")
+    assert deep[20:22] == (1, "Sector")
     direct = next(row for row in rows if row[1] == 4)
-    assert direct[10:16] == (7, "Direct Area", None, None, 1, "Sector")
+    assert direct[16:22] == (7, "Direct Area", None, None, 1, "Sector")
 
 
 def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
@@ -207,7 +231,7 @@ def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
     c.execute("INSERT INTO pg.public.orgs VALUES (9, 3, 'Region Two', 'region'), (10, 9, 'AO Two', 'ao')")
     c.execute(
         "INSERT INTO pg.public.event_instances VALUES "
-        "(4, 10, true, 3, 1, '{}', 'Later', '2026-01-04', NULL, true, false)"
+        "(4, 10, true, 3, 1, '{}', 'Later', '2026-01-04', NULL, true, false, NULL, NULL, NULL, NULL, NULL)"
     )
     root = tmp_path / "events"
     artifacts = materialize(c, root, MATERIALIZATION_REGISTRY["pv_events"], "2026-01-05T00:00:00Z", "2026-01-05")
@@ -231,7 +255,8 @@ def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
 def test_events_aggregates_independent_lists_and_attendance_flags():
     c = source()
     c.executemany(
-        "INSERT INTO pg.public.event_instances VALUES (?, 5, true, 3, 1, '{}', ?, ?, NULL, true, false)",
+        "INSERT INTO pg.public.event_instances VALUES "
+        "(?, 5, true, 3, 1, '{}', ?, ?, NULL, true, false, NULL, NULL, NULL, NULL, NULL)",
         [(4, "Many lists", "2026-01-04"), (5, "Empty lists", "2026-01-05")],
     )
     c.executemany(
@@ -263,20 +288,20 @@ def test_events_aggregates_independent_lists_and_attendance_flags():
 
     rows = c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"]).fetchall()
     many = next(row for row in rows if row[1] == 4)
-    assert len(many[19]) == 2
-    assert len(many[20]) == 2
-    assert len(many[21]) == 2
-    assert many[19] == [
+    assert len(many[25]) == 2
+    assert len(many[26]) == 2
+    assert len(many[27]) == 2
+    assert many[25] == [
         {"id": 3, "name": "Alpha", "description": "Alpha description", "event_category": "first_f"},
         {"id": 4, "name": "Zulu", "description": "Zulu description", "event_category": "second_f"},
     ]
-    assert [entry["user_id"] for entry in many[21]] == [4, 5]
-    assert many[21][0]["coq_ind"] == 0
-    assert many[21][0]["fartsack"] is True
-    assert many[21][1]["coq_ind"] == 1
-    assert many[21][1]["ghost"] is True
+    assert [entry["user_id"] for entry in many[27]] == [4, 5]
+    assert many[27][0]["coq_ind"] == 0
+    assert many[27][0]["fartsack"] is True
+    assert many[27][1]["coq_ind"] == 1
+    assert many[27][1]["ghost"] is True
 
     empty = next(row for row in rows if row[1] == 5)
-    assert empty[19] == []
-    assert empty[20] == []
-    assert empty[21] == []
+    assert empty[25] == []
+    assert empty[26] == []
+    assert empty[27] == []

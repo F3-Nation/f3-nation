@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -12,10 +14,10 @@ from google.cloud.storage import Client as StorageClient  # type: ignore[import-
 
 from .duckdb import connect
 from .logging import JsonLogger
-from .materializations import select_materializations
+from .materializations import MATERIALIZATIONS_BY_NAME, PRODUCTS, Materialization, select_materializations
 from .publication import (
-    CatalogConflictError,
     GcsPublisher,
+    PointerConflictError,
     PublicationStatus,
     build_release_manifest,
     publish,
@@ -38,6 +40,38 @@ class BatchRunError(RuntimeError):
         self.cleanup_failures = cleanup_failures or {}
 
 
+def _candidate_count_golden(connection: Any, artifacts: Any, definition: Materialization) -> dict[str, Any]:
+    if MATERIALIZATIONS_BY_NAME.get(definition.name) is not definition:
+        raise ValueError("candidate golden requires an allowlisted materialization")
+    parquet_paths = [str(path) for path in artifacts.sorted_parquet_files]
+    count = connection.execute(
+        "SELECT COUNT(*) AS row_count FROM read_parquet(?)",
+        [parquet_paths],
+    ).fetchone()[0]
+    if int(count) != artifacts.row_count:
+        raise ValueError("candidate Parquet row count does not match materialization artifacts")
+    query = f"SELECT COUNT(*) AS row_count FROM {definition.name}"
+    artifact = json.dumps(
+        [[{"$bigint": str(int(count))}]], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return {
+        "name": "candidate_transport_check",
+        "query": query,
+        "canonicalization": "rows-json-v1",
+        "sha256": hashlib.sha256(artifact).hexdigest(),
+        "artifact": artifact,
+    }
+
+
+def _pointer_conflict_outcome(error: PointerConflictError) -> str:
+    detail = str(error).lower()
+    if error.committed:
+        return "committed_superseded" if "supersed" in detail else "committed"
+    if "ambiguous" in detail:
+        return "ambiguous"
+    return "not_committed"
+
+
 def run(
     settings: Settings,
     storage_client: StorageClient,
@@ -47,18 +81,22 @@ def run(
     run_id: str | None = None,
     execution_context: dict[str, str] | None = None,
     materializations: tuple[str, ...] | list[str] | None = None,
+    product: str = "pax-vault",
 ) -> dict[str, PublicationStatus]:
     log = logger or JsonLogger()
     clock = now or (lambda: datetime.now(timezone.utc))
-    definitions = select_materializations(materializations)
+    if product not in PRODUCTS:
+        raise ValueError(f"unknown analytics product: {product}")
+    definitions = select_materializations(materializations, product=product)
     run_id_value = run_id or RunId.create(clock()).value
     results: dict[str, PublicationStatus] = {}
     failures: dict[str, BaseException] = {}
     cleanup_failures: dict[str, dict[str, BaseException]] = {}
     started = time.perf_counter()
-    if {item.name for item in definitions} != {item.name for item in select_materializations(None)}:
-        raise ValueError("publication requires the exact approved materialization set")
-    batch_source_order = clock().isoformat()
+    approved_definitions = select_materializations(None, product=product)
+    if tuple(item.name for item in definitions) != tuple(item.name for item in approved_definitions):
+        raise ValueError("publication requires the exact approved materialization set for the product")
+    batch_source_order = clock().astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
 
     def emit(event: str, context: dict[str, Any]) -> None:
         log.info(event, **context)
@@ -74,7 +112,7 @@ def run(
             with tempfile.TemporaryDirectory(prefix="analytics-") as workspace:
                 source_started = time.perf_counter()
                 root = Path(workspace) / definition.name
-                source_timestamp = datetime.fromisoformat(batch_source_order)
+                source_timestamp = clock()
                 refreshed_at = source_timestamp.isoformat()
                 as_of_date = source_timestamp.astimezone(timezone.utc).date().isoformat()
                 try:
@@ -86,15 +124,19 @@ def run(
                         row_count=artifacts.row_count,
                         duration_ms=round((time.perf_counter() - source_started) * 1000, 3),
                     )
+                    assert connection is not None
+                    golden = _candidate_count_golden(connection, artifacts, definition)
                     dataset_published_at = clock().isoformat()
                     results[definition.name] = publish(
-                        GcsPublisher(storage_client, settings),
+                        GcsPublisher(storage_client, settings, product=product),
                         run_id_value,
                         artifacts,
                         refreshed_at,
                         dataset_published_at,
                         definition,
                         emit=emit,
+                        goldens=(golden,),
+                        source_order=batch_source_order,
                     )
                 except Exception:
                     artifact_state = artifact_observability(root, definition)
@@ -132,20 +174,38 @@ def run(
         )
         raise BatchRunError(failures, cleanup_failures)
     try:
-        publisher = GcsPublisher(storage_client, settings)
+        publisher = GcsPublisher(storage_client, settings, product=product)
         # Dataset uploads are staged. Capture publication time only at the
-        # complete release/catalog commit boundary.
+        # complete release/pointer commit boundary.
         batch_published_at = clock().isoformat()
-        release = build_release_manifest(run_id_value, results, batch_published_at, batch_source_order)
+        release = build_release_manifest(
+            run_id_value,
+            results,
+            batch_published_at,
+            batch_source_order,
+            product=product,
+            producer_revision=settings.producer_revision,
+        )
         release_object = publisher.upload_release_manifest(run_id_value, release)
-        catalog = publisher.commit_catalog(run_id_value, release_object, batch_source_order, emit=emit)
+        release_bytes = json.dumps(
+            release, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        pointer = publisher.commit_pointer(
+            run_id_value,
+            release_object,
+            hashlib.sha256(release_bytes).hexdigest(),
+            batch_source_order,
+            settings.producer_revision,
+            batch_published_at,
+        )
         results = {
             name: PublicationStatus(
                 status.manifest,
                 status.parquet_files,
                 status.manifest_object,
                 release_object,
-                str(getattr(catalog, "metageneration", "")),
+                None,
+                pointer,
             )
             for name, status in results.items()
         }
@@ -156,12 +216,26 @@ def run(
             dataset_count=len(results),
             release_uri=release_object.uri,
             batch_source_order=batch_source_order,
-            catalog_metageneration=str(getattr(catalog, "metageneration", "")),
+            pointer_release_sequence=pointer["releaseSequence"],
             published_at=batch_published_at,
         )
-    except CatalogConflictError as error:
+    except PointerConflictError as error:
         failures["batch"] = error
-        log.error("analytics.etl.catalog_conflict", error, run_id=run_id_value, materialization="batch")
+        outcome = _pointer_conflict_outcome(error)
+        event = {
+            "committed": "analytics.etl.pointer_commit_committed",
+            "committed_superseded": "analytics.etl.pointer_commit_superseded",
+            "ambiguous": "analytics.etl.pointer_commit_ambiguous",
+            "not_committed": "analytics.etl.pointer_conflict",
+        }[outcome]
+        log.error(
+            event,
+            error,
+            run_id=run_id_value,
+            materialization="batch",
+            pointer_outcome=outcome,
+            pointer_committed=error.committed,
+        )
         raise BatchRunError(failures, cleanup_failures) from error
     except Exception as error:
         failures["batch"] = error

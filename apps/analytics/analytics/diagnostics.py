@@ -33,10 +33,12 @@ _STAGED_EVENTS_TABLES = (
     ),
     (
         "event_instances",
-        "SELECT id, org_id, is_active, pax_count, fng_count, meta, name, start_date FROM public.event_instances",
+        "SELECT id, org_id, is_active, pax_count, fng_count, meta, name, start_date, description, preblast, "
+        "preblast_rich, backblast, backblast_rich FROM public.event_instances",
         "CREATE TABLE staged.event_instances (id INTEGER, org_id INTEGER, is_active BOOLEAN, pax_count INTEGER, "
-        "fng_count INTEGER, meta JSON, name VARCHAR, start_date DATE)",
-        "INSERT INTO staged.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "fng_count INTEGER, meta JSON, name VARCHAR, start_date DATE, description VARCHAR, preblast VARCHAR, "
+        "preblast_rich JSON, backblast VARCHAR, backblast_rich JSON)",
+        "INSERT INTO staged.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ),
     (
         "event_instances_x_event_types",
@@ -92,7 +94,8 @@ _CTAS_EVENTS_TABLES = (
     (
         "event_instances",
         "CREATE TABLE staged.event_instances AS SELECT id, org_id, is_active, pax_count, fng_count, meta, name, "
-        "start_date FROM pg.public.event_instances",
+        "start_date, description, preblast, preblast_rich, backblast, backblast_rich "
+        "FROM pg.public.event_instances",
     ),
     (
         "event_instances_x_event_types",
