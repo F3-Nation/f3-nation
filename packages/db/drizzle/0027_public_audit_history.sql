@@ -1,4 +1,5 @@
--- #664: explicit public-table activation only. Attribution plumbing is #665/#667.
+-- Enable audit history only for the explicitly listed public tables.
+-- Application-level user and source attribution is configured separately.
 -- Custom migration: history stays outside Drizzle's mirrored source schema.
 CREATE SCHEMA audit;
 REVOKE ALL ON SCHEMA audit FROM PUBLIC;
