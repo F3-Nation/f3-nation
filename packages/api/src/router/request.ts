@@ -201,7 +201,7 @@ export const requestRouter = {
     .input(
       z
         .object({
-          ...paginationFields("requests"),
+          ...paginationFields("requests", 10),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, status, requestType, regionName, aoName, workoutName, dayOfWeek, startTime, endTime, description, locationAddress, submittedBy, created.",
           ),

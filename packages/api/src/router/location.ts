@@ -39,7 +39,7 @@ export const locationRouter = {
             .describe(
               "Search locations by name or description. Case-insensitive partial matching.",
             ),
-          ...paginationFields("locations"),
+          ...paginationFields("locations", 10),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, locationName, regionName, isActive, latitude, longitude, addressStreet, addressCity, addressState, addressZip, created.",
           ),

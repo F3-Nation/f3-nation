@@ -55,6 +55,14 @@ export const MAX_PAGE_INDEX = 100_000;
  * fields validate against, so a test importing it (rather than a hand-copied
  * mirror) actually exercises what each route runs.
  *
+ * `defaultPageSize` must match the same-named argument the route's own
+ * `resolvePagination` call passes — it's only used here to document that
+ * value, not to compute it, so the two can drift if a route changes one
+ * without the other. Without it, a caller (human or AI) reading `pageSize`'s
+ * `.describe()` sees only the max (`MAX_PAGE_SIZE`) and has no way to know
+ * the page size actually used when `pageIndex` is supplied alone, short of
+ * testing it.
+ *
  * `unpaginatedBehavior` lets a route override the default "returns
  * everything" description when its own unpaginated branch doesn't actually
  * do that (event-instance.ts caps at 40 rows either way) — the published
@@ -63,7 +71,8 @@ export const MAX_PAGE_INDEX = 100_000;
  */
 export function paginationFields(
   entityPlural: string,
-  unpaginatedBehavior = `returns all matching ${entityPlural} unpaginated (unchanged default)`,
+  defaultPageSize: number,
+  unpaginatedBehavior = `returns all matching ${entityPlural} unpaginated`,
 ) {
   return {
     pageIndex: z.coerce
@@ -73,7 +82,7 @@ export function paginationFields(
       .max(MAX_PAGE_INDEX)
       .optional()
       .describe(
-        `Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both ${unpaginatedBehavior}.`,
+        `Zero-based page index. Supplying this (or pageSize) opts into paginated results, using a page size of ${defaultPageSize} when pageSize is omitted; omitting both ${unpaginatedBehavior}.`,
       ),
     pageSize: z.coerce
       .number()
@@ -81,7 +90,7 @@ export function paginationFields(
       .max(MAX_PAGE_SIZE)
       .optional()
       .describe(
-        `Number of ${entityPlural} per page (max ${MAX_PAGE_SIZE}). Supplying this (or pageIndex) opts into paginated results; omitting both ${unpaginatedBehavior}.`,
+        `Number of ${entityPlural} per page (default ${defaultPageSize}, max ${MAX_PAGE_SIZE}). Supplying this (or pageIndex) opts into paginated results; omitting both ${unpaginatedBehavior}.`,
       ),
   };
 }

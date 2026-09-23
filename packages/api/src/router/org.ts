@@ -70,7 +70,7 @@ type OrgFilterInput = z.infer<typeof orgFilterSchema>;
 
 // Extended schema with pagination and sorting for the `all` endpoint
 const orgAllInputSchema = orgFilterSchema.extend({
-  ...paginationFields("organizations"),
+  ...paginationFields("organizations", 10),
   sorting: parseSorting().describe(
     "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
   ),
@@ -79,7 +79,7 @@ const orgAllInputSchema = orgFilterSchema.extend({
 // Schema for the `accessible` endpoint with pagination and sorting
 const orgAccessibleInputSchema = z.object({
   orgTypes: arrayOrSingle(z.enum(OrgType)).optional(),
-  ...paginationFields("organizations"),
+  ...paginationFields("organizations", 10),
   sorting: parseSorting(),
 });
 
@@ -545,7 +545,14 @@ export const orgRouter = {
         roles: directRolesMap.get(String(org.id)) ?? [],
       }));
 
-      // Sort the orgs array manually since we're working with in-memory data
+      // Sort the orgs array manually since we're working with in-memory data.
+      // Always sorts, even with no caller-supplied sorting: editableOrgsData's
+      // query above has no ORDER BY, so Postgres doesn't guarantee returning
+      // these rows in the same order across requests. Without a default sort
+      // here, a caller paging through this branch across separate requests
+      // (e.g. useFetchAllPages) could see the same org twice or skip one
+      // entirely. Defaults to name ascending, matching the F3 Nation branch's
+      // default sort column above.
       const sortedOrgs = [...allAssignedOrgs];
       if (input?.sorting && input.sorting.length > 0) {
         sortedOrgs.sort((a, b) => {
@@ -593,6 +600,8 @@ export const orgRouter = {
           }
           return 0;
         });
+      } else {
+        sortedOrgs.sort((a, b) => a.name.localeCompare(b.name));
       }
 
       // Apply pagination

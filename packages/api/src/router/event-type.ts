@@ -44,7 +44,7 @@ export const eventTypeRouter = {
             .describe(
               "Filter event types by status. Matches event types with ANY of the given statuses (active, inactive).",
             ),
-          ...paginationFields("event types"),
+          ...paginationFields("event types", 10),
           searchTerm: z
             .string()
             .optional()

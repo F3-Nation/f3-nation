@@ -83,7 +83,7 @@ export const positionRouter = {
             .describe(
               "Filter positions by status. Matches positions with ANY of the given statuses.",
             ),
-          ...paginationFields("positions"),
+          ...paginationFields("positions", 20),
         })
         .optional()
         .describe(

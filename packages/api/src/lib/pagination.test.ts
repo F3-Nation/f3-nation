@@ -74,7 +74,7 @@ describe("resolvePagination", () => {
 // in this shared definition) actually fails this suite. user.byF3Name
 // (router/user.ts) intentionally differs — it defaults and lower-bounds both
 // fields, so it always paginates — and isn't covered by this fragment.
-const paginationSchema = z.object(paginationFields("things"));
+const paginationSchema = z.object(paginationFields("things", 10));
 
 describe("pagination input schema (paginationFields)", () => {
   it("rejects a negative pageIndex — would otherwise produce a negative SQL OFFSET", () => {

@@ -384,6 +384,49 @@ describe("Event Router", () => {
       }
     });
 
+    it("applies a LIMIT when pageSize is supplied without pageIndex", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) return;
+
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const prefix = `MapLimitTest-${uniqueId()}`;
+      for (let i = 0; i < 3; i++) {
+        const [created] = await db
+          .insert(schema.events)
+          .values({
+            name: `${prefix} ${i}`,
+            orgId: ao.id,
+            locationId: null,
+            dayOfWeek: "monday",
+            startTime: "0530",
+            isActive: true,
+            highlight: false,
+            startDate: "2026-01-01",
+          })
+          .returning();
+        if (created) {
+          createdEventIds.push(created.id);
+        }
+      }
+
+      const client = createTestClient();
+      const result = await client.map.event.all({
+        searchTerm: prefix,
+        pageSize: 2,
+      });
+
+      // Hard equality, not toBeLessThanOrEqual — an empty array would
+      // satisfy a <= assertion even if pageSize-alone silently returned
+      // everything, exactly the bug this pagination fix exists to catch.
+      expect(result.events?.length).toBe(2);
+      expect(result.totalCount).toBeGreaterThan(2);
+    });
+
     it("should filter by status", async () => {
       const client = createTestClient();
       const activeEvents = await client.map.event.all({

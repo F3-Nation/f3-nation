@@ -125,7 +125,8 @@ export const eventInstanceRouter = {
         .object({
           ...paginationFields(
             "event instances",
-            "returns a single default-sized page of up to 40 event instances (not every matching row)",
+            40,
+            "returns a single page of up to 40 event instances (not every matching row)",
           ),
           searchTerm: z.string().optional(),
           statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),

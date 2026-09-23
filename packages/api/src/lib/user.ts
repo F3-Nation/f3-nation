@@ -149,7 +149,7 @@ export const userListInputSchema = z.object({
     .describe(
       "Search users by name, email, phone, or emergency contact information. Case-insensitive partial matching.",
     ),
-  ...paginationFields("users"),
+  ...paginationFields("users", 10),
   sorting: parseSorting().describe(
     "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, f3Name, email, roles, status, created.",
   ),
