@@ -9,7 +9,11 @@
 -- EXISTS only needs CREATE on the schema and is used as-is. Supported states:
 -- codex fully absent (fresh dev/CI/test → bootstrapped) or fully present
 -- (prod → no-op, verified as app_codex in a rolled-back transaction). Partial
--- provisioning is not reconciled.
+-- provisioning is not reconciled — instead the final block VERIFIES that every
+-- table carries the primary key / unique constraint this snapshot declares and
+-- raises if one is missing, so the migration can never be recorded as applied
+-- against a prod schema that still lacks them. The owner-run script that
+-- installs them is checked in at packages/db/scripts/codex-constraints.sql.
 DO $$
 BEGIN
 	-- CREATE SCHEMA IF NOT EXISTS checks CREATE-on-database *before* the existence
@@ -93,5 +97,36 @@ BEGIN
 	END IF;
 	IF to_regclass('codex.idx_entry_tags_tag_id') IS NULL THEN
 		CREATE INDEX "idx_entry_tags_tag_id" ON "codex"."entry_tags" USING btree ("tag_id");
+	END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+DECLARE
+	missing text;
+BEGIN
+	-- Verify (never alter) the constraints an already-present codex schema must
+	-- have to match this snapshot. pg_constraint is readable without table
+	-- privileges, so this works for the non-owning migration role.
+	SELECT string_agg(expected.conname, ', ' ORDER BY expected.conname)
+	INTO missing
+	FROM (VALUES
+		('admins', 'admins_pkey'),
+		('entries', 'entries_pkey'),
+		('entry_references', 'entry_references_pkey'),
+		('entry_tags', 'entry_tags_pkey'),
+		('references', 'references_pkey'),
+		('tags', 'tags_pkey'),
+		('tags', 'tags_name_unique'),
+		('user_submissions', 'user_submissions_pkey')
+	) AS expected(tbl, conname)
+	WHERE NOT EXISTS (
+		SELECT 1 FROM pg_constraint c
+		JOIN pg_class r ON r.oid = c.conrelid
+		WHERE r.relnamespace = 'codex'::regnamespace
+		  AND r.relname = expected.tbl
+		  AND c.conname = expected.conname
+	);
+	IF missing IS NOT NULL THEN
+		RAISE EXCEPTION 'codex schema is missing constraints required by migration 0027: %. Apply packages/db/scripts/codex-constraints.sql as the codex owner (app_codex) first.', missing;
 	END IF;
 END $$;
