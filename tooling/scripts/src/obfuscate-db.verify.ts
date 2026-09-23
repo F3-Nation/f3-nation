@@ -519,6 +519,26 @@ async function main(): Promise<void> {
       throw new Error("Harness bug: expected planted PII before obfuscation");
     }
 
+    // --- 3b. Stash the target's own API keys ------------------------------------
+    // On a real refresh the stash runs on staging before the load; here the
+    // sandbox plays both roles. Restored in 5c after the logins exist.
+    const [keysBefore] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM api_keys`;
+    run(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/staging-api-keys.ts",
+        "--allow-db",
+        DB_NAME,
+        "--stash",
+      ],
+      childEnv,
+    );
+
     // --- 4. Run the obfuscator (NO --preserve-local-seed) --------------------
     run(
       "pnpm",
@@ -835,6 +855,41 @@ async function main(): Promise<void> {
       "staging admin logins seeded once per org level",
       loginsOk,
       logins.map((l) => `${l.email}=${l.org_type}`).join(", "),
+    );
+
+    // --- 5c. Restore the stashed API keys --------------------------------------
+    run(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/staging-api-keys.ts",
+        "--allow-db",
+        DB_NAME,
+        "--restore",
+        "--owner-email",
+        "staging+nation@f3nation.com",
+      ],
+      childEnv,
+    );
+    const [keysAfter] = await sql<
+      { n: number; owned: number; stash: boolean }[]
+    >`
+      SELECT count(*)::int AS n,
+        count(*) FILTER (WHERE owner_id = (SELECT id FROM users
+          WHERE email = 'staging+nation@f3nation.com'))::int AS owned,
+        to_regnamespace('refresh_keep') IS NOT NULL AS stash
+      FROM api_keys`;
+    check(
+      "target API keys survive the refresh, owned by the nation login",
+      (keysBefore?.n ?? 0) > 0 &&
+        !!keysAfter &&
+        keysAfter.n === keysBefore?.n &&
+        keysAfter.owned === keysAfter.n &&
+        !keysAfter.stash,
+      `${keysBefore?.n ?? "?"} stashed, ${keysAfter?.n ?? "?"} restored, ${keysAfter?.owned ?? "?"} re-owned, stash ${keysAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
     );
 
     // --- 6. Verdict -----------------------------------------------------------

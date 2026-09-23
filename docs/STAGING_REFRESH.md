@@ -39,7 +39,40 @@ and loading the result into staging (`f3data-nonprod`).
      is behind is fine (absent tables are skipped); one that is ahead has
      tables this script has never classified, and the coverage gate refuses
      the run before it writes anything. Better to know before booking the window.
-3. **Load**: restore the _obfuscated_ dump into `f3data-nonprod`.
+3. **Load** the _obfuscated_ copy into `f3data-nonprod`. Learned on the
+   first real run (2026-09-22):
+   - **Match staging's migration level**, not the repo's. Staging's
+     `drizzle.__drizzle_migrations_<db>` says where it is; obfuscate the copy
+     at that level and do not migrate it further.
+   - **Dump only `public`, `auth` and `drizzle` from prod.** Prod also has
+     `codex`, `regionpages` and `temp`; `codex.user_submissions` and
+     `codex.admins` hold names and emails this script does not classify.
+   - **Load data only** into staging's existing tables. Its schemas belong
+     to several roles (`dev_generic`, `tackle`, `app_auth`) whose grants the
+     other apps need; a drop-and-restore loses them. Skip any prod table
+     staging doesn't have.
+   - **Stash staging's own API keys first**, or every service key (the map's
+     `F3_MAP_API_KEY`, the slackbot's, the auth app's) is gone and the map
+     serves 401s. The key values never leave the database:
+
+     ```bash
+     pnpm -F @acme/scripts staging-api-keys -- --allow-db <staging-db-name> --stash
+     ```
+
+   - **Drop the foreign keys around the load** (`orgs` and `events` have
+     circular FKs, and the Cloud SQL roles can't disable triggers). Save
+     them with `pg_get_constraintdef`, truncate, `pg_restore --data-only`
+     with `PGOPTIONS='-c app.disable_ao_count_trigger=true'`, then re-add
+     them `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
+     them validated in one transaction took over an hour and lost its
+     connection.
+   - After step 4, put the keys back:
+
+     ```bash
+     pnpm -F @acme/scripts staging-api-keys -- --allow-db <staging-db-name> \
+       --restore --owner-email staging+nation@f3nation.com
+     ```
+
 4. **Seed sign-in identities** on staging. The refresh truncates every
    session and leaves every address at `@obfuscated.f3nation.dev`, so no one
    can receive an email code. The seed adds one admin per org level, all
