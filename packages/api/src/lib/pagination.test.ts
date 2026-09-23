@@ -70,10 +70,12 @@ describe("resolvePagination", () => {
 // Imports the real fragment every one of the 11 call sites spreads into its
 // own input schema (event.ts, event-instance.ts, event-tag.ts, event-type.ts,
 // location.ts, map/event.ts, org.ts x2, position.ts, request.ts, lib/user.ts)
-// — not a hand-copied mirror, so a regression at any of those 11 sites (or
-// in this shared definition) actually fails this suite. user.byF3Name
-// (router/user.ts) intentionally differs — it defaults and lower-bounds both
-// fields, so it always paginates — and isn't covered by this fragment.
+// — not a hand-copied mirror, so a regression in this shared definition (not
+// necessarily at each call site — a route that stopped spreading it into its
+// own schema would still leave this suite green) fails this suite.
+// user.byF3Name (router/user.ts) intentionally differs — it defaults and
+// lower-bounds both fields, so it always paginates — and isn't covered by
+// this fragment.
 const paginationSchema = z.object(paginationFields("things", 10));
 
 describe("pagination input schema (paginationFields)", () => {
