@@ -285,9 +285,10 @@ async function main(): Promise<void> {
 
     const [namesBad] = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM users
-      WHERE (f3_name IS NOT NULL AND f3_name <> 'F3 ' || id)
-         OR (first_name IS NOT NULL AND first_name <> 'First ' || id)
-         OR (last_name IS NOT NULL AND last_name <> 'Last ' || id)`;
+      -- '' is left as is (nothing to hide), same as NULL.
+      WHERE (NULLIF(f3_name, '') IS NOT NULL AND f3_name <> 'F3 ' || id)
+         OR (NULLIF(first_name, '') IS NOT NULL AND first_name <> 'First ' || id)
+         OR (NULLIF(last_name, '') IS NOT NULL AND last_name <> 'Last ' || id)`;
     check(
       "user names are F3/First/Last <id>",
       namesBad?.n === 0,
