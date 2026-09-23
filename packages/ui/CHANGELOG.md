@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.1.6...pkg-ui@0.2.0) (2026-09-23)
+
+
+### Features
+
+* **api,admin:** sort areas by resolved sector and territory ([#1049](https://github.com/F3-Nation/f3-nation/issues/1049)) ([4e97ef7](https://github.com/F3-Nation/f3-nation/commit/4e97ef788e826c81d8b1975cf2b46b8d493393e8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.4.0
+
 ## [0.1.6](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.1.5...pkg-ui@0.1.6) (2026-09-16)
 
 
