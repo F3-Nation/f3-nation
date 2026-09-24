@@ -237,7 +237,7 @@ def pull_org_leaderboard_data() -> Dict[int, List[OrgUserLeaderboard]]:
         select(
             Attendance_x_AttendanceType.attendance_id.label("attendance_id"),
             func.sum(case((AttendanceType.type == "Q", 1), else_=0)).label("q_ind"),
-            func.max(case((AttendanceType.type.in_(["Co-Q", "CoQ"]), 1), else_=0)).label("coq_ind"),
+            func.sum(case((AttendanceType.type.in_(["Co-Q", "CoQ"]), 1), else_=0)).label("coq_ind"),
         )
         .select_from(Attendance_x_AttendanceType)
         .join(Attendance, Attendance.id == Attendance_x_AttendanceType.attendance_id)
