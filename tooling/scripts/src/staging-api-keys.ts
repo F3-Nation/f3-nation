@@ -1,30 +1,39 @@
 /**
- * Carry staging's own API keys across a refresh (F3-65).
+ * Provision staging's own API keys after a refresh (F3-65).
  *
  * The obfuscator deletes every api_keys row in the prod copy (prod keys must
- * never reach staging), so loading that copy wipes the service keys staging's
- * own apps authenticate with: the map's F3_MAP_API_KEY, the slackbot's, the
- * auth app's. Every map data call then fails with 401 Unauthorized
- * (real-data finding 2026-09-23).
+ * never reach staging), which leaves staging's own services (map, auth,
+ * slackbot) with nothing to authenticate against: every map data call then
+ * fails with 401 Unauthorized (real-data finding 2026-09-23).
  *
- * This stashes staging's keys in a holding schema INSIDE staging before the
- * load and restores them afterwards, so key values never leave the database:
+ * This writes the declared service keys (staging-service-keys.ts) back:
  *
- *   --stash    copy api_keys + roles_x_api_keys_x_org into refresh_keep.*
- *   --restore  put them back after the load and drop refresh_keep. Each key
- *              keeps its owner id (ids carry over from prod); pass
- *              --owner-email to re-own them all instead
+ *   - values come from the env vars the list names, never from the database,
+ *     so a refresh no longer depends on staging's old rows
+ *   - each key is upserted by value and named per the list; an older row with
+ *     the same name but another value (a rotated key) is revoked
+ *   - grants are rebuilt from the list against the nation org, resolved by
+ *     org type, never by an id carried over from before the load
+ *   - every key is owned by --owner-id, an existing users.id
+ *   - --revoke-unlisted revokes every other live key (hand-made test keys,
+ *     anything created on staging since the last refresh)
+ *   - --dry-run does all of it in a transaction and rolls back
  *
- * Usage (staging, around the load):
+ * Usage (staging, after the load or an in-place obfuscation):
+ *   STAGING_MAP_API_KEY=… STAGING_AUTH_API_KEY=… STAGING_SLACKBOT_API_KEY=… \
  *   DATABASE_URL=... pnpm -F @acme/scripts staging-api-keys -- \
- *     --allow-db <staging-db-name> --stash
- *   ... truncate + load ...
- *   DATABASE_URL=... pnpm -F @acme/scripts staging-api-keys -- \
- *     --allow-db <staging-db-name> --restore [--owner-email <user email>]
+ *     --allow-db <staging-db-name> --provision --owner-id <users.id> \
+ *     [--revoke-unlisted] [--dry-run]
+ *
+ * Key values are never printed, only their first and last four characters.
  */
 import postgres from "postgres";
 
 import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
+import {
+  MIN_SERVICE_KEY_LENGTH,
+  STAGING_SERVICE_KEYS,
+} from "./staging-service-keys";
 
 const argv = process.argv.slice(2);
 
@@ -34,6 +43,32 @@ function flagValue(name: string): string | undefined {
   const idx = argv.indexOf(name);
   if (idx !== -1) return argv[idx + 1];
   return undefined;
+}
+
+const signature = (key: string) => `${key.slice(0, 4)}...${key.slice(-4)}`;
+
+class DryRunRollback extends Error {}
+
+/** Read and validate every declared key's value before touching the DB. */
+function readKeyValues(): Map<string, string> {
+  const values = new Map<string, string>();
+  const problems: string[] = [];
+  for (const entry of STAGING_SERVICE_KEYS) {
+    const value = process.env[entry.valueEnv]?.trim();
+    if (!value) problems.push(`${entry.valueEnv} is not set`);
+    else if (value.length < MIN_SERVICE_KEY_LENGTH) {
+      problems.push(
+        `${entry.valueEnv} is shorter than ${MIN_SERVICE_KEY_LENGTH} characters`,
+      );
+    } else values.set(entry.name, value);
+  }
+  if (new Set(values.values()).size !== values.size) {
+    problems.push("two service keys share a value; each needs its own");
+  }
+  if (problems.length > 0) {
+    throw new Error(`Refusing to provision:\n  - ${problems.join("\n  - ")}`);
+  }
+  return values;
 }
 
 async function main(): Promise<void> {
@@ -55,12 +90,21 @@ async function main(): Promise<void> {
       `Refusing to run: database name "${allowDb}" is (or looks like) production.`,
     );
   }
-  const stash = argv.includes("--stash");
-  const restore = argv.includes("--restore");
-  if (stash === restore) {
-    throw new Error("Pass exactly one of --stash or --restore.");
+  if (argv.includes("--stash") || argv.includes("--restore")) {
+    throw new Error(
+      "--stash/--restore were removed: staging's keys are now declared in staging-service-keys.ts and written with --provision (see docs/STAGING_REFRESH.md).",
+    );
   }
-  const ownerEmail = flagValue("--owner-email")?.toLowerCase();
+  if (!argv.includes("--provision")) {
+    throw new Error("Pass --provision.");
+  }
+  const ownerId = Number(flagValue("--owner-id"));
+  if (!Number.isInteger(ownerId) || ownerId <= 0) {
+    throw new Error("Pass --owner-id <users.id> for the keys' owner.");
+  }
+  const revokeUnlisted = argv.includes("--revoke-unlisted");
+  const dryRun = argv.includes("--dry-run");
+  const values = readKeyValues();
 
   const sql = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
   try {
@@ -72,69 +116,90 @@ async function main(): Promise<void> {
       );
     }
 
-    if (stash) {
-      await sql.begin(async (tx) => {
-        const [existing] = await tx<{ present: boolean }[]>`
-          SELECT to_regclass('refresh_keep.api_keys') IS NOT NULL AS present`;
-        if (existing?.present) {
-          throw new Error(
-            "refresh_keep.api_keys already exists: a previous stash was never restored. Restore it (or drop refresh_keep) first.",
-          );
-        }
-        await tx`CREATE SCHEMA refresh_keep`;
-        await tx`CREATE TABLE refresh_keep.api_keys AS TABLE public.api_keys`;
-        await tx`
-          CREATE TABLE refresh_keep.roles_x_api_keys_x_org
-          AS TABLE public.roles_x_api_keys_x_org`;
-      });
-      const [n] = await sql<{ keys: number; grants: number }[]>`
-        SELECT (SELECT count(*)::int FROM refresh_keep.api_keys) AS keys,
-          (SELECT count(*)::int FROM refresh_keep.roles_x_api_keys_x_org) AS grants`;
-      console.log(
-        `Stashed ${n?.keys} API key(s) and ${n?.grants} grant(s) in refresh_keep.`,
-      );
-      return;
-    }
-
     await sql.begin(async (tx) => {
-      if (ownerEmail) {
-        const [owner] = await tx<{ id: number }[]>`
-          SELECT id FROM public.users WHERE email = ${ownerEmail}`;
-        if (!owner) throw new Error(`No user ${ownerEmail} in the target.`);
-        await tx`UPDATE refresh_keep.api_keys SET owner_id = ${owner.id}`;
-      }
-      const orphans = await tx<{ id: number }[]>`
-        SELECT k.id FROM refresh_keep.api_keys k
-        WHERE NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = k.owner_id)`;
-      if (orphans.length > 0) {
+      const [owner] = await tx<{ id: number }[]>`
+        SELECT id FROM users WHERE id = ${ownerId}`;
+      if (!owner) throw new Error(`No user with id ${ownerId} in the target.`);
+
+      const nations = await tx<{ id: number }[]>`
+        SELECT id FROM orgs WHERE org_type = 'nation' AND is_active`;
+      if (nations.length !== 1) {
         throw new Error(
-          `${orphans.length} stashed key(s) have an owner id the loaded copy doesn't have; re-run with --owner-email <user email>.`,
+          `Expected exactly one active nation org, found ${nations.length}.`,
         );
       }
-      const keys = await tx`
-        INSERT INTO public.api_keys SELECT * FROM refresh_keep.api_keys
-        ON CONFLICT (id) DO NOTHING
-        RETURNING id`;
-      // The grant table has no unique key, so guard re-runs explicitly; skip
-      // grants on an org the loaded copy doesn't have.
-      const grants = await tx`
-        INSERT INTO public.roles_x_api_keys_x_org (role_id, api_key_id, org_id)
-        SELECT g.role_id, g.api_key_id, g.org_id
-        FROM refresh_keep.roles_x_api_keys_x_org g
-        WHERE EXISTS (SELECT 1 FROM public.orgs o WHERE o.id = g.org_id)
-          AND NOT EXISTS (
-            SELECT 1 FROM public.roles_x_api_keys_x_org x
-            WHERE x.role_id = g.role_id AND x.api_key_id = g.api_key_id
-              AND x.org_id = g.org_id)
-        RETURNING api_key_id`;
+      const nationId = nations[0]!.id;
+      const roleRows = await tx<{ id: number; name: string }[]>`
+        SELECT id, name::text AS name FROM roles`;
+      const roleIds = new Map(roleRows.map((r) => [r.name, r.id]));
+
+      // A data-only load can leave the sequence behind max(id).
       await tx`
         SELECT setval(pg_get_serial_sequence('public.api_keys', 'id'),
-          GREATEST((SELECT max(id) FROM public.api_keys), 1))`;
-      await tx`DROP SCHEMA refresh_keep CASCADE`;
-      console.log(
-        `Restored ${keys.length} API key(s) and ${grants.length} grant(s)${ownerEmail ? `, owned by ${ownerEmail}` : ""}.`,
-      );
+          GREATEST((SELECT max(id) FROM api_keys), 1))`;
+
+      for (const entry of STAGING_SERVICE_KEYS) {
+        const value = values.get(entry.name)!;
+        const [key] = await tx<{ id: number }[]>`
+          INSERT INTO api_keys (key, name, description, owner_id)
+          VALUES (${value}, ${entry.name}, ${entry.description}, ${ownerId})
+          ON CONFLICT (key) DO UPDATE SET
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            owner_id = EXCLUDED.owner_id,
+            revoked_at = NULL,
+            expires_at = NULL,
+            updated = timezone('utc'::text, now())
+          RETURNING id`;
+        const keyId = key!.id;
+
+        const rotated = await tx`
+          UPDATE api_keys SET revoked_at = timezone('utc'::text, now()),
+            updated = timezone('utc'::text, now())
+          WHERE name = ${entry.name} AND id <> ${keyId} AND revoked_at IS NULL
+          RETURNING id`;
+
+        await tx`DELETE FROM roles_x_api_keys_x_org WHERE api_key_id = ${keyId}`;
+        if (entry.role !== null) {
+          const roleId = roleIds.get(entry.role);
+          if (roleId === undefined) {
+            throw new Error(`No "${entry.role}" role in the target.`);
+          }
+          await tx`
+            INSERT INTO roles_x_api_keys_x_org (role_id, api_key_id, org_id)
+            VALUES (${roleId}, ${keyId}, ${nationId})`;
+        }
+        console.log(
+          `  ${entry.name} (${signature(value)}) -> ${entry.role ?? "read-only"}` +
+            `${entry.role ? " on nation" : ""}, for ${entry.consumer}` +
+            `${rotated.length > 0 ? `; revoked ${rotated.length} older key(s)` : ""}`,
+        );
+      }
+
+      if (revokeUnlisted) {
+        const declared = STAGING_SERVICE_KEYS.map((k) => k.name);
+        const revoked = await tx<{ id: number; name: string }[]>`
+          UPDATE api_keys SET revoked_at = timezone('utc'::text, now()),
+            updated = timezone('utc'::text, now())
+          WHERE revoked_at IS NULL AND NOT (name = ANY(${declared}))
+          RETURNING id, name`;
+        console.log(
+          revoked.length === 0
+            ? "  No undeclared live keys."
+            : `  Revoked ${revoked.length} undeclared key(s): ${revoked
+                .map((r) => `#${r.id} "${r.name}"`)
+                .join(", ")}`,
+        );
+      }
+
+      if (dryRun) throw new DryRunRollback();
     });
+    console.log(
+      `Provisioned ${STAGING_SERVICE_KEYS.length} staging service key(s), owned by user ${ownerId}.`,
+    );
+  } catch (error) {
+    if (!(error instanceof DryRunRollback)) throw error;
+    console.log("Dry run: rolled back, nothing written.");
   } finally {
     await sql.end();
   }

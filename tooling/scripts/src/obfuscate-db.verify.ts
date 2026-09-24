@@ -14,6 +14,9 @@
  *      same source email maps to the same fake across tables
  *      (users.email <-> update_requests.submitted_by).
  *   4. Free-text scrubbing rewrote the planted backblast email.
+ *   5. slack_spaces secrets are gone from the column AND the settings JSON.
+ *   6. `staging-api-keys --provision` writes the declared service keys with
+ *      their roles, rotates, revokes unlisted keys, and refuses short ones.
  *
  * Usage (from repo root or tooling/scripts):
  *   pnpm -F @acme/scripts obfuscate-db:verify
@@ -330,6 +333,23 @@ async function plantSyntheticPii(
       false, 'T0TEAM', 'strava-access-secret', 'strava-refresh-secret',
       'https://avatars.slack.com/jane.png')`;
 
+  // The slackbot keeps its own copy of the bot token (and the region's SMTP
+  // login) inside settings — the copy that survived the first real refresh
+  // (2026-09-24) and let staging post into prod Slack. A stray token under an
+  // innocuous key must be caught by shape; non-secret keys must survive.
+  await sql`
+    INSERT INTO slack_spaces (team_id, workspace_name, bot_token, settings)
+    VALUES ('T0VERIFYSPACE', 'Verify Workspace', 'xoxb-column-secret',
+      ${sql.json({
+        team_id: "T0VERIFYSPACE",
+        bot_token: "xoxb-settings-secret",
+        email_user: "region.mailer@gmail.com",
+        email_password: "smtp-app-password",
+        email_server: "smtp.gmail.com",
+        calendar_image_current: "1-current-abcdefghij.png",
+        note: "old install used xoxp-1111-2222-legacy",
+      })})`;
+
   // Better Auth shadow row, 1:1 with the users row above. f3_user_id is a
   // GENERATED ALWAYS column ((id)::integer) with an FK to users.id and a
   // CHECK that id is a canonical positive integer, so it cannot be inserted
@@ -526,26 +546,6 @@ async function main(): Promise<void> {
       throw new Error("Harness bug: expected planted PII before obfuscation");
     }
 
-    // --- 3b. Stash the target's own API keys ------------------------------------
-    // On a real refresh the stash runs on staging before the load; here the
-    // sandbox plays both roles. Restored in 5c after the logins exist.
-    const [keysBefore] = await sql<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM api_keys`;
-    run(
-      "pnpm",
-      [
-        "-F",
-        "@acme/scripts",
-        "exec",
-        "tsx",
-        "src/staging-api-keys.ts",
-        "--allow-db",
-        DB_NAME,
-        "--stash",
-      ],
-      childEnv,
-    );
-
     // --- 4. Run the obfuscator (NO --preserve-local-seed) --------------------
     run(
       "pnpm",
@@ -670,6 +670,34 @@ async function main(): Promise<void> {
       !pipeText.includes("|") &&
       (pipeText.match(/<@U[A-Z0-9]+>/g) ?? []).length === 2;
     check("piped/enterprise Slack mentions scrubbed", pipeOk, pipeText);
+
+    const [space] = await sql<
+      { bot_token: string | null; settings: Record<string, unknown> | null }[]
+    >`
+      SELECT bot_token, settings FROM slack_spaces
+      WHERE team_id = 'T0VERIFYSPACE' LIMIT 1`;
+    const spaceSettings = space?.settings ?? {};
+    const spaceText = JSON.stringify(spaceSettings);
+    const spaceOk =
+      !!space &&
+      space.bot_token === null &&
+      // Secret keys are kept but nulled, so readers indexing them still work.
+      "bot_token" in spaceSettings &&
+      spaceSettings.bot_token === null &&
+      spaceSettings.email_password === null &&
+      !spaceText.includes("secret") &&
+      !spaceText.includes("smtp-app-password") &&
+      !spaceText.includes("xoxp-") &&
+      typeof spaceSettings.email_user === "string" &&
+      isSinkAddress(spaceSettings.email_user) &&
+      spaceSettings.email_server === "smtp.gmail.com" &&
+      spaceSettings.calendar_image_current === "1-current-abcdefghij.png";
+    check(
+      "slack_spaces bot token + settings secrets nulled",
+      spaceOk,
+      // Values here are synthetic fixtures, safe to print.
+      space ? `bot_token=${space.bot_token} settings=${spaceText}` : "missing",
+    );
 
     const [shadow] = await sql<
       { id: string; name: string; email: string; image: string | null }[]
@@ -833,32 +861,122 @@ async function main(): Promise<void> {
     await sql`DROP TABLE public._unclassified_gate_test`;
     await sql`UPDATE users SET email = ${prior?.email ?? ""} WHERE id = ${userId}`;
 
-    // --- 5c. Restore the stashed API keys --------------------------------------
-    run(
-      "pnpm",
-      [
-        "-F",
-        "@acme/scripts",
-        "exec",
-        "tsx",
-        "src/staging-api-keys.ts",
-        "--allow-db",
-        DB_NAME,
-        "--restore",
-      ],
-      childEnv,
-    );
-    const [keysAfter] = await sql<{ n: number; stash: boolean }[]>`
-      SELECT count(*)::int AS n,
-        to_regnamespace('refresh_keep') IS NOT NULL AS stash
-      FROM api_keys`;
+    // --- 5c. Provision staging's declared service keys ----------------------
+    // The obfuscator emptied api_keys; the refresh's last step writes back
+    // exactly the keys in staging-service-keys.ts, values from env.
+    const keyEnv = (map: string) => ({
+      ...childEnv,
+      STAGING_MAP_API_KEY: map,
+      STAGING_AUTH_API_KEY: `f3_${"b".repeat(48)}`,
+      STAGING_SLACKBOT_API_KEY: `f3_${"c".repeat(48)}`,
+    });
+    const provision = (env: Record<string, string>, extra: string[] = []) =>
+      run(
+        "pnpm",
+        [
+          "-F",
+          "@acme/scripts",
+          "exec",
+          "tsx",
+          "src/staging-api-keys.ts",
+          "--allow-db",
+          DB_NAME,
+          "--provision",
+          "--owner-id",
+          String(userId),
+          ...extra,
+        ],
+        env,
+      );
+
+    // A hand-typed short value is refused before anything is written.
+    let shortRefused = false;
+    try {
+      provision(keyEnv("Tackle Testing"));
+    } catch {
+      shortRefused = true;
+    }
+    provision(keyEnv(`f3_${"a".repeat(48)}`), ["--dry-run"]);
+    const [afterDryRun] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM api_keys`;
     check(
-      "target API keys survive the refresh",
-      (keysBefore?.n ?? 0) > 0 &&
-        !!keysAfter &&
-        keysAfter.n === keysBefore?.n &&
-        !keysAfter.stash,
-      `${keysBefore?.n ?? "?"} stashed, ${keysAfter?.n ?? "?"} restored, stash ${keysAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
+      "provision refuses short keys and --dry-run writes nothing",
+      shortRefused && afterDryRun?.n === 0,
+      `short refused: ${shortRefused}; rows after dry run: ${afterDryRun?.n}`,
+    );
+
+    // A key made on staging by hand since the refresh (the kind
+    // --revoke-unlisted exists for).
+    await sql`
+      INSERT INTO api_keys (key, name, owner_id)
+      VALUES ('with permissions', 'Hand-made test key', ${userId})`;
+    provision(keyEnv(`f3_${"a".repeat(48)}`));
+    // Rotating the map key revokes its old row.
+    provision(keyEnv(`f3_${"d".repeat(48)}`), ["--revoke-unlisted"]);
+
+    const provisioned = await sql<
+      {
+        name: string;
+        key: string;
+        live: boolean;
+        owner_id: number;
+        grants: string | null;
+      }[]
+    >`
+      SELECT k.name, k.key, k.revoked_at IS NULL AS live, k.owner_id,
+        string_agg(r.name::text || '@' || o.org_type::text, ',') AS grants
+      FROM api_keys k
+      LEFT JOIN roles_x_api_keys_x_org g ON g.api_key_id = k.id
+      LEFT JOIN roles r ON r.id = g.role_id
+      LEFT JOIN orgs o ON o.id = g.org_id
+      GROUP BY k.id ORDER BY k.id`;
+    const live = provisioned.filter((k) => k.live);
+    const liveBy = new Map(live.map((k) => [k.name, k]));
+    const keysOk =
+      live.length === 3 &&
+      liveBy.get("staging: map")?.key === `f3_${"d".repeat(48)}` &&
+      liveBy.get("staging: map")?.grants === null &&
+      liveBy.get("staging: auth")?.grants === "editor@nation" &&
+      liveBy.get("staging: slackbot")?.grants === "admin@nation" &&
+      live.every((k) => k.owner_id === userId) &&
+      // the rotated-out map key and the hand-made key are revoked
+      provisioned.filter((k) => !k.live).length === 2;
+    check(
+      "declared staging service keys provisioned (roles, rotation, revoke)",
+      keysOk,
+      // Synthetic fixture values; names and grants only.
+      provisioned
+        .map(
+          (k) =>
+            `${k.name}${k.live ? "" : " (revoked)"}: ${k.grants ?? "read-only"}`,
+        )
+        .join("; "),
+    );
+
+    // --- 5d. The real-data verifier agrees ---------------------------------
+    // verify-target is what an operator runs against staging; run it here,
+    // after provisioning, so its sweeps (including the secret sweep and the
+    // declared-keys check) are exercised on every CI run.
+    let verifyTargetOk = true;
+    try {
+      run(
+        "pnpm",
+        [
+          "-F",
+          "@acme/scripts",
+          "exec",
+          "tsx",
+          "src/obfuscate-db.verify-target.ts",
+        ],
+        childEnv,
+      );
+    } catch {
+      verifyTargetOk = false;
+    }
+    check(
+      "verify-target passes on the obfuscated, provisioned sandbox",
+      verifyTargetOk,
+      verifyTargetOk ? "all checks passed" : "see its FAIL lines above",
     );
 
     // --- 6. Verdict -----------------------------------------------------------

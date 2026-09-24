@@ -18,6 +18,12 @@
  *   5. auth.oauth_client(s) secrets invalidated.
  *   6. No kept OAuth client URI points at a production F3 host.
  *   7. attendance FK integrity.
+ *   8. Secret sweep — no Slack token (xoxb-/xoxp-/xapp-…) anywhere in
+ *      public+auth, no JSON key naming a secret with a value, and every
+ *      slack_spaces.bot_token null.
+ *   9. api_keys holds only the declared staging service keys
+ *      (staging-service-keys.ts), so this also passes after
+ *      `staging-api-keys --provision`.
  *
  * Usage:
  *   DATABASE_URL=postgresql://… pnpm -F @acme/scripts obfuscate-db:verify-target \
@@ -29,6 +35,7 @@
 import postgres from "postgres";
 
 import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
+import { STAGING_SERVICE_KEYS } from "./staging-service-keys";
 
 // Must match the --email-sink the obfuscator ran with (same default).
 const EMAIL_SINK = (
@@ -60,11 +67,17 @@ const SLACK_MENTION_REGEX = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
 // shape is a mention that survived un-rewritten.
 const OBFUSCATED_SLACK_ID = /^U[0-9A-F]{8,}$/;
 
+// Keep in sync with SLACK_TOKEN_REGEX / SECRET_KEY_REGEX /
+// REDACTED_SLACK_TOKEN in obfuscate-db.ts.
+const SLACK_TOKEN_REGEX = /\b(?:xox[a-z]|xapp)-[A-Za-z0-9-]+/g;
+const REDACTED_SLACK_TOKEN = "xoxb-redacted";
+const SECRET_KEY_REGEX =
+  /(?:token|secret|password|passwd|api_?key|private_?key|credential)s?$/i;
+
 const EMPTY_TABLES = [
   "public.auth_sessions",
   "public.auth_verification_tokens",
   "public.auth_accounts",
-  "public.api_keys",
   "auth.oauth_authorization_codes",
   "auth.oauth_authorization_code",
   "auth.oauth_access_tokens",
@@ -218,6 +231,136 @@ async function sweepForEmails(sql: Sql): Promise<void> {
   );
 }
 
+/** Paths ("a.b.c") of JSON keys naming a secret whose value isn't null. */
+function secretKeyPaths(value: unknown, path: string, out: string[]): string[] {
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => secretKeyPaths(v, `${path}[${i}]`, out));
+  } else if (value !== null && typeof value === "object") {
+    for (const [k, v] of Object.entries(value)) {
+      const child = path ? `${path}.${k}` : k;
+      if (SECRET_KEY_REGEX.test(k) && v !== null) out.push(child);
+      else secretKeyPaths(v, child, out);
+    }
+  }
+  return out;
+}
+
+/**
+ * Secrets the email sweep can't see (2026-09-24 finding): the slackbot keeps
+ * each workspace's bot token and SMTP password inside slack_spaces.settings,
+ * and the copies survived the first refresh. Like the email sweep, this
+ * records locations (column, JSON key path) and never the value.
+ */
+async function sweepForSecrets(sql: Sql): Promise<void> {
+  const columns = await sql<
+    {
+      table_schema: string;
+      table_name: string;
+      column_name: string;
+      data_type: string;
+    }[]
+  >`
+    SELECT c.table_schema, c.table_name, c.column_name, c.data_type
+    FROM information_schema.columns c
+    JOIN information_schema.tables t
+      ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+    WHERE c.table_schema IN ('public', 'auth')
+      AND t.table_type = 'BASE TABLE'
+      AND (c.data_type IN ('text', 'character varying', 'json', 'jsonb')
+        OR c.udt_name = 'citext')`;
+
+  const tokenColumns = new Set<string>();
+  const secretKeys = new Set<string>();
+  for (const col of columns) {
+    const location = `${col.table_schema}.${col.table_name}.${col.column_name}`;
+    const qualified = quoteQualified(`${col.table_schema}.${col.table_name}`);
+    const isJson = col.data_type === "json" || col.data_type === "jsonb";
+    // Cheap pre-filter in SQL; the exact rules run on the parsed value.
+    const filter = isJson
+      ? `"${col.column_name}"::text ~ '(xox[a-z]|xapp)-'
+         OR "${col.column_name}"::text ~* '(token|secret|password|passwd|api_?key|private_?key|credential)s?"\\s*:'`
+      : `"${col.column_name}"::text ~ '(xox[a-z]|xapp)-'`;
+    const cursor = sql
+      .unsafe(
+        `SELECT "${col.column_name}"::text AS v FROM ${qualified}
+         WHERE ${filter}`,
+      )
+      .cursor(5000);
+    for await (const rows of cursor) {
+      for (const row of rows as unknown as { v: string }[]) {
+        const parsed: unknown = isJson ? JSON.parse(row.v) : row.v;
+        const texts = isJson ? stringLeaves(parsed, []) : [row.v];
+        const hasToken = texts.some((t) =>
+          [...t.matchAll(SLACK_TOKEN_REGEX)].some(
+            (m) => m[0] !== REDACTED_SLACK_TOKEN,
+          ),
+        );
+        if (hasToken) tokenColumns.add(location);
+        if (isJson) {
+          for (const keyPath of secretKeyPaths(parsed, "", [])) {
+            // Array indexes vary per row; report the key path once.
+            secretKeys.add(
+              `${location} -> ${keyPath.replace(/\[\d+\]/g, "[]")}`,
+            );
+          }
+        }
+      }
+    }
+  }
+  check(
+    "Slack token sweep",
+    tokenColumns.size === 0,
+    tokenColumns.size === 0
+      ? `0 Slack tokens across ${columns.length} text/json columns (public + auth)`
+      : `${tokenColumns.size} column(s) carry a Slack token: ${[...tokenColumns].slice(0, 5).join("; ")}`,
+  );
+  check(
+    "no secret-named JSON keys with a value",
+    secretKeys.size === 0,
+    secretKeys.size === 0
+      ? `0 across the json columns (public + auth)`
+      : `${secretKeys.size} key path(s): ${[...secretKeys].slice(0, 5).join("; ")}`,
+  );
+
+  if (await tableExists(sql, "public.slack_spaces")) {
+    const [live] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM slack_spaces WHERE bot_token IS NOT NULL`;
+    check(
+      "slack_spaces.bot_token null",
+      live?.n === 0,
+      `${live?.n} rows with a bot token`,
+    );
+  }
+}
+
+/**
+ * api_keys is emptied by the obfuscator and then re-provisioned with staging's
+ * own declared service keys, so the only rows allowed are those names. Counts
+ * and names only, never key values.
+ */
+async function checkApiKeys(sql: Sql): Promise<void> {
+  if (!(await tableExists(sql, "public.api_keys"))) {
+    check(
+      "api_keys holds only declared staging keys",
+      true,
+      "absent — skipped",
+    );
+    return;
+  }
+  const declared = STAGING_SERVICE_KEYS.map((k) => k.name);
+  const [row] = await sql<{ total: number; undeclared: number }[]>`
+    SELECT count(*)::int AS total,
+      count(*) FILTER (
+        WHERE revoked_at IS NULL AND NOT (name = ANY(${declared}))
+      )::int AS undeclared
+    FROM api_keys`;
+  check(
+    "api_keys holds only declared staging keys",
+    row?.undeclared === 0,
+    `${row?.total} rows, ${row?.undeclared} live key(s) not in staging-service-keys.ts`,
+  );
+}
+
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -259,6 +402,8 @@ async function main(): Promise<void> {
     console.log(`=== obfuscation target verification: "${dbName}" ===`);
 
     await sweepForEmails(sql);
+    await sweepForSecrets(sql);
+    await checkApiKeys(sql);
 
     for (const table of EMPTY_TABLES) {
       if (!(await tableExists(sql, table))) {

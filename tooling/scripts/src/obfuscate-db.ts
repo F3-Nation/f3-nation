@@ -5,7 +5,7 @@
  * staging (f3data-nonprod). PII is replaced with deterministic fakes (same
  * input always maps to the same fake, so relational consistency holds across
  * tables), secrets/sessions are truncated, and JSON/free-text columns are
- * scrubbed of email-shaped strings.
+ * scrubbed of email-shaped strings, Slack tokens and secret-named JSON keys.
  *
  * !! This script has only been proven against the local sandbox seed. It must
  * !! never be pointed at real data without human review of the PII inventory
@@ -220,6 +220,22 @@ const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // rather than rewritten — the replacement always emits the bare form.
 const SLACK_MENTION_REGEX = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
 
+// Secrets stored inside JSON, found the hard way (2026-09-24): the slackbot
+// keeps a copy of each workspace's bot token in slack_spaces.settings
+// (`bot_token`) next to the region's SMTP login (`email_password`). Nulling
+// the bot_token column alone left every prod workspace's live xoxb- token in
+// the JSON, and staging's scheduled scripts used them to post into prod
+// Slack. Any JSON key whose name ends in a secret word (bot_token,
+// email_password, apiKey; not token_endpoint_auth_method) has its value
+// nulled at any depth. The key is kept, so readers that index it still work.
+const SECRET_KEY_REGEX =
+  /(?:token|secret|password|passwd|api_?key|private_?key|credential)s?$/i;
+
+// Slack tokens (bot xoxb-, user xoxp-, app xapp-, refresh xoxe-, …) caught
+// by shape wherever they sit in free text or under an innocuous key.
+const SLACK_TOKEN_REGEX = /\b(?:xox[a-z]|xapp)-[A-Za-z0-9-]+/g;
+const REDACTED_SLACK_TOKEN = "xoxb-redacted";
+
 function isAllowlistedEmail(email: string): boolean {
   // Already a sink address: final. (Old @obfuscated.f3nation.dev fakes are
   // NOT allowlisted: an in-place run over an earlier refresh remaps them.)
@@ -232,10 +248,12 @@ function isAllowlistedEmail(email: string): boolean {
 }
 
 function scrubText(value: string): string {
-  const withoutMentions = value.replace(
-    SLACK_MENTION_REGEX,
-    (_match, id: string) => `<@${fakeSlackId(id)}>`,
-  );
+  const withoutMentions = value
+    .replace(SLACK_TOKEN_REGEX, REDACTED_SLACK_TOKEN)
+    .replace(
+      SLACK_MENTION_REGEX,
+      (_match, id: string) => `<@${fakeSlackId(id)}>`,
+    );
   return withoutMentions.replace(EMAIL_REGEX, (match) =>
     isAllowlistedEmail(match) ? match : fakeEmail(match),
   );
@@ -243,7 +261,8 @@ function scrubText(value: string): string {
 
 /**
  * Scrub email-shaped strings anywhere inside a JSON value by walking the
- * parsed structure and scrubbing each string (keys included). Scrubbing the
+ * parsed structure and scrubbing each string (keys included), and null the
+ * value of any key that names a secret (SECRET_KEY_REGEX). Scrubbing the
  * serialized form is NOT safe: an email-shaped match can begin inside a
  * backslash escape — `"…\n@A.1."` serializes to `…\\n@A.1.`, EMAIL_REGEX
  * reads `n@A.1` as an email and consumes the `n`, and the replacement turns
@@ -266,7 +285,7 @@ function scrubJson(value: unknown): unknown {
     let changed = false;
     const entries = Object.entries(value).map(([k, v]) => {
       const key = scrubText(k);
-      const scrubbed = scrubJson(v);
+      const scrubbed = SECRET_KEY_REGEX.test(k) ? null : scrubJson(v);
       if (key !== k || scrubbed !== v) changed = true;
       return [key, scrubbed] as const;
     });
@@ -1014,7 +1033,9 @@ async function obfuscate(sql: Sql): Promise<void> {
     columns: ["bot_token", "settings"],
     actions: {
       bot_token: "null out (secret)",
-      settings: "scrub emails (json)",
+      // settings carries its own bot_token + email_password copies; the
+      // secret-key rule in scrubJson nulls them.
+      settings: "scrub emails + null secret keys (json)",
     },
     transform: (row) => {
       const changes: Row = {};
