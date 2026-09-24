@@ -237,9 +237,19 @@ def pull_org_leaderboard_data() -> Dict[int, List[OrgUserLeaderboard]]:
         select(
             Attendance_x_AttendanceType.attendance_id.label("attendance_id"),
             func.sum(case((AttendanceType.type == "Q", 1), else_=0)).label("q_ind"),
-            func.sum(case((AttendanceType.type == "Co-Q", 1), else_=0)).label("coq_ind"),
+            func.sum(case((AttendanceType.type.in_(["Co-Q", "CoQ"]), 1), else_=0)).label("coq_ind"),
         )
+        .select_from(Attendance_x_AttendanceType)
+        .join(Attendance, Attendance.id == Attendance_x_AttendanceType.attendance_id)
+        .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
         .join(AttendanceType, AttendanceType.id == Attendance_x_AttendanceType.attendance_type_id)
+        .where(
+            Attendance.is_planned.is_(False),
+            EventInstance.is_active.is_(True),
+            EventInstance.pax_count.is_not(None),
+            EventInstance.start_date >= datetime(prior_year, 1, 1),
+            EventInstance.start_date < datetime(prior_year + 1, 1, 1),
+        )
         .group_by(Attendance_x_AttendanceType.attendance_id)
         .subquery("attendance_type_counts")
     )
@@ -255,7 +265,10 @@ def pull_org_leaderboard_data() -> Dict[int, List[OrgUserLeaderboard]]:
                 User.f3_name.label("f3_name"),
                 User.avatar_url.label("avatar_url"),
                 func.count(events.c.event_id).label("post_count"),
-                func.sum(attendance_types.c.q_ind + attendance_types.c.coq_ind).label("total_qs"),
+                func.coalesce(
+                    func.sum(func.coalesce(attendance_types.c.q_ind, 0) + func.coalesce(attendance_types.c.coq_ind, 0)),
+                    0,
+                ).label("total_qs"),
             )
             .select_from(events)
             .join(Attendance, Attendance.event_instance_id == events.c.event_id)

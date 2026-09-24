@@ -5,11 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import Boolean, Column, DateTime, Integer, MetaData, String, Table, create_engine, event
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-
-from sqlalchemy.dialects import postgresql
 
 from scripts import monthly_reporting
 
@@ -168,6 +167,14 @@ def reporting_session(monkeypatch):
                     "fng_count": 1,
                     "is_active": True,
                 },
+                {
+                    "id": 9,
+                    "org_id": 10,
+                    "start_date": datetime(2022, 12, 10),
+                    "pax_count": 2,
+                    "fng_count": 0,
+                    "is_active": True,
+                },
             ],
         )
         connection.execute(
@@ -193,9 +200,13 @@ def reporting_session(monkeypatch):
                 {"id": 61, "event_instance_id": 6, "user_id": 2, "is_planned": False},
                 {"id": 71, "event_instance_id": 7, "user_id": 1, "is_planned": False},
                 {"id": 81, "event_instance_id": 8, "user_id": 1, "is_planned": False},
+                {"id": 91, "event_instance_id": 9, "user_id": 2, "is_planned": False},
             ],
         )
-        connection.execute(attendance_types.insert(), [{"id": 1, "type": "Q"}, {"id": 2, "type": "Co-Q"}])
+        connection.execute(
+            attendance_types.insert(),
+            [{"id": 1, "type": "Q"}, {"id": 2, "type": "Co-Q"}, {"id": 3, "type": "CoQ"}],
+        )
         connection.execute(
             attendance_type_links.insert(),
             [
@@ -204,11 +215,13 @@ def reporting_session(monkeypatch):
                 {"attendance_id": 22, "attendance_type_id": 2},
                 {"attendance_id": 31, "attendance_type_id": 1},
                 {"attendance_id": 31, "attendance_type_id": 2},
+                {"attendance_id": 31, "attendance_type_id": 3},
                 {"attendance_id": 41, "attendance_type_id": 1},
                 {"attendance_id": 51, "attendance_type_id": 1},
                 {"attendance_id": 61, "attendance_type_id": 1},
                 {"attendance_id": 71, "attendance_type_id": 1},
                 {"attendance_id": 81, "attendance_type_id": 1},
+                {"attendance_id": 91, "attendance_type_id": 3},
             ],
         )
 
@@ -278,8 +291,14 @@ def test_leaderboard_queries_base_tables_and_preserve_report_rows(monkeypatch):
     assert "users" in sql
     assert "sum(CASE" in sql
     compiled = session.statement.compile(dialect=postgresql.dialect())
-    assert "Q" in compiled.params.values()
-    assert "Co-Q" in compiled.params.values()
+    bind_values = [
+        value
+        for parameter in compiled.params.values()
+        for value in (parameter if isinstance(parameter, (list, tuple)) else [parameter])
+    ]
+    assert "Q" in bind_values
+    assert "Co-Q" in bind_values
+    assert "CoQ" in bind_values
     assert "event_org.org_type" in sql
     assert "event_parent_org.org_type" in sql
     assert "event_instances.pax_count IS NOT NULL" in sql
@@ -348,6 +367,31 @@ def test_monthly_summary_queries_base_tables_and_preserves_summary_shape(monkeyp
     }
 
 
+def test_type_aggregate_is_scoped_to_current_year_reportable_attendance(monkeypatch):
+    session = FakeSession([])
+    monkeypatch.setattr(monthly_reporting, "get_session", lambda: session)
+    monkeypatch.setattr(monthly_reporting, "datetime", January2025)
+
+    monthly_reporting.pull_org_leaderboard_data()
+
+    compiled = session.statement.compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    aggregate_start = sql.index("SELECT attendance_x_attendance_types.attendance_id AS attendance_id")
+    aggregate_end = sql.index(") AS attendance_type_counts", aggregate_start)
+    aggregate_sql = sql[aggregate_start:aggregate_end]
+
+    assert "JOIN attendance ON attendance.id = attendance_x_attendance_types.attendance_id" in aggregate_sql
+    assert "JOIN event_instances ON event_instances.id = attendance.event_instance_id" in aggregate_sql
+    assert "attendance.is_planned IS false" in aggregate_sql
+    assert "event_instances.is_active IS true" in aggregate_sql
+    assert "event_instances.pax_count IS NOT NULL" in aggregate_sql
+    assert "event_instances.start_date >=" in aggregate_sql
+    assert "event_instances.start_date <" in aggregate_sql
+    assert "event_org" not in aggregate_sql  # No repeated hierarchy joins in the type aggregate.
+    assert datetime(2024, 1, 1) in compiled.params.values()
+    assert datetime(2025, 1, 1) in compiled.params.values()
+
+
 def test_leaderboard_executes_with_january_year_boundary_and_null_type_semantics(reporting_session):
     results = monthly_reporting.pull_org_leaderboard_data()
 
@@ -356,12 +400,14 @@ def test_leaderboard_executes_with_january_year_boundary_and_null_type_semantics
     assert rows[(10, "month", 1)].post_count == 2
     assert rows[(10, "month", 1)].total_qs == 1
     assert rows[(10, "month", 2)].total_qs == 1  # Co-Q
-    assert rows[(10, "month", 4)].total_qs is None  # Actual attendance with no type link
+    assert rows[(10, "month", 4)].total_qs == 0  # Actual attendance with no type link.
     assert rows[(10, "year", 1)].post_count == 3  # Includes February, but not January 2025
     assert rows[(100, "month", 1)].post_count == 2  # AO events roll up to their parent region.
     assert rows[(100, "month", 1)].total_qs == 1
     assert rows[(200, "month", 1)].post_count == 1  # Direct-region organization
-    assert rows[(200, "month", 1)].total_qs == 2  # Direct-region event has both Q and Co-Q.
+    assert rows[(200, "month", 1)].total_qs == 3  # Q, Co-Q, and legacy CoQ all count.
+    assert rows[(10, "month", 2)].post_count == 1  # 2022 CoQ attendance is outside the report year.
+    assert rows[(10, "month", 2)].total_qs == 1
     assert (10, "month", 3) not in rows  # Planned attendance is excluded
 
 
@@ -388,3 +434,37 @@ def test_monthly_summary_executes_filters_and_counts_distinct_actual_users(repor
     assert direct_region.event_count == 1
     assert direct_region.unique_pax_count == 1
     assert all(month_key(record) < "2025-01-01" for records in results.values() for record in records)
+
+
+def test_leaderboard_chart_sorts_mixed_typed_and_untyped_attendance(monkeypatch, tmp_path):
+    pytest.importorskip("matplotlib")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(monthly_reporting, "stitch_2x2", lambda *_args, **_kwargs: "stitched.png")
+    records = [
+        monthly_reporting.OrgUserLeaderboard(
+            basis="month",
+            org_id=10,
+            org_name="Alpha",
+            user_id=1,
+            f3_name="Typed PAX",
+            avatar_url=None,
+            post_count=2,
+            total_qs=1,
+        ),
+        monthly_reporting.OrgUserLeaderboard(
+            basis="month",
+            org_id=10,
+            org_name="Alpha",
+            user_id=2,
+            f3_name="Untyped PAX",
+            avatar_url=None,
+            post_count=1,
+            total_qs=0,
+        ),
+    ]
+
+    result = monthly_reporting.create_post_leaders_plot(records)
+
+    assert result == "stitched.png"
+    assert (tmp_path / "month_Q_leaders.png").is_file()
+    assert (tmp_path / "year_Q_leaders.png").is_file()
