@@ -17,11 +17,15 @@ export default defineConfig({
       include: coverageInclude,
       exclude: coverageExclude,
       thresholds: {
+        // The OTel rework moved posthog-server.ts out of this app into
+        // @acme/observability, then brought instrumentation.ts and
+        // instrumentation-client.ts back into the denominator with tests of
+        // their own (see tooling/vitest/coverage.ts) — net upward.
         autoUpdate: true,
-        statements: 27.34,
-        branches: 26.73,
-        functions: 21.53,
-        lines: 27.37,
+        statements: 28.75,
+        branches: 27.66,
+        functions: 22.82,
+        lines: 28.75,
       },
     },
     exclude: [

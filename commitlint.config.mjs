@@ -24,6 +24,7 @@ export default {
         "env",
         "health",
         "mail",
+        "observability",
         "shared",
         "sso",
         "storage",

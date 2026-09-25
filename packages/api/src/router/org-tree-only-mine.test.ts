@@ -19,6 +19,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 import {
+  createMixedOrgTree,
   createTestClient,
   db,
   getOrCreateRoles,
@@ -355,6 +356,84 @@ describe("organization tree onlyMine router scoping", () => {
     const ids = result.events.map((event) => event.id);
     expect(ids).toContain(withinEventId);
     expect(ids).not.toContain(beyondEventId);
+  });
+
+  it("scopes map events across real Territory and direct-Area branches", async () => {
+    const tree = await createMixedOrgTree(createdOrgIds);
+    const searchTerm = `${prefix} Mixed`;
+    const branchEvents: number[] = [];
+    for (const branch of [
+      tree.territoryBranch,
+      tree.directBranch,
+      tree.unrelatedBranch,
+    ]) {
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `${searchTerm} Location`,
+          orgId: branch.region.id,
+          isActive: true,
+          latitude: 36.2,
+          longitude: -81.6,
+        })
+        .returning({ id: schema.locations.id });
+      if (!location) throw new Error("Failed to create mixed-tree location");
+      createdLocationIds.push(location.id);
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `${searchTerm} Event`,
+          orgId: branch.ao.id,
+          locationId: location.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          startDate: "2026-01-01",
+          isActive: true,
+          isPrivate: false,
+          highlight: false,
+        })
+        .returning({ id: schema.events.id });
+      if (!event) throw new Error("Failed to create mixed-tree event");
+      createdEventIds.push(event.id);
+      branchEvents.push(event.id);
+    }
+    const roles = await db.select().from(schema.roles);
+    const role = roles.find((candidate) => candidate.name === "admin");
+    if (!role) throw new Error("Missing admin role");
+    for (const [root, expected] of [
+      [tree.sector, branchEvents.slice(0, 2)],
+      [tree.territory, branchEvents.slice(0, 1)],
+    ] as const) {
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `mixed-scope-${uniqueId()}@example.com`,
+          f3Name: "Mixed scope test",
+        })
+        .returning({ id: schema.users.id, email: schema.users.email });
+      if (!user) throw new Error("Failed to create mixed-tree user");
+      createdUserIds.push(user.id);
+      await db
+        .insert(schema.rolesXUsersXOrg)
+        .values({ userId: user.id, roleId: role.id, orgId: root.id });
+      await mockAuthWithSession(
+        createSession({
+          userId: user.id,
+          email: user.email,
+          orgId: root.id,
+          orgName: root.name,
+        }),
+      );
+      const result = await createTestClient().map.event.all({
+        onlyMine: true,
+        searchTerm,
+        pageIndex: 0,
+        pageSize: 100,
+      });
+      expect(new Set(result.events.map((event) => event.id))).toEqual(
+        new Set(expected),
+      );
+    }
   });
 
   it("applies one depth budget to map event results", async () => {

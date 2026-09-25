@@ -12,17 +12,21 @@ export default defineConfig({
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
       include: coverageInclude,
-      // server.ts and instrument.ts are hand-verified process bootstrap (Sentry
-      // init, @hono/node-server serve(), SIGTERM handling) — same category as
+      // server.ts and instrument.ts are hand-verified process bootstrap
+      // (observability init, @hono/node-server serve(), SIGTERM handling) —
+      // same category as
       // the instrumentation.ts they replace, which bootstrapCoverageExclude
       // already excludes for every app.
       exclude: [...coverageExclude, "src/server.ts", "src/instrument.ts"],
       thresholds: {
+        // Lowered when the OTel rework moved posthog-server.ts (fully
+        // covered) out of this app into @acme/observability — the remaining
+        // src denominator has proportionally more uncovered bootstrap code.
         autoUpdate: true,
-        statements: 99.02,
+        statements: 99.11,
         branches: 100,
-        functions: 94.11,
-        lines: 99,
+        functions: 94.73,
+        lines: 99.09,
       },
     },
     exclude: [

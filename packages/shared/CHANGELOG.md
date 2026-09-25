@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.3.1...pkg-shared@0.4.0) (2026-09-23)
+
+
+### Features
+
+* **admin,api,db,shared:** surface territory in the admin UI and count AOs at any depth ([#1043](https://github.com/F3-Nation/f3-nation/issues/1043)) ([f9932d2](https://github.com/F3-Nation/f3-nation/commit/f9932d26700c733fb69ee02b703aedab63053f4f))
+* **api,admin:** sort areas by resolved sector and territory ([#1049](https://github.com/F3-Nation/f3-nation/issues/1049)) ([4e97ef7](https://github.com/F3-Nation/f3-nation/commit/4e97ef788e826c81d8b1975cf2b46b8d493393e8))
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
 ## [0.3.1](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.3.0...pkg-shared@0.3.1) (2026-09-16)
 
 

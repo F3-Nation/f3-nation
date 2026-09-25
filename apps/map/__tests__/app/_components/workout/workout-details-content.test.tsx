@@ -70,9 +70,9 @@ vi.mock("~/app/_components/map/event-chip", () => ({
 vi.mock("~/utils/hooks/use-update-event-search-params", () => ({
   useUpdateEventSearchParams: vi.fn(),
 }));
-// The exception-list hook reports failures to Sentry; the report itself is
+// The exception-list hook reports failures to PostHog; the report itself is
 // covered in `__tests__/utils/hooks/use-upcoming-instances.test.ts`.
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("posthog-js", () => ({ default: { captureException: vi.fn() } }));
 
 import {
   createWorkoutEventFromInstance,

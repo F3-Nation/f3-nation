@@ -36,7 +36,7 @@ import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 
 - **`coverageInclude`** — the whole-`src` glob (keeps untested files counted).
 - **`coverageExclude`** — Vitest's built-in excludes plus non-testable
-  bootstrap/config files (Sentry init, `next.config.*`, `instrumentation*`,
+  bootstrap/config files (PostHog init, `next.config.*`, `instrumentation*`,
   Tailwind/PostCSS config, `middleware.*`). Those files would otherwise sit in
   the denominator at 0% and break thresholds on every edit.
 
@@ -144,4 +144,4 @@ directory. Do not add a `coverage` block to `vitest.characterization.config.ts`.
 Tests and QA flows that require sign-in go through `apps/auth`'s email-based MFA
 against a local mail backend (no real inbox). See the
 [Testing Guidelines in AGENTS.md](../AGENTS.md) and
-[`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md).
+[`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) for the full recipe.

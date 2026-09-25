@@ -1,6 +1,6 @@
 {
   "name": "f3-api",
-  "version": "6.7.0",
+  "version": "6.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,6 +22,7 @@
   "dependencies": {
     "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/observability": "workspace:*",
     "@acme/shared": "workspace:*",
     "@f3nation/health": "workspace:*",
     "@hono/node-server": "catalog:",
@@ -30,8 +31,6 @@
     "@orpc/zod": "catalog:",
     "@scalar/hono-api-reference": "catalog:",
     "@scalar/nextjs-api-reference": "catalog:",
-    "@sentry/nextjs": "catalog:",
-    "@sentry/node": "catalog:",
     "@t3-oss/env-core": "catalog:",
     "dotenv-cli": "catalog:",
     "hono": "catalog:",
