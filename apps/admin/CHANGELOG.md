@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.6.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.3...admin@2.6.0) (2026-09-23)
+
+
+### Features
+
+* **admin,api,db,shared:** surface territory in the admin UI and count AOs at any depth ([#1043](https://github.com/F3-Nation/f3-nation/issues/1043)) ([f9932d2](https://github.com/F3-Nation/f3-nation/commit/f9932d26700c733fb69ee02b703aedab63053f4f))
+* **api,admin:** sort areas by resolved sector and territory ([#1049](https://github.com/F3-Nation/f3-nation/issues/1049)) ([4e97ef7](https://github.com/F3-Nation/f3-nation/commit/4e97ef788e826c81d8b1975cf2b46b8d493393e8))
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.11.0
+    * @acme/logger bumped to 0.2.0
+    * @acme/mail bumped to 0.1.4
+    * @acme/shared bumped to 0.4.0
+    * @acme/ui bumped to 0.2.0
+    * @acme/validators bumped to 0.4.4
+
 ## [2.5.3](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.2...admin@2.5.3) (2026-09-16)
 
 
