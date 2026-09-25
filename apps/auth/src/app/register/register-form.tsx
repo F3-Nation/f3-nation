@@ -160,17 +160,17 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
           otp: code,
         });
         if (signInError) {
-          if (signInError.status === 429) {
-            setError("Too many attempts. Please wait a moment and try again.");
-          } else {
-            // The account was already created above — "start over" would
-            // send them back into a registration form that now fails as a
-            // duplicate. Send them to sign in fresh instead.
-            setError(
-              "Your account was created, but your code has expired. Please sign in again to continue.",
-            );
-            setNeedsSignInAgain(true);
-          }
+          // The account was already created above in both branches —
+          // retrying via the "Create Account" button (the only other
+          // control on this page) would re-post to /api/register, which
+          // the F3 API rejects as a duplicate email. Every branch here
+          // needs a path to sign in instead of "try again" on this form.
+          setError(
+            signInError.status === 429
+              ? "Your account was created, but you've hit the sign-in rate limit. Please wait a moment, then sign in again to continue."
+              : "Your account was created, but your code has expired. Please sign in again to continue.",
+          );
+          setNeedsSignInAgain(true);
           return;
         }
       } else {

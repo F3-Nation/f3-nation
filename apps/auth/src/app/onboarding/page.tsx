@@ -34,7 +34,13 @@ function OnboardingForm() {
     fetch("/api/onboarding")
       .then((res) => {
         if (res.status === 401) {
-          router.push("/login");
+          // /login itself doesn't read callbackUrl (it's a static landing
+          // page) — go straight to /login/email so a session that expired
+          // mid-onboarding still resumes the OAuth flow that sent the user
+          // here, instead of landing back on "/" after re-login.
+          router.push(
+            `/login/email?callbackUrl=${encodeURIComponent(`/onboarding?callbackUrl=${encodeURIComponent(callbackUrl)}`)}`,
+          );
           return;
         }
         if (!res.ok) return;
