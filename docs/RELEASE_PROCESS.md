@@ -70,6 +70,8 @@ If multiple PRs are merged to `main` before the Release Please PR is merged, Rel
 
 The PR is purely mechanical (version + changelog). Review the changelog entries to make sure they're accurate. When ready, merge it into `main`.
 
+Before merging, have an agent create a release-plan issue with the [`release-plan`](../.agents/skills/release-plan/SKILL.md) skill. That plan's test step creates the Staging test plan with the [`staging-test-plan`](../.agents/skills/staging-test-plan/SKILL.md) skill.
+
 ### 4. Release Please creates the tag
 
 On merge of the Release Please PR, the workflow runs again and this time creates the tag (e.g. `me@1.2.0`). This is why the GitHub App token is required — see the [GitHub App section](#github-app) below.

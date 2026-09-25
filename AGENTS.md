@@ -23,6 +23,13 @@ Reusable agent skills (procedural runbooks in the
 [Agent Skills](https://agentskills.io) `SKILL.md` format) live in
 [`.agents/skills/`](.agents/skills/).
 
+When asked for a **release plan** or a **Staging test plan** for a
+release-please PR, follow
+[`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
+or
+[`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
+— even if your tool does not load skills automatically.
+
 ## Project Structure & Module Organization
 
 - Deployable apps live in `apps/`, shared code in `packages/`, config in `tooling/`, and Turbo generators in `turbo/`.
