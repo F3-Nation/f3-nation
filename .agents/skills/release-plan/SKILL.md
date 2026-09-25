@@ -40,10 +40,13 @@ Ask for anything missing before starting:
 
    ```bash
    git fetch origin main
+   # Release PR still open: diff the last release against main.
    PREV=$(git log origin/main --grep '^chore: release main' --format=%H -n 1)
-   # If the release PR is already merged, PREV is that merge; use the one before it:
-   # PREV=$(git log origin/main --grep '^chore: release main' --format=%H -n 2 | tail -1)
-   git diff --name-only --diff-filter=A "$PREV" origin/main -- packages/db/drizzle/'*.sql'
+   END=origin/main
+   # Release PR already merged: diff the release before it against this release's merge.
+   # END=$(git log origin/main --grep '^chore: release main (#<PR>)' --format=%H -n 1)
+   # PREV=$(git log "$END^" --grep '^chore: release main' --format=%H -n 1)
+   git diff --name-only --diff-filter=A "$PREV" "$END" -- packages/db/drizzle/'*.sql'
    ```
 
    No new `.sql` files → **no migration**: drop Step 2 and the Database
@@ -105,14 +108,16 @@ Ask for anything missing before starting:
 
 ## Staging vs Production
 
-|                         | Staging                                                                     | Production                                                                              |
-| ----------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Step 1 action           | Merge the release PR; staging deploys start automatically                   | Approve each paused `*-production` deploy job on the Actions page                       |
-| Homepage                | Already published to production when the PR merges — say so in the Overview | Nothing to do                                                                           |
-| Database                | Cloud SQL `f3data-nonprod`, database `f3_staging`                           | Cloud SQL `f3data`, database `f3_prod`                                                  |
-| Cloud Run and log links | As in the template                                                          | Drop `-staging` from each project ID                                                    |
-| Test step               | Run the Staging test plan issue                                             | Repeat only the per-app smoke checks from the Staging test plan against production URLs |
-| Last step               | Let it run 24–48 h, then go/no-go for Production                            | Announce done in `#monorepo`                                                            |
+|                         | Staging                                                                     | Production                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Step 1 action           | Merge the release PR; staging deploys start automatically                   | Approve each paused `*-production` deploy job on the Actions page                            |
+| Homepage                | Already published to production when the PR merges — say so in the Overview | Nothing to do                                                                                |
+| Database                | Cloud SQL `f3data-nonprod`, database `f3_staging`                           | Cloud SQL `f3data`, database `f3_prod`                                                       |
+| Cloud Run and log links | As in the template                                                          | Drop `-staging` from each project ID; Analytics: job `analytics-etl` (same `f3data` project) |
+| Step 3 (test plan)      | Create the Staging test plan                                                | Drop the step                                                                                |
+| Test step               | Run the Staging test plan issue                                             | Repeat only the per-app smoke checks from the Staging test plan against production URLs      |
+| Database queries        | Run against `f3_staging`                                                    | Run against `f3_prod`                                                                        |
+| Last step               | Let it run 24–48 h, then go/no-go for Production                            | Announce done in `#monorepo`                                                                 |
 
 ## What to leave out
 

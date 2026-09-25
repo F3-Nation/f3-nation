@@ -7,7 +7,7 @@
 | ----- | ---------------------------------- |
 | Map   | https://staging.map.f3nation.com   |
 | Admin | https://staging.admin.f3nation.com |
-| Auth  | https://staging.auth.f3nation.com  |
+| Auth  | https://staging.auth2.f3nation.com |
 | API   | https://staging.api.f3nation.com   |
 | Me    | https://staging.me.f3nation.com    |
 

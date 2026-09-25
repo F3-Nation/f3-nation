@@ -31,8 +31,13 @@ Keep this list to 2–3 checks per app; edit it here when an app changes.
 
 - [ ] In the Slack workspace connected to the Staging bot, run a slash command you know. The bot responds. If you don't have access to that workspace, leave this unchecked and say so in `#monorepo`.
 
+## Analytics
+
+No manual check. It is a scheduled job; the release plan covers its monitoring.
+
 ## Homepage
 
-Homepage has no Staging; it is already live when the release PR merges.
+Homepage has no Staging; it is already live when the release PR merges. Title
+its section in the issue "Homepage (live site, no Staging)".
 
 - [ ] https://f3nation.com/org loads and the org chart expands.
