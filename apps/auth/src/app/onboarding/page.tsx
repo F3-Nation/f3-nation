@@ -31,6 +31,7 @@ function OnboardingForm() {
   // entirely with AUTH_USE_BETTER_AUTH on. /api/onboarding itself reads
   // getCurrentSession() and already returns 401 with no session.
   useEffect(() => {
+    let redirecting = false;
     fetch("/api/onboarding")
       .then((res) => {
         if (res.status === 401) {
@@ -38,6 +39,7 @@ function OnboardingForm() {
           // page) — go straight to /login/email so a session that expired
           // mid-onboarding still resumes the OAuth flow that sent the user
           // here, instead of landing back on "/" after re-login.
+          redirecting = true;
           router.push(
             `/login/email?callbackUrl=${encodeURIComponent(`/onboarding?callbackUrl=${encodeURIComponent(callbackUrl)}`)}`,
           );
@@ -63,8 +65,13 @@ function OnboardingForm() {
       .catch(() => {
         // Ignore — fields will just be empty
       })
-      .finally(() => setPrefilling(false));
-  }, [router]);
+      .finally(() => {
+        // Keep the "Loading..." state up through the 401 redirect above —
+        // otherwise this branch still reaches `finally` and briefly renders
+        // (and lets the user submit) an empty onboarding form.
+        if (!redirecting) setPrefilling(false);
+      });
+  }, [router, callbackUrl]);
 
   if (prefilling) {
     return (
