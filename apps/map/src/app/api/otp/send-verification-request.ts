@@ -28,6 +28,15 @@ export const sendVerificationRequest = async (
     subject,
     text: renderOtpEmailText({ host, token }),
     html: renderOtpEmailHtml({ host, token }),
+    // Disable SendGrid click/open tracking on auth mail.
+    headers: {
+      "X-SMTPAPI": JSON.stringify({
+        filters: {
+          clicktrack: { settings: { enable: 0 } },
+          opentrack: { settings: { enable: 0 } },
+        },
+      }),
+    },
   });
   const failed = result.rejected.concat(result.pending ?? []).filter(Boolean);
   if (failed.length) {
