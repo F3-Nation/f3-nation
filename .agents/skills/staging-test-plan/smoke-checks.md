@@ -33,7 +33,8 @@ Keep this list to 2–3 checks per app; edit it here when an app changes.
 
 ## Analytics
 
-No manual check. It is a scheduled job; the release plan covers its monitoring.
+No manual check. The release plan has Tackle run the Staging job once and
+confirm it succeeds.
 
 ## Homepage
 

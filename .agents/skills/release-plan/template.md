@@ -42,13 +42,20 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 - [ ] **Announce the start** in `#monorepo`. Owner: @taterhead247
 - [ ] **Merge release PR #{{PR}}.** The deploys start automatically. Owner: @taterhead247
 
-<!-- Production: replace the item below with "Approve each paused production deploy job and wait for it to finish", and drop "Leave those paused". -->
+<!-- Production: replace the item below with "Approve each paused production deploy job and wait for it to finish", and drop "Leave those paused". Watch: every `*-production` job turns green, and each Production service shows a new Ready revision. Stop if: a `*-production` job fails (red). -->
 
 - [ ] **Wait for the deploys to finish** on the [Actions page](https://github.com/F3-Nation/f3-nation/actions). Each app deploys to Staging, then pauses at "waiting for approval" for Production. Leave those paused. Owner: @taterhead247
-  - **Watch** (@BigGillyStyle): every "deploy-staging" job turns green, and each Cloud Run service shows a new Ready revision (jobs: a new successful execution). Homepage goes straight to GitHub Pages: no staging job, no Cloud Run revision.
+  - **Watch** (@BigGillyStyle): every "deploy-staging" job turns green, and each Cloud Run service shows a new Ready revision (jobs: the job shows the new image; deploying does not run it). Homepage goes straight to GitHub Pages: no staging job, no Cloud Run revision.
   - **Stop if:** a deploy-staging job fails (red).
 
+<!-- OPTIONAL (only if Analytics is in the release): -->
+
+- [ ] **Run the Staging Analytics job once.** Click **Execute** on [`analytics-etl-nonprod`](https://console.cloud.google.com/run/jobs/details/us-central1/analytics-etl-nonprod/executions?project=f3data). Owner: @taterhead247
+  - **Expected:** the run succeeds.
+  - **Stop if:** the run fails.
+
 <!-- OPTIONAL (only if there is a migration): -->
+<!-- Production: if Staging's "Expected" line was not "none", move Step 2 before the production approval, unless the migration drops or renames something the old app still uses. State the chosen order in the Overview. -->
 
 ### Step 2: Run the database migration (~5 min)
 
