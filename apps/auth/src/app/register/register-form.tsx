@@ -52,6 +52,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
   const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [needsSignInAgain, setNeedsSignInAgain] = useState(false);
   const [showEmergency, setShowEmergency] = useState(false);
   const [regionSearch, setRegionSearch] = useState("");
   const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
@@ -99,6 +100,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setNeedsSignInAgain(false);
 
     if (!firstName.trim() || !lastName.trim()) {
       setError("First name and last name are required.");
@@ -121,63 +123,81 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
       return;
     }
 
-    // Create user via API — backend-agnostic, creates the `users` row
-    // through the F3 API regardless of which auth backend completes the
-    // sign-in below.
-    const res = await fetch("/api/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        f3Name: f3Name || undefined,
-        firstName,
-        lastName,
-        homeRegionId: homeRegionId || undefined,
-        phone: phone || undefined,
-        emergencyContact: emergencyContact || undefined,
-        emergencyPhone: emergencyPhone || undefined,
-        emergencyNotes: emergencyNotes || undefined,
-      }),
-    });
+    try {
+      // Create user via API — backend-agnostic, creates the `users` row
+      // through the F3 API regardless of which auth backend completes the
+      // sign-in below.
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          f3Name: f3Name || undefined,
+          firstName,
+          lastName,
+          homeRegionId: homeRegionId || undefined,
+          phone: phone || undefined,
+          emergencyContact: emergencyContact || undefined,
+          emergencyPhone: emergencyPhone || undefined,
+          emergencyNotes: emergencyNotes || undefined,
+        }),
+      });
 
-    if (!res.ok) {
-      const data = (await res.json()) as { error?: string };
-      setError(data.error ?? "Registration failed. Please try again.");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        setError(data.error ?? "Registration failed. Please try again.");
+        return;
+      }
+
+      // User created — now sign in with the original MFA code. The `users`
+      // row exists now, so Better Auth's databaseHooks.user.create.before
+      // (apps/auth/src/lib/better-auth.ts) finds it and bridges the id.
+      if (useBetterAuth) {
+        const { error: signInError } = await authClient.signIn.emailOtp({
+          email,
+          otp: code,
+        });
+        if (signInError) {
+          if (signInError.status === 429) {
+            setError("Too many attempts. Please wait a moment and try again.");
+          } else {
+            // The account was already created above — "start over" would
+            // send them back into a registration form that now fails as a
+            // duplicate. Send them to sign in fresh instead.
+            setError(
+              "Your account was created, but your code has expired. Please sign in again to continue.",
+            );
+            setNeedsSignInAgain(true);
+          }
+          return;
+        }
+      } else {
+        const result = await signIn("email-mfa", {
+          email,
+          code,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          setError(
+            "Your account was created, but your code has expired. Please sign in again to continue.",
+          );
+          setNeedsSignInAgain(true);
+          return;
+        }
+      }
+
+      const safeUrl = isValidCallbackUrl(callbackUrl, window.location.origin)
+        ? callbackUrl
+        : "/";
+      router.push(safeUrl);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // User created — now sign in with the original MFA code. The `users`
-    // row exists now, so Better Auth's databaseHooks.user.create.before
-    // (apps/auth/src/lib/better-auth.ts) finds it and bridges the id.
-    if (useBetterAuth) {
-      const { error: signInError } = await authClient.signIn.emailOtp({
-        email,
-        otp: code,
-      });
-      if (signInError) {
-        setError("Your verification code has expired. Please start over.");
-        setLoading(false);
-        return;
-      }
-    } else {
-      const result = await signIn("email-mfa", {
-        email,
-        code,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        setError("Your verification code has expired. Please start over.");
-        setLoading(false);
-        return;
-      }
-    }
-
-    const safeUrl = isValidCallbackUrl(callbackUrl, window.location.origin)
-      ? callbackUrl
-      : "/";
-    router.push(safeUrl);
   }
 
   const inputClass =
@@ -400,7 +420,24 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
               </div>
             )}
 
-            {error && <p className="text-base text-destructive">{error}</p>}
+            {error && (
+              <div className="space-y-2">
+                <p className="text-base text-destructive">{error}</p>
+                {needsSignInAgain && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(
+                        `/login/email?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+                      )
+                    }
+                    className="text-base text-primary underline hover:no-underline"
+                  >
+                    Sign in again
+                  </button>
+                )}
+              </div>
+            )}
 
             <button
               type="submit"

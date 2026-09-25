@@ -45,9 +45,18 @@ function VerifyEmailFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email }),
         });
-        const checkData = (await checkRes.json()) as { exists: boolean };
+        const checkData = (await checkRes.json()) as { exists?: boolean };
 
-        if (!checkData.exists) {
+        if (!checkRes.ok) {
+          setError(
+            checkRes.status === 429
+              ? "Too many attempts. Please wait a minute and try again."
+              : "Something went wrong. Please try again.",
+          );
+          return;
+        }
+
+        if (checkData.exists === false) {
           // New user — redirect to registration (code stays valid, neither
           // backend has consumed it yet)
           const params = new URLSearchParams({
@@ -65,7 +74,11 @@ function VerifyEmailFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
             otp: verifyCode,
           });
           if (signInError) {
-            setError("Invalid or expired code. Please try again.");
+            setError(
+              signInError.status === 429
+                ? "Too many attempts. Please wait a moment and try again."
+                : "Invalid or expired code. Please try again.",
+            );
             return;
           }
         } else {

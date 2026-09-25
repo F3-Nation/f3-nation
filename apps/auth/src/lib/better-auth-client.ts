@@ -1,10 +1,8 @@
 /**
- * Browser-side Better Auth client, mounted against the same isolated
- * /api/auth2 instance as apps/auth/src/lib/better-auth.ts. Only imported
- * from client components gated on AUTH_USE_BETTER_AUTH — see
- * apps/auth/src/app/login/email, apps/auth/src/app/login/email/verify, and
- * apps/auth/src/app/register, each of which now has a server `page.tsx`
- * that reads the flag and a client form component that branches on it.
+ * Browser-side Better Auth client for the /api/auth2 instance. Imported
+ * unconditionally; only called when the server passes `useBetterAuth`.
+ * The flag is server-only, so pages read it and pass it down as a prop
+ * instead of exposing a NEXT_PUBLIC_ var.
  */
 "use client";
 

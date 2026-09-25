@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 
 import Image from "next/image";
 
@@ -15,23 +14,29 @@ export default function OnboardingPage() {
 }
 
 function OnboardingForm() {
-  const { data: session } = useSession();
   const [f3Name, setF3Name] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [prefilling, setPrefilling] = useState(false);
+  const [prefilling, setPrefilling] = useState(true);
   const [isExistingUser, setIsExistingUser] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
 
+  // Always fetch on mount rather than gating on NextAuth's useSession() —
+  // that hook is NextAuth-only and stays empty for a Better Auth session
+  // (see apps/auth/src/lib/current-session.ts), which skipped this prefill
+  // entirely with AUTH_USE_BETTER_AUTH on. /api/onboarding itself reads
+  // getCurrentSession() and already returns 401 with no session.
   useEffect(() => {
-    if (!session?.user?.id) return;
-    setPrefilling(true);
     fetch("/api/onboarding")
       .then((res) => {
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
         if (!res.ok) return;
         return res.json();
       })
@@ -53,9 +58,9 @@ function OnboardingForm() {
         // Ignore — fields will just be empty
       })
       .finally(() => setPrefilling(false));
-  }, [session?.user?.id]);
+  }, [router]);
 
-  if (!session?.user || prefilling) {
+  if (prefilling) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>

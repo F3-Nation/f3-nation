@@ -1,7 +1,8 @@
 /**
- * Better Auth instance for the F3 SSO server — not wired into any live
- * route yet; gated behind AUTH_USE_BETTER_AUTH (see apps/auth/src/app/api/
- * auth2/[...all]/route.ts).
+ * Better Auth instance for the F3 SSO server. With AUTH_USE_BETTER_AUTH on,
+ * it backs first-party sign-in, registration, sign-out and session reads
+ * (see lib/current-session.ts); /api/oauth/* token issuance still runs on
+ * lib/oauth.ts either way.
  *
  * This factory is deliberately adapter-injectable (see `createAuthInstance`
  * below) rather than exporting one hardwired instance:
@@ -184,9 +185,10 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
               // — an unregistered email crashes with an unhandled TypeError
               // (500) instead of a clean error. Throwing here is what
               // surfaces a real 4xx to the caller. The registration
-              // hand-off (see apps/auth/src/app/register) avoids ever
-              // hitting this path in normal use by checking /api/check-user
-              // before calling signIn.emailOtp, so this is a safety net for
+              // hand-off (see apps/auth/src/app/login/email/verify/
+              // verify-email-form.tsx) avoids ever hitting this path in
+              // normal use by checking /api/check-user before calling
+              // signIn.emailOtp, so this is a safety net for
               // anyone calling the Better Auth API directly, not the
               // primary mechanism.
               throw new APIError("BAD_REQUEST", {

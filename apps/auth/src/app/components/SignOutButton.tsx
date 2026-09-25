@@ -25,8 +25,12 @@ export default function SignOutButton({
       // to /login as if nothing went wrong, leaving live refresh tokens
       // behind. A rejected fetch (network failure) falls through to the
       // catch block below.
+      // A 401 means the server already has no session for this user (it
+      // expired, or was revoked elsewhere) — there's nothing left to
+      // revoke and retrying can never succeed, so treat it the same as a
+      // successful revoke and continue to the local sign-out below.
       const logoutRes = await fetch("/api/logout", { method: "POST" });
-      if (!logoutRes.ok) {
+      if (!logoutRes.ok && logoutRes.status !== 401) {
         setError("Failed to log out. Please try again.");
         return;
       }
