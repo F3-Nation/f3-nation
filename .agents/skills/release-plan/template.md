@@ -48,7 +48,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Watch** (@BigGillyStyle): every "deploy-staging" job turns green, and each Cloud Run service shows a new Ready revision (jobs: the job shows the new image; deploying does not run it). Homepage goes straight to GitHub Pages: no staging job, no Cloud Run revision.
   - **Stop if:** a deploy-staging job fails (red).
 
-<!-- OPTIONAL (only if Analytics is in the release): -->
+<!-- OPTIONAL (Staging only, when Analytics is in the release): -->
 
 - [ ] **Run the Staging Analytics job once.** Click **Execute** on [`analytics-etl-nonprod`](https://console.cloud.google.com/run/jobs/details/us-central1/analytics-etl-nonprod/executions?project=f3data). Owner: @taterhead247
   - **Expected:** the run succeeds.
