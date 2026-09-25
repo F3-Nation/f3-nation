@@ -103,13 +103,28 @@ describe("sendEmailCode", () => {
     );
   });
 
-  it("logs warning and omits callbackUrl when invalid external URL is passed", async () => {
+  it("logs only origin + path of a rejected external callbackUrl and omits it from the link", async () => {
     const { logWarn } = await import("~/lib/logging");
-    await sendEmailCode("user@example.com", "https://evil.com/phishing");
+    await sendEmailCode(
+      "user@example.com",
+      "https://evil.com/phishing?token=secret#frag",
+    );
 
     expect(logWarn).toHaveBeenCalledWith(
       "auth.email_mfa.invalid_callback_url",
       { callbackUrl: "https://evil.com/phishing" },
+    );
+    const callArgs = (sendMail.mock.calls[0]?.[0] ?? {}) as TestMailOptions;
+    expect(callArgs.html).not.toContain("callbackUrl=");
+  });
+
+  it("logs 'unparseable' when the rejected callbackUrl is not a valid URL", async () => {
+    const { logWarn } = await import("~/lib/logging");
+    await sendEmailCode("user@example.com", "https://[bad");
+
+    expect(logWarn).toHaveBeenCalledWith(
+      "auth.email_mfa.invalid_callback_url",
+      { callbackUrl: "unparseable" },
     );
     const callArgs = (sendMail.mock.calls[0]?.[0] ?? {}) as TestMailOptions;
     expect(callArgs.html).not.toContain("callbackUrl=");
@@ -142,6 +157,7 @@ describe("verifyEmailCode", () => {
 
     const result = await verifyEmailCode("user@example.com", "123456");
     expect(result).toBeNull();
+    expect(dbMock.update).not.toHaveBeenCalled();
   });
 
   it("increments attemptCount and returns null if code does not match", async () => {
@@ -158,7 +174,15 @@ describe("verifyEmailCode", () => {
 
     const result = await verifyEmailCode("user@example.com", "999999");
     expect(result).toBeNull();
-    expect(dbMock.update).toHaveBeenCalled();
+    expect(dbMock.update).toHaveBeenCalledTimes(1);
+    const updateChain = dbMock.update.mock.results[0]?.value as {
+      set: ReturnType<typeof vi.fn>;
+    };
+    const setArg = updateChain.set.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(setArg)).toEqual(["attemptCount"]);
   });
 
   it("marks code as consumed and returns user if code matches existing user", async () => {
@@ -194,6 +218,36 @@ describe("verifyEmailCode", () => {
     });
     // Should update code as consumed and mark emailVerified
     expect(dbMock.update).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-mark emailVerified when the user is already verified", async () => {
+    const code = "654321";
+    dbMock.select
+      .mockReturnValueOnce(
+        chain([
+          {
+            id: "code-1",
+            email: "user@example.com",
+            codeHash: hashCode(code),
+            attemptCount: 0,
+          },
+        ]),
+      )
+      .mockReturnValueOnce(
+        chain([
+          {
+            id: 42,
+            email: "user@example.com",
+            emailVerified: "2026-01-01T00:00:00.000Z",
+            f3Name: "Ocho",
+          },
+        ]),
+      );
+
+    const result = await verifyEmailCode("user@example.com", code);
+    expect(result).toMatchObject({ id: 42 });
+    // Only the code-consumed update; no emailVerified write
+    expect(dbMock.update).toHaveBeenCalledTimes(1);
   });
 
   it("returns null when code matches but user does not exist in users table", async () => {

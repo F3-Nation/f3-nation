@@ -9,6 +9,7 @@ import { isValidCallbackUrl } from "~/lib/callback-url";
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { logWarn } from "~/lib/logging";
+import { NO_TRACKING_HEADERS } from "~/lib/mail-headers";
 import { env } from "~/env";
 
 const MAX_ATTEMPTS = 5;
@@ -106,17 +107,7 @@ export async function sendEmailCode(
         <p style="color: #666; font-size: 12px;">If you didn't request this, you can safely ignore this email.</p>
       </div>
     `,
-    // Disable SendGrid click/open tracking - it makes links look suspicious (url9440.f3nation.com)
-    // and causes link scanners / recipient spam filters to delay delivery.
-    // See: https://github.com/F3-Nation/f3-nation/issues/45
-    headers: {
-      "X-SMTPAPI": JSON.stringify({
-        filters: {
-          clicktrack: { settings: { enable: 0 } },
-          opentrack: { settings: { enable: 0 } },
-        },
-      }),
-    },
+    headers: NO_TRACKING_HEADERS,
   });
 }
 
