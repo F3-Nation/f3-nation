@@ -1,5 +1,12 @@
 import crypto from "node:crypto";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { SQL } from "drizzle-orm";
+import type { Mock } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { and, eq, gt, isNull } from "@acme/db";
+import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
 const { createTransport, sendMail } = vi.hoisted(() => {
   const sendMail = vi.fn();
@@ -28,7 +35,7 @@ function chain<T>(result: T) {
 }
 
 const dbMock = {
-  update: vi.fn(() => chain([])),
+  update: vi.fn<(table: unknown) => ReturnType<typeof chain>>(() => chain([])),
   insert: vi.fn(() => chain([])),
   select: vi.fn(() => chain([])),
 };
@@ -38,7 +45,7 @@ vi.mock("~/lib/logging", () => ({ logWarn: vi.fn(), logError: vi.fn() }));
 vi.mock("~/env", () => ({
   env: {
     EMAIL_SERVER: "smtp://localhost:1025",
-    EMAIL_FROM: "noreply@f3nation.com",
+    EMAIL_FROM: "noreply@example.com",
     NEXT_PUBLIC_AUTH_URL: "https://auth.f3nation.com",
     NODE_ENV: "test",
   },
@@ -51,6 +58,29 @@ function hashCode(code: string): string {
   return crypto.createHash("sha256").update(code).digest("hex");
 }
 
+const NOW = "2026-09-25T00:00:00.000Z";
+
+const toQuery = (s: SQL | undefined) => new PgDialect().sqlToQuery(s!);
+
+interface ChainMock {
+  set: Mock;
+  where: Mock;
+  values: Mock;
+}
+
+function updateChain(index: number) {
+  return dbMock.update.mock.results[index]?.value as ChainMock;
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(NOW));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("sendEmailCode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -60,12 +90,24 @@ describe("sendEmailCode", () => {
   it("sends email with SendGrid clicktrack and opentrack disabled via X-SMTPAPI header", async () => {
     await sendEmailCode("User@Example.COM  ");
 
-    expect(dbMock.update).toHaveBeenCalled();
-    expect(dbMock.insert).toHaveBeenCalled();
     expect(sendMail).toHaveBeenCalledTimes(1);
 
     const callArgs = (sendMail.mock.calls[0]?.[0] ?? {}) as TestMailOptions;
-    expect(callArgs.from).toBe("noreply@f3nation.com");
+    const code = /code=(\d{6})/.exec(callArgs.html ?? "")?.[1];
+    expect(code).toBeDefined();
+
+    expect(updateChain(0).set).toHaveBeenCalledWith({ consumedAt: NOW });
+    const insertChain = dbMock.insert.mock.results[0]?.value as ChainMock;
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "user@example.com",
+        codeHash: hashCode(code ?? ""),
+        attemptCount: 0,
+        expiresAt: "2026-09-25T00:10:00.000Z",
+      }),
+    );
+
+    expect(callArgs.from).toBe("noreply@example.com");
     expect(callArgs.to).toBe("user@example.com");
     expect(callArgs.subject).toBe("Your F3 Nation sign-in code");
     expect(callArgs.html).toContain("Your verification code");
@@ -137,10 +179,22 @@ describe("verifyEmailCode", () => {
   });
 
   it("returns null if no active MFA code is found", async () => {
-    dbMock.select.mockReturnValueOnce(chain([]));
+    const selectChain = chain([]);
+    dbMock.select.mockReturnValueOnce(selectChain);
 
-    const result = await verifyEmailCode("user@example.com", "123456");
+    const result = await verifyEmailCode("User@Example.com", "123456");
     expect(result).toBeNull();
+    expect(
+      toQuery((selectChain.where as Mock).mock.calls[0]?.[0] as SQL),
+    ).toEqual(
+      toQuery(
+        and(
+          eq(emailMfaCodes.email, "user@example.com"),
+          isNull(emailMfaCodes.consumedAt),
+          gt(emailMfaCodes.expiresAt, NOW),
+        ),
+      ),
+    );
   });
 
   it("returns null if attempt count has reached max attempts", async () => {
@@ -216,8 +270,21 @@ describe("verifyEmailCode", () => {
       emailVerified: null,
       f3Name: "Ocho",
     });
-    // Should update code as consumed and mark emailVerified
     expect(dbMock.update).toHaveBeenCalledTimes(2);
+
+    const consume = updateChain(0);
+    expect(dbMock.update.mock.calls[0]?.[0]).toBe(emailMfaCodes);
+    expect(consume.set).toHaveBeenCalledWith({ consumedAt: NOW });
+    expect(toQuery(consume.where.mock.calls[0]?.[0] as SQL)).toEqual(
+      toQuery(eq(emailMfaCodes.id, "code-1")),
+    );
+
+    const verify = updateChain(1);
+    expect(dbMock.update.mock.calls[1]?.[0]).toBe(users);
+    expect(verify.set).toHaveBeenCalledWith({ emailVerified: NOW });
+    expect(toQuery(verify.where.mock.calls[0]?.[0] as SQL)).toEqual(
+      toQuery(eq(users.id, 42)),
+    );
   });
 
   it("does not re-mark emailVerified when the user is already verified", async () => {
@@ -248,6 +315,7 @@ describe("verifyEmailCode", () => {
     expect(result).toMatchObject({ id: 42 });
     // Only the code-consumed update; no emailVerified write
     expect(dbMock.update).toHaveBeenCalledTimes(1);
+    expect(updateChain(0).set).toHaveBeenCalledWith({ consumedAt: NOW });
   });
 
   it("returns null when code matches but user does not exist in users table", async () => {

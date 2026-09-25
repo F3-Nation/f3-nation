@@ -9,7 +9,7 @@ vi.mock("nodemailer", () => ({ createTransport }));
 vi.mock("~/env", () => ({
   env: {
     EMAIL_SERVER: "smtp://localhost:1025",
-    EMAIL_FROM: "noreply@f3nation.com",
+    EMAIL_FROM: "noreply@example.com",
   },
 }));
 
@@ -37,7 +37,7 @@ describe("sendBetterAuthOtpEmail", () => {
     expect(sendMail).toHaveBeenCalledTimes(1);
 
     const callArgs = (sendMail.mock.calls[0]?.[0] ?? {}) as TestMailOptions;
-    expect(callArgs.from).toBe("noreply@f3nation.com");
+    expect(callArgs.from).toBe("noreply@example.com");
     expect(callArgs.to).toBe("user@example.com");
     expect(callArgs.subject).toBe("Your F3 Nation sign-in code");
     expect(callArgs.html).toContain("123456");
