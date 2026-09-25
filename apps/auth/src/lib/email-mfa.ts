@@ -9,6 +9,7 @@ import { isValidCallbackUrl } from "~/lib/callback-url";
 import { constantTimeEqual } from "~/lib/crypto-utils";
 import { db } from "~/lib/db";
 import { logWarn } from "~/lib/logging";
+import { NO_TRACKING_HEADERS } from "~/lib/mail-headers";
 import { env } from "~/env";
 
 const MAX_ATTEMPTS = 5;
@@ -106,6 +107,7 @@ export async function sendEmailCode(
         <p style="color: #666; font-size: 12px;">If you didn't request this, you can safely ignore this email.</p>
       </div>
     `,
+    headers: NO_TRACKING_HEADERS,
   });
 }
 
