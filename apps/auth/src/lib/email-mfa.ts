@@ -106,6 +106,17 @@ export async function sendEmailCode(
         <p style="color: #666; font-size: 12px;">If you didn't request this, you can safely ignore this email.</p>
       </div>
     `,
+    // Disable SendGrid click/open tracking - it makes links look suspicious (url9440.f3nation.com)
+    // and causes link scanners / recipient spam filters to delay delivery.
+    // See: https://github.com/F3-Nation/f3-nation/issues/45
+    headers: {
+      "X-SMTPAPI": JSON.stringify({
+        filters: {
+          clicktrack: { settings: { enable: 0 } },
+          opentrack: { settings: { enable: 0 } },
+        },
+      }),
+    },
   });
 }
 
