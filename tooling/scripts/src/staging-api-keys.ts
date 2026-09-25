@@ -11,68 +11,65 @@
  * load and restores them afterwards, so key values never leave the database:
  *
  *   --stash    copy api_keys + roles_x_api_keys_x_org into refresh_keep.*
- *   --restore  put them back after the load and drop refresh_keep. Each key
- *              keeps its owner id (ids carry over from prod); pass
- *              --owner-email to re-own them all instead
+ *   --restore  put back only the keys named with --keep (one flag per key
+ *              name) and drop refresh_keep. Every other stashed key is
+ *              dropped: ad-hoc keys don't outlive a refresh. Without --keep
+ *              it lists the stashed keys (no values) and changes nothing.
+ *              Each kept key keeps its owner id (ids carry over from prod);
+ *              pass --owner-email to re-own them all instead
  *
  * Usage (staging, around the load):
  *   DATABASE_URL=... pnpm -F @acme/scripts staging-api-keys -- \
  *     --allow-db <staging-db-name> --stash
  *   ... truncate + load ...
  *   DATABASE_URL=... pnpm -F @acme/scripts staging-api-keys -- \
- *     --allow-db <staging-db-name> --restore [--owner-email <user email>]
+ *     --allow-db <staging-db-name> --restore \
+ *     --keep "<map key name>" --keep "<slackbot key name>" ... \
+ *     [--owner-email <user email>]
  */
-import postgres from "postgres";
+import type postgres from "postgres";
 
-import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
+import {
+  connectToStaging,
+  flagValue,
+  flagValues,
+  stashOrRestore,
+} from "./staging-target";
 
 const argv = process.argv.slice(2);
 
-function flagValue(name: string): string | undefined {
-  const eq = argv.find((a) => a.startsWith(`${name}=`));
-  if (eq) return eq.slice(name.length + 1);
-  const idx = argv.indexOf(name);
-  if (idx !== -1) return argv[idx + 1];
-  return undefined;
+interface StashedKey {
+  id: number;
+  name: string;
+  owner_id: number | null;
+  key_length: number;
+  revoked: boolean;
+  grants: number;
+}
+
+async function listStashed(
+  tx: postgres.Sql | postgres.TransactionSql,
+): Promise<StashedKey[]> {
+  return tx<StashedKey[]>`
+    SELECT k.id, k.name, k.owner_id, length(k.key)::int AS key_length,
+      k.revoked_at IS NOT NULL AS revoked,
+      (SELECT count(*)::int FROM refresh_keep.roles_x_api_keys_x_org g
+        WHERE g.api_key_id = k.id) AS grants
+    FROM refresh_keep.api_keys k ORDER BY k.id`;
+}
+
+function describe(k: StashedKey): string {
+  return `  #${k.id} "${k.name}" (owner ${k.owner_id ?? "none"}, ${k.key_length}-char key, ${k.grants} grant(s)${k.revoked ? ", revoked" : ""})`;
 }
 
 async function main(): Promise<void> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
-  const allowDb = flagValue("--allow-db");
-  if (!allowDb) {
-    throw new Error(
-      "Refusing to run: pass --allow-db <name> naming the exact database.",
-    );
-  }
-  if (databaseNameFromUrl(databaseUrl) !== allowDb) {
-    throw new Error(
-      `Refusing to run: DATABASE_URL does not point at "${allowDb}".`,
-    );
-  }
-  if (looksLikeProdDbName(allowDb)) {
-    throw new Error(
-      `Refusing to run: database name "${allowDb}" is (or looks like) production.`,
-    );
-  }
-  const stash = argv.includes("--stash");
-  const restore = argv.includes("--restore");
-  if (stash === restore) {
-    throw new Error("Pass exactly one of --stash or --restore.");
-  }
-  const ownerEmail = flagValue("--owner-email")?.toLowerCase();
+  const mode = stashOrRestore(argv);
+  const ownerEmail = flagValue(argv, "--owner-email")?.toLowerCase();
+  const keep = new Set(flagValues(argv, "--keep"));
 
-  const sql = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
+  const sql = await connectToStaging(argv);
   try {
-    const [current] = await sql<{ db: string }[]>`
-      SELECT current_database() AS db`;
-    if (current?.db !== allowDb) {
-      throw new Error(
-        `Refusing to run: connected database is "${current?.db}" but --allow-db is "${allowDb}".`,
-      );
-    }
-
-    if (stash) {
+    if (mode === "stash") {
       await sql.begin(async (tx) => {
         const [existing] = await tx<{ present: boolean }[]>`
           SELECT to_regclass('refresh_keep.api_keys') IS NOT NULL AS present`;
@@ -96,7 +93,35 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (keep.size === 0) {
+      const stashed = await listStashed(sql);
+      throw new Error(
+        `Refusing to restore without --keep: name each key staging's apps ` +
+          `use (one --keep per name). Every other key is dropped. Stashed:\n` +
+          stashed.map(describe).join("\n"),
+      );
+    }
+
     await sql.begin(async (tx) => {
+      const stashed = await listStashed(tx);
+      const unknown = [...keep].filter(
+        (name) => !stashed.some((k) => k.name === name),
+      );
+      if (unknown.length > 0) {
+        throw new Error(
+          `No stashed key named ${unknown.map((n) => `"${n}"`).join(", ")}. Stashed:\n` +
+            stashed.map(describe).join("\n"),
+        );
+      }
+      const dropped = stashed.filter((k) => !keep.has(k.name));
+      const droppedIds = dropped.map((k) => k.id);
+      if (droppedIds.length > 0) {
+        await tx`
+          DELETE FROM refresh_keep.roles_x_api_keys_x_org
+          WHERE api_key_id IN ${tx(droppedIds)}`;
+        await tx`DELETE FROM refresh_keep.api_keys WHERE id IN ${tx(droppedIds)}`;
+      }
+
       if (ownerEmail) {
         const [owner] = await tx<{ id: number }[]>`
           SELECT id FROM public.users WHERE email = ${ownerEmail}`;
@@ -134,6 +159,12 @@ async function main(): Promise<void> {
       console.log(
         `Restored ${keys.length} API key(s) and ${grants.length} grant(s)${ownerEmail ? `, owned by ${ownerEmail}` : ""}.`,
       );
+      if (dropped.length > 0) {
+        console.log(
+          `Dropped ${dropped.length} key(s) not named with --keep:\n` +
+            dropped.map(describe).join("\n"),
+        );
+      }
     });
   } finally {
     await sql.end();

@@ -9,7 +9,8 @@
  *
  *   1. No email-shaped string anywhere (public + auth schemas) except
  *      the shared email sink (dev.staging-email-sink+<tag>@f3nation.com).
- *   2. Sessions / verification tokens / OAuth artifacts / api_keys are empty.
+ *   2. Sessions / verification tokens / OAuth artifacts / api_keys and the
+ *      Slack tables (not replicated) are empty.
  *   3. Referential integrity: row counts unchanged for kept tables, and the
  *      same source email maps to the same fake across tables
  *      (users.email <-> update_requests.submitted_by).
@@ -56,7 +57,6 @@ const KEPT_TABLES = [
   "event_instances",
   "attendance",
   "update_requests",
-  "slack_users",
   "positions",
   "event_types",
   "attendance_types",
@@ -68,6 +68,9 @@ const EMPTY_TABLES = [
   "auth_verification_tokens",
   "auth_accounts",
   "api_keys",
+  "orgs_x_slack_spaces",
+  "slack_spaces",
+  "slack_users",
   "auth.oauth_authorization_codes",
   "auth.oauth_access_tokens",
   "auth.oauth_refresh_tokens",
@@ -329,6 +332,18 @@ async function plantSyntheticPii(
     VALUES ('U0REALSLACK', 'Jane Doe', 'jane@example.com', false, false,
       false, 'T0TEAM', 'strava-access-secret', 'strava-refresh-secret',
       'https://avatars.slack.com/jane.png')`;
+
+  // Prod's Slack tables are emptied, not scrubbed: a workspace with a live
+  // bot token, linked to a real region, must not survive the run.
+  const [space] = await sql<{ id: number }[]>`
+    INSERT INTO slack_spaces (team_id, workspace_name, bot_token, settings)
+    VALUES ('T0TEAM', 'F3 Real Region', 'xoxb-real-bot-token',
+      '{"admin_email": "jane@example.com"}')
+    RETURNING id`;
+  if (!space) throw new Error("Failed to insert synthetic slack space");
+  await sql`
+    INSERT INTO orgs_x_slack_spaces (org_id, slack_space_id)
+    VALUES (${region.id}, ${space.id})`;
 
   // Better Auth shadow row, 1:1 with the users row above. f3_user_id is a
   // GENERATED ALWAYS column ((id)::integer) with an FK to users.id and a
@@ -833,7 +848,32 @@ async function main(): Promise<void> {
     await sql`DROP TABLE public._unclassified_gate_test`;
     await sql`UPDATE users SET email = ${prior?.email ?? ""} WHERE id = ${userId}`;
 
-    // --- 5c. Restore the stashed API keys --------------------------------------
+    // --- 5c. Restore only the named API keys -----------------------------------
+    // Without --keep the restore refuses and changes nothing.
+    const scripts = (script: string, args: string[]) =>
+      spawnSync(
+        "pnpm",
+        ["-F", "@acme/scripts", "exec", "tsx", `src/${script}`, ...args],
+        { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+      );
+    const refused = scripts("staging-api-keys.ts", [
+      "--allow-db",
+      DB_NAME,
+      "--restore",
+    ]);
+    const [stillStashed] = await sql<{ stash: boolean; n: number }[]>`
+      SELECT to_regnamespace('refresh_keep') IS NOT NULL AS stash,
+        (SELECT count(*)::int FROM api_keys) AS n`;
+    check(
+      "API key restore refuses without --keep",
+      refused.status !== 0 &&
+        refused.stderr.toString().includes("without --keep") &&
+        !!stillStashed?.stash &&
+        stillStashed.n === 0,
+      `exit ${refused.status}, stash ${stillStashed?.stash ? "kept" : "GONE"}, ${stillStashed?.n ?? "?"} key(s) in api_keys`,
+    );
+
+    const keepNames = ["Map App (local dev)", "Slackbot (local dev)"];
     run(
       "pnpm",
       [
@@ -845,20 +885,109 @@ async function main(): Promise<void> {
         "--allow-db",
         DB_NAME,
         "--restore",
+        ...keepNames.flatMap((name) => ["--keep", name]),
       ],
       childEnv,
     );
-    const [keysAfter] = await sql<{ n: number; stash: boolean }[]>`
-      SELECT count(*)::int AS n,
-        to_regnamespace('refresh_keep') IS NOT NULL AS stash
-      FROM api_keys`;
+    const keysAfter = await sql<{ name: string }[]>`
+      SELECT name FROM api_keys ORDER BY name`;
+    const [stashAfter] = await sql<{ stash: boolean; grants: number }[]>`
+      SELECT to_regnamespace('refresh_keep') IS NOT NULL AS stash,
+        (SELECT count(*)::int FROM roles_x_api_keys_x_org) AS grants`;
+    const [slackbotGrants] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM roles_x_api_keys_x_org g
+      JOIN api_keys k ON k.id = g.api_key_id
+      WHERE k.name = 'Slackbot (local dev)'`;
+    const restoredNames = keysAfter.map((k) => k.name);
     check(
-      "target API keys survive the refresh",
-      (keysBefore?.n ?? 0) > 0 &&
-        !!keysAfter &&
-        keysAfter.n === keysBefore?.n &&
-        !keysAfter.stash,
-      `${keysBefore?.n ?? "?"} stashed, ${keysAfter?.n ?? "?"} restored, stash ${keysAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
+      "only the --keep API keys survive the refresh",
+      (keysBefore?.n ?? 0) > keepNames.length &&
+        JSON.stringify(restoredNames) === JSON.stringify(keepNames) &&
+        stashAfter?.grants === slackbotGrants?.n &&
+        (slackbotGrants?.n ?? 0) > 0 &&
+        stashAfter?.stash === false,
+      `${keysBefore?.n ?? "?"} stashed, restored [${restoredNames.join(", ")}], ${stashAfter?.grants ?? "?"} grant(s), stash ${stashAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
+    );
+
+    // --- 5d. Staging's own Slack data survives the refresh ---------------------
+    // The obfuscator emptied prod's Slack tables above. Plant staging's own
+    // workspace, stash it, empty the tables as the load does, restore.
+    const [stagingSpace] = await sql<{ id: number }[]>`
+      INSERT INTO slack_spaces (team_id, workspace_name, bot_token)
+      VALUES ('T0STAGING', 'App Pioneers', 'xoxb-staging-bot-token')
+      RETURNING id`;
+    if (!stagingSpace) throw new Error("Failed to insert staging workspace");
+    const [linkOrg] = await sql<{ id: number }[]>`
+      SELECT id FROM orgs WHERE org_type = 'region' ORDER BY id LIMIT 1`;
+    if (!linkOrg) throw new Error("Seed data missing a region org");
+    await sql`
+      INSERT INTO orgs_x_slack_spaces (org_id, slack_space_id)
+      VALUES (${linkOrg.id}, ${stagingSpace.id})`;
+    await sql`
+      INSERT INTO slack_users (slack_id, user_name, email, is_admin, is_owner,
+        is_bot, slack_team_id, user_id)
+      VALUES
+        ('U0SINKED', 'F3 1', ${`${SINK_PREFIX}1${SINK_SUFFIX}`}, false, false,
+          false, 'T0STAGING', 1),
+        ('U0SYNCED', 'Real Person', 'real.person@example.com', false, false,
+          false, 'T0STAGING', 1)`;
+    run(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/staging-slack.ts",
+        "--allow-db",
+        DB_NAME,
+        "--stash",
+      ],
+      childEnv,
+    );
+    // A member whose user and a link whose org the next copy won't have.
+    await sql`
+      UPDATE refresh_keep_slack.slack_users SET user_id = 999999
+      WHERE slack_id = 'U0SINKED'`;
+    await sql`
+      INSERT INTO refresh_keep_slack.orgs_x_slack_spaces (org_id, slack_space_id)
+      VALUES (999999, ${stagingSpace.id})`;
+    await sql`TRUNCATE orgs_x_slack_spaces, slack_spaces, slack_users`;
+    const slackRestore = scripts("staging-slack.ts", [
+      "--allow-db",
+      DB_NAME,
+      "--restore",
+    ]);
+    const slackOut = slackRestore.stdout.toString();
+    const [slackAfter] = await sql<
+      {
+        spaces: number;
+        members: number;
+        links: number;
+        nulled: number;
+        stash: boolean;
+      }[]
+    >`
+      SELECT
+        (SELECT count(*)::int FROM slack_spaces WHERE team_id = 'T0STAGING') AS spaces,
+        (SELECT count(*)::int FROM slack_users) AS members,
+        (SELECT count(*)::int FROM orgs_x_slack_spaces
+          WHERE org_id = ${linkOrg.id} AND slack_space_id = ${stagingSpace.id}) AS links,
+        (SELECT count(*)::int FROM slack_users
+          WHERE slack_id = 'U0SINKED' AND user_id IS NULL) AS nulled,
+        to_regnamespace('refresh_keep_slack') IS NOT NULL AS stash`;
+    check(
+      "staging's own Slack data survives the refresh",
+      slackRestore.status === 0 &&
+        slackAfter?.spaces === 1 &&
+        slackAfter.members === 2 &&
+        slackAfter.links === 1 &&
+        slackAfter.nulled === 1 &&
+        !slackAfter.stash &&
+        slackOut.includes("workspace T0STAGING -> org 999999") &&
+        slackOut.includes("Warning: 1 restored Slack member(s)") &&
+        !slackOut.includes("real.person@example.com"),
+      `exit ${slackRestore.status}, ${slackAfter?.spaces ?? "?"} workspace, ${slackAfter?.members ?? "?"} member(s), ${slackAfter?.links ?? "?"} link, ${slackAfter?.nulled ?? "?"} unlinked member, stash ${slackAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
     );
 
     // --- 6. Verdict -----------------------------------------------------------

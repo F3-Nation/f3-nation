@@ -10,9 +10,9 @@
  *   1. Email sweep — no email-shaped string anywhere in public+auth outside
  *      the shared email sink (sink+<tag>@) (json columns are walked structurally; the
  *      serialized form false-positives on escape-adjacent Slack handles).
- *   2. Secret/session/token tables are empty — both the repo's own NextAuth
- *      adapter's plural names and the legacy singular ones (2026-07-10
- *      schema-drift catch).
+ *   2. Secret/session/token tables and prod's Slack tables are empty — both
+ *      the repo's own NextAuth adapter's plural names and the legacy singular
+ *      ones (2026-07-10 schema-drift catch).
  *   3. users.email / auth.user (email, email-as-id, image) fully obfuscated.
  *   4. Deterministic cross-table mapping still joins.
  *   5. auth.oauth_client(s) secrets invalidated.
@@ -65,6 +65,9 @@ const EMPTY_TABLES = [
   "public.auth_verification_tokens",
   "public.auth_accounts",
   "public.api_keys",
+  "public.orgs_x_slack_spaces",
+  "public.slack_spaces",
+  "public.slack_users",
   "auth.oauth_authorization_codes",
   "auth.oauth_authorization_code",
   "auth.oauth_access_tokens",

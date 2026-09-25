@@ -5,7 +5,9 @@
  * staging (f3data-nonprod). PII is replaced with deterministic fakes (same
  * input always maps to the same fake, so relational consistency holds across
  * tables), secrets/sessions are truncated, and JSON/free-text columns are
- * scrubbed of email-shaped strings.
+ * scrubbed of email-shaped strings. Prod's Slack tables (slack_spaces,
+ * slack_users, orgs_x_slack_spaces) are emptied, not scrubbed: staging keeps
+ * its own Slack data across a refresh (staging-slack.ts).
  *
  * !! This script has only been proven against the local sandbox seed. It must
  * !! never be pointed at real data without human review of the PII inventory
@@ -121,14 +123,13 @@ function hashDigits(input: string, length: number): string {
 
 // Real email (lowercased) -> users.id, read from the target before any
 // transform runs. An address that belongs to a user becomes that user's
-// sink+<id> address everywhere it appears (update requests, Slack users,
-// free text), so cross-table relationships survive. On a target that was
+// sink+<id> address everywhere it appears (update requests, free text), so cross-table relationships survive. On a target that was
 // already obfuscated the lookup keys are the old fakes, which were applied
 // consistently, so the same mapping holds.
 const userIdByEmail = new Map<string, number>();
 
 // Addresses with no user: a caller with a row passes a tag naming where it
-// came from (org-12, slack-34); free text gets ext-<hash>, memoized and
+// came from (org-12, event-34); free text gets ext-<hash>, memoized and
 // lengthened on collision so one real address has one fake per run.
 const emailFakes = new Map<string, string>();
 const emailFakesInUse = new Map<string, string>();
@@ -173,10 +174,9 @@ function fakePhone(original: string): string {
   return `555-${exchangeFirst}${digits.slice(1, 3)}-${digits.slice(3)}`;
 }
 
-// Memoized like fakeEmail: slack_id has no unique constraint in the schema,
-// but it's a join key in the slackbot integration path, so a birthday-bound
-// collision (expected around ~100k distinct Slack users at 8 hex chars) would
-// make staging lookups ambiguous. Lengthen on collision the same way.
+// Memoized like fakeEmail, and lengthened on collision the same way, so one
+// real Slack id maps to one fake in every mention (a birthday-bound collision
+// is expected around ~100k distinct ids at 8 hex chars).
 const slackIdFakes = new Map<string, string>();
 const slackIdFakesInUse = new Set<string>();
 
@@ -205,10 +205,9 @@ const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 
 // Slack mention syntax (`<@U0REALSLACK>`) embedded in free text/Block Kit
 // JSON (preblast/backblast bodies) — real-data finding 2026-08: this ID
-// joins straight to attendance.user_id, so leaving it real while the same
-// person's slack_users row gets faked creates a joinable fake<->real
-// mapping. Route through the same memoized fakeSlackId as the dedicated
-// column so it stays consistent with slack_users.slack_id. NOTE: this does
+// joins straight to prod's slack_users and so to a person, so it must not
+// survive. Route through the memoized fakeSlackId so one member is the same
+// fake in every mention. NOTE: this does
 // NOT cover real names (pax_names/q_name) appearing in free text with no
 // accompanying "@" — that's a separate, unresolved gap (see backblast_rich
 // scrub call sites) that needs a name-substitution pass, not a regex.
@@ -621,7 +620,6 @@ const KEPT_TABLES = new Set([
   "public.event_tags_x_events",
   "public.events_x_event_types",
   "public.materializedviews",
-  "public.orgs_x_slack_spaces",
   "public.permissions",
   "public.positions_x_orgs_x_users",
   "public.roles",
@@ -638,6 +636,7 @@ const TOUCHED_TABLES = new Set([
   "public.users",
   "public.slack_users",
   "public.slack_spaces",
+  "public.orgs_x_slack_spaces",
   "public.orgs",
   "public.locations",
   "public.events",
@@ -796,6 +795,18 @@ async function obfuscate(sql: Sql): Promise<void> {
       : sql`DELETE FROM api_keys`,
   });
 
+  // ---- Slack tables: not replicated -----------------------------------------
+  // Prod's workspaces, members and org links are no use on staging (there is
+  // no prod Slack workspace to talk to) and the staging slackbot acts on them:
+  // the 2026-09-23 refresh had it regenerating prod regions' calendar images.
+  // The load carries staging's own rows across instead (staging-slack.ts).
+  // One statement: orgs_x_slack_spaces references slack_spaces.
+  await truncateTables(sql, [
+    "orgs_x_slack_spaces",
+    "slack_spaces",
+    "slack_users",
+  ]);
+
   // ---- auth.oauth_clients: invalidate secrets --------------------------------
   // Overwrite the secret hash with one derived from a non-secret string, so no
   // plaintext secret can authenticate against staging. Local dev clients
@@ -892,7 +903,7 @@ async function obfuscate(sql: Sql): Promise<void> {
       // back (email / names). The "null out" columns below are not
       // identity — they're PII with no fake substitute — so they are cleared
       // even for fixtures, in case a fixture row picked up real values during
-      // local testing. Mirrors the slack_users rule.
+      // local testing.
       const isLocalFixture =
         PRESERVE_LOCAL_SEED &&
         !!email?.toLowerCase().endsWith(LOCAL_SEED_EMAIL_SUFFIX);
@@ -930,100 +941,6 @@ async function obfuscate(sql: Sql): Promise<void> {
       if (row.meta !== null) {
         const scrubbed = scrubJson(row.meta);
         if (scrubbed !== row.meta) changes.meta = JSON.stringify(scrubbed);
-      }
-      return changes;
-    },
-  });
-
-  // ---- slack_users ----------------------------------------------------------
-  await transformTable(sql, {
-    table: "slack_users",
-    pk: "id",
-    columns: [
-      "slack_id",
-      "user_id",
-      "user_name",
-      "email",
-      "avatar_url",
-      "strava_access_token",
-      "strava_refresh_token",
-      "strava_expires_at",
-      "strava_athlete_id",
-      "meta",
-    ],
-    actions: {
-      slack_id: "obfuscate (id)",
-      user_name: "obfuscate (name)",
-      email: "obfuscate (email)",
-      avatar_url: "null out",
-      strava_access_token: "null out (secret)",
-      strava_refresh_token: "null out (secret)",
-      strava_expires_at: "null out",
-      strava_athlete_id: "null out",
-      meta: "scrub emails (json)",
-    },
-    transform: (row) => {
-      const email = str(row.email);
-      const isLocalFixture =
-        PRESERVE_LOCAL_SEED &&
-        email?.toLowerCase().endsWith(LOCAL_SEED_EMAIL_SUFFIX);
-      // A committed dev fixture keeps its login identity (email/slack_id/
-      // user_name) intact even under --preserve-local-seed, but Strava
-      // tokens are secrets, not fixture identity — always null those out
-      // regardless, in case a fixture row ever picked up a real token
-      // value during local testing. avatar_url gets the same treatment: a
-      // personal photo URL is unrelated PII that no local login path reads,
-      // so preserving the fixture is never a reason to keep it.
-      const changes: Row = {};
-      if (!isLocalFixture) {
-        const slackId = str(row.slack_id);
-        if (slackId) changes.slack_id = fakeSlackId(slackId);
-        const userName = str(row.user_name);
-        const linkedUser =
-          typeof row.user_id === "number" ? String(row.user_id) : null;
-        if (userName) {
-          changes.user_name = linkedUser
-            ? `F3 ${linkedUser}`
-            : fakeName(`slack:${userName}`);
-        }
-        if (email && !isAllowlistedEmail(email)) {
-          changes.email = fakeEmail(email, `slack-${String(row.id)}`);
-        }
-      }
-      for (const col of [
-        "avatar_url",
-        "strava_access_token",
-        "strava_refresh_token",
-        "strava_expires_at",
-        "strava_athlete_id",
-      ]) {
-        if (row[col] !== null) changes[col] = null;
-      }
-      if (row.meta !== null) {
-        const scrubbed = scrubJson(row.meta);
-        if (scrubbed !== row.meta) changes.meta = JSON.stringify(scrubbed);
-      }
-      return changes;
-    },
-  });
-
-  // ---- slack_spaces ----------------------------------------------------------
-  await transformTable(sql, {
-    table: "slack_spaces",
-    pk: "id",
-    columns: ["bot_token", "settings"],
-    actions: {
-      bot_token: "null out (secret)",
-      settings: "scrub emails (json)",
-    },
-    transform: (row) => {
-      const changes: Row = {};
-      if (row.bot_token !== null) changes.bot_token = null;
-      if (row.settings !== null) {
-        const scrubbed = scrubJson(row.settings);
-        if (scrubbed !== row.settings) {
-          changes.settings = JSON.stringify(scrubbed);
-        }
       }
       return changes;
     },

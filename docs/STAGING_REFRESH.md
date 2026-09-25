@@ -51,12 +51,15 @@ and loading the result into staging (`f3data-nonprod`).
      to several roles (`dev_generic`, `tackle`, `app_auth`) whose grants the
      other apps need; a drop-and-restore loses them. Skip any prod table
      staging doesn't have.
-   - **Stash staging's own API keys first**, or every service key (the map's
-     `F3_MAP_API_KEY`, the slackbot's, the auth app's) is gone and the map
-     serves 401s. The key values never leave the database:
+   - **Stash staging's own API keys and Slack data first**, or every service
+     key (the map's `F3_MAP_API_KEY`, the slackbot's, the auth app's) is gone
+     and the map serves 401s, and the staging slackbot's workspace (App
+     Pioneers) loses its install. Prod's Slack tables are never loaded: the
+     obfuscator empties them. The values never leave the database:
 
      ```bash
      pnpm -F @acme/scripts staging-api-keys -- --allow-db <staging-db-name> --stash
+     pnpm -F @acme/scripts staging-slack -- --allow-db <staging-db-name> --stash
      ```
 
    - **Drop the foreign keys around the load** (`orgs` and `events` have
@@ -66,12 +69,32 @@ and loading the result into staging (`f3data-nonprod`).
      them `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
      them validated in one transaction took over an hour and lost its
      connection.
-   - After the load, put the keys back. Each keeps its owner id (ids carry
-     over from prod); `--owner-email` re-owns them all if an owner is gone:
+   - After the load, put back **only the service keys**, named with one
+     `--keep` each. Every other stashed key (ad-hoc test keys, anything with
+     nation admin that nobody owns up to) is dropped, so it doesn't outlive
+     the refresh. `--restore` without `--keep` lists the stashed keys (names,
+     owners, grant counts, never values) and changes nothing. Each kept key
+     keeps its owner id (ids carry over from prod); `--owner-email` re-owns
+     them all if an owner is gone:
 
      ```bash
-     pnpm -F @acme/scripts staging-api-keys -- --allow-db <staging-db-name> --restore
+     pnpm -F @acme/scripts staging-api-keys -- --allow-db <staging-db-name> --restore \
+       --keep "<map key name>" --keep "<slackbot key name>" --keep "<auth key name>"
      ```
+
+   - Then put staging's Slack data back. A workspace linked to an org the
+     new copy doesn't have is restored unlinked and listed, so it can be
+     relinked by hand; a Slack member whose user is gone comes back with
+     `user_id` NULL. It warns (with a count, never the values) about any
+     member whose email isn't on the sink, which means the staging slackbot
+     synced a real profile:
+
+     ```bash
+     pnpm -F @acme/scripts staging-slack -- --allow-db <staging-db-name> --restore
+     ```
+
+     The Slack step is its own script so it can be deleted outright when F3
+     moves off Slack.
 
 4. **Sign in as anyone.** Every address is rewritten onto one shared
    Google Group, `dev.staging-email-sink@f3nation.com`, plus-addressed
@@ -89,6 +112,18 @@ currently uses the synthetic local seed (`packages/db/src/local-seed.ts`).
 Once this pipeline is approved and running, the preview seed switches from
 synthetic data to this pipeline's obfuscated output, giving previews
 production-shaped data with zero PII.
+
+## When to refresh
+
+Not on a schedule. A refresh disrupts staging (logins change, App Pioneers
+gets relinked), so:
+
+- Run it **right after a prod release**, never right before a staging test
+  cycle, so there is time to work through oddities before the next release
+  is tested.
+- Run it only when it's needed: prod has had **structural changes** since
+  the last refresh (new sectors or territories, a new column prod has since
+  populated), or someone needs fresh data for a specific reason.
 
 ## Running the script
 
@@ -137,15 +172,15 @@ Users are rebuilt from their id; everything else is derived from
 
 Formats (sink = `dev.staging-email-sink@f3nation.com`):
 
-| Value                                                                                        | Becomes                                                                 |
-| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `users.f3_name` / `first_name` / `last_name`                                                 | `F3 <id>` / `First <id>` / `Last <id>` (nulls stay null)                |
-| a user's email, anywhere                                                                     | `sink+<users.id>`                                                       |
-| a non-user email on a row (org, location, event, event instance, Slack user, update request) | `sink+<table>-<row id>`, e.g. `+org-12`, `+slack-34`, `+request-<uuid>` |
-| a non-user email in free text                                                                | `sink+ext-<hash8>`                                                      |
-| other names (Slack users not linked to a user, hospital names)                               | `F3 User <hash6>` (a linked Slack user is `F3 <user_id>`)               |
+| Value                                                                            | Becomes                                                                 |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `users.f3_name` / `first_name` / `last_name`                                     | `F3 <id>` / `First <id>` / `Last <id>` (nulls stay null)                |
+| a user's email, anywhere                                                         | `sink+<users.id>`                                                       |
+| a non-user email on a row (org, location, event, event instance, update request) | `sink+<table>-<row id>`, e.g. `+org-12`, `+event-34`, `+request-<uuid>` |
+| a non-user email in free text                                                    | `sink+ext-<hash8>`                                                      |
+| other names (hospital names)                                                     | `F3 User <hash6>`                                                       |
 
-Phones → `555-<hash3>-<hash4>`, Slack IDs →
+Phones → `555-<hash3>-<hash4>`, Slack IDs in free text →
 `U<HASH8>` (lengthened on collision). Free-text contact/emergency fields are
 nulled. JSON/meta and free-text columns are scrubbed of email-shaped strings
 by regex, replaced with the same deterministic fakes.
@@ -174,58 +209,49 @@ URL repointed at its staging equivalent; **KEEP**: non-PII, left untouched.
 
 ### `public` schema
 
-| Table                                                                                                             | Column(s)                                                    | Classification            | Notes                                                                                                                                |
-| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `users`                                                                                                           | `email`                                                      | OBFUSCATE (email)         | Unique; deterministic hash keeps FKs-by-email consistent                                                                             |
-| `users`                                                                                                           | `f3_name`, `first_name`, `last_name`                         | OBFUSCATE (name)          |                                                                                                                                      |
-| `users`                                                                                                           | `phone`                                                      | OBFUSCATE (phone)         |                                                                                                                                      |
-| `users`                                                                                                           | `avatar_url`                                                 | NULL OUT                  | Personal photo URL                                                                                                                   |
-| `users`                                                                                                           | `emergency_contact`, `emergency_phone`, `emergency_notes`    | NULL OUT                  | Highly sensitive free text                                                                                                           |
-| `users`                                                                                                           | `meta` (json)                                                | SCRUB                     | May carry emails/free text                                                                                                           |
-| `users`                                                                                                           | `email_verified`, `status`, `home_region_id`, ids/timestamps | KEEP                      |                                                                                                                                      |
-| `slack_users`                                                                                                     | `slack_id`                                                   | OBFUSCATE (id)            | External identifier tied to a person                                                                                                 |
-| `slack_users`                                                                                                     | `user_name`                                                  | OBFUSCATE (name)          |                                                                                                                                      |
-| `slack_users`                                                                                                     | `email`                                                      | OBFUSCATE (email)         |                                                                                                                                      |
-| `slack_users`                                                                                                     | `avatar_url`                                                 | NULL OUT                  |                                                                                                                                      |
-| `slack_users`                                                                                                     | `strava_access_token`, `strava_refresh_token`                | NULL OUT                  | OAuth secrets                                                                                                                        |
-| `slack_users`                                                                                                     | `strava_athlete_id`, `strava_expires_at`                     | NULL OUT                  | Linked-account identifiers                                                                                                           |
-| `slack_users`                                                                                                     | `meta` (json)                                                | SCRUB                     |                                                                                                                                      |
-| `slack_spaces`                                                                                                    | `bot_token`                                                  | NULL OUT                  | Slack bot secret                                                                                                                     |
-| `slack_spaces`                                                                                                    | `settings` (json)                                            | SCRUB                     |                                                                                                                                      |
-| `slack_spaces`                                                                                                    | `team_id`, `workspace_name`                                  | KEEP                      | Workspace-level, not personal                                                                                                        |
-| `orgs`                                                                                                            | `email`                                                      | OBFUSCATE (email)         | Region/AO contact inboxes are often personal                                                                                         |
-| `orgs`                                                                                                            | `phone`                                                      | OBFUSCATE (phone)         |                                                                                                                                      |
-| `orgs`                                                                                                            | `description`                                                | SCRUB                     | Emails hide in free text                                                                                                             |
-| `orgs`                                                                                                            | `meta` (json)                                                | SCRUB                     |                                                                                                                                      |
-| `orgs`                                                                                                            | `website`                                                    | SCRUB                     | Real-data finding (2026-07-10): "website" fields carry typed-in emails                                                               |
-| `orgs`                                                                                                            | `twitter`, `facebook`, `instagram`, `logo_url`               | KEEP                      | Public org presence                                                                                                                  |
-| `locations`                                                                                                       | `email`                                                      | OBFUSCATE (email)         |                                                                                                                                      |
-| `locations`                                                                                                       | `description`                                                | SCRUB                     |                                                                                                                                      |
-| `locations`                                                                                                       | `meta` (json)                                                | SCRUB                     |                                                                                                                                      |
-| `locations`                                                                                                       | address/lat/lon                                              | KEEP                      | Public workout locations                                                                                                             |
-| `events`                                                                                                          | `email`                                                      | OBFUSCATE (email)         | Event contact                                                                                                                        |
-| `events`                                                                                                          | `description`                                                | SCRUB                     |                                                                                                                                      |
-| `events`                                                                                                          | `meta` (json)                                                | SCRUB                     |                                                                                                                                      |
-| `event_instances`                                                                                                 | `email`                                                      | OBFUSCATE (email)         |                                                                                                                                      |
-| `event_instances`                                                                                                 | `description`, `preblast`, `backblast`                       | SCRUB                     | Free text authored by users. Emails + Slack mentions only — real names survive, see the SCRUB limit above                            |
-| `event_instances`                                                                                                 | `preblast_rich`, `backblast_rich`, `meta` (json)             | SCRUB                     | Slack Block Kit. Emails + Slack mentions only — real names survive, see the SCRUB limit above                                        |
-| `update_requests`                                                                                                 | `submitted_by`, `reviewed_by`                                | OBFUSCATE (email)         | Submitter/reviewer contact                                                                                                           |
-| `update_requests`                                                                                                 | `event_contact_email`, `location_contact_email`              | OBFUSCATE (email)         |                                                                                                                                      |
-| `update_requests`                                                                                                 | `event_description`, `location_description`                  | SCRUB                     |                                                                                                                                      |
-| `update_requests`                                                                                                 | `ao_website`                                                 | SCRUB                     | Website field carries typed-in emails (see `orgs.website`)                                                                           |
-| `update_requests`                                                                                                 | `event_meta`, `meta` (json)                                  | SCRUB                     |                                                                                                                                      |
-| `update_requests`                                                                                                 | `token`                                                      | REGENERATE                | Capability token mailed to submitters — new random UUID                                                                              |
-| `expansions`                                                                                                      | `user_lat`, `user_lon`                                       | OBFUSCATE (coarsen ~11km) | User-submitted home coordinates                                                                                                      |
-| `expansions`                                                                                                      | `area`, `pinned_lat`, `pinned_lon`                           | KEEP                      | Proposed public location                                                                                                             |
-| `expansions_x_users`                                                                                              | `notes`                                                      | NULL OUT                  | Free text                                                                                                                            |
-| `attendance`                                                                                                      | `meta` (json)                                                | SCRUB                     |                                                                                                                                      |
-| `positions`                                                                                                       | `description`                                                | SCRUB                     | Names are role titles (Nant'an, Site Q) — KEEP                                                                                       |
-| `achievements`                                                                                                    | `description`, `meta` (json)                                 | SCRUB                     |                                                                                                                                      |
-| `auth_sessions`                                                                                                   | all                                                          | TRUNCATE                  | Live session tokens                                                                                                                  |
-| `auth_verification_tokens`                                                                                        | all                                                          | TRUNCATE                  | Magic-link tokens                                                                                                                    |
-| `auth_accounts`                                                                                                   | all                                                          | TRUNCATE                  | OAuth refresh/access/id tokens per user                                                                                              |
-| `api_keys`                                                                                                        | all                                                          | DELETE                    | Live API secrets; cascades `roles_x_api_keys_x_org`. Staging gets its own keys. With `--preserve-local-seed`, `local-*` keys survive |
-| `permissions`, `roles`, `event_types`, `event_tags`, `attendance_types`, join tables (`*_x_*`), `alembic_version` | all                                                          | KEEP                      | Reference data / integer-FK join rows, no PII                                                                                        |
+| Table                                                                                                                                          | Column(s)                                                    | Classification            | Notes                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`                                                                                                                                        | `email`                                                      | OBFUSCATE (email)         | Unique; deterministic hash keeps FKs-by-email consistent                                                                                                      |
+| `users`                                                                                                                                        | `f3_name`, `first_name`, `last_name`                         | OBFUSCATE (name)          |                                                                                                                                                               |
+| `users`                                                                                                                                        | `phone`                                                      | OBFUSCATE (phone)         |                                                                                                                                                               |
+| `users`                                                                                                                                        | `avatar_url`                                                 | NULL OUT                  | Personal photo URL                                                                                                                                            |
+| `users`                                                                                                                                        | `emergency_contact`, `emergency_phone`, `emergency_notes`    | NULL OUT                  | Highly sensitive free text                                                                                                                                    |
+| `users`                                                                                                                                        | `meta` (json)                                                | SCRUB                     | May carry emails/free text                                                                                                                                    |
+| `users`                                                                                                                                        | `email_verified`, `status`, `home_region_id`, ids/timestamps | KEEP                      |                                                                                                                                                               |
+| `slack_spaces`, `slack_users`, `orgs_x_slack_spaces`                                                                                           | all                                                          | TRUNCATE                  | Not replicated: prod's workspaces are no use on staging, and the staging slackbot acts on what it finds. Staging keeps its own rows (`staging-slack`, step 3) |
+| `orgs`                                                                                                                                         | `email`                                                      | OBFUSCATE (email)         | Region/AO contact inboxes are often personal                                                                                                                  |
+| `orgs`                                                                                                                                         | `phone`                                                      | OBFUSCATE (phone)         |                                                                                                                                                               |
+| `orgs`                                                                                                                                         | `description`                                                | SCRUB                     | Emails hide in free text                                                                                                                                      |
+| `orgs`                                                                                                                                         | `meta` (json)                                                | SCRUB                     |                                                                                                                                                               |
+| `orgs`                                                                                                                                         | `website`                                                    | SCRUB                     | Real-data finding (2026-07-10): "website" fields carry typed-in emails                                                                                        |
+| `orgs`                                                                                                                                         | `twitter`, `facebook`, `instagram`, `logo_url`               | KEEP                      | Public org presence                                                                                                                                           |
+| `locations`                                                                                                                                    | `email`                                                      | OBFUSCATE (email)         |                                                                                                                                                               |
+| `locations`                                                                                                                                    | `description`                                                | SCRUB                     |                                                                                                                                                               |
+| `locations`                                                                                                                                    | `meta` (json)                                                | SCRUB                     |                                                                                                                                                               |
+| `locations`                                                                                                                                    | address/lat/lon                                              | KEEP                      | Public workout locations                                                                                                                                      |
+| `events`                                                                                                                                       | `email`                                                      | OBFUSCATE (email)         | Event contact                                                                                                                                                 |
+| `events`                                                                                                                                       | `description`                                                | SCRUB                     |                                                                                                                                                               |
+| `events`                                                                                                                                       | `meta` (json)                                                | SCRUB                     |                                                                                                                                                               |
+| `event_instances`                                                                                                                              | `email`                                                      | OBFUSCATE (email)         |                                                                                                                                                               |
+| `event_instances`                                                                                                                              | `description`, `preblast`, `backblast`                       | SCRUB                     | Free text authored by users. Emails + Slack mentions only — real names survive, see the SCRUB limit above                                                     |
+| `event_instances`                                                                                                                              | `preblast_rich`, `backblast_rich`, `meta` (json)             | SCRUB                     | Slack Block Kit. Emails + Slack mentions only — real names survive, see the SCRUB limit above                                                                 |
+| `update_requests`                                                                                                                              | `submitted_by`, `reviewed_by`                                | OBFUSCATE (email)         | Submitter/reviewer contact                                                                                                                                    |
+| `update_requests`                                                                                                                              | `event_contact_email`, `location_contact_email`              | OBFUSCATE (email)         |                                                                                                                                                               |
+| `update_requests`                                                                                                                              | `event_description`, `location_description`                  | SCRUB                     |                                                                                                                                                               |
+| `update_requests`                                                                                                                              | `ao_website`                                                 | SCRUB                     | Website field carries typed-in emails (see `orgs.website`)                                                                                                    |
+| `update_requests`                                                                                                                              | `event_meta`, `meta` (json)                                  | SCRUB                     |                                                                                                                                                               |
+| `update_requests`                                                                                                                              | `token`                                                      | REGENERATE                | Capability token mailed to submitters — new random UUID                                                                                                       |
+| `expansions`                                                                                                                                   | `user_lat`, `user_lon`                                       | OBFUSCATE (coarsen ~11km) | User-submitted home coordinates                                                                                                                               |
+| `expansions`                                                                                                                                   | `area`, `pinned_lat`, `pinned_lon`                           | KEEP                      | Proposed public location                                                                                                                                      |
+| `expansions_x_users`                                                                                                                           | `notes`                                                      | NULL OUT                  | Free text                                                                                                                                                     |
+| `attendance`                                                                                                                                   | `meta` (json)                                                | SCRUB                     |                                                                                                                                                               |
+| `positions`                                                                                                                                    | `description`                                                | SCRUB                     | Names are role titles (Nant'an, Site Q) — KEEP                                                                                                                |
+| `achievements`                                                                                                                                 | `description`, `meta` (json)                                 | SCRUB                     |                                                                                                                                                               |
+| `auth_sessions`                                                                                                                                | all                                                          | TRUNCATE                  | Live session tokens                                                                                                                                           |
+| `auth_verification_tokens`                                                                                                                     | all                                                          | TRUNCATE                  | Magic-link tokens                                                                                                                                             |
+| `auth_accounts`                                                                                                                                | all                                                          | TRUNCATE                  | OAuth refresh/access/id tokens per user                                                                                                                       |
+| `api_keys`                                                                                                                                     | all                                                          | DELETE                    | Live API secrets; cascades `roles_x_api_keys_x_org`. Staging gets its own keys. With `--preserve-local-seed`, `local-*` keys survive                          |
+| `permissions`, `roles`, `event_types`, `event_tags`, `attendance_types`, join tables (`*_x_*` except `orgs_x_slack_spaces`), `alembic_version` | all                                                          | KEEP                      | Reference data / integer-FK join rows, no PII                                                                                                                 |
 
 ### `auth` schema (OAuth/OIDC provider, apps/auth)
 
@@ -305,16 +331,22 @@ legacy. Two things are specific to them:
    database dump" step).
 2. Plants synthetic PII: a user with real-looking email/phone/emergency data,
    sessions, verification tokens, OAuth tokens, an API key, an update request
-   and a backblast with embedded emails, a Slack user with Strava tokens.
+   and a backblast with embedded emails, a Slack user with Strava tokens,
+   and a Slack workspace with a bot token linked to a region.
 3. Runs the obfuscator (without `--preserve-local-seed`), then asserts:
    - **zero** email-shaped strings in any text/json column of the `public`
      and `auth` schemas except `dev.staging-email-sink+<tag>@f3nation.com`;
    - every user is renamed to `F3/First/Last <id>` and emailed at `sink+<id>`;
-   - sessions/tokens/api-key tables are empty;
+   - sessions/tokens/api-key tables and the Slack tables are empty;
    - row counts of all kept tables are unchanged (referential integrity);
    - the same source email maps to the same fake across tables;
    - free-text scrubbing rewrote the planted backblast email;
-   - attendance FKs still resolve.
+   - attendance FKs still resolve;
+   - `staging-api-keys --restore` refuses without `--keep` and then restores
+     only the named keys and their grants;
+   - `staging-slack` carries a staging workspace, its members and its org
+     link across an emptied load, unlinks what no longer resolves, and warns
+     about a member that isn't on the sink.
 4. Tears the container down and restores `packages/env/.env`.
 
 CI runs it on every PR (`obfuscate-db-verify` in `.github/workflows/ci.yml`),
