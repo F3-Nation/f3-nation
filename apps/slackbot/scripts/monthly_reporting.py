@@ -10,16 +10,20 @@ from typing import Dict, List
 
 import pytz
 from f3_data_models.models import (
-    AttendanceExpanded,
-    EventInstanceExpanded,
+    Attendance,
+    Attendance_x_AttendanceType,
+    AttendanceType,
+    EventInstance,
     Org,
+    Org_Type,
     Org_x_SlackSpace,
     SlackSpace,
+    User,
 )
 from f3_data_models.utils import DbManager, get_session
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from sqlalchemy import and_, func, literal, select, union_all
+from sqlalchemy import and_, case, func, literal, select, union_all
 
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import safe_get
@@ -45,6 +49,41 @@ class OrgUserLeaderboard:
     avatar_url: str
     post_count: int
     total_qs: int
+
+
+def _event_org_scope():
+    """Return one row per reportable event, with its AO and region scopes."""
+    direct_org = Org.__table__.alias("event_org")
+    parent_org = Org.__table__.alias("event_parent_org")
+    return (
+        select(
+            EventInstance.id.label("event_id"),
+            EventInstance.start_date.label("start_date"),
+            EventInstance.pax_count.label("pax_count"),
+            EventInstance.fng_count.label("fng_count"),
+            case((direct_org.c.org_type == Org_Type.ao, direct_org.c.id)).label("ao_org_id"),
+            case((direct_org.c.org_type == Org_Type.ao, direct_org.c.name)).label("ao_name"),
+            case(
+                (direct_org.c.org_type == Org_Type.region, direct_org.c.id),
+                (
+                    and_(direct_org.c.org_type == Org_Type.ao, parent_org.c.org_type == Org_Type.region),
+                    parent_org.c.id,
+                ),
+            ).label("region_org_id"),
+            case(
+                (direct_org.c.org_type == Org_Type.region, direct_org.c.name),
+                (
+                    and_(direct_org.c.org_type == Org_Type.ao, parent_org.c.org_type == Org_Type.region),
+                    parent_org.c.name,
+                ),
+            ).label("region_name"),
+        )
+        .select_from(EventInstance)
+        .join(direct_org, direct_org.c.id == EventInstance.org_id)
+        .outerjoin(parent_org, parent_org.c.id == direct_org.c.parent_id)
+        .where(EventInstance.pax_count.is_not(None), EventInstance.is_active.is_(True))
+        .subquery("reportable_events")
+    )
 
 
 # Create the horizontal bar chart (dark + neon styling)
@@ -190,46 +229,69 @@ def pull_org_leaderboard_data() -> Dict[int, List[OrgUserLeaderboard]]:
     prior_month = datetime.now().month - 1 if datetime.now().month > 1 else 12
     prior_year = datetime.now().year if datetime.now().month > 1 else datetime.now().year - 1
 
-    # Helper to build a scoped query for a given org id column
-    def build_scoped_query(org_id_col, org_name_col, scope_name: str, basis: str = "month"):
+    events = _event_org_scope()
+
+    # Aggregate type links per actual attendance first so multiple links cannot
+    # multiply attendance rows or post counts in the leaderboard.
+    attendance_types = (
+        select(
+            Attendance_x_AttendanceType.attendance_id.label("attendance_id"),
+            func.sum(case((AttendanceType.type == "Q", 1), else_=0)).label("q_ind"),
+            func.sum(case((AttendanceType.type.in_(["Co-Q", "CoQ"]), 1), else_=0)).label("coq_ind"),
+        )
+        .select_from(Attendance_x_AttendanceType)
+        .join(Attendance, Attendance.id == Attendance_x_AttendanceType.attendance_id)
+        .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
+        .join(AttendanceType, AttendanceType.id == Attendance_x_AttendanceType.attendance_type_id)
+        .where(
+            Attendance.is_planned.is_(False),
+            EventInstance.is_active.is_(True),
+            EventInstance.pax_count.is_not(None),
+            EventInstance.start_date >= datetime(prior_year, 1, 1),
+            EventInstance.start_date < datetime(prior_year + 1, 1, 1),
+        )
+        .group_by(Attendance_x_AttendanceType.attendance_id)
+        .subquery("attendance_type_counts")
+    )
+
+    def build_scoped_query(org_id_col, org_name_col, basis: str = "month"):
         trunc_date = datetime(prior_year, prior_month, 1) if basis == "month" else datetime(prior_year, 1, 1)
-        query = (
+        return (
             select(
                 org_id_col.label("org_id"),
                 org_name_col.label("org_name"),
                 literal(basis).label("basis"),
-                AttendanceExpanded.user_id.label("user_id"),
-                AttendanceExpanded.f3_name.label("f3_name"),
-                AttendanceExpanded.avatar_url.label("avatar_url"),
-                func.count(EventInstanceExpanded.id).label("post_count"),
-                func.sum(AttendanceExpanded.q_ind + AttendanceExpanded.coq_ind).label("total_qs"),
+                User.id.label("user_id"),
+                User.f3_name.label("f3_name"),
+                User.avatar_url.label("avatar_url"),
+                func.count(events.c.event_id).label("post_count"),
+                func.coalesce(
+                    func.sum(func.coalesce(attendance_types.c.q_ind, 0) + func.coalesce(attendance_types.c.coq_ind, 0)),
+                    0,
+                ).label("total_qs"),
             )
-            .join(AttendanceExpanded, AttendanceExpanded.event_instance_id == EventInstanceExpanded.id)
-            .filter(func.date_trunc(basis, EventInstanceExpanded.start_date) == trunc_date)
+            .select_from(events)
+            .join(Attendance, Attendance.event_instance_id == events.c.event_id)
+            .join(User, User.id == Attendance.user_id)
+            .outerjoin(attendance_types, attendance_types.c.attendance_id == Attendance.id)
+            .where(
+                Attendance.is_planned.is_(False),
+                org_id_col.is_not(None),
+                func.date_trunc(basis, events.c.start_date) == trunc_date,
+            )
             .group_by(
                 org_id_col,
                 org_name_col,
-                AttendanceExpanded.user_id,
-                AttendanceExpanded.f3_name,
-                AttendanceExpanded.avatar_url,
+                User.id,
+                User.f3_name,
+                User.avatar_url,
             )
-            .order_by(org_id_col, func.count(EventInstanceExpanded.id).desc())
         )
-        return query
 
-    # Build queries for AO-scoped and Region-scoped orgs
-    query_ao_month = build_scoped_query(
-        EventInstanceExpanded.ao_org_id, EventInstanceExpanded.ao_name, "ao", basis="month"
-    )
-    query_region_month = build_scoped_query(
-        EventInstanceExpanded.region_org_id, EventInstanceExpanded.region_name, "region", basis="month"
-    )
-    query_ao_ytd = build_scoped_query(
-        EventInstanceExpanded.ao_org_id, EventInstanceExpanded.ao_name, "ao", basis="year"
-    )
-    query_region_ytd = build_scoped_query(
-        EventInstanceExpanded.region_org_id, EventInstanceExpanded.region_name, "region", basis="year"
-    )
+    query_ao_month = build_scoped_query(events.c.ao_org_id, events.c.ao_name, "month")
+    query_region_month = build_scoped_query(events.c.region_org_id, events.c.region_name, "month")
+    query_ao_ytd = build_scoped_query(events.c.ao_org_id, events.c.ao_name, "year")
+    query_region_ytd = build_scoped_query(events.c.region_org_id, events.c.region_name, "year")
 
     # Union both scopes so the result includes both AO and Region orgs
     final_query = union_all(query_ao_month, query_region_month, query_ao_ytd, query_region_ytd)
@@ -678,23 +740,24 @@ def pull_org_summary_data() -> Dict[int, List[OrgMonthlySummary]]:
     # Pull 2 years of data to support rolling 12-month view with prior year comparison
     start_date = datetime(datetime.now().year - 2, 1, 1)
     end_date = datetime(datetime.now().year, datetime.now().month, 1)
-    month_expr = func.date_trunc("month", EventInstanceExpanded.start_date)
+    events = _event_org_scope()
+    month_expr = func.date_trunc("month", events.c.start_date)
 
-    # Helper to build a scoped query for a given org id column
     def build_scoped_query(org_id_col, scope_name: str):
         # Subquery of events (one row per event) to avoid duplication from Attendance joins
         events_subq = (
             select(
                 org_id_col.label("org_id"),
                 month_expr.label("month"),
-                EventInstanceExpanded.id.label("event_id"),
-                EventInstanceExpanded.pax_count.label("pax_count"),
-                EventInstanceExpanded.fng_count.label("fng_count"),
+                events.c.event_id,
+                events.c.pax_count,
+                events.c.fng_count,
             )
             .where(
                 and_(
-                    EventInstanceExpanded.start_date >= start_date,
-                    EventInstanceExpanded.start_date < end_date,
+                    events.c.start_date >= start_date,
+                    events.c.start_date < end_date,
+                    org_id_col.is_not(None),
                 )
             )
             .subquery(f"events_subq_{scope_name}")
@@ -718,14 +781,17 @@ def pull_org_summary_data() -> Dict[int, List[OrgMonthlySummary]]:
             select(
                 org_id_col.label("org_id"),
                 month_expr.label("month"),
-                AttendanceExpanded.user_id.label("user_id"),
+                Attendance.user_id.label("user_id"),
             )
-            .select_from(EventInstanceExpanded)
-            .join(AttendanceExpanded, AttendanceExpanded.event_instance_id == EventInstanceExpanded.id)
+            .select_from(events)
+            .join(Attendance, Attendance.event_instance_id == events.c.event_id)
             .where(
                 and_(
-                    EventInstanceExpanded.start_date >= start_date,
-                    EventInstanceExpanded.start_date < end_date,
+                    events.c.start_date >= start_date,
+                    events.c.start_date < end_date,
+                    Attendance.is_planned.is_(False),
+                    Attendance.user_id.is_not(None),
+                    org_id_col.is_not(None),
                 )
             )
             .distinct()
@@ -762,8 +828,8 @@ def pull_org_summary_data() -> Dict[int, List[OrgMonthlySummary]]:
         return scoped_query
 
     # Build queries for AO-scoped and Region-scoped orgs
-    query_ao = build_scoped_query(EventInstanceExpanded.ao_org_id, "ao")
-    query_region = build_scoped_query(EventInstanceExpanded.region_org_id, "region")
+    query_ao = build_scoped_query(events.c.ao_org_id, "ao")
+    query_region = build_scoped_query(events.c.region_org_id, "region")
 
     # Union both scopes so the result includes both AO and Region orgs
     final_query = union_all(query_ao, query_region)
