@@ -5,8 +5,8 @@ target, each under a `## <app key>` heading — the core flows that should
 still work, not new-feature testing (see individual release issues like
 [#841](https://github.com/F3-Nation/f3-nation/issues/841) for that). Some
 targets land at the low end because there isn't much left to check without
-extra setup — e.g. `api`'s other routes all require auth, so its checklist
-only covers the two that don't.
+extra setup. `api`'s authenticated routes are checked through the map and
+me/admin apps rather than called directly.
 
 After every successful staging deploy, `_deploy-cloudrun.yml` /
 `_deploy-cloudrun-job.yml` call the `.github/actions/staging-smoke-test-issue`
