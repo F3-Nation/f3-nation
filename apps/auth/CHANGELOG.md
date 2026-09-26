@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.5](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.4...auth@2.3.5) (2026-09-26)
+
+
+### Bug Fixes
+
+* **auth,map:** disable SendGrid click and open tracking on sign-in code emails ([#1077](https://github.com/F3-Nation/f3-nation/issues/1077)) ([1dfeea6](https://github.com/F3-Nation/f3-nation/commit/1dfeea6f2294d78261f58e8c9116327bd02af231))
+
 ## [2.3.4](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.3...auth@2.3.4) (2026-09-23)
 
 
