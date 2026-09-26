@@ -1,4 +1,4 @@
-import type Supercluster from "supercluster";
+import type { Options } from "supercluster";
 import { useCallback, useMemo } from "react";
 import { useMap } from "@vis.gl/react-google-maps";
 import { CLOSE_ZOOM } from "@acme/shared/app/constants";
@@ -16,10 +16,7 @@ import { useFilteredMapResults } from "../map/filtered-map-results-provider";
 import { FeatureMarker } from "../map/group-marker";
 import { FeaturesClusterMarker } from "./features-cluster-marker";
 
-const superclusterOptions: Supercluster.Options<
-  MarkerProperties,
-  F3ClusterProperties
-> = {
+const superclusterOptions: Options<MarkerProperties, F3ClusterProperties> = {
   extent: 256, // smaller means more in a cluster
   radius: 64, // Adjust this. smaller means more smaller clusters
   maxZoom: 12,

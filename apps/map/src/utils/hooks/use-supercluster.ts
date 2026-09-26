@@ -1,5 +1,5 @@
 import type { FeatureCollection, GeoJsonProperties, Point } from "geojson";
-import type { ClusterProperties } from "supercluster";
+import type { ClusterProperties, Options } from "supercluster";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import Supercluster from "supercluster";
 
@@ -7,7 +7,7 @@ import { useMapViewport } from "./use-map-viewport";
 
 export function useSupercluster<T extends GeoJsonProperties>(
   geojson: FeatureCollection<Point, T>,
-  superclusterOptions: Supercluster.Options<T, ClusterProperties>,
+  superclusterOptions: Options<T, ClusterProperties>,
 ) {
   // create the clusterer and keep it
   const clusterer = useMemo(() => {

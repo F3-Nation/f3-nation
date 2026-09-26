@@ -72,7 +72,6 @@
     "@types/nodemailer": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@types/supercluster": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
