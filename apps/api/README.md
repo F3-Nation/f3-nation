@@ -15,13 +15,13 @@ Interactive API docs (via [`@scalar/nextjs-api-reference`](https://github.com/sc
 
 ## Tech Stack
 
-| Layer     | Choice                                    |
-| --------- | ----------------------------------------- |
-| Framework | Next.js (App Router, Route Handlers only) |
-| RPC/REST  | oRPC (`@orpc/server`, `@orpc/openapi`)    |
-| API Docs  | Scalar (`@scalar/nextjs-api-reference`)   |
-| Database  | Drizzle ORM (via `@acme/db`)              |
-| Hosting   | GCP Cloud Run (via GitHub Actions)        |
+| Layer     | Choice                                     |
+| --------- | ------------------------------------------ |
+| Framework | Hono on @hono/node-server (esbuild bundle) |
+| RPC/REST  | oRPC (`@orpc/server`, `@orpc/openapi`)     |
+| API Docs  | Scalar (`@scalar/hono-api-reference`)      |
+| Database  | Drizzle ORM (via `@acme/db`)               |
+| Hosting   | GCP Cloud Run (via GitHub Actions)         |
 
 ## Authentication
 

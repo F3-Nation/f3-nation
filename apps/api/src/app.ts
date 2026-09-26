@@ -32,11 +32,10 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// No response compression. The deployed Next revision serves these responses
-// uncompressed even when the client accepts gzip, and the map's /api/orpc
-// proxy relies on that: it returns the upstream Response as-is, and its
-// fetch() decodes a gzip body but keeps the Content-Encoding header, so
-// browsers then fail to decode it.
+// No response compression, matching the service this replaced. Map revisions
+// whose /api/orpc proxy forwards the upstream Content-Encoding onto a body its
+// fetch() already decoded break on gzip, so don't enable it while any of those
+// can still be deployed.
 
 const SERVICE_NAME = "f3-api";
 

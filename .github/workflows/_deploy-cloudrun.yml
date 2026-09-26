@@ -118,7 +118,7 @@ on:
         default: ""
     secrets:
       posthog_key:
-        description: "NEXT_PUBLIC_POSTHOG_KEY build-arg — Next.js inlines NEXT_PUBLIC_* vars into the bundle at build time, so this must be supplied here, not as a Cloud Run runtime env var"
+        description: "NEXT_PUBLIC_POSTHOG_KEY build-arg — Next.js inlines NEXT_PUBLIC_* vars into the bundle at build time, so this must be supplied here, not as a Cloud Run runtime env var. Exception: the api image (Hono bundle) turns it into an image ENV read at runtime, so a Cloud Run runtime value, even an empty one, overrides it"
         required: false
 
 jobs:
@@ -227,6 +227,11 @@ jobs:
           # here as build args, not as Cloud Run runtime env vars. This image
           # is built once and promoted to prod unchanged (see deploy-prod
           # below), so one key/flag pair covers both environments.
+          #
+          # Exception: the api image is a Hono bundle, not Next.js. Its
+          # Dockerfile turns the key build arg into an image ENV that the
+          # bundle reads from process.env at runtime, so a Cloud Run runtime
+          # value (even an empty one) overrides it.
           docker build \
             --platform=linux/amd64 \
             --file "${DOCKERFILE}" \

@@ -4,6 +4,12 @@
   [#644](https://github.com/F3-Nation/f3-nation/issues/644))
 - **Date:** 2026-07-09
 - **Deciders:** @taterhead247, @BigGillyStyle, @evanpetzoldt
+- **Amended 2026-09-26:** the Hono server does not use `hono/compress`. The
+  premise below that Next standalone compresses responses was wrong: the
+  deployed Next service served them uncompressed, and the Hono server matches
+  that. Compression also broke the map, whose `/api/orpc` proxy passed the
+  upstream `Content-Encoding` header through after its own `fetch()` had
+  already decoded the body, so browsers failed to decode the response.
 
 ## Context
 

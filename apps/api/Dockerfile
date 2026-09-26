@@ -83,13 +83,11 @@ COPY --from=installer --chown=api:nodejs /app/apps/api/public ./public
 
 USER api
 
-# Next's standalone server.js forced this; the bundle does not, and
-# src/instrument.ts only registers error tracking in production.
+# src/instrument.ts only registers error tracking when NODE_ENV is production.
 ENV NODE_ENV=production
 
-# Next inlined this build arg into its server output; esbuild does not inline
-# process.env, so it must reach the container as a runtime env var or error
-# tracking is silently disabled.
+# The bundle reads this from process.env at runtime; without it error tracking
+# is disabled (instrument.ts logs api.observability.posthog_disabled).
 ARG NEXT_PUBLIC_POSTHOG_KEY
 ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 
