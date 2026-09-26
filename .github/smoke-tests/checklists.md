@@ -15,7 +15,10 @@
 ## api
 
 - [ ] `GET <staging URL>/v1/ping` returns HTTP 200.
-- [ ] `GET <staging URL>/docs/openapi.json` returns a valid JSON OpenAPI spec.
+- [ ] `GET <staging URL>/health` returns HTTP 200 with JSON `"service": "f3-api"` and `"status": "ok"`.
+- [ ] `<staging URL>/docs` renders the API docs, and `GET <staging URL>/docs/openapi.json` returns a valid JSON OpenAPI spec.
+- [ ] Signed in to the staging map, save a trivial edit to a workout or location; it saves with no error.
+- [ ] Signed in to staging me (or admin), a page that loads your own data shows it with no error.
 
 ## auth
 

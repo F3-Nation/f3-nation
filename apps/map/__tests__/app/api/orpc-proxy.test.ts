@@ -266,6 +266,35 @@ describe("oRPC proxy route", () => {
     expect(response.headers.has("cache-control")).toBe(false);
   });
 
+  // fetch() decodes a compressed upstream body but keeps its headers; passing
+  // them on makes the browser try to decode plain bytes again.
+  it.each(["/v1/ping", "/v1/request/canEditRegions"])(
+    "drops upstream Content-Encoding and Content-Length on %s",
+    async (path) => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response('{"ok":true}', {
+          headers: {
+            "content-type": "application/json",
+            "content-encoding": "gzip",
+            "content-length": "999",
+          },
+        }),
+      );
+      const { GET } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+      const response = await GET(
+        new NextRequest(`http://localhost:3000/api/orpc${path}`, {
+          headers: { "accept-encoding": "gzip, br" },
+        }),
+      );
+
+      expect(response.headers.get("content-encoding")).toBeNull();
+      expect(response.headers.get("content-length")).not.toBe("999");
+      expect(await response.json()).toEqual({ ok: true });
+    },
+  );
+
   it("drops crafted Authorization header when F3_MAP_API_KEY is unset", async () => {
     vi.stubEnv("F3_MAP_API_KEY", "");
 

@@ -120,13 +120,14 @@ async function proxyRequest(request: NextRequest) {
     body,
   });
 
-  if (!isSignedInOnly) return upstreamResponse;
-
+  const headers = new Headers(upstreamResponse.headers);
+  // fetch() already decoded the body; these describe the encoded bytes.
+  headers.delete("content-encoding");
+  headers.delete("content-length");
   // These responses can carry PII scoped to the caller's own session
   // (see SIGNED_IN_ONLY_PATHS above) — never let a shared browser cache or
   // intermediate proxy retain a copy for the next visitor on this device.
-  const headers = new Headers(upstreamResponse.headers);
-  headers.set("Cache-Control", "no-store");
+  if (isSignedInOnly) headers.set("Cache-Control", "no-store");
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,

@@ -19,6 +19,7 @@ import {
 } from "@acme/observability";
 
 import { env } from "~/env";
+import { logWarn } from "~/lib/logging";
 
 if (env.NODE_ENV === "production") {
   registerObservability({
@@ -27,4 +28,9 @@ if (env.NODE_ENV === "production") {
     posthog: { apiKey: env.NEXT_PUBLIC_POSTHOG_KEY },
   });
   registerLoggerErrorReporter();
+  if (!env.NEXT_PUBLIC_POSTHOG_KEY) {
+    logWarn("api.observability.posthog_disabled", {
+      channel: env.NEXT_PUBLIC_CHANNEL,
+    });
+  }
 }
