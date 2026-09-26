@@ -2,6 +2,13 @@
 
 <!-- version list -->
 
+## [2.7.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.6.0...slackbot@2.7.0) (2026-09-26)
+
+
+### Features
+
+* **slackbot:** add more snarky comments to hc's ([#1062](https://github.com/F3-Nation/f3-nation/issues/1062)) ([7558b29](https://github.com/F3-Nation/f3-nation/commit/7558b2903863f18f2f959561d45a5736c9ac5aff))
+
 ## [2.6.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.5.1...slackbot@2.6.0) (2026-09-23)
 
 
