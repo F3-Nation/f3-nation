@@ -71,10 +71,10 @@ def test_prepare_calendar_labels_preserves_preformatted_times_and_nullable_metad
 
     assert events["event_time"].tolist() == ["0930", "1000", ""]
     assert events["label"].tolist() == ["Q One\nEC 0930", "Q Two\nEC 1000", "Q Three\nEC "]
-    assert events.loc[0, "ao_description"] is None
-    assert events.loc[0, "location_name"] is None
-    assert events.loc[0, "location_description"] is None
-    assert events.loc[0, "location_address_street"] is None
+    assert pd.isna(events.loc[0, "ao_description"])
+    assert pd.isna(events.loc[0, "location_name"])
+    assert pd.isna(events.loc[0, "location_description"])
+    assert pd.isna(events.loc[0, "location_address_street"])
 
 
 def test_calendar_time_sort_key_places_missing_times_last_and_preserves_lexicographic_order():
