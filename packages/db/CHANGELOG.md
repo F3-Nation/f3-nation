@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.2...pkg-db@0.7.0) (2026-09-23)
+
+
+### Features
+
+* **admin,api,db,shared:** surface territory in the admin UI and count AOs at any depth ([#1043](https://github.com/F3-Nation/f3-nation/issues/1043)) ([f9932d2](https://github.com/F3-Nation/f3-nation/commit/f9932d26700c733fb69ee02b703aedab63053f4f))
+* **db:** add FK cascade and email-sync trigger for better_auth_user ([#1032](https://github.com/F3-Nation/f3-nation/issues/1032)) ([e95c218](https://github.com/F3-Nation/f3-nation/commit/e95c21840646e9096aa8ab49a19a0e891ca23c12))
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Bug Fixes
+
+* **db:** add territory with ADD VALUE so 0023 survives dependent views ([#1063](https://github.com/F3-Nation/f3-nation/issues/1063)) ([1600218](https://github.com/F3-Nation/f3-nation/commit/16002188f5248fa5e8c07156a2f3b6a288c09cb8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/env bumped to 0.1.3
+    * @acme/shared bumped to 0.4.0
+
 ## [0.6.2](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.1...pkg-db@0.6.2) (2026-09-16)
 
 

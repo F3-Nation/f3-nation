@@ -11,7 +11,7 @@ declare global {
 }
 globalThis.jest = vi;
 
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 import "vitest-canvas-mock";
 
 vi.mock("@acme/auth", () => ({

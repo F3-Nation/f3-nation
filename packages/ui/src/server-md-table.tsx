@@ -1,24 +1,18 @@
 "use client";
 
 import type {
+  ColumnVisibilityState,
   PaginationState,
+  ReactTable,
   Row,
+  RowData,
   RowSelectionState,
   SortingState,
   TableOptions,
   Updater,
-  VisibilityState,
 } from "@tanstack/react-table";
-import type { Table as TableType } from "@tanstack/table-core";
 import React, { useImperativeHandle, useMemo, useRef, useState } from "react";
-import {
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
+import { flexRender, useTable } from "@tanstack/react-table";
 import { ChevronDownIcon, Loader2, RefreshCcw } from "lucide-react";
 
 import type { PartialBy } from "@acme/shared/common/types";
@@ -42,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./select";
+import type { MdTableFeatures } from "./table-features";
 import { Skeleton } from "./skeleton";
 import {
   Table,
@@ -51,6 +46,7 @@ import {
   TableHeader,
   TableRow,
 } from "./table";
+import { mdTableFeatures } from "./table-features";
 
 export const TableName = ["default", "posts", "users"] as const;
 
@@ -144,9 +140,12 @@ const setTableStoreValue = <T extends keyof TableState>(
   tableStore.setState({ [tableName]: { ...tableState, [key]: value } });
 };
 
+type TableType<T extends RowData> = ReactTable<MdTableFeatures, T>;
+type MdTableOptionsBase<T extends RowData> = TableOptions<MdTableFeatures, T>;
+
 export interface MDTableProps<T extends { id: string | number }> {
-  onRowClick?: (row: Row<T>) => void;
-  rowHref?: (row: Row<T>) => string;
+  onRowClick?: (row: Row<MdTableFeatures, T>) => void;
+  rowHref?: (row: Row<MdTableFeatures, T>) => string;
   /**
    * The data to display in the table.
    * If the data is undefined, we show a loading state.
@@ -154,9 +153,9 @@ export interface MDTableProps<T extends { id: string | number }> {
    * If the data is an array, we show the data in the table.
    *
    */
-  data: TableOptions<T>["data"] | undefined;
-  columns: TableOptions<T>["columns"];
-  tableOptions?: Partial<TableOptions<T>>;
+  data: MdTableOptionsBase<T>["data"] | undefined;
+  columns: MdTableOptionsBase<T>["columns"];
+  tableOptions?: Partial<MdTableOptionsBase<T>>;
   tableName: TableName | null;
   rowsName?: string;
   downloadCSV?: (params: { table: TableType<T>; name: string }) => void;
@@ -167,8 +166,8 @@ export interface MDTableProps<T extends { id: string | number }> {
   paginationOptions?: PaginationOptions;
   serverSidePagination: boolean;
   defaultSortingState?: SortingState;
-  defaultColumnVisibility?: VisibilityState;
-  rowClassName?: (row: Row<T>) => string | undefined;
+  defaultColumnVisibility?: ColumnVisibilityState;
+  rowClassName?: (row: Row<MdTableFeatures, T>) => string | undefined;
   totalCount?: number;
   hideTopRow?: boolean;
   enableRowSelection?: boolean;
@@ -240,25 +239,22 @@ export const MDTable = <T extends { id: string | number }>(
     cachedCount.current = totalCountParam;
   }
 
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table
-  const table = useReactTable<T>({
+  const table = useTable({
+    features: mdTableFeatures,
     data: cachedData.current ?? [],
     columns,
     ...(serverSidePagination
       ? { manualPagination: true, manualSorting: true }
       : {}),
     ...(enableRowSelection ? { enableRowSelection: true } : {}),
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setValue("columnVisibility"),
-    getPaginationRowModel: getPaginationRowModel(),
     onPaginationChange: setValue("pagination"),
     onSortingChange: setValue("sorting"),
     ...(cachedCount.current !== undefined && {
       rowCount: cachedCount.current,
     }),
     onRowSelectionChange: setValue("rowSelection"),
+    getRowId: (row) => row.id.toString(),
     state: {
       pagination: tableState.pagination,
       sorting: tableState.sorting,
@@ -267,11 +263,6 @@ export const MDTable = <T extends { id: string | number }>(
       ...(enableRowSelection ? { rowSelection: tableState.rowSelection } : {}),
     },
   });
-  table.setOptions((prev) => ({
-    ...prev,
-    getRowId: (row) => row.id.toString(),
-    autoResetSelectedRows: false,
-  }));
 
   useImperativeHandle(tableRef, () => table);
 
@@ -448,7 +439,9 @@ export const MDTable = <T extends { id: string | number }>(
                   <IndeterminateCheckbox
                     {...{
                       checked: table.getIsAllPageRowsSelected(),
-                      indeterminate: table.getIsSomePageRowsSelected(),
+                      indeterminate:
+                        table.getIsSomePageRowsSelected() &&
+                        !table.getIsAllPageRowsSelected(),
                       onChange: table.getToggleAllPageRowsSelectedHandler(),
                     }}
                   />
@@ -481,7 +474,7 @@ export const MDTable = <T extends { id: string | number }>(
             <span className="flex items-center gap-1">
               <div>Page</div>
               <strong>
-                {table.getState().pagination.pageIndex + 1} of {pageCount}
+                {table.state.pagination.pageIndex + 1} of {pageCount}
               </strong>
             </span>
             <Button
@@ -546,15 +539,18 @@ export const MDTable = <T extends { id: string | number }>(
   );
 };
 
-export type MdTableOptions<T> = Pick<TableOptions<T>, "data" | "columns"> &
-  Partial<TableOptions<T>> & {
+export type MdTableOptions<T extends RowData> = Pick<
+  MdTableOptionsBase<T>,
+  "data" | "columns"
+> &
+  Partial<MdTableOptionsBase<T>> & {
     tableName: string;
     rowsName: string;
     downloadCSV?: (params: { table: TableType<T>; name: string }) => void;
   };
 
 // Type helper
-export const createTableOptions = <T,>(
+export const createTableOptions = <T extends RowData>(
   params: PartialBy<MdTableOptions<T>, "tableName" | "rowsName">,
 ): MdTableOptions<T> => {
   return {
