@@ -21,7 +21,11 @@ function resolvePort(raw: string | undefined): number {
 }
 
 const port = resolvePort(process.env.PORT);
-const server = serve({ fetch: app.fetch, port });
+// overrideGlobalObjects would swap in @hono/node-server's lightweight
+// Response, whose default string-body content-type ("text/plain; charset=UTF-8")
+// differs from undici's ("text/plain;charset=UTF-8") that Next served and the
+// characterization goldens pin.
+const server = serve({ fetch: app.fetch, port, overrideGlobalObjects: false });
 
 // Cloud Run sends SIGTERM with a ~10s grace window before SIGKILL — force-exit
 // a couple seconds ahead of that so a hung close() reports its own error

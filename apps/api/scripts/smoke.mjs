@@ -9,6 +9,9 @@ import { spawn } from "node:child_process";
 const PORT = "8089";
 const BASE = `http://127.0.0.1:${PORT}`;
 const READY_TIMEOUT_MS = 30_000;
+// Bounds every request, so a server that accepts connections but never
+// answers fails the build instead of hanging it.
+const REQUEST_TIMEOUT_MS = 5_000;
 
 const server = spawn(
   process.execPath,
@@ -40,10 +43,12 @@ async function waitForReady() {
   while (Date.now() < deadline) {
     if (exited) fail("server exited during startup");
     try {
-      const res = await fetch(`${BASE}/health`);
+      const res = await fetch(`${BASE}/health`, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
       if (res.ok) return;
     } catch {
-      // Not listening yet.
+      // Not listening yet, or the request timed out.
     }
     await new Promise((r) => setTimeout(r, 250));
   }
@@ -67,7 +72,9 @@ async function readJsonObject(res) {
  * @returns {Promise<Response>}
  */
 async function expectOk(path) {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
   if (res.status !== 200) fail(`GET ${path} returned ${res.status}`);
   console.log(`smoke: ok GET ${path}`);
   return res;
@@ -82,6 +89,10 @@ if (health.headers.get("cache-control") !== "no-store") {
 const healthBody = await readJsonObject(health);
 if (healthBody.service !== "f3-api") {
   fail(`GET /health reported service ${JSON.stringify(healthBody.service)}`);
+}
+// The endpoint answers 200 even when a check is down; the body says which.
+if (healthBody.status !== "ok") {
+  fail(`GET /health reported status ${JSON.stringify(healthBody.status)}`);
 }
 
 const spec = await readJsonObject(await expectOk("/docs/openapi.json"));
