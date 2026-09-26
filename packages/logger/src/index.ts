@@ -24,8 +24,8 @@ export type LogContext = Record<string, unknown>;
 
 // Drizzle adds source SQL and bind values to database errors. When an audit
 // failure occurs anywhere in the cause chain, replace the whole error with a
-// fresh message/SQLSTATE-only error. Original stacks, causes and driver fields
-// are discarded; unrelated errors pass through unchanged.
+// fresh error containing only the message, SQLSTATE and source identifiers.
+// Original stacks, causes and other driver fields are discarded.
 function safeAuditError<T>(error: T): T | Error {
   let cause: unknown = error;
   const seen = new Set<unknown>();
@@ -38,7 +38,15 @@ function safeAuditError<T>(error: T): T | Error {
         /^[0-9A-Z]{5}$/.test(cause.code)
           ? cause.code
           : undefined;
-      return Object.assign(new Error("Audit history capture failed"), { code });
+      const identifiers: Record<string, string> = {};
+      for (const field of ["schema_name", "table_name"] as const) {
+        const value: unknown = Reflect.get(cause, field);
+        if (typeof value === "string") identifiers[field] = value;
+      }
+      return Object.assign(new Error("Audit history capture failed"), {
+        code,
+        ...identifiers,
+      });
     }
     cause = cause.cause;
   }
@@ -134,6 +142,9 @@ export function createLogger(
     (level: "error" | "fatal") =>
     (event: string, ctx: LogContext = {}, err?: unknown) => {
       err = safeAuditError(err);
+      ctx = Object.fromEntries(
+        Object.entries(ctx).map(([key, value]) => [key, safeAuditError(value)]),
+      );
       logger[level]({ ...ctx, ...(err !== undefined ? { err } : {}) }, event);
       // Never let a failing reporter (e.g. the PostHog bridge) throw out of a
       // log call and break request flow. Report the failure via raw pino so we

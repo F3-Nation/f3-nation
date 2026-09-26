@@ -58,12 +58,10 @@ export const reset = async (db?: AppDb) => {
       connectedDb?.disposable_marker !== "f3-disposable-local-v1"
     ) {
       throw new Error(
-        "Refusing reset: target is not a verified disposable local database. Use pnpm local:setup to provision the local Docker database.",
+        "Refusing reset: target is not a verified disposable local database. For the local Docker database, run pnpm local:setup, or mark it once with: docker exec f3-postgres psql -U f3local -d f3nation -c \"COMMENT ON DATABASE f3nation IS 'f3-disposable-local-v1'\"",
       );
     }
-    // Only printed for the interactive path: the full URL can carry
-    // credentials, and the automated (isTest) branches above never read
-    // this prompt, so it must not run unconditionally on every reset.
+    // Interactive path only: automated (isTest) callers have no TTY to answer.
     process.stdout.write(
       `Resetting disposable database ${databaseName}, including all audit history. ARE YOU SURE? (y/n): `,
     );

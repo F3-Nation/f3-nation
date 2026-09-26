@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 export async function cleanupAuditStack(
   children: readonly Pick<ChildProcess, "pid">[],
   removeContainer: () => void,
+  setupFailure?: { error: unknown; logs: string },
 ) {
   const errors: unknown[] = [];
   // Attempt every owned process group, even if an earlier signal failed.
@@ -24,6 +25,16 @@ export async function cleanupAuditStack(
   } catch (error) {
     errors.push(error);
   }
-  if (errors.length)
-    throw new AggregateError(errors, "Audit stack cleanup failed");
+  if (errors.length) {
+    const cleanupError = new AggregateError(
+      errors,
+      "Audit stack cleanup failed",
+    );
+    if (setupFailure)
+      throw new AggregateError(
+        [setupFailure.error, cleanupError],
+        `Audit stack setup and cleanup failed; see ${setupFailure.logs}`,
+      );
+    throw cleanupError;
+  }
 }

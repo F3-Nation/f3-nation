@@ -324,10 +324,10 @@ Run the repository CI gates before proposing implementation ready.
 The SQL integration tests live in
 `packages/api/src/__tests__/audit-history.test.ts` so they use the existing real
 migration/reset setup and run serially with other database-mutating API tests.
-Run through the repository-pinned toolchain:
+Run using the repo's NVM-managed Node/pnpm (`.nvmrc`):
 
 ```bash
-direnv exec . pnpm --filter @acme/api test src/__tests__/audit-history.test.ts
+pnpm --filter @acme/api test src/__tests__/audit-history.test.ts
 ```
 
 Only run against a verified local/disposable database ending in `_test`.
@@ -337,11 +337,11 @@ a local test administrator. The fixture schemas, roles and rows roll back.
 Source writes in the API integration case commit, then are deleted; their
 masked history remains until the next test reset.
 
-Run `direnv exec . pnpm --filter f3-map test:e2e:audit` with Docker available.
+Run `pnpm --filter f3-map test:e2e:audit` with Docker available.
 The advisory Playwright case owns a temporary PostgreSQL container and fresh
 map/API processes on allocated loopback ports. It migrates and seeds that database,
 then uses a read-only connection to check stored history. It never uses supplied
-`E2E_BASE_URL` or `E2E_AUDIT_DATABASE_URL` targets. Teardown stops its processes and
+`E2E_BASE_URL` or a supplied database URL. Teardown stops its processes and
 removes its container and data, including history, on success or failure.
 The ordinary advisory suite skips this case unless `E2E_AUDIT_LOCAL=1` selects
 the owned local fixture. No history endpoint is added. Logs remain in a private
@@ -360,12 +360,14 @@ Capture failures surface as database errors and fail the source transaction;
 existing application error paths report failures without logging snapshots or
 secret values. No new telemetry subsystem is required.
 
-An audit failure returns a generic message with its SQLSTATE, without the original
+An audit failure returns a generic message with its SQLSTATE and source schema/table
+identifiers (`AH001` for a missing primary-key column, `AH002` for a missing masked
+column), without the original
 database message/detail. Database statement logging is a separate operator setting
 and must not log credential-bearing statements or bind values.
 
 The shared `@acme/logger` boundary replaces audit errors with a fresh error
-containing only the generic message and SQLSTATE before pino or the error-reporting
+containing only the generic message, SQLSTATE and source schema/table identifiers before pino or the error-reporting
 sink receives them. It covers all app/package error/fatal helpers and pino's
 `err` serializer, including child loggers. Direct Sentry capture and other direct
 database clients do not pass through that boundary; they must avoid logging query
@@ -391,6 +393,19 @@ concurrent CI activity and hardware affect these numbers.
    primary-key order, configured columns, absence of conflicting audit objects,
    source ownership, migration owner and runtime writer roles. Checked-in schema
    metadata and local measurements do not substitute for this inventory.
+   The operator must act as the exact source owner: inherited role membership
+   alone does not satisfy `enable_tracking`. Inventory **all 26 tables**, not
+   just the first failing table. If they share one owner, use an approved
+   migration session with `SET ROLE <source_owner>` before running the migration,
+   in that same session, so helpers and history objects have consistent ownership.
+   The current `packages/db` migration command does not select an owner role.
+   Before release, approve and implement how that connection assumes the verified
+   owner; the role-selection mechanism remains a deployment prerequisite.
+   A role change in a separate psql session does not affect the application's
+   migration connection. Verify that the selected role can create schemas and
+   functions and access the migration journal. If owners differ, stop and agree
+   an ownership plan; one `SET ROLE` cannot satisfy this migration's shared
+   history-schema ownership rule. Do not relax the ownership check as a workaround.
 2. Select and manually provision the intended reader role. Review inherited role
    memberships and default ACLs, not just direct grants. Verify the operator can
    own all source/history objects and can create triggers/functions.
@@ -407,7 +422,13 @@ concurrent CI activity and hardware affect these numbers.
    writes can wait until the migration transaction ends. Set an appropriate
    operator lock timeout and deploy window. The Drizzle migration transaction
    makes activation atomic; a failure must not leave a partially active set.
-5. Obtain migration approval, execute through `packages/db` tooling, and verify
+5. Before merging or deploying, reconcile migration numbering with other pending
+   migrations. The migration merged second must use the next free index, matching
+   SQL filename, journal `idx`/`tag`, snapshot filename and `prevId` chain.
+   Its journal `when` must be strictly greater than every preceding entry and
+   every migration already deployed. Renaming a file alone is insufficient:
+   Drizzle skips timestamps at or below the database's latest recorded migration.
+6. Obtain migration approval, execute through `packages/db` tooling, and verify
    exact activation, reader grants and representative source writes. Ask for team
    feedback on the approved policy that an audit insert failure fails its source
    statement. Do not assume multiple independent statements in an application

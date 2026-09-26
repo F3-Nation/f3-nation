@@ -92,6 +92,16 @@ describe("audit reset safety", () => {
     ).toBe(true);
     expect(write.mock.calls.flat().join("")).not.toContain("postgresql://");
   });
+  it("drops nothing when the marked local reset is declined", async () => {
+    const { db, statements } = client("f3nation", "f3-disposable-local-v1");
+    vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    vi.spyOn(process.stdin, "once").mockImplementation((event, listener) => {
+      if (event === "data") listener(Buffer.from("n"));
+      return process.stdin;
+    });
+    await expect(reset(db)).rejects.toThrow("Reset cancelled");
+    expect(statements.some((s) => s.includes("DROP"))).toBe(false);
+  });
   it("requires the actual test database to match the configured test database", async () => {
     vi.stubEnv("CI", "1");
     state.isTest = true;

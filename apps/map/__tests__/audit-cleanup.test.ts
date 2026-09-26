@@ -9,6 +9,27 @@ vi.mock("node:timers/promises", () => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe("owned audit stack cleanup", () => {
+  it("preserves setup failure and the logs path when cleanup also fails", async () => {
+    const setupError = new Error("Synthetic setup failure");
+    const cleanupError = new Error("Synthetic container failure");
+    await expect(
+      cleanupAuditStack(
+        [],
+        () => {
+          throw cleanupError;
+        },
+        {
+          error: setupError,
+          logs: "/tmp/synthetic-audit-logs",
+        },
+      ),
+    ).rejects.toMatchObject({
+      message:
+        "Audit stack setup and cleanup failed; see /tmp/synthetic-audit-logs",
+      errors: [setupError, { errors: [cleanupError] }],
+    });
+  });
+
   it("attempts every process and container cleanup before reporting failures", async () => {
     const signalError = Object.assign(new Error("Synthetic signal failure"), {
       code: "EPERM",

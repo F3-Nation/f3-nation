@@ -44,6 +44,7 @@ export const test = base.extend<
       const logs = mkdtempSync(join(tmpdir(), "f3-audit-e2e-"));
       const children: ChildProcess[] = [];
       let containerCreated = false;
+      let setupFailure: { error: unknown } | undefined;
       const docker = (...args: string[]) =>
         execFileSync("docker", args, {
           encoding: "utf8",
@@ -77,6 +78,8 @@ export const test = base.extend<
               "exec",
               container,
               "pg_isready",
+              "-h",
+              "127.0.0.1",
               "-U",
               "postgres",
               "-d",
@@ -193,10 +196,17 @@ export const test = base.extend<
             );
         }
         await provide({ databaseUrl, baseURL });
+      } catch (error) {
+        setupFailure = { error };
+        throw error;
       } finally {
-        await cleanupAuditStack(children, () => {
-          if (containerCreated) docker("rm", "--force", container);
-        });
+        await cleanupAuditStack(
+          children,
+          () => {
+            if (containerCreated) docker("rm", "--force", container);
+          },
+          setupFailure && { ...setupFailure, logs },
+        );
       }
     },
     { scope: "worker", timeout: 300000 },

@@ -297,8 +297,20 @@ describe("audit history migration (#664)", () => {
             ? sql`INSERT INTO audit_fixture.keys (a) VALUES (3)`
             : sql`UPDATE audit_fixture.keys SET updated=1`,
           ...(change === "null" ? [] : [sql`DELETE FROM audit_fixture.keys`]),
-        ])
-          await rejected(tx, statement, "Audit history capture failed");
+        ]) {
+          await expect(
+            tx.transaction(async (sp) => {
+              await sp.execute(statement);
+            }),
+          ).rejects.toMatchObject({
+            cause: {
+              message: "Audit history capture failed",
+              code: "AH001",
+              schema_name: "audit_fixture",
+              table_name: "keys",
+            },
+          });
+        }
         const rows = await tx.execute(sql`SELECT * FROM audit_fixture.keys`);
         expect(rows).toHaveLength(1);
         const historyRows = await tx.execute(
@@ -437,6 +449,61 @@ describe("audit history migration (#664)", () => {
       expect(await history(tx)).toHaveLength(2);
     }));
 
+  it("requires a member operator to assume the exact source-owner role", async () =>
+    fixture(async (tx) => {
+      await tx.execute(sql`CREATE ROLE audit_source_owner NOLOGIN NOSUPERUSER`);
+      await tx.execute(
+        sql`CREATE ROLE audit_member_operator NOLOGIN NOSUPERUSER INHERIT`,
+      );
+      await tx.execute(sql`GRANT audit_source_owner TO audit_member_operator`);
+      await tx.execute(
+        sql`CREATE SCHEMA audit_member_fixture AUTHORIZATION audit_source_owner`,
+      );
+      await tx.execute(
+        sql`CREATE TABLE audit_member_fixture.rows (id integer PRIMARY KEY)`,
+      );
+      await tx.execute(
+        sql`ALTER TABLE audit_member_fixture.rows OWNER TO audit_source_owner`,
+      );
+      const [database] = await tx.execute<{ name: string }>(
+        sql`SELECT current_database() AS name`,
+      );
+      if (!database) throw new Error("Missing fixture database");
+      await tx.execute(
+        sql`GRANT CREATE ON DATABASE ${sql.identifier(database.name)} TO audit_source_owner`,
+      );
+      await tx.execute(sql`GRANT USAGE ON SCHEMA audit TO audit_source_owner`);
+      await tx.execute(
+        sql`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA audit TO audit_source_owner`,
+      );
+      await tx.execute(sql`SET LOCAL ROLE audit_member_operator`);
+      await rejected(
+        tx,
+        sql`SELECT audit.enable_tracking('audit_member_fixture.rows')`,
+        "audit.enable_tracking: source must be owned by current role",
+      );
+      await tx.execute(sql`SET LOCAL ROLE audit_source_owner`);
+      await tx.execute(
+        sql`SELECT audit.enable_tracking('audit_member_fixture.rows')`,
+      );
+      await tx.execute(
+        sql`SELECT audit.enable_tracking('audit_member_fixture.rows')`,
+      );
+      await tx.execute(sql`RESET ROLE`);
+      const [owners] = await tx.execute<{
+        table_owner: string;
+        schema_owner: string;
+      }>(sql`
+        SELECT pg_get_userbyid(c.relowner) AS table_owner,
+          pg_get_userbyid(n.nspowner) AS schema_owner
+        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='audit_member_fixture_history' AND c.relname='rows'`);
+      expect(owners).toEqual({
+        table_owner: "audit_source_owner",
+        schema_owner: "audit_source_owner",
+      });
+    }));
+
   it.each(["rename", "drop"])(
     "fails closed after a masked column %s until reconfigured",
     async (change) =>
@@ -453,8 +520,20 @@ describe("audit history migration (#664)", () => {
           sql`INSERT INTO audit_fixture.rows (id) VALUES (1)`,
           sql`UPDATE audit_fixture.rows SET updated=updated WHERE id=0`,
           sql`DELETE FROM audit_fixture.rows WHERE id=0`,
-        ])
-          await rejected(tx, statement, "Audit history capture failed");
+        ]) {
+          await expect(
+            tx.transaction(async (sp) => {
+              await sp.execute(statement);
+            }),
+          ).rejects.toMatchObject({
+            cause: {
+              message: "Audit history capture failed",
+              code: "AH002",
+              schema_name: "audit_fixture",
+              table_name: "rows",
+            },
+          });
+        }
         expect(await history(tx)).toHaveLength(0);
         if (change === "rename") {
           await tx.execute(

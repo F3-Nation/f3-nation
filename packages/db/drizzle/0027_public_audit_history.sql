@@ -27,12 +27,12 @@ BEGIN
   -- Frozen key names must still identify every component, including after DDL.
   FOREACH col IN ARRAY pk_cols LOOP
     IF (row_j ->> col) IS NULL THEN
-      RAISE EXCEPTION 'audit.log_change: primary key column missing';
+      RAISE EXCEPTION 'audit.log_change: primary key column missing' USING ERRCODE = 'AH001';
     END IF;
   END LOOP;
   FOREACH col IN ARRAY redact_cols LOOP
     IF NOT (row_j ? col) THEN
-      RAISE EXCEPTION 'audit.log_change: redacted column missing';
+      RAISE EXCEPTION 'audit.log_change: redacted column missing' USING ERRCODE = 'AH002';
     END IF;
   END LOOP;
   IF TG_OP = 'UPDATE' AND (old_j - ignore_cols) = (new_j - ignore_cols) THEN
@@ -71,7 +71,8 @@ EXCEPTION WHEN OTHERS THEN
   -- A driver may log PostgreSQL DETAIL/CONTEXT. Do not propagate a constraint's
   -- failing-row detail or a trigger's message, which can contain raw secrets.
   -- Preserve the SQLSTATE (including retryable failures), but not its payload.
-  RAISE EXCEPTION USING ERRCODE = SQLSTATE, MESSAGE = 'Audit history capture failed';
+  RAISE EXCEPTION USING ERRCODE = SQLSTATE, MESSAGE = 'Audit history capture failed',
+    SCHEMA = TG_TABLE_SCHEMA, TABLE = TG_TABLE_NAME;
 END
 $$;
 REVOKE ALL ON FUNCTION audit.log_change() FROM PUBLIC;
