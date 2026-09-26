@@ -50,7 +50,8 @@ Ask for anything missing before starting:
    ```
 
    No new `.sql` files → **no migration**: drop Step 2 and the Database
-   queries section from the template.
+   queries section from the template. Otherwise fill
+   `{{NEWEST_MIGRATION_FILE}}` with the last file name listed.
 
 3. **Skim the linked PRs only for risk.** For each changelog entry, read the
    PR title and, if needed, the first lines of its body. You are looking for
@@ -110,7 +111,7 @@ Ask for anything missing before starting:
 
 |                         | Staging                                                                     | Production                                                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Step 1 action           | Merge the release PR; staging deploys start automatically                   | Approve each paused `*-production` deploy job on the Actions page; drop the Staging Analytics run                                        |
+| Step 1 action           | Merge the release PR; staging deploys start automatically                   | Approve each paused `deploy-prod` job (environment `*-production`) on the Actions page; drop the Staging Analytics run                   |
 | Migration order         | Deploy, then migrate                                                        | Migrate before approving if Staging's "Expected" line was not "none", unless the migration breaks the old app; say which in the Overview |
 | Homepage                | Already published to production when the PR merges — say so in the Overview | Nothing to do                                                                                                                            |
 | Database                | Cloud SQL `f3data-nonprod`, database `f3_staging`                           | Cloud SQL `f3data`, database `f3_prod`                                                                                                   |
