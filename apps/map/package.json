@@ -53,7 +53,6 @@
     "react-responsive": "catalog:",
     "server-only": "catalog:",
     "supercluster": "catalog:",
-    "uuid": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -1,5 +1,4 @@
 import { getSession } from "next-auth/react";
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 
 import type { RequestType } from "@acme/shared/app/enums";
@@ -466,7 +465,7 @@ const getFormValues = async (params: {
   };
 
   const frm = {
-    id: req?.id ?? uuidv4(),
+    id: req?.id ?? crypto.randomUUID(),
     isReview: !!req,
     submittedBy: req?.submittedBy ?? cur.submittedBy,
 
