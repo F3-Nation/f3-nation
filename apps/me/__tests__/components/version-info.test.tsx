@@ -32,4 +32,16 @@ describe("VersionInfo", () => {
     expect(screen.getByText("add profile avatar upload")).toBeInTheDocument();
     expect(screen.getByText("June 1, 2024")).toBeInTheDocument();
   });
+
+  it("shows the raw date when it cannot be parsed", async () => {
+    render(
+      <VersionInfo
+        version="1.2.0"
+        channel="local"
+        changelog={[{ ...entry, date: "not-a-date" }]}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /v1\.2\.0/ }));
+    expect(screen.getByText("not-a-date")).toBeInTheDocument();
+  });
 });

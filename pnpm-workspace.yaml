@@ -78,7 +78,7 @@ catalog:
   "@types/supercluster": ^7.1.3
   "@vis.gl/react-google-maps": ~1.8.3
   "@vitejs/plugin-react": ^6.1.1
-  "@vitest/coverage-v8": ^4.1.11
+  "@vitest/coverage-v8": ^5.0.1
   "@vitest/eslint-plugin": ^1.6.27
   better-auth: ^1.7.4
   class-variance-authority: ^0.7.1
@@ -149,7 +149,7 @@ catalog:
   # peer) dep, which pnpm won't reliably bump from the locked v5; declaring it
   # explicitly in each vitest package pins a compatible Vite deterministically.
   vite: ^8.3.0
-  vitest: ^4.1.11
+  vitest: ^5.0.1
   vitest-canvas-mock: ^1.2.0
   zod: ^4.5.4
   zustand: ^5.0.15
