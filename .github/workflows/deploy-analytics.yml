@@ -15,11 +15,11 @@ concurrency:
   group: deploy-analytics-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
+# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate.
 permissions:
   contents: read
   id-token: write
   checks: read
-  issues: write
 
 jobs:
   deploy:
