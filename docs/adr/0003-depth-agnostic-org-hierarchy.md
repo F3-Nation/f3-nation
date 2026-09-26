@@ -109,7 +109,7 @@ map's region joins hard-assume that adjacency, so a skip-level `ao` →
 `sector`/`area`/`nation` parent is rejected even though it would satisfy the
 ordinal rule alone.
 
-### 4. Unknown org types are never coerced — but dangling parents are not re-linked
+### 4. Unknown org types are never coerced — their children are re-linked
 
 Code that meets an org type it does not recognize must **not** substitute a
 plausible one. `normalizeOrgType` returns `null`.
@@ -121,11 +121,12 @@ alternative to guessing is not "no guess" — it is a dangling pointer, which
 orphans the whole subtree. Attaching to a known-real ancestor degrades to an
 incomplete-but-coherent tree.
 
-That re-linking is not implemented yet. The current gap in `buildOrgHierarchy`
-(`apps/homepage/src/app/org/_lib/org-chart.ts`) — and the missing test
-coverage for it — is tracked as a follow-up rather than detailed here, since
-implementation status drifts out of date faster than the design rationale
-above for why re-linking, not a dangling pointer, is the target behavior.
+`buildOrgHierarchy` (`apps/homepage/src/app/org/_lib/org-chart.ts`) implements
+this by filtering unrecognized entries out of each item's ancestor chain before
+assigning parent links, so a child attaches to its nearest recognized ancestor
+— or to none, if every ancestor above it is unknown. `org-chart.test.ts` covers
+an unknown immediate ancestor, consecutive unknown ancestors, and an unknown
+root.
 
 This distinction matters most for statically-exported clients, which carry a
 build-time snapshot of the enum while reading a live API that may already be
