@@ -8,6 +8,7 @@ import { useState } from "react";
 import { IsActiveStatus } from "@acme/shared/app/enums";
 import { dayOfWeekToShortDayOfWeek } from "@acme/shared/app/functions";
 import { cn } from "@acme/ui";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
 import {
@@ -161,7 +162,7 @@ export const WorkoutsTable = () => {
 
 type WorkoutEvent = RouterOutputs["map"]["event"]["all"]["events"][number];
 
-const columns: TableOptions<WorkoutEvent>["columns"] = [
+const columns: TableOptions<MdTableFeatures, WorkoutEvent>["columns"] = [
   {
     accessorKey: "name",
     meta: { name: "Event Name" },

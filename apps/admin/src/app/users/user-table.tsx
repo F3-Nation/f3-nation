@@ -8,6 +8,7 @@ import { useCallback, useState } from "react";
 
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Button } from "@acme/ui/button";
 import {
   Command,
@@ -251,6 +252,7 @@ export const UserTable = () => {
 };
 
 const columns: TableOptions<
+  MdTableFeatures,
   RouterOutputs["user"]["all"]["users"][number]
 >["columns"] = [
   {

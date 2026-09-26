@@ -5,6 +5,7 @@ import type { TableOptions } from "@tanstack/react-table";
 import { useState } from "react";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Button } from "@acme/ui/button";
 import {
   DropdownMenu,
@@ -134,6 +135,7 @@ export const LocationsTable = () => {
 };
 
 const columns: TableOptions<
+  MdTableFeatures,
   RouterOutputs["location"]["all"]["locations"][number]
 >["columns"] = [
   {

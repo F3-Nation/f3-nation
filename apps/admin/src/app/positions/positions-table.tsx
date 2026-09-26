@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import { OrgType } from "@acme/shared/app/enums";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Button } from "@acme/ui/button";
 import {
   Select,
@@ -90,7 +91,7 @@ export const PositionsTable = () => {
   const activeFilterCount =
     selectedStatuses.length + (selectedOrgLevel ? 1 : 0) + (onlyMine ? 1 : 0);
 
-  const getColumns = (): TableOptions<Position>["columns"] => [
+  const getColumns = (): TableOptions<MdTableFeatures, Position>["columns"] => [
     {
       accessorKey: "name",
       meta: { name: "Name" },
