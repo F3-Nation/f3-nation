@@ -1,6 +1,6 @@
 import type { FeatureCollection, GeoJsonProperties, Point } from "geojson";
 import type { ClusterProperties, Options } from "supercluster";
-import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { useCallback, useMemo } from "react";
 import Supercluster from "supercluster";
 
 import { useMapViewport } from "./use-map-viewport";
@@ -9,32 +9,22 @@ export function useSupercluster<T extends GeoJsonProperties>(
   geojson: FeatureCollection<Point, T>,
   superclusterOptions: Options<T, ClusterProperties>,
 ) {
-  // create the clusterer and keep it
-  const clusterer = useMemo(() => {
-    return new Supercluster(superclusterOptions);
-  }, [superclusterOptions]);
-
-  // version-number for the data loaded into the clusterer
-  // (this is needed to trigger updating the clusters when data was changed)
-  const [version, dataWasUpdated] = useReducer((x: number) => x + 1, 0);
-
-  // when data changes, load it into the clusterer
-  useEffect(() => {
-    clusterer.load(geojson.features);
-    dataWasUpdated();
-  }, [clusterer, geojson]);
+  // load in the same memo that creates the clusterer: querying an unloaded
+  // instance throws, and a separate load effect runs only after render
+  const clusterer = useMemo(
+    () => new Supercluster(superclusterOptions).load(geojson.features),
+    [superclusterOptions, geojson],
+  );
 
   // get bounding-box and zoomlevel from the map
   const { bbox, zoom } = useMapViewport({ padding: 100 });
 
   // retrieve the clusters within the current viewport
   const clusters = useMemo(() => {
-    // don't try to read clusters before data was loaded into the clusterer (version===0),
-    // otherwise getClusters will crash
-    if (!clusterer || version === 0 || !bbox || zoom == null) return [];
+    if (!bbox || zoom == null) return [];
 
     return clusterer.getClusters(bbox, zoom);
-  }, [version, clusterer, bbox, zoom]);
+  }, [clusterer, bbox, zoom]);
 
   // create callbacks to expose supercluster functionality outside of this hook
   const getChildren = useCallback(
