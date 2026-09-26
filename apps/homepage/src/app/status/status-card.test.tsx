@@ -88,6 +88,19 @@ describe("status card rendering", () => {
     expect(html).toContain("Last updated:");
   });
 
+  it("falls back to the raw timestamp when it cannot be formatted", () => {
+    const result = makeOkResult("ok");
+    if (result.ok && result.source === "contract") {
+      result.data.timestamp = "not-a-date";
+    }
+
+    const html = renderToStaticMarkup(
+      React.createElement(StatusCard, { result }),
+    );
+
+    expect(html).toContain("not-a-date");
+  });
+
   it("renders DEGRADED state with explicit status text", () => {
     const html = renderToStaticMarkup(
       React.createElement(StatusCard, { result: makeOkResult("degraded") }),
