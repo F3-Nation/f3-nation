@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "~/lib/auth";
+import { getCurrentSession } from "~/lib/current-session";
 import { revokeAllUserTokens } from "~/lib/oauth";
 
 export async function POST() {
-  const session = await auth();
+  const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

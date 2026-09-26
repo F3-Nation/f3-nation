@@ -239,8 +239,98 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     const otp = await auth.api.createVerificationOTP({
       body: { email, type: "sign-in" },
     });
+    // A specific, catchable error — not just "throws something". Before
+    // the create.before hook was hardened to throw explicitly, returning
+    // `false` here made Better Auth's own signInEmailOTP handler
+    // dereference `.id` on a null user, an unrelated TypeError that
+    // happened to also satisfy a bare `.rejects.toThrow()`. Asserting the
+    // actual error code pins the real fix, not just "some error happened".
     await expect(
       auth.api.signInEmailOTP({ body: { email, otp } }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
+  });
+
+  it("registration hand-off: sign-in is refused before the F3 users row exists and succeeds once it does", async () => {
+    // Exercises the engine-level guarantee the hand-off relies on: while
+    // findF3UserId resolves null, sign-in is refused; once it resolves (as
+    // it would once /api/register has created the `users` row), the same
+    // email can complete sign-in. Uses a new code for the second attempt
+    // because the refused attempt already consumed the first one.
+    const email = "phase3-handoff@f3nation.test";
+    let f3UserId: number | null = null;
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: () => Promise.resolve(f3UserId),
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const preRegistrationOtp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp: preRegistrationOtp } }),
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
+
+    // Registration completes — mirrors /api/register creating the users row.
+    f3UserId = 6161;
+
+    const postRegistrationOtp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    const signIn = await auth.api.signInEmailOTP({
+      body: { email, otp: postRegistrationOtp },
+    });
+    expect(signIn.token).toBeTruthy();
+  });
+
+  it("registration hand-off: the code minted before registration is redeemed after it, matching the real UI flow", async () => {
+    // The real flow (apps/auth/src/app/login/email/verify/verify-email-form
+    // and apps/auth/src/app/register/register-form) never spends the
+    // original code on a refused signIn.emailOtp call — it checks
+    // /api/check-user first and only ever calls signIn.emailOtp once, after
+    // /api/register has created the `users` row, using the same code that
+    // was minted before registration. The test above proves the engine
+    // refuses/allows correctly but mints a fresh code for the allowed
+    // attempt; this one proves a code minted while findF3UserId still
+    // resolves null is still redeemable once it resolves, with no refused
+    // attempt burning it first.
+    const email = "phase3-handoff-same-code@f3nation.test";
+    let f3UserId: number | null = null;
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: () => Promise.resolve(f3UserId),
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    // Registration completes — mirrors /api/register creating the users row.
+    f3UserId = 6161;
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+    expect(signIn.token).toBeTruthy();
+    expect(signIn.user.id).toBe("6161");
   });
 });

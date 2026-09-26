@@ -1,15 +1,16 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 
-import { auth } from "~/lib/auth";
+import { getCurrentSession } from "~/lib/current-session";
 import SignOutButton from "~/app/components/SignOutButton";
+import { env } from "~/env";
 
 export default async function HomePage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await auth();
+  const session = await getCurrentSession();
   const params = await searchParams;
 
   // If there are OAuth params, forward to authorize
@@ -64,7 +65,7 @@ export default async function HomePage({
             </a>
           </p>
         </div>
-        <SignOutButton />
+        <SignOutButton useBetterAuth={env.AUTH_USE_BETTER_AUTH} />
       </div>
     </div>
   );

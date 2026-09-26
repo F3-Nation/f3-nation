@@ -13,10 +13,10 @@ export const env = createEnv({
     // set it just can't turn on AUTH_USE_BETTER_AUTH, rather than failing
     // env validation outright.
     BETTER_AUTH_SECRET: z.string().min(1).optional(),
-    // Kill switch. Off by default: mounts the Better Auth instance
-    // (apps/auth/src/lib/better-auth.ts) at the isolated /api/auth2/* path
-    // so it can be exercised without touching any of the real /api/oauth/*
-    // traffic. Does not move any client cutover — see
+    // Kill switch. Off by default: switches first-party sign-in,
+    // registration, sign-out, and session reads over to the Better Auth
+    // instance (apps/auth/src/lib/better-auth.ts) at the isolated
+    // /api/auth2/* path. Does not move OAuth client token issuance — see
     // apps/auth/src/lib/better-auth.ts's file-level comment for what this
     // flag does and does not do yet.
     AUTH_USE_BETTER_AUTH: z

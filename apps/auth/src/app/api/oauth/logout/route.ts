@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { eq } from "@acme/db";
 import { oauthClients } from "@acme/db/schema/schema";
 
-import { auth } from "~/lib/auth";
+import { getAuth } from "~/lib/better-auth";
+import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
+import { logError } from "~/lib/logging";
 import { revokeAllUserTokens } from "~/lib/oauth";
 import { env } from "~/env";
 
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Revoke tokens if user is authenticated
-  const session = await auth();
+  const session = await getCurrentSession();
   if (session?.user?.id) {
     const userId = Number(session.user.id);
     if (userId) {
@@ -80,17 +82,52 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Clear the NextAuth session cookie
-  const cookieStore = await cookies();
-  for (const cookie of cookieStore.getAll()) {
-    if (
-      cookie.name.startsWith("next-auth") ||
-      cookie.name.startsWith("__Secure-next-auth") ||
-      cookie.name.startsWith("authjs")
-    ) {
-      cookieStore.delete(cookie.name);
+  const response = NextResponse.redirect(redirectUrl);
+
+  // Revoke the Better Auth session row server-side and forward Better
+  // Auth's own cookie-clearing Set-Cookie headers — they carry the correct
+  // Secure/Path attributes for its cookie name, which the manual
+  // prefix-matching loop below can't guarantee (see that loop's comment).
+  // Without this, the session row survives and the next
+  // /api/oauth/authorize silently re-authenticates the user.
+  if (env.AUTH_USE_BETTER_AUTH) {
+    try {
+      const betterAuth = await getAuth();
+      const signOutResponse = await betterAuth.api.signOut({
+        headers: await headers(),
+        asResponse: true,
+      });
+      for (const setCookie of signOutResponse.headers.getSetCookie()) {
+        response.headers.append("set-cookie", setCookie);
+      }
+    } catch (err) {
+      logError("auth.oauth_logout.better_auth_signout_failed", {}, err);
     }
   }
 
-  return NextResponse.redirect(redirectUrl);
+  // Clear every auth cookie from either backend, regardless of which one
+  // AUTH_USE_BETTER_AUTH currently selects — a cookie left over from
+  // switching the flag should never survive a logout. `secure: true` is
+  // required for every "__Secure-"-prefixed name: browsers only accept a
+  // change to a "__Secure-" cookie when the Secure attribute is present,
+  // and cookieStore.delete(name) alone doesn't set it.
+  const cookieStore = await cookies();
+  for (const cookie of cookieStore.getAll()) {
+    const isAuthCookie =
+      cookie.name.startsWith("next-auth") ||
+      cookie.name.startsWith("__Secure-next-auth") ||
+      cookie.name.startsWith("authjs") ||
+      cookie.name.startsWith("__Secure-authjs") ||
+      cookie.name.startsWith("better-auth") ||
+      cookie.name.startsWith("__Secure-better-auth");
+    if (isAuthCookie) {
+      cookieStore.delete({
+        name: cookie.name,
+        path: "/",
+        secure: cookie.name.startsWith("__Secure-"),
+      });
+    }
+  }
+
+  return response;
 }

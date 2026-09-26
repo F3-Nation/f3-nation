@@ -1,7 +1,8 @@
 /**
- * Better Auth instance for the F3 SSO server — not wired into any live
- * route yet; gated behind AUTH_USE_BETTER_AUTH (see apps/auth/src/app/api/
- * auth2/[...all]/route.ts).
+ * Better Auth instance for the F3 SSO server. With AUTH_USE_BETTER_AUTH on,
+ * it backs first-party sign-in, registration, sign-out and session reads
+ * (see lib/current-session.ts); /api/oauth/* token issuance still runs on
+ * lib/oauth.ts either way.
  *
  * This factory is deliberately adapter-injectable (see `createAuthInstance`
  * below) rather than exporting one hardwired instance:
@@ -42,7 +43,7 @@
  * below), neither of which applies here.
  */
 import type { BetterAuthPlugin } from "better-auth";
-import { betterAuth } from "better-auth";
+import { APIError, betterAuth } from "better-auth";
 import { bearer } from "better-auth/plugins/bearer";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
@@ -177,7 +178,25 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
           // matters (it's what jwt().getSubject below reads).
           before: async (user: { email: string } & Record<string, unknown>) => {
             const f3UserId = await options.findF3UserId(user.email);
-            if (f3UserId === null) return false;
+            if (f3UserId === null) {
+              // Not `return false`: Better Auth's internal createWithHooks
+              // treats that as "silently return null," and signInEmailOTP
+              // then dereferences `newUser.id` on that null unconditionally
+              // — an unregistered email crashes with an unhandled TypeError
+              // (500) instead of a clean error. Throwing here is what
+              // surfaces a real 4xx to the caller. The registration
+              // hand-off (see apps/auth/src/app/login/email/verify/
+              // verify-email-form.tsx) avoids ever hitting this path in
+              // normal use by checking /api/check-user before calling
+              // signIn.emailOtp, so this is a safety net for
+              // anyone calling the Better Auth API directly, not the
+              // primary mechanism.
+              throw new APIError("BAD_REQUEST", {
+                code: "NO_F3_ACCOUNT",
+                message:
+                  "No F3 account exists for this email yet — register first.",
+              });
+            }
             return { data: { ...user, id: String(f3UserId) } };
           },
         },
