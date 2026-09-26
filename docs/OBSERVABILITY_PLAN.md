@@ -403,11 +403,11 @@ blockAllMedia: false` in `apps/map/src/instrumentation-client.ts` means
 [`AGENTS.md`](../AGENTS.md) says never `console.*`. Three sites in this
 workstream break that rule on purpose:
 
-| Site | Why |
-| --- | --- |
-| `packages/observability/src/index.ts` (`captureException` catch) | This function *is* the logger's `errorReporter` target. `logError` here re-enters it — infinite recursion. |
-| `packages/observability/src/posthog-exporter.ts` (export-failure catch) | Same pipeline, one layer down: the exporter's own failure cannot be reported through the exporter. |
-| `apps/map/src/app/global-error.tsx` (report-failure catch) | Browser-only, last-resort UI with no error boundary above it. `@acme/logger` is pino — it does not run here, so there is no approved alternative. |
+| Site                                                                    | Why                                                                                                                                               |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/observability/src/index.ts` (`captureException` catch)        | This function _is_ the logger's `errorReporter` target. `logError` here re-enters it — infinite recursion.                                        |
+| `packages/observability/src/posthog-exporter.ts` (export-failure catch) | Same pipeline, one layer down: the exporter's own failure cannot be reported through the exporter.                                                |
+| `apps/map/src/app/global-error.tsx` (report-failure catch)              | Browser-only, last-resort UI with no error boundary above it. `@acme/logger` is pino — it does not run here, so there is no approved alternative. |
 
 Each is wrapped so the secondary failure can never escape, and each carries a
 comment naming this section.

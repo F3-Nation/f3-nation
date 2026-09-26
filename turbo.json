@@ -117,6 +117,10 @@
     },
     "clean": {
       "cache": false
+    },
+    "obfuscate-db": {
+      "cache": false,
+      "env": ["OBFUSCATION_SALT"]
     }
   }
 }
