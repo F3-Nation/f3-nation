@@ -102,9 +102,8 @@ export default function UserMutate({
                   // (email, phone, emergency contact). AGENTS.md: never log PII.
                   crupdateUser.mutate(data);
                 },
-                (error) => {
+                () => {
                   toast.error("Failed to upsert user");
-                  console.log(error);
                 },
               )}
               className="space-y-4"

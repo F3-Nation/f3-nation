@@ -20,10 +20,10 @@ export default defineConfig({
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 33.32,
+        statements: 33.33,
         branches: 36.11,
         functions: 28.98,
-        lines: 33.14,
+        lines: 33.15,
       },
     },
     setupFiles: ["./vitest.setup.ts"],
