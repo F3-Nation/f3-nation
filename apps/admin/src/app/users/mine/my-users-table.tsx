@@ -8,6 +8,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { UserRole, UserStatus } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Button } from "@acme/ui/button";
 import {
   Command,
@@ -324,6 +325,7 @@ export const MyUsersTable = () => {
 };
 
 const columns: TableOptions<
+  MdTableFeatures,
   RouterOutputs["user"]["byOrgs"]["users"][number]
 >["columns"] = [
   {

@@ -1,3 +1,4 @@
+import type { CellData, RowData, TableFeatures } from "@tanstack/table-core";
 import type { DefaultSession } from "next-auth";
 import type { DefaultJWT } from "next-auth/jwt";
 
@@ -45,9 +46,13 @@ declare module "next-auth" {
 }
 
 declare module "@tanstack/table-core" {
-  // Type parameters must match the original declaration for the augmentation to
-  // merge (`RowData` is re-exported by @tanstack/table-core).
-  interface ColumnMeta<TData extends RowData, TValue> {
+  // Type parameters must match the original declaration, variance annotations
+  // included, for the augmentation to merge.
+  interface ColumnMeta<
+    in out TFeatures extends TableFeatures,
+    in out TData extends RowData,
+    TValue extends CellData = CellData,
+  > {
     // Used in the Header component and in csv
     name?: string;
     excludeFromCsv?: boolean;
