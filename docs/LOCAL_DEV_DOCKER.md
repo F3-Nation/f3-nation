@@ -284,15 +284,16 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 Each app and shared package has its own `.env` file, copied from a `.env.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
 
-| Directory            | Purpose                                                            |
-| -------------------- | ------------------------------------------------------------------ |
-| `apps/api/.env`      | API app (Next.js on port 3001)                                     |
-| `apps/auth/.env`     | Auth app (Next.js on port 3004)                                    |
-| `apps/map/.env`      | Map app (Next.js on port 3000)                                     |
-| `apps/admin/.env`    | Admin app (Next.js on port 3002)                                   |
-| `apps/me/.env`       | Me app (Next.js on port 3003)                                      |
-| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                 |
-| `packages/env/.env`  | Shared backend env root (used by `packages/db` and `packages/api`) |
+| Directory            | Purpose                                            |
+| -------------------- | -------------------------------------------------- |
+| `apps/api/.env`      | API app (Next.js on port 3001)                     |
+| `apps/auth/.env`     | Auth app (Next.js on port 3004)                    |
+| `apps/map/.env`      | Map app (Next.js on port 3000)                     |
+| `apps/admin/.env`    | Admin app (Next.js on port 3002)                   |
+| `apps/me/.env`       | Me app (Next.js on port 3003)                      |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006) |
+| `packages/env/.env`  | Shared backend env root (used by `packages/api`)   |
+| `packages/db/.env`   | Database migration, seed, and test scripts         |
 
 Here's what each variable means:
 

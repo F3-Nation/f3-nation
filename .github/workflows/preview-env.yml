@@ -109,8 +109,8 @@ jobs:
             -e POSTGRES_USER=f3local -e POSTGRES_PASSWORD=f3local -e POSTGRES_DB=f3nation \
             -p 5433:5432 postgres:18.0
           until docker exec seed-pg pg_isready -U f3local -d f3nation >/dev/null 2>&1; do sleep 1; done
-          # db scripts load env via dotenv from packages/env/.env
-          echo 'DATABASE_URL=postgresql://f3local:f3local@localhost:5433/f3nation' > packages/env/.env
+          # db scripts load env via dotenv from packages/db/.env
+          echo 'DATABASE_URL=postgresql://f3local:f3local@localhost:5433/f3nation' > packages/db/.env
           # CI= re-enables migrate.ts (it no-ops when CI is set);
           # SKIP_ENV_VALIDATION keeps @acme/env from demanding the full var set.
           CI= SKIP_ENV_VALIDATION=1 pnpm db:migrate

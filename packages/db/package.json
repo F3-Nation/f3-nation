@@ -26,8 +26,9 @@
     "reset-test-db": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
     "seed:local": "QUERY_TIMEOUT_MS=0 pnpm with-env tsx src/local-seed.ts",
     "typecheck": "tsc --noEmit",
-    "with-env": "dotenv -e ../env/.env --",
-    "update-db": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/update-db.ts"
+    "with-env": "dotenv -e .env --",
+    "update-db": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/update-db.ts",
+    "test": "NODE_ENV=test pnpm with-env vitest run"
   },
   "dependencies": {
     "@acme/env": "workspace:*",
@@ -48,7 +49,8 @@
     "eslint": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }

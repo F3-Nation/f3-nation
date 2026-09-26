@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { and, eq, gte, schema } from "@acme/db";
+import { and, eq, gte, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -208,7 +208,7 @@ describe("Org Router", () => {
   });
 
   describe("crupdate", () => {
-    it("should create a new region org", async () => {
+    it("should create a new region org and record its audit history", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -238,6 +238,21 @@ describe("Org Router", () => {
       if (result.org) {
         createdOrgIds.push(result.org.id);
       }
+
+      const history = await db.execute(sql`
+        SELECT op, old_row, new_row, changed_by, changed_via
+        FROM public_history.orgs
+        WHERE row_id = ${String(result.org!.id)}
+        ORDER BY id
+      `);
+      expect(history).toHaveLength(1);
+      expect(history[0]).toMatchObject({
+        op: "I",
+        old_row: null,
+        new_row: { name: orgName, org_type: "region" },
+        changed_by: null,
+        changed_via: null,
+      });
     });
 
     it("should require parentId or id", async () => {
