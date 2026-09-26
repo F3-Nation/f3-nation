@@ -69,6 +69,12 @@
       "allowedVersions": "<7.0.0"
     },
     {
+      "description": "Hold pandas at 2.x indefinitely: the team has decided not to adopt pandas 3.x. Patch/minor 2.x releases still flow through the Python non-major group. Remove this rule only when the team decides to migrate to 3.x.",
+      "matchManagers": ["pep621"],
+      "matchPackageNames": ["pandas"],
+      "allowedVersions": "<3.0.0"
+    },
+    {
       "description": "Hold at <1.9.0: 1.9.0 rewired AdvancedMarker onClick to the gmp-click DOM event (upstream PR #997), dropping event.stop()/event.latLng. Shipped as a minor but breaks marker clicks at runtime. Remove this rule with the migration.",
       "matchDatasources": ["npm"],
       "matchPackageNames": ["@vis.gl/react-google-maps"],
