@@ -44,12 +44,13 @@ def export_local(
     logger: JsonLogger | None = None,
     now: Callable[[], datetime] | None = None,
     run_id: str | None = None,
+    product: str = "pax-vault",
 ) -> dict[str, MaterializationArtifacts]:
     """Materialize approved datasets below one unique, persistent local run directory."""
     if settings.environment != "local":
         raise SettingsError("export-local requires ANALYTICS_ENVIRONMENT=local")
     root = _validate_output_dir(output_dir)
-    definitions = select_materializations(materializations)
+    definitions = select_materializations(materializations, product=product)
     clock = now or (lambda: datetime.now(timezone.utc))
     run_id_value = run_id or RunId.create(clock()).value
     final_root = _run_directory(root, run_id_value)

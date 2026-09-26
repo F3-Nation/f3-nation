@@ -1,27 +1,45 @@
 # Analytics ETL operations
 
-## Deployment contract
+## Product and deployment contract
 
-Both jobs are in project `f3data`, region `us-central1`. `analytics-etl-nonprod`
-uses `f3data-nonprod` and bucket `gs://f3-analytics-nonprod`; `analytics-etl`
-uses `f3data` and bucket `gs://f3-analytics`. Published objects are under
-`parquets/releases/<run-id>/<dataset>/`.
-The compiled materialization registry in the deployed image selects the approved
-dataset paths beneath these prefixes.
-The image is built once and deployed by digest. Each job has one task and
-parallelism, no task retries, and a 60-minute
-timeout. Deployment does not create IAM grants or schedules.
+Both Cloud Run Jobs are in project `f3data`, region `us-central1`:
 
-GitHub environments `analytics-nonprod` and `analytics-production` hold the WIF
-deployment settings; production approval is required by the environment policy.
-The runtime identities are separate (`analytics-etl-nonprod@f3data...` and
-`analytics-etl@f3data...`), and neither is the GitHub deployment identity.
+| Environment | Job                     | Database                         | Bucket                      |
+| ----------- | ----------------------- | -------------------------------- | --------------------------- |
+| Nonprod     | `analytics-etl-nonprod` | `f3_staging` on `f3data-nonprod` | `gs://f3-analytics-nonprod` |
+| Production  | `analytics-etl`         | `f3_prod` on `f3data`            | `gs://f3-analytics`         |
 
-## Local testing and live end-to-end runs
+| Product     | Exact publication set                                                                                                 | Immutable layout                               | Sole mutable pointer              |
+| ----------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
+| `pax-vault` | `pv_regions`, `pv_pax`, `pv_kotter`, `pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`, `pv_events` | `<bucket>/pax-vault/releases/<release-id>/...` | `<bucket>/pax-vault/current.json` |
+| `analytics` | `event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`                                            | `<bucket>/analytics/releases/<release-id>/...` | `<bucket>/analytics/current.json` |
 
-The default local test path is offline and safe. It needs Python 3.13, `uv`,
-and the repository checkout, but no cloud credentials, Google ADC, database,
-Cloud SQL socket, or DuckDB extension. From the repository root:
+Every release has per-dataset manifests/objects and a final `release.json`.
+`current.json` is the only mutable selection object for that product. The roots,
+contracts, source-order state, release sequences, and rollback state are
+independent; there is no shared catalog and no `parquets/` release root. The
+producer never dual-publishes a legacy pointer. Preserve the old serving path
+and data until the consumer owner signs off on cutover; after cutover, do not
+continue publishing to both paths.
+
+The CLI `run` command with no `--product` runs both products sequentially as two
+independent complete releases, each with its own run ID and pointer. Use
+`--product=pax-vault` or `--product=analytics` to run only one product. A
+publication run cannot select a subset of that product's approved set. Local
+exports/diagnostics may have different selection rules; they do not publish.
+Nonprod is manual. Production scheduling is daily. Jobs use one task,
+parallelism one, no task retries, and a 60-minute timeout. Deployment does not
+create IAM grants or schedules. `ANALYTICS_PRODUCER_REVISION` is a validated
+safe slug recorded in release/pointer metadata; production requires it.
+
+Dataset reads are sequential with independent read boundaries. They are not one
+PostgreSQL snapshot. `sourceOrder` is an ordering value, not a shared-snapshot
+claim. Candidate count goldens validate candidate Parquet transport/staging;
+they are not independent SQL parity evidence.
+
+## Local tests and approved live runs
+
+The ordinary test path is offline and safe. From the repository root:
 
 ```bash
 uv --directory apps/analytics sync --group dev
@@ -29,181 +47,168 @@ uv --directory apps/analytics run pytest
 uv --directory apps/analytics run ruff check .
 ```
 
-The tests use synthetic DuckDB fixtures and mocked GCS clients; they
-do not access live cloud or database resources.
+Tests use synthetic DuckDB data and fake GCS clients; they do not contact a
+database or GCS. `tests/test_product_release_integration.py` exercises the full
+synthetic data-to-pointer chain for both products. It is not production SQL,
+IAM, Cloud Run, or real-GCS validation.
 
-A live local CLI run is separate and optional. It is not a sandbox: it reads
-the approved nonprod PostgreSQL database and publishes to
-`gs://f3-analytics-nonprod/parquets/releases/<run-id>/` only after the complete
-nine-dataset batch succeeds.
-It requires explicit human approval,
-real read-only database credentials, access to
-`/cloudsql/f3data:us-central1:f3data-nonprod`, a real signed DuckDB 1.5.5
-`postgres_scanner` extension in the configured absolute version/platform path,
-and Google ADC with the narrowly scoped nonprod IAM grants. Do not use
-production targets, database write credentials, unsigned or placeholder
-extensions, or credentials in source control or logs.
+A live local `run` is a publication operation, not a sandbox. It requires
+explicit security/platform and analytics-operator approval, real read-only
+database credentials and approved connectivity, a valid DuckDB 1.5.5 signed
+PostgreSQL extension at the configured absolute path, and ADC with reviewed
+least-privilege permissions. Do not use production targets for local testing.
+Follow [`apps/analytics/README.md`](../apps/analytics/README.md) for safe local
+extension setup and export handling. Cloud Run uses the approved Cloud SQL Unix
+socket; never commit credentials or place them in logs.
 
-For an approved local CLI run, configure every value from the example and
-verify the target values before running both commands:
-
-```bash
-cp apps/analytics/.env.example /tmp/analytics.env
-# Edit /tmp/analytics.env; do not commit it.
-set -a; . /tmp/analytics.env; set +a
-ANALYTICS_ENVIRONMENT=local \
-  uv --directory apps/analytics run analytics-etl preflight
-ANALYTICS_ENVIRONMENT=local \
-  uv --directory apps/analytics run analytics-etl run
-```
-
-The local CLI runs the current checkout under the caller's ADC. It is not the
-deployed nonprod Cloud Run Job and does not use the Cloud Run runtime identity.
-Publication rejects subset selections: only the complete nine-dataset
-registry can create `release.json` or advance the global catalog.
-To execute the deployed nonprod job, which publishes through its deployed
-immutable image and nonprod runtime identity, obtain the same explicit human
-approval and run:
+Before a manually approved deployed nonprod run, inspect the target and image,
+record the approver/reason/revision/start time, and then execute:
 
 ```bash
 gcloud run jobs execute analytics-etl-nonprod \
   --project f3data --region us-central1 --wait
 ```
 
-Record the approver, reason, image revision, start time, and outcome. Nonprod
-is manual only; this command does not create or enable a scheduler.
+This uses the deployed image and runtime identity, not the local checkout.
+Nonprod has no standing scheduler.
 
-## Human-approved IAM matrix
+## IAM and access requirements — human approval required
 
-The following is the minimum matrix to approve and grant, with resource-level
-conditions where supported:
+The following are requirements to review, not verified grants. No IAM changes
+have been executed or asserted as configured here.
 
-| Identity              | Permission                                                                                                                         | Resource                                                                             | Explicitly not granted                                                                    |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| GitHub WIF deployer   | Artifact Registry write/read; Cloud Run Job deploy; service-account use                                                            | `f3data` AR and the two named jobs                                                   | Runtime data, scheduler administration, broad project owner/editor                        |
-| Nonprod runtime SA    | `roles/cloudsql.client`; `roles/secretmanager.secretAccessor`; create/get on release paths plus update on the exact catalog object | Nonprod secrets, `f3data-nonprod`, `parquets/releases/*` and `parquets/catalog.json` | Database writes/DDL/admin, object deletion, content overwrite, unrelated buckets/datasets |
-| Production runtime SA | Same narrowly scoped roles as nonprod, restricted to production resources                                                          | Production secrets, `f3data`, `parquets/releases/*` and `parquets/catalog.json`      | Nonprod resources, database writes/DDL/admin, object deletion, content overwrite          |
-| Scheduler SA          | `roles/run.invoker` only                                                                                                           | `analytics-etl`                                                                      | Secret, storage, deploy, and scheduler administration                                     |
-| PAX Vault consumer    | GCS object read only                                                                                                               | Catalog plus approved release prefix                                                 | Write, catalog mutation, direct end-user access                                           |
+| Identity                  | Required access, limited by product/environment                                                                                                                                                                        | Must not receive                                                                                  |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Product runtime           | Read-only database and matching secrets; `storage.objects.get` and `storage.objects.create` on only its immutable release prefix; read/create/content-replacement permissions needed for only its exact `current.json` | Database write/DDL/admin; release delete/overwrite; other product root; broad bucket admin        |
+| Consumer for one product  | `storage.objects.get` on that product's exact pointer and release prefix                                                                                                                                               | Pointer/release mutation, other product unless separately approved, end-user/direct source access |
+| Scheduler identity        | `roles/run.invoker` on production job only                                                                                                                                                                             | Storage, secrets, database, deploy, scheduler administration                                      |
+| GitHub deploy identity    | Reviewed deploy/build permissions and runtime service-account use                                                                                                                                                      | Runtime data access, database access, scheduler administration, Owner/Editor                      |
+| Pointer rollback operator | Separately approved read and exact-pointer update/content replacement permissions                                                                                                                                      | Release-object mutation/deletion, broad bucket update/delete                                      |
 
-Security/platform owners must approve the exact predefined service-account
-bindings, database read-only role, secret versions, bucket conditions, and
-GCS object/catalog scope before granting them. The runtime identities must not
-receive `roles/editor`, bucket admin, or database
-write/DDL privileges. Secret values never belong in workflow files.
+GCS content replacement is not a metadata patch. `storage.objects.update` alone
+does not authorize replacing `current.json`. Depending on effective GCS
+semantics and bucket configuration, pointer replacement may require
+`storage.objects.create` plus `storage.objects.delete` on the exact pointer
+object. Security/platform owners must verify the minimum effective permissions
+and conditional binding against the actual bucket before granting them. If
+delete is required for pointer replacement, scope it to the one product pointer
+only; never grant it on release prefixes. An exact-name IAM condition cannot
+require the client-side `if_generation_match` CAS precondition, and the pointer
+delete grant still permits unconditional deletion of that key. Security owners
+must explicitly assess/accept that risk and verify/audit effective access. Do not
+infer a deployed role or binding from this document. Release objects remain
+create-only and immutable.
 
-The publisher custom role must separate release-object access from catalog
-metadata update. Grant create/get on
-`parquets/releases/*`, with no delete and no overwrite of existing content.
-Grant `storage.objects.get`, `storage.objects.create`, and
-`storage.objects.update` for the fixed catalog only through a conditional
-binding whose resource name is exactly:
+Consumers follow the pointer and manifests and do not need bucket listing for
+the documented chain. Confirm whether the concrete client path needs any
+additional permissions before approval; do not grant broad object viewer roles
+by default. Keep nonprod and production runtime identities, secrets, databases,
+and buckets separate.
 
-```text
-projects/_/buckets/f3-analytics-nonprod/objects/parquets/catalog.json
-projects/_/buckets/f3-analytics/objects/parquets/catalog.json
-```
+## Retention and cleanup
 
-Do not grant `storage.objects.update` across `parquets/`; catalog updates are
-metadata-only metageneration-CAS patches. The consumer receives read-only
-access to the approved release prefix and catalog metadata, never mutation.
+- Keep the current and retained previous valid release for at least one day.
+- Retain ordinary completed releases for at least 14 days.
+- Keep abandoned/incomplete release prefixes for at least 14 days before they
+  can be considered for cleanup.
+- Never delete the current release or a rollback-eligible release.
 
-## Scheduler policy and provisioning
+Do **not** configure a naive bucket lifecycle age rule that can delete
+`current.json`, a selected release, or a retained previous release. No automated
+garbage collector is implemented. Any future GC is a separately privileged,
+generation-aware operation requiring explicit human approval and preservation
+of the live and rollback-eligible pointer chains. Publisher and rollback code
+do not delete objects. Failed runs may leave unreachable immutable prefixes;
+record them for later reviewed cleanup.
 
-Production is scheduled daily; nonprod is manual only. A human supplies the
-cron and IANA timezone at provisioning time—there is deliberately no default.
-The script is idempotent and creates or updates an OAuth POST target for the
-Cloud Run Jobs v2 `jobs:run` endpoint, with zero retries:
+## Publication, CAS, and rollback
 
-```bash
-bash scripts/provision-analytics-scheduler.sh \
-  --project f3data --region us-central1 --job analytics-etl \
-  --service-account analytics-scheduler@f3data.iam.gserviceaccount.com \
-  --cron '0 6 * * *' --time-zone UTC
-bash scripts/provision-analytics-scheduler.sh --project f3data --region us-central1 \
-  --job analytics-etl --service-account analytics-scheduler@f3data.iam.gserviceaccount.com \
-  --cron '0 6 * * *' --time-zone UTC --status
-```
+The publication order is: create-only Parquet and golden objects; validate
+generation-pinned size, CRC32C, schema, counts and candidate golden; create-only
+dataset manifests; create-only `release.json`; validate the exact product
+release; then CAS the product's `current.json` using its observed object
+generation (`if_generation_match=0` for first creation). The producer reads back
+and confirms the pointer generation/content. Metageneration is metadata state;
+it is not the pointer CAS token. A CAS conflict rereads the pointer and
+recalculates sequence; a stale source order is rejected. A successful rollback
+advances sequence and preserves the source high-water order. Release objects are
+immutable; only the selected product's `current.json` is replaced by pointer CAS.
 
-Use `--pause` or `--resume` for an existing schedule. Do not run provisioning
-from an application deployment; review the target, IAM, cron, and timezone
-separately. Nonprod has no standing scheduler: execute a one-off job manually
-only after a human approves the run, and do not create or enable a nonprod
-schedule:
-
-```bash
-gcloud run jobs execute analytics-etl-nonprod \
-  --project f3data --region us-central1 --wait
-```
-
-The operator must record the approver, reason, image revision, start time, and
-outcome. The one-off still uses the deployed nonprod runtime identity and the
-same zero-retry job settings.
-
-## Release, recovery, and validation
-
-Every run stages a new immutable `parquets/releases/<run-id>/<dataset>/` tree.
-Dataset objects and manifests are staged uploads, not a published release: they
-are unreachable by consumers until `release.json` is written after all nine
-datasets validate and the fixed catalog is successfully advanced by CAS. The
-release/catalog commit timestamp (`published_at`) is captured at that final
-commit boundary, not at batch start. A catalog CAS/IAM failure may leave an
-immutable but unselected `release.json`; catalog metadata alone determines
-consumer visibility. A failed or subset run has no current release and must be
-rerun as a complete batch. Lifecycle policy cleans unreachable staged objects;
-operators and the publisher never delete them.
-
-PAX Vault reads `parquets/catalog.json` custom metadata, downloads the pinned
-`release.json` generation, then reads exactly its nine pinned dataset manifests
-and the object generations recorded there. Verify catalog schema, current/previous
-URI and generation, logical batch-start source order (not a database snapshot),
-high-water order, and metageneration. Catalog updates
-are metadata-only CAS patches; object generation must remain stable.
-
-For an approved rollback, use the explicit human catalog rollback operation to
-select the retained generation-pinned previous release with the observed catalog
-metageneration. It retains high-water source order, so stale in-flight runs
-cannot undo it; only a genuinely newer source order may advance the catalog.
-PAX Vault consumer compatibility and ownership must be confirmed before catalog
-activation. Record the approver, release IDs, generations, metagenerations, and
-outcome.
-
-The command is operator-only and is not used by the normal runtime path. The
-operator identity needs `storage.objects.get` and `storage.objects.update` on
-the exact catalog object (plus get on the referenced release objects), granted
-separately from the producer service account. It must not have delete or
-release-object update permission. Obtain the catalog metadata first and copy
-the retained previous URI, generation, and catalog metageneration exactly:
+Rollback is an operator-only selection of the pointer's **retained previous**
+release. The publisher downloads and validates the retained release and pinned
+objects before CAS. Arbitrary release IDs, guessed generations, and caller
+chosen source order are not rollback inputs. Obtain the current pointer object's
+generation from an approved read before invoking:
 
 ```bash
 ANALYTICS_ENVIRONMENT=nonprod \
-  ANALYTICS_CATALOG_BUCKET=f3-analytics-nonprod \
-  uv --directory apps/analytics run analytics-etl rollback-catalog \
-  --release-manifest-uri 'gs://f3-analytics-nonprod/parquets/releases/<run-id>/release.json' \
-  --release-manifest-generation '<release-generation>' \
-  --catalog-metageneration '<catalog-metageneration>'
+ANALYTICS_CATALOG_BUCKET=f3-analytics-nonprod \
+ANALYTICS_PRODUCER_REVISION=approved-operator-revision \
+  uv --directory apps/analytics run analytics-etl rollback-pointer \
+  --product pax-vault \
+  --expected-generation '<current-pointer-object-generation>' \
+  --release-id '<retained-previous-release-id>'
 ```
 
-Use the production bucket and approved production environment only after the
-production human gate. A URI/generation mismatch or CAS conflict fails without
-changing catalog metadata; do not retry with guessed values. After success,
-re-read catalog metadata, verify the selected URI and generation, unchanged
-high-water source order, incremented metageneration, and the complete pinned
-nine-dataset chain before allowing PAX Vault to consume it.
+Use `--product analytics` and the production bucket/environment only after the
+corresponding human gates. The existing validated pointer settings still name
+the bucket variable `ANALYTICS_CATALOG_BUCKET`; set it to the approved
+environment bucket. Record approval, product, release ID, observed/returned
+pointer generations, outcome, and verification. Re-read the pointer after
+rollback. Do not retry a conflict with guessed values. Rollback uses
+`rollback-pointer` and the pointer's retained previous release only.
 
-After a secret rotation, create a new Secret Manager version, verify the
-runtime identity can access it, run nonprod manually, then approve production;
-revoke the old version only after successful validation.
+## Release gates and current status
 
-Useful checks:
+Production release is **BLOCKED**. The focused Phase 2 review passed for
+controlled nonprod testing only; it is not a production review or signoff. No
+production IAM/deployment action or live production validation is claimed.
+Before production deployment, owners must complete and record all of these
+gates:
+
+1. Verify that no enabled Cloud Scheduler job or other unattended invocation
+   can trigger the updated production `analytics-etl` job. If an enabled path
+   exists, either obtain human approval to suspend it and confirm suspension, or
+   complete all production release gates before deployment so an immediate run
+   is allowed. Tie production GitHub environment reviewer approval to this
+   evidence and disposition; do not assume reviewers are currently configured.
+2. The Analytics tagged deploy defaults to staging only (`deploy_prod=false`).
+   Enabling production deployment later requires a separate reviewed workflow
+   change; do not bypass the default.
+3. External consumer compatibility against every serving and
+   rollback-eligible consumer revision, including staged generation-race and
+   pointer-replacement tests.
+4. Security signoff for dataset sensitivity, consumer access, pointer
+   replacement/delete semantics, rollback operator access, secrets, and
+   end-user denial.
+5. Source-query plan/read-volume/load review for all 13 datasets, sequential
+   source semantics, runtime and freshness/SLO approval.
+6. Human-reviewed nonprod and production IAM, plus staging validations of
+   separate product roots/pointers, create-only releases, generation-pinned
+   reads, CAS races, and retained-release rollback.
+7. Consumer-owned cutover approval. Preserve the prior serving path/data until
+   signoff; do not run ongoing dual-pointer publishing after cutover.
+8. Retention and cleanup plan meeting the time minima above without an unsafe
+   lifecycle deletion rule.
+
+Green synthetic tests are not evidence that these gates have passed. Record
+live validation and approvals separately before unblocking production.
+
+## Production Scheduler and operational checks
+
+Production uses the existing daily Scheduler design; nonprod remains manual.
+Scheduler provisioning is a separately approved human operation, not part of
+application deployment. The repository script requires the approved cron,
+timezone, project, region, job and invoker service account; do not invent a
+schedule or run it as part of ETL deployment. After approved deployment, review
+the jobs and execution logs:
 
 ```bash
 gcloud run jobs describe analytics-etl-nonprod --region us-central1 --project f3data
 gcloud run jobs describe analytics-etl --region us-central1 --project f3data
-gcloud scheduler jobs describe analytics-etl-daily --location us-central1 --project f3data
 gcloud logging read 'resource.type="cloud_run_job"' --project f3data --limit=20
 ```
 
-Validate workflow YAML with the repository's CI/workflow linter (or a YAML
-parser), and review the immutable image digest, Cloud SQL instance, secret
-references, and environment approval before merging.
+Record job image digest/revision, source order, pointer generation/sequence,
+release IDs, product outcomes, and any abandoned prefixes. These commands do
+not prove live permissions, source correctness, or consumer compatibility.

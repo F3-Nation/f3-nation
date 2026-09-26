@@ -41,27 +41,32 @@ jobs:
       ar_repo: cloud-run-builds
       staging_runtime_service_account: analytics-etl-nonprod@f3data.iam.gserviceaccount.com
       prod_runtime_service_account: analytics-etl@f3data.iam.gserviceaccount.com
+      # Staging still builds and deploys, but production stays disabled pending human security,
+      # source-load, consumer, GCS, IAM, retention, and review gates, plus the existing Scheduler check.
+      deploy_prod: false
+      # Track this deployment run and retry, not github.sha: workflow_dispatch may re-deploy a tag whose image commit differs.
+      # The reusable deploy resolves that tag to the immutable image digest used by this run.
       staging_flags: >-
         --set-cloudsql-instances=f3data:us-central1:f3data-nonprod
         --tasks=1
         --parallelism=1
-        --memory=4Gi
-        --cpu=2
+        --memory=16Gi
+        --cpu=4
         --max-retries=0
         --task-timeout=60m
         --command=analytics-etl
         --args=run
-        --set-env-vars=ANALYTICS_ENVIRONMENT=nonprod,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data-nonprod,ANALYTICS_POSTGRES_DATABASE=f3_staging
+        --set-env-vars=ANALYTICS_ENVIRONMENT=nonprod,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data-nonprod,ANALYTICS_POSTGRES_DATABASE=f3_staging,ANALYTICS_PRODUCER_REVISION=gha-${{ github.run_id }}-${{ github.run_attempt }}
         --set-secrets=ANALYTICS_POSTGRES_USER=analytics-etl-nonprod-database-user:latest,ANALYTICS_POSTGRES_PASSWORD=analytics-etl-nonprod-database-password:latest
       prod_flags: >-
         --set-cloudsql-instances=f3data:us-central1:f3data
         --tasks=1
         --parallelism=1
-        --memory=4Gi
-        --cpu=2
+        --memory=16Gi
+        --cpu=4
         --max-retries=0
         --task-timeout=60m
         --command=analytics-etl
         --args=run
-        --set-env-vars=ANALYTICS_ENVIRONMENT=production,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data,ANALYTICS_POSTGRES_DATABASE=f3_prod
+        --set-env-vars=ANALYTICS_ENVIRONMENT=production,ANALYTICS_POSTGRES_SOCKET_DIR=/cloudsql/f3data:us-central1:f3data,ANALYTICS_POSTGRES_DATABASE=f3_prod,ANALYTICS_PRODUCER_REVISION=gha-${{ github.run_id }}-${{ github.run_attempt }}
         --set-secrets=ANALYTICS_POSTGRES_USER=analytics-etl-database-user:latest,ANALYTICS_POSTGRES_PASSWORD=analytics-etl-database-password:latest

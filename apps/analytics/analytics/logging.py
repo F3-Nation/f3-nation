@@ -10,12 +10,65 @@ import sys
 import traceback
 from typing import Any, TextIO
 
+import duckdb
+
 _EVENT = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+_DUCKDB_IO_EXCEPTION = duckdb.IOException
+_DUCKDB_IO_MARKERS = {
+    "no_space": ("no space left", "disk full", "out of disk space", "enospc"),
+    "postgres": ("postgres", "network", "socket"),
+    "read": ("read", "recv", "receive"),
+    "write": ("write", "writing", "flush", "fsync", "checkpoint"),
+    "postgres_transport": ("postgres", "postgresql", "libpq", "socket", "connection", "transport"),
+    "parquet_serialization": ("parquet", "serialize", "serialization", "footer", "encoding"),
+    "compression": ("compression", "zstd", "snappy", "gzip"),
+    "local_or_spill_io": ("spill", "filesystem", "file system", "temporary", "temp directory", "local"),
+    "resource_allocation": ("out of memory", "memory", "allocation", "resource", "buffer"),
+}
 _SECRET_KEY = re.compile(
     r"(secret|token|password|passwd|pwd|credential|authorization|api[_-]?key|private[_-]?key|"
     r"access[_-]?key|refresh[_-]?token|dsn|connection|string|bearer|cookie|session)",
     re.I,
 )
+
+
+def _safe_error_detail(error: BaseException) -> str:
+    """Return a normalized category without exposing the exception message."""
+    if isinstance(error, _DUCKDB_IO_EXCEPTION):
+        message = str(error).lower()
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["no_space"]):
+            return "duckdb_io_no_space"
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["postgres"]) and any(
+            marker in message for marker in _DUCKDB_IO_MARKERS["read"]
+        ):
+            return "duckdb_io_postgres_network_read"
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["write"]):
+            return "duckdb_io_write"
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["postgres_transport"]):
+            return "duckdb_io_postgres_transport"
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["parquet_serialization"]):
+            return "duckdb_io_parquet_serialization"
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["compression"]):
+            return "duckdb_io_compression"
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["local_or_spill_io"]):
+            return "duckdb_io_local_or_spill_io"
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["resource_allocation"]):
+            return "duckdb_io_resource_allocation"
+        return "duckdb_io"
+
+    categories = (
+        (TimeoutError, "timeout_error"),
+        (ConnectionError, "connection_error"),
+        (PermissionError, "permission_error"),
+        (FileNotFoundError, "not_found_error"),
+        ((ValueError, TypeError), "validation_error"),
+        (OSError, "system_error"),
+        (RuntimeError, "runtime_error"),
+    )
+    for error_type, category in categories:
+        if isinstance(error, error_type):
+            return category
+    return "exception"
 
 
 def _safe(value: Any, key: str = "") -> Any:
@@ -43,6 +96,7 @@ class JsonLogger:
             error_record: dict[str, Any] = {
                 "type": type(error).__name__,
                 "module": type(error).__module__,
+                "detail": _safe_error_detail(error),
             }
             frames = traceback.extract_tb(error.__traceback__) if error.__traceback__ else ()
             if frames:
