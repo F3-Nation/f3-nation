@@ -8,6 +8,7 @@ import type {
   MarkerProperties,
   MarkersProps,
 } from "./types";
+import { getClusterFeatureKey } from "~/utils/get-cluster-feature-key";
 import { getGeojson } from "~/utils/get-geojson";
 import { getMapPosForLeaves } from "~/utils/get-map-pos-for-leaves";
 import { useSupercluster } from "~/utils/hooks/use-supercluster";
@@ -77,14 +78,15 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
         const [lng, lat] = feature.geometry.coordinates;
         if (typeof lng !== "number" || typeof lat !== "number") return null;
         const featureId = feature.id?.toString();
-        if (!featureId) return null;
+        const key = getClusterFeatureKey(feature);
+        if (!featureId || !key) return null;
 
         const clusterProperties = feature.properties as F3ClusterProperties;
         const isCluster: boolean = clusterProperties.cluster;
 
         return isCluster ? (
           <FeaturesClusterMarker
-            key={featureId}
+            key={key}
             clusterId={clusterProperties.cluster_id}
             position={{ lat, lng }}
             size={clusterProperties.point_count}
@@ -93,7 +95,7 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
           />
         ) : (
           <FeatureMarker
-            key={featureId}
+            key={key}
             featureId={featureId}
             position={{ lat, lng }}
             isClose={isClose}
