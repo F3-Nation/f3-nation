@@ -9,6 +9,7 @@ import {
   orgTypeDisplay,
 } from "@acme/shared/app/org-hierarchy";
 import type { SortingSchema } from "@acme/validators";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Button } from "@acme/ui/button";
 import {
   DropdownMenu,
@@ -34,7 +35,9 @@ import { useOrgFilters } from "./use-org-filters";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
 
-function orgColumns(orgType: OrgType): TableOptions<Org>["columns"] {
+function orgColumns(
+  orgType: OrgType,
+): TableOptions<MdTableFeatures, Org>["columns"] {
   const config = orgAdminConfig[orgType];
   return [
     {
@@ -49,7 +52,7 @@ function orgColumns(orgType: OrgType): TableOptions<Org>["columns"] {
       meta: { name: column.label },
       header: Header,
       cell: column.parentType
-        ? (cell: CellContext<Org, unknown>) => (
+        ? (cell: CellContext<MdTableFeatures, Org, unknown>) => (
             <Cell>
               {cell.row.original.parentOrgType === column.parentType
                 ? cell.row.original.parentOrgName

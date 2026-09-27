@@ -5,17 +5,17 @@ import type { StandardHandlerInterceptorOptions } from "@orpc/server/standard";
 import { Client, Header } from "@acme/shared/common/enums";
 
 // Hoisted mocks shared between the vi.mock factories and the test bodies.
-const { rpcHandle, openApiHandle, rpcCtor, openApiCtor, logError } = vi.hoisted(
-  () => ({
+const { rpcHandle, openApiHandle, rpcCtor, openApiCtor, corsCtor, logError } =
+  vi.hoisted(() => ({
     rpcHandle:
       vi.fn<(...args: unknown[]) => Promise<{ response?: Response }>>(),
     openApiHandle:
       vi.fn<(...args: unknown[]) => Promise<{ response?: Response }>>(),
     rpcCtor: vi.fn(),
     openApiCtor: vi.fn(),
+    corsCtor: vi.fn(),
     logError: vi.fn(),
-  }),
-);
+  }));
 
 vi.mock("@acme/api", () => ({ router: {} }));
 vi.mock("~/lib/logging", () => ({ logError }));
@@ -26,7 +26,11 @@ vi.mock("@orpc/server", () => ({
 }));
 
 vi.mock("@orpc/server/plugins", () => ({
-  CORSPlugin: class CORSPlugin {},
+  CORSPlugin: class CORSPlugin {
+    constructor(options: unknown) {
+      corsCtor(options);
+    }
+  },
   RequestHeadersPlugin: class RequestHeadersPlugin {},
 }));
 
@@ -194,6 +198,17 @@ describe("handleRequest", () => {
       expect(response.status).toBe(404);
       expect(await response.text()).toBe("Not found");
     });
+  });
+
+  it("reflects the request origin in CORS (credentialed requests forbid *)", async () => {
+    await importHandler();
+
+    const { origin, credentials } = corsCtor.mock.calls[0]![0] as {
+      origin: (origin: string) => string;
+      credentials: boolean;
+    };
+    expect(credentials).toBe(true);
+    expect(origin("https://map.f3nation.com")).toBe("https://map.f3nation.com");
   });
 
   describe("error interceptors log via logError", () => {

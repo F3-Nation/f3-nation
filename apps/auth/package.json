@@ -1,6 +1,6 @@
 {
   "name": "f3-auth",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "private": true,
   "type": "module",
   "scripts": {
