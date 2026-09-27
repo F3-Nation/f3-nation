@@ -3,20 +3,21 @@
   OPTIONAL block that does not apply, then delete all HTML comments.
 -->
 
-| App   | Staging URL                        |
-| ----- | ---------------------------------- |
-| Map   | https://staging.map.f3nation.com   |
-| Admin | https://staging.admin.f3nation.com |
-| Auth  | https://staging.auth2.f3nation.com |
-| API   | https://staging.api.f3nation.com   |
-| Me    | https://staging.me.f3nation.com    |
+| App                         | Staging URL                        |
+| --------------------------- | ---------------------------------- |
+| Map                         | https://staging.map.f3nation.com   |
+| Admin                       | https://staging.admin.f3nation.com |
+| Auth                        | https://staging.auth2.f3nation.com |
+| API                         | https://staging.api.f3nation.com   |
+| Me                          | https://staging.me.f3nation.com    |
+| Homepage (live, no Staging) | https://apps.f3nation.com          |
 
 <!-- Keep only rows for apps in this release. -->
 
-**Test accounts and test data** are in the pinned message in `#monorepo`.
-**Found a problem?** Post it in `#monorepo` with the time, the app, and what you did, and link it here.<!-- OPTIONAL: append " It blocks the go/no-go in #{{RELEASE_PLAN_ISSUE}}." -->
+**Need a test account?** Ask the Release lead by commenting here or in `#monorepo`; accounts are sent privately, never posted here.
+**Found a problem?** Comment on this issue (or post in `#monorepo`) with the time, the app, and what you did.<!-- OPTIONAL: append " It blocks the go/no-go in #{{RELEASE_PLAN_ISSUE}}." -->
 
-Put your name on a section before you start so two people don't do the same one.
+**Before you start a section,** comment its name here so two people don't take the same one. Can't tick the boxes? Comment which checks passed.
 
 ## Stories
 
@@ -24,7 +25,7 @@ Put your name on a section before you start so two people don't do the same one.
 
 ### {{STORY_NAME}}
 
-~{{N}} min · Owner: ___
+~{{N}} min
 
 {{OPTIONAL_ONE_SENTENCE_OF_CONTEXT}}
 
@@ -37,7 +38,7 @@ Put your name on a section before you start so two people don't do the same one.
 
 ### {{App}}
 
-~{{N}} min · Owner: ___
+~{{N}} min
 
 - [ ] {{smoke check}}
 - [ ] {{this release's check}}

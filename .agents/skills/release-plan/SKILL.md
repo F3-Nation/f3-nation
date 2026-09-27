@@ -70,52 +70,45 @@ Ask for anything missing before starting:
    scratch/temp directory (not in the repo). Show it to the person who asked
    and **stop until they approve** or request changes.
 
-6. **File the issue** only after approval. Follow the repo
-   [`github`](../github/SKILL.md) skill: run its pre-check with
-   `--require-write` and end the body with its `_written by <model_name>_`
-   signature.
+6. **File the issue** only after approval, following the repo
+   [`github`](../github/SKILL.md) skill.
 
    ```bash
    gh issue create --title "Release plan: <short release name> to <Environment> (#<PR>)" \
      --body-file <draft file>
    ```
 
-   No labels, no assignees. If `gh` is not available to you, stop after
-   step 5 and tell the person to paste the draft into a new issue.
+   No labels, no assignees. If `gh` is not available, suggest installing the
+   [GitHub CLI](https://cli.github.com/); otherwise stop after step 5 and
+   tell the person to paste the draft into a new issue.
 
 ## Rules for the content
 
 - **Audience:** volunteers who are not all developers. Plain words; explain a
   term the first time only if they must act on it.
-- **Fixed sections, in this order:** Overview, Who's who, Stop rule,
-  Checklist, If something goes wrong, Monitoring reference, Database queries
-  (only if there is a migration). **Never add a section.**
-- **Overview:** at most 3 short paragraphs or 1 paragraph + a numbered list of
-  at most 3 items. What ships, what is unusual about this release, and what
-  to expect mid-release.
-- **No app versions anywhere.** Say "Map", not "map 7.3.4 → 7.4.0".
-- **Every checklist item** is one bold action sentence, optionally one more
-  sentence, then `Owner: @handle`. Only the risky steps get **Watch**,
-  **Expected**, and **Stop if** sub-bullets, one line each.
-- **Database queries** are read-only and each has a one-line "Expect …".
-  Write them from the migration SQL; keep to the few that prove the migration
-  applied and that nothing drifted.
-- **People.** Only these two are named. Do not invent other roles.
-
-  | Person | GitHub           | F3 role                | Does                                                                                                                                       |
-  | ------ | ---------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-  | Tackle | `@taterhead247`  | Nation IT Weaselshaker | Release lead: merges the release PR, runs migrations, approves Production, makes go/no-go. The only one who deploys or changes a database. |
-  | Crash  | `@BigGillyStyle` | Nation Code Q          | Monitor and tester: watches logs/dashboards, runs read-only DB checks, creates and runs the test plan.                                     |
+- **Never add a section** beyond the ones in the template.
+- **Only the risky checklist steps** get **Watch**, **Expected**, and
+  **Stop if** sub-bullets, one line each.
+- **Database queries** are read-only. Write them from the migration SQL; keep
+  to the few that prove the migration applied and that nothing drifted.
+- **People:** refer to roles, never names or handles. The template's Who's
+  who table is the only place people are named; never invent people or
+  roles. When the team changes, edit that table.
+- **Analytics** ships separately. Leave it out even if it appears in the
+  changelog.
 
 ## Staging vs Production
 
+The template is written for Staging. For a Production release, use the
+Production column of each row while filling it in.
+
 |                         | Staging                                                                     | Production                                                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Step 1 action           | Merge the release PR; staging deploys start automatically                   | Approve each paused `deploy-prod` job (environment `*-production`) on the Actions page; drop the Staging Analytics run                   |
+| Step 1 action           | Merge the release PR; staging deploys start automatically                   | Approve each paused `deploy-prod` job (environment `*-production`) on the Actions page                                                   |
 | Migration order         | Deploy, then migrate                                                        | Migrate before approving if Staging's "Expected" line was not "none", unless the migration breaks the old app; say which in the Overview |
 | Homepage                | Already published to production when the PR merges — say so in the Overview | Nothing to do                                                                                                                            |
 | Database                | Cloud SQL `f3data-nonprod`, database `f3_staging`                           | Cloud SQL `f3data`, database `f3_prod`                                                                                                   |
-| Cloud Run and log links | As in the template                                                          | Drop `-staging` from each project ID; Analytics: job `analytics-etl` (same `f3data` project)                                             |
+| Cloud Run and log links | As in the template                                                          | Drop `-staging` from each project ID                                                                                                     |
 | Step 3 (test plan)      | Create the Staging test plan                                                | Drop the step                                                                                                                            |
 | Test step               | Run the Staging test plan issue                                             | Repeat only the per-app smoke checks from the Staging test plan against production URLs                                                  |
 | Database queries        | Run against `f3_staging`                                                    | Run against `f3_prod`                                                                                                                    |
@@ -129,4 +122,4 @@ These made past plans too long. Do not include them:
 - A per-PR summary of the changelog.
 - Background on how release-please, Cloud Run, or migrations work.
 - Anything about testing features — that belongs in the test plan.
-- Placeholder rows for people who are not listed above.
+- Placeholder rows for people who are not in the Who's who table.

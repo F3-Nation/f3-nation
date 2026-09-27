@@ -59,26 +59,26 @@ Ask for anything missing before starting:
    scratch/temp directory (not in the repo). Show it to the person who asked
    and **stop until they approve** or request changes.
 
-6. **File the issue** only after approval. Follow the repo
-   [`github`](../github/SKILL.md) skill: run its pre-check with
-   `--require-write` and end the body with its `_written by <model_name>_`
-   signature.
+6. **File the issue** only after approval, following the repo
+   [`github`](../github/SKILL.md) skill.
 
    ```bash
    gh issue create --title "Staging test plan: <short release name> (#<PR>)" \
      --body-file <draft file>
    ```
 
-   No labels, no assignees. If `gh` is not available to you, stop after
-   step 5 and tell the person to paste the draft into a new issue.
+   No labels, no assignees. If `gh` is not available, suggest installing the
+   [GitHub CLI](https://cli.github.com/); otherwise stop after step 5 and
+   tell the person to paste the draft into a new issue.
 
 ## Rules for the content
 
 - **Nothing above the first story** except the three items in the template:
-  the URL table, the test-accounts line, and the reporting line. No
+  the URL table, the test-accounts line, the reporting line, and the
+  claiming line. No
   overview, background, or "before you start" paragraphs.
 - **Each story:** a `###` heading naming the feature, one line with
-  `~N min · Owner: ___`, and at most one sentence of context if the steps
+  `~N min`, and at most one sentence of context if the steps
   would not make sense without it. Then checkboxes.
 - **Each checkbox:** one action and what the tester should see, in one or two
   plain sentences. Name the app at the start of the step when a story crosses
@@ -88,7 +88,8 @@ Ask for anything missing before starting:
 - **No app versions**, PR numbers only where a tester would need to open the
   PR, no explanation of how the code works.
 - **Test accounts and test data are never written in the issue** (the repo
-  is public). Point to the pinned message in `#monorepo` instead.
+  is public). Keep the template's line telling testers to ask the Release
+  lead for one.
 - **Cleanup section** only if a story creates or changes Staging data; one
   checkbox per thing to undo.
 
@@ -96,7 +97,7 @@ Ask for anything missing before starting:
 
 - Each story: **at most 8 checkboxes and ~15 minutes.** Split a bigger
   feature into two stories only if the second can be run by a different
-  person after the first is done.
+  person.
 - Each app section: the smoke checks plus **at most 3** app checks.
 - Whole issue: aim for **under 60 minutes** of total testing time. If it is
   over, cut app checks before story steps.
@@ -112,3 +113,4 @@ These made past plans too long for volunteers to use. Do not include them:
   notes.
 - Monitoring, log queries, or database queries — those are in the release
   plan.
+- Analytics. It ships separately, even if it appears in the changelog.
