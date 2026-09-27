@@ -1,6 +1,8 @@
 import json
+from unittest.mock import MagicMock, patch
 
 import pytest
+from f3_data_models.models import SlackUser, User
 
 from features.strava import (
     STRAVA_ACTIVITY_BUTTON_LABEL_MAX_LENGTH,
@@ -9,8 +11,7 @@ from features.strava import (
     format_strava_activity_button_label,
 )
 from utilities.slack import actions
-from unittest.mock import MagicMock, patch
-from f3_data_models.models import SlackUser, User
+
 
 @pytest.mark.parametrize(
     ("activity_name", "expected_name"),
