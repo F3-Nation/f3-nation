@@ -27,9 +27,6 @@ vi.mock("next-auth/react", () => ({
   getSession: h.getSession,
 }));
 
-// Deterministic uuid so generated ids don't matter
-vi.mock("uuid", () => ({ v4: () => "test-uuid" }));
-
 // Toast – we only care that an error was raised
 vi.mock("@acme/ui/toast", () => ({
   toast: { error: h.toastError },
