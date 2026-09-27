@@ -143,3 +143,4 @@ def test_build_strava_form_linked_user(
     mock_strava_form_instance.update_modal.assert_called_once()
     kwargs = mock_strava_form_instance.update_modal.call_args.kwargs
     assert kwargs.get("title_text") == "Choose Activity"
+    assert kwargs.get("view_id") == mock_strava_form_body[actions.LOADING_ID]
