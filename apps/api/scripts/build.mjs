@@ -174,6 +174,8 @@ for (const name of Object.keys(RUNTIME_DEPS).sort()) {
 
 const appManifestPath = join(appDir, "package.json");
 const appManifest = readManifest(appManifestPath);
+const rootManifestPath = join(repoRoot, "package.json");
+const rootManifest = readManifest(rootManifestPath);
 
 mkdirSync(outDir, { recursive: true });
 writeFileSync(
@@ -184,6 +186,14 @@ writeFileSync(
       version: readManifestString(appManifest, "version", appManifestPath),
       private: true,
       type: "module",
+      // The runtime install runs outside the workspace (inside it, pnpm
+      // resolves the workspace root and ignores this manifest), where
+      // corepack would otherwise pick an unpinned pnpm.
+      packageManager: readManifestString(
+        rootManifest,
+        "packageManager",
+        rootManifestPath,
+      ),
       dependencies: runtimeDependencies,
     },
     null,
