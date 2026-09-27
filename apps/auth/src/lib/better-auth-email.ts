@@ -11,6 +11,7 @@
  */
 import { createTransport } from "nodemailer";
 
+import { NO_TRACKING_HEADERS } from "~/lib/mail-headers";
 import { env } from "~/env";
 
 let _transporter: ReturnType<typeof createTransport> | null = null;
@@ -37,5 +38,6 @@ export async function sendBetterAuthOtpEmail(
         <p style="color: #666; font-size: 12px;">If you didn't request this, you can safely ignore this email.</p>
       </div>
     `,
+    headers: NO_TRACKING_HEADERS,
   });
 }

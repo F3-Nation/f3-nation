@@ -42,6 +42,21 @@ describe("sendVerificationRequest", () => {
       subject: "Authentication code: AB12CD",
       text: renderOtpEmailText({ host: "map.example.test", token: "AB12CD" }),
       html: renderOtpEmailHtml({ host: "map.example.test", token: "AB12CD" }),
+      headers: { "X-SMTPAPI": expect.any(String) as string },
+    });
+  });
+
+  it("disables SendGrid click and open tracking", async () => {
+    await sendVerificationRequest(baseParams);
+
+    const { headers } = sendMail.mock.calls[0]?.[0] as {
+      headers: Record<string, string>;
+    };
+    expect(JSON.parse(headers["X-SMTPAPI"] ?? "{}")).toEqual({
+      filters: {
+        clicktrack: { settings: { enable: 0 } },
+        opentrack: { settings: { enable: 0 } },
+      },
     });
   });
 
