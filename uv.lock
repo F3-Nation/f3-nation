@@ -675,7 +675,7 @@ requires-dist = [
 dev = [
     { name = "debugpy", specifier = ">=1.8.17,<2.0.0" },
     { name = "mypy", specifier = ">=2.3.1,<2.4.0" },
-    { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
+    { name = "pandas", specifier = "==2.3.3" },
     { name = "pytest", specifier = ">=9.1.1,<9.2.0" },
     { name = "ruff", specifier = ">=0.14.0,<1.0.0" },
 ]
@@ -683,7 +683,7 @@ scripts = [
     { name = "dataframe-image", specifier = ">=0.2.7,<0.3.0" },
     { name = "matplotlib", specifier = ">=3.10.7,<4.0.0" },
     { name = "mplcyberpunk", specifier = ">=0.7.6,<0.8.0" },
-    { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
+    { name = "pandas", specifier = "==2.3.3" },
     { name = "playwright", specifier = ">=1.44.0,<2.0.0" },
 ]
 
