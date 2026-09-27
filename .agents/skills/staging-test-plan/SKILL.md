@@ -68,15 +68,14 @@ Ask for anything missing before starting:
    ```
 
    No labels, no assignees. If `gh` is not available, suggest installing the
-   [GitHub CLI](https://cli.github.com/); otherwise stop after step 5 and
-   tell the person to paste the draft into a new issue.
+   [GitHub CLI](https://cli.github.com/). If it still isn't available, stop
+   after step 5 and tell the person to paste the draft into a new issue.
 
 ## Rules for the content
 
-- **Nothing above the first story** except the three items in the template:
+- **Nothing above the first story** except the four items in the template:
   the URL table, the test-accounts line, the reporting line, and the
-  claiming line. No
-  overview, background, or "before you start" paragraphs.
+  claiming line. No overview, background, or "before you start" paragraphs.
 - **Each story:** a `###` heading naming the feature, one line with
   `~N min`, and at most one sentence of context if the steps
   would not make sense without it. Then checkboxes.

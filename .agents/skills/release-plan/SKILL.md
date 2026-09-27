@@ -79,8 +79,8 @@ Ask for anything missing before starting:
    ```
 
    No labels, no assignees. If `gh` is not available, suggest installing the
-   [GitHub CLI](https://cli.github.com/); otherwise stop after step 5 and
-   tell the person to paste the draft into a new issue.
+   [GitHub CLI](https://cli.github.com/). If it still isn't available, stop
+   after step 5 and tell the person to paste the draft into a new issue.
 
 ## Rules for the content
 
