@@ -138,6 +138,7 @@ def test_build_strava_form_linked_user(
             and any("08-01 05:30 - Morning Run" in str(elem.label) for elem in block.elements)
             for block in blocks
         )
+        assert json.loads(blocks[0].elements[0].value)[actions.STRAVA_BACKBLAST_TITLE] == "Test Title"
 
     mock_strava_form_instance.update_modal.assert_called_once()
     kwargs = mock_strava_form_instance.update_modal.call_args.kwargs
