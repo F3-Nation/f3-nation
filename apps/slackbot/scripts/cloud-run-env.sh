@@ -110,6 +110,11 @@ fi
 
 PROJECT="${PROJECT_MAP[$ENV_NAME]}"
 ENV_FILE="$SCRIPT_DIR/../.env.cloud-run.$ENV_NAME"
+if [[ "$ENV_NAME" == "prod" ]]; then
+  SLACKBOT_DEPLOYMENT_ENV="production"
+else
+  SLACKBOT_DEPLOYMENT_ENV="staging"
+fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Error: $ENV_FILE not found."
@@ -282,6 +287,10 @@ for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
   [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
 done
+
+# Deployment classification is derived from the selected target, never from
+# arbitrary values in the env file or the caller's shell.
+UPDATE_ARGS+=("SLACKBOT_ENV=$SLACKBOT_DEPLOYMENT_ENV")
 
 # Secret-backed env vars
 SECRET_ARGS=()
