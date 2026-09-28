@@ -40,8 +40,9 @@ const config: KnipConfig = {
       // Wired in by resolve.alias rather than an import, so it is not
       // reachable through the module graph. (src/server.ts needs no entry
       // here — knip's package.json plugin already discovers it via the
-      // dev:hono/start:hono scripts.)
-      entry: ["characterization/next-headers-shim.ts"],
+      // dev:hono/start:hono scripts.) scripts/smoke.mjs is run only by the
+      // Dockerfile's smoke stage, which knip does not parse.
+      entry: ["characterization/next-headers-shim.ts", "scripts/smoke.mjs"],
     },
     "apps/admin": {
       // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's
