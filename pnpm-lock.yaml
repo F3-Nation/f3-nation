@@ -408,8 +408,8 @@ catalogs:
       specifier: ^3.4.15
       version: 3.4.15
     dotenv:
-      specifier: ^17.4.2
-      version: 17.4.2
+      specifier: ^18.0.1
+      version: 18.0.4
     dotenv-cli:
       specifier: ^11.0.0
       version: 11.0.0
@@ -1053,10 +1053,7 @@ importers:
         version: 5.0.2(vitest@5.0.2)
       dotenv:
         specifier: 'catalog:'
-        version: 17.4.2
-      dotenv-cli:
-        specifier: 'catalog:'
-        version: 11.0.0
+        version: 18.0.4
       eslint:
         specifier: 'catalog:'
         version: 10.10.0(jiti@2.7.0)(supports-color@8.1.1)
@@ -1715,7 +1712,7 @@ importers:
         version: 0.13.11(typescript@6.0.3)(zod@4.5.4)
       dotenv:
         specifier: 'catalog:'
-        version: 17.4.2
+        version: 18.0.4
       zod:
         specifier: ^4.5.4
         version: 4.5.4
@@ -1729,9 +1726,6 @@ importers:
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
-      dotenv-cli:
-        specifier: 'catalog:'
-        version: 11.0.0
       eslint:
         specifier: 'catalog:'
         version: 10.10.0(jiti@2.7.0)(supports-color@8.1.1)
@@ -6261,6 +6255,11 @@ packages:
   dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
+
+  dotenv@18.0.4:
+    resolution: {integrity: sha512-jGt9uI5BIxpVO15kvy+iEFqNAwxYClKWnkptLjSNPnFLC003Imd0ofr3aEVsbpHdSBdSsbcApNIlz4nbyGMwdA==}
+    engines: {node: '>=12'}
+    hasBin: true
 
   drizzle-kit@0.31.10:
     resolution: {integrity: sha512-7OZcmQUrdGI+DUNNsKBn1aW8qSoKuTH7d0mYgSP8bAzdFzKoovxEFnoGQp2dVs82EOJeYycqRtciopszwUf8bw==}
@@ -12173,6 +12172,8 @@ snapshots:
   dotenv@16.6.1: {}
 
   dotenv@17.4.2: {}
+
+  dotenv@18.0.4: {}
 
   drizzle-kit@0.31.10:
     dependencies:

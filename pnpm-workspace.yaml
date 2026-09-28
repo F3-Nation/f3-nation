@@ -86,7 +86,7 @@ catalog:
   commitizen: ^4.3.2
   dayjs: ^1.11.23
   dompurify: ^3.4.15
-  dotenv: ^17.4.2
+  dotenv: ^18.0.1
   dotenv-cli: ^11.0.0
   drizzle-kit: ^0.31.10
   drizzle-orm: ^0.45.2

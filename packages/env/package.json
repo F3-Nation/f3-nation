@@ -12,7 +12,7 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "with-env": "dotenv -e .env --"
+    "with-env": "dotenv run -f .env --"
   },
   "dependencies": {
     "@t3-oss/env-nextjs": "catalog:",
@@ -23,7 +23,6 @@
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
-    "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:"
