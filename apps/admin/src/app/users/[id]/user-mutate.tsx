@@ -98,12 +98,12 @@ export default function UserMutate({
             <form
               onSubmit={form.handleSubmit(
                 (data) => {
-                  console.log(data);
+                  // Deliberately not logged: this payload is a full user record
+                  // (email, phone, emergency contact). AGENTS.md: never log PII.
                   crupdateUser.mutate(data);
                 },
-                (error) => {
+                () => {
                   toast.error("Failed to upsert user");
-                  console.log(error);
                 },
               )}
               className="space-y-4"
