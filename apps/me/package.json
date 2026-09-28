@@ -51,6 +51,7 @@
     "@vitejs/plugin-react": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",
+    "jsdom": "catalog:",
     "postcss": "catalog:",
     "postcss-load-config": "catalog:",
     "prettier": "catalog:",
