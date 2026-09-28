@@ -25,7 +25,9 @@ export interface Context {
 /**
  * Returns a mock session for development mode.
  * This allows the app to work without an API key when running locally.
- * The mock session has admin access to all endpoints.
+ * The mock session has no roles, so it only clears `protectedProcedure`'s
+ * "a user is present" check — `editorProcedure`/`adminProcedure`/
+ * `nationAdminProcedure` still reject it.
  */
 const getDevMockSession = (): Session => ({
   id: 0,
@@ -106,6 +108,16 @@ const withSessionAndDb = base.use(async ({ context, next }) => {
 });
 
 export const publicProcedure = base;
+
+/**
+ * Read-only, no credential required — session is resolved if present (so a
+ * signed-in caller's identity is still available to handlers) but never
+ * asserted. Use only for endpoints whose response is safe for an anonymous
+ * caller to see; see docs/AI_GUARDRAILS.md for the "when to pick this tier"
+ * checklist. `protectedProcedure` remains the default for anything that
+ * requires a real credential.
+ */
+export const publicReadProcedure = withSessionAndDb;
 
 export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
   if (!context.session?.user) {

@@ -32,7 +32,11 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { logError } from "../logger";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import type { Context } from "../shared";
-import { editorProcedure, protectedProcedure } from "../shared";
+import {
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 // Shared filter schema for events (used by both `all` and `count` endpoints)
@@ -235,7 +239,7 @@ async function getEventCount(params: {
 }
 
 export const eventRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(eventAllInputSchema)
     .route({
       method: "GET",
@@ -524,7 +528,7 @@ export const eventRouter = {
 
       return { count };
     }),
-  byId: protectedProcedure
+  byId: publicReadProcedure
     .input(
       z.object({
         id: z.coerce.number().describe("The unique identifier of the event"),
@@ -996,7 +1000,7 @@ export const eventRouter = {
 
       return { event: result ?? null };
     }),
-  eventIdToRegionNameLookup: protectedProcedure
+  eventIdToRegionNameLookup: publicReadProcedure
     .route({
       method: "GET",
       path: "/event-id-to-region-name-lookup",

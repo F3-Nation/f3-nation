@@ -20,7 +20,11 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { editorProcedure, protectedProcedure } from "../shared";
+import {
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const eventTypeRouter = {
@@ -29,7 +33,7 @@ export const eventTypeRouter = {
    * To get only the event types for a specific org, set ignoreNationEventTypes to true
    * Use nationalOnly to return only nation-wide types (specific_org_id is null); cannot be combined with orgIds
    */
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(
       z
         .object({

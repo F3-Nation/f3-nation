@@ -24,11 +24,16 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { notifyMapDataChange } from "../lib/webhook-events";
-import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
+import {
+  adminProcedure,
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const locationRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(
       z
         .object({

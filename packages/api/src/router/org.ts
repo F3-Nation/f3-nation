@@ -33,7 +33,12 @@ import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { orgAncestorName } from "../org-ancestor-name";
 import type { Context } from "../shared";
-import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
+import {
+  adminProcedure,
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 const DEFAULT_ORG_TYPES = ["region"] as const satisfies readonly OrgType[];
@@ -191,7 +196,7 @@ async function getOrgCount(params: {
 }
 
 export const orgRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(orgAllInputSchema)
     .route({
       method: "GET",
@@ -650,7 +655,7 @@ export const orgRouter = {
       };
     }),
 
-  byId: protectedProcedure
+  byId: publicReadProcedure
     .input(
       z.object({
         id: z.coerce
