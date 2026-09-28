@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "add-client": "tsx scripts/add-client.ts",
     "migrate-oauth-clients-to-better-auth": "tsx scripts/migrate-oauth-clients-to-better-auth.ts",
-    "with-env": "dotenv run -f .env --"
+    "with-env": "dotenv run --"
   },
   "dependencies": {
     "@acme/db": "workspace:*",

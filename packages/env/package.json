@@ -12,7 +12,7 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "with-env": "dotenv run -f .env --"
+    "with-env": "dotenv run --"
   },
   "dependencies": {
     "@t3-oss/env-nextjs": "catalog:",

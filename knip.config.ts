@@ -20,7 +20,7 @@ const config: KnipConfig = {
     // vitest suite; follow-up to configure knip entries properly.
     "tooling/ci-factory/**",
   ],
-  ignoreDependencies: ["@turbo/gen", "dotenv"],
+  ignoreDependencies: ["@turbo/gen"],
   ignoreBinaries: ["uv"],
   workspaces: {
     ".": {
@@ -32,6 +32,13 @@ const config: KnipConfig = {
       // deliberately — see build.mjs), so `./instrument.js` never exists as a
       // real repo file for knip's GitHub Actions plugin to resolve.
       ignoreUnresolved: ["./instrument.js"],
+    },
+    "apps/auth": {
+      // with-env's "dotenv run -- <command>" invokes dotenv's own bundled
+      // CLI (its `run` subcommand); knip's binary scanner doesn't parse
+      // dotenv's subcommand syntax and flags the bare "run" token as an
+      // unlisted binary.
+      ignoreBinaries: ["run"],
     },
     "apps/api": {
       // The characterization suite runs under its own vitest config,
@@ -58,6 +65,11 @@ const config: KnipConfig = {
       // Graph-only edge mirroring apps/slackbot/pyproject.toml so Turbo can see
       // the Python workspace; no TypeScript imports it.
       ignoreDependencies: ["f3-data-models"],
+    },
+    "packages/env": {
+      // Same as apps/auth: with-env's "dotenv run -- <command>" trips
+      // knip's binary scanner on the bare "run" subcommand token.
+      ignoreBinaries: ["run"],
     },
   },
 };
