@@ -6,6 +6,7 @@ import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import type { SortingSchema } from "@acme/validators";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Button } from "@acme/ui/button";
 import {
   DropdownMenu,
@@ -164,6 +165,7 @@ export const EventTypesTable = () => {
 };
 
 const columns: TableOptions<
+  MdTableFeatures,
   RouterOutputs["eventType"]["all"]["eventTypes"][number]
 >["columns"] = [
   {

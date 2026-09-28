@@ -1,25 +1,32 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-import {
-  createTable,
-  flexRender,
-  getCoreRowModel,
+import { flexRender, useTable } from "@tanstack/react-table";
+import type {
+  ColumnDef,
+  OnChangeFn,
+  SortingState,
 } from "@tanstack/react-table";
-import type { ColumnDef } from "@tanstack/react-table";
 import type { RouterOutputs } from "~/orpc/types";
 import { OrgType } from "@acme/shared/app/enums";
-import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import {
+  ORG_TREE_MAX_DEPTH,
+  orgTypeDisplay,
+} from "@acme/shared/app/org-hierarchy";
 import { OrgTable } from "./org-table";
 import type * as MDTableModule from "@acme/ui/md-table";
+import type { MdTableFeatures } from "@acme/ui/table-features";
+import { mdTableFeatures } from "@acme/ui/table-features";
 
 const mocks = vi.hoisted(
   (): {
     inputs: Record<string, unknown>[];
+    orgs: ({ orgType: string } & Record<string, unknown>)[];
     props: Record<string, unknown>;
     open: ReturnType<typeof vi.fn>;
   } => ({
     inputs: [] as Record<string, unknown>[],
+    orgs: [],
     props: {},
     open: vi.fn(),
   }),
@@ -36,7 +43,13 @@ vi.mock("~/orpc/react", () => ({
       const { input, enabled } = options;
       if (enabled === false) return {};
       mocks.inputs.push(input);
-      return { data: { orgs: [], total: 100 } };
+      const orgTypes = (input.orgTypes ?? []) as string[];
+      return {
+        data: {
+          orgs: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
+          total: 100,
+        },
+      };
     }
 
     // useFetchAllPages-shaped calls -- use-org-filters.ts's hierarchy query
@@ -48,12 +61,17 @@ vi.mock("~/orpc/react", () => ({
     const orgTypes =
       queryKey[0] === "org.all.everyRegion" ? ["region"] : (queryKey[1] ?? []);
     mocks.inputs.push({ orgTypes });
-    return { data: [] };
+    return {
+      data: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
+    };
   },
 }));
 vi.mock("~/utils/store/modal", () => ({
   DeleteType: { ORG: "ORG" },
-  ModalType: { ADMIN_ORG: "ADMIN_ORG" },
+  ModalType: {
+    ADMIN_ORG: "ADMIN_ORG",
+    ADMIN_DELETE_CONFIRMATION: "ADMIN_DELETE_CONFIRMATION",
+  },
   openModal: mocks.open,
 }));
 vi.mock("@acme/ui/md-table", async (importOriginal) => {
@@ -132,6 +150,7 @@ vi.mock("../reset-filter", () => ({
 
 beforeEach(() => {
   mocks.inputs = [];
+  mocks.orgs = [];
   mocks.props = {};
   vi.clearAllMocks();
 });
@@ -152,7 +171,7 @@ describe.each(OrgType)("%s table contract", (type) => {
         onlyMine: true,
         searchTerm: type === "ao" ? "" : undefined,
       });
-    if (type !== "nation" && type !== "sector" && type !== "territory")
+    if (type !== "nation" && type !== "sector")
       expected.parentOrgIds = type === "ao" ? [] : undefined;
     if (["ao", "area", "territory", "sector"].includes(type))
       expected.sorting = [];
@@ -164,12 +183,14 @@ describe.each(OrgType)("%s table contract", (type) => {
     }[];
     const extra =
       type === "area"
-        ? ["parentOrgName"]
-        : type === "region"
-          ? ["area", "sector"]
-          : type === "ao"
-            ? ["parentOrgName"]
-            : [];
+        ? ["territoryName", "sectorName"]
+        : type === "territory"
+          ? ["parentOrgName"]
+          : type === "region"
+            ? ["area", "sector"]
+            : type === "ao"
+              ? ["parentOrgName"]
+              : [];
     expect(columns.map((column) => column.id ?? column.accessorKey)).toEqual([
       "name",
       ...extra,
@@ -201,6 +222,115 @@ describe.each(OrgType)("%s table contract", (type) => {
       id: 40,
     });
   });
+});
+
+describe("ancestor columns", () => {
+  const columnsFor = (type: "area" | "territory") => {
+    render(<OrgTable orgType={type} />);
+    return mocks.props.columns as {
+      id?: string;
+      accessorKey?: string;
+      enableSorting?: boolean;
+    }[];
+  };
+  const find = (columns: ReturnType<typeof columnsFor>, key: string) =>
+    columns.find((column) => (column.id ?? column.accessorKey) === key);
+
+  it("enables the area table's resolved territory and sector server sort ids", () => {
+    const columns = columnsFor("area");
+
+    expect(find(columns, "territoryName")?.accessorKey).toBe("territory");
+    expect(find(columns, "sectorName")?.accessorKey).toBe("sector");
+    expect(find(columns, "territoryName")?.enableSorting).not.toBe(false);
+    expect(find(columns, "sectorName")?.enableSorting).not.toBe(false);
+  });
+
+  it("sorts the territory table's sector column by its parent's name", () => {
+    const columns = columnsFor("territory");
+
+    expect(find(columns, "parentOrgName")).toBeDefined();
+    expect(find(columns, "parentOrgName")?.enableSorting).not.toBe(false);
+  });
+
+  it("renders the area table's resolved territory and sector headers with sort buttons", () => {
+    render(<OrgTable orgType="area" />);
+    const table = capturedTable([]);
+    const rendered = (id: string) => {
+      const column = table.getColumn(id)!;
+      return render(
+        flexRender(column.columnDef.header, {
+          table,
+          column,
+          header: {} as never,
+        }),
+      ).container;
+    };
+
+    for (const [id, label] of [
+      ["territoryName", "Territory"],
+      ["sectorName", "Sector"],
+    ] as const) {
+      const container = rendered(id);
+      expect(container.textContent).toBe(label);
+      expect(container.querySelector("button")).not.toBeNull();
+    }
+    expect(rendered("name").querySelector("button")).not.toBeNull();
+  });
+
+  it.each([
+    {
+      name: "an area with a missing parent",
+      areaParentId: 999,
+      territory: "",
+      sector: "",
+    },
+    {
+      name: "an area without a parent",
+      areaParentId: null,
+      territory: "",
+      sector: "",
+    },
+    {
+      name: "an area directly under a sector",
+      areaParentId: 2,
+      territory: "",
+      sector: "Sector One",
+    },
+    {
+      name: "an area under an inactive territory",
+      areaParentId: 1,
+      territory: "Inactive Territory",
+      sector: "Sector One",
+    },
+  ])(
+    "renders the resolved Territory and Sector text for $name",
+    ({ areaParentId, territory, sector }) => {
+      mocks.orgs = [
+        { id: 2, parentId: null, orgType: "sector", name: "Sector One" },
+        {
+          id: 1,
+          parentId: 2,
+          orgType: "territory",
+          name: "Inactive Territory",
+          isActive: false,
+        },
+        { id: 3, parentId: areaParentId, orgType: "area", name: "Area" },
+      ];
+      render(<OrgTable orgType="area" />);
+      const table = capturedTable(mocks.props.data as Org[]);
+      const cellText = (id: string) => {
+        const cell = table
+          .getRowModel()
+          .rows[0]!.getAllCells()
+          .find((item) => item.column.id === id)!;
+        return render(flexRender(cell.column.columnDef.cell, cell.getContext()))
+          .container.textContent;
+      };
+
+      expect(cellText("territoryName")).toBe(territory);
+      expect(cellText("sectorName")).toBe(sector);
+    },
+  );
 });
 
 it.each(["sector", "territory", "area", "region", "ao"] as const)(
@@ -240,16 +370,79 @@ it("retains the independent AO Region-filter option query", () => {
 });
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
-function capturedTable(data: Org[]) {
-  return createTable({
-    data,
-    columns: mocks.props.columns as ColumnDef<Org>[],
-    getCoreRowModel: getCoreRowModel(),
-    state: {},
-    onStateChange: vi.fn(),
-    renderFallbackValue: null,
+
+it("keeps the Area row action bound to its row after ancestor sorting", async () => {
+  render(<OrgTable orgType="area" />);
+  const before = capturedTable([]);
+  const column = before.getColumn("sectorName")!;
+  const header = render(
+    flexRender(column.columnDef.header, {
+      table: before,
+      column,
+      header: {} as never,
+    }),
+  );
+  fireEvent.click(header.getByRole("button", { name: "Sector" }));
+  expect(lastQuery("area")?.sorting).toEqual([
+    { id: "sectorName", desc: false },
+  ]);
+  header.unmount();
+  const table = capturedTable([{ id: 40, isActive: true } as Org]);
+  const cell = table
+    .getRowModel()
+    .rows[0]!.getAllCells()
+    .find((item) => item.column.id === "id")!;
+  render(flexRender(cell.column.columnDef.cell, cell.getContext()));
+  fireEvent.keyDown(screen.getByRole("button", { name: "Open menu" }), {
+    key: "Enter",
   });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Deactivate" }));
+  expect(mocks.open).toHaveBeenCalledWith("ADMIN_DELETE_CONFIRMATION", {
+    id: 40,
+    type: "ORG",
+    orgType: "area",
+  });
+});
+
+function capturedTable(data: Org[]) {
+  return renderHook(() =>
+    useTable({
+      features: mdTableFeatures,
+      data,
+      columns: mocks.props.columns as ColumnDef<MdTableFeatures, Org>[],
+      state: {
+        sorting: (mocks.props.sorting as SortingState | undefined) ?? [],
+      },
+      onSortingChange: mocks.props.setSorting as OnChangeFn<SortingState>,
+      renderFallbackValue: null,
+    }),
+  ).result.current;
 }
+
+it.each(["sectorName", "territoryName"])(
+  "clicking the Area %s header sends ascending and descending server sorting",
+  (id) => {
+    render(<OrgTable orgType="area" />);
+    for (const desc of [false, true]) {
+      const table = capturedTable([]);
+      const column = table.getColumn(id)!;
+      const header = render(
+        flexRender(column.columnDef.header, {
+          table,
+          column,
+          header: {} as never,
+        }),
+      );
+      fireEvent.click(
+        header.getByRole("button", {
+          name: id === "sectorName" ? "Sector" : "Territory",
+        }),
+      );
+      expect(lastQuery("area")?.sorting).toEqual([{ id, desc }]);
+      header.unmount();
+    }
+  },
+);
 
 it.each(["sector", "area"] as const)(
   "does not allow sorting the %s action column",
@@ -288,5 +481,36 @@ it.each(["region", "area", null] as const)(
     expect(view.container.textContent).toBe(
       parentOrgType === "region" ? "Parent fixture" : "",
     );
+  },
+);
+
+it.each(["sector", "territory"] as const)(
+  "caps Area %s display at 20 parent edges while preserving Region display",
+  (ancestorType) => {
+    const chain = Array.from({ length: ORG_TREE_MAX_DEPTH + 1 }, (_, i) => ({
+      id: i + 1,
+      parentId: i === ORG_TREE_MAX_DEPTH ? null : i + 2,
+      orgType: i === ORG_TREE_MAX_DEPTH ? ancestorType : "nation",
+      name: i === ORG_TREE_MAX_DEPTH ? "Boundary ancestor" : "Intermediate",
+    }));
+    mocks.orgs = [
+      ...chain,
+      { id: 100, parentId: 2, orgType: "area", name: "At limit" },
+      { id: 101, parentId: 1, orgType: "area", name: "Beyond limit" },
+      { id: 102, parentId: 1, orgType: "region", name: "Legacy Region" },
+    ];
+    const area = render(<OrgTable orgType="area" />);
+    expect(mocks.props.data).toEqual([
+      expect.objectContaining({ id: 100, [ancestorType]: "Boundary ancestor" }),
+      expect.objectContaining({ id: 101, [ancestorType]: undefined }),
+    ]);
+    area.unmount();
+    render(<OrgTable orgType="region" />);
+    expect(mocks.props.data).toEqual([
+      expect.objectContaining({
+        id: 102,
+        sector: ancestorType === "sector" ? "Boundary ancestor" : undefined,
+      }),
+    ]);
   },
 );

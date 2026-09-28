@@ -51,6 +51,7 @@ import type { DataType } from "~/utils/store/modal";
 import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
+import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
 
 function isAdminSessionRoleName(
   roleName: string | null,
@@ -94,7 +95,7 @@ export default function UserModal({
     queryKey: ["org.accessible.adminUsersModal"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.accessible({
-        orgTypes: ["region", "area", "sector", "nation"],
+        orgTypes: AdminScopeOrgTypes,
         pageIndex,
         pageSize,
       });

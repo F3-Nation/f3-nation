@@ -10,6 +10,7 @@ import { UpdateRequestStatus } from "@acme/shared/app/enums";
 import { getFullAddress, requestTypeToTitle } from "@acme/shared/app/functions";
 import { ZustandStore } from "@acme/shared/common/classes";
 import { cn } from "@acme/ui";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Badge } from "@acme/ui/badge";
 import {
   Command,
@@ -139,6 +140,7 @@ export const RequestsTable = () => {
 };
 
 const columns: TableOptions<
+  MdTableFeatures,
   RouterOutputs["request"]["all"]["requests"][number]
 >["columns"] = [
   {

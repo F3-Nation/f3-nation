@@ -5,6 +5,7 @@ import type { AppDb } from "../client";
 export interface OrgIds {
   nationId: number;
   sectorIds: Record<string, number>;
+  territoryIds: Record<string, number>;
   areaIds: Record<string, number>;
   regionIds: Record<string, number>;
   aoIds: Record<string, number>;

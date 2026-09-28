@@ -15,6 +15,11 @@ export const env = createEnv({
       "staging",
       "prod",
     ]),
+    // PostHog error tracking (server-side pipeline via @acme/observability).
+    // Optional: absence disables capture without crashing anything. Kept
+    // NEXT_PUBLIC_-prefixed for parity with map and the shared deploy
+    // workflow, though this app no longer has a client bundle.
+    NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
   },
   /**
    * Specify your server-side environment variables schema here.
@@ -44,6 +49,7 @@ export const env = createEnv({
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
+    NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     AUTH_SECRET: process.env.AUTH_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
     TEST_DATABASE_URL: process.env.TEST_DATABASE_URL,

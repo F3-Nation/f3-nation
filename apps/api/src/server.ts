@@ -1,7 +1,8 @@
 import "~/instrument";
 
 import { serve } from "@hono/node-server";
-import * as Sentry from "@sentry/node";
+
+import { flushObservability } from "@acme/observability";
 
 import { app } from "~/app";
 import { logError, logInfo } from "~/lib/logging";
@@ -20,7 +21,11 @@ function resolvePort(raw: string | undefined): number {
 }
 
 const port = resolvePort(process.env.PORT);
-const server = serve({ fetch: app.fetch, port });
+// overrideGlobalObjects would swap in @hono/node-server's lightweight
+// Response, whose default string-body content-type ("text/plain; charset=UTF-8")
+// differs from undici's ("text/plain;charset=UTF-8") that Next served and the
+// characterization goldens pin.
+const server = serve({ fetch: app.fetch, port, overrideGlobalObjects: false });
 
 // Cloud Run sends SIGTERM with a ~10s grace window before SIGKILL — force-exit
 // a couple seconds ahead of that so a hung close() reports its own error
@@ -38,14 +43,12 @@ process.on("SIGTERM", () => {
 
   server.close((err) => {
     clearTimeout(forceExit);
-    void Sentry.flush(2000)
-      .catch(() => undefined)
-      .finally(() => {
-        if (err) {
-          logError("api.server.shutdown_error", {}, err);
-          process.exit(1);
-        }
-        process.exit(0);
-      });
+    void flushObservability(2000).finally(() => {
+      if (err) {
+        logError("api.server.shutdown_error", {}, err);
+        process.exit(1);
+      }
+      process.exit(0);
+    });
   });
 });

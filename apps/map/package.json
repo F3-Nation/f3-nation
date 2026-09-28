@@ -1,6 +1,6 @@
 {
   "name": "f3-map",
-  "version": "7.3.4",
+  "version": "7.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,6 +22,7 @@
     "@acme/api": "workspace:*",
     "@acme/auth": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/observability": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/tailwind-config": "workspace:*",
     "@acme/ui": "workspace:*",
@@ -30,7 +31,6 @@
     "@orpc/server": "catalog:",
     "@orpc/tanstack-query": "catalog:",
     "@react-hook/window-size": "catalog:",
-    "@sentry/nextjs": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-query-devtools": "catalog:",
@@ -45,6 +45,7 @@
     "next-auth": "catalog:",
     "next-themes": "catalog:",
     "nodemailer": "catalog:",
+    "posthog-js": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-hook-form": "catalog:",
@@ -52,7 +53,6 @@
     "react-responsive": "catalog:",
     "server-only": "catalog:",
     "supercluster": "catalog:",
-    "uuid": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -72,7 +72,6 @@
     "@types/nodemailer": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@types/supercluster": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "eslint": "catalog:",

@@ -95,19 +95,18 @@ on:
         required: false
         type: string
         default: SUPER_ADMIN_API_KEY
-      smoke_test_app:
-        description: >-
-          Section key matching a "## <key>" heading in .github/smoke-tests/checklists.md
-          to sync into the staging smoke-test tracker issue after a successful staging
-          deploy; empty skips
+      posthog_session_recording:
+        description: 'NEXT_PUBLIC_POSTHOG_SESSION_RECORDING build-arg ("true" to opt in); Next.js inlines this at build time same as the PostHog key'
         required: false
         type: string
-        default: ""
-      app_label:
-        description: "Existing 'app: X' label to apply to the staging smoke-test tracker issue"
+        # Not "" — apps/{api,map}/src/env.ts validates this as
+        # z.enum(["true","false"]).optional(), which rejects an empty
+        # string. An omitted input must still produce a schema-valid value.
+        default: "false"
+    secrets:
+      posthog_key:
+        description: "NEXT_PUBLIC_POSTHOG_KEY build-arg — Next.js inlines NEXT_PUBLIC_* vars into the bundle at build time, so this must be supplied here, not as a Cloud Run runtime env var. Exception: the api image (Hono bundle) turns it into an image ENV read at runtime, so a Cloud Run runtime value, even an empty one, overrides it"
         required: false
-        type: string
-        default: ""
 
 jobs:
   # ── Gate: wait for the full CI check set to pass on this commit ──
@@ -202,14 +201,30 @@ jobs:
           DOCKERFILE: ${{ inputs.dockerfile }}
           BUILD_CONTEXT: ${{ inputs.build_context }}
           IMAGE: ${{ steps.meta.outputs.image }}
+          POSTHOG_KEY: ${{ secrets.posthog_key }}
+          POSTHOG_SESSION_RECORDING: ${{ inputs.posthog_session_recording }}
         run: |
           TURBO_VERSION=$(grep '^  turbo:' pnpm-workspace.yaml | awk '{print $2}')
           # Cloud Run only runs linux/amd64. The Dockerfile FROM lines no longer
           # pin --platform (BuildKit lint), so the target arch is set here.
+          #
+          # NEXT_PUBLIC_POSTHOG_KEY/_SESSION_RECORDING are inlined into the
+          # Next.js bundle at build time (both client AND server output —
+          # NEXT_PUBLIC_* vars are not client-only), so they must be supplied
+          # here as build args, not as Cloud Run runtime env vars. This image
+          # is built once and promoted to prod unchanged (see deploy-prod
+          # below), so one key/flag pair covers both environments.
+          #
+          # Exception: the api image is a Hono bundle, not Next.js. Its
+          # Dockerfile turns the key build arg into an image ENV that the
+          # bundle reads from process.env at runtime, so a Cloud Run runtime
+          # value (even an empty one) overrides it.
           docker build \
             --platform=linux/amd64 \
             --file "${DOCKERFILE}" \
             --build-arg TURBO_VERSION="${TURBO_VERSION}" \
+            --build-arg NEXT_PUBLIC_POSTHOG_KEY="${POSTHOG_KEY}" \
+            --build-arg NEXT_PUBLIC_POSTHOG_SESSION_RECORDING="${POSTHOG_SESSION_RECORDING}" \
             --tag "${IMAGE}" \
             "${BUILD_CONTEXT}"
           docker push "${IMAGE}"
@@ -266,36 +281,6 @@ jobs:
           elif [ "$(printf '%s' "${body}" | jq -r '.warmed // false')" != "true" ]; then
             echo "::warning::Cache revalidated but warm-up did not complete; instance will regenerate lazily on next visit"
           fi
-
-  # ── Update the shared staging smoke-test tracker issue after a successful staging deploy ──
-  smoke-test-issue:
-    needs: [build, deploy-staging]
-    if: inputs.smoke_test_app != ''
-    runs-on: ubuntu-latest
-    # No concurrency group here: with cancel-in-progress: false, Actions only
-    # keeps ONE job pending per group and cancels any earlier pending job when
-    # a new one arrives — a burst of 3+ near-simultaneous staging deploys
-    # (e.g. a release-please merge tagging several apps at once) would silently
-    # drop the evicted job's tracker update. The composite action below
-    # verifies its own write and retries on conflict instead, so every job
-    # runs and self-corrects rather than being queued and possibly skipped.
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.ref }}
-          persist-credentials: false
-
-      - uses: ./.github/actions/staging-smoke-test-issue
-        with:
-          service_name: ${{ inputs.service_name }}
-          version: ${{ needs.build.outputs.version }}
-          staging_url: ${{ inputs.staging_url }}
-          app_key: ${{ inputs.smoke_test_app }}
-          app_label: ${{ inputs.app_label }}
-          github_token: ${{ github.token }}
 
   # ── Deploy to production (requires approval) ──
   deploy-prod:

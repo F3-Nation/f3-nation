@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { client } from "~/orpc/client";
 import type { RouterOutputs } from "~/orpc/types";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
+import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
 
 type Org = RouterOutputs["org"]["accessible"]["orgs"][number];
 
@@ -29,7 +30,7 @@ export const OrgFilter = ({
     queryKey: ["org.accessible.eventTypesOrgFilter"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs: page, total } = await client.org.accessible({
-        orgTypes: ["area", "sector", "region", "nation"],
+        orgTypes: AdminScopeOrgTypes,
         pageIndex,
         pageSize,
       });

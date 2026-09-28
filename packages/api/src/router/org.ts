@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 import type { SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 import {
@@ -19,6 +20,8 @@ import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import { ORG_ALL_SORT_IDS } from "@acme/shared/app/org-sorting";
+import type { OrgAllSortId } from "@acme/shared/app/org-sorting";
 import { OrgInsertSchema } from "@acme/validators";
 
 import { assertValidParentType } from "../assert-valid-parent-type";
@@ -29,9 +32,12 @@ import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { orgAncestorName } from "../org-ancestor-name";
 import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
+
+const DEFAULT_ORG_TYPES = ["region"] as const satisfies readonly OrgType[];
 
 // Shared filter schema for orgs (used by both `all` and `count` endpoints)
 const orgFilterSchema = z.object({
@@ -39,9 +45,9 @@ const orgFilterSchema = z.object({
     .refine((val) => val.length >= 1, {
       message: "At least one orgType is required",
     })
-    .default(["region"])
+    .default([...DEFAULT_ORG_TYPES])
     .describe(
-      "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+      `Filter organizations by type. Returns orgs matching ANY of the given types (${OrgType.join(", ")}). Defaults to [${DEFAULT_ORG_TYPES.join(", ")}].`,
     ),
   searchTerm: z
     .string()
@@ -52,7 +58,7 @@ const orgFilterSchema = z.object({
   statuses: arrayOrSingle(z.enum(IsActiveStatus))
     .optional()
     .describe(
-      "Filter organizations by status. Matches orgs with ANY of the given statuses (active, inactive).",
+      `Filter organizations by status. Matches orgs with ANY of the given statuses (${IsActiveStatus.join(", ")}).`,
     ),
   parentOrgIds: arrayOrSingle(z.coerce.number())
     .optional()
@@ -73,7 +79,7 @@ type OrgFilterInput = z.infer<typeof orgFilterSchema>;
 const orgAllInputSchema = orgFilterSchema.extend({
   ...paginationFields("organizations"),
   sorting: parseSorting().describe(
-    "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
+    `Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: ${ORG_ALL_SORT_IDS.join(", ")}. sectorName and territoryName require orgTypes to be exactly ["area"].`,
   ),
 });
 
@@ -250,6 +256,18 @@ export const orgRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      // Correlated ancestor sorting is bounded to the Area table, not AO listings.
+      if (
+        input.sorting?.some(({ id }) =>
+          ["sectorName", "territoryName"].includes(id),
+        ) &&
+        (input.orgTypes.length !== 1 || input.orgTypes[0] !== "area")
+      ) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: 'Ancestor sorting requires orgTypes to be exactly ["area"].',
+        });
+      }
+
       // orgAllInputSchema is a required object (not `.optional()`), same as
       // the unguarded `input.onlyMine` below — no `?.` needed here.
       const { limit, offset, usePagination } = resolvePagination({
@@ -287,13 +305,20 @@ export const orgRouter = {
           id: org.id,
           name: org.name,
           parentOrgName: parentOrg.name,
+          sectorName: orgAncestorName(org.id, "sector"),
+          territoryName: orgAncestorName(org.id, "territory"),
           aoCount: org.aoCount,
           lastAnnualReview: org.lastAnnualReview,
           status: org.isActive,
           created: org.created,
-        },
+        } satisfies Record<OrgAllSortId, PgColumn | SQL>,
         "id",
-        new Set(["parentOrgName", "lastAnnualReview"] as const),
+        new Set([
+          "parentOrgName",
+          "lastAnnualReview",
+          "sectorName",
+          "territoryName",
+        ] as const),
       ).concat(asc(org.id));
 
       const total = await getOrgCount({ db: ctx.db, where });

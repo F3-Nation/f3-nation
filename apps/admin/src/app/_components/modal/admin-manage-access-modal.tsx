@@ -49,6 +49,7 @@ import {
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
+import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 export default function AdminManageAccessModal({
@@ -67,7 +68,7 @@ export default function AdminManageAccessModal({
     queryKey: ["org.accessible.adminManageAccessModal"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.accessible({
-        orgTypes: ["region", "area", "sector", "nation"],
+        orgTypes: AdminScopeOrgTypes,
         pageIndex,
         pageSize,
       });

@@ -11,6 +11,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
   createAdminSession,
+  createMixedOrgTree,
   createTestClient,
   db,
   getOrCreateF3NationOrg,
@@ -87,8 +88,8 @@ describe("Map Location Router", () => {
 
   /**
    * Generic org level with an explicit parent, for building ancestor chains
-   * deeper than the real hierarchy currently goes (standing in for a
-   * not-yet-added tier above region). The recursive ancestor-active check
+   * beyond the real hierarchy for depth-boundary and cycle tests.
+   * The recursive ancestor-active check
    * only walks `parentId`, so the `orgType` label here is arbitrary.
    */
   const createTestOrgLevel = async (parentId: number) => {
@@ -1354,6 +1355,109 @@ describe("Map Location Router", () => {
           result.find((returned) => returned.id === instance.id),
         ).toBeUndefined();
       });
+    });
+
+    it("hides an inactive Territory branch while retaining a direct-Area branch", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const tree = await createMixedOrgTree(createdOrgIds);
+      const startDate = await getDbTomorrow();
+      const instanceIds: number[] = [];
+      const locationIds: number[] = [];
+      const recurringWorkouts: {
+        locationId: number;
+        eventId: number;
+        regionId: number;
+      }[] = [];
+      for (const branch of [tree.territoryBranch, tree.directBranch]) {
+        const location = await createTestLocation(branch.region.id);
+        if (!location) throw new Error("Failed to create mixed-tree location");
+        locationIds.push(location.id);
+        const recurringEvent = await createDatedEvent({
+          aoId: branch.ao.id,
+          locationId: location.id,
+          label: "Mixed Territory recurring visibility",
+          dayOfWeek: "monday",
+          startDate: shiftDays(startDate, -2),
+        });
+        recurringWorkouts.push({
+          locationId: location.id,
+          eventId: recurringEvent.id,
+          regionId: branch.region.id,
+        });
+        const [instance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Mixed Territory visibility ${uniqueId()}`,
+            orgId: branch.ao.id,
+            locationId: location.id,
+            startDate,
+            startTime: "0600",
+            isActive: true,
+            highlight: false,
+            isPrivate: false,
+          })
+          .returning({ id: schema.eventInstances.id });
+        if (!instance) throw new Error("Failed to create mixed-tree instance");
+        createdEventInstanceIds.push(instance.id);
+        instanceIds.push(instance.id);
+      }
+      const [territoryLocationId, directLocationId] = locationIds;
+      if (!territoryLocationId || !directLocationId) {
+        throw new Error("Missing mixed-tree locations");
+      }
+      const client = createTestClient();
+      const activeMarkers = await client.map.location.eventsAndLocations();
+      expect(activeMarkers.map((location) => location[0])).toEqual(
+        expect.arrayContaining(locationIds),
+      );
+      for (const { locationId, eventId, regionId } of recurringWorkouts) {
+        const workout = await client.map.location.locationWorkout({
+          locationId,
+        });
+        expect(workout.location).toMatchObject({
+          id: locationId,
+          regionId,
+          regionType: "region",
+        });
+        expect(workout.location?.events.map((event) => event.id)).toContain(
+          eventId,
+        );
+      }
+      const active = await client.map.location.upcomingInstances();
+      expect(active.map((instance) => instance.id)).toEqual(
+        expect.arrayContaining(instanceIds),
+      );
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, tree.territory.id));
+      const inactive = await client.map.location.upcomingInstances();
+      expect(inactive.map((instance) => instance.id)).not.toContain(
+        instanceIds[0],
+      );
+      expect(inactive.map((instance) => instance.id)).toContain(instanceIds[1]);
+      const inactiveMarkers = await client.map.location.eventsAndLocations();
+      expect(inactiveMarkers.map((location) => location[0])).not.toContain(
+        territoryLocationId,
+      );
+      expect(inactiveMarkers.map((location) => location[0])).toContain(
+        directLocationId,
+      );
+      const hiddenWorkout = await client.map.location.locationWorkout({
+        locationId: territoryLocationId,
+      });
+      expect(hiddenWorkout.location).toBeNull();
+      const visibleWorkout = await client.map.location.locationWorkout({
+        locationId: directLocationId,
+      });
+      expect(visibleWorkout.location).toMatchObject({
+        id: directLocationId,
+        regionId: tree.directBranch.region.id,
+        regionType: "region",
+      });
+      expect(
+        visibleWorkout.location?.events.map((event) => event.id),
+      ).toContain(recurringWorkouts[1]?.eventId);
     });
 
     it("should exclude a qualifying instance whose region is inactive", async () => {
