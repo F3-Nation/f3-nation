@@ -1,10 +1,11 @@
-import type { CellContext, Column } from "@tanstack/react-table";
+import type { CellContext, Column, RowData } from "@tanstack/react-table";
 import * as React from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 
 import { Case } from "@acme/shared/common/enums";
 import { convertCase } from "@acme/shared/common/functions";
 
+import type { MdTableFeatures } from "./table-features";
 import { cn } from ".";
 import { Button } from "./button";
 
@@ -117,7 +118,11 @@ const Row = ({
   return <div className="ml-4 flex items-center">{children}</div>;
 };
 
-const ColumnSortIcon = <T,>({ column }: { column: Column<T, unknown> }) => {
+const ColumnSortIcon = <T extends RowData>({
+  column,
+}: {
+  column: Column<MdTableFeatures, T, unknown>;
+}) => {
   switch (column.getIsSorted()) {
     case "asc":
       return <ArrowUp className="ml-2 h-4 w-4" color="black" />;
@@ -128,11 +133,11 @@ const ColumnSortIcon = <T,>({ column }: { column: Column<T, unknown> }) => {
   }
 };
 
-const Header = <T,>({
+const Header = <T extends RowData>({
   column,
   children,
 }: {
-  column: Column<T>;
+  column: Column<MdTableFeatures, T, unknown>;
   children?: React.ReactNode;
 }) => {
   return (
@@ -152,16 +157,16 @@ const Header = <T,>({
     </Button>
   );
 };
-const Cell = <T,>(
+const Cell = <T extends RowData, TValue = unknown>(
   params: React.DetailedHTMLProps<
     React.HTMLAttributes<HTMLDivElement>,
     HTMLDivElement
   > &
-    Partial<CellContext<T, string | number>>,
+    Partial<CellContext<MdTableFeatures, T, TValue>>,
 ) => {
   return (
     <div className={cn("ml-4 flex items-center", params.className)}>
-      {params.children ?? params.getValue?.()}
+      {params.children ?? (params.getValue?.() as React.ReactNode)}
     </div>
   );
 };
