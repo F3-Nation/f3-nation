@@ -79,6 +79,7 @@ export default function UserModal({
   const hasPiiAccess = userResponse?.includePii ?? false;
   const router = useRouter();
   const { data: regions } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyRegion"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
@@ -92,6 +93,7 @@ export default function UserModal({
 
   // Get orgs where user has admin role (required to manage access)
   const { data: accessibleOrgs } = useFetchAllPages({
+    path: ["org", "accessible"],
     queryKey: ["org.accessible.adminUsersModal"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.accessible({

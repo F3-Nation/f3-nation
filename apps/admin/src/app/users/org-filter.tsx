@@ -23,6 +23,7 @@ export const OrgFilter = ({
   orgTypes?: OrgType[];
 }) => {
   const { data: orgs } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyOrgType", orgTypes],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({

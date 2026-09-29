@@ -88,6 +88,7 @@ export default function AdminOrgEditModal({
   );
   const org = orgResponse?.org;
   const { data: parents } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyParent", parentTypes],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({

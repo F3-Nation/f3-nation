@@ -26,6 +26,7 @@ export const RegionFilter = ({
   selectedRegions: Region[];
 }) => {
   const { data: regions } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyRegion"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({

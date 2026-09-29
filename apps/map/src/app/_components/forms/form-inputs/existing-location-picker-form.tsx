@@ -37,6 +37,7 @@ export const ExistingLocationPickerForm = (params: {
     isError,
     refetch,
   } = useFetchAllPages({
+    path: ["location", "all"],
     queryKey: ["location.all.everyInRegion", activeRegionId],
     enabled: activeRegionId != null,
     throwOnError: false,

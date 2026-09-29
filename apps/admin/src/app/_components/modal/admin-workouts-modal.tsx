@@ -91,6 +91,7 @@ export default function AdminWorkoutsModal({
   data: DataType[ModalType.ADMIN_EVENTS];
 }) {
   const { data: regionOrgs } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyRegion", "adminWorkoutsModal"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
@@ -106,6 +107,7 @@ export default function AdminWorkoutsModal({
     [regionOrgs],
   );
   const { data: activeLocations } = useFetchAllPages({
+    path: ["location", "all"],
     queryKey: ["location.all.everyActive"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { locations: items, totalCount } = await client.location.all({
@@ -121,6 +123,7 @@ export default function AdminWorkoutsModal({
     [activeLocations],
   );
   const { data: aoOrgs } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyAo"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
@@ -163,6 +166,7 @@ export default function AdminWorkoutsModal({
   // (disabled={!formRegionId}), so there's no reason to fetch anything
   // before then -- only fetch once a region is selected, scoped to it.
   const { data: eventTypes } = useFetchAllPages({
+    path: ["eventType", "all"],
     queryKey: ["eventType.all.everyMatching", formRegionId],
     enabled: !!formRegionId,
     fetchPage: async ({ pageIndex, pageSize }) => {

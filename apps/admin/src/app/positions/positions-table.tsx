@@ -78,6 +78,7 @@ export const PositionsTable = () => {
     }),
   );
   const { data: accessibleOrgs } = useFetchAllPages({
+    path: ["org", "accessible"],
     queryKey: ["org.accessible.positionsTable"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.accessible({

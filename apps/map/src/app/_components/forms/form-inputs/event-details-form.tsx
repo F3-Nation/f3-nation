@@ -39,6 +39,7 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
   // Get event types for the region
   const orgIds = formRegionId ? [formRegionId] : [];
   const { data: eventTypes } = useFetchAllPages({
+    path: ["eventType", "all"],
     queryKey: ["eventType.all.everyMatching", orgIds],
     enabled: formRegionId != null,
     fetchPage: async ({ pageIndex, pageSize }) => {

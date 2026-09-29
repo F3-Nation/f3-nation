@@ -29,6 +29,7 @@ describe("useFetchAllPages", () => {
     const { result } = renderHook(
       () =>
         useFetchAllPages({
+          path: ["test", "singlePage"],
           queryKey: ["single-page-test"],
           fetchPage,
         }),
@@ -52,6 +53,7 @@ describe("useFetchAllPages", () => {
     const { result } = renderHook(
       () =>
         useFetchAllPages({
+          path: ["test", "multiPage"],
           queryKey: ["multi-page-test"],
           fetchPage,
         }),
@@ -78,6 +80,7 @@ describe("useFetchAllPages", () => {
     renderHook(
       () =>
         useFetchAllPages({
+          path: ["test", "disabled"],
           queryKey: ["disabled-test"],
           fetchPage,
           enabled: false,

@@ -50,6 +50,7 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
   const isDark = resolvedTheme === "dark";
 
   const { data: nationalEventTypes, isLoading } = useFetchAllPages({
+    path: ["eventType", "all"],
     queryKey: ["eventType.all.everyNational"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { eventTypes: items, totalCount } = await client.eventType.all({

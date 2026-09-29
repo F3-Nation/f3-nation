@@ -27,6 +27,7 @@ export const OrgFilter = ({
   selectedOrgs: Org[];
 }) => {
   const { data: orgs } = useFetchAllPages({
+    path: ["org", "accessible"],
     queryKey: ["org.accessible.eventTypesOrgFilter"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs: page, total } = await client.org.accessible({

@@ -40,6 +40,7 @@ export function RegionSelector<_T extends RegionSelectorFormValues>({
     isError,
     refetch,
   } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyRegion"],
     throwOnError: false,
     fetchPage: async ({ pageIndex, pageSize }) => {

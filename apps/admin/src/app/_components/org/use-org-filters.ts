@@ -121,6 +121,7 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
   // silently truncate the sector/territory hierarchy for any org with more
   // than a default page's worth of children.
   const { data: hierarchyDataOrgs } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: [
       "org.all.hierarchy",
       config.ancestorTypes,

@@ -44,6 +44,7 @@ export const EventTypesTable = () => {
 
   // Get user's accessible orgs (all orgs if nation admin, otherwise assigned orgs)
   const { data: accessibleOrgs } = useFetchAllPages({
+    path: ["org", "accessible"],
     queryKey: ["org.accessible.eventTypesTable"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.accessible({

@@ -32,6 +32,7 @@ export const MoveEventToDifferentAoRequestForm = () => {
     orpc.map.location.regions.queryOptions(),
   );
   const { data: allAos } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyAo"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({

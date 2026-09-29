@@ -36,7 +36,10 @@ vi.mock("~/orpc/react", () => ({
   useQuery: (
     options:
       | { input: Record<string, unknown>; enabled?: boolean }
-      | { queryKey: [string, string[]?]; enabled?: boolean },
+      | {
+          queryKey: [readonly string[], { key: [string, string[]?] }];
+          enabled?: boolean;
+        },
   ) => {
     // org-table.tsx's own direct paginated table query, unchanged.
     if ("input" in options) {
@@ -58,8 +61,8 @@ vi.mock("~/orpc/react", () => ({
     // not the {orgs, total} page shape the input-based branch returns.
     const { queryKey, enabled } = options;
     if (enabled === false) return { data: undefined };
-    const orgTypes =
-      queryKey[0] === "org.all.everyRegion" ? ["region"] : (queryKey[1] ?? []);
+    const key = queryKey[1].key;
+    const orgTypes = key[0] === "org.all.everyRegion" ? ["region"] : (key[1] ?? []);
     mocks.inputs.push({ orgTypes });
     return {
       data: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),

@@ -152,6 +152,7 @@ export default function AdminEventInstancesModal({
   // pagination.ts), so page through them instead of relying on an unbounded
   // "omit both params" request.
   const { data: fetchedRegions } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyRegion"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
@@ -167,6 +168,7 @@ export default function AdminEventInstancesModal({
     [fetchedRegions],
   );
   const { data: fetchedAos } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyAo"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
@@ -182,6 +184,7 @@ export default function AdminEventInstancesModal({
     [fetchedAos],
   );
   const { data: fetchedLocations } = useFetchAllPages({
+    path: ["location", "all"],
     queryKey: ["location.all.everyActive"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { locations: items, totalCount } = await client.location.all({
@@ -222,7 +225,12 @@ export default function AdminEventInstancesModal({
   // (see pagination.ts) -- pageSize: 200/500 now exceeds that cap and would
   // fail validation, so page through both instead.
   const { data: fetchedEventTypes } = useFetchAllPages({
-    queryKey: ["eventType.all.everyMatching", formRegionId],
+    path: ["eventType", "all"],
+    // "byName" discriminates this from admin-workouts-modal.tsx's
+    // eventType.all.everyMatching fetch, which uses the API's default order
+    // instead of this explicit name sort -- same key otherwise, and they'd
+    // share (and silently reorder) each other's cached result.
+    queryKey: ["eventType.all.everyMatching", "byName", formRegionId],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { eventTypes: items, totalCount } = await client.eventType.all({
         orgIds: formRegionId ? [formRegionId] : undefined,
@@ -235,7 +243,11 @@ export default function AdminEventInstancesModal({
   });
 
   const { data: fetchedEvents } = useFetchAllPages({
-    queryKey: ["event.all.everyMatching", formRegionId],
+    path: ["event", "all"],
+    // See the eventType.all fetch above -- discriminate by sort order so a
+    // future default-order event.all.everyMatching fetch can't collide with
+    // this explicitly name-sorted one.
+    queryKey: ["event.all.everyMatching", "byName", formRegionId],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { events: items, totalCount } = await client.event.all({
         regionIds: formRegionId ? [formRegionId] : undefined,

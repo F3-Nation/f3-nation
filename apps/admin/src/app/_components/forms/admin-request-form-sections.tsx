@@ -32,6 +32,7 @@ export const EventDetailsFields = () => {
 
   const orgIds = formRegionId && formRegionId > 0 ? [formRegionId] : [];
   const { data: eventTypes } = useFetchAllPages({
+    path: ["eventType", "all"],
     queryKey: ["eventType.all.everyMatching", orgIds],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { eventTypes: items, totalCount } = await client.eventType.all({
@@ -305,6 +306,7 @@ export const LocationPickerField = ({
   const formLocationId = form.watch("locationId");
 
   const { data: locations } = useFetchAllPages({
+    path: ["location", "all"],
     queryKey: ["location.all.everyLocation"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { locations: items, totalCount } = await client.location.all({

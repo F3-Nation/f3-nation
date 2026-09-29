@@ -65,6 +65,7 @@ export default function AdminEventTypesModal({
   );
   const eventType = eventTypeResponse?.eventType;
   const { data: regionOrgs } = useFetchAllPages({
+    path: ["org", "accessible"],
     queryKey: ["org.accessible.adminEventTypesModal"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.accessible({

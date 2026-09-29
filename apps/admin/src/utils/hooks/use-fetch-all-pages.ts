@@ -14,6 +14,12 @@ const MAX_PAGE_SIZE = 100;
  * params" escape hatch that isn't safe for every entity type.
  */
 export function useFetchAllPages<TItem>(params: {
+  // The oRPC router path this fetch conceptually belongs to (e.g.
+  // ["org", "all"]) -- `invalidateQueries("org")` matches by checking
+  // `queryKey[0].includes(segment)`, so this must be a real path array
+  // (not the dotted string `queryKey` below) for mutations to invalidate
+  // this cache correctly.
+  path: readonly string[];
   queryKey: unknown[];
   fetchPage: (page: {
     pageIndex: number;
@@ -22,9 +28,9 @@ export function useFetchAllPages<TItem>(params: {
   enabled?: boolean;
   throwOnError?: boolean;
 }) {
-  const { queryKey, fetchPage, enabled = true, throwOnError } = params;
+  const { path, queryKey, fetchPage, enabled = true, throwOnError } = params;
   return useQuery({
-    queryKey,
+    queryKey: [path, { fetchAll: true, key: queryKey }],
     enabled,
     throwOnError,
     queryFn: async () => {

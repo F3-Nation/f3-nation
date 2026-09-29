@@ -49,6 +49,7 @@ export function EventSelector({
     isError,
     refetch,
   } = useFetchAllPages({
+    path: ["event", "all"],
     queryKey: ["event.all.everyMatching", eventFilter],
     enabled: regionId != null,
     throwOnError: false,

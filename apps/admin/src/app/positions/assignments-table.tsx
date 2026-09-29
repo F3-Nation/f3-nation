@@ -49,6 +49,7 @@ export const AssignmentsTable = () => {
   const [selectedOrg, setSelectedOrg] = useState<AccessibleOrg | null>(null);
 
   const { data: orgs } = useFetchAllPages({
+    path: ["org", "accessible"],
     queryKey: ["org.accessible.assignmentsTable"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs: page, total } = await client.org.accessible({

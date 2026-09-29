@@ -65,6 +65,7 @@ export default function AdminManageAccessModal({
 
   // Get orgs where user has admin role (required to manage access)
   const { data: accessibleOrgs, isLoading: isLoadingOrgs } = useFetchAllPages({
+    path: ["org", "accessible"],
     queryKey: ["org.accessible.adminManageAccessModal"],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.accessible({

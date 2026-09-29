@@ -36,7 +36,12 @@ vi.mock("~/orpc/react", () => ({
     options:
       | { input: QueryInput }
       | {
-          queryKey: [string, string[] | undefined, string[] | undefined];
+          queryKey: [
+            readonly string[],
+            {
+              key: [string, string[] | undefined, string[] | undefined];
+            },
+          ];
           enabled?: boolean;
         },
   ) => {
@@ -78,7 +83,8 @@ vi.mock("~/orpc/react", () => ({
     // type lists, matching use-org-filters.ts's fetchPage orgTypes input.
     const { queryKey, enabled } = options;
     if (enabled === false) return { data: undefined };
-    const orgTypes = [...(queryKey[1] ?? []), ...(queryKey[2] ?? [])];
+    const key = queryKey[1].key;
+    const orgTypes = [...(key[1] ?? []), ...(key[2] ?? [])];
     mocks.queryInputs.push({ orgTypes });
 
     if (!mocks.hierarchyAvailable) return { data: undefined };

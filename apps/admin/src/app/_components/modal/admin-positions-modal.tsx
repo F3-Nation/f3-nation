@@ -107,6 +107,7 @@ export default function AdminPositionsModal({
   // is capped server-side (see pagination.ts), so page through it instead
   // of relying on an unbounded "omit both params" request.
   const { data: editableOrgs } = useFetchAllPages({
+    path: ["org", "all"],
     queryKey: ["org.all.everyEditable", selectedOrgType],
     enabled: !!selectedOrgType,
     fetchPage: async ({ pageIndex, pageSize }) => {
