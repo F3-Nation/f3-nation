@@ -62,7 +62,8 @@ vi.mock("~/orpc/react", () => ({
     const { queryKey, enabled } = options;
     if (enabled === false) return { data: undefined };
     const key = queryKey[1].key;
-    const orgTypes = key[0] === "org.all.everyRegion" ? ["region"] : (key[1] ?? []);
+    const orgTypes =
+      key[0] === "org.all.everyRegion" ? ["region"] : (key[1] ?? []);
     mocks.inputs.push({ orgTypes });
     return {
       data: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
