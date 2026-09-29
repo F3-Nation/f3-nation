@@ -304,7 +304,12 @@ The order is load-bearing. Each step must land before the next begins.
      `terminating connection`, and the pool-wait/execution timeout, emitted as
      `Query exceeded <n>ms pool-wait/execution timeout`
      (`packages/db/src/utils/query-timeout.ts`) — filtered to
-     `environment = production`, firing above 5 events in 5 minutes.
+     `environment = prod` (the value the exporter actually stamps — previews
+     send `branch`, staging `staging`), firing above 5 events in 5 minutes.
+     Match on the message, not on volume alone: ordinary 4xx responses (rate
+     limits, `Unauthorized`, input validation) are also reported as
+     `$exception` today, and one client's 429 burst on 2026-09-28 produced
+     ~400 in five minutes.
 
      **This needs code first** (the last prerequisite in step 1). Every query
      in `api` and `map` goes through Drizzle, which wraps any driver error in a
