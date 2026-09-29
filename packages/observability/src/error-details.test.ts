@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { redactQueryParams, rootCause } from "./error-details";
+import { redactQueryParams, redactStack, rootCause } from "./error-details";
 
 describe("rootCause", () => {
   it("is undefined for an error without a cause", () => {
@@ -47,30 +47,49 @@ describe("redactQueryParams", () => {
     ).toBe("Failed query: select $1::text\nparams: [redacted]");
   });
 
-  it("redacts multi-line params in a stack but keeps the frames", () => {
-    const stack = [
-      "Error: Failed query: insert into t (a) values ($1)",
-      "params: line one",
-      "line two of a backblast",
-      "    at PostgresJsPreparedQuery.queryWithCache (session.js:41:15)",
-      "    at handler (router.ts:10:3)",
-    ].join("\n");
-    expect(redactQueryParams(stack)).toBe(
-      [
-        "Error: Failed query: insert into t (a) values ($1)",
-        "params: [redacted]",
-        "    at PostgresJsPreparedQuery.queryWithCache (session.js:41:15)",
-        "    at handler (router.ts:10:3)",
-      ].join("\n"),
-    );
-  });
-
-  it("leaves text without the Drizzle shape unchanged", () => {
+  it("leaves messages without the Drizzle shape unchanged", () => {
     expect(redactQueryParams("params: not a query")).toBe(
       "params: not a query",
     );
-    expect(redactQueryParams("connect ECONNREFUSED 127.0.0.1:1")).toBe(
-      "connect ECONNREFUSED 127.0.0.1:1",
+    expect(redactQueryParams("Failed query: select 1")).toBe(
+      "Failed query: select 1",
     );
+  });
+});
+
+describe("redactStack", () => {
+  const message = "Failed query: insert into t (a) values ($1)\nparams: x";
+
+  it("swaps the exact message in the stack header, keeping the frames", () => {
+    const stack = `Error: ${message}\n    at handler (router.ts:10:3)`;
+    expect(redactStack(stack, message)).toBe(
+      "Error: Failed query: insert into t (a) values ($1)\nparams: [redacted]\n    at handler (router.ts:10:3)",
+    );
+  });
+
+  it("redacts a bound value that itself looks like a stack frame", () => {
+    // Regression: a params value containing "\n    at …" must not be
+    // mistaken for the first frame and kept.
+    const tricky =
+      "Failed query: select $1::text\nparams: hi\n    at secret@example.com";
+    const stack = `Error: ${tricky}\n    at handler (router.ts:10:3)`;
+    const redacted = redactStack(stack, tricky);
+    expect(redacted).not.toContain("secret@example.com");
+    expect(redacted).toContain("params: [redacted]\n    at handler");
+  });
+
+  it("drops the stack when the raw message can't be found in it", () => {
+    expect(
+      redactStack("Error: something else\n    at x (y.ts:1:1)", message),
+    ).toBeUndefined();
+  });
+
+  it("returns a stack unchanged when the message has no params", () => {
+    const stack = "Error: boom\n    at x (y.ts:1:1)";
+    expect(redactStack(stack, "boom")).toBe(stack);
+  });
+
+  it("is undefined for a missing stack", () => {
+    expect(redactStack(undefined, message)).toBeUndefined();
   });
 });

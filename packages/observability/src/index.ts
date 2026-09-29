@@ -27,6 +27,7 @@ import {
   ATTR_EXCEPTION_CAUSE_STACKTRACE,
   ATTR_EXCEPTION_CAUSE_TYPE,
   redactQueryParams,
+  redactStack,
   rootCause,
 } from "./error-details";
 import { ImmediateLogRecordProcessor } from "./immediate-processor";
@@ -109,6 +110,7 @@ export async function captureException(
     if (!provider) return;
     const error = err instanceof Error ? err : new Error(safeStringify(err));
     const message = redactQueryParams(error.message);
+    const stack = redactStack(error.stack, error.message);
     // The innermost `.cause` — for a Drizzle-wrapped query failure, the only
     // place the real reason lives (see error-details.ts).
     const cause = rootCause(error);
@@ -122,22 +124,8 @@ export async function captureException(
         ...withoutCauseAttributes(toLogAttributes(attributes)),
         [ATTR_EXCEPTION_TYPE]: error.name,
         [ATTR_EXCEPTION_MESSAGE]: message,
-        ...(error.stack
-          ? { [ATTR_EXCEPTION_STACKTRACE]: redactQueryParams(error.stack) }
-          : {}),
-        ...(cause
-          ? {
-              [ATTR_EXCEPTION_CAUSE_TYPE]: cause.name,
-              [ATTR_EXCEPTION_CAUSE_MESSAGE]: redactQueryParams(cause.message),
-              ...(cause.stack
-                ? {
-                    [ATTR_EXCEPTION_CAUSE_STACKTRACE]: redactQueryParams(
-                      cause.stack,
-                    ),
-                  }
-                : {}),
-            }
-          : {}),
+        ...(stack ? { [ATTR_EXCEPTION_STACKTRACE]: stack } : {}),
+        ...(cause ? causeAttributes(cause) : {}),
       },
     });
     await provider.forceFlush();
@@ -220,6 +208,16 @@ function toLogAttributes(
     }
   }
   return out;
+}
+
+/** The root cause as exception.cause.* attributes, params redacted. */
+function causeAttributes(cause: Error): Record<string, string> {
+  const stack = redactStack(cause.stack, cause.message);
+  return {
+    [ATTR_EXCEPTION_CAUSE_TYPE]: cause.name,
+    [ATTR_EXCEPTION_CAUSE_MESSAGE]: redactQueryParams(cause.message),
+    ...(stack ? { [ATTR_EXCEPTION_CAUSE_STACKTRACE]: stack } : {}),
+  };
 }
 
 /**

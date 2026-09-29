@@ -18,6 +18,10 @@ import { logError, logWarn } from "~/lib/logging";
  * the error tracker. One client's 429 burst on 2026-09-28 put ~400 of them
  * into PostHog in five minutes, burying real errors. 5xx ORPCErrors and
  * anything that isn't an ORPCError still go through logError.
+ *
+ * Only status and code are logged, never the message: client-facing
+ * messages can echo user input (the duplicate-email BAD_REQUEST includes
+ * the submitted address).
  */
 export function reportHandlerError(
   event: string,
@@ -25,12 +29,7 @@ export function reportHandlerError(
   error: unknown,
 ): void {
   if (error instanceof ORPCError && error.status < 500) {
-    logWarn(event, {
-      ...ctx,
-      status: error.status,
-      code: error.code,
-      message: error.message,
-    });
+    logWarn(event, { ...ctx, status: error.status, code: error.code });
     return;
   }
   logError(event, ctx, error);

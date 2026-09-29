@@ -268,6 +268,37 @@ describe("captureException root cause", () => {
     expect(properties).not.toHaveProperty("exception.cause.message");
   });
 
+  it("drops a stack it cannot safely redact instead of sending the params", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const error = new Error("Failed query: select $1\nparams: secret@x.com");
+    // A stack whose header doesn't embed the message verbatim.
+    error.stack = "Error: rewritten\n    at x (y.ts:1:1)\nparams: secret@x.com";
+    await captureException(error);
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.message).toBe(
+      "Failed query: select $1\nparams: [redacted]",
+    );
+    expect(JSON.stringify([reported.stack, properties])).not.toContain(
+      "secret@x.com",
+    );
+  });
+
+  it("reports a root cause that has no stack", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const cause = new Error("connect ECONNREFUSED 127.0.0.1:5432");
+    cause.stack = undefined;
+    await captureException(new Error("outer", { cause }));
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toBe(
+      "connect ECONNREFUSED 127.0.0.1:5432",
+    );
+    expect(reported.cause).toBeInstanceOf(Error);
+  });
+
   it("omits root_cause_* for an error without a cause", async () => {
     const { registerObservability, captureException } = await freshModule();
     registerObservability(config);

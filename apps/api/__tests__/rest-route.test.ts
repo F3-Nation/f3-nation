@@ -278,8 +278,9 @@ describe("handleRequest", () => {
           method: "POST",
           status,
           code,
-          message,
         });
+        // Never the message — client-facing messages can echo user input.
+        expect(JSON.stringify(logWarn.mock.lastCall)).not.toContain(message);
       }
       expect(logError).not.toHaveBeenCalled();
     });

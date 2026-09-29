@@ -49,25 +49,40 @@ export function rootCause(error: Error): Error | undefined {
 }
 
 const PARAMS_MARKER = "\nparams: ";
+const REDACTED_PARAMS = `${PARAMS_MARKER}[redacted]`;
 
 /**
  * Redact the bound values from a Drizzle `Failed query: …\nparams: …`
- * message or stack. The SQL text is parameterized and safe to keep; the
- * params are raw user data (names, emails, free text) and must not leave the
- * process. In a stack, only the params segment before the first frame is
- * replaced. Text without that shape is returned unchanged.
+ * message. The SQL text is parameterized and safe to keep; the params are
+ * raw user data (names, emails, free text) and must not leave the process.
+ * Everything after the marker is dropped: params can contain anything,
+ * including newlines, so there is no safe way to find where they end.
+ * Text without that shape is returned unchanged.
  */
-export function redactQueryParams(text: string): string {
-  if (!text.includes("Failed query: ")) return text;
-  const start = text.indexOf(PARAMS_MARKER);
-  if (start < 0) return text;
-  const afterParams = text.slice(start + PARAMS_MARKER.length);
-  const firstFrame = afterParams.search(/\n\s+at /);
-  return (
-    text.slice(0, start) +
-    `${PARAMS_MARKER}[redacted]` +
-    (firstFrame < 0 ? "" : afterParams.slice(firstFrame))
-  );
+export function redactQueryParams(message: string): string {
+  if (!message.startsWith("Failed query: ")) return message;
+  const start = message.indexOf(PARAMS_MARKER);
+  return start < 0 ? message : message.slice(0, start) + REDACTED_PARAMS;
+}
+
+/**
+ * The stack with `message`'s params redacted, or `undefined` when that
+ * can't be done safely. A stack's header embeds the message verbatim, so
+ * the raw message is located exactly and swapped for the redacted one —
+ * never by guessing where the params end (a bound value can itself contain
+ * a line that looks like `    at …`). If the raw message isn't found in the
+ * stack, the stack is dropped rather than risk sending the params.
+ */
+export function redactStack(
+  stack: string | undefined,
+  message: string,
+): string | undefined {
+  if (!stack) return undefined;
+  const redacted = redactQueryParams(message);
+  if (redacted === message) return stack;
+  const at = stack.indexOf(message);
+  if (at < 0) return undefined;
+  return stack.slice(0, at) + redacted + stack.slice(at + message.length);
 }
 
 function safeString(value: unknown): string {
