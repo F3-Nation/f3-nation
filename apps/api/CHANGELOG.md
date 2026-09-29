@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.9.0](https://github.com/F3-Nation/f3-nation/compare/api@6.8.0...api@6.9.0) (2026-09-27)
+
+
+### Features
+
+* **api,map,ci,repo:** serve the API image from the Hono bundle ([#1082](https://github.com/F3-Nation/f3-nation/issues/1082)) ([a485dec](https://github.com/F3-Nation/f3-nation/commit/a485dec238bf7e1dd5edfd28b887a25857351304))
+
 ## [6.8.0](https://github.com/F3-Nation/f3-nation/compare/api@6.7.0...api@6.8.0) (2026-09-23)
 
 

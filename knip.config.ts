@@ -12,7 +12,6 @@ const config: KnipConfig = {
     ".claude/scripts/sync-agent-skills.mjs",
     ".github/scripts/code-scanning-issue.cjs",
     ".github/scripts/ready-for-human-review-label.cjs",
-    "turbo/generators/config.ts",
     // AI-SDLC factory tooling (fork-only). Its entry points are CI workflows
     // (e2e-triage / adversarial-review) invoking `tsx src/review-pr.ts` /
     // `triage-e2e-failure.ts`, so knip can't trace usage across the workflow
@@ -20,7 +19,6 @@ const config: KnipConfig = {
     // vitest suite; follow-up to configure knip entries properly.
     "tooling/ci-factory/**",
   ],
-  ignoreDependencies: ["@turbo/gen", "dotenv"],
   ignoreBinaries: ["uv"],
   workspaces: {
     ".": {
@@ -40,8 +38,14 @@ const config: KnipConfig = {
       // Wired in by resolve.alias rather than an import, so it is not
       // reachable through the module graph. (src/server.ts needs no entry
       // here — knip's package.json plugin already discovers it via the
-      // dev:hono/start:hono scripts.)
-      entry: ["characterization/next-headers-shim.ts"],
+      // dev:hono/start:hono scripts.) scripts/smoke.mjs is run only by the
+      // Dockerfile's smoke stage, which knip does not parse.
+      entry: ["characterization/next-headers-shim.ts", "scripts/smoke.mjs"],
+    },
+    "apps/auth": {
+      // knip parses `dotenv run -q --` as a binary named `run`; `dotenv` is
+      // the CLI shipped by the `dotenv` package itself.
+      ignoreBinaries: ["run"],
     },
     "apps/admin": {
       // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's

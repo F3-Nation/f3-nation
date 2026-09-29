@@ -212,13 +212,40 @@ describe("admin auth server helpers", () => {
       get: vi.fn().mockReturnValue({ value: "valid-token" }),
     });
     verifyAccessTokenMock.mockResolvedValue(validPayload);
-    getMyProfileMock.mockRejectedValue(new Error("API down"));
+    // Passed through as `err` rather than flattened to a string: the logger
+    // registers pino's stdSerializers.err, which keeps the type and stack.
+    const apiDown = new Error("API down");
+    getMyProfileMock.mockRejectedValue(apiDown);
 
     const { getSessionUser } = await import("~/lib/auth/server");
     const user = await getSessionUser();
 
     expect(user).not.toBeNull();
     expect(user?.roles).toEqual([]);
+    expect(logWarnMock).toHaveBeenCalledWith(
+      "admin.auth.roles_hydrate_failed",
+      { err: apiDown },
+    );
+  });
+
+  it("still returns the session when hydrating roles rejects with a non-Error", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "valid-token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue(validPayload);
+    // A fetch layer can reject with a plain value. Nothing here reads `.message`
+    // off it, so this must log and fall through rather than throw.
+    getMyProfileMock.mockRejectedValue("gateway timeout");
+
+    const { getSessionUser } = await import("~/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user).not.toBeNull();
+    expect(user?.roles).toEqual([]);
+    expect(logWarnMock).toHaveBeenCalledWith(
+      "admin.auth.roles_hydrate_failed",
+      { err: "gateway timeout" },
+    );
   });
 
   // -------------------------------------------------------------------------

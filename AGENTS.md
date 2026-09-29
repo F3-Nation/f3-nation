@@ -9,6 +9,10 @@ guidance, put it in `AGENTS.md` (or `docs/` for deep topics and link it) and
 keep those pointer files thin. Per-app specifics belong in that app's
 `AGENTS.md`.
 
+Claude Code (v2.1.281+) reads `AGENTS.md` files directly, so there is no
+`CLAUDE.md`. Don't add one: a `CLAUDE.md` or `CLAUDE.local.md` in the
+working directory or above it makes Claude Code skip `AGENTS.md` entirely.
+
 Deeper guidance lives in [`docs/`](docs/) — scan the directory and read a doc's
 intro to judge relevance. Two are not optional: read
 [`docs/AI_GUARDRAILS.md`](docs/AI_GUARDRAILS.md) and
@@ -21,7 +25,18 @@ security-, auth-, or reliability-sensitive work. Read the relevant
 
 Reusable agent skills (procedural runbooks in the
 [Agent Skills](https://agentskills.io) `SKILL.md` format) live in
-[`.agents/skills/`](.agents/skills/).
+[`.agents/skills/`](.agents/skills/). Add or edit skills there only. Claude
+Code doesn't read `.agents/`, so a `SessionStart` hook in
+`.claude/settings.json` runs `.claude/scripts/sync-agent-skills.mjs` to copy
+them into `.claude/skills/`, which is generated and gitignored — never commit
+anything under it.
+
+When asked for a **release plan** or a **Staging test plan** for a
+release-please PR, follow
+[`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
+or
+[`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
+— even if your tool does not load skills automatically.
 
 ## Project Structure & Module Organization
 
@@ -96,7 +111,7 @@ Reusable agent skills (procedural runbooks in the
 
 Apps that require sign-in (e.g. `apps/map`, `apps/me`) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved** — outbound mail is caught by Mailpit (`http://localhost:8025`, started by `pnpm docker:up`), and agents drive the full sign-in flow headlessly by reading the 6-digit code from its REST API.
 
-The full recipe lives in [`apps/auth/AGENTS.md`](apps/auth/AGENTS.md). Assistants that scan nested `AGENTS.md` files pick it up on their own; Claude Code reaches it through the `@AGENTS.md` import in [`apps/auth/CLAUDE.md`](apps/auth/CLAUDE.md).
+The full recipe lives in [`apps/auth/AGENTS.md`](apps/auth/AGENTS.md). Assistants that scan nested `AGENTS.md` files, Claude Code included, pick it up when they work under `apps/auth`.
 
 ## Commit Message Convention
 
@@ -150,3 +165,14 @@ changed, not by its scope** — is documented in
 
 - Store all secrets in per-directory `.env` files (one per app and `packages/env`). Always use `with-env` helpers to load environment variables and never commit `.env` files to the repo.
 - Scope PostHog/analytics keys per environment and rotate if leaked. Run production DB changes only through scripts in `packages/db`.
+
+<!-- BEGIN:turborepo-agent-rules -->
+
+# This is NOT the Turborepo you know
+
+Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+
+Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+
+This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
+<!-- END:turborepo-agent-rules -->
