@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.6.0...admin@2.6.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **admin:** stop logging user PII to the browser console ([#1047](https://github.com/F3-Nation/f3-nation/issues/1047)) ([d2f90f2](https://github.com/F3-Nation/f3-nation/commit/d2f90f280803dd3ac8e11cbfb431bd8fb4ab6366))
+
 ## [2.6.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.3...admin@2.6.0) (2026-09-23)
 
 

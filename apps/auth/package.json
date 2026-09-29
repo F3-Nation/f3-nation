@@ -1,6 +1,6 @@
 {
   "name": "f3-auth",
-  "version": "2.3.4",
+  "version": "2.3.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "add-client": "tsx scripts/add-client.ts",
     "migrate-oauth-clients-to-better-auth": "tsx scripts/migrate-oauth-clients-to-better-auth.ts",
-    "with-env": "dotenv -e .env --"
+    "with-env": "dotenv run -q --"
   },
   "dependencies": {
     "@acme/db": "workspace:*",
@@ -54,7 +54,6 @@
     "@types/react-dom": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "dotenv": "catalog:",
-    "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "postcss": "catalog:",
     "postcss-load-config": "catalog:",
