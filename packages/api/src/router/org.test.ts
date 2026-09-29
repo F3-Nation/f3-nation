@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { and, eq, gte, schema } from "@acme/db";
+import { and, count, eq, gte, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -188,6 +188,56 @@ describe("Org Router", () => {
         expect(matches).toBe(true);
       });
     });
+
+    it("does not duplicate or skip rows across pages when many orgs share a name", async () => {
+      // asc(id) is appended unconditionally after the caller's sort (see the
+      // `.concat(asc(org.id))` in this router) specifically so a non-unique
+      // sort key like `name` still gets a deterministic order. Without it,
+      // Postgres doesn't guarantee tie order is stable across the separate
+      // requests a paging client (e.g. useFetchAllPages) makes.
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const prefix = `TieBreakTest-${uniqueId()}`;
+      const sharedName = `${prefix} Shared Region`;
+      const insertedIds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: sharedName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        insertedIds.push(org.id);
+      }
+
+      const client = createTestClient();
+      const seenIds: number[] = [];
+      for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+        const page = await client.org.all({
+          orgTypes: ["region"],
+          searchTerm: prefix,
+          sorting: [{ id: "name", desc: false }],
+          pageIndex,
+          pageSize: 2,
+        });
+        seenIds.push(...page.orgs.map((o) => o.id));
+      }
+
+      expect(seenIds).toHaveLength(5);
+      expect(new Set(seenIds).size).toBe(5);
+      // Every id inserted must be seen exactly once, and (since all 5 rows
+      // share a name) they must come back in ascending id order -- that's
+      // what would break if the asc(id) tiebreaker were removed.
+      const sortedByIdAsc = insertedIds.slice().sort((a, b) => a - b);
+      expect(seenIds).toEqual(sortedByIdAsc);
+    });
   });
 
   describe("accessible", () => {
@@ -316,6 +366,110 @@ describe("Org Router", () => {
       expect(seenIds).toHaveLength(5);
       expect(new Set(seenIds).size).toBe(5);
       expect(seenIds.sort()).toEqual(orgIds.slice().sort());
+    });
+
+    it("does not duplicate or skip rows for a non-nation-admin editor when many orgs share a name", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const prefix = `AccessibleTieBreakTest-${uniqueId()}`;
+      const sharedName = `${prefix} Shared Region`;
+      const orgIds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: sharedName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        orgIds.push(org.id);
+      }
+
+      const session = await createDbBackedEditorSession(orgIds);
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+      const seenIds: number[] = [];
+      for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+        const page = await client.org.accessible({
+          sorting: [{ id: "name", desc: false }],
+          pageIndex,
+          pageSize: 2,
+        });
+        expect(page.total).toBe(5);
+        seenIds.push(...page.orgs.map((o) => o.id));
+      }
+
+      expect(seenIds).toHaveLength(5);
+      expect(new Set(seenIds).size).toBe(5);
+      // All 5 share a name, so only the asc(id) tiebreaker keeps their
+      // order stable across these separate paged requests.
+      expect(seenIds).toEqual(orgIds.slice().sort((a, b) => a - b));
+    });
+
+    it("does not duplicate or skip rows for a nation admin when many orgs share a name", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const prefix = `AccessibleNationTieBreakTest-${uniqueId()}`;
+      const sharedName = `${prefix} Shared Region`;
+      const insertedIds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: sharedName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        insertedIds.push(org.id);
+      }
+
+      const [regionCountRow] = await db
+        .select({ value: count(schema.orgs.id) })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.orgType, "region"));
+      const regionCount = regionCountRow?.value ?? 0;
+
+      const client = createTestClient();
+      const pageSize = 2;
+      const pageCount = Math.ceil(regionCount / pageSize);
+      const seenIds: number[] = [];
+      let total = 0;
+      for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+        const page = await client.org.accessible({
+          orgTypes: ["region"],
+          sorting: [{ id: "name", desc: false }],
+          pageIndex,
+          pageSize,
+        });
+        total = page.total;
+        for (const org of page.orgs) {
+          expect(org.orgType).toBe("region");
+          expect(org.roles).toEqual([]);
+        }
+        seenIds.push(...page.orgs.map((o) => o.id));
+      }
+
+      expect(total).toBe(regionCount);
+      expect(seenIds).toHaveLength(regionCount);
+      expect(new Set(seenIds).size).toBe(regionCount);
+
+      // Within the equal-name group, ties must come back in a stable
+      // ascending id order across these separate page requests -- Postgres
+      // doesn't guarantee tie order on its own, so this is what the
+      // asc(id) tiebreaker in the nation branch's getSortingColumns call is
+      // actually for.
+      const seenSharedIds = seenIds.filter((id) => insertedIds.includes(id));
+      expect(seenSharedIds).toEqual(insertedIds.slice().sort((a, b) => a - b));
     });
   });
 
