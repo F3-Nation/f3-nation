@@ -77,7 +77,7 @@ async function main() {
   }
 
   const { config } = await import("dotenv");
-  const envPath = targetEnv === "local" ? "../../.env" : `.env.${targetEnv}`;
+  const envPath = targetEnv === "local" ? ".env" : `.env.${targetEnv}`;
   // override: true so --env's file always wins over whatever DATABASE_* the
   // calling shell already has set (e.g. a leftover prod export) — without
   // it, dotenv only fills in variables that aren't already present, so
