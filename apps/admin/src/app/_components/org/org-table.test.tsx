@@ -1,11 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-import {
-  createTable,
-  flexRender,
-  getCoreRowModel,
-} from "@tanstack/react-table";
+import { flexRender, useTable } from "@tanstack/react-table";
 import type {
   ColumnDef,
   OnChangeFn,
@@ -19,6 +15,8 @@ import {
 } from "@acme/shared/app/org-hierarchy";
 import { OrgTable } from "./org-table";
 import type * as MDTableModule from "@acme/ui/md-table";
+import type { MdTableFeatures } from "@acme/ui/table-features";
+import { mdTableFeatures } from "@acme/ui/table-features";
 
 const mocks = vi.hoisted(
   (): {
@@ -392,15 +390,18 @@ it("keeps the Area row action bound to its row after ancestor sorting", async ()
 });
 
 function capturedTable(data: Org[]) {
-  return createTable({
-    data,
-    columns: mocks.props.columns as ColumnDef<Org>[],
-    getCoreRowModel: getCoreRowModel(),
-    state: { sorting: (mocks.props.sorting as SortingState | undefined) ?? [] },
-    onSortingChange: mocks.props.setSorting as OnChangeFn<SortingState>,
-    onStateChange: vi.fn(),
-    renderFallbackValue: null,
-  });
+  return renderHook(() =>
+    useTable({
+      features: mdTableFeatures,
+      data,
+      columns: mocks.props.columns as ColumnDef<MdTableFeatures, Org>[],
+      state: {
+        sorting: (mocks.props.sorting as SortingState | undefined) ?? [],
+      },
+      onSortingChange: mocks.props.setSorting as OnChangeFn<SortingState>,
+      renderFallbackValue: null,
+    }),
+  ).result.current;
 }
 
 it.each(["sectorName", "territoryName"])(

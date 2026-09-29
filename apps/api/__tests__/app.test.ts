@@ -7,7 +7,7 @@ import { healthResponseSchema } from "@f3nation/health";
 import { app } from "../src/app";
 
 // Thin wiring tests: prove app.ts routes to the right module and applies the
-// Next-parity behaviors it owns (trailing-slash 308, docs method-guard,
+// Next-parity behaviors it owns (trailing-slash 308, docs method-guard, no
 // compression). Router/auth/dispatch behavior itself is covered by
 // handler.ts's own unit tests and the characterization suite, not duplicated
 // here.
@@ -28,7 +28,7 @@ const { handleRequest } = vi.hoisted(() => ({
     if (url.pathname === "/") {
       return Response.redirect(`${url.origin}/docs`);
     }
-    // Body over hono/compress's 1024-byte default threshold.
+    // Large enough that a compression middleware would kick in.
     return new Response("x".repeat(2000), {
       headers: { "content-type": "text/plain" },
     });
@@ -188,98 +188,17 @@ describe("app", () => {
     },
   );
 
-  it("compresses a large catch-all response when the client accepts gzip", async () => {
+  it("never compresses, even when the client accepts gzip", async () => {
     const res = await app.fetch(
       new Request("http://api.test/v1/some-large-endpoint", {
-        headers: { "accept-encoding": "gzip" },
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-encoding")).toBe("gzip");
-  });
-
-  it("does not compress a body under the 1024-byte threshold", async () => {
-    handleRequest.mockImplementationOnce(
-      async () => new Response("small body"),
-    );
-
-    const res = await app.fetch(
-      new Request("http://api.test/v1/small-endpoint", {
-        headers: { "accept-encoding": "gzip" },
+        headers: { "accept-encoding": "gzip, br" },
       }),
     );
 
     expect(res.status).toBe(200);
     expect(res.headers.get("content-encoding")).toBeNull();
-  });
-
-  it("does not compress when the client sends no Accept-Encoding header", async () => {
-    const res = await app.fetch(
-      new Request("http://api.test/v1/some-large-endpoint"),
-    );
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-encoding")).toBeNull();
-  });
-
-  it("leaves a response that already sets content-length alone", async () => {
-    const body = "x".repeat(2000);
-    handleRequest.mockImplementationOnce(
-      async () =>
-        new Response(body, {
-          headers: { "content-length": String(body.length) },
-        }),
-    );
-
-    const res = await app.fetch(
-      new Request("http://api.test/v1/precomputed-length", {
-        headers: { "accept-encoding": "gzip" },
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-encoding")).toBe("gzip");
-  });
-
-  it("leaves a response that already sets content-encoding alone", async () => {
-    handleRequest.mockImplementationOnce(
-      async () =>
-        new Response("x".repeat(2000), {
-          headers: { "content-encoding": "identity" },
-        }),
-    );
-
-    const res = await app.fetch(
-      new Request("http://api.test/v1/precompressed", {
-        headers: { "accept-encoding": "gzip" },
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-encoding")).toBe("identity");
-  });
-
-  it("logs and still sends the response if computing content-length fails", async () => {
-    // Only the content-length middleware's own .clone() call should fail;
-    // restoring after one call lets compress()'s later .clone() succeed
-    // normally so this test isolates the one failure mode it targets.
-    const cloneSpy = vi
-      .spyOn(Response.prototype, "clone")
-      .mockImplementationOnce(() => {
-        throw new Error("clone failed");
-      });
-
-    const res = await app.fetch(
-      new Request("http://api.test/v1/broken-length", {
-        headers: { "accept-encoding": "gzip" },
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(res.headers.has("content-length")).toBe(false);
-
-    cloneSpy.mockRestore();
+    expect(res.headers.get("vary")).toBeNull();
+    expect(await res.text()).toBe("x".repeat(2000));
   });
 
   it("returns a generic 500 when a handler throws an ordinary error", async () => {
