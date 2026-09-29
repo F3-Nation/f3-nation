@@ -30,6 +30,26 @@ describe("rootCause", () => {
     expect(rootCause(new Error("outer", { cause: aggregate }))).toBe(aggregate);
   });
 
+  it("survives a throwing cause getter", () => {
+    const error = new Error("outer");
+    Object.defineProperty(error, "cause", {
+      get() {
+        throw new Error("getter boom");
+      },
+    });
+    expect(rootCause(error)).toBeUndefined();
+  });
+
+  it("keeps the deepest cause reached before a throwing getter", () => {
+    const middle = new Error("middle");
+    Object.defineProperty(middle, "cause", {
+      get() {
+        throw new Error("getter boom");
+      },
+    });
+    expect(rootCause(new Error("outer", { cause: middle }))).toBe(middle);
+  });
+
   it("terminates on a cause cycle", () => {
     const a = new Error("a");
     const b = new Error("b", { cause: a });

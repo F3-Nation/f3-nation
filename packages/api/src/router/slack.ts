@@ -302,8 +302,11 @@ const mapSlackError = (slackError: string) => {
     });
   }
 
+  // Upstream throttling is a server-side dependency failure, not the
+  // caller exceeding a limit: 503, so it stays out of the client-error
+  // (4xx) bucket and still reaches error tracking.
   if (slackError === "ratelimited") {
-    return new ORPCError("TOO_MANY_REQUESTS", {
+    return new ORPCError("SERVICE_UNAVAILABLE", {
       message: `Slack rate limit exceeded (${slackError})`,
     });
   }
@@ -360,7 +363,7 @@ const callSlackWebApi = async ({
     data = (await response.json()) as SlackWebApiResponse;
   } catch {
     if (response.status === 429) {
-      throw new ORPCError("TOO_MANY_REQUESTS", {
+      throw new ORPCError("SERVICE_UNAVAILABLE", {
         message: "Slack rate limit exceeded",
       });
     }
@@ -382,7 +385,7 @@ const callSlackWebApi = async ({
   }
 
   if (response.status === 429) {
-    throw new ORPCError("TOO_MANY_REQUESTS", {
+    throw new ORPCError("SERVICE_UNAVAILABLE", {
       message: "Slack rate limit exceeded",
     });
   }

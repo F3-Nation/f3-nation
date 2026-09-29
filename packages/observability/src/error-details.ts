@@ -30,20 +30,25 @@ const MAX_CAUSE_DEPTH = 10;
 export function rootCause(error: Error): Error | undefined {
   const seen = new Set<unknown>([error]);
   let root: Error | undefined;
-  let next: unknown = error.cause;
-  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth++) {
-    if (next == null || seen.has(next)) break;
-    seen.add(next);
-    if (!(next instanceof Error)) {
-      root = new Error(safeString(next));
-      break;
+  try {
+    let next: unknown = error.cause;
+    for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth++) {
+      if (next == null || seen.has(next)) break;
+      seen.add(next);
+      if (!(next instanceof Error)) {
+        root = new Error(safeString(next));
+        break;
+      }
+      root = next;
+      next =
+        next.cause ??
+        (next instanceof AggregateError && !next.message
+          ? (next.errors as unknown[])[0]
+          : undefined);
     }
-    root = next;
-    next =
-      next.cause ??
-      (next instanceof AggregateError && !next.message
-        ? (next.errors as unknown[])[0]
-        : undefined);
+  } catch {
+    // A throwing `cause` getter (or `errors`) must not cost us the report:
+    // keep the deepest cause reached so far, or none.
   }
   return root;
 }

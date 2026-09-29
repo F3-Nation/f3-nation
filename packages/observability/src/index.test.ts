@@ -299,6 +299,22 @@ describe("captureException root cause", () => {
     expect(reported.cause).toBeInstanceOf(Error);
   });
 
+  it("still reports an error whose cause getter throws", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const error = new Error("outer");
+    Object.defineProperty(error, "cause", {
+      get() {
+        throw new Error("getter boom");
+      },
+    });
+    await captureException(error);
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.message).toBe("outer");
+    expect(properties).not.toHaveProperty("root_cause_message");
+  });
+
   it("omits root_cause_* for an error without a cause", async () => {
     const { registerObservability, captureException } = await freshModule();
     registerObservability(config);
