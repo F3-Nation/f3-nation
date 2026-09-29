@@ -94,6 +94,13 @@ previews run with `NEXT_PUBLIC_CHANNEL=branch`, so it is enabled. It signs in
 any email as a nation-admin mock user. The cookie is host-only on the map
 host, which is all the map needs (see point 2 above).
 
+**In a browser:** open the map preview → Settings → **Sign in (Dev Mode)**.
+Don't use the regular **Sign in** form — it sends a real magic-link email,
+and previews have no working mail server (see Known constraints), so it says
+"email sent" and nothing arrives.
+
+**Scripted (E2E):**
+
 ```bash
 MAP=https://pr-7-map-<project>.us-central1.run.app
 JAR=/tmp/jar
