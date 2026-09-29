@@ -3,15 +3,13 @@
 - **Status:** Accepted
 - **Date:** 2026-08-11 (investigation) · accepted 2026-09-22
 - **Deciders:** @dnishiyama, with the removal direction agreed by @taterhead247
-  on [#176](https://github.com/F3-Nation/f3-nation/issues/176) 2026-08-25
-- **Related:** [#176](https://github.com/F3-Nation/f3-nation/issues/176)
-  (document PgBouncer), [How it used to be](#how-it-used-to-be) (the PgBouncer
-  setup as found, recorded at the end of this ADR), [#901](https://github.com/F3-Nation/f3-nation/pull/901) and
-  [#911](https://github.com/F3-Nation/f3-nation/pull/911) (the pool bounds this
-  ADR depends on, both merged 2026-09-11)
-- **Depends on:** [#767](https://github.com/F3-Nation/f3-nation/pull/767)
-  (OpenTelemetry + PostHog error transport) — **merged 2026-09-22**, which is
-  what the monitoring in §7 step 2 is built on
+  on 2026-08-25, in the request to document PgBouncer
+- **Related:** [How it used to be](#how-it-used-to-be) (the PgBouncer setup as
+  found, recorded at the end of this ADR); the pool-bounding change and the
+  client-side query-timeout change (both merged 2026-09-11), which this ADR
+  depends on
+- **Depends on:** the move of error reporting to OpenTelemetry and PostHog
+  (merged 2026-09-22), which the monitoring in §7 step 2 is built on
 
 ## Summary
 
@@ -25,7 +23,7 @@ The reasoning, each expanded below:
 
 1. **[The load does not justify a pooler.](#1-the-load-does-not-justify-a-pooler)**
    Production peaked at 88 database connections over 30 days against a ceiling
-   of 400. The median hour uses one.
+   of 400, with a p95 of 24.
 2. **[The original justification no longer applies.](#2-the-original-justification-no-longer-applies)**
    PgBouncer was introduced to absorb serverless connection churn. Every app is
    a long-lived Cloud Run container now, holding one memoized client per
@@ -33,22 +31,25 @@ The reasoning, each expanded below:
 3. **[The direct path is already running in production.](#3-the-direct-path-is-already-running-in-production)**
    `app_auth` and the Slack bot connect straight to Cloud SQL today. This is not
    a migration into the unknown.
-4. **[The only thing PgBouncer provided was a connection ceiling.](#4-what-pgbouncer-provided-before-901)**
+4. **[The only thing PgBouncer provided was a connection ceiling.](#4-what-pgbouncer-provided-before-the-pool-bound)**
    That ceiling existed because the application set no pool limit of its own. It
-   belongs in the driver, not on a VM — which is where #901 has since put it.
+   belongs in the driver, not on a VM — which is where the pool-bounding change
+   has since put it.
 5. **[Keeping it costs more than removing it.](#5-what-keeping-it-would-cost)**
    The pooler is the least-managed component in the stack: an unmanaged zonal
    single point of failure with no logs, no admin access, no IaC, and a port
    open to the internet.
 6. **[Retiring it closes six open problems at once.](#6-what-retiring-it-buys)**
-   It also lets us re-enable TLS and prepared statements.
+   It also lets us re-enable TLS and removes the transaction-pooling
+   session-state restrictions.
 7. **[The migration has a strict order and a one-command rollback.](#7-migration-sequence)**
-   Bound the pools, stand up the monitors and baseline them against the current
-   architecture, migrate one service at a time, run both paths for a week, then
-   delete.
+   Land the code prerequisites, stand up the monitors and baseline them against
+   the current architecture, migrate one service at a time, run both paths for a
+   week, then delete.
 8. **[One open question should be settled first.](#8-open-question)** The
-   88-connection peak exceeds PgBouncer's own cap, so some of it is already
-   direct traffic — but the split is unproven.
+   88-connection peak exceeds PgBouncer's cap on the single `f3_prod` database,
+   so at least 48 of those connections were direct traffic; which direct client
+   held them is unproven.
 
 ---
 
@@ -64,8 +65,15 @@ Measured 2026-08-11 from Cloud Monitoring —
 | `f3data-nonprod` (staging) | 20                            | 3   | 1      | —                 |
 
 All 88 of the production peak were on the `f3_prod` database. The worst hour in
-a month left 78% of the connection ceiling unused; the typical hour uses a
-single connection.
+a month left 78% of the connection ceiling unused.
+
+The median column needs re-measuring before it is relied on. A whole-instance
+hourly maximum of 1 is implausible — PgBouncer holds `min_pool_size = 5` server
+connections open, the Slack bot keeps a warm instance with a pool, and
+Datastream holds a CDC connection — so the August figure most likely came from
+a per-database series. The §8 samples re-run it and record the aggregation used
+(`f3_prod` only vs. summed across databases); the peak and p95 are the figures
+the argument rests on.
 
 Transaction pooling solves a specific problem: many short-lived clients
 contending for a small number of expensive backends. At this volume there is no
@@ -139,11 +147,11 @@ live production database credential that nothing consumes. Delete it.
 This also corrects a common mental model: "everything goes through the pooler"
 has not been true for some time.
 
-## 4. What PgBouncer provided before #901
+## 4. What PgBouncer provided before the pool bound
 
 One thing: a hard ceiling on connections to Postgres. This section describes the
-state at investigation time (2026-08-11); #901 has since moved that ceiling into
-the driver, which is what makes step 1 of §7 already complete.
+state at investigation time (2026-08-11); the pool-bounding change (September 2026) has since moved that ceiling into the driver, which completes most of
+step 1 of §7.
 
 ```ini
 max_db_connections = 40     # server connections to f3_prod, across all pools
@@ -154,7 +162,7 @@ pool_mode = transaction
 That ceiling mattered because the application had none of its own:
 
 ```ts
-// packages/db/src/utils/functions.ts:28
+// packages/db/src/utils/functions.ts, as of 2026-08-11 (since changed)
 const client = postgres(databaseUrl, sslOptions); // no `max` → driver default of 10
 ```
 
@@ -163,8 +171,10 @@ theoretical 1000 connections from a single service against a 400-connection
 database. `max_db_connections = 40` was the only reason that was safe.
 
 So the pooler was compensating for a missing configuration value. The fix was to
-set the value, which #901 did. `docs/AI_DEVELOPMENT_GUIDE.md` already instructs contributors to
-size pools this way; the repository does not currently follow its own guidance.
+set the value, which the pool-bounding change did. The sizing rule lives in
+`docs/AI_DEVELOPMENT_GUIDE.md` ("Data layer"), which still sizes against
+PgBouncer's `max_client_conn` and counts `admin`/`me` as database clients; it is
+rewritten in step 5.
 
 ## 5. What keeping it would cost
 
@@ -193,10 +203,11 @@ of work. Spent on a component that, per §1, is relieving no measurable pressure
   tunnel that is authorized by IAM (`roles/cloudsql.client`).
 - Lets `getDbUrl()` stop forcing `useSsl = false` — the comment there reads
   `// Remove SSL to enable PGBouncer to work`.
-- Lets the driver use prepared statements again. Transaction pooling is what
-  forces `prepare: false`; without it, that constraint and the related
-  session-state restrictions (`SET`, `LISTEN`/`NOTIFY`, advisory locks, session
-  temp tables) go away.
+- Removes the transaction-pooling restrictions on session state (`SET`,
+  `LISTEN`/`NOTIFY`, advisory locks, session temp tables). Restoring `prepare`
+  to its default only affects direct tagged-template usage (the seed/reset
+  scripts); Drizzle issues every query via `client.unsafe()`, which postgres.js
+  never prepares, so this is not an app-query performance change.
 - Aligns production with staging, local, and preview environments, which already
   connect directly — so pooling-specific breakage can no longer hide until
   production.
@@ -205,21 +216,63 @@ of work. Spent on a component that, per §1, is relieving no measurable pressure
 
 The order is load-bearing. Each step must land before the next begins.
 
-1. **Bound the application pool.** ✅ **Done** — [#901](https://github.com/F3-Nation/f3-nation/pull/901)
-   set `max: 5`, `idle_timeout: 20`, `connect_timeout: 10` on the `postgres.js`
-   client and gave each service a deliberate `--max-instances` instead of
-   inheriting 100. [#911](https://github.com/F3-Nation/f3-nation/pull/911) added
-   the client-side queue timeout, which is pooler-agnostic and carries over
-   unchanged. Retune `--max-instances` to 15 at cutover: 2 services × 15 ×
-   `max` 5 = 150, comfortably under the 400 ceiling alongside the direct
-   connectors from §3.
+1. **Land the code prerequisites.** **Mostly not done** — only the first item
+   has landed. Each is a normal PR, merged and deployed before step 3; none
+   changes how production connects today.
+
+   - ✅ **Bound the application pool.** The pool-bounding change set `max: 5`,
+     `idle_timeout: 20`, `connect_timeout: 10` on the `postgres.js` client and
+     gave each service a deliberate `--max-instances` instead of inheriting 100. The client-side query-timeout change added the pool-wait timeout,
+     which is pooler-agnostic and carries over unchanged.
+   - **Set `--max-instances=15` for `api` and `map` in their deploy workflow
+     files** (`.github/workflows/deploy-api.yml`, `deploy-map.yml`; both 25
+     today). `_deploy-cloudrun.yml` applies those flags on every release deploy,
+     so a value applied by hand at cutover is silently reverted by the next
+     release.
+   - **Bound the Slack bot's pool.** It connects directly, allows 100
+     production instances (`deploy-slackbot.yml`), and its engine
+     (`packages/db-python/f3_data_models/utils.py`) uses SQLAlchemy's default
+     pool of 5 + 10 overflow, a theoretical 1,500 connections. Set
+     `pool_size`/`max_overflow`, `--max-instances`, or both, so it fits the
+     budget below. Owned by the Slack bot maintainer.
+   - **Let the shared client reach a Cloud SQL socket.** `auth` does not use
+     `DATABASE_URL` or `@acme/db`; it builds its own client from discrete
+     `DATABASE_HOST`/`DATABASE_USER`/… variables with
+     `DATABASE_HOST=/cloudsql/<instance>` (`apps/auth/src/lib/db.ts`).
+     `@acme/db` accepts only a URL, and no URL spelling reaches a socket in
+     postgres@3.4.9: `postgres://u:p@/f3_prod?host=/cloudsql/…` throws
+     `Invalid URL`, and `postgres://u:p@localhost/f3_prod?host=/cloudsql/…`
+     silently connects to `localhost`. Only the options form
+     (`{ host: "/cloudsql/<instance>", … }`) resolves the socket path.
+     `packages/db/src/utils/functions.ts` needs a socket-capable input before
+     the cutover can be a value change — ideally by honouring a socket
+     `host=/cloudsql/…` parameter in `DATABASE_URL` itself (passing it through
+     as the options-form `host`), so cutover and rollback stay a swap of one
+     secret rather than a set of variables.
+   - **Attach the instance and grant access.** Neither the `api` nor the `map`
+     service has `--add-cloudsql-instances` in its deploy workflow (the Slack
+     bot's does), and their runtime service accounts need
+     `roles/cloudsql.client`, as `apps/auth/README.md` documents for `auth`.
+   - **Report the root cause of database errors to PostHog.** See the
+     connection-failure alert in step 2 — without this, that alert cannot fire.
+
+   **Connection budget.** Every direct client counts once PgBouncer is gone:
+   `api` 15 × 5 + `map` 15 × 5 = 150, plus `auth` 1 × 10 (no `max`, so the
+   postgres.js default; `--max-instances=1`) = 160, plus Datastream and Cloud
+   SQL's own agent (a handful). Bound the Slack bot so the configured total
+   stays under step 2's 240-backend alert — roughly 70 connections for the
+   Slack bot, e.g. 10 instances × (`pool_size` 5 + `max_overflow` 2). Keeping
+   the configured maximum below the alert threshold is what gives the alert
+   meaning: it can only fire if a deploy breaks this arithmetic. The §8 samples
+   record what the direct clients actually use.
+
 2. **Put the monitors in place, and let them run against the _current_
    architecture first.** Removing the pooler removes the last automatic ceiling
    on connections; something has to hold that job afterward, and it has to be
    proven before the change, not after.
 
-   #767 merged on 2026-09-22 and removed `@sentry/nextjs` from both `api` and
-   `map`. Application errors now travel the OpenTelemetry logs pipeline and land
+   The move to OpenTelemetry and PostHog merged on 2026-09-22 and removed
+   `@sentry/nextjs` from both `api` and `map`. Application errors now travel the OpenTelemetry logs pipeline and land
    in **PostHog error tracking** as `$exception` events
    (`packages/observability/src/posthog-exporter.ts`), stamped with
    `environment` and `service.name`. The original decision said "Sentry
@@ -230,9 +283,13 @@ The order is load-bearing. Each step must land before the next begins.
      `cloudsql.googleapis.com/database/postgresql/num_backends` for
      `f3data`, firing at **240 backends** (60% of `max_connections = 400`, a
      threshold that would have stayed silent across the entire measured 30-day
-     window while still catching a leak). This is the direct replacement for
-     `max_db_connections = 40` and needs no code: Cloud SQL exports the metric
-     natively.
+     window). This does not enforce a ceiling the way `max_db_connections = 40`
+     did — that ceiling now lives in `max` × `--max-instances` (step 1). The
+     alert is the backstop for a breach of that arithmetic: a deploy that
+     raises either value, or a direct client from §3 growing. It watches the
+     whole instance, not just `api`/`map`, and needs no code: Cloud SQL exports
+     the metric natively. Pool exhaustion _inside_ the budget surfaces as
+     pool-wait timeouts and is caught by the PostHog alert below.
 
      An earlier draft built this as a Cloud Run Job checking in to a Sentry cron
      monitor. With Sentry gone, the job's only remaining value is attribution —
@@ -244,17 +301,38 @@ The order is load-bearing. Each step must land before the next begins.
    - **Connection-failure alert — PostHog.** Alert on `$exception` events whose
      message matches the connection-failure class — `CONNECT_TIMEOUT`,
      `ECONNREFUSED`, `ENOTFOUND`, `sorry, too many clients already`,
-     `terminating connection`, and #911's pool-wait/execution timeout, emitted
-     as `Query exceeded <n>ms pool-wait/execution timeout`
+     `terminating connection`, and the pool-wait/execution timeout, emitted as
+     `Query exceeded <n>ms pool-wait/execution timeout`
      (`packages/db/src/utils/query-timeout.ts`) — filtered to
-     `environment = production`, firing above 5 events in 5 minutes. Config
-     only; both in-scope services already report through the exporter.
+     `environment = production`, firing above 5 events in 5 minutes.
+
+     **This needs code first** (the last prerequisite in step 1). Every query
+     in `api` and `map` goes through Drizzle, which wraps any driver error in a
+     `DrizzleQueryError` whose message is `Failed query: <sql> params: …`; the
+     real reason — including the query-timeout error, since the timeout wraps
+     `client.unsafe()` inside Drizzle's try — survives only as `.cause`.
+     `captureException` in `packages/observability/src/index.ts` emits only
+     `error.name`, `error.message` and `error.stack`, so during a real outage
+     PostHog would receive a flood of "Failed query" exceptions that match none
+     of these patterns. The exporter must report the root cause (walk `.cause`
+     to the innermost error and emit its type and message), with a test that
+     goes through Drizzle rather than calling `client.unsafe()` directly.
+
+   For the step 3 staging drill, create a staging twin of each monitor: the
+   same `num_backends` policy on `f3data-nonprod` (threshold at 60% of its
+   `max_connections`, measured and recorded in the §1 table, which currently
+   shows "—"), and the same PostHog alert filtered to `environment = staging`.
+   The drill proves the twins fire; the production monitors are proven by their
+   own baseline.
 
    Hold here until both monitors have been green for 24 hours against today's
    PgBouncer topology — long enough to cover the 03:45 UTC batch window where
    §8's unexplained peak landed. That baseline is the point: a monitor that has
    never been observed reporting _normal_ cannot be trusted to report
-   _abnormal_.
+   _abnormal_. It is only half the proof, though — a green baseline passes
+   whether or not a monitor could ever fire, and while PgBouncer still caps
+   `api`/`map` at 40 it cannot show that. The other half is the staging drill in
+   step 3, where the twins must be seen firing.
 
    A third tier was considered and dropped: an uptime monitor on a
    database-backed `/health` endpoint. It would detect a silent failure roughly
@@ -265,11 +343,12 @@ The order is load-bearing. Each step must land before the next begins.
    window. (This supersedes the first draft of this plan, which made a `db`
    check in `@f3nation/health` the first piece of monitoring work.)
 
-3. **Migrate `api` and `map` to the Cloud SQL connector**, matching how `auth`
-   already connects. Staging first — which also proves the socket syntax and
-   lets `f3data-nonprod`'s `0.0.0.0/0` authorized network close later — then
-   deliberately induce connection pressure and confirm both monitors alarm and a
-   rollback recovers. Production follows one service per day, `api` first, each
+3. **Migrate `api` and `map` to the Cloud SQL connector** — the same Cloud Run
+   Unix-socket path `auth` and the Slack bot use, reached through the
+   socket-capable client input from step 1. Staging first — which also proves
+   the socket configuration and lets `f3data-nonprod`'s `0.0.0.0/0` authorized
+   network close later — then deliberately induce connection pressure and
+   confirm both staging-twin monitors alarm and a rollback recovers. Production follows one service per day, `api` first, each
    cutover watched actively for an hour and soaked 24 hours before the next.
 
    **Any monitor alarming rolls that service back**, stops the sequence, and the
@@ -281,30 +360,42 @@ The order is load-bearing. Each step must land before the next begins.
    someone is watching, so it does not earn a standing alert policy.
 
    Re-enabling SSL in `getDbUrl()` and dropping `prepare: false` are _not_ part
-   of the cutover — they land in step 5, so that a rollback during step 3 is
-   only ever a connection-string change. The prepared-statement switch is a real
-   behavior change, not a flag flip, and deserves its own PR and its own test.
+   of the cutover — they land in step 5, so that once step 1 has landed, a
+   rollback during step 3 is only ever a secret-version change.
 
 4. **Run both paths for a week.** PgBouncer stays up and reachable throughout.
 5. **Delete**, in this order: the VM (stopped for 30 days first), the
    `pgbouncer` firewall rule, and the `34.172.230.30` entry in Cloud SQL's
-   authorized networks. Then the cleanup PR: `prepare: true`, SSL back on,
-   Cloud SQL `sslMode` tightened, and the 400-connection budget arithmetic
-   written somewhere visible in the repository.
+   authorized networks. Then the cleanup PR:
+   - `prepare` back to its default, SSL back on, Cloud SQL `sslMode` tightened.
+   - The step 1 budget arithmetic written into the "Data layer" section of
+     `docs/AI_DEVELOPMENT_GUIDE.md`, replacing its PgBouncer-based arithmetic.
+   - The pooler-specific comments updated: `packages/db/src/utils/functions.ts`,
+     `packages/db/src/utils/query-timeout.ts`, and the "pooler's client
+     ceiling" comments in `deploy-api.yml` / `deploy-map.yml`.
+   - `_deploy-cloudrun.yml`'s staging-deploy comment, which still points
+     operators at `scripts/cloud-run-env.sh`, changed to match the warning under
+     Rollback.
+   - The `DATABASE_URL` secret references on both services moved off the
+     pinned cutover version (see Rollback), so the pin doesn't outlive the
+     migration.
 
 ### Rollback
 
-Through step 4, cutover is a `DATABASE_URL` swap per service — from the Cloud
-SQL connector back to the pooler — with the VM still running and still in the
-authorized-network list. Rollback is a config push, not a rebuild.
+Once step 1 has landed, and through step 4, cutover is a `DATABASE_URL` swap
+per service — from the Cloud SQL connector back to the pooler — with the VM
+still running and still in the authorized-network list. Rollback is a config
+push, not a rebuild. (Before step 1 lands it is not: the service would first
+need the socket-capable client, the attached instance, and the IAM grant.)
 
-Config reaches Cloud Run separately from code: `_deploy-cloudrun.yml` deliberately
-never sets `env_vars` or `secrets` (see the comment at line 197). `DATABASE_URL` is
+Config reaches Cloud Run separately from code: `_deploy-cloudrun.yml` passes no
+`env_vars` or `secrets` to either deploy step, so a release deploy leaves the
+service's secret references — including a pinned version — untouched. `DATABASE_URL` is
 a Secret Manager reference — confirmed on both services — so the swap is a Secret
 Manager operation plus a revision roll, and **not** a git tag or a rebuild.
 
 **Do not use `apps/<app>/scripts/cloud-run-env.sh` for this.** It exists for
-initial service setup and is a liability afterwards, for two independent reasons:
+initial service setup and is a liability afterwards, for three independent reasons:
 
 - It pushes **every** variable from the operator's local `.env.cloud-run.<env>`.
   If that file has drifted from what the service is actually running — and there
@@ -312,8 +403,14 @@ initial service setup and is a liability afterwards, for two independent reasons
   everything else alongside it.
 - After adding a new secret version it **destroys every previous version**
   (`gcloud secrets versions destroy`, keeping only the newest). That deletes the
-  exact value a rollback needs. Both `DATABASE_URL` secrets currently sit at
-  version 1 with nothing behind them, which is this behaviour showing its work.
+  exact value a rollback needs.
+- Every run re-points **every** secret reference on the service to `:latest`,
+  so running it for any other variable during the migration silently unpins
+  `DATABASE_URL` and removes the rollback path below.
+
+As of 2026-09-22 both `DATABASE_URL` secrets were still at version 1 — never
+rotated — so there is no older version to roll back to yet; the first cutover
+value becomes version 2.
 
 Use scoped commands instead, and **pin the service to an explicit secret version
 rather than `:latest`**:
@@ -352,6 +449,12 @@ running and keeps its entry in Cloud SQL's authorized networks, and the `6432`
 firewall rule stays open until decommission. Closing that rule early — it is a
 legitimate finding in its own right — would remove the rollback path.
 
+If the VM itself fails mid-migration, services still on the pooler fail
+exactly as they would today. Once step 1 has landed, the fastest recovery is to
+cut that service forward to the connector rather than repair the VM; the access
+commands under [How it used to be](#how-it-used-to-be) cover the repair path if
+forward is not an option.
+
 ## 8. Open question
 
 **The 88-connection peak is unattributed, and attributing it is a gate on
@@ -359,18 +462,23 @@ step 3.** During step 2's 24-hour baseline, run the `pg_stat_activity`
 breakdown by `client_addr` from §1 by hand — at minimum once across the
 03:45 UTC window where the peak landed and once during weekday daytime traffic —
 and record the split before any traffic moves. There is no scheduled sampler;
-a handful of manual samples in the right windows is enough to answer it.
+a handful of manual samples in the right windows is enough to answer it. If
+the 03:45 UTC samples show nothing unusual, the gate is met by recording the
+per-client split of current (p95-level) load and noting that the peak did not
+recur; a recurrence is then covered by the `num_backends` alert rather than by
+attribution.
 
-88 backends on `f3_prod` exceeds PgBouncer's own `max_db_connections = 40`, so
-the pooler cannot be the source of all of it. Two explanations, not mutually
-exclusive:
+88 backends on `f3_prod` exceeds PgBouncer's own `max_db_connections = 40` for
+that single database, so at least 48 were direct traffic. What remains open is
+which direct client held them:
 
 - The direct connectors from §3 (`app_auth`, `f3slackbot`, `datastream_user`)
   account for the excess — in which case the pooler is already fronting a
   minority of production load, strengthening this ADR.
-- The `[databases] * =` wildcard means `max_db_connections` is enforced per
-  requested database name, so distinct names receive distinct 40-connection
-  budgets.
+- ~~Distinct database names receive distinct budgets~~ — ruled out: the `* =`
+  wildcard does give each requested database name its own
+  `max_db_connections`, but all 88 backends were on `f3_prod` (§1), i.e. one
+  budget of 40.
 
 The peak occurred at 03:45 UTC — 11:45pm Eastern — which suggests a batch job or
 a Datastream backfill rather than user traffic. That would weaken the pooling
@@ -406,10 +514,13 @@ restart itself unattended. "Working today" is not the same as "safe to leave."
 **Accepted risks:**
 
 - The connection ceiling moves from infrastructure into application config. A
-  bad deploy — an unbounded pool, a raised `maxScale` — could exhaust Postgres
-  directly. Mitigated by step 2's alert, which is why it precedes removal.
-- Prepared statements return. This is a performance improvement but a behavior
-  change, and it needs testing rather than assumption.
+  bad deploy — an unbounded pool, a raised `--max-instances`, an unbounded
+  direct client — could exhaust Postgres directly. Step 2's alert is the
+  backstop for exactly that breach of the step 1 budget (it notifies; it does
+  not enforce), which is why it precedes removal.
+- `prepare` returns to its default. Only direct tagged-template usage (the
+  seed/reset scripts) is affected, since Drizzle's queries are never prepared;
+  the step 5 cleanup PR should still exercise those scripts.
 - Adding a future workload means checking it against the 400-connection budget
   by hand. Previously PgBouncer absorbed that mistake. The budget arithmetic
   should live somewhere visible in the repository, not in this ADR alone.
