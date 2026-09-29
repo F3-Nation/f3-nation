@@ -287,6 +287,50 @@ describe("Org Router", () => {
       };
     };
 
+    /**
+     * org.accessible's nation-admin branch checks `roles_x_users_x_org`
+     * directly for (userId, F3 Nation orgId) via a raw DB query -- unlike
+     * createAdminSession's mocked `session.roles` claims (which other
+     * routers read instead), that check isn't satisfied unless a real row
+     * exists, so this inserts one for a fresh DB-backed user.
+     */
+    const createDbBackedNationAdminSession = async (f3NationOrgId: number) => {
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-nation-admin-${uniqueId()}@example.com`,
+          f3Name: `TestNationAdmin ${uniqueId()}`,
+        })
+        .returning();
+      if (!user) throw new Error("Failed to create test user");
+      createdUserIds.push(user.id);
+
+      const [anyRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .limit(1);
+      if (!anyRole) throw new Error("No roles found in DB");
+
+      await db.insert(schema.rolesXUsersXOrg).values({
+        roleId: anyRole.id,
+        userId: user.id,
+        orgId: f3NationOrgId,
+      });
+
+      return {
+        id: user.id,
+        email: user.email,
+        user: {
+          id: String(user.id),
+          email: user.email,
+          name: user.f3Name,
+          roles: [],
+        },
+        roles: [],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+    };
+
     it("paginates the non-nation-admin branch when only pageSize is sent", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const prefix = `AccessibleTest-${uniqueId()}`;
@@ -412,7 +456,7 @@ describe("Org Router", () => {
 
     it("does not duplicate or skip rows for a nation admin when many orgs share a name", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
-      const session = await createAdminSession();
+      const session = await createDbBackedNationAdminSession(f3Nation.id);
       await mockAuthWithSession(session);
 
       const prefix = `AccessibleNationTieBreakTest-${uniqueId()}`;
