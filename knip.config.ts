@@ -19,7 +19,6 @@ const config: KnipConfig = {
     // vitest suite; follow-up to configure knip entries properly.
     "tooling/ci-factory/**",
   ],
-  ignoreDependencies: ["dotenv"],
   ignoreBinaries: ["uv"],
   workspaces: {
     ".": {
@@ -42,6 +41,11 @@ const config: KnipConfig = {
       // dev:hono/start:hono scripts.) scripts/smoke.mjs is run only by the
       // Dockerfile's smoke stage, which knip does not parse.
       entry: ["characterization/next-headers-shim.ts", "scripts/smoke.mjs"],
+    },
+    "apps/auth": {
+      // knip parses `dotenv run -q --` as a binary named `run`; `dotenv` is
+      // the CLI shipped by the `dotenv` package itself.
+      ignoreBinaries: ["run"],
     },
     "apps/admin": {
       // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's
