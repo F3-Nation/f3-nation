@@ -94,9 +94,7 @@ class FetchAllPagesTest(unittest.TestCase):
     def test_max_items_does_not_cut_short_a_smaller_total(self):
         self.client.get.return_value = {"items": [{"id": 1}, {"id": 2}], "totalCount": 2}
 
-        result = fetch_all_pages(
-            self.client, "/v1/thing", params={}, items_key="items", max_items=2 * MAX_PAGE_SIZE
-        )
+        result = fetch_all_pages(self.client, "/v1/thing", params={}, items_key="items", max_items=2 * MAX_PAGE_SIZE)
 
         self.client.get.assert_called_once()
         self.assertEqual(result, [{"id": 1}, {"id": 2}])
