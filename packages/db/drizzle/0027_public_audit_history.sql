@@ -100,10 +100,11 @@ BEGIN
      OR sch LIKE 'pg\_%' OR sch LIKE '%\_history' THEN
     RAISE EXCEPTION 'audit.enable_tracking: unsupported source table';
   END IF;
-  -- Operators act as the migration owner. Source ownership alone is not an
-  -- authorization grant to execute this helper (EXECUTE is revoked below).
-  IF owner_id <> (SELECT oid FROM pg_roles WHERE rolname = current_user) THEN
-    RAISE EXCEPTION 'audit.enable_tracking: source must be owned by current role';
+  -- Operators act with the source owner's inherited privileges. Created history
+  -- objects are handed to that owner, never left with the operator's login.
+  -- Source ownership alone does not grant EXECUTE on this helper (revoked below).
+  IF NOT pg_has_role(current_user, owner_id, 'USAGE') THEN
+    RAISE EXCEPTION 'audit.enable_tracking: current role must inherit the source owner';
   END IF;
   IF octet_length(sch || '_history') > 63 OR octet_length('zz_audit_' || tbl) > 63 THEN
     RAISE EXCEPTION 'audit.enable_tracking: identifier too long';
@@ -131,6 +132,7 @@ BEGIN
   hist_schema := sch || '_history';
   IF NOT EXISTS (SELECT FROM pg_namespace WHERE nspname = hist_schema) THEN
     EXECUTE format('CREATE SCHEMA %I', hist_schema);
+    EXECUTE format('ALTER SCHEMA %I OWNER TO %I', hist_schema, pg_get_userbyid(owner_id));
   ELSIF (SELECT nspowner FROM pg_namespace WHERE nspname = hist_schema) <> owner_id THEN
     RAISE EXCEPTION 'audit.enable_tracking: history schema owner mismatch';
   END IF;
@@ -143,6 +145,7 @@ BEGIN
       changed_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
       changed_by integer, changed_via text, old_row jsonb, new_row jsonb
     )', hist_schema, tbl);
+    EXECUTE format('ALTER TABLE %I.%I OWNER TO %I', hist_schema, tbl, pg_get_userbyid(owner_id));
     hist := to_regclass(format('%I.%I', hist_schema, tbl));
     EXECUTE format('COMMENT ON TABLE %I.%I IS %L', hist_schema, tbl, 'audit-history-v1');
     EXECUTE format('CREATE INDEX ON %I.%I (row_id, changed_at)', hist_schema, tbl);
@@ -230,6 +233,18 @@ BEGIN
 END
 $$;
 REVOKE ALL ON FUNCTION audit.disable_tracking(regclass) FROM PUBLIC;
+--> statement-breakpoint
+-- Helpers and the capture function belong to the audited tables' owner, not to
+-- the login that ran the migration; that login acts through role membership.
+DO $$
+DECLARE owner_name text := (SELECT pg_get_userbyid(relowner) FROM pg_class
+  WHERE oid = 'public.users'::regclass);
+BEGIN
+  EXECUTE format('ALTER SCHEMA audit OWNER TO %I', owner_name);
+  EXECUTE format('ALTER FUNCTION audit.log_change() OWNER TO %I', owner_name);
+  EXECUTE format('ALTER FUNCTION audit.enable_tracking(regclass, text[], text[]) OWNER TO %I', owner_name);
+  EXECUTE format('ALTER FUNCTION audit.disable_tracking(regclass) OWNER TO %I', owner_name);
+END $$;
 --> statement-breakpoint
 -- Also remove explicit function grants inherited from global default ACLs.
 DO $$

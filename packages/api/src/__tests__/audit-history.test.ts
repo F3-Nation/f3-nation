@@ -449,11 +449,14 @@ describe("audit history migration (#664)", () => {
       expect(await history(tx)).toHaveLength(2);
     }));
 
-  it("requires a member operator to assume the exact source-owner role", async () =>
+  it("lets a member of the source owner enable tracking as that owner", async () =>
     fixture(async (tx) => {
       await tx.execute(sql`CREATE ROLE audit_source_owner NOLOGIN NOSUPERUSER`);
       await tx.execute(
         sql`CREATE ROLE audit_member_operator NOLOGIN NOSUPERUSER INHERIT`,
+      );
+      await tx.execute(
+        sql`CREATE ROLE audit_outside_operator NOLOGIN NOSUPERUSER INHERIT`,
       );
       await tx.execute(sql`GRANT audit_source_owner TO audit_member_operator`);
       await tx.execute(
@@ -472,37 +475,64 @@ describe("audit history migration (#664)", () => {
       await tx.execute(
         sql`GRANT CREATE ON DATABASE ${sql.identifier(database.name)} TO audit_source_owner`,
       );
-      await tx.execute(sql`GRANT USAGE ON SCHEMA audit TO audit_source_owner`);
+      for (const role of ["audit_source_owner", "audit_outside_operator"]) {
+        await tx.execute(
+          sql`GRANT USAGE ON SCHEMA audit TO ${sql.identifier(role)}`,
+        );
+        await tx.execute(
+          sql`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA audit TO ${sql.identifier(role)}`,
+        );
+      }
       await tx.execute(
-        sql`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA audit TO audit_source_owner`,
+        sql`GRANT USAGE ON SCHEMA audit_member_fixture TO audit_outside_operator`,
       );
-      await tx.execute(sql`SET LOCAL ROLE audit_member_operator`);
+      await tx.execute(
+        sql`GRANT SELECT ON audit_member_fixture.rows TO audit_outside_operator`,
+      );
+      await tx.execute(sql`SET LOCAL ROLE audit_outside_operator`);
       await rejected(
         tx,
         sql`SELECT audit.enable_tracking('audit_member_fixture.rows')`,
-        "audit.enable_tracking: source must be owned by current role",
+        "audit.enable_tracking: current role must inherit the source owner",
       );
-      await tx.execute(sql`SET LOCAL ROLE audit_source_owner`);
+      await tx.execute(sql`SET LOCAL ROLE audit_member_operator`);
       await tx.execute(
         sql`SELECT audit.enable_tracking('audit_member_fixture.rows')`,
       );
       await tx.execute(
         sql`SELECT audit.enable_tracking('audit_member_fixture.rows')`,
       );
+      await tx.execute(sql`INSERT INTO audit_member_fixture.rows VALUES (1)`);
       await tx.execute(sql`RESET ROLE`);
-      const [owners] = await tx.execute<{
-        table_owner: string;
-        schema_owner: string;
-      }>(sql`
-        SELECT pg_get_userbyid(c.relowner) AS table_owner,
-          pg_get_userbyid(n.nspowner) AS schema_owner
-        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-        WHERE n.nspname='audit_member_fixture_history' AND c.relname='rows'`);
-      expect(owners).toEqual({
-        table_owner: "audit_source_owner",
-        schema_owner: "audit_source_owner",
-      });
+      const owners = await tx.execute<{ kind: string; owner: string }>(sql`
+        SELECT 'schema' AS kind, pg_get_userbyid(nspowner) AS owner
+        FROM pg_namespace WHERE nspname = 'audit_member_fixture_history'
+        UNION ALL
+        SELECT c.relkind::text, pg_get_userbyid(c.relowner)
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'audit_member_fixture_history'`);
+      expect(owners.length).toBeGreaterThan(1);
+      expect(new Set(owners.map((o) => o.owner))).toEqual(
+        new Set(["audit_source_owner"]),
+      );
+      const [captured] = await tx.execute<{ count: number }>(
+        sql`SELECT count(*)::int AS count FROM audit_member_fixture_history.rows`,
+      );
+      expect(captured?.count).toBe(1);
     }));
+
+  it("gives the audit helpers to the owner of the tracked tables", async () => {
+    const owners = await db.execute<{ owner: string }>(sql`
+      SELECT DISTINCT pg_get_userbyid(nspowner) AS owner
+      FROM pg_namespace WHERE nspname IN ('audit', 'public_history')
+      UNION
+      SELECT pg_get_userbyid(p.proowner) FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'audit'
+      UNION
+      SELECT pg_get_userbyid(relowner) FROM pg_class
+      WHERE oid = 'public.users'::regclass`);
+    expect(owners).toHaveLength(1);
+  });
 
   it.each(["rename", "drop"])(
     "fails closed after a masked column %s until reconfigured",

@@ -245,8 +245,10 @@ Attribution settings are informational, not proof of identity or authorization.
 
 ### Ownership and access
 
-Run the migration as the designated source-table owner. The elevated capture
-function and history tables have that owner. Ordinary application writers must
+Run the migration as the source-table owner or as a role that inherits it
+(`INHERIT` membership). The migration hands the helpers, the elevated capture
+function and every history object to the source-table owner, never to the login
+that ran it. Ordinary application writers must
 be separate roles with source DML grants, without ownership, history DML,
 tracking-helper execution, or membership in the owner role. Source owners and
 superusers can defeat capture; this is not a tamper-proof ledger.
@@ -264,7 +266,7 @@ collected history. Test access before and after manual provisioning for all
 26 tables. Do not infer effective permissions from role names alone.
 
 The helpers use invoker privileges and are executable only by their owner.
-Operators should assume the designated migration-owner role. The capture
+Operators use them through inherited membership in the owner role. The capture
 function uses SECURITY DEFINER with `pg_catalog, pg_temp` as its fixed search
 path and parameterized snapshot insertion. Array trigger arguments preserve
 column names without comma-delimited parsing ambiguity. Helper and history
@@ -393,19 +395,13 @@ concurrent CI activity and hardware affect these numbers.
    primary-key order, configured columns, absence of conflicting audit objects,
    source ownership, migration owner and runtime writer roles. Checked-in schema
    metadata and local measurements do not substitute for this inventory.
-   The operator must act as the exact source owner: inherited role membership
-   alone does not satisfy `enable_tracking`. Inventory **all 26 tables**, not
-   just the first failing table. If they share one owner, use an approved
-   migration session with `SET ROLE <source_owner>` before running the migration,
-   in that same session, so helpers and history objects have consistent ownership.
-   The current `packages/db` migration command does not select an owner role.
-   Before release, approve and implement how that connection assumes the verified
-   owner; the role-selection mechanism remains a deployment prerequisite.
-   A role change in a separate psql session does not affect the application's
-   migration connection. Verify that the selected role can create schemas and
-   functions and access the migration journal. If owners differ, stop and agree
-   an ownership plan; one `SET ROLE` cannot satisfy this migration's shared
-   history-schema ownership rule. Do not relax the ownership check as a workaround.
+   All 26 tables must share one owner, because `public_history` has a single
+   owner. The migration role must inherit that owner, and the owner must have
+   `CREATE` on the database. No `SET ROLE` is needed. If owners differ, stop and
+   agree an ownership plan before release.
+   Verified read-only on September 29, 2026: all 26 tables are owned by
+   `f3slackbot` in Production and `dev_generic` in Staging; `tackle` inherits
+   each, and each owner has database `CREATE`.
 2. Select and manually provision the intended reader role. Review inherited role
    memberships and default ACLs, not just direct grants. Verify the operator can
    own all source/history objects and can create triggers/functions.
