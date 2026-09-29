@@ -47,7 +47,8 @@
     "reset-test-db": "turbo run reset-test-db",
     "test": "turbo test",
     "test:characterization": "turbo test:characterization",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "with-env": "dotenv -e .env --"
   },
   "devDependencies": {
     "@acme/prettier-config": "workspace:^0.1.0",
@@ -57,6 +58,7 @@
     "@commitlint/types": "catalog:",
     "@turbo/gen": "catalog:",
     "commitizen": "catalog:",
+    "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "inquirer": "catalog:",
     "knip": "catalog:",
