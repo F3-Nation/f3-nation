@@ -15,7 +15,7 @@
     "notify-outstanding-requests": "pnpm with-env tsx ./src/notify-outstanding-requests.ts",
     "script": "pnpm with-env tsx ./src/script.ts",
     "typecheck": "tsc --noEmit",
-    "with-env": "dotenv -e ../../.env --"
+    "with-env": "dotenv -e ../../packages/env/.env --"
   },
   "devDependencies": {
     "@acme/api": "workspace:*",
