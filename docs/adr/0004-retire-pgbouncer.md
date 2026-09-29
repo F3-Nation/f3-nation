@@ -234,7 +234,8 @@ The order is load-bearing. Each step must land before the next begins.
      (`packages/db-python/f3_data_models/utils.py`) uses SQLAlchemy's default
      pool of 5 + 10 overflow, a theoretical 1,500 connections. Set
      `pool_size`/`max_overflow`, `--max-instances`, or both, so it fits the
-     budget below. Owned by the Slack bot maintainer.
+     budget below (about 45 for the service). Owned by the Slack bot
+     maintainer.
    - **Let the shared client reach a Cloud SQL socket.** `auth` does not use
      `DATABASE_URL` or `@acme/db`; it builds its own client from discrete
      `DATABASE_HOST`/`DATABASE_USER`/… variables with
@@ -259,11 +260,18 @@ The order is load-bearing. Each step must land before the next begins.
    **Connection budget.** Every direct client counts once PgBouncer is gone:
    `api` 15 × 5 + `map` 15 × 5 = 150, plus `auth` 1 × 10 (no `max`, so the
    postgres.js default; `--max-instances=1`) = 160, plus Datastream and Cloud
-   SQL's own agent (a handful). Bound the Slack bot so the configured total
-   stays under step 2's 240-backend alert — roughly 70 connections for the
-   Slack bot, e.g. 10 instances × (`pool_size` 5 + `max_overflow` 2). Keeping
-   the configured maximum below the alert threshold is what gives the alert
-   meaning: it can only fire if a deploy breaks this arithmetic. The §8 samples
+   SQL's own agent (a handful), plus the two scheduled Cloud Run jobs that
+   attach the production instance directly: the Slack bot scripts job
+   (`deploy-slackbot.yml`, one task on the same SQLAlchemy engine, up to 15)
+   and the analytics ETL (`deploy-analytics.yml`, one task reading Postgres
+   through DuckDB's scanner — its connection count is unmeasured; take it
+   during a run in the §8 samples). Reserve about 30 for the jobs. Bound the
+   Slack bot service so the configured total stays under step 2's
+   240-backend alert — roughly 45 connections, e.g. 5 instances ×
+   (`pool_size` 5 + `max_overflow` 4); revisit once the analytics figure is
+   measured. Keeping the configured maximum below the alert threshold is what
+   gives the alert meaning: it can only fire if a deploy breaks this
+   arithmetic, not because a scheduled job happened to run. The §8 samples
    record what the direct clients actually use.
 
 2. **Put the monitors in place, and let them run against the _current_
