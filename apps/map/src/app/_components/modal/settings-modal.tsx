@@ -30,6 +30,7 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
+import { shouldShowDevModeSignIn } from "~/utils/dev-mode-sign-in";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { useRuntimeConfig } from "~/utils/runtime-config";
 import { appStore } from "~/utils/store/app";
@@ -241,11 +242,12 @@ export default function SettingsModal() {
                   <LogIn className="size-4" />
                   <span className="text-xs">Sign in</span>
                 </button>
-                {/* Per-PR previews are production builds (isDevelopment is
-                    false), so also show the button on the `branch` channel —
-                    the server registers the dev-mode provider there too. */}
-                {!isProd &&
-                (isDevelopment || channel === "branch" || showDebug) ? (
+                {shouldShowDevModeSignIn({
+                  isProd,
+                  isDevelopment,
+                  channel,
+                  showDebug,
+                }) ? (
                   <button
                     className={cn(
                       "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-primary p-2 text-primary-foreground shadow-xs hover:bg-primary/90",
