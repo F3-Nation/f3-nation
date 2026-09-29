@@ -218,6 +218,97 @@ describe("captureException", () => {
   });
 });
 
+describe("captureException root cause", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  type Captured = [Error, undefined, Record<string, unknown>];
+
+  it("reports the driver error behind a real DrizzleQueryError, with params redacted", async () => {
+    // A genuine Drizzle failure, not a hand-built lookalike: a query against
+    // a closed port makes drizzle-orm wrap postgres.js's ECONNREFUSED in its
+    // own `Failed query: …\nparams: …` error — the shape every api/map
+    // database failure arrives in, and the one a connection-failure alert
+    // has to see through.
+    const { default: postgres } = await import("postgres");
+    const { drizzle } = await import("drizzle-orm/postgres-js");
+    const { sql } = await import("drizzle-orm");
+    const client = postgres("postgres://u:p@127.0.0.1:1/db", {
+      max: 1,
+      connect_timeout: 2,
+    });
+    let dbError: unknown;
+    try {
+      await drizzle(client).execute(sql`select ${"pii@example.com"}::text`);
+    } catch (err) {
+      dbError = err;
+    } finally {
+      await client.end({ timeout: 1 });
+    }
+    expect((dbError as Error).message).toMatch(/^Failed query: /);
+
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(dbError);
+
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toMatch(/ECONNREFUSED/);
+    expect(properties.root_cause_type).toBe("Error");
+    // Re-attached as .cause so posthog-node emits a chained exception.
+    expect((reported.cause as Error).message).toMatch(/ECONNREFUSED/);
+    // The bound value never leaves the process — not in the message, the
+    // stack, or any property.
+    expect(reported.message).toContain("params: [redacted]");
+    expect(
+      JSON.stringify([reported.message, reported.stack, properties]),
+    ).not.toContain("pii@example.com");
+    // The cause attributes are folded into root_cause_*, not duplicated.
+    expect(properties).not.toHaveProperty("exception.cause.message");
+  });
+
+  it("omits root_cause_* for an error without a cause", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(new Error("boom"));
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.cause).toBeUndefined();
+    expect(properties).not.toHaveProperty("root_cause_message");
+  });
+
+  it("callers cannot inject a root cause onto an error without one", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(new Error("no cause"), {
+      root_cause_message: "spoofed",
+      "exception.cause.message": "spoofed",
+    });
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.cause).toBeUndefined();
+    expect(properties).not.toHaveProperty("root_cause_message");
+    expect(properties).not.toHaveProperty("exception.cause.message");
+  });
+
+  it("callers cannot spoof the root cause", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(
+      new Error("outer", { cause: new Error("real cause") }),
+      {
+        root_cause_message: "spoofed",
+        "exception.cause.message": "spoofed",
+      },
+    );
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toBe("real cause");
+    expect((reported.cause as Error).message).toBe("real cause");
+  });
+});
+
 describe("registerObservability", () => {
   beforeEach(() => {
     vi.clearAllMocks();
