@@ -635,9 +635,6 @@ importers:
       commitizen:
         specifier: 'catalog:'
         version: 4.3.2(@types/node@25.9.2)(typescript@6.0.3)
-      dotenv-cli:
-        specifier: 'catalog:'
-        version: 11.0.0
       eslint:
         specifier: 'catalog:'
         version: 10.11.0(jiti@2.7.0)(supports-color@8.1.1)
