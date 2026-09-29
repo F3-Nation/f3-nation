@@ -1054,9 +1054,6 @@ importers:
       dotenv:
         specifier: 'catalog:'
         version: 18.0.4
-      dotenv-cli:
-        specifier: 'catalog:'
-        version: 11.0.0
       eslint:
         specifier: 'catalog:'
         version: 10.11.0(jiti@2.7.0)(supports-color@8.1.1)
@@ -1713,9 +1710,6 @@ importers:
       '@t3-oss/env-nextjs':
         specifier: 'catalog:'
         version: 0.13.11(typescript@6.0.3)(zod@4.5.4)
-      dotenv:
-        specifier: 'catalog:'
-        version: 18.0.4
       zod:
         specifier: ^4.5.4
         version: 4.5.4
