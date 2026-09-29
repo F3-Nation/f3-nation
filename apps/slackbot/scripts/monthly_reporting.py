@@ -81,7 +81,11 @@ def _event_org_scope():
         .select_from(EventInstance)
         .join(direct_org, direct_org.c.id == EventInstance.org_id)
         .outerjoin(parent_org, parent_org.c.id == direct_org.c.parent_id)
-        .where(EventInstance.pax_count.is_not(None), EventInstance.is_active.is_(True))
+        .where(
+            EventInstance.pax_count.is_not(None),
+            EventInstance.is_active.is_(True),
+            EventInstance.meta["exclude_from_pax_vault"].as_boolean().is_not(True),
+        )
         .subquery("reportable_events")
     )
 
@@ -247,6 +251,7 @@ def pull_org_leaderboard_data() -> Dict[int, List[OrgUserLeaderboard]]:
             Attendance.is_planned.is_(False),
             EventInstance.is_active.is_(True),
             EventInstance.pax_count.is_not(None),
+            EventInstance.meta["exclude_from_pax_vault"].as_boolean().is_not(True),
             EventInstance.start_date >= datetime(prior_year, 1, 1),
             EventInstance.start_date < datetime(prior_year + 1, 1, 1),
         )

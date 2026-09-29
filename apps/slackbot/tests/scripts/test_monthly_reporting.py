@@ -4,7 +4,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import Boolean, Column, DateTime, Integer, MetaData, String, Table, create_engine, event
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, MetaData, String, Table, create_engine, event
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
@@ -60,6 +60,7 @@ def reporting_session(monkeypatch):
         Column("pax_count", Integer),
         Column("fng_count", Integer),
         Column("is_active", Boolean),
+        Column("meta", JSON),
     )
     attendance = Table(
         "attendance",
@@ -98,6 +99,8 @@ def reporting_session(monkeypatch):
                 {"id": 10, "parent_id": 100, "org_type": "ao", "name": "Alpha"},
                 {"id": 200, "parent_id": None, "org_type": "region", "name": "South"},
                 {"id": 300, "parent_id": None, "org_type": "area", "name": "Area"},
+                {"id": 20, "parent_id": 300, "org_type": "ao", "name": "Area AO"},
+                {"id": 30, "parent_id": None, "org_type": "ao", "name": "Orphan AO"},
             ],
         )
         connection.execute(
@@ -175,8 +178,33 @@ def reporting_session(monkeypatch):
                     "fng_count": 0,
                     "is_active": True,
                 },
+                {
+                    "id": 10,
+                    "org_id": 20,
+                    "start_date": datetime(2024, 12, 21),
+                    "pax_count": 4,
+                    "fng_count": 1,
+                    "is_active": True,
+                },
+                {
+                    "id": 11,
+                    "org_id": 30,
+                    "start_date": datetime(2024, 12, 22),
+                    "pax_count": 3,
+                    "fng_count": 1,
+                    "is_active": True,
+                },
+                {
+                    "id": 12,
+                    "org_id": 10,
+                    "start_date": datetime(2024, 12, 23),
+                    "pax_count": 100,
+                    "fng_count": 50,
+                    "is_active": True,
+                },
             ],
         )
+        connection.execute(events.update().where(events.c.id == 12).values(meta={"exclude_from_pax_vault": True}))
         connection.execute(
             users.insert(),
             [
@@ -184,6 +212,7 @@ def reporting_session(monkeypatch):
                 {"id": 2, "f3_name": "PAX Two", "avatar_url": None},
                 {"id": 3, "f3_name": "Planned Only", "avatar_url": None},
                 {"id": 4, "f3_name": "No Type", "avatar_url": None},
+                {"id": 5, "f3_name": "Excluded Event PAX", "avatar_url": None},
             ],
         )
         connection.execute(
@@ -201,6 +230,9 @@ def reporting_session(monkeypatch):
                 {"id": 71, "event_instance_id": 7, "user_id": 1, "is_planned": False},
                 {"id": 81, "event_instance_id": 8, "user_id": 1, "is_planned": False},
                 {"id": 91, "event_instance_id": 9, "user_id": 2, "is_planned": False},
+                {"id": 101, "event_instance_id": 10, "user_id": 1, "is_planned": False},
+                {"id": 111, "event_instance_id": 11, "user_id": 2, "is_planned": False},
+                {"id": 121, "event_instance_id": 12, "user_id": 5, "is_planned": False},
             ],
         )
         connection.execute(
@@ -222,6 +254,9 @@ def reporting_session(monkeypatch):
                 {"attendance_id": 71, "attendance_type_id": 1},
                 {"attendance_id": 81, "attendance_type_id": 1},
                 {"attendance_id": 91, "attendance_type_id": 3},
+                {"attendance_id": 101, "attendance_type_id": 1},
+                {"attendance_id": 111, "attendance_type_id": 2},
+                {"attendance_id": 121, "attendance_type_id": 1},
             ],
         )
 
@@ -303,6 +338,7 @@ def test_leaderboard_queries_base_tables_and_preserve_report_rows(monkeypatch):
     assert "event_parent_org.org_type" in sql
     assert "event_instances.pax_count IS NOT NULL" in sql
     assert "event_instances.is_active IS true" in sql
+    assert "exclude_from_pax_vault" in compiled.params.values()
     assert "attendance.is_planned IS false" in sql
     assert "date_trunc" in sql
     assert "attendance_type_counts" in sql
@@ -385,9 +421,11 @@ def test_type_aggregate_is_scoped_to_current_year_reportable_attendance(monkeypa
     assert "attendance.is_planned IS false" in aggregate_sql
     assert "event_instances.is_active IS true" in aggregate_sql
     assert "event_instances.pax_count IS NOT NULL" in aggregate_sql
+    assert "exclude_from_pax_vault" in compiled.params.values()
     assert "event_instances.start_date >=" in aggregate_sql
     assert "event_instances.start_date <" in aggregate_sql
     assert "event_org" not in aggregate_sql  # No repeated hierarchy joins in the type aggregate.
+    assert list(compiled.params.values()).count("exclude_from_pax_vault") >= 2
     assert datetime(2024, 1, 1) in compiled.params.values()
     assert datetime(2025, 1, 1) in compiled.params.values()
 
@@ -396,7 +434,7 @@ def test_leaderboard_executes_with_january_year_boundary_and_null_type_semantics
     results = monthly_reporting.pull_org_leaderboard_data()
 
     rows = {(record.org_id, record.basis, record.user_id): record for records in results.values() for record in records}
-    assert set(results) == {10, 100, 200}
+    assert set(results) == {10, 20, 30, 100, 200}
     assert rows[(10, "month", 1)].post_count == 2
     assert rows[(10, "month", 1)].total_qs == 1
     assert rows[(10, "month", 2)].total_qs == 1  # Co-Q
@@ -409,6 +447,11 @@ def test_leaderboard_executes_with_january_year_boundary_and_null_type_semantics
     assert rows[(10, "month", 2)].post_count == 1  # 2022 CoQ attendance is outside the report year.
     assert rows[(10, "month", 2)].total_qs == 1
     assert (10, "month", 3) not in rows  # Planned attendance is excluded
+    assert rows[(20, "month", 1)].post_count == 1
+    assert rows[(20, "month", 1)].total_qs == 1
+    assert rows[(30, "month", 2)].post_count == 1
+    assert rows[(30, "month", 2)].total_qs == 1
+    assert all(row.user_id != 5 for records in results.values() for row in records)
 
 
 def test_monthly_summary_executes_filters_and_counts_distinct_actual_users(reporting_session):
@@ -417,7 +460,7 @@ def test_monthly_summary_executes_filters_and_counts_distinct_actual_users(repor
     def month_key(record):
         return record.month.strftime("%Y-%m-%d") if isinstance(record.month, datetime) else str(record.month)[:10]
 
-    assert set(results) == {10, 100, 200}
+    assert set(results) == {10, 20, 30, 100, 200}
     ao_december = next(record for record in results[10] if month_key(record) == "2024-12-01")
     assert ao_december.event_count == 2
     assert ao_december.total_posts == 8
@@ -429,6 +472,18 @@ def test_monthly_summary_executes_filters_and_counts_distinct_actual_users(repor
     assert region_december.total_posts == 8
     assert region_december.total_fngs == 1
     assert region_december.unique_pax_count == 3
+
+    area_ao_december = next(record for record in results[20] if month_key(record) == "2024-12-01")
+    assert area_ao_december.event_count == 1
+    assert area_ao_december.total_posts == 4
+    assert area_ao_december.total_fngs == 1
+    assert area_ao_december.unique_pax_count == 1
+
+    orphan_ao_december = next(record for record in results[30] if month_key(record) == "2024-12-01")
+    assert orphan_ao_december.event_count == 1
+    assert orphan_ao_december.total_posts == 3
+    assert orphan_ao_december.total_fngs == 1
+    assert orphan_ao_december.unique_pax_count == 1
 
     direct_region = next(record for record in results[200] if month_key(record) == "2024-12-01")
     assert direct_region.event_count == 1
