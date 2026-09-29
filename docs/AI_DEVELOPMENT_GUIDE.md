@@ -18,12 +18,12 @@ Different developers use different assistants. To keep one source of truth, this
 repo uses the **`AGENTS.md` standard** as canonical and adds thin pointer files
 so each tool resolves to the same content:
 
-| Tool                     | Entry point it reads                         | What it contains                   |
-| ------------------------ | -------------------------------------------- | ---------------------------------- |
-| **All / standard**       | [`AGENTS.md`](../AGENTS.md) (root + per-app) | Canonical conventions              |
-| **Claude** (Claude Code) | `CLAUDE.md`                                  | Pointer → `AGENTS.md` + this guide |
-| **GitHub Copilot**       | `.github/copilot-instructions.md`            | Pointer → `AGENTS.md` + this guide |
-| **Cursor**               | `.cursor/rules/*.mdc`                        | Pointer → `AGENTS.md` + this guide |
+| Tool                     | Entry point it reads                         | What it contains                          |
+| ------------------------ | -------------------------------------------- | ----------------------------------------- |
+| **All / standard**       | [`AGENTS.md`](../AGENTS.md) (root + per-app) | Canonical conventions                     |
+| **Claude** (Claude Code) | [`AGENTS.md`](../AGENTS.md) (root + per-app) | Read directly (v2.1.281+); no `CLAUDE.md` |
+| **GitHub Copilot**       | `.github/copilot-instructions.md`            | Pointer → `AGENTS.md` + this guide        |
+| **Cursor**               | `.cursor/rules/*.mdc`                        | Pointer → `AGENTS.md` + this guide        |
 
 **Rule of thumb:** put durable guidance in `AGENTS.md` (or, for deep topics, in
 `docs/` and link it). Keep the tool-specific pointer files thin so they never
