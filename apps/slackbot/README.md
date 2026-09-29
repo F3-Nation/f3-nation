@@ -114,3 +114,26 @@ One tag deploys two runtimes:
 4. Deploys staging main service and staging scripts job
 5. Waits for production environment approval
 6. Promotes images and deploys production service and production job
+
+### Production profile-privacy rollout
+
+The release workflow sets the target classification (`production` or `staging`), and
+`scripts/cloud-run-env.sh --env prod` sets `SLACKBOT_ENV=production` when it
+updates Cloud Run. Neither a workflow change nor editing an env file changes
+already-running resources. Before deploying privacy code/image, an operator
+must verify/backfill **both existing production resources**:
+
+```bash
+gcloud run services update f3-slackbot --project=f3-slackbot --region=us-central1 \
+  --update-env-vars=SLACKBOT_ENV=production
+gcloud run jobs update f3-slackbot-scripts --project=f3-slackbot --region=us-central1 \
+  --update-env-vars=SLACKBOT_ENV=production
+```
+
+Then inspect `gcloud run services describe f3-slackbot --project=f3-slackbot
+--region=us-central1` and confirm the revision receiving traffic has
+`SLACKBOT_ENV=production`; inspect `gcloud run jobs describe
+f3-slackbot-scripts --project=f3-slackbot --region=us-central1` and confirm its
+job template has the same value. These are operator-run commands, not an
+automated backfill. The app does not automatically delete synthetic users or
+clean up historical profile data.

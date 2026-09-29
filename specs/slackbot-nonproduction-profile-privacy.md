@@ -38,7 +38,7 @@ This changes no Slack or F3 authorization grants. Existing Slack handlers retain
 - Obfuscating operational Slack IDs, or linking newly observed Slack members to pre-existing F3 users by email in non-production.
 - Guaranteeing that free text, messages, uploads, or every other application's data contains no PII. PR #768 documents known limits of free-text name scrubbing.
 
-Production rollout requires `SLACKBOT_ENV=production` on both the service and scripts job **before** deploying the new code; configuring the deployment script alone does not update running resources.
+Production rollout requires `SLACKBOT_ENV=production` on both existing Cloud Run resources—the `f3-slackbot` service and `f3-slackbot-scripts` job in project `f3-slackbot`, region `us-central1`—**before** deploying the privacy code/image. The release workflow sets target classification, and `scripts/cloud-run-env.sh --env prod` sets it for updates, but neither changes resources that are already running; an operator must verify/backfill both resources first. Verify the service's traffic-serving revision and the job template have `SLACKBOT_ENV=production`. This is an operator-run prerequisite, not an automated cleanup: synthetic users and historical profile data are not automatically deleted.
 
 ## 7. Critical-path test cases
 

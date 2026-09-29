@@ -199,6 +199,32 @@ def test_nonproduction_known_user_preserves_link_without_slack_lookup(monkeypatc
     assert result.user_id == 77
 
 
+def test_nonproduction_get_user_returns_linked_cache_without_database_lookup(monkeypatch):
+    cached = SimpleNamespace(slack_id="U_CACHED", user_id=78, user_name="Existing", email="existing@f3nation.com")
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: False)
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS[cached.slack_id] = cached
+    monkeypatch.setattr(
+        helper_functions,
+        "create_user",
+        lambda *_args, **_kwargs: pytest.fail("linked cache hit must not call create_user"),
+    )
+    monkeypatch.setattr(
+        helper_functions,
+        "session_scope",
+        lambda: pytest.fail("linked cache hit must not open a database session"),
+    )
+
+    result = helper_functions.get_user(
+        cached.slack_id,
+        SimpleNamespace(org_id=9, team_id="T_CACHED"),
+        SimpleNamespace(users_info=lambda **_kwargs: pytest.fail("users_info must not be called")),
+        None,
+    )
+
+    assert result is cached
+
+
 def test_nonproduction_direct_create_links_unlinked_row_without_email_matching(monkeypatch):
     old_slack_user = SimpleNamespace(
         id=44,
