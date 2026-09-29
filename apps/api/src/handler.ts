@@ -1,5 +1,5 @@
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
-import { onError } from "@orpc/server";
+import { onError, ORPCError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { CORSPlugin, RequestHeadersPlugin } from "@orpc/server/plugins";
 
@@ -8,7 +8,33 @@ import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import { getBaseUrl } from "~/lib/get-base-url";
-import { logError } from "~/lib/logging";
+import { logError, logWarn } from "~/lib/logging";
+
+/**
+ * Report a procedure error from the oRPC interceptors. A 4xx ORPCError is an
+ * expected client-side outcome — rate limiting, bad credentials, input
+ * validation, a conflict — not a server fault, so it is logged at warn
+ * (stdout / Cloud Logging only) instead of logError, which also forwards to
+ * the error tracker. One client's 429 burst on 2026-09-28 put ~400 of them
+ * into PostHog in five minutes, burying real errors. 5xx ORPCErrors and
+ * anything that isn't an ORPCError still go through logError.
+ */
+export function reportHandlerError(
+  event: string,
+  ctx: Record<string, unknown>,
+  error: unknown,
+): void {
+  if (error instanceof ORPCError && error.status < 500) {
+    logWarn(event, {
+      ...ctx,
+      status: error.status,
+      code: error.code,
+      message: error.message,
+    });
+    return;
+  }
+  logError(event, ctx, error);
+}
 
 const corsPlugin = new CORSPlugin({
   origin: (origin) => origin,
@@ -22,7 +48,7 @@ const handler = new RPCHandler(router, {
   plugins: [corsPlugin, new RequestHeadersPlugin()],
   interceptors: [
     onError((error, { request }) => {
-      logError(
+      reportHandlerError(
         "api.rpc.handler_error",
         { path: request.url.pathname, method: request.method },
         error,
@@ -35,7 +61,7 @@ const openAPIHandler = new OpenAPIHandler(router, {
   plugins: [corsPlugin, new RequestHeadersPlugin()],
   interceptors: [
     onError((error, { request }) => {
-      logError(
+      reportHandlerError(
         "api.openapi.handler_error",
         { path: request.url.pathname, method: request.method },
         error,

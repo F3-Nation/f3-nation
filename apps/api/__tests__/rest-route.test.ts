@@ -1,26 +1,37 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as OrpcServer from "@orpc/server";
 import type { StandardHandlerInterceptorOptions } from "@orpc/server/standard";
 
 import { Client, Header } from "@acme/shared/common/enums";
 
 // Hoisted mocks shared between the vi.mock factories and the test bodies.
-const { rpcHandle, openApiHandle, rpcCtor, openApiCtor, corsCtor, logError } =
-  vi.hoisted(() => ({
-    rpcHandle:
-      vi.fn<(...args: unknown[]) => Promise<{ response?: Response }>>(),
-    openApiHandle:
-      vi.fn<(...args: unknown[]) => Promise<{ response?: Response }>>(),
-    rpcCtor: vi.fn(),
-    openApiCtor: vi.fn(),
-    corsCtor: vi.fn(),
-    logError: vi.fn(),
-  }));
+const {
+  rpcHandle,
+  openApiHandle,
+  rpcCtor,
+  openApiCtor,
+  corsCtor,
+  logError,
+  logWarn,
+} = vi.hoisted(() => ({
+  rpcHandle: vi.fn<(...args: unknown[]) => Promise<{ response?: Response }>>(),
+  openApiHandle:
+    vi.fn<(...args: unknown[]) => Promise<{ response?: Response }>>(),
+  rpcCtor: vi.fn(),
+  openApiCtor: vi.fn(),
+  corsCtor: vi.fn(),
+  logError: vi.fn(),
+  logWarn: vi.fn(),
+}));
 
 vi.mock("@acme/api", () => ({ router: {} }));
-vi.mock("~/lib/logging", () => ({ logError }));
+vi.mock("~/lib/logging", () => ({ logError, logWarn }));
 
-vi.mock("@orpc/server", () => ({
+vi.mock("@orpc/server", async (importOriginal) => ({
+  // The real ORPCError, so the 4xx/5xx split is tested against oRPC's own
+  // status mapping.
+  ...(await importOriginal<typeof OrpcServer>()),
   // Pass the error callback straight through so we can invoke it directly.
   onError: (fn: unknown) => fn,
 }));
@@ -243,6 +254,51 @@ describe("handleRequest", () => {
         { path: "/v1/openapi-path", method: "GET" },
         openApiError,
       );
+    });
+
+    it("logs 4xx ORPCErrors at warn so they never reach the error tracker", async () => {
+      const { ORPCError } = await import("@orpc/server");
+      await importHandler();
+      const rpcOptions = rpcCtor.mock.calls[0]![1] as Interceptors;
+      const request = {
+        url: new URL("http://api.test/v1/rpc-path"),
+        method: "POST",
+      };
+
+      for (const [code, status, message] of [
+        ["TOO_MANY_REQUESTS", 429, "Rate limit exceeded. Try again in 1s"],
+        ["UNAUTHORIZED", 401, "Unauthorized"],
+        ["BAD_REQUEST", 400, "Input validation failed"],
+      ] as const) {
+        rpcOptions.interceptors[0]!(new ORPCError(code, { message }), {
+          request,
+        });
+        expect(logWarn).toHaveBeenLastCalledWith("api.rpc.handler_error", {
+          path: "/v1/rpc-path",
+          method: "POST",
+          status,
+          code,
+          message,
+        });
+      }
+      expect(logError).not.toHaveBeenCalled();
+    });
+
+    it("still logs 5xx ORPCErrors via logError", async () => {
+      const { ORPCError } = await import("@orpc/server");
+      await importHandler();
+      const rpcOptions = rpcCtor.mock.calls[0]![1] as Interceptors;
+
+      const serverError = new ORPCError("INTERNAL_SERVER_ERROR");
+      rpcOptions.interceptors[0]!(serverError, {
+        request: { url: new URL("http://api.test/v1/x"), method: "GET" },
+      });
+      expect(logError).toHaveBeenCalledWith(
+        "api.rpc.handler_error",
+        { path: "/v1/x", method: "GET" },
+        serverError,
+      );
+      expect(logWarn).not.toHaveBeenCalled();
     });
   });
 });
