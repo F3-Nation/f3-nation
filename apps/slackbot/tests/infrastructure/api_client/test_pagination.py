@@ -72,6 +72,35 @@ class FetchAllPagesTest(unittest.TestCase):
 
         self.assertEqual(result, [])
 
+    def test_stops_once_max_items_collected_even_if_more_remain(self):
+        page_one = {"items": [{"id": i} for i in range(MAX_PAGE_SIZE)], "totalCount": MAX_PAGE_SIZE * 5}
+        page_two = {
+            "items": [{"id": MAX_PAGE_SIZE + i} for i in range(MAX_PAGE_SIZE)],
+            "totalCount": MAX_PAGE_SIZE * 5,
+        }
+        self.client.get.side_effect = [page_one, page_two]
+
+        result = fetch_all_pages(
+            self.client,
+            "/v1/thing",
+            params={},
+            items_key="items",
+            max_items=2 * MAX_PAGE_SIZE,
+        )
+
+        self.assertEqual(self.client.get.call_count, 2)
+        self.assertEqual(len(result), 2 * MAX_PAGE_SIZE)
+
+    def test_max_items_does_not_cut_short_a_smaller_total(self):
+        self.client.get.return_value = {"items": [{"id": 1}, {"id": 2}], "totalCount": 2}
+
+        result = fetch_all_pages(
+            self.client, "/v1/thing", params={}, items_key="items", max_items=2 * MAX_PAGE_SIZE
+        )
+
+        self.client.get.assert_called_once()
+        self.assertEqual(result, [{"id": 1}, {"id": 2}])
+
 
 if __name__ == "__main__":
     unittest.main()

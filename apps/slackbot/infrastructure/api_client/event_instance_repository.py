@@ -22,7 +22,7 @@ from typing import Any
 from application.event_instance import EventInstanceData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
-from infrastructure.api_client.pagination import MAX_PAGE_SIZE
+from infrastructure.api_client.pagination import MAX_PAGE_SIZE, fetch_all_pages
 from infrastructure.api_client.series_repository import ApiSeriesRepository, get_api_series_repository
 
 PREBLAST_CHANNEL_META_KEY = "preblast_channel_id"
@@ -288,14 +288,23 @@ class ApiEventInstanceRepository:
         }
         if ao_org_id is not None:
             params["aoOrgId"] = ao_org_id
-        # Callers (see EventInstanceService.get_region_instances) only keep the
-        # first `limit` rows sorted by date, and the API already defaults to
-        # ascending startDate order -- one page of MAX_PAGE_SIZE is enough to
-        # satisfy that without paging through every future instance.
-        params["pageSize"] = MAX_PAGE_SIZE
-        params["pageIndex"] = 0
-        result = self._client.get("/v1/event-instance", params=params)
-        raw_list = result.get("eventInstances") or result.get("results") or []
+        # Callers (see EventInstanceService.get_region_instances) only keep
+        # the first `limit` (currently 40) rows sorted by date, and the API
+        # already defaults to ascending startDate order, so we don't need to
+        # page through every future instance. But the API's own tiebreak
+        # within a shared startDate is `name`, not the `start_time` the
+        # caller ultimately sorts by, so a single MAX_PAGE_SIZE page isn't
+        # provably enough if one date alone has more than 100 matching
+        # instances. `max_items` bounds this to at most a couple of pages
+        # instead of either extreme -- a single page (unsafe on that edge
+        # case) or every page (the over-fetch this method used to do).
+        raw_list = fetch_all_pages(
+            self._client,
+            "/v1/event-instance",
+            params=params,
+            items_key="eventInstances",
+            max_items=2 * MAX_PAGE_SIZE,
+        )
         return [_parse_instance(i) for i in raw_list]
 
     def get_by_id(self, instance_id: int) -> EventInstanceData | None:

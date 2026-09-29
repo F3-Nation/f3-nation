@@ -28,6 +28,7 @@ def fetch_all_pages(
     params: dict[str, Any],
     items_key: str,
     total_key: str = "totalCount",
+    max_items: int | None = None,
 ) -> list[dict]:
     """Page through a list endpoint and return every matching row.
 
@@ -35,6 +36,12 @@ def fetch_all_pages(
     ``"eventTags"``). *total_key* is the response key holding the overall
     row count -- ``/v1/org`` uses ``"total"``; every other list route used
     here uses ``"totalCount"``.
+
+    *max_items*, if given, stops paging once at least that many rows have
+    been collected (the last page fetched is kept whole, so the result can
+    run slightly past it) -- for a caller that only needs a bounded prefix
+    of the sorted result set and would rather not walk every page of a
+    result set with an unbounded tail.
     """
     all_items: list[dict] = []
     page_index = 0
@@ -47,6 +54,8 @@ def fetch_all_pages(
         if total is not None and len(all_items) >= total:
             break
         if len(items) < MAX_PAGE_SIZE:
+            break
+        if max_items is not None and len(all_items) >= max_items:
             break
         page_index += 1
     return all_items
