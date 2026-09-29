@@ -35,30 +35,45 @@ gcloud auth application-default login   # needed by Cloud SQL Auth Proxy
 
 ## 3. Populate secrets
 
-Secrets live in GCP Secret Manager (project `f3-authentication-staging`), not in the repo. Start from the per-directory templates that `pnpm local:setup` copies (`apps/<app>/.env` and `packages/env/.env`), then pull the secrets you need and map them to env vars. Environment variables are application-specific: put each `.env` in its app directory, not the monorepo root.
+Secrets live in GCP Secret Manager, not in the repo. The fastest way to get a working `.env` is the automated script:
 
-> **Safety:** Only pull from the `f3-authentication-staging` project — never production. Local dev uses the staging database, staging APIs, and localhost URLs.
+```bash
+pnpm env:generate
+```
 
-The canonical mapping is:
+This pulls staging secrets from GCP, constructs a complete `.env` at the repo root, and symlinks it into each app directory (`apps/api/.env.local`, `apps/map/.env.local`, `apps/auth/.env.local`). Preview what it would do without writing files:
 
-| GCP Secret Name          | `.env` Variable(s)                    | Notes                                                                                              |
-| ------------------------ | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `database-host`          | `DATABASE_HOST`                       | Use `localhost` for local dev (proxy handles the connection)                                       |
-| `database-user`          | `DATABASE_USER`                       | Also used in `DATABASE_URL`                                                                        |
-| `database-password`      | `DATABASE_PASSWORD`                   | Also used in `DATABASE_URL`                                                                        |
-| `database-name`          | `DATABASE_NAME`                       | Also used in `DATABASE_URL`                                                                        |
-| `auth-secret`            | `AUTH_SECRET`                         | Required in production; optional in dev                                                            |
-| `auth-jwt-private-key`   | `AUTH_JWT_PRIVATE_KEY`                | RSA PEM key; single-line with `\n` escapes, wrapped in double quotes                               |
-| `api-key`                | `API_KEY`                             |                                                                                                    |
-| `super-admin-api-key`    | `SUPER_ADMIN_API_KEY`                 |                                                                                                    |
-| `sendgrid-api-key`       | `EMAIL_SERVER`                        | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)                          |
-| `google-maps-api-key`    | `F3_GOOGLE_API_KEY`                   | Google Maps JS API key; read by the map + admin apps.                                              |
-| _(set manually)_         | `GCS_EMULATOR_HOST`                   | `localhost:9023` for the local fake-gcs emulator                                                   |
-| _(set manually)_         | `GCS_CREDENTIALS`                     | `local-placeholder-not-used-with-emulator` for local dev; base64 service-account JSON for real GCS |
-| _(set manually)_         | `EMAIL_FROM`                          | Sender address (e.g. `noreply@f3nation.com`)                                                       |
-| _(set manually)_         | `EMAIL_ADMIN_DESTINATIONS`            | Comma-separated admin email addresses                                                              |
-| _(same as DATABASE_URL)_ | `TEST_DATABASE_URL`                   | Connection string for test database                                                                |
-| _(set manually)_         | `NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED` | Optional; comma-separated webhook URLs for notifications                                           |
+```bash
+pnpm env:generate:dry-run
+```
+
+> **Safety:** The script only pulls from the `f3-authentication-staging` project — never production. All local dev defaults use staging database, staging APIs, and localhost URLs.
+
+If you need to customize a specific app's env (e.g., point one app at a different API), break the symlink by replacing `apps/<app>/.env.local` with a regular file.
+
+<details>
+<summary>Manual setup (if the script doesn't work)</summary>
+
+Pull secrets manually and map them to env vars. The canonical mapping is:
+
+| GCP Secret Name          | `.env` Variable(s)                    | Notes                                                                                                                          |
+| ------------------------ | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `database-host`          | `DATABASE_HOST`                       | Use `localhost` for local dev (proxy handles the connection)                                                                   |
+| `database-user`          | `DATABASE_USER`                       | Also used in `DATABASE_URL`                                                                                                    |
+| `database-password`      | `DATABASE_PASSWORD`                   | Also used in `DATABASE_URL`                                                                                                    |
+| `database-name`          | `DATABASE_NAME`                       | Also used in `DATABASE_URL`                                                                                                    |
+| `auth-secret`            | `AUTH_SECRET`                         | Required in production; optional in dev                                                                                        |
+| `auth-jwt-private-key`   | `AUTH_JWT_PRIVATE_KEY`                | RSA PEM key; single-line with `\n` escapes, wrapped in double quotes                                                           |
+| `api-key`                | `API_KEY`                             |                                                                                                                                |
+| `super-admin-api-key`    | `SUPER_ADMIN_API_KEY`                 |                                                                                                                                |
+| `sendgrid-api-key`       | `EMAIL_SERVER`                        | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)                                                      |
+| `google-maps-api-key`    | `F3_GOOGLE_API_KEY`                   | Google Maps JS API key; read by the map + admin apps. The script also writes `NEXT_PUBLIC_GOOGLE_API_KEY`, which no app reads. |
+| _(set manually)_         | `GCS_EMULATOR_HOST`                   | `localhost:9023` for the local fake-gcs emulator                                                                               |
+| _(set manually)_         | `GCS_CREDENTIALS`                     | `local-placeholder-not-used-with-emulator` for local dev; base64 service-account JSON for real GCS                             |
+| _(set manually)_         | `EMAIL_FROM`                          | Sender address (e.g. `noreply@f3nation.com`)                                                                                   |
+| _(set manually)_         | `EMAIL_ADMIN_DESTINATIONS`            | Comma-separated admin email addresses                                                                                          |
+| _(same as DATABASE_URL)_ | `TEST_DATABASE_URL`                   | Connection string for test database                                                                                            |
+| _(set manually)_         | `NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED` | Optional; comma-separated webhook URLs for notifications                                                                       |
 
 **Client-side variables** (set these directly in `.env`):
 
@@ -76,6 +91,8 @@ DATABASE_URL=postgresql://<DATABASE_USER>:<DATABASE_PASSWORD>@localhost:5433/<DA
 ```
 
 See each app's `.env.example` (e.g., `apps/api/.env.example`, `apps/map/.env.example`) for a complete template with placeholder values.
+
+</details>
 
 ## 4. Start the Cloud SQL Auth Proxy
 
