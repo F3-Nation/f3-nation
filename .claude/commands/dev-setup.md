@@ -10,10 +10,10 @@ $ARGUMENTS
 
 **Modes:**
 
-- No arguments — full interactive setup (check prerequisites → generate env → start proxy → verify DB → start dev servers)
+- No arguments — full interactive setup (check prerequisites → check env files → start proxy → verify DB → start dev servers)
 - `status` — check the health of all components (proxy, env, DB connection, app ports)
 - `fix` — diagnose and auto-fix common issues (missing deps, stale env, proxy down, port conflicts)
-- `reset` — regenerate `.env` from GCP and restart services
+- `reset` — re-copy the `.env.example` files, re-pull secrets from GCP, and restart services
 
 ---
 
@@ -64,15 +64,15 @@ Wait for the user to confirm, then re-check.
 
 ---
 
-## Step 4 — Generate Environment
+## Step 4 — Check Environment Files
 
-Check if `.env` exists at the repo root:
+Env files are per-directory (`apps/<app>/.env` and `packages/env/.env`), not at the repo root. Check each one exists:
 
 ```bash
-test -f .env && echo "EXISTS" || echo "MISSING"
+for d in apps/api apps/auth apps/map apps/me apps/admin packages/env; do test -f "$d/.env" && echo "$d EXISTS" || echo "$d MISSING"; done
 ```
 
-**If missing or `reset` mode:** Run `pnpm env:generate` to pull staging secrets from GCP and create `.env` with symlinks.
+**If missing or `reset` mode:** Run `pnpm local:setup` to copy the `.env.example` files, then fill in secrets from GCP Secret Manager (project `f3-authentication-staging`) following the mapping in `docs/LOCAL_DEV_SETUP.md`.
 
 **If exists:** Validate it has the required variables by cross-referencing with `packages/env/src/index.ts`. Report any missing vars.
 
@@ -156,8 +156,7 @@ GCP Auth:
   App Default:       ✓
 
 Environment:
-  .env:              ✓ (generated 2026-04-09)
-  Symlinks:          api ✓  map ✓  auth ✓
+  .env files:        api ✓  auth ✓  map ✓  me ✓  admin ✓  env ✓
 
 Database:
   Proxy:             ✓ running on :5433 (background daemon)
@@ -179,10 +178,9 @@ When called with `fix`, diagnose and auto-fix issues:
 
 1. Missing prerequisites → install them
 2. GCP auth expired → prompt re-auth
-3. `.env` missing or incomplete → regenerate
+3. `.env` missing or incomplete → re-copy from `.env.example` and refill secrets
 4. Proxy not running → start it (or install daemon)
 5. Port conflicts → identify and offer to kill conflicting processes
-6. Stale symlinks → recreate
 
 ---
 
