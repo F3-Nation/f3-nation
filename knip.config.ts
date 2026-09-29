@@ -21,7 +21,14 @@ const config: KnipConfig = {
     "tooling/ci-factory/**",
   ],
   ignoreDependencies: ["@turbo/gen", "dotenv"],
-  ignoreBinaries: ["uv"],
+  ignoreBinaries: [
+    "uv",
+    // Postgres CLIs the obfuscator's verify harness shells out to.
+    "initdb",
+    "pg_ctl",
+    "pg_isready",
+    "createdb",
+  ],
   workspaces: {
     ".": {
       // scripts/lint-staged.mjs spawns the eslint binary by path, so the root
