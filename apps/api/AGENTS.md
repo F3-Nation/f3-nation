@@ -1,7 +1,8 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# apps/api
 
-# Next.js: ALWAYS read docs before coding
+Hono on `@hono/node-server`, bundled with esbuild (`scripts/build.mjs`); the
+oRPC router lives in `packages/api`. `pnpm dev` runs it with
+`NODE_ENV=development` so the dev mock session works locally.
 
-Before any Next.js work, find and read the relevant doc in `node_modules/next/dist/docs/`. Your training data is outdated — the docs are the source of truth.
-
-<!-- END:nextjs-agent-rules -->
+`characterization/` goldens are frozen: a snapshot diff is a behavior change,
+not churn. Read [docs/testing.md](../../docs/testing.md) before touching them.

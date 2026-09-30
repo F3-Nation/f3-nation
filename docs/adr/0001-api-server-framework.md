@@ -1,6 +1,6 @@
 # ADR 0001: Migrate `apps/api` off Next.js to Hono on Node
 
-- **Status:** Accepted (implementation tracked in epic
+- **Status:** Implemented (tracked in epic
   [#644](https://github.com/F3-Nation/f3-nation/issues/644))
 - **Date:** 2026-07-09
 - **Deciders:** @taterhead247, @BigGillyStyle, @evanpetzoldt

@@ -80,11 +80,10 @@ backstop that `--no-verify` cannot skip.
 tests. It exists for one reason: the Hono migration (epic #644) replaces the
 framework underneath `apps/api`, and the code with the largest blast radius —
 auth resolution and the HTTP wire layer — had no end-to-end tests at all. The
-suite dispatches real `Request` objects into the real route handlers with the
-auth, codec, and CORS stack unmocked — only `next/headers` is shimmed, because
-it throws outside a Next request scope — so a port can be proven
+suite dispatches real `Request` objects into the real app with the auth,
+codec, and CORS stack unmocked, so a change to the server layer can be proven
 behavior-identical instead of argued to be. The `live` target issues real HTTP
-over a socket; `next` dispatches in-process.
+over a socket; `hono` dispatches in-process.
 
 The framework decision itself is recorded in
 [ADR 0001](adr/0001-api-server-framework.md).
@@ -108,15 +107,18 @@ suites mutate the shared `f3_test` database and must never run concurrently.
 Every test is written against `type Invoke = (req: Request) => Promise<Response>`,
 selected by `CHAR_TEST_TARGET`:
 
-| Value            | Dispatch                                  | Used by                                              |
-| ---------------- | ----------------------------------------- | ---------------------------------------------------- |
-| `next` (default) | the real Next route handlers, in-process  | today, and CI                                        |
-| `hono`           | the Hono app's `fetch`                    | #649, run alongside `next` against identical goldens |
-| `live`           | real `fetch` against `CHAR_TEST_BASE_URL` | #650's staging gate                                  |
+| Value            | Dispatch                                  | Used by                                    |
+| ---------------- | ----------------------------------------- | ------------------------------------------ |
+| `hono` (default) | the Hono app's `fetch`, in-process        | local runs and CI                          |
+| `live`           | real `fetch` against `CHAR_TEST_BASE_URL` | CI's built-bundle leg and the Staging gate |
 
 Cases needing DB fixtures or in-process module state are gated behind
 `describe.runIf(target.inProcess)`, so the `live` target runs the black-box
-subset without any test rewrites.
+subset without any test rewrites. Cases that only need fixtures the server can
+see use `target.sharesDatabase` instead: CI's bundle leg sets
+`CHAR_TEST_SHARED_DB=1` because the booted bundle and the test process share
+`f3_test`, which lets it exercise `cascade-service`'s dynamic import. Staging
+leaves it unset and skips those cases.
 
 ### Golden files are frozen
 
