@@ -87,10 +87,19 @@ describe("migrationsDatabaseName", () => {
     ).toBe("f3_test?sslmode=disable");
   });
 
-  it("uses the bare database name for a socket URL", () => {
+  it("names a socket URL's table exactly like the equivalent TCP URL's", () => {
+    // Only the socket host= is ignored; any other parameter still counts,
+    // as it always has, so switching transport never moves the history.
     expect(
       migrationsDatabaseName(`postgres://api:pw@/f3_prod?host=${SOCKET}`),
-    ).toBe("f3_prod");
+    ).toBe(migrationsDatabaseName("postgres://api:pw@h:6432/f3_prod"));
+    expect(
+      migrationsDatabaseName(
+        `postgres://api:pw@/f3_test?host=${SOCKET}&sslmode=disable`,
+      ),
+    ).toBe(
+      migrationsDatabaseName("postgres://api:pw@h/f3_test?sslmode=disable"),
+    );
   });
 });
 

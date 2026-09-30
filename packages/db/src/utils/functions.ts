@@ -100,17 +100,17 @@ export const postgresArgs = (
 
 /**
  * The database name migrate.ts suffixes its migrations table with
- * (`__drizzle_migrations_<name>`). For TCP URLs this is deliberately the
- * legacy `split("/").pop()` value, query string included, so existing
- * environments keep finding their migration history — renaming it would
- * re-run every migration. Socket URLs (new) use the bare database name
- * instead of `f3_prod?host=/cloudsql/…`, matching the table the same
- * database's TCP URL has always used.
+ * (`__drizzle_migrations_<name>`). Deliberately the legacy
+ * `split("/").pop()` value — query string included — so every existing
+ * environment keeps finding its migration history; renaming it would re-run
+ * every migration. The only change is that a Cloud SQL socket `host=` is
+ * removed first, so a socket URL names the same table as the TCP URL for
+ * the same database with the same other parameters
+ * (`…@/f3_prod?host=/cloudsql/…` → `f3_prod`,
+ * `…?host=/cloudsql/…&sslmode=disable` → `f3_prod?sslmode=disable`).
  */
 export const migrationsDatabaseName = (databaseUrl: string) =>
-  splitSocketHost(databaseUrl).socketHost
-    ? getDatabaseNameFromUri(databaseUrl)
-    : databaseUrl.split("/").slice(-1)[0];
+  splitSocketHost(databaseUrl).url.split("/").slice(-1)[0];
 
 export const getDatabaseNameFromUri = (uri: string) => {
   const databaseNameRegex = /\/([^/?]+)(\?|$)/;
