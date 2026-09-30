@@ -256,6 +256,10 @@ The order is load-bearing. Each step must land before the next begins.
      `roles/cloudsql.client`, as `apps/auth/README.md` documents for `auth`.
    - **Report the root cause of database errors to PostHog.** See the
      connection-failure alert in step 2 — without this, that alert cannot fire.
+     The exporter change stamps it as flat `root_cause_type` /
+     `root_cause_message` properties (and a chained exception in the issue
+     view), redacts Drizzle's bound params, and stops reporting 4xx oRPC
+     errors as exceptions.
 
    **Connection budget.** Every direct client counts once PgBouncer is gone:
    `api` 15 × 5 + `map` 15 × 5 = 150, plus `auth` 1 × 10 (no `max`, so the
@@ -307,17 +311,18 @@ The order is load-bearing. Each step must land before the next begins.
      answers §8 without standing up a scheduled job to maintain.
 
    - **Connection-failure alert — PostHog.** Alert on `$exception` events whose
-     message matches the connection-failure class — `CONNECT_TIMEOUT`,
+     `root_cause_message` — or, for an error with no cause, the exception
+     message itself — matches the connection-failure class — `CONNECT_TIMEOUT`,
      `ECONNREFUSED`, `ENOTFOUND`, `sorry, too many clients already`,
      `terminating connection`, and the pool-wait/execution timeout, emitted as
      `Query exceeded <n>ms pool-wait/execution timeout`
      (`packages/db/src/utils/query-timeout.ts`) — filtered to
      `environment = prod` (the value the exporter actually stamps — previews
      send `branch`, staging `staging`), firing above 5 events in 5 minutes.
-     Match on the message, not on volume alone: ordinary 4xx responses (rate
-     limits, `Unauthorized`, input validation) are also reported as
-     `$exception` today, and one client's 429 burst on 2026-09-28 produced
-     ~400 in five minutes.
+     Match on the message, not on volume alone: until the exporter change in
+     step 1 lands, ordinary 4xx responses (rate limits, `Unauthorized`, input
+     validation) are also reported as `$exception` — one client's 429 burst on
+     2026-09-28 produced ~400 in five minutes.
 
      **This needs code first** (the last prerequisite in step 1). Every query
      in `api` and `map` goes through Drizzle, which wraps any driver error in a
