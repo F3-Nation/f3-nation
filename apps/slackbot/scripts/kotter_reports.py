@@ -41,7 +41,9 @@ VALID_SEND_MODES = {"group", "individual"}
 SLACK_TABLE_MAX_ROWS = 201
 SLACK_TABLE_HEADER_ROWS = 1
 SLACK_TABLE_MAX_DATA_ROWS = SLACK_TABLE_MAX_ROWS - SLACK_TABLE_HEADER_ROWS
-SLACK_DATA_TABLE_MAX_CHARS = 20_000
+SLACK_DATA_TABLE_MAX_CHARS = 18_000
+SLACK_TABLE_MAX_CELL_CHARS = 1_000
+SLACK_MESSAGE_TEXT_MAX_CHARS = 4_000
 DEFAULT_SAMPLE_REPORT_ROWS = 8
 
 
@@ -490,15 +492,26 @@ def _stats_url(row: KotterRow, stats_url: str | None) -> str | None:
     return f"{stats_url.rstrip('/')}/stats/pax/{row.user_id}"
 
 
+def _truncate_table_text(value: str, limit: int = SLACK_TABLE_MAX_CELL_CHARS) -> str:
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 1]}…"
+
+
 def _pax_table_cell(row: KotterRow, stats_url: str | None) -> dict:
     url = _stats_url(row, stats_url)
+    display_name = _truncate_table_text(row.f3_name or f"User {row.user_id}")
+    if row.slack_user_id and len(str(row.slack_user_id)) > SLACK_TABLE_MAX_CELL_CHARS:
+        return {"type": "raw_text", "text": display_name}
+    if url and len(url) > SLACK_TABLE_MAX_CELL_CHARS:
+        return {"type": "raw_text", "text": display_name}
     name_element = (
-        {"type": "user", "user_id": row.slack_user_id} if row.slack_user_id else {"type": "text", "text": row.f3_name}
+        {"type": "user", "user_id": row.slack_user_id} if row.slack_user_id else {"type": "text", "text": display_name}
     )
     if not url:
         if row.slack_user_id:
             return {"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [name_element]}]}
-        return {"type": "raw_text", "text": row.f3_name}
+        return {"type": "raw_text", "text": display_name}
     return {
         "type": "rich_text",
         "elements": [
@@ -531,27 +544,30 @@ def build_kotter_message(delivery: Delivery, stats_url: str | None = None) -> li
     def make_cells(row: KotterRow) -> list[dict]:
         return [
             _pax_table_cell(row, stats_url),
-            {"type": "raw_text", "text": _reason_text(row)},
-            {"type": "raw_text", "text": row.home_ao_name or ""},
+            {"type": "raw_text", "text": _truncate_table_text(_reason_text(row))},
+            {"type": "raw_text", "text": _truncate_table_text(row.home_ao_name or "")},
             {"type": "raw_text", "text": row.last_post_date.isoformat() if row.last_post_date else ""},
             {"type": "raw_text", "text": row.last_q_date.isoformat() if row.last_q_date else ""},
         ]
 
     def cell_chars(cells: list[dict]) -> int:
-        return sum(
-            len(cell.get("text", ""))
-            if cell["type"] != "rich_text"
-            else sum(
-                len(element.get("text", "")) + len(element.get("url", ""))
-                for section in cell.get("elements", [])
-                for element in section.get("elements", [])
-            )
-            for cell in cells
-        )
+        total = 0
+        for cell in cells:
+            if cell["type"] != "rich_text":
+                total += len(cell.get("text", ""))
+                continue
+            for section in cell.get("elements", []):
+                for element in section.get("elements", []):
+                    total += len(element.get("text", ""))
+                    total += len(element.get("url", ""))
+                    if element.get("type") == "user":
+                        total += len(str(element.get("user_id", "")))
+        return total
 
     chunks: list[list[KotterRow]] = []
     current: list[KotterRow] = []
-    current_chars = cell_chars(header)
+    caption = _truncate_table_text(delivery.title)
+    current_chars = cell_chars(header) + len(caption)
     for row in rows:
         row_chars = cell_chars(make_cells(row))
         if current and (
@@ -559,7 +575,7 @@ def build_kotter_message(delivery: Delivery, stats_url: str | None = None) -> li
         ):
             chunks.append(current)
             current = []
-            current_chars = cell_chars(header)
+            current_chars = cell_chars(header) + len(caption)
         current.append(row)
         current_chars += row_chars
     if current or not chunks:
@@ -569,7 +585,7 @@ def build_kotter_message(delivery: Delivery, stats_url: str | None = None) -> li
     messages = []
     for page, chunk in enumerate(chunks, start=1):
         page_info = f" Part {page} of {total_pages}." if total_pages > 1 else ""
-        summary = f"{delivery.title} — {len(rows)} PAX need attention.{page_info}"
+        summary = _truncate_table_text(f"{delivery.title} — {len(rows)} PAX need attention.{page_info}", limit=3_000)
         fallback_lines = [summary]
         for row in chunk:
             last_post = row.last_post_date.isoformat() if row.last_post_date else "unknown"
@@ -579,13 +595,17 @@ def build_kotter_message(delivery: Delivery, stats_url: str | None = None) -> li
                 f"last post: {last_post}; last Q: {last_q}."
             )
         text = "\n".join(fallback_lines)
+        if len(text) > SLACK_MESSAGE_TEXT_MAX_CHARS:
+            omitted_note = "\nAdditional details omitted from this text preview."
+            available_chars = SLACK_MESSAGE_TEXT_MAX_CHARS - len(omitted_note) - 1
+            text = f"{text[:available_chars].rstrip()}…{omitted_note}"
         table_rows = [header, *(make_cells(row) for row in chunk)]
         messages.append(
             (
                 text,
                 [
                     {"type": "section", "text": {"type": "mrkdwn", "text": summary[:3000]}},
-                    {"type": "data_table", "caption": delivery.title, "page_size": 20, "rows": table_rows},
+                    {"type": "data_table", "caption": caption, "page_size": 20, "rows": table_rows},
                 ],
             )
         )

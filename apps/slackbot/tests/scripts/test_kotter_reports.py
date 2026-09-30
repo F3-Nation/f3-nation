@@ -334,6 +334,71 @@ def test_build_kotter_message_splits_on_table_character_limit():
         assert sum(len(cell.get("text", "")) for table_row in table["rows"] for cell in table_row) <= 20_000
 
 
+def test_build_kotter_message_bounds_pathological_table_row():
+    oversized = row(1)
+    oversized.f3_name = "PAX " + "N" * 25_000
+    oversized.home_ao_name = "AO " + "A" * 25_000
+    oversized.slack_user_id = "U" * 25_000
+    text, blocks = kotter_reports.build_kotter_message(
+        kotter_reports.Delivery("C1", [oversized]), stats_url="https://example.test/" + "x" * 25_000
+    )[0]
+    table = next(block for block in blocks if block["type"] == "data_table")
+    pax_cell = table["rows"][1][0]
+
+    assert len(text) <= 4_000
+    assert pax_cell["type"] == "raw_text"
+    assert pax_cell["text"].endswith("…")
+    assert table["rows"][1][2]["text"].endswith("…")
+    assert sum(len(cell.get("text", "")) for table_row in table["rows"] for cell in table_row) <= 20_000
+
+
+def test_build_kotter_message_budgets_rich_text_ids_and_links():
+    rows = [row(i, ao_name="A" * 950) for i in range(8)]
+    for item in rows:
+        item.slack_user_id = "U" * 900
+    messages = kotter_reports.build_kotter_message(
+        kotter_reports.Delivery("C1", rows), stats_url="https://example.test/" + "x" * 900
+    )
+
+    assert len(messages) > 1
+    assert sum(
+        len(next(block for block in blocks if block["type"] == "data_table")["rows"]) - 1 for _, blocks in messages
+    ) == len(rows)
+    for _, blocks in messages:
+        table = next(block for block in blocks if block["type"] == "data_table")
+        table_chars = len(table["caption"])
+        for table_row in table["rows"]:
+            for cell in table_row:
+                if cell["type"] == "rich_text":
+                    for section in cell["elements"]:
+                        for element in section["elements"]:
+                            table_chars += len(element.get("text", "")) + len(element.get("url", ""))
+                            if element.get("type") == "user":
+                                table_chars += len(element["user_id"])
+                else:
+                    table_chars += len(cell.get("text", ""))
+        assert table_chars <= 18_000
+
+
+def test_send_delivery_uses_bounded_text_fallback_for_many_rows(capsys):
+    calls = []
+
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            calls.append(kwargs)
+            if kwargs["blocks"] is not None:
+                raise SlackApiError("invalid blocks", {"error": "invalid_blocks"})
+
+    delivery = kotter_reports.Delivery("C1", [row(i, ao_name="AO " + "A" * 950) for i in range(201)])
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=1)
+
+    retry_texts = [call["text"] for call in calls if call["blocks"] is None]
+    assert len(retry_texts) == len(kotter_reports.build_kotter_message(delivery))
+    assert all(len(text) <= 4_000 for text in retry_texts)
+    assert "Additional details omitted from this text preview." in retry_texts[0]
+    assert "Sent Kotter Report" in capsys.readouterr().out
+
+
 def test_send_delivery_posts_all_data_table_chunks():
     calls = []
 
