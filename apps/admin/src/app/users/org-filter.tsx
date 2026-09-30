@@ -1,7 +1,8 @@
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
 import type { RouterOutputs } from "~/orpc/types";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { OrgType } from "@acme/shared/app/enums";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
@@ -21,18 +22,25 @@ export const OrgFilter = ({
   label?: string;
   orgTypes?: OrgType[];
 }) => {
-  const { data: orgs } = useQuery(
-    orpc.org.all.queryOptions({
-      input: { orgTypes },
-    }),
-  );
+  const { data: orgs } = useFetchAllPages({
+    path: ["org", "all"],
+    queryKey: ["org.all.everyOrgType", orgTypes],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes,
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   return (
     <div className="max-w-80">
       <VirtualizedCombobox
         popoverContentAlign="end"
         options={
-          orgs?.orgs
+          orgs
             ?.map((org) => ({
               label: `(${org.orgType.toUpperCase()}) ${org.name}`,
               value: org.id.toString(),
@@ -41,7 +49,7 @@ export const OrgFilter = ({
         }
         value={selectedOrgs.map((org) => org.id.toString())}
         onSelect={(item) => {
-          const org = orgs?.orgs.find((org) => org.id.toString() === item);
+          const org = orgs?.find((org) => org.id.toString() === item);
           if (org) {
             onOrgSelect(org);
           }
