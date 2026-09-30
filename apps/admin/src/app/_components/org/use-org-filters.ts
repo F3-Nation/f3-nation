@@ -1,7 +1,8 @@
 import { useMemo, useReducer, useState } from "react";
 import { IsActiveStatus } from "@acme/shared/app/enums";
-import { orpc, useQuery } from "~/orpc/react";
+import { client } from "~/orpc/client";
 import type { RouterOutputs } from "~/orpc/types";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { OrgAdminConfig } from "./org-admin-config";
 import {
   getOrgById,
@@ -114,31 +115,45 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
     "active",
   ]);
   const [onlyMine, setOnlyMine] = useState(true);
-  const { data: hierarchyData } = useQuery(
-    orpc.org.all.queryOptions({
-      input: {
+  // Paged via useFetchAllPages rather than the old "omit both pageIndex and
+  // pageSize" escape hatch — org.all now bounds that branch server-side (see
+  // packages/api/src/lib/pagination.ts), so an unpaginated fetch would
+  // silently truncate the sector/territory hierarchy for any org with more
+  // than a default page's worth of children.
+  const { data: hierarchyDataOrgs } = useFetchAllPages({
+    path: ["org", "all"],
+    queryKey: [
+      "org.all.hierarchy",
+      config.ancestorTypes,
+      config.intermediateTypes,
+    ],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
         orgTypes: [
           ...(config.ancestorTypes ?? []),
           ...(config.intermediateTypes ?? []),
         ],
         statuses: IsActiveStatus,
-      },
-      enabled: !!config.ancestorTypes,
-    }),
-  );
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+    enabled: !!config.ancestorTypes,
+  });
   // Keep filter candidates unchanged while retaining intermediate nodes in the
   // lookup for irregular legacy/imported or directly written same-tier ancestry.
   // The API parent rule rejects creating these relationships.
   const hierarchyOrgs = useMemo(
     () =>
-      hierarchyData?.orgs.filter((org) =>
+      hierarchyDataOrgs?.filter((org) =>
         config.ancestorTypes?.includes(org.orgType),
       ),
-    [hierarchyData, config.ancestorTypes],
+    [hierarchyDataOrgs, config.ancestorTypes],
   );
   const orgById = useMemo(
-    () => getOrgById(hierarchyData?.orgs ?? []),
-    [hierarchyData],
+    () => getOrgById(hierarchyDataOrgs ?? []),
+    [hierarchyDataOrgs],
   );
   const sectors = useMemo(
     () =>
