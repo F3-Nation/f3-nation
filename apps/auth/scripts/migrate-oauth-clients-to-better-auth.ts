@@ -166,8 +166,13 @@ async function main() {
   });
   const db = drizzle(sql);
 
+  // Label unconditionally (dry run or not) -- .env.local's connection is the
+  // real, shared staging database, not an isolated local one, and the dry-run
+  // preview below is exactly where an operator would otherwise mistake one
+  // for the other.
+  const connectionLabel = usingEnvLocal ? "the shared STAGING" : targetEnv;
   console.log(
-    `\nConnected to ${targetEnv} database at ${databaseHost}/${databaseName}.\n`,
+    `\nConnected to ${connectionLabel} database at ${databaseHost}/${databaseName}.\n`,
   );
 
   const clients = await db
