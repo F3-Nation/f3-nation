@@ -7,7 +7,7 @@ import { healthResponseSchema } from "@f3nation/health";
 import { app } from "../src/app";
 
 // Thin wiring tests: prove app.ts routes to the right module and applies the
-// Next-parity behaviors it owns (trailing-slash 308, docs method-guard, no
+// legacy-parity behaviors it owns (trailing-slash 308, docs method-guard, no
 // compression). Router/auth/dispatch behavior itself is covered by
 // handler.ts's own unit tests and the characterization suite, not duplicated
 // here.
