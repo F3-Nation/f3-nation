@@ -66,16 +66,39 @@ const QUERY_TIMEOUT_MS = resolveQueryTimeoutMs(process.env.QUERY_TIMEOUT_MS);
  * the pooler and the socket stays a swap of that one secret. URLs without a
  * socket `host=` (every TCP URL today) are returned unchanged.
  */
+const decodeQueryPart = (part: string) => {
+  try {
+    return decodeURIComponent(part.replace(/\+/g, " "));
+  } catch {
+    return part;
+  }
+};
+
 export const splitSocketHost = (
   databaseUrl: string,
 ): { url: string; socketHost?: string } => {
   const queryStart = databaseUrl.indexOf("?");
   if (queryStart < 0) return { url: databaseUrl };
-  const params = new URLSearchParams(databaseUrl.slice(queryStart + 1));
-  const host = params.get("host");
-  if (!host?.startsWith("/")) return { url: databaseUrl };
-  params.delete("host");
-  const query = params.toString();
+  // Filter the raw `key=value` pairs rather than parsing and re-serializing
+  // the query: every other parameter must survive byte-for-byte (e.g.
+  // `%20` must not become `+`), because migrationsDatabaseName names the
+  // migrations table after this text.
+  let host: string | undefined;
+  const kept = databaseUrl
+    .slice(queryStart + 1)
+    .split("&")
+    .filter((pair) => {
+      const eq = pair.indexOf("=");
+      if (decodeQueryPart(eq < 0 ? pair : pair.slice(0, eq)) !== "host") {
+        return true;
+      }
+      const value = decodeQueryPart(eq < 0 ? "" : pair.slice(eq + 1));
+      if (!value.startsWith("/")) return true;
+      host = value;
+      return false;
+    });
+  if (!host) return { url: databaseUrl };
+  const query = kept.join("&");
   // postgres.js rejects an empty host; any placeholder works, since the
   // options-form host overrides it.
   const base = databaseUrl

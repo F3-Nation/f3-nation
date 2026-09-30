@@ -46,6 +46,18 @@ describe("splitSocketHost", () => {
     });
   });
 
+  it("keeps every other parameter byte-for-byte", () => {
+    // No parse/re-serialize round trip: %20 must not become +, and the
+    // parameter order is kept.
+    expect(
+      splitSocketHost(
+        `postgres://api:pw@/f3_prod?application_name=api%20map&host=${SOCKET}&options=-c%20x%3Dy`,
+      ).url,
+    ).toBe(
+      "postgres://api:pw@localhost/f3_prod?application_name=api%20map&options=-c%20x%3Dy",
+    );
+  });
+
   it("handles a credential-less URL", () => {
     expect(splitSocketHost(`postgres:///f3_prod?host=${SOCKET}`)).toEqual({
       url: "postgres://localhost/f3_prod",
@@ -99,6 +111,15 @@ describe("migrationsDatabaseName", () => {
       ),
     ).toBe(
       migrationsDatabaseName("postgres://api:pw@h/f3_test?sslmode=disable"),
+    );
+    expect(
+      migrationsDatabaseName(
+        `postgres://api:pw@/f3_prod?application_name=api%20map&host=${SOCKET}`,
+      ),
+    ).toBe(
+      migrationsDatabaseName(
+        "postgres://api:pw@h/f3_prod?application_name=api%20map",
+      ),
     );
   });
 });
