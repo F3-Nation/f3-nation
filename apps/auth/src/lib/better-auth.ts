@@ -55,6 +55,13 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
 import { eq } from "drizzle-orm";
 
+// Type-only — erased at compile time, so this does NOT import ~/lib/db (and
+// its DATABASE_* env requirement) as a module-load side effect. See getAuth's
+// own dynamic `await import("~/lib/db")` below for the actual runtime import.
+import type { db as authDbType } from "~/lib/db";
+import { logInfo, logWarn } from "~/lib/logging";
+
+import { getUserRoles } from "@acme/db";
 import {
   betterAuthAccount,
   betterAuthJwks,
@@ -70,6 +77,7 @@ import {
   betterAuthVerification,
   users,
 } from "@acme/db/schema/schema";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 
 // The OAuth Provider plugin's `claims.accessToken` extension is strictly
 // additive (can't override an AS-owned/reserved claim) and is only
@@ -140,7 +148,48 @@ export interface CreateAuthInstanceOptions {
    * what makes that `before` hook refuse the sign-in instead.
    */
   findF3UserId: (email: string) => Promise<number | null>;
+  /**
+   * Returns whether the given F3 `users.id` currently holds the nation-admin
+   * role — the same check `nationAdminProcedure` uses (packages/api/src/
+   * shared.ts), just against a raw user id instead of a `Session`, since
+   * oauth-provider's `clientReference` callback below only gets Better
+   * Auth's own `{ user, session }` shape, not an F3 `Session` with a
+   * populated `roles` array.
+   */
+  isNationAdmin: (f3UserId: number) => Promise<boolean>;
+  /**
+   * Gates every OAuth client action via oauth-provider's `clientPrivileges`
+   * hook — called with the attempted action, returns whether it's allowed.
+   * Production is an allowlist of read/list/rotate (see
+   * allowProductionClientAction's comment): "create" is denied because
+   * dynamic self-serve client creation isn't part of the design (letting it
+   * through would auto-tag whatever an admin creates as F3-managed via
+   * clientReference below, not just the intended F3-managed clients), and
+   * "update"/"delete"/"configure-client-credentials-scopes" are denied
+   * because once a client is F3-managed, oauth-provider's own per-client
+   * ownership check no longer limits who can use them — every nation admin
+   * passes it — so those actions need this allowlist to stay closed
+   * instead. Tests pass a permissive policy so fixtures can exercise client
+   * creation directly.
+   */
+  allowClientAction: (
+    action:
+      | "create"
+      | "read"
+      | "update"
+      | "delete"
+      | "list"
+      | "rotate"
+      | "configure-client-credentials-scopes",
+  ) => Promise<boolean>;
 }
+
+// The stable "owner" identity for F3-Nation-managed OAuth clients — set as a
+// client's referenceId rather than a per-user userId, so any current or
+// future nation admin can read, list, and rotate the secret for a client one
+// of them created, not just whoever happened to create it. See oauthProvider's
+// clientReference option below.
+const F3_NATION_CLIENT_REFERENCE_ID = "f3-nation";
 
 /**
  * Split out from createAuthInstance so tests can pre-seed a memoryAdapter's
@@ -220,6 +269,56 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         // apps/auth/src/lib/oauth.ts's exchangeAuthorizationCode). Set
         // explicitly here anyway so the intent is documented, not implicit.
         clientRegistrationRequirePKCE: true,
+        // Any nation admin can read/list/rotate a shared, F3-Nation-owned
+        // client instead of it being tied to whichever individual admin
+        // happened to create it — see F3_NATION_CLIENT_REFERENCE_ID above.
+        // A session that isn't a nation admin gets `undefined` here, so
+        // oauth-provider falls back to its normal per-user ownership
+        // (session.user.id) for any client that admin creates for
+        // themselves.
+        //
+        // This callback only ever sees the calling session, never the
+        // client being created/mutated, so it can't tell an intended
+        // F3-managed client apart from any other client a nation admin
+        // happens to create — see allowClientAction's doc comment above for
+        // why production denies "create" outright instead of relying on
+        // this callback alone. This callback's create-time return value
+        // only matters where a caller injects a permissive allowClientAction
+        // (the test fixtures) — production never takes that path.
+        //
+        // An F3-managed client's referenceId has to be set directly, by a
+        // provisioning script writing to the database, before this callback
+        // (or a rotate call) can ever apply to it.
+        clientReference: async ({ user }) => {
+          if (!user) return undefined;
+          const f3UserId = Number(user.id);
+          if (!Number.isInteger(f3UserId)) return undefined;
+          return (await options.isNationAdmin(f3UserId))
+            ? F3_NATION_CLIENT_REFERENCE_ID
+            : undefined;
+        },
+        // See allowClientAction's doc comment above.
+        clientPrivileges: async ({ action, user }) => {
+          const allowed = await options.allowClientAction(action);
+          // Denials and non-read attempts are worth an audit trail — an
+          // action here hands out or replaces an app's credentials, and
+          // oauth-provider itself doesn't log the UNAUTHORIZED it throws
+          // when this returns false. This hook runs before oauth-provider's
+          // own ownership check, so an "attempted" log records an attempt,
+          // not necessarily a success.
+          if (!allowed) {
+            logWarn("auth.oauth_client.action_denied", {
+              action,
+              userId: user?.id,
+            });
+          } else if (action !== "read" && action !== "list") {
+            logInfo("auth.oauth_client.action_attempted", {
+              action,
+              userId: user?.id,
+            });
+          }
+          return allowed;
+        },
         // Deliberately no storeClientSecret override — prefers Better
         // Auth's own default secret hashing over matching the hand-rolled
         // server's sha256 scheme, even though it means confidential clients
@@ -248,6 +347,45 @@ export function createAuthInstance(options: CreateAuthInstanceOptions) {
 // ---------------------------------------------------------------------------
 
 let _auth: ReturnType<typeof createAuthInstance> | null = null;
+
+type AuthDb = typeof authDbType;
+
+/**
+ * Kept as a standalone function — rather than inline in getAuth's
+ * `isNationAdmin` field — so it can be unit-tested with a stubbed db without
+ * constructing a whole Better Auth instance. The roles query itself lives
+ * in @acme/db's getUserRoles, shared with packages/api's getSessionFromJWT,
+ * so there's one place to change it, not two.
+ */
+export async function isNationAdminForUser(
+  database: AuthDb,
+  f3UserId: number,
+): Promise<boolean> {
+  const userRoles = await getUserRoles(database, f3UserId);
+  return isNationAdminFromSession({ roles: userRoles });
+}
+
+/**
+ * Production's allowClientAction policy. An allowlist, not a denylist: once
+ * a client is F3-managed, "ownership" just means "is a nation admin" (see
+ * clientReference above), so `update` and `delete` aren't safe defaults to
+ * leave open. `update` covers redirect_uris in this version of
+ * oauth-provider — an admin could repoint an F3-managed client's
+ * redirect_uris at a URL they control, then rotate its secret, and
+ * intercept another F3 user's authorization code on their next sign-in. The
+ * only actions the stated goal (issuing a secret for an existing client)
+ * needs are read/list/rotate — everything else, including any future
+ * oauth-provider action, is denied by default rather than silently
+ * permitted. Split out from getAuth() (which needs a live DB connection to
+ * construct at all) so this pure decision is independently testable.
+ */
+export function allowProductionClientAction(
+  action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
+): Promise<boolean> {
+  return Promise.resolve(
+    action === "read" || action === "list" || action === "rotate",
+  );
+}
 
 /**
  * The production Better Auth instance, backed by the real database via
@@ -312,6 +450,8 @@ export async function getAuth() {
         .limit(1);
       return existing ? existing.id : null;
     },
+    isNationAdmin: (f3UserId) => isNationAdminForUser(db, f3UserId),
+    allowClientAction: allowProductionClientAction,
   });
 
   return _auth;
