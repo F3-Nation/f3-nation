@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { isDevModeSignInAllowed } from "./dev-mode";
+import { isDevModeSignInAllowed } from "@acme/auth/lib/dev-mode";
 
 describe("isDevModeSignInAllowed", () => {
   afterEach(() => {
