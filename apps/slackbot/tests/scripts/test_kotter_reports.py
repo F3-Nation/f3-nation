@@ -168,7 +168,7 @@ def test_get_kotter_config_thresholds_and_recipients():
         )
     )
     assert cfg.no_post_weeks == kotter_reports.DEFAULT_NO_POST_WEEKS
-    assert cfg.remove_weeks is None
+    assert cfg.remove_weeks == kotter_reports.DEFAULT_NO_POST_WEEKS + 2
     assert cfg.recipient_users == ["U1", "U2"]
     assert (
         kotter_reports.get_kotter_config(
@@ -194,6 +194,35 @@ def test_get_kotter_config_thresholds_and_recipients():
         ).remove_weeks
         == 5
     )
+
+    default_cutoff = kotter_reports.get_kotter_config(
+        settings(kotter_reports_enabled=True, NO_POST_THRESHOLD=4, REMINDER_WEEKS=" ")
+    )
+    assert default_cutoff.remove_weeks == 6
+
+
+def test_get_kotter_rows_default_removal_boundary_and_zero_is_unbounded(mocked_kotter_session):
+    today, query_chain, query_results = mocked_kotter_session
+    query_results[0].append((8, "PAX 8", "U8", date(2026, 6, 19)))
+    default_cfg = kotter_reports.get_kotter_config(
+        settings(kotter_reports_enabled=True, NO_POST_THRESHOLD=4, REMINDER_WEEKS=None)
+    )
+
+    rows = kotter_reports.get_kotter_rows(default_cfg, today=today)
+
+    assert default_cfg.remove_weeks == 6
+    assert 8 in [result.user_id for result in rows]  # exactly at the removal boundary
+    assert 3 not in [result.user_id for result in rows]  # older than the removal boundary
+    assert 4 not in [result.user_id for result in rows]
+
+    query_chain.calls = 0
+    unbounded_cfg = kotter_reports.get_kotter_config(
+        settings(kotter_reports_enabled=True, NO_POST_THRESHOLD=4, REMINDER_WEEKS=0)
+    )
+    unbounded_rows = kotter_reports.get_kotter_rows(unbounded_cfg, today=today)
+
+    assert unbounded_cfg.remove_weeks is None
+    assert {3, 4, 8}.issubset({result.user_id for result in unbounded_rows})
 
 
 def test_resolve_group_and_individual_deliveries(monkeypatch):
@@ -249,10 +278,10 @@ def test_resolve_ao_routing_warns_when_home_ao_has_no_site_qs(monkeypatch, caplo
 
 def test_build_kotter_message_table_summary_and_oversized():
     delivery = kotter_reports.Delivery(destination="C1", rows=[row(1)])
-    text, blocks = kotter_reports.build_kotter_message(delivery)
+    text, blocks = kotter_reports.build_kotter_message(delivery)[0]
     assert "None/stats" not in text
-    assert any(block["type"] == "table" for block in blocks)
-    table = next(block for block in blocks if block["type"] == "table")
+    assert any(block["type"] == "data_table" for block in blocks)
+    table = next(block for block in blocks if block["type"] == "data_table")
     headers = [cell["text"] for cell in table["rows"][0]]
     assert "Last Q" in headers
     assert "Posts in window" not in headers
@@ -260,19 +289,93 @@ def test_build_kotter_message_table_summary_and_oversized():
     pax_cell = table["rows"][1][0]
     pax_elements = pax_cell["elements"][0]["elements"]
     assert pax_elements == [{"type": "user", "user_id": "U1"}]
-    assert "Last Q: 2025-12-01" in text
-    text, blocks = kotter_reports.build_kotter_message(delivery, stats_url="https://example.test")
+    assert "last Q: 2025-12-01" in text
+    assert "<@U1>: No recent posts, Posting, not Qing" in text
+    assert blocks[0]["text"]["text"] == "Weekly Kotter Report — 1 PAX need attention."
+    text, blocks = kotter_reports.build_kotter_message(delivery, stats_url="https://example.test")[0]
     assert "https://example.test/stats/pax/1" in text
-    assert any("/stats/pax/1" in block.get("text", {}).get("text", "") for block in blocks)
-    table = next(block for block in blocks if block["type"] == "table")
+    assert blocks[0]["text"]["text"] == "Weekly Kotter Report — 1 PAX need attention."
+    table = next(block for block in blocks if block["type"] == "data_table")
     pax_elements = table["rows"][1][0]["elements"][0]["elements"]
     assert pax_elements[0] == {"type": "user", "user_id": "U1"}
     assert pax_elements[2] == {"type": "link", "url": "https://example.test/stats/pax/1", "text": "stats"}
 
-    many_rows = [row(i) for i in range(kotter_reports.SLACK_TABLE_MAX_DATA_ROWS + 2)]
-    text, blocks = kotter_reports.build_kotter_message(kotter_reports.Delivery(destination="C1", rows=many_rows))
-    assert "+2 more" in text
-    assert all(block["type"] != "table" for block in blocks)
+    messages = kotter_reports.build_kotter_message(
+        kotter_reports.Delivery(destination="C1", rows=[row(i) for i in range(201)])
+    )
+    assert [
+        len(next(block for block in blocks if block["type"] == "data_table")["rows"]) for _, blocks in messages
+    ] == [201, 2]
+    assert "Part 1 of 2" in messages[0][0]
+    assert "Part 2 of 2" in messages[1][0]
+
+
+def test_build_kotter_message_limits_section_and_table_rows():
+    rows = [row(i) for i in range(kotter_reports.SLACK_TABLE_MAX_DATA_ROWS)]
+    text, blocks = kotter_reports.build_kotter_message(kotter_reports.Delivery("C1", rows))[0]
+
+    assert len(next(block for block in blocks if block["type"] == "section")["text"]["text"]) <= 3000
+    table = next(block for block in blocks if block["type"] == "data_table")
+    assert len(table["rows"]) == kotter_reports.SLACK_TABLE_MAX_ROWS
+    assert "<@U0>: No recent posts" in text
+
+
+def test_build_kotter_message_splits_on_table_character_limit():
+    rows = [row(i, ao_name="A" * 900) for i in range(25)]
+    messages = kotter_reports.build_kotter_message(kotter_reports.Delivery("C1", rows))
+
+    assert len(messages) == 2
+    assert (
+        sum(len(next(block for block in blocks if block["type"] == "data_table")["rows"]) - 1 for _, blocks in messages)
+        == 25
+    )
+    for _, blocks in messages:
+        table = next(block for block in blocks if block["type"] == "data_table")
+        assert sum(len(cell.get("text", "")) for table_row in table["rows"] for cell in table_row) <= 20_000
+
+
+def test_send_delivery_posts_all_data_table_chunks():
+    calls = []
+
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            calls.append(kwargs)
+
+    delivery = kotter_reports.Delivery("C1", [row(i) for i in range(201)])
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=1)
+
+    assert len(calls) == 2
+    assert [
+        len(next(block for block in call["blocks"] if block["type"] == "data_table")["rows"]) for call in calls
+    ] == [201, 2]
+
+
+def test_send_delivery_joins_and_retries_only_failed_chunk(monkeypatch):
+    calls = []
+    joined = []
+    failed_once = False
+
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            nonlocal failed_once
+            calls.append(kwargs)
+            if "Part 2 of 3" in kwargs["text"] and not failed_once:
+                failed_once = True
+                raise SlackApiError("not in channel", {"error": "not_in_channel"})
+
+        def conversations_join(self, **kwargs):
+            joined.append(kwargs)
+
+    delivery = kotter_reports.Delivery("C1", [row(i) for i in range(403)])
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=1)
+
+    assert joined == [{"channel": "C1"}]
+    assert [call["text"].split(" — ")[1].split("\n")[0] for call in calls] == [
+        "403 PAX need attention. Part 1 of 3.",
+        "403 PAX need attention. Part 2 of 3.",
+        "403 PAX need attention. Part 2 of 3.",
+        "403 PAX need attention. Part 3 of 3.",
+    ]
 
 
 def test_send_kotter_reports_schedule_guard(monkeypatch):
@@ -437,7 +540,7 @@ def test_send_delivery_falls_back_to_text_only(error_code, caplog):
     assert "destination=C1" in caplog.text
 
 
-def test_send_delivery_text_only_retry_failure_is_logged_and_suppressed(caplog):
+def test_send_delivery_text_only_retry_failure_stops_remaining_parts_and_is_suppressed(caplog, capsys):
     calls = []
 
     class Client:
@@ -445,11 +548,12 @@ def test_send_delivery_text_only_retry_failure_is_logged_and_suppressed(caplog):
             calls.append(kwargs)
             raise SlackApiError("payload rejected", {"error": "invalid_blocks"})
 
-    delivery = kotter_reports.Delivery(destination="C1", rows=[row(1)])
+    delivery = kotter_reports.Delivery(destination="C1", rows=[row(i) for i in range(403)])
     kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=42)
 
     assert len(calls) == 2
     assert calls[1]["blocks"] is None
+    assert "Sent Kotter Report" not in capsys.readouterr().out
     assert any(record.levelname == "ERROR" for record in caplog.records)
     assert "text-only retry failed" in caplog.text
     assert "org_id=42" in caplog.text
