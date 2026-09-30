@@ -32,29 +32,65 @@ vi.mock("~/orpc/react", () => ({
       },
     },
   },
-  useQuery: ({ input }: { input: QueryInput }) => {
-    mocks.queryInputs.push(input);
+  useQuery: (
+    options:
+      | { input: QueryInput }
+      | {
+          queryKey: [
+            readonly string[],
+            {
+              key: [string, string[] | undefined, string[] | undefined];
+            },
+          ];
+          enabled?: boolean;
+        },
+  ) => {
+    // org-table.tsx's own direct paginated table query, unchanged.
+    if ("input" in options) {
+      const { input } = options;
+      mocks.queryInputs.push(input);
 
-    const isResultQuery =
-      input.orgTypes.length === 1 &&
-      (input.orgTypes[0] === "region" || input.pageIndex !== undefined);
+      const isResultQuery =
+        input.orgTypes.length === 1 &&
+        (input.orgTypes[0] === "region" || input.pageIndex !== undefined);
 
-    if (!isResultQuery && !mocks.hierarchyAvailable) return { data: undefined };
+      if (!isResultQuery && !mocks.hierarchyAvailable)
+        return { data: undefined };
+
+      return {
+        data: {
+          orgs: isResultQuery
+            ? mocks.resultOrgs
+            : mocks.hierarchyOrgs.filter(
+                (org) =>
+                  input.orgTypes.includes(org.orgType) &&
+                  // Like the real org.all: no statuses means active rows only.
+                  (input.statuses ?? ["active"]).includes(
+                    org.isActive ? "active" : "inactive",
+                  ),
+              ),
+          total: 0,
+        },
+      };
+    }
+
+    // use-org-filters.ts's useFetchAllPages hierarchy query -- identified by
+    // the absence of `input` (useFetchAllPages calls useQuery with
+    // queryKey/fetchPage, never an oRPC-generated `input`). Mirrors the
+    // input-based branch above but returns the flattened array
+    // useFetchAllPages produces, not the {orgs, total} page shape.
+    // queryKey is [name, ancestorTypes, intermediateTypes] -- combine both
+    // type lists, matching use-org-filters.ts's fetchPage orgTypes input.
+    const { queryKey, enabled } = options;
+    if (enabled === false) return { data: undefined };
+    const key = queryKey[1].key;
+    const orgTypes = [...(key[1] ?? []), ...(key[2] ?? [])];
+    mocks.queryInputs.push({ orgTypes });
+
+    if (!mocks.hierarchyAvailable) return { data: undefined };
 
     return {
-      data: {
-        orgs: isResultQuery
-          ? mocks.resultOrgs
-          : mocks.hierarchyOrgs.filter(
-              (org) =>
-                input.orgTypes.includes(org.orgType) &&
-                // Like the real org.all: no statuses means active rows only.
-                (input.statuses ?? ["active"]).includes(
-                  org.isActive ? "active" : "inactive",
-                ),
-            ),
-        total: 0,
-      },
+      data: mocks.hierarchyOrgs.filter((org) => orgTypes.includes(org.orgType)),
     };
   },
 }));

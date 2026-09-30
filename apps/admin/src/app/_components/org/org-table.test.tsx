@@ -33,21 +33,40 @@ const mocks = vi.hoisted(
 );
 vi.mock("~/orpc/react", () => ({
   orpc: { org: { all: { queryOptions: (options: unknown) => options } } },
-  useQuery: ({
-    input,
-    enabled,
-  }: {
-    input: Record<string, unknown>;
-    enabled?: boolean;
-  }) => {
-    if (enabled === false) return {};
-    mocks.inputs.push(input);
-    const orgTypes = (input.orgTypes ?? []) as string[];
+  useQuery: (
+    options:
+      | { input: Record<string, unknown>; enabled?: boolean }
+      | {
+          queryKey: [readonly string[], { key: [string, string[]?] }];
+          enabled?: boolean;
+        },
+  ) => {
+    // org-table.tsx's own direct paginated table query, unchanged.
+    if ("input" in options) {
+      const { input, enabled } = options;
+      if (enabled === false) return {};
+      mocks.inputs.push(input);
+      const orgTypes = (input.orgTypes ?? []) as string[];
+      return {
+        data: {
+          orgs: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
+          total: 100,
+        },
+      };
+    }
+
+    // useFetchAllPages-shaped calls -- use-org-filters.ts's hierarchy query
+    // and RegionFilter's region list -- identified by the absence of
+    // `input`. Returns the flattened array useFetchAllPages produces,
+    // not the {orgs, total} page shape the input-based branch returns.
+    const { queryKey, enabled } = options;
+    if (enabled === false) return { data: undefined };
+    const key = queryKey[1].key;
+    const orgTypes =
+      key[0] === "org.all.everyRegion" ? ["region"] : (key[1] ?? []);
+    mocks.inputs.push({ orgTypes });
     return {
-      data: {
-        orgs: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
-        total: 100,
-      },
+      data: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
     };
   },
 }));
