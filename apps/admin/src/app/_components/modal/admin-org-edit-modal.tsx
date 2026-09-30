@@ -51,6 +51,8 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import {
   closeModal,
   DeleteType,
@@ -85,14 +87,21 @@ export default function AdminOrgEditModal({
     }),
   );
   const org = orgResponse?.org;
-  const { data: parents } = useQuery(
-    orpc.org.all.queryOptions({
-      input: { orgTypes: parentTypes },
-      enabled: hasParent,
-    }),
-  );
+  const { data: parents } = useFetchAllPages({
+    path: ["org", "all"],
+    queryKey: ["org.all.everyParent", parentTypes],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: parentTypes,
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+    enabled: hasParent,
+  });
   const router = useRouter();
-  const parentOptions = (parents?.orgs ?? [])
+  const parentOptions = (parents ?? [])
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name));
   const renderParentItem = (parent: (typeof parentOptions)[number]) => (
@@ -365,8 +374,8 @@ export default function AdminOrgEditModal({
                           <VirtualizedCombobox
                             value={field.value?.toString()}
                             options={
-                              parents?.orgs
-                                .filter((org) =>
+                              parents
+                                ?.filter((org) =>
                                   parentTypes.includes(org.orgType),
                                 )
                                 .map((region) => ({
@@ -673,8 +682,8 @@ export default function AdminOrgEditModal({
                         form.setValue("name", `Fake ${label}`);
                         form.setValue(
                           "parentId",
-                          parents?.orgs?.[
-                            Math.floor(Math.random() * parents?.orgs.length)
+                          parents?.[
+                            Math.floor(Math.random() * (parents?.length ?? 0))
                           ]?.id ?? -1,
                         );
                         form.setValue("website", `https://fake${orgType}.com`);
