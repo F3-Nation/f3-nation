@@ -101,6 +101,10 @@ for BUCKET_NAME in "${BUCKETS[@]}"; do
 done
 
 # ── Step 5: Run migrations ────────────────────────────────────────────────────
+# Mark the compose-owned local database, including pre-existing Docker volumes.
+# Go through the container directly, never through a host port that may be a proxy.
+docker exec "$PG_CONTAINER" psql -U f3local -d f3nation -v ON_ERROR_STOP=1 \
+  -c "COMMENT ON DATABASE f3nation IS 'f3-disposable-local-v1'"
 echo "  → Running database migrations..."
 pnpm db:migrate
 
