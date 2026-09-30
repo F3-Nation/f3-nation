@@ -88,9 +88,12 @@ RBAC matrix testing (admin vs editor vs unauthenticated) without any UI.
 
 ### Recipe 2 — Signed-in map UI via the dev-mode provider
 
-`packages/auth` registers a `dev-mode` credentials provider whenever
-`NEXT_PUBLIC_CHANNEL !== "prod"` (`packages/auth/src/config.ts:112-145`) —
-previews run with `NEXT_PUBLIC_CHANNEL=branch`, so it is enabled. It signs in
+`packages/auth` registers a `dev-mode` credentials provider only when the
+server-only `F3_CHANNEL` is on the allowlist in
+`packages/auth/src/lib/dev-mode.ts` (`local`, `ci`, `branch`, `dev`,
+`staging`); an unset or unknown value, and `prod`, leave it off. Previews run
+with `F3_CHANNEL=branch` (`.github/preview/map-service.template.yaml`), so it
+is enabled. It signs in
 any email as a nation-admin mock user. The cookie is host-only on the map
 host, which is all the map needs (see point 2 above).
 
