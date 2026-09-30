@@ -184,14 +184,20 @@ class ApiSeriesRepositoryTest(unittest.TestCase):
     def test_get_by_region_uses_region_ids(self):
         self.client.get.return_value = {"events": [_raw_series_list(id=1), _raw_series_list(id=2)]}
         result = self.repo.get_by_region(region_id=5)
-        self.client.get.assert_called_once_with("/v1/event", params={"regionIds": [5], "statuses": ["active"]})
+        self.client.get.assert_called_once_with(
+            "/v1/event",
+            params={"regionIds": [5], "statuses": ["active"], "pageSize": 100, "pageIndex": 0},
+        )
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].id, 1)
 
     def test_get_by_region_with_ao_id_uses_ao_ids(self):
         self.client.get.return_value = {"events": [_raw_series_list(id=3)]}
         result = self.repo.get_by_region(region_id=5, ao_id=10)
-        self.client.get.assert_called_once_with("/v1/event", params={"aoIds": [10], "statuses": ["active"]})
+        self.client.get.assert_called_once_with(
+            "/v1/event",
+            params={"aoIds": [10], "statuses": ["active"], "pageSize": 100, "pageIndex": 0},
+        )
         self.assertEqual(result[0].id, 3)
 
     def test_get_by_region_supports_results_fallback(self):
@@ -203,6 +209,22 @@ class ApiSeriesRepositoryTest(unittest.TestCase):
         self.client.get.return_value = {"unexpected": []}
         result = self.repo.get_by_region(region_id=5)
         self.assertEqual(result, [])
+
+    def test_get_by_region_pages_through_every_series(self):
+        page_one = {"events": [_raw_series_list(id=i) for i in range(100)], "totalCount": 101}
+        page_two = {"events": [_raw_series_list(id=100)], "totalCount": 101}
+        self.client.get.side_effect = [page_one, page_two]
+        result = self.repo.get_by_region(region_id=5)
+        self.assertEqual(self.client.get.call_count, 2)
+        self.client.get.assert_any_call(
+            "/v1/event",
+            params={"regionIds": [5], "statuses": ["active"], "pageSize": 100, "pageIndex": 0},
+        )
+        self.client.get.assert_any_call(
+            "/v1/event",
+            params={"regionIds": [5], "statuses": ["active"], "pageSize": 100, "pageIndex": 1},
+        )
+        self.assertEqual(len(result), 101)
 
     # ------------------------------------------------------------------
     # get_by_id

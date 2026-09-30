@@ -57,6 +57,18 @@ vi.mock("~/orpc/react", async () => {
     },
   };
 });
+// useFetchAllPages (the org pickers under test all fetch this way, for
+// pagination safety) calls the imperative client directly rather than
+// going through orpc.org.*.queryOptions above -- route it to the same
+// mocks.accessible/mocks.all so this file's assertions still see every call.
+vi.mock("~/orpc/client", () => ({
+  client: {
+    org: {
+      accessible: (input: unknown) => mocks.accessible(input),
+      all: (input: unknown) => mocks.all(input),
+    },
+  },
+}));
 
 const withProviders = (ui: ReactNode) => (
   <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>
