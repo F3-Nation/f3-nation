@@ -132,9 +132,18 @@ async function main() {
     process.exit(1);
   }
 
-  if (targetEnv === "prod" || targetEnv === "staging") {
+  // `usingEnvLocal` means .env.local (the `pnpm env:generate` layout) is
+  // in play -- that file's DATABASE_* values come from the real,
+  // shared f3-authentication-staging GCP project (docs/LOCAL_DEV_SETUP.md),
+  // reached through the Cloud SQL Auth Proxy, not an isolated local
+  // database. `--env local` would otherwise skip the write warning below,
+  // even though this is exactly the same shared data the staging warning
+  // exists to protect.
+  if (targetEnv === "prod" || targetEnv === "staging" || usingEnvLocal) {
     console.log(
-      `\n⚠️  WARNING: You are about to write to ${targetEnv.toUpperCase()} data.\n`,
+      `\n⚠️  WARNING: You are about to write to ${
+        usingEnvLocal ? "the shared STAGING" : targetEnv.toUpperCase()
+      } data.\n`,
     );
     const answer = await ask("Are you sure you want to continue? (y/N): ");
     if (answer.toLowerCase() !== "y") process.exit(0);
