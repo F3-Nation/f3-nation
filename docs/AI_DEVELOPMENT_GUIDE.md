@@ -300,9 +300,9 @@ violation is a `BAD_REQUEST`, not a 500.
     `prepare: false` in the shared client. PgBouncer caps client connections
     at `max_client_conn = 1000` and its own connections into Postgres at
     `max_db_connections = 40`, so the server side is well bounded and the
-    binding constraint is the **client** side: keep the sum of
-    `--max-instances` × pool size across every database client under the
-    Postgres connection budget (see ADR 0004).
+    binding constraint is the **client** side: keep the peak connections
+    of every database client under the Postgres connection budget (see ADR 0004) — for a service, `--max-instances` × pool size; for a Cloud Run
+    job, parallel tasks × pool size.
   - Leave `max_lifetime` on the postgres-js default: it is a per-connection
     jittered 30–60 min; a fixed value synchronizes expiry into reconnect
     stampedes through the pooler.
