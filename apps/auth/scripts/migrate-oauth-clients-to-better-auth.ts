@@ -80,9 +80,19 @@ async function main() {
   // `pnpm env:generate` writes a root .env and symlinks it in as
   // apps/auth/.env.local) -- try both rather than assuming one.
   const { existsSync } = await import("fs");
+  const hasDotEnv = existsSync(".env");
+  const hasDotEnvLocal = existsSync(".env.local");
+  if (targetEnv === "local" && hasDotEnv && hasDotEnvLocal) {
+    console.log(
+      "Both .env and .env.local are present — using .env (the " +
+        "`pnpm local:setup` Docker layout). To use the `pnpm env:generate` " +
+        "GCP-connected layout instead, temporarily move .env aside.",
+    );
+  }
+  const usingEnvLocal = targetEnv === "local" && !hasDotEnv && hasDotEnvLocal;
   const envPath =
     targetEnv === "local"
-      ? existsSync(".env")
+      ? hasDotEnv
         ? ".env"
         : ".env.local"
       : `.env.${targetEnv}`;
@@ -93,14 +103,24 @@ async function main() {
   const result = config({ path: envPath, override: true });
   if (result.error) {
     console.error(
-      `Could not load ${envPath}: ${result.error.message}\n` +
-        "Run 'pnpm local:setup' (writes apps/auth/.env) or 'pnpm env:generate' (symlinks apps/auth/.env.local) first.",
+      `Could not load ${envPath}: ${result.error.message}` +
+        (targetEnv === "local"
+          ? "\nRun 'pnpm local:setup' (writes apps/auth/.env) or 'pnpm env:generate' (symlinks apps/auth/.env.local) first."
+          : ""),
     );
     process.exit(1);
   }
 
   const databaseHost = process.env.DATABASE_HOST;
-  const databasePort = parseInt(process.env.DATABASE_PORT ?? "5432", 10);
+  // `pnpm env:generate`'s layout never sets DATABASE_PORT and connects
+  // through the Cloud SQL Auth Proxy on 5433 (docs/LOCAL_DEV_SETUP.md); the
+  // Docker layout embeds its port in DATABASE_HOST itself (e.g.
+  // "localhost:5433"), which postgres-js parses ahead of the `port` option,
+  // so 5432 stays a safe default there.
+  const databasePort = parseInt(
+    process.env.DATABASE_PORT ?? (usingEnvLocal ? "5433" : "5432"),
+    10,
+  );
   const databaseUser = process.env.DATABASE_USER;
   const databasePassword = process.env.DATABASE_PASSWORD;
   const databaseName = process.env.DATABASE_NAME;
