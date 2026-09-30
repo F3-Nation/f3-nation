@@ -6,7 +6,10 @@ import { sql } from ".";
 import { db } from "./client";
 import { alembicVersionValue, reset } from "./reset";
 import { seed } from "./seed";
-import { createDatabaseIfNotExists } from "./utils/functions";
+import {
+  createDatabaseIfNotExists,
+  getDatabaseNameFromUri,
+} from "./utils/functions";
 
 const databaseUrl = env.DATABASE_URL;
 
@@ -27,7 +30,12 @@ const migrate = async () => {
     await reset();
   }
 
-  const database = databaseUrl.split("/").slice(-1)[0];
+  // Not `databaseUrl.split("/").pop()`: with a query string (e.g. a Cloud
+  // SQL socket `?host=/cloudsql/…`) that yields "f3_prod?host=…", which
+  // names a brand-new migrations table and re-runs every migration.
+  const database = getDatabaseNameFromUri(databaseUrl);
+  if (!database)
+    throw new Error("Could not read the database name from DATABASE_URL");
 
   console.log("Migrating database", database);
   await migrator(db, {
