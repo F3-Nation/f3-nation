@@ -391,7 +391,12 @@ class ParseInstanceTest(unittest.TestCase):
 
         self.client.get.assert_called_once_with(
             "/v1/event-instance",
-            params={"regionOrgId": 5, "startDate": "2026-06-01"},
+            params={
+                "regionOrgId": 5,
+                "startDate": "2026-06-01",
+                "pageSize": 100,
+                "pageIndex": 0,
+            },
         )
 
     def test_get_list_adds_the_ao_filter_when_given(self):

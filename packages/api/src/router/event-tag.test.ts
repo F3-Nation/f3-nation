@@ -158,6 +158,24 @@ describe("Event Tag Router", () => {
       }
     });
 
+    it("applies a LIMIT when pageSize is supplied without pageIndex", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      for (let i = 0; i < 3; i++) {
+        await createTestEventTag({ name: `Limit Test ${uniqueId()}` });
+      }
+
+      const client = createTestClient();
+      const result = await client.eventTag.all({ pageSize: 2 });
+
+      // Hard equality, not toBeLessThanOrEqual — an empty array would
+      // satisfy a <= assertion even if pageSize-alone silently returned
+      // everything, exactly the bug this pagination fix exists to catch.
+      expect(result.eventTags.length).toBe(2);
+      expect(result.totalCount).toBeGreaterThan(2);
+    });
+
     it("should search by name", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
