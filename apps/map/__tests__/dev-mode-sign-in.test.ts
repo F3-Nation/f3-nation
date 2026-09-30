@@ -18,12 +18,18 @@ describe("isDevModeSignInAllowed", () => {
     expect(isDevModeSignInAllowed("prod")).toBe(false);
   });
 
-  it.each([undefined, "", "Prod", "production", "unknown"])(
+  it.each(["", "Prod", "production", "unknown"])(
     "fails closed for %j",
     (channel) => {
       expect(isDevModeSignInAllowed(channel)).toBe(false);
     },
   );
+
+  // An explicit `undefined` argument falls through to the F3_CHANNEL default.
+  it("fails closed when F3_CHANNEL is unset", () => {
+    vi.stubEnv("F3_CHANNEL", undefined);
+    expect(isDevModeSignInAllowed()).toBe(false);
+  });
 
   it("reads F3_CHANNEL at call time", () => {
     vi.stubEnv("F3_CHANNEL", "prod");
