@@ -53,3 +53,27 @@ jobs:
       flags: "--max-instances=25"
     secrets:
       posthog_key: ${{ secrets.POSTHOG_KEY }}
+
+  # Staging allows the dev-mode sign-in (a nation-admin login); Production must
+  # never have it. The image is promoted unchanged from Staging, so assert it
+  # against the live Production service after every deploy.
+  verify-prod-no-dev-mode:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Assert Production does not register the dev-mode sign-in
+        run: |
+          providers=$(curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 \
+            https://map.f3nation.com/api/auth/providers)
+          # Validate the response first: jq -e on non-JSON would otherwise read
+          # as "no dev-mode" and pass.
+          if ! jq -e 'type == "object" and has("email")' <<<"$providers" >/dev/null; then
+            echo "::error::Unexpected /api/auth/providers response: ${providers}"
+            exit 1
+          fi
+          if jq -e 'has("dev-mode")' <<<"$providers" >/dev/null; then
+            echo "::error::Production map registers the dev-mode sign-in provider. Roll back now."
+            exit 1
+          fi
+          echo "Production providers: $(jq -c 'keys' <<<"$providers")"
