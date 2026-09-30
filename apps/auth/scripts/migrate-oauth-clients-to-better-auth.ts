@@ -138,8 +138,13 @@ async function main() {
   // reached through the Cloud SQL Auth Proxy, not an isolated local
   // database. `--env local` would otherwise skip the write warning below,
   // even though this is exactly the same shared data the staging warning
-  // exists to protect.
-  if (targetEnv === "prod" || targetEnv === "staging" || usingEnvLocal) {
+  // exists to protect. Gated on `confirmed` too: a dry run can't write
+  // anything, so warning here would just block the read-only preview below
+  // for no protective benefit.
+  if (
+    confirmed &&
+    (targetEnv === "prod" || targetEnv === "staging" || usingEnvLocal)
+  ) {
     console.log(
       `\n⚠️  WARNING: You are about to write to ${
         usingEnvLocal ? "the shared STAGING" : targetEnv.toUpperCase()
