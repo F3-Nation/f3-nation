@@ -48,8 +48,11 @@ jobs:
       # into the CLIENT bundle, where skipValidation's CI/SKIP_ENV_VALIDATION
       # escape hatches are both absent, it throws in the browser on import.
       posthog_session_recording: ${{ vars.POSTHOG_SESSION_RECORDING || 'false' }}
-      # Bound instances x per-instance db pool below the pooler's client
-      # ceiling — sizing rationale in docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
-      flags: "--max-instances=25"
+      # Bound instances x per-instance db pool (max: 5): 15 x 5 = 75 per
+      # service, sized to the whole-instance connection budget in
+      # docs/adr/0004-retire-pgbouncer.md (§7 step 1) so it still holds once
+      # PgBouncer is gone. Set here, not by hand: _deploy-cloudrun.yml
+      # re-applies these flags on every release deploy.
+      flags: "--max-instances=15"
     secrets:
       posthog_key: ${{ secrets.POSTHOG_KEY }}

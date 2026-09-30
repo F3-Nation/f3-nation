@@ -300,11 +300,14 @@ violation is a `BAD_REQUEST`, not a 500.
     `prepare: false` in the shared client. PgBouncer caps client connections
     at `max_client_conn = 1000` and its own connections into Postgres at
     `max_db_connections = 40`, so the server side is well bounded and the
-    binding constraint is the **client** side: each db-backed service
-    (api/map/admin/me) pins `--max-instances=25` in its deploy workflow,
-    which with `max: 5` per instance bounds the fleet at 4 × 25 × 5 = 500
-    clients. Raising a service's `--max-instances` or the client's `max`
-    means redoing that arithmetic against `max_client_conn`.
+    binding constraint is the **client** side. Only `api` and `map` open
+    database connections (`admin` and `me` call the API over HTTP); each
+    pins `--max-instances=15` in its deploy workflow, which with `max: 5`
+    per instance bounds them at 2 × 15 × 5 = 150 — sized to the
+    whole-instance budget in
+    [ADR 0004](adr/0004-retire-pgbouncer.md) so it still holds after
+    PgBouncer is retired. Raising a service's `--max-instances` or the
+    client's `max` means redoing that budget.
   - Leave `max_lifetime` on the postgres-js default: it is a per-connection
     jittered 30–60 min; a fixed value synchronizes expiry into reconnect
     stampedes through the pooler.
