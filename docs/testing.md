@@ -77,9 +77,9 @@ backstop that `--no-verify` cannot skip.
 ## Characterization suite (apps/api)
 
 `apps/api/characterization/` is a behavior-pinning suite separate from the unit
-tests. It exists for one reason: the Hono migration (epic #644) replaces the
-framework underneath `apps/api`, and the code with the largest blast radius —
-auth resolution and the HTTP wire layer — had no end-to-end tests at all. The
+tests. It exists because the code with the largest blast radius — auth
+resolution and the HTTP wire layer — had no end-to-end tests before the
+framework swap. The
 suite dispatches real `Request` objects into the real app with the auth,
 codec, and CORS stack unmocked, so a change to the server layer can be proven
 behavior-identical instead of argued to be. The `live` target issues real HTTP

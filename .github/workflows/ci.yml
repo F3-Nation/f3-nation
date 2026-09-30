@@ -487,7 +487,6 @@ jobs:
   # This surfaces those at PR time instead of at release. No image push —
   # building the image is the validation. PRs import the per-app GHCR layer
   # cache read-only; docker-cache-refresh updates it only from main.
-
   docker-build:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

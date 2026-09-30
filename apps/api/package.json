@@ -9,7 +9,7 @@
     "dev": "TZ=UTC NODE_ENV=development pnpm with-env tsx watch --import ./src/instrument.ts src/server.ts",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "dotenv -v SKIP_ENV_VALIDATION=1 eslint .",
-    "start": "pnpm with-env tsx --import ./src/instrument.ts src/server.ts",
+    "start": "NODE_ENV=production pnpm with-env node --enable-source-maps --import ./dist/instrument.js dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "pnpm with-env vitest --run --coverage",
     "test:characterization": "pnpm with-env vitest --run --config vitest.characterization.config.ts",

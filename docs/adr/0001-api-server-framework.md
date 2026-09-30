@@ -1,7 +1,6 @@
 # ADR 0001: Migrate `apps/api` off Next.js to Hono on Node
 
-- **Status:** Implemented (tracked in epic
-  [#644](https://github.com/F3-Nation/f3-nation/issues/644))
+- **Status:** Implemented (the API Hono migration epic)
 - **Date:** 2026-07-09
 - **Deciders:** @taterhead247, @BigGillyStyle, @evanpetzoldt
 - **Amended 2026-09-26:** the Hono server does not use `hono/compress`. The
