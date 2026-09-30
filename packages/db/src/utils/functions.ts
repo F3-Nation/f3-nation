@@ -85,6 +85,33 @@ export const splitSocketHost = (
   return { url: query ? `${base}?${query}` : base, socketHost: host };
 };
 
+/**
+ * `postgres(url, options)` arguments for a connection string: the URL with
+ * any socket `host=` split out, plus the options-form `host` that makes
+ * postgres.js connect to `<dir>/.s.PGSQL.5432`. Every client built from
+ * DATABASE_URL goes through this, so none can skip the socket handling.
+ */
+export const postgresArgs = (
+  databaseUrl: string,
+): { url: string; hostOptions: { host?: string } } => {
+  const { url, socketHost } = splitSocketHost(databaseUrl);
+  return { url, hostOptions: socketHost ? { host: socketHost } : {} };
+};
+
+/**
+ * The database name migrate.ts suffixes its migrations table with
+ * (`__drizzle_migrations_<name>`). For TCP URLs this is deliberately the
+ * legacy `split("/").pop()` value, query string included, so existing
+ * environments keep finding their migration history — renaming it would
+ * re-run every migration. Socket URLs (new) use the bare database name
+ * instead of `f3_prod?host=/cloudsql/…`, matching the table the same
+ * database's TCP URL has always used.
+ */
+export const migrationsDatabaseName = (databaseUrl: string) =>
+  splitSocketHost(databaseUrl).socketHost
+    ? getDatabaseNameFromUri(databaseUrl)
+    : databaseUrl.split("/").slice(-1)[0];
+
 export const getDatabaseNameFromUri = (uri: string) => {
   const databaseNameRegex = /\/([^/?]+)(\?|$)/;
   const databaseNameMatch = databaseNameRegex.exec(uri);
@@ -102,12 +129,12 @@ export const getDbUrl = () => {
 
 export const createDbClient = () => {
   const { databaseUrl, useSsl } = getDbUrl();
-  const { url, socketHost } = splitSocketHost(databaseUrl);
+  const { url, hostOptions } = postgresArgs(databaseUrl);
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
   const client = postgres(url, {
     ...sslOptions,
-    // Cloud SQL Unix socket (see splitSocketHost); absent for TCP URLs.
-    ...(socketHost ? { host: socketHost } : {}),
+    // Cloud SQL Unix socket (see splitSocketHost); empty for TCP URLs.
+    ...hostOptions,
     // Cloud Run scales to many instances, each holding its own pool (see
     // client.ts) — an untuned client defaults to `max: 10` per instance,
     // which exhausts the pooler's client ceiling under autoscaling.
@@ -150,9 +177,12 @@ export async function createDatabaseIfNotExists(
   );
   const useSsl = false; // dbName?.includes("_prod") ?? false;
 
-  // Connect to the default 'postgres' database
-  const sql = postgres(newConnectionString, {
+  // Connect to the default 'postgres' database (over the socket, if the
+  // URL names one — see postgresArgs)
+  const { url, hostOptions } = postgresArgs(newConnectionString);
+  const sql = postgres(url, {
     ssl: useSsl,
+    ...hostOptions,
   });
 
   try {

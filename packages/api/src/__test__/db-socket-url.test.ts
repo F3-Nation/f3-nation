@@ -1,10 +1,18 @@
+import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 
-import { getDatabaseNameFromUri, splitSocketHost } from "@acme/db/testing";
+import {
+  getDatabaseNameFromUri,
+  migrationsDatabaseName,
+  postgresArgs,
+  splitSocketHost,
+} from "@acme/db/testing";
 
-// Cloud SQL Unix-socket support in the shared client. Pure URL handling;
-// the socket connection itself needs a real /cloudsql mount and is covered
-// by the staging cutover drill (ADR 0004 §7 step 3).
+// Cloud SQL Unix-socket support in the shared client. No socket is
+// available in CI, so the connection-level check below asserts what
+// postgres.js itself resolves from the client's arguments (constructing a
+// client is lazy — it never connects); the live socket path is exercised by
+// the staging cutover drill (ADR 0004 §7 step 3).
 const SOCKET = "/cloudsql/f3data:us-central1:f3data";
 
 describe("splitSocketHost", () => {
@@ -46,10 +54,48 @@ describe("splitSocketHost", () => {
   });
 });
 
+describe("postgresArgs", () => {
+  it("makes postgres.js resolve the Cloud SQL socket path", () => {
+    const { url, hostOptions } = postgresArgs(
+      `postgres://api:pw@/f3_prod?host=${SOCKET}`,
+    );
+    const client = postgres(url, { ...hostOptions, max: 1 });
+    expect(client.options.path).toBe(`${SOCKET}/.s.PGSQL.5432`);
+    expect(client.options.database).toBe("f3_prod");
+  });
+
+  it("leaves a TCP URL on TCP", () => {
+    const { url, hostOptions } = postgresArgs(
+      "postgres://api:pw@pgbouncer.prod.db.f3nation.com:6432/f3_prod",
+    );
+    const client = postgres(url, { ...hostOptions, max: 1 });
+    expect(hostOptions).toEqual({});
+    expect(client.options.path).toBe(false);
+    expect(client.options.host).toEqual(["pgbouncer.prod.db.f3nation.com"]);
+  });
+});
+
+describe("migrationsDatabaseName", () => {
+  it("keeps the legacy name for TCP URLs, query string included", () => {
+    // Existing environments' migration history lives in a table named after
+    // this value; changing it would re-run every migration.
+    expect(migrationsDatabaseName("postgres://u:p@h:6432/f3_prod")).toBe(
+      "f3_prod",
+    );
+    expect(
+      migrationsDatabaseName("postgres://u:p@h/f3_test?sslmode=disable"),
+    ).toBe("f3_test?sslmode=disable");
+  });
+
+  it("uses the bare database name for a socket URL", () => {
+    expect(
+      migrationsDatabaseName(`postgres://api:pw@/f3_prod?host=${SOCKET}`),
+    ).toBe("f3_prod");
+  });
+});
+
 describe("getDatabaseNameFromUri", () => {
   it("reads the database name without the query string", () => {
-    // migrate.ts names its migrations table after this value; the old
-    // split("/").pop() returned "f3_prod?host=…" for a socket URL.
     expect(
       getDatabaseNameFromUri(`postgres://api:pw@/f3_prod?host=${SOCKET}`),
     ).toBe("f3_prod");

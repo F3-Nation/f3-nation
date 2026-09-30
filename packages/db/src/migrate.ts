@@ -8,7 +8,7 @@ import { alembicVersionValue, reset } from "./reset";
 import { seed } from "./seed";
 import {
   createDatabaseIfNotExists,
-  getDatabaseNameFromUri,
+  migrationsDatabaseName,
 } from "./utils/functions";
 
 const databaseUrl = env.DATABASE_URL;
@@ -30,10 +30,10 @@ const migrate = async () => {
     await reset();
   }
 
-  // Not `databaseUrl.split("/").pop()`: with a query string (e.g. a Cloud
-  // SQL socket `?host=/cloudsql/…`) that yields "f3_prod?host=…", which
-  // names a brand-new migrations table and re-runs every migration.
-  const database = getDatabaseNameFromUri(databaseUrl);
+  // See migrationsDatabaseName: legacy naming for TCP URLs (so existing
+  // environments keep their migration history), bare name for Cloud SQL
+  // socket URLs.
+  const database = migrationsDatabaseName(databaseUrl);
   if (!database)
     throw new Error("Could not read the database name from DATABASE_URL");
 

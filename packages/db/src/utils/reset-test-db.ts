@@ -12,6 +12,8 @@ export { createDbClient } from "./functions";
 export { withQueryTimeout } from "./query-timeout";
 export {
   getDatabaseNameFromUri,
+  migrationsDatabaseName,
+  postgresArgs,
   resolveQueryTimeoutMs,
   splitSocketHost,
 } from "./functions";
