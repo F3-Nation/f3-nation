@@ -75,14 +75,27 @@ async function main() {
   }
 
   const { config } = await import("dotenv");
-  const envPath = targetEnv === "local" ? ".env" : `.env.${targetEnv}`;
+  // The repo has two documented local setups (docs/LOCAL_DEV_DOCKER.md's
+  // `pnpm local:setup` writes apps/auth/.env directly; docs/LOCAL_DEV_SETUP.md's
+  // `pnpm env:generate` writes a root .env and symlinks it in as
+  // apps/auth/.env.local) -- try both rather than assuming one.
+  const { existsSync } = await import("fs");
+  const envPath =
+    targetEnv === "local"
+      ? existsSync(".env")
+        ? ".env"
+        : ".env.local"
+      : `.env.${targetEnv}`;
   // override: true so --env's file always wins over whatever DATABASE_* the
   // calling shell already has set (e.g. a leftover prod export) — without
   // it, dotenv only fills in variables that aren't already present, so
   // --env local could silently connect using ambient prod credentials.
   const result = config({ path: envPath, override: true });
   if (result.error) {
-    console.error(`Could not load ${envPath}: ${result.error.message}`);
+    console.error(
+      `Could not load ${envPath}: ${result.error.message}\n` +
+        "Run 'pnpm local:setup' (writes apps/auth/.env) or 'pnpm env:generate' (symlinks apps/auth/.env.local) first.",
+    );
     process.exit(1);
   }
 
