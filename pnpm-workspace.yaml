@@ -17,7 +17,7 @@ catalog:
   "@hono/node-server": ^2.1.1
   "@hookform/resolvers": ^5.9.1
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
-  "@next/eslint-plugin-next": ^16.3.5
+  "@next/eslint-plugin-next": ^16.3.8
   "@opentelemetry/api": ^1.9.1
   "@opentelemetry/api-logs": ^0.222.0
   "@opentelemetry/core": ^2.11.0
@@ -112,7 +112,7 @@ catalog:
   libphonenumber-js: ^1.13.13
   lodash: ^4.18.1
   lucide-react: ^1.47.0
-  next: ^16.3.5
+  next: ^16.3.8
   next-auth: 5.0.0-beta.32
   next-themes: ^0.4.6
   nodemailer: ^10.0.10
@@ -179,7 +179,7 @@ overrides:
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.12" # GHSA-rgw5-rvv9-x895 (DoS)
   "fast-uri@<3.1.5": "3.1.8" # host confusion via failed backslash authority introducer
   "sharp@<0.35.4": "0.35.4" # GHSA-rgj7-g3m4-5g8c / GHSA-g89c-p67h-r497 / GHSA-2jg2-4ch7-h545 (libheif vulnerabilities); next's optional sharp dep resolved to 0.35.3, outside the old <0.35.0 range
-  "next@>=16.0.0 <16.3.0": "16.3.5" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
+  "next@>=16.0.0 <16.3.8": "16.3.8" # GHSA-vcvr-r3jv-pc5j (RCE in next/og ImageResponse) / GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
   "postcss@<8.5.12": "^8.5.28" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
   "nanoid@<3.3.17": "^6.0.1" # GHSA-2v37-7h3g-55p8
   "nanoid@>=4.0.0 <5.1.16": "^6.0.1" # GHSA-28wg-ghj8-5hjv
