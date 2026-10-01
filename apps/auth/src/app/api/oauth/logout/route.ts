@@ -110,10 +110,15 @@ export async function GET(request: NextRequest) {
   // switching the flag should never survive a logout. `secure: true` is
   // required for every "__Secure-"-prefixed name: browsers only accept a
   // change to a "__Secure-" cookie when the Secure attribute is present,
-  // and cookieStore.delete(name) alone doesn't set it.
+  // and cookieStore.delete(name) alone doesn't set it. NextAuth's own
+  // production cookie name (auth-options.ts's sessionToken.name) is the
+  // bare "__session" — not "__Secure-"-prefixed, but still set with
+  // Secure: true in production, so it needs the same explicit flag or it
+  // survives this loop.
   const cookieStore = await cookies();
   for (const cookie of cookieStore.getAll()) {
     const isAuthCookie =
+      cookie.name === "__session" ||
       cookie.name.startsWith("next-auth") ||
       cookie.name.startsWith("__Secure-next-auth") ||
       cookie.name.startsWith("authjs") ||
@@ -124,7 +129,8 @@ export async function GET(request: NextRequest) {
       cookieStore.delete({
         name: cookie.name,
         path: "/",
-        secure: cookie.name.startsWith("__Secure-"),
+        secure:
+          cookie.name.startsWith("__Secure-") || cookie.name === "__session",
       });
     }
   }

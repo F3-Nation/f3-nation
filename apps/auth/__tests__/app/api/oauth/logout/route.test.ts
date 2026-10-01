@@ -56,6 +56,7 @@ const ALL_FIVE_PREFIXES: FakeCookie[] = [
   { name: "__Secure-authjs.session-token", value: "d" },
   { name: "better-auth.session_token", value: "e" },
   { name: "__Secure-better-auth.session_token", value: "f" },
+  { name: "__session", value: "g" },
   { name: "theme", value: "dark" },
 ];
 
@@ -68,7 +69,7 @@ beforeEach(() => {
 });
 
 describe("GET /api/oauth/logout", () => {
-  it("clears every auth cookie regardless of AUTH_USE_BETTER_AUTH, passing secure:true for __Secure- names, and leaves unrelated cookies alone", async () => {
+  it("clears every auth cookie regardless of AUTH_USE_BETTER_AUTH, passing secure:true for __Secure- names and for __session, and leaves unrelated cookies alone", async () => {
     const res = await GET(
       makeRequest("https://auth.test.invalid/api/oauth/logout"),
     );
@@ -89,13 +90,16 @@ describe("GET /api/oauth/logout", () => {
         "__Secure-authjs.session-token",
         "better-auth.session_token",
         "__Secure-better-auth.session_token",
+        "__session",
       ].sort(),
     );
 
     for (const call of cookieStoreMock.delete.mock.calls) {
       const arg = call[0] as { name: string; path: string; secure: boolean };
       expect(arg.path).toBe("/");
-      expect(arg.secure).toBe(arg.name.startsWith("__Secure-"));
+      expect(arg.secure).toBe(
+        arg.name.startsWith("__Secure-") || arg.name === "__session",
+      );
     }
   });
 
