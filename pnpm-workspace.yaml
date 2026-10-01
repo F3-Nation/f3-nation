@@ -53,7 +53,6 @@ catalog:
   "@radix-ui/react-tooltip": ^1.2.16
   "@react-hook/window-size": ^3.1.1
   "@scalar/hono-api-reference": ^0.12.3
-  "@scalar/nextjs-api-reference": ^0.12.1
   "@t3-oss/env-core": ^0.13.11
   "@t3-oss/env-nextjs": ^0.13.11
   "@tailwindcss/postcss": ^4.3.3
