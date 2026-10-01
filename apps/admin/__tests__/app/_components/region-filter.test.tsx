@@ -34,7 +34,9 @@ const regions = [
 
 vi.mock("~/orpc/react", () => ({
   orpc: { org: { all: { queryOptions: () => ({}) } } },
-  useQuery: () => ({ data: { orgs: regions } }),
+  // RegionFilter fetches through useFetchAllPages, which returns the
+  // flattened array directly as `data`, not `{ orgs, total }`.
+  useQuery: () => ({ data: regions }),
 }));
 
 type Props = Parameters<typeof RegionFilter>[0];

@@ -12,6 +12,7 @@ from __future__ import annotations
 from application.ao import AoData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
+from infrastructure.api_client.pagination import fetch_all_pages
 
 
 def _parse_ao(raw: dict) -> AoData:
@@ -37,11 +38,13 @@ class ApiAoRepository:
 
     def get_by_parent_org(self, parent_org_id: int) -> list[AoData]:
         """Return active AOs whose parent org is *parent_org_id*."""
-        result = self._client.get(
+        orgs_raw = fetch_all_pages(
+            self._client,
             "/v1/org",
             params={"orgTypes": ["ao"], "parentOrgIds": [parent_org_id], "statuses": ["active"]},
+            items_key="orgs",
+            total_key="total",
         )
-        orgs_raw: list[dict] = result.get("orgs") or result.get("results") or []
         return [_parse_ao(o) for o in orgs_raw]
 
     def get_by_id(self, ao_id: int) -> AoData | None:

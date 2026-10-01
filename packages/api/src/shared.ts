@@ -5,7 +5,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 
 import type { Session } from "@acme/auth";
 import { getSessionFromHeaders } from "@acme/auth";
-import { and, eq, gt, isNull, or, schema, sql } from "@acme/db";
+import { and, eq, getUserRoles, gt, isNull, or, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
@@ -355,17 +355,7 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
 
   if (!user) return null;
 
-  // Fetch user roles (same pattern as PR #184's getSessionFromOAuthToken)
-  const userRoles = await db
-    .select({
-      orgId: schema.orgs.id,
-      orgName: schema.orgs.name,
-      roleName: schema.roles.name,
-    })
-    .from(schema.rolesXUsersXOrg)
-    .innerJoin(schema.orgs, eq(schema.orgs.id, schema.rolesXUsersXOrg.orgId))
-    .innerJoin(schema.roles, eq(schema.roles.id, schema.rolesXUsersXOrg.roleId))
-    .where(eq(schema.rolesXUsersXOrg.userId, userId));
+  const userRoles = await getUserRoles(db, userId);
 
   const roles = userRoles.map((r) => ({
     orgId: r.orgId,
