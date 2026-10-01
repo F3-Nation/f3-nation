@@ -38,7 +38,9 @@
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth --confirm
  *   (actually writes)
  */
+import path from "path";
 import readline from "readline";
+import { fileURLToPath } from "url";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq, inArray } from "drizzle-orm";
@@ -79,9 +81,20 @@ async function main() {
   // `pnpm local:setup` writes apps/auth/.env directly; docs/LOCAL_DEV_SETUP.md's
   // `pnpm env:generate` writes a root .env and symlinks it in as
   // apps/auth/.env.local) -- try both rather than assuming one.
+  //
+  // Resolved relative to this script's own location, not the current
+  // working directory: the documented invocation is `pnpm -C apps/auth
+  // migrate-oauth-clients-to-better-auth`, but if someone runs it from the
+  // repo root instead, a CWD-relative lookup would find the root `.env`
+  // that `pnpm env:generate` writes there -- which holds staging
+  // credentials -- and mislabel it "local".
   const { existsSync } = await import("fs");
-  const hasDotEnv = existsSync(".env");
-  const hasDotEnvLocal = existsSync(".env.local");
+  const authDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+  );
+  const hasDotEnv = existsSync(path.join(authDir, ".env"));
+  const hasDotEnvLocal = existsSync(path.join(authDir, ".env.local"));
   if (targetEnv === "local" && hasDotEnv && hasDotEnvLocal) {
     console.log(
       "Both .env and .env.local are present — using .env (the " +
@@ -90,12 +103,13 @@ async function main() {
     );
   }
   const usingEnvLocal = targetEnv === "local" && !hasDotEnv && hasDotEnvLocal;
-  const envPath =
+  const envName =
     targetEnv === "local"
       ? hasDotEnv
         ? ".env"
         : ".env.local"
       : `.env.${targetEnv}`;
+  const envPath = path.join(authDir, envName);
   // override: true so --env's file always wins over whatever DATABASE_* the
   // calling shell already has set (e.g. a leftover prod export) — without
   // it, dotenv only fills in variables that aren't already present, so
@@ -103,7 +117,7 @@ async function main() {
   const result = config({ path: envPath, override: true });
   if (result.error) {
     console.error(
-      `Could not load ${envPath}: ${result.error.message}` +
+      `Could not load ${envName}: ${result.error.message}` +
         (targetEnv === "local"
           ? "\nRun 'pnpm local:setup' (writes apps/auth/.env) or 'pnpm env:generate' (symlinks apps/auth/.env.local) first."
           : ""),
@@ -132,15 +146,9 @@ async function main() {
     process.exit(1);
   }
 
-  // `usingEnvLocal` means .env.local (the `pnpm env:generate` layout) is
-  // in play -- that file's DATABASE_* values come from the real,
-  // shared f3-authentication-staging GCP project (docs/LOCAL_DEV_SETUP.md),
-  // reached through the Cloud SQL Auth Proxy, not an isolated local
-  // database. `--env local` would otherwise skip the write warning below,
-  // even though this is exactly the same shared data the staging warning
-  // exists to protect. Gated on `confirmed` too: a dry run can't write
-  // anything, so warning here would just block the read-only preview below
-  // for no protective benefit.
+  // .env.local (the `pnpm env:generate` layout) points at the shared staging
+  // database via the Cloud SQL Auth Proxy, so confirm writes like --env
+  // staging. Dry runs skip the prompt.
   if (
     confirmed &&
     (targetEnv === "prod" || targetEnv === "staging" || usingEnvLocal)
