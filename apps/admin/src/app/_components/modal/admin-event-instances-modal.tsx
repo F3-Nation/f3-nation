@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { EVENT_CATEGORY_LABEL_MAP, Z_INDEX } from "@acme/shared/app/constants";
@@ -47,6 +47,8 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
 import { toStoredTime } from "~/utils/date";
 import {
@@ -145,14 +147,57 @@ export default function AdminEventInstancesModal({
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: regions } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["region"] } }),
+  // These dropdowns need every matching region/AO/location, not one page of
+  // them -- org.all and location.all are capped server-side (see
+  // pagination.ts), so page through them instead of relying on an unbounded
+  // "omit both params" request.
+  const { data: fetchedRegions } = useFetchAllPages({
+    path: ["org", "all"],
+    queryKey: ["org.all.everyRegion"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["region"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const regions = useMemo(
+    () => (fetchedRegions ? { orgs: fetchedRegions } : undefined),
+    [fetchedRegions],
   );
-  const { data: aos } = useQuery(
-    orpc.org.all.queryOptions({ input: { orgTypes: ["ao"] } }),
+  const { data: fetchedAos } = useFetchAllPages({
+    path: ["org", "all"],
+    queryKey: ["org.all.everyAo"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: ["ao"],
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const aos = useMemo(
+    () => (fetchedAos ? { orgs: fetchedAos } : undefined),
+    [fetchedAos],
   );
-  const { data: locations } = useQuery(
-    orpc.location.all.queryOptions({ input: { statuses: ["active"] } }),
+  const { data: fetchedLocations } = useFetchAllPages({
+    path: ["location", "all"],
+    queryKey: ["location.all.everyActive"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { locations: items, totalCount } = await client.location.all({
+        statuses: ["active"],
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
+  const locations = useMemo(
+    () => (fetchedLocations ? { locations: fetchedLocations } : undefined),
+    [fetchedLocations],
   );
 
   const editingId = data.id != null && gte(data.id, 0) ? data.id : null;
@@ -176,28 +221,46 @@ export default function AdminEventInstancesModal({
 
   const formRegionId = form.watch("regionId");
 
-  const { data: eventTypes } = useQuery(
-    orpc.eventType.all.queryOptions({
-      input: {
-        pageSize: 200,
+  // eventType.all and event.all are capped server-side at MAX_PAGE_SIZE
+  // (see pagination.ts) -- pageSize: 200/500 now exceeds that cap and would
+  // fail validation, so page through both instead.
+  const { data: fetchedEventTypes } = useFetchAllPages({
+    path: ["eventType", "all"],
+    // "byName" discriminates this from admin-workouts-modal.tsx's
+    // eventType.all.everyMatching fetch, which uses the API's default order
+    // instead of this explicit name sort -- same key otherwise, and they'd
+    // share (and silently reorder) each other's cached result.
+    queryKey: ["eventType.all.everyMatching", "byName", formRegionId],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { eventTypes: items, totalCount } = await client.eventType.all({
         orgIds: formRegionId ? [formRegionId] : undefined,
         sorting: [{ id: "name", desc: false }],
-      },
-    }),
-  );
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
 
-  const { data: eventsResponse } = useQuery(
-    orpc.event.all.queryOptions({
-      input: {
-        pageSize: 500,
+  const { data: fetchedEvents } = useFetchAllPages({
+    path: ["event", "all"],
+    // See the eventType.all fetch above -- discriminate by sort order so a
+    // future default-order event.all.everyMatching fetch can't collide with
+    // this explicitly name-sorted one.
+    queryKey: ["event.all.everyMatching", "byName", formRegionId],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { events: items, totalCount } = await client.event.all({
         regionIds: formRegionId ? [formRegionId] : undefined,
         sorting: [{ id: "name", desc: false }],
-      },
-    }),
-  );
+        pageIndex,
+        pageSize,
+      });
+      return { items, total: totalCount };
+    },
+  });
 
-  const sortedEventTypes = eventTypes?.eventTypes ?? [];
-  const events = eventsResponse?.events ?? [];
+  const sortedEventTypes = fetchedEventTypes ?? [];
+  const events = fetchedEvents ?? [];
 
   useEffect(() => {
     form.reset({
