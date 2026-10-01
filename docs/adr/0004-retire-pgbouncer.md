@@ -96,9 +96,8 @@ What that commits us to:
   client code, not in hand-applied settings.
 - **Monitors before the change, not after.** A Cloud Monitoring alert on
   `num_backends` (280, i.e. 70% of 400, above the configured total) backstops a
-  breach of the budget, and a
-  PostHog alert on connection-failure root causes catches pool exhaustion inside
-  it. Both are baselined against the current topology, and their staging twins
+  breach of the budget, and a PostHog alert on connection-failure root causes
+  catches pool exhaustion inside it. Both are baselined against the current topology, and their staging twins
   are seen firing, before any service moves.
 - **One service at a time, with a one-command rollback.** Staging first, then
   `api`, then `map`. Cutover and rollback are a switch between pinned versions
