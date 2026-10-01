@@ -52,7 +52,8 @@ if (require.main === module) {
   void migrate()
     .then(() => console.log("Migration done"))
     .catch((e) => {
-      console.log("Migration failed", e);
+      console.error("Migration failed", e);
+      process.exitCode = 1;
     })
     .finally(() => {
       process.exit();
