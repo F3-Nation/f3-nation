@@ -13,7 +13,7 @@ import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 import { isDevelopment } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
-import { logWarn } from "./logger";
+import { logError, logWarn } from "./logger";
 
 type BaseContext = RequestHeadersPluginContext;
 
@@ -328,7 +328,16 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
       algorithms: ["RS256"],
     });
     payload = result.payload;
-  } catch {
+  } catch (err) {
+    // Any bearer is tried as a JWT first, so ordinary failures (an API key,
+    // an expired token) are expected and stay silent. Failing to fetch or
+    // match the signing keys (ERR_JWKS_*) fails every JWT request, so it is
+    // reported rather than disappearing into 401s.
+    const code =
+      err instanceof Error && "code" in err ? String(err.code) : undefined;
+    if (code?.startsWith("ERR_JWKS")) {
+      logError("api.auth.jwks_unavailable", { code });
+    }
     return null;
   }
 

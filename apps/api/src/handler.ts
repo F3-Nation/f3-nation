@@ -1,5 +1,5 @@
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
-import { onError, ORPCError } from "@orpc/server";
+import { onError, ORPCError, ValidationError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { CORSPlugin, RequestHeadersPlugin } from "@orpc/server/plugins";
 
@@ -11,13 +11,15 @@ import { getBaseUrl } from "~/lib/get-base-url";
 import { logError, logWarn } from "~/lib/logging";
 
 /**
- * Report a procedure error from the oRPC interceptors. A 4xx ORPCError is an
- * expected client-side outcome — rate limiting, bad credentials, input
- * validation, a conflict — not a server fault, so it is logged at warn
+ * Report a procedure error from the oRPC interceptors. A 4xx ORPCError with
+ * no underlying cause is an expected client-side outcome — rate limiting,
+ * bad credentials, input validation, a conflict — so it is logged at warn
  * (stdout / Cloud Logging only) instead of logError, which also forwards to
- * the error tracker. One client's 429 burst on 2026-09-28 put ~400 of them
- * into PostHog in five minutes, burying real errors. 5xx ORPCErrors and
- * anything that isn't an ORPCError still go through logError.
+ * the error tracker, so expected client errors (e.g. a 429 burst) don't bury
+ * real errors. A 4xx carrying a `cause` wraps a fault of ours and still goes
+ * through logError, except oRPC's own input-validation cause, which is the
+ * caller's. 5xx ORPCErrors and anything that isn't an ORPCError always go
+ * through logError.
  *
  * Only status and code are logged, never the message: client-facing
  * messages can echo user input (the duplicate-email BAD_REQUEST includes
@@ -28,8 +30,21 @@ export function reportHandlerError(
   ctx: Record<string, unknown>,
   error: unknown,
 ): void {
-  if (error instanceof ORPCError && error.status < 500) {
-    logWarn(event, { ...ctx, status: error.status, code: error.code });
+  if (
+    error instanceof ORPCError &&
+    error.status < 500 &&
+    (error.cause == null || error.cause instanceof ValidationError)
+  ) {
+    logWarn(event, {
+      ...ctx,
+      status: error.status,
+      code: error.code,
+      // Non-PII discriminator for a 4xx that carried a cause. Labelled
+      // explicitly: oRPC's ValidationError reports its name as "Error".
+      ...(error.cause instanceof ValidationError
+        ? { causeType: "ValidationError" }
+        : {}),
+    });
     return;
   }
   logError(event, ctx, error);

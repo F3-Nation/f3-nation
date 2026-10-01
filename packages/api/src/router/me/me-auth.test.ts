@@ -15,12 +15,13 @@ import {
 
 const mocks = vi.hoisted(() => {
   vi.stubEnv("NEXT_PUBLIC_AUTH_URL", "https://auth.example.test");
-  return { key: vi.fn(), limit: vi.fn(), warn: vi.fn() };
+  return { key: vi.fn(), limit: vi.fn(), warn: vi.fn(), error: vi.fn() };
 });
 
 vi.mock("../../logger", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiLogger>()),
   logWarn: mocks.warn,
+  logError: mocks.error,
 }));
 
 // Keep real JWT signature/issuer/expiry checks, replacing only JWKS retrieval.
@@ -275,6 +276,33 @@ describe("Personal operations authentication", () => {
       }
     }
     expect(await state(ownerId)).toEqual(before);
+  });
+
+  it("reports an unreachable signing-key set instead of failing silently into 401s", async () => {
+    mocks.error.mockClear();
+    mocks.key.mockRejectedValueOnce(
+      Object.assign(new Error("JWKS request timed out"), {
+        code: "ERR_JWKS_TIMEOUT",
+      }),
+    );
+    await expect(clientFor(userToken).identity()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    expect(mocks.error).toHaveBeenCalledWith("api.auth.jwks_unavailable", {
+      code: "ERR_JWKS_TIMEOUT",
+    });
+  });
+
+  it("stays silent for an ordinary bad token or an API key on the JWT path", async () => {
+    mocks.error.mockClear();
+    await expect(clientFor(expiredToken).identity()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await clientFor(keys.unprivileged).identity();
+    expect(mocks.error).not.toHaveBeenCalledWith(
+      "api.auth.jwks_unavailable",
+      expect.anything(),
+    );
   });
 
   it.each(["session", "jwt", "session-and-key"] as const)(

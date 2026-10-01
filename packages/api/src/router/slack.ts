@@ -5,6 +5,7 @@ import { and, eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { logError } from "../logger";
 import { protectedProcedure } from "../shared";
 import type { Context } from "../shared";
 
@@ -237,6 +238,12 @@ const getSlackBotTokenForOrg = async (
 
   const botToken = rows[0]?.botToken?.trim();
   if (!botToken) {
+    // The region is linked to a Slack space with no usable token: bad stored
+    // data, not a caller mistake, so it is reported even though it's a 404.
+    logError("api.slack.integration_fault", {
+      slackError: "bot_token_missing",
+      regionOrgId,
+    });
     throw new ORPCError("NOT_FOUND", {
       message:
         "Slack bot token not found for this region. Please contact the F3 tech team.",
@@ -259,7 +266,24 @@ const prepareSlackMessageRequest = async (
   return { botToken };
 };
 
-const mapSlackError = (slackError: string) => {
+// Slack errors that mean our integration or stored data is wrong rather than
+// the caller: they map to 4xx for the client but are reported where detected.
+const SLACK_INTEGRATION_FAULTS = new Set([
+  "channel_not_found",
+  "not_in_channel",
+  "cant_update_message",
+  "invalid_blocks",
+]);
+
+const reportSlackError = (slackError: string) => {
+  if (slackError === "ratelimited") {
+    logError("api.slack.upstream_ratelimited", {});
+  } else if (SLACK_INTEGRATION_FAULTS.has(slackError)) {
+    logError("api.slack.integration_fault", { slackError });
+  }
+};
+
+export const mapSlackError = (slackError: string) => {
   if (
     ["channel_not_found", "user_not_found", "not_in_channel"].includes(
       slackError,
@@ -302,11 +326,8 @@ const mapSlackError = (slackError: string) => {
     });
   }
 
-  // Upstream throttling is a server-side dependency failure, not the
-  // caller exceeding a limit: 503, so it stays out of the client-error
-  // (4xx) bucket and still reaches error tracking.
   if (slackError === "ratelimited") {
-    return new ORPCError("SERVICE_UNAVAILABLE", {
+    return new ORPCError("TOO_MANY_REQUESTS", {
       message: `Slack rate limit exceeded (${slackError})`,
     });
   }
@@ -316,7 +337,7 @@ const mapSlackError = (slackError: string) => {
   });
 };
 
-const callSlackWebApi = async ({
+export const callSlackWebApi = async ({
   url,
   botToken,
   payload,
@@ -358,16 +379,20 @@ const callSlackWebApi = async ({
     });
   }
 
+  // Checked before the body is parsed or `ok` inspected, so a throttled
+  // response is always reported as one, whatever its body says. The client
+  // keeps 429 semantics; the upstream throttle is reported here instead.
+  if (response.status === 429) {
+    logError("api.slack.upstream_ratelimited", {});
+    throw new ORPCError("TOO_MANY_REQUESTS", {
+      message: "Slack rate limit exceeded",
+    });
+  }
+
   let data: SlackWebApiResponse;
   try {
     data = (await response.json()) as SlackWebApiResponse;
   } catch {
-    if (response.status === 429) {
-      throw new ORPCError("SERVICE_UNAVAILABLE", {
-        message: "Slack rate limit exceeded",
-      });
-    }
-
     if (!response.ok && response.status >= 500) {
       throw new ORPCError("BAD_GATEWAY", {
         message: "Slack API returned a server error",
@@ -381,13 +406,9 @@ const callSlackWebApi = async ({
   }
 
   if (!data.ok) {
-    throw mapSlackError(data.error ?? "unknown_error");
-  }
-
-  if (response.status === 429) {
-    throw new ORPCError("SERVICE_UNAVAILABLE", {
-      message: "Slack rate limit exceeded",
-    });
+    const slackError = data.error ?? "unknown_error";
+    reportSlackError(slackError);
+    throw mapSlackError(slackError);
   }
 
   if (!response.ok && response.status >= 500) {

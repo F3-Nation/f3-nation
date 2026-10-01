@@ -256,49 +256,103 @@ describe("handleRequest", () => {
       );
     });
 
-    it("logs 4xx ORPCErrors at warn so they never reach the error tracker", async () => {
+    // Both interceptors are wired to reportHandlerError independently, so
+    // every case runs against each handler.
+    const handlers = [
+      [rpcCtor, "api.rpc.handler_error"],
+      [openApiCtor, "api.openapi.handler_error"],
+    ] as const;
+    const request = {
+      url: new URL("http://api.test/v1/some-path"),
+      method: "POST",
+    };
+    const ctx = { path: "/v1/some-path", method: "POST" };
+
+    it("logs plain 4xx ORPCErrors at warn so they never reach the error tracker", async () => {
       const { ORPCError } = await import("@orpc/server");
       await importHandler();
-      const rpcOptions = rpcCtor.mock.calls[0]![1] as Interceptors;
-      const request = {
-        url: new URL("http://api.test/v1/rpc-path"),
-        method: "POST",
-      };
 
-      for (const [code, status, message] of [
-        ["TOO_MANY_REQUESTS", 429, "Rate limit exceeded. Try again in 1s"],
-        ["UNAUTHORIZED", 401, "Unauthorized"],
-        ["BAD_REQUEST", 400, "Input validation failed"],
-      ] as const) {
-        rpcOptions.interceptors[0]!(new ORPCError(code, { message }), {
-          request,
-        });
-        expect(logWarn).toHaveBeenLastCalledWith("api.rpc.handler_error", {
-          path: "/v1/rpc-path",
-          method: "POST",
-          status,
-          code,
-        });
-        // Never the message — client-facing messages can echo user input.
-        expect(JSON.stringify(logWarn.mock.lastCall)).not.toContain(message);
+      for (const [ctor, event] of handlers) {
+        const options = ctor.mock.calls[0]![1] as Interceptors;
+        for (const [code, status, message] of [
+          ["TOO_MANY_REQUESTS", 429, "Rate limit exceeded. Try again in 1s"],
+          ["UNAUTHORIZED", 401, "Unauthorized"],
+          ["CONFLICT", 409, "Event already has a Q assigned"],
+        ] as const) {
+          options.interceptors[0]!(new ORPCError(code, { message }), {
+            request,
+          });
+          expect(logWarn).toHaveBeenLastCalledWith(event, {
+            ...ctx,
+            status,
+            code,
+          });
+          // Never the message — client-facing messages can echo user input.
+          expect(JSON.stringify(logWarn.mock.lastCall)).not.toContain(message);
+        }
       }
       expect(logError).not.toHaveBeenCalled();
     });
 
-    it("still logs 5xx ORPCErrors via logError", async () => {
+    it("keeps input-validation 4xx at warn, tagged with the cause type", async () => {
+      const { ORPCError, ValidationError } = await import("@orpc/server");
+      await importHandler();
+
+      for (const [ctor, event] of handlers) {
+        const options = ctor.mock.calls[0]![1] as Interceptors;
+        const validation = new ORPCError("BAD_REQUEST", {
+          message: "Input validation failed",
+          cause: new ValidationError({
+            message: "Input validation failed",
+            issues: [],
+            data: { email: "pii@example.com" },
+          }),
+        });
+        options.interceptors[0]!(validation, { request });
+        expect(logWarn).toHaveBeenLastCalledWith(event, {
+          ...ctx,
+          status: 400,
+          code: "BAD_REQUEST",
+          causeType: "ValidationError",
+        });
+        expect(JSON.stringify(logWarn.mock.lastCall)).not.toContain(
+          "pii@example.com",
+        );
+      }
+      expect(logError).not.toHaveBeenCalled();
+    });
+
+    it("reports a 4xx that wraps a fault of ours (has a cause) via logError", async () => {
       const { ORPCError } = await import("@orpc/server");
       await importHandler();
-      const rpcOptions = rpcCtor.mock.calls[0]![1] as Interceptors;
 
-      const serverError = new ORPCError("INTERNAL_SERVER_ERROR");
-      rpcOptions.interceptors[0]!(serverError, {
-        request: { url: new URL("http://api.test/v1/x"), method: "GET" },
-      });
-      expect(logError).toHaveBeenCalledWith(
-        "api.rpc.handler_error",
-        { path: "/v1/x", method: "GET" },
-        serverError,
-      );
+      for (const [ctor, event] of handlers) {
+        const options = ctor.mock.calls[0]![1] as Interceptors;
+        const wrapped = new ORPCError("UNAUTHORIZED", {
+          cause: new Error("JWKS fetch failed"),
+        });
+        options.interceptors[0]!(wrapped, { request });
+        expect(logError).toHaveBeenLastCalledWith(event, ctx, wrapped);
+      }
+      expect(logWarn).not.toHaveBeenCalled();
+    });
+
+    it("still logs 5xx ORPCErrors, including 503, via logError", async () => {
+      const { ORPCError } = await import("@orpc/server");
+      await importHandler();
+
+      for (const [ctor, event] of handlers) {
+        const options = ctor.mock.calls[0]![1] as Interceptors;
+        for (const code of [
+          "INTERNAL_SERVER_ERROR",
+          "BAD_GATEWAY",
+          "SERVICE_UNAVAILABLE",
+        ] as const) {
+          const serverError = new ORPCError(code);
+          options.interceptors[0]!(serverError, { request });
+          expect(logError).toHaveBeenLastCalledWith(event, ctx, serverError);
+        }
+      }
       expect(logWarn).not.toHaveBeenCalled();
     });
   });
