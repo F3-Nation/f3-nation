@@ -4,11 +4,11 @@ import type { NextRequest } from "next/server";
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
 
-import { auth } from "~/lib/auth";
+import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
 
 export async function GET() {
-  const session = await auth();
+  const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -35,7 +35,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
+  const session = await getCurrentSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

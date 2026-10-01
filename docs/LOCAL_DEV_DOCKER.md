@@ -286,7 +286,7 @@ Each app and shared package has its own `.env` file, copied from a `.env.example
 
 | Directory            | Purpose                                                            |
 | -------------------- | ------------------------------------------------------------------ |
-| `apps/api/.env`      | API app (Next.js on port 3001)                                     |
+| `apps/api/.env`      | API app (Hono on port 3001)                                        |
 | `apps/auth/.env`     | Auth app (Next.js on port 3004)                                    |
 | `apps/map/.env`      | Map app (Next.js on port 3000)                                     |
 | `apps/admin/.env`    | Admin app (Next.js on port 3002)                                   |

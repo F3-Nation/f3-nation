@@ -23,16 +23,18 @@ import AdminEventInstancesModal, {
   seriesExceptionOptions,
 } from "~/app/_components/modal/admin-event-instances-modal";
 
-const { toastMock, crupdateMutateAsync, instanceState } = vi.hoisted(() => ({
-  toastMock: {
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warning: vi.fn(),
-  },
-  crupdateMutateAsync: vi.fn(),
-  instanceState: { current: null as Record<string, unknown> | null },
-}));
+const { toastMock, crupdateMutateAsync, instanceState, refDataState } =
+  vi.hoisted(() => ({
+    toastMock: {
+      success: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      warning: vi.fn(),
+    },
+    crupdateMutateAsync: vi.fn(),
+    instanceState: { current: null as Record<string, unknown> | null },
+    refDataState: { available: true },
+  }));
 
 /**
  * The reference data the comboboxes offer. Two regions, each with its own AOs
@@ -146,53 +148,38 @@ vi.mock("~/orpc/react", () => ({
     }
   },
   invalidateQueries: vi.fn(),
-  useQuery: (options: { queryKey: string[] }) => {
+  useQuery: (options: { queryKey: unknown[] }) => {
     if (options.queryKey.includes("eventInstance.byId")) {
       return { data: instanceState.current, isLoading: false };
-    }
-    // The modal runs `org.all` twice — once for regions, once for AOs — so the
-    // key has to carry the requested orgType or both calls see one list.
-    if (options.queryKey.includes("org.all")) {
-      return {
-        data: {
-          orgs: options.queryKey.includes("region") ? REGIONS : AOS,
-        },
-        isLoading: false,
-      };
-    }
-    if (options.queryKey.includes("location.all")) {
-      return { data: { locations: LOCATIONS }, isLoading: false };
-    }
-    if (options.queryKey.includes("eventType.all")) {
-      return { data: { eventTypes: EVENT_TYPES }, isLoading: false };
-    }
-    if (options.queryKey.includes("event.all")) {
-      return { data: { events: SERIES }, isLoading: false };
     }
     return { data: undefined, isLoading: false };
   },
   useMutation: () => ({ mutateAsync: crupdateMutateAsync }),
   orpc: {
-    org: {
-      all: {
-        queryOptions: (options: { input: { orgTypes?: string[] } }) => ({
-          queryKey: ["org.all", ...(options.input.orgTypes ?? [])],
-        }),
-      },
-    },
-    location: {
-      all: { queryOptions: () => ({ queryKey: ["location.all"] }) },
-    },
-    eventType: {
-      all: { queryOptions: () => ({ queryKey: ["eventType.all"] }) },
-    },
-    event: { all: { queryOptions: () => ({ queryKey: ["event.all"] }) } },
     eventInstance: {
       byId: { queryOptions: () => ({ queryKey: ["eventInstance.byId"] }) },
       crupdate: {
         mutationOptions: () => ({ mutationKey: ["eventInstance.crupdate"] }),
       },
     },
+  },
+}));
+
+// The modal's region/AO/location/event-type/event dropdowns all page
+// through useFetchAllPages (client.org.all etc.), which itself calls the
+// mocked useQuery above via a queryFn that mock never executes -- so the
+// hook is mocked directly here instead, keyed off the same queryKey names
+// admin-event-instances-modal.tsx uses.
+vi.mock("~/utils/hooks/use-fetch-all-pages", () => ({
+  useFetchAllPages: (options: { queryKey: unknown[] }) => {
+    const [key] = options.queryKey;
+    if (!refDataState.available) return { data: undefined };
+    if (key === "org.all.everyRegion") return { data: REGIONS };
+    if (key === "org.all.everyAo") return { data: AOS };
+    if (key === "location.all.everyActive") return { data: LOCATIONS };
+    if (key === "eventType.all.everyMatching") return { data: EVENT_TYPES };
+    if (key === "event.all.everyMatching") return { data: SERIES };
+    return { data: undefined };
   },
 }));
 
@@ -390,6 +377,7 @@ describe("AdminEventInstancesModal", () => {
     vi.clearAllMocks();
     crupdateMutateAsync.mockResolvedValue({ id: 7 });
     instanceState.current = null;
+    refDataState.available = true;
   });
 
   describe("reset on load", () => {
@@ -443,6 +431,20 @@ describe("AdminEventInstancesModal", () => {
       expect(field("Start date").value).toBe("");
       expect(field("Name (optional)").value).toBe("");
       expect(timeField("startTime").value).toBe("");
+    });
+
+    // Region/AO/location now page through useFetchAllPages instead of one
+    // unbounded request, so `data` is `undefined` until every page has
+    // loaded -- the comboboxes must render with no options rather than
+    // throwing, not just once every page is in.
+    it("renders empty region, AO and location dropdowns while reference data is still loading", () => {
+      refDataState.available = false;
+      instanceState.current = null;
+      render(<AdminEventInstancesModal data={{}} />);
+
+      expect(offeredOptions("Select a region")).toEqual([]);
+      expect(offeredOptions("Select an AO")).toEqual([]);
+      expect(offeredOptions("Select a location")).toEqual([]);
     });
   });
 
