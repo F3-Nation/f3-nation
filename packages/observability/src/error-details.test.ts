@@ -35,6 +35,17 @@ describe("rootCause", () => {
     expect(rootCause(new Error("outer", { cause: aggregate }))).toBe(aggregate);
   });
 
+  it("wraps a non-Error cause whose toString throws", () => {
+    const cause = {
+      toString() {
+        throw new Error("no");
+      },
+    };
+    expect(rootCause(new Error("outer", { cause }))?.message).toBe(
+      "[unstringifiable error value]",
+    );
+  });
+
   it("survives a throwing cause getter", () => {
     const error = new Error("outer");
     Object.defineProperty(error, "cause", {
@@ -152,13 +163,27 @@ describe("redactCauseMessage", () => {
     ).toBe('duplicate key value violates unique constraint "users_email_key"');
   });
 
-  it("redacts every quoted value, and leaves an unterminated quote alone", () => {
-    expect(redactCauseMessage('a: "x" and b: "y"')).toBe(
-      'a: "[redacted]" and b: "[redacted]"',
+  it("redacts a value that itself contains a double quote", () => {
+    // Postgres doesn't escape quotes inside the echoed value.
+    const out = redactCauseMessage(
+      'invalid input syntax for type uuid: "alice"secret@example.com"',
     );
-    expect(redactCauseMessage('bad input: "unterminated')).toBe(
-      'bad input: "unterminated',
+    expect(out).toBe('invalid input syntax for type uuid: "[redacted]"');
+    expect(out).not.toContain("secret");
+    const mid = redactCauseMessage(
+      'value "12"34" is out of range for type integer',
     );
+    expect(mid).toBe('value "[redacted]" is out of range for type integer');
+  });
+
+  it("fails closed: an unterminated quote is redacted to the end", () => {
+    expect(redactCauseMessage('bad input: "unterminated secret')).toBe(
+      'bad input: "[redacted]"',
+    );
+  });
+
+  it("over-redacts rather than under-redacts when several values appear", () => {
+    expect(redactCauseMessage('a: "x" and b: "y"')).toBe('a: "[redacted]"');
   });
 
   it("also redacts Drizzle params", () => {

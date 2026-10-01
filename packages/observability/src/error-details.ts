@@ -79,23 +79,24 @@ export function redactQueryParams(message: string): string {
 const REDACTED_VALUE = "[redacted]";
 
 /**
- * Replace the content of every `"…"` that starts at `marker` (up to the next
- * `"`) with `[redacted]`. A single left-to-right scan, so linear in the
- * input — no backtracking regex.
+ * Replace the quoted value that starts at `marker` with `[redacted]`.
+ * Postgres does not escape a `"` inside the value it echoes back, so the
+ * value is taken to run to the LAST `"` in the message (or to the end, if
+ * there is no closing quote) rather than to the next one — a value like
+ * `a"b@example.com` must not leak its tail. That can over-redact trailing
+ * text, which is the safe direction. Linear-time `indexOf`/`lastIndexOf`,
+ * no regex.
  */
 const redactQuotedAfter = (text: string, marker: string): string => {
-  let out = "";
-  let from = 0;
-  for (;;) {
-    const at = text.indexOf(marker, from);
-    if (at < 0) break;
-    const open = at + marker.length;
-    const close = text.indexOf('"', open);
-    if (close < 0) break;
-    out += text.slice(from, open) + REDACTED_VALUE;
-    from = close;
-  }
-  return out + text.slice(from);
+  const at = text.indexOf(marker);
+  if (at < 0) return text;
+  const open = at + marker.length;
+  const close = text.lastIndexOf('"');
+  return (
+    text.slice(0, open) +
+    REDACTED_VALUE +
+    (close >= open ? text.slice(close) : '"')
+  );
 };
 
 /**
