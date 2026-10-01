@@ -75,7 +75,11 @@ jobs:
             exit 1
           fi
           if jq -e 'has("dev-mode")' <<<"$providers" >/dev/null; then
-            echo "::error::Production map registers the dev-mode sign-in provider. Roll back now."
+            # The cause is usually the service env, not the revision, so a
+            # rollback may not help. Report the channel the service is running.
+            channel=$(curl --silent --max-time 30 https://map.f3nation.com/api/runtime-config \
+              | jq -r '.channel // "unreadable"' 2>/dev/null || echo unreadable)
+            echo "::error::Production map registers the dev-mode sign-in provider (runtime F3_CHANNEL: ${channel}). Fix F3_CHANNEL on the Production service; if it is already prod, roll back the revision."
             exit 1
           fi
           echo "Production providers: $(jq -c 'keys' <<<"$providers")"

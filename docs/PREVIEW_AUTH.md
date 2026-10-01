@@ -90,8 +90,7 @@ RBAC matrix testing (admin vs editor vs unauthenticated) without any UI.
 
 `packages/auth` registers a `dev-mode` credentials provider only when the
 server-only `F3_CHANNEL` is on the allowlist in
-`packages/auth/src/lib/dev-mode.ts` (`local`, `ci`, `branch`, `dev`,
-`staging`); an unset or unknown value, and `prod`, leave it off. Previews run
+`packages/auth/src/lib/dev-mode.ts`; an unset or unknown value, and `prod`, leave it off. Previews run
 with `F3_CHANNEL=branch` (`.github/preview/map-service.template.yaml`), so it
 is enabled. It signs in
 any email as a nation-admin mock user. The cookie is host-only on the map

@@ -81,4 +81,25 @@ describe("dev-mode provider registration", () => {
     vi.stubEnv("F3_CHANNEL", undefined);
     expect(await registeredProviderIds()).not.toContain("dev-mode");
   });
+
+  it("refuses to authorize if F3_CHANNEL becomes prod after registration", async () => {
+    vi.stubEnv("F3_CHANNEL", "staging");
+    vi.resetModules();
+    vi.stubEnv("SKIP_ENV_VALIDATION", "1");
+    const { authConfig } = await import("@acme/auth/config");
+    const provider = authConfig.providers
+      .map((p) => (typeof p === "function" ? p() : p))
+      .find(
+        (p) => (p as { options?: { id?: string } }).options?.id === "dev-mode",
+      ) as unknown as {
+      options: {
+        authorize: (c: Record<string, unknown>) => Promise<unknown>;
+      };
+    };
+
+    vi.stubEnv("F3_CHANNEL", "prod");
+    expect(
+      await provider.options.authorize({ email: "someone@example.com" }),
+    ).toBeNull();
+  });
 });
