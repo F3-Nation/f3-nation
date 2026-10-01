@@ -7,7 +7,7 @@ import { healthResponseSchema } from "@f3nation/health";
 import { app } from "../src/app";
 
 // Thin wiring tests: prove app.ts routes to the right module and applies the
-// Next-parity behaviors it owns (trailing-slash 308, docs method-guard, no
+// legacy-parity behaviors it owns (trailing-slash 308, docs method-guard, no
 // compression). Router/auth/dispatch behavior itself is covered by
 // handler.ts's own unit tests and the characterization suite, not duplicated
 // here.
@@ -23,7 +23,7 @@ vi.mock("@f3nation/health", async (importOriginal) => {
 });
 
 const { handleRequest } = vi.hoisted(() => ({
-  handleRequest: vi.fn(async (request: Request) => {
+  handleRequest: vi.fn((request: Request) => {
     const url = new URL(request.url);
     if (url.pathname === "/") {
       return Response.redirect(`${url.origin}/docs`);
@@ -45,7 +45,7 @@ const { docsPage, openApiJson } = vi.hoisted(() => ({
       }),
   ),
   openApiJson: vi.fn(
-    async () =>
+    () =>
       new Response(JSON.stringify({ openapi: "3.1.0" }), {
         headers: { "content-type": "application/json" },
       }),

@@ -22,25 +22,23 @@ const generatedProcedures = [
 
 let omitGeneratedPaths = false;
 
-const generateMock = vi.fn(
-  async (_router: unknown, options: GenerateOptions) => ({
-    servers: options.servers,
-    ...(omitGeneratedPaths
-      ? {}
-      : {
-          paths: Object.fromEntries(
-            generatedProcedures
-              .filter(({ routerPath }) =>
-                options.filter({ path: [...routerPath] }),
-              )
-              .map(({ openApiPath, item }) => [
-                openApiPath,
-                structuredClone(item),
-              ]),
-          ),
-        }),
-  }),
-);
+const generateMock = vi.fn((_router: unknown, options: GenerateOptions) => ({
+  servers: options.servers,
+  ...(omitGeneratedPaths
+    ? {}
+    : {
+        paths: Object.fromEntries(
+          generatedProcedures
+            .filter(({ routerPath }) =>
+              options.filter({ path: [...routerPath] }),
+            )
+            .map(({ openApiPath, item }) => [
+              openApiPath,
+              structuredClone(item),
+            ]),
+        ),
+      }),
+}));
 
 vi.mock("@acme/api", () => ({
   router: {},
@@ -52,8 +50,8 @@ vi.mock("@orpc/zod/zod4", () => ({
 
 vi.mock("@orpc/openapi", () => ({
   OpenAPIGenerator: class OpenAPIGenerator {
-    async generate(...args: Parameters<typeof generateMock>) {
-      return generateMock(...args);
+    generate(...args: Parameters<typeof generateMock>) {
+      return Promise.resolve(generateMock(...args));
     }
   },
 }));
