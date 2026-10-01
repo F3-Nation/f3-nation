@@ -11,6 +11,7 @@ from features.strava import (
     format_strava_activity_button_label,
 )
 from utilities.slack import actions
+from utilities.slack import orm as slack_orm
 
 
 @pytest.mark.parametrize(
@@ -63,6 +64,10 @@ def test_activity_buttons_truncate_names_and_preserve_selection_payloads() -> No
         actions.STRAVA_BACKBLAST_TS: "1234.5678",
         actions.STRAVA_BACKBLAST_TITLE: "Test Backblast",
     }
+
+
+def _compile_filter(expression) -> str:
+    return str(expression.compile(compile_kwargs={"literal_binds": True}))
 
 
 @pytest.fixture
@@ -122,6 +127,14 @@ def test_build_strava_form_linked_user(
 
     build_strava_form(mock_strava_form_body, mock_client, mock_logger, {}, MagicMock())
 
+    mock_db_manager.find_records.assert_called_once()
+    find_call = mock_db_manager.find_records.call_args
+    assert find_call.args[0] is SlackUser
+    assert [_compile_filter(f) for f in find_call.kwargs["filters"]] == [
+        _compile_filter(SlackUser.slack_id == "U123"),
+        _compile_filter(SlackUser.slack_team_id == "T123"),
+    ]
+    mock_db_manager.get.assert_called_once_with(User, 1)
     mock_get_strava_activities.assert_called_once_with(mock_user)
 
     mock_block_view.assert_called_once()
@@ -144,3 +157,80 @@ def test_build_strava_form_linked_user(
     kwargs = mock_strava_form_instance.update_modal.call_args.kwargs
     assert kwargs.get("title_text") == "Choose Activity"
     assert kwargs.get("view_id") == mock_strava_form_body[actions.LOADING_ID]
+
+
+@patch("features.strava.DbManager")
+@patch("features.strava.get_strava_activities")
+@patch("features.strava.slack_orm.BlockView")
+def test_build_strava_form_unlinked_user(
+    mock_block_view,
+    mock_get_strava_activities,
+    mock_db_manager,
+    mock_strava_form_body,
+    monkeypatch,
+):
+    monkeypatch.delenv("STRAVA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("STRAVA_CLIENT_SECRET", raising=False)
+
+    mock_db_manager.find_records.return_value = []
+
+    mock_strava_form_instance = MagicMock()
+    mock_block_view.return_value = mock_strava_form_instance
+
+    build_strava_form(mock_strava_form_body, MagicMock(), MagicMock(), {}, MagicMock())
+
+    mock_db_manager.get.assert_not_called()
+    mock_get_strava_activities.assert_not_called()
+
+    blocks = mock_block_view.call_args.kwargs["blocks"]
+    assert len(blocks) == 1
+    assert isinstance(blocks[0], slack_orm.SectionBlock)
+    assert "Strava client ID and secret are not configured" in str(blocks[0].label)
+
+    mock_strava_form_instance.update_modal.assert_called_once()
+    kwargs = mock_strava_form_instance.update_modal.call_args.kwargs
+    assert kwargs.get("title_text") == "Connect Strava"
+    assert kwargs.get("view_id") == mock_strava_form_body[actions.LOADING_ID]
+
+
+@patch("features.strava.DbManager")
+@patch("features.strava.get_strava_activities")
+@patch("features.strava.slack_orm.BlockView")
+def test_build_strava_form_no_activities_shows_reconnect_button(
+    mock_block_view,
+    mock_get_strava_activities,
+    mock_db_manager,
+    mock_strava_form_body,
+    monkeypatch,
+):
+    monkeypatch.setenv("STRAVA_CLIENT_ID", "test-id")
+    monkeypatch.setenv("STRAVA_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv("APP_URL", "https://example.test")
+
+    mock_db_manager.find_records.return_value = [SlackUser(slack_id="U123", slack_team_id="T123", user_id=1)]
+    mock_db_manager.get.return_value = User(id=1)
+    mock_get_strava_activities.return_value = []
+
+    mock_strava_form_instance = MagicMock()
+    mock_block_view.return_value = mock_strava_form_instance
+
+    build_strava_form(mock_strava_form_body, MagicMock(), MagicMock(), {}, MagicMock())
+
+    blocks = mock_block_view.call_args.kwargs["blocks"]
+    assert [type(block) for block in blocks] == [
+        slack_orm.SectionBlock,
+        slack_orm.ImageBlock,
+        slack_orm.ActionsBlock,
+        slack_orm.ContextBlock,
+    ]
+    assert "No recent activities found" in str(blocks[0].label)
+
+    connect_button = blocks[2].elements[0]
+    assert isinstance(connect_button, slack_orm.ButtonElement)
+    assert connect_button.action == actions.STRAVA_CONNECT_BUTTON
+    assert connect_button.url.startswith("https://www.strava.com/oauth/authorize")
+    assert "client_id=test-id" in connect_button.url
+    assert "redirect_uri=https%3A%2F%2Fexample.test%2Fexchange_token" in connect_button.url
+
+    kwargs = mock_strava_form_instance.update_modal.call_args.kwargs
+    assert kwargs.get("title_text") == "Choose Activity"
