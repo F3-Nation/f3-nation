@@ -256,6 +256,8 @@ describe("captureException root cause", () => {
       .calls[0] as Captured;
     expect(properties.root_cause_message).toMatch(/ECONNREFUSED/);
     expect(properties.root_cause_type).toBe("Error");
+    // The driver's code, a stable field to alert on.
+    expect(properties.root_cause_code).toBe("ECONNREFUSED");
     // Re-attached as .cause so posthog-node emits a chained exception.
     expect((reported.cause as Error).message).toMatch(/ECONNREFUSED/);
     // The bound value never leaves the process — not in the message, the
@@ -283,6 +285,53 @@ describe("captureException root cause", () => {
     expect(JSON.stringify([reported.stack, properties])).not.toContain(
       "secret@x.com",
     );
+    // The withheld stack is marked, not silently absent.
+    expect(properties["exception.stacktrace_dropped"]).toBe("redaction");
+  });
+
+  it("redacts the value a Postgres type error quotes back", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const cause = Object.assign(
+      new Error('invalid input syntax for type uuid: "alice@example.com"'),
+      { name: "PostgresError", code: "22P02" },
+    );
+    await captureException(
+      new Error("Failed query: select $1\nparams: x", { cause }),
+    );
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toBe(
+      'invalid input syntax for type uuid: "[redacted]"',
+    );
+    expect(properties.root_cause_code).toBe("22P02");
+    const cause_ = reported.cause as Error;
+    expect(
+      JSON.stringify([reported.message, reported.stack, properties]) +
+        cause_.message +
+        (cause_.stack ?? ""),
+    ).not.toContain("alice@example.com");
+  });
+
+  it("marks a cause stack withheld because redaction couldn't be verified", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const cause = new Error('bad input: "secret@x.com"');
+    cause.stack = "Error: rewritten header\n    at x (y.ts:1:1)";
+    await captureException(new Error("outer", { cause }));
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties["exception.cause.stacktrace_dropped"]).toBe("redaction");
+    expect(JSON.stringify(properties)).not.toContain("secret@x.com");
+  });
+
+  it("omits root_cause_code when the cause has none", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(new Error("outer", { cause: new Error("inner") }));
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties).not.toHaveProperty("root_cause_code");
   });
 
   it("reports a root cause that has no stack", async () => {
@@ -330,13 +379,18 @@ describe("captureException root cause", () => {
     registerObservability(config);
     await captureException(new Error("no cause"), {
       root_cause_message: "spoofed",
+      root_cause_code: "spoofed",
       "exception.cause.message": "spoofed",
+      "exception.cause.code": "spoofed",
+      "exception.stacktrace_dropped": "spoofed",
     });
     const [reported, , properties] = captureExceptionImmediateMock.mock
       .calls[0] as Captured;
     expect(reported.cause).toBeUndefined();
     expect(properties).not.toHaveProperty("root_cause_message");
     expect(properties).not.toHaveProperty("exception.cause.message");
+    expect(properties).not.toHaveProperty("root_cause_code");
+    expect(properties).not.toHaveProperty("exception.stacktrace_dropped");
   });
 
   it("callers cannot spoof the root cause", async () => {

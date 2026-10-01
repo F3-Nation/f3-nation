@@ -23,9 +23,13 @@ import {
 import { setErrorReporter } from "@acme/logger";
 
 import {
+  ATTR_EXCEPTION_CAUSE_CODE,
   ATTR_EXCEPTION_CAUSE_MESSAGE,
   ATTR_EXCEPTION_CAUSE_STACKTRACE,
+  ATTR_EXCEPTION_CAUSE_STACKTRACE_DROPPED,
   ATTR_EXCEPTION_CAUSE_TYPE,
+  ATTR_EXCEPTION_STACKTRACE_DROPPED,
+  redactCauseMessage,
   redactQueryParams,
   redactStack,
   rootCause,
@@ -125,6 +129,11 @@ export async function captureException(
         [ATTR_EXCEPTION_TYPE]: error.name,
         [ATTR_EXCEPTION_MESSAGE]: message,
         ...(stack ? { [ATTR_EXCEPTION_STACKTRACE]: stack } : {}),
+        // A stack withheld because its redaction couldn't be verified is
+        // marked, so it doesn't look like an error that never had one.
+        ...(error.stack && !stack
+          ? { [ATTR_EXCEPTION_STACKTRACE_DROPPED]: "redaction" }
+          : {}),
         ...(cause ? causeAttributes(cause) : {}),
       },
     });
@@ -210,13 +219,24 @@ function toLogAttributes(
   return out;
 }
 
-/** The root cause as exception.cause.* attributes, params redacted. */
+/**
+ * The root cause as exception.cause.* attributes: message and stack header
+ * redacted (bound params and quoted input values), plus the driver's
+ * machine-readable `code` when it has one — a stable field to alert on.
+ */
 function causeAttributes(cause: Error): Record<string, string> {
-  const stack = redactStack(cause.stack, cause.message);
+  const stack = redactStack(cause.stack, cause.message, redactCauseMessage);
+  const code = (cause as { code?: unknown }).code;
   return {
     [ATTR_EXCEPTION_CAUSE_TYPE]: cause.name,
-    [ATTR_EXCEPTION_CAUSE_MESSAGE]: redactQueryParams(cause.message),
+    [ATTR_EXCEPTION_CAUSE_MESSAGE]: redactCauseMessage(cause.message),
+    ...(typeof code === "string" || typeof code === "number"
+      ? { [ATTR_EXCEPTION_CAUSE_CODE]: String(code) }
+      : {}),
     ...(stack ? { [ATTR_EXCEPTION_CAUSE_STACKTRACE]: stack } : {}),
+    ...(cause.stack && !stack
+      ? { [ATTR_EXCEPTION_CAUSE_STACKTRACE_DROPPED]: "redaction" }
+      : {}),
   };
 }
 
@@ -232,6 +252,9 @@ function withoutCauseAttributes(
     [ATTR_EXCEPTION_CAUSE_TYPE]: _type,
     [ATTR_EXCEPTION_CAUSE_MESSAGE]: _message,
     [ATTR_EXCEPTION_CAUSE_STACKTRACE]: _stack,
+    [ATTR_EXCEPTION_CAUSE_CODE]: _code,
+    [ATTR_EXCEPTION_CAUSE_STACKTRACE_DROPPED]: _causeDropped,
+    [ATTR_EXCEPTION_STACKTRACE_DROPPED]: _dropped,
     ...rest
   } = attrs;
   return rest;

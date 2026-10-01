@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { redactQueryParams, redactStack, rootCause } from "./error-details";
+import {
+  redactCauseMessage,
+  redactQueryParams,
+  redactStack,
+  rootCause,
+} from "./error-details";
 
 describe("rootCause", () => {
   it("is undefined for an error without a cause", () => {
@@ -111,5 +116,67 @@ describe("redactStack", () => {
 
   it("is undefined for a missing stack", () => {
     expect(redactStack(undefined, message)).toBeUndefined();
+  });
+});
+
+describe("redactCauseMessage", () => {
+  it.each([
+    [
+      'invalid input syntax for type uuid: "alice@example.com"',
+      'invalid input syntax for type uuid: "[redacted]"',
+    ],
+    [
+      'invalid input value for enum org_type: "my secret"',
+      'invalid input value for enum org_type: "[redacted]"',
+    ],
+    [
+      'value "99999999999" is out of range for type integer',
+      'value "[redacted]" is out of range for type integer',
+    ],
+    [
+      'date/time field value out of range: "2026-99-99"',
+      'date/time field value out of range: "[redacted]"',
+    ],
+  ])("redacts the value Postgres quotes back: %s", (input, expected) => {
+    expect(redactCauseMessage(input)).toBe(expected);
+  });
+
+  it("keeps quoted schema identifiers", () => {
+    expect(redactCauseMessage('relation "users" does not exist')).toBe(
+      'relation "users" does not exist',
+    );
+    expect(
+      redactCauseMessage(
+        'duplicate key value violates unique constraint "users_email_key"',
+      ),
+    ).toBe('duplicate key value violates unique constraint "users_email_key"');
+  });
+
+  it("redacts every quoted value, and leaves an unterminated quote alone", () => {
+    expect(redactCauseMessage('a: "x" and b: "y"')).toBe(
+      'a: "[redacted]" and b: "[redacted]"',
+    );
+    expect(redactCauseMessage('bad input: "unterminated')).toBe(
+      'bad input: "unterminated',
+    );
+  });
+
+  it("also redacts Drizzle params", () => {
+    expect(
+      redactCauseMessage("Failed query: select $1\nparams: pii@example.com"),
+    ).toBe("Failed query: select $1\nparams: [redacted]");
+  });
+
+  it("is applied by redactStack when passed as the redactor", () => {
+    const message = 'invalid input syntax for type uuid: "alice@example.com"';
+    expect(
+      redactStack(
+        `error: ${message}\n    at Parser.parseErrorMessage (x.js:1:1)`,
+        message,
+        redactCauseMessage,
+      ),
+    ).toBe(
+      'error: invalid input syntax for type uuid: "[redacted]"\n    at Parser.parseErrorMessage (x.js:1:1)',
+    );
   });
 });

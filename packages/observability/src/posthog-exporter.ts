@@ -20,6 +20,7 @@ import {
 import { PostHog } from "posthog-node";
 
 import {
+  ATTR_EXCEPTION_CAUSE_CODE,
   ATTR_EXCEPTION_CAUSE_MESSAGE,
   ATTR_EXCEPTION_CAUSE_STACKTRACE,
   ATTR_EXCEPTION_CAUSE_TYPE,
@@ -94,10 +95,12 @@ export class PostHogExceptionExporter implements LogRecordExporter {
         [ATTR_EXCEPTION_CAUSE_TYPE]: causeType,
         [ATTR_EXCEPTION_CAUSE_MESSAGE]: causeMessage,
         [ATTR_EXCEPTION_CAUSE_STACKTRACE]: causeStacktrace,
+        [ATTR_EXCEPTION_CAUSE_CODE]: causeCode,
         // Dropped from the record so only the canonical values below (or
         // none, for an error without a cause) reach PostHog.
         root_cause_type: _rootCauseType,
         root_cause_message: _rootCauseMessage,
+        root_cause_code: _rootCauseCode,
         ...rest
       } = record.attributes;
 
@@ -128,6 +131,8 @@ export class PostHogExceptionExporter implements LogRecordExporter {
         error.cause = cause;
         rootCause.root_cause_type = cause.name;
         rootCause.root_cause_message = causeMessage;
+        if (typeof causeCode === "string" && causeCode)
+          rootCause.root_cause_code = causeCode;
       }
 
       // Both apps report into one PostHog project (single shared POSTHOG_KEY),

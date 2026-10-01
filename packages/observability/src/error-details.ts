@@ -16,6 +16,12 @@
 export const ATTR_EXCEPTION_CAUSE_TYPE = "exception.cause.type";
 export const ATTR_EXCEPTION_CAUSE_MESSAGE = "exception.cause.message";
 export const ATTR_EXCEPTION_CAUSE_STACKTRACE = "exception.cause.stacktrace";
+/** The cause's machine-readable code (SQLSTATE such as `53300`, `ECONNREFUSED`). */
+export const ATTR_EXCEPTION_CAUSE_CODE = "exception.cause.code";
+/** Set when a stack was withheld because its redaction couldn't be verified. */
+export const ATTR_EXCEPTION_STACKTRACE_DROPPED = "exception.stacktrace_dropped";
+export const ATTR_EXCEPTION_CAUSE_STACKTRACE_DROPPED =
+  "exception.cause.stacktrace_dropped";
 
 // Deep enough for any real wrapper stack (Drizzle → postgres.js → Node is 2).
 const MAX_CAUSE_DEPTH = 10;
@@ -70,6 +76,43 @@ export function redactQueryParams(message: string): string {
   return start < 0 ? message : message.slice(0, start) + REDACTED_PARAMS;
 }
 
+const REDACTED_VALUE = "[redacted]";
+
+/**
+ * Replace the content of every `"…"` that starts at `marker` (up to the next
+ * `"`) with `[redacted]`. A single left-to-right scan, so linear in the
+ * input — no backtracking regex.
+ */
+const redactQuotedAfter = (text: string, marker: string): string => {
+  let out = "";
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf(marker, from);
+    if (at < 0) break;
+    const open = at + marker.length;
+    const close = text.indexOf('"', open);
+    if (close < 0) break;
+    out += text.slice(from, open) + REDACTED_VALUE;
+    from = close;
+  }
+  return out + text.slice(from);
+};
+
+/**
+ * Redact a root-cause message. On top of Drizzle's bound params, Postgres
+ * repeats the offending input in its own type and format errors —
+ * `invalid input syntax for type uuid: "…"`, `invalid input value for enum
+ * …: "…"`, `value "…" is out of range for type integer` — so a quoted value
+ * after `: ` or `value ` is replaced. Quoted identifiers elsewhere
+ * (`relation "users" does not exist`) are kept: they're schema, not data.
+ */
+export function redactCauseMessage(message: string): string {
+  return redactQuotedAfter(
+    redactQuotedAfter(redactQueryParams(message), ': "'),
+    'value "',
+  );
+}
+
 /**
  * The stack with `message`'s params redacted, or `undefined` when that
  * can't be done safely. A stack's header embeds the message verbatim, so
@@ -81,9 +124,10 @@ export function redactQueryParams(message: string): string {
 export function redactStack(
   stack: string | undefined,
   message: string,
+  redact: (message: string) => string = redactQueryParams,
 ): string | undefined {
   if (!stack) return undefined;
-  const redacted = redactQueryParams(message);
+  const redacted = redact(message);
   if (redacted === message) return stack;
   const at = stack.indexOf(message);
   if (at < 0) return undefined;
