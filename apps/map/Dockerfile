@@ -62,6 +62,11 @@ ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 # so this default is load-bearing, not cosmetic.
 ARG NEXT_PUBLIC_POSTHOG_SESSION_RECORDING=false
 ENV NEXT_PUBLIC_POSTHOG_SESSION_RECORDING=$NEXT_PUBLIC_POSTHOG_SESSION_RECORDING
+# Never set NEXT_PUBLIC_CHANNEL or F3_CHANNEL at build time. This image is built
+# once and promoted unchanged from Staging to Production, so a build-time
+# channel would be frozen into the bundle (NEXT_PUBLIC_*) or become a fallback
+# default (F3_CHANNEL). The channel must come from the Cloud Run runtime env;
+# the dev-mode sign-in gate depends on it.
 
 # `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
 # app's subset into the pruned lockfile. pnpm's verify-deps-before-run check (run
