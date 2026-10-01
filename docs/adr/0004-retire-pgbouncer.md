@@ -86,14 +86,17 @@ configuration rather than by a pooler.
 What that commits us to:
 
 - **A whole-instance connection budget.** With no pooler, the sum of every
-  direct client's peak connections — a service's `--max-instances` × pool size,
-  a Cloud Run job's concurrent tasks × pool size — must stay under
-  `max_connections = 400`, with headroom below the connection-budget alert.
-  `api` and `map` run at 15 instances × 5; the Slack bot's pool is bounded too.
-  The limits live in the deploy workflows and client code, not in hand-applied
-  settings.
+  direct client's peak connections — a service's `--max-instances` × its
+  maximum pool connections (overflow included), a Cloud Run job's concurrent
+  tasks × the same — must stay under `max_connections = 400`, with headroom
+  below the connection-budget alert. `api` runs at 20 instances and `map` at
+  15, each × 5 (sized from 30 days of prod demand: `api` peaked at 20 active
+  instances, `map` at 13); the Slack bot's pool is bounded too, and the
+  configured total is about 260. The limits live in the deploy workflows and
+  client code, not in hand-applied settings.
 - **Monitors before the change, not after.** A Cloud Monitoring alert on
-  `num_backends` (240, i.e. 60% of 400) backstops a breach of the budget, and a
+  `num_backends` (280, i.e. 70% of 400, above the configured total) backstops a
+  breach of the budget, and a
   PostHog alert on connection-failure root causes catches pool exhaustion inside
   it. Both are baselined against the current topology, and their staging twins
   are seen firing, before any service moves.
