@@ -6,11 +6,15 @@ import { getAuthTables } from "@better-auth/core/db";
 import { isAccessTokenPayload } from "@f3nation/sso";
 
 import {
+  allowProductionClientAction,
   buildBetterAuthOptions,
   createAuthInstance,
   memoryAdapter,
 } from "../../src/lib/better-auth";
-import type { MemoryDB } from "../../src/lib/better-auth";
+import type {
+  CreateAuthInstanceOptions,
+  MemoryDB,
+} from "../../src/lib/better-auth";
 
 const BASE_URL = "http://localhost:3999";
 const BASE_PATH = "/api/auth2";
@@ -50,12 +54,62 @@ function createTestAuth(f3UserId: number | null) {
     database: memoryAdapter(memoryDb),
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(f3UserId),
+    isNationAdmin: () => Promise.resolve(false),
+    // Permissive — unlike production, these tests need to exercise client
+    // creation directly. See "denies client creation..." below for
+    // coverage of production's actual (stricter) policy.
+    allowClientAction: () => Promise.resolve(true),
   };
   const authOptions = buildBetterAuthOptions(options);
   for (const table of Object.keys(getAuthTables(authOptions))) {
     memoryDb[table] ??= [];
   }
   return createAuthInstance(options);
+}
+
+// Unlike createTestAuth above, this maps distinct emails to distinct F3 user
+// ids (and lets a caller mark some of them nation admins) — needed to model
+// two separate people signing in against the same instance, which the
+// clientReference tests below require.
+function createMultiUserTestAuth(
+  emailToF3UserId: Record<string, number>,
+  adminF3UserIds: Set<number> = new Set<number>(),
+) {
+  const memoryDb: MemoryDB = {};
+  const options = {
+    baseURL: BASE_URL,
+    basePath: BASE_PATH,
+    secret: "test-only-not-a-real-secret",
+    issuer: ISSUER,
+    database: memoryAdapter(memoryDb),
+    sendVerificationOTP: () => Promise.resolve(),
+    findF3UserId: (email: string) =>
+      Promise.resolve(emailToF3UserId[email] ?? null),
+    isNationAdmin: (f3UserId: number) =>
+      Promise.resolve(adminF3UserIds.has(f3UserId)),
+    allowClientAction: () => Promise.resolve(true),
+  };
+  const authOptions = buildBetterAuthOptions(options);
+  for (const table of Object.keys(getAuthTables(authOptions))) {
+    memoryDb[table] ??= [];
+  }
+  return createAuthInstance(options);
+}
+
+async function createConfidentialClient(
+  auth: ReturnType<typeof createTestAuth>,
+  sessionToken: string,
+) {
+  return auth.api.createOAuthClient({
+    headers: { authorization: `Bearer ${sessionToken}` },
+    body: {
+      redirect_uris: [REDIRECT_URI],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      application_type: "web",
+      scope: "openid profile email offline_access",
+    },
+  });
 }
 
 async function signInAndGetToken(
@@ -239,8 +293,269 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     const otp = await auth.api.createVerificationOTP({
       body: { email, type: "sign-in" },
     });
+    // A specific, catchable error — not just "throws something". Before
+    // the create.before hook was hardened to throw explicitly, returning
+    // `false` here made Better Auth's own signInEmailOTP handler
+    // dereference `.id` on a null user, an unrelated TypeError that
+    // happened to also satisfy a bare `.rejects.toThrow()`. Asserting the
+    // actual error code pins the real fix, not just "some error happened".
     await expect(
       auth.api.signInEmailOTP({ body: { email, otp } }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
+  });
+
+  it("registration hand-off: sign-in is refused before the F3 users row exists and succeeds once it does", async () => {
+    // Exercises the engine-level guarantee the hand-off relies on: while
+    // findF3UserId resolves null, sign-in is refused; once it resolves (as
+    // it would once /api/register has created the `users` row), the same
+    // email can complete sign-in. Uses a new code for the second attempt
+    // because the refused attempt already consumed the first one.
+    const email = "phase3-handoff@f3nation.test";
+    let f3UserId: number | null = null;
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: () => Promise.resolve(f3UserId),
+      isNationAdmin: () => Promise.resolve(false),
+      allowClientAction: () => Promise.resolve(true),
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const preRegistrationOtp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp: preRegistrationOtp } }),
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
+
+    // Registration completes — mirrors /api/register creating the users row.
+    f3UserId = 6161;
+
+    const postRegistrationOtp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    const signIn = await auth.api.signInEmailOTP({
+      body: { email, otp: postRegistrationOtp },
+    });
+    expect(signIn.token).toBeTruthy();
+  });
+
+  it("registration hand-off: the code minted before registration is redeemed after it, matching the real UI flow", async () => {
+    // The real flow (apps/auth/src/app/login/email/verify/verify-email-form
+    // and apps/auth/src/app/register/register-form) never spends the
+    // original code on a refused signIn.emailOtp call — it checks
+    // /api/check-user first and only ever calls signIn.emailOtp once, after
+    // /api/register has created the `users` row, using the same code that
+    // was minted before registration. The test above proves the engine
+    // refuses/allows correctly but mints a fresh code for the allowed
+    // attempt; this one proves a code minted while findF3UserId still
+    // resolves null is still redeemable once it resolves, with no refused
+    // attempt burning it first.
+    const email = "phase3-handoff-same-code@f3nation.test";
+    let f3UserId: number | null = null;
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: () => Promise.resolve(f3UserId),
+      isNationAdmin: () => Promise.resolve(false),
+      allowClientAction: () => Promise.resolve(true),
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    // Registration completes — mirrors /api/register creating the users row.
+    f3UserId = 6161;
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+    expect(signIn.token).toBeTruthy();
+    expect(signIn.user.id).toBe("6161");
+  });
+
+  it("lets any nation admin rotate the secret of a client another nation admin created (#876 Phase 3 client-reference)", async () => {
+    const auth = createMultiUserTestAuth(
+      {
+        "admin-a@f3nation.test": 501,
+        "admin-b@f3nation.test": 502,
+      },
+      new Set([501, 502]),
+    );
+
+    const tokenA = await signInAndGetToken(auth, "admin-a@f3nation.test");
+    const client = await createConfidentialClient(auth, tokenA);
+    expect(client.client_secret).toBeTruthy();
+
+    // A different nation admin, who did not create this client, rotates its
+    // secret — only possible because clientReference stamped the client
+    // with F3_NATION_CLIENT_REFERENCE_ID instead of admin A's own user id.
+    const tokenB = await signInAndGetToken(auth, "admin-b@f3nation.test");
+    const rotated = await auth.api.rotateClientSecret({
+      headers: { authorization: `Bearer ${tokenB}` },
+      body: { client_id: client.client_id },
+    });
+    expect(rotated.client_secret).toBeTruthy();
+    expect(rotated.client_secret).not.toBe(client.client_secret);
+  });
+
+  it("still refuses to let one non-admin rotate another non-admin's client", async () => {
+    const auth = createMultiUserTestAuth({
+      "pax-a@f3nation.test": 601,
+      "pax-b@f3nation.test": 602,
+    });
+
+    const tokenA = await signInAndGetToken(auth, "pax-a@f3nation.test");
+    const client = await createConfidentialClient(auth, tokenA);
+
+    const tokenB = await signInAndGetToken(auth, "pax-b@f3nation.test");
+    await expect(
+      auth.api.rotateClientSecret({
+        headers: { authorization: `Bearer ${tokenB}` },
+        body: { client_id: client.client_id },
+      }),
+    ).rejects.toMatchObject({ status: "UNAUTHORIZED" });
+  });
+
+  it("denies client creation under production's allowClientAction policy, even for a nation admin", async () => {
+    // clientReference alone can't tell an F3-managed client apart from any
+    // other client a nation admin happens to create — it only ever sees the
+    // calling session, never the client being created. Production closes
+    // that gap by denying "create" outright via allowProductionClientAction
+    // instead; this wires the real function in, not a re-declared copy of
+    // its policy.
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: () => Promise.resolve(701),
+      isNationAdmin: () => Promise.resolve(true),
+      allowClientAction: allowProductionClientAction,
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const token = await signInAndGetToken(auth, "admin-c@f3nation.test");
+    await expect(createConfidentialClient(auth, token)).rejects.toMatchObject({
+      status: "UNAUTHORIZED",
+    });
+  });
+
+  it("lets a nation admin rotate an F3-managed client's secret under production's allowlist, but denies update and delete", async () => {
+    const emailToF3UserId: Record<string, number> = {
+      "admin-creator@f3nation.test": 801,
+      "admin-rotator@f3nation.test": 802,
+    };
+    // Swapped after creation, below — models the real production path,
+    // where a client only ever gets F3_NATION_CLIENT_REFERENCE_ID via a
+    // provisioning script (permissive policy stands in for that here),
+    // and every actual session-driven action against it goes through
+    // production's real allowProductionClientAction.
+    let currentPolicy: (
+      action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
+    ) => Promise<boolean> = () => Promise.resolve(true);
+
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: (email: string) =>
+        Promise.resolve(emailToF3UserId[email] ?? null),
+      isNationAdmin: () => Promise.resolve(true),
+      allowClientAction: (
+        action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
+      ) => currentPolicy(action),
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const creatorToken = await signInAndGetToken(
+      auth,
+      "admin-creator@f3nation.test",
+    );
+    const client = await createConfidentialClient(auth, creatorToken);
+
+    currentPolicy = allowProductionClientAction;
+
+    const rotatorToken = await signInAndGetToken(
+      auth,
+      "admin-rotator@f3nation.test",
+    );
+    const authHeaders = { authorization: `Bearer ${rotatorToken}` };
+
+    const rotated = await auth.api.rotateClientSecret({
+      headers: authHeaders,
+      body: { client_id: client.client_id },
+    });
+    expect(rotated.client_secret).toBeTruthy();
+    expect(rotated.client_secret).not.toBe(client.client_secret);
+
+    await expect(
+      auth.api.updateOAuthClient({
+        headers: authHeaders,
+        body: {
+          client_id: client.client_id,
+          update: {
+            redirect_uris: ["https://attacker.example.com/callback"],
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ status: "UNAUTHORIZED" });
+
+    await expect(
+      auth.api.deleteOAuthClient({
+        headers: authHeaders,
+        body: { client_id: client.client_id },
+      }),
+    ).rejects.toMatchObject({ status: "UNAUTHORIZED" });
+  });
+});
+
+describe("allowProductionClientAction", () => {
+  it("allows only read, list, and rotate", async () => {
+    for (const action of [
+      "create",
+      "update",
+      "delete",
+      "configure-client-credentials-scopes",
+    ] as const) {
+      await expect(allowProductionClientAction(action)).resolves.toBe(false);
+    }
+
+    for (const action of ["read", "list", "rotate"] as const) {
+      await expect(allowProductionClientAction(action)).resolves.toBe(true);
+    }
   });
 });

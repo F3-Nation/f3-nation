@@ -10,6 +10,7 @@ import { env } from "@acme/env";
 import { COOKIE_NAME } from "@acme/shared/common/constants";
 import { ProviderId } from "@acme/shared/common/enums";
 
+import { isDevModeSignInAllowed } from "./lib/dev-mode";
 import { emailProvider } from "./lib/email-provider";
 import { MDPGDrizzleAdapter } from "./lib/md-pg-drizzzle-adapter";
 import OtpProvider from "./lib/otp-provider";
@@ -108,7 +109,7 @@ const cookiePrefix = isProd ? "__Secure-" : "";
 
 const providers: Provider[] = [emailProvider, OtpProvider];
 
-if (!isProd) {
+if (isDevModeSignInAllowed()) {
   providers.push(
     CredentialsProvider({
       id: ProviderId.DEV_MODE,
@@ -117,7 +118,7 @@ if (!isProd) {
         email: { label: "Email", type: "email" },
       },
       async authorize(credentials) {
-        if (isProd) return null;
+        if (!isDevModeSignInAllowed()) return null;
 
         // Resolve the nation org for the mock admin role. Per-PR preview MAP
         // services run WITHOUT a database (only api/auth get a seeded Postgres
