@@ -18,7 +18,7 @@ vi.mock("@acme/mail", async (importOriginal) => {
   };
 });
 
-// Mock next-auth to avoid Next.js dependencies
+// Mock next-auth to avoid pulling in the real auth stack
 vi.mock("next-auth", () => ({
   default: vi.fn(),
 }));
@@ -36,7 +36,7 @@ vi.mock("../lib/notify-webhooks", () => ({
   notifyWebhooks: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock @acme/auth to avoid Next.js dependencies
+// Mock @acme/auth to avoid pulling in the real auth stack
 // Return a default session with admin role for tests (admin can do everything)
 const defaultSession: Session = {
   id: 1,

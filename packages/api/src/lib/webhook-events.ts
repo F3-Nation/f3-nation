@@ -125,7 +125,7 @@ export const notifyMapDataChange = (event: WebhookEvent): void => {
     logError("api.webhook.notify_failed", { webhookEvent: event }, error);
   });
 
-  // Trigger Map app revalidation via HTTP - API and Map are separate Next.js
-  // instances, so the Map app must be notified explicitly.
+  // Trigger Map app revalidation via HTTP - API and Map are separate
+  // services, so the Map app must be notified explicitly.
   void triggerMapAppRevalidation({ event });
 };
