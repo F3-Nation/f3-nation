@@ -1,27 +1,21 @@
-interface DevModeSignInVisibility {
-  /** Build-time `NEXT_PUBLIC_CHANNEL === "prod"`. */
-  isProd: boolean;
-  /** Build-time `NODE_ENV === "development"` (i.e. `next dev`). */
-  isDevelopment: boolean;
-  /** Runtime channel from /api/runtime-config. */
-  channel: string;
-  /** The debug toggle (12 clicks on the channel label). */
-  showDebug: boolean;
-}
+import { isDevModeChannel } from "@acme/shared/common/dev-mode";
+
+import type { RuntimeConfigStatus } from "~/utils/runtime-config";
 
 /**
- * Whether the Settings modal offers "Sign in (Dev Mode)". Never in prod.
- * Otherwise in local dev, on per-PR previews — production builds, so
- * `isDevelopment` is false there, but the server registers the dev-mode
- * provider on the `branch` channel and the regular email sign-in can't
- * deliver mail — or when debug is on.
+ * Whether the Settings modal offers "Sign in (Dev Mode)": exactly where the
+ * server registers the dev-mode provider, using the same channel list
+ * (`@acme/shared/common/dev-mode`). The channel is the runtime one from
+ * /api/runtime-config, not the build-time NEXT_PUBLIC_CHANNEL, which images
+ * don't receive at build. Hidden until that config has loaded, because its
+ * loading default is "local".
  */
 export function shouldShowDevModeSignIn({
-  isProd,
-  isDevelopment,
   channel,
-  showDebug,
-}: DevModeSignInVisibility): boolean {
-  if (isProd) return false;
-  return isDevelopment || channel === "branch" || showDebug;
+  status,
+}: {
+  channel: string;
+  status: RuntimeConfigStatus;
+}): boolean {
+  return status === "ready" && isDevModeChannel(channel);
 }

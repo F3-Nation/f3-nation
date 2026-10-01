@@ -19,7 +19,6 @@ import Link from "next/link";
 import { useCallback } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
-import { isDevelopment, isProd } from "@acme/shared/common/constants";
 import { ProviderId } from "@acme/shared/common/enums";
 import { cn } from "@acme/ui";
 import {
@@ -39,12 +38,15 @@ import { closeModal, ModalType, openModal } from "~/utils/store/modal";
 import { VersionInfo } from "../version-info";
 
 export default function SettingsModal() {
-  const showDebug = mapStore.use.showDebug();
   const mode = appStore.use.mode();
   const tiles = mapStore.use.tiles();
   const { theme, setTheme } = useTheme();
   const { session, isNationAdmin, isEditorOrAdmin } = useAuth();
-  const { adminUrl: configAdminUrl, channel } = useRuntimeConfig();
+  const {
+    adminUrl: configAdminUrl,
+    channel,
+    status: runtimeConfigStatus,
+  } = useRuntimeConfig();
   const center = mapStore.use.center();
   const zoom = mapStore.use.zoom();
 
@@ -243,10 +245,8 @@ export default function SettingsModal() {
                   <span className="text-xs">Sign in</span>
                 </button>
                 {shouldShowDevModeSignIn({
-                  isProd,
-                  isDevelopment,
                   channel,
-                  showDebug,
+                  status: runtimeConfigStatus,
                 }) ? (
                   <button
                     className={cn(

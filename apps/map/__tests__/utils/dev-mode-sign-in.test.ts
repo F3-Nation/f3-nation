@@ -1,42 +1,28 @@
 import { describe, expect, it } from "vitest";
 
+import { DEV_MODE_CHANNELS } from "@acme/shared/common/dev-mode";
+
 import { shouldShowDevModeSignIn } from "~/utils/dev-mode-sign-in";
 
-const base = {
-  isProd: false,
-  isDevelopment: false,
-  channel: "staging",
-  showDebug: false,
-};
-
 describe("shouldShowDevModeSignIn", () => {
-  it("shows on a per-PR preview (production build, branch channel)", () => {
-    expect(shouldShowDevModeSignIn({ ...base, channel: "branch" })).toBe(true);
-  });
+  it.each([...DEV_MODE_CHANNELS])(
+    "shows on the %s channel once runtime config has loaded",
+    (channel) => {
+      expect(shouldShowDevModeSignIn({ channel, status: "ready" })).toBe(true);
+    },
+  );
 
-  it("shows in local dev", () => {
-    expect(
-      shouldShowDevModeSignIn({
-        ...base,
-        isDevelopment: true,
-        channel: "local",
-      }),
-    ).toBe(true);
-  });
+  it.each(["prod", "", "Prod", "production", "unknown"])(
+    "never shows on %j",
+    (channel) => {
+      expect(shouldShowDevModeSignIn({ channel, status: "ready" })).toBe(false);
+    },
+  );
 
-  it("shows on staging only when debug is on", () => {
-    expect(shouldShowDevModeSignIn(base)).toBe(false);
-    expect(shouldShowDevModeSignIn({ ...base, showDebug: true })).toBe(true);
-  });
-
-  it("never shows in prod, even with every other signal set", () => {
-    expect(
-      shouldShowDevModeSignIn({
-        isProd: true,
-        isDevelopment: true,
-        channel: "branch",
-        showDebug: true,
-      }),
-    ).toBe(false);
-  });
+  it.each(["loading", "error"] as const)(
+    "stays hidden while runtime config is %s (its loading default is local)",
+    (status) => {
+      expect(shouldShowDevModeSignIn({ channel: "local", status })).toBe(false);
+    },
+  );
 });
