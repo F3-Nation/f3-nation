@@ -43,7 +43,7 @@ export const env = createEnv({
   },
   /**
    * env-core has no bundler integration, so every var (client and server) must be
-   * listed explicitly here — unlike env-nextjs, server vars aren't auto-filled.
+   * listed explicitly here — server vars aren't auto-filled.
    */
   runtimeEnvStrict: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
