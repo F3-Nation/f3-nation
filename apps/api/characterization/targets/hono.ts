@@ -2,10 +2,9 @@ import type { Invoke } from "../transport";
 import { app } from "../../src/app";
 
 /**
- * Unlike `targets/next.ts`, this needs no pre-handler modeling (trailing-slash
- * 308, docs-route 405/OPTIONS synthesis) — `app.ts` implements those itself, so
- * a divergence there fails a golden instead of being silently duplicated here.
- * It also needs no `next/headers` shim: session resolution is fully
- * header-based, so `app.fetch` receiving a real `Request` is enough.
+ * In-process dispatch through `app.fetch`. It needs no pre-handler modeling
+ * (trailing-slash 308, docs-route 405/OPTIONS) because `app.ts` implements
+ * those itself, and no request-scope shim because session resolution is fully
+ * header-based.
  */
 export const invokeHono: Invoke = async (request) => app.fetch(request);

@@ -2,16 +2,14 @@
   "extends": "../../tooling/typescript/base.json",
   "compilerOptions": {
     "lib": ["ES2022", "dom", "dom.iterable"],
-    "jsx": "preserve",
     "paths": {
       "~/*": ["./src/*"],
       "@f3nation/health": ["../../packages/health/src/index.ts"]
     },
     "allowArbitraryExtensions": true,
-    "plugins": [{ "name": "next" }],
     "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json",
     "strictNullChecks": true
   },
-  "include": [".", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "vitest.config.ts", ".next"]
+  "include": ["."],
+  "exclude": ["node_modules", "vitest.config.ts"]
 }
