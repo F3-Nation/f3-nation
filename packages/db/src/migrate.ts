@@ -30,9 +30,8 @@ const migrate = async () => {
     await reset();
   }
 
-  // See migrationsDatabaseName: legacy naming for TCP URLs (so existing
-  // environments keep their migration history), bare name for Cloud SQL
-  // socket URLs.
+  // Named like the TCP form of this URL, so migration history survives a
+  // transport switch. Changing any other URL parameter renames the table.
   const database = migrationsDatabaseName(databaseUrl);
   if (!database)
     throw new Error("Could not read the database name from DATABASE_URL");

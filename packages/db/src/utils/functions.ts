@@ -48,6 +48,20 @@ export const resolveQueryTimeoutMs = (raw: string | undefined): number => {
 
 const QUERY_TIMEOUT_MS = resolveQueryTimeoutMs(process.env.QUERY_TIMEOUT_MS);
 
+const decodeQueryPart = (part: string) => {
+  try {
+    return decodeURIComponent(part.replace(/\+/g, " "));
+  } catch {
+    return part;
+  }
+};
+
+// A `host=` value that is clearly meant as a Cloud SQL socket but lacks the
+// leading slash: `cloudsql/<connection name>`, or a bare
+// `<project>:<region>:<instance>` connection name.
+const looksLikeSocketTypo = (value: string) =>
+  value.includes("cloudsql") || /^[^/:\s]+:[^/:\s]+:[^/:\s]+$/.test(value);
+
 /**
  * Split a Cloud SQL Unix-socket host out of a connection string.
  *
@@ -59,60 +73,75 @@ const QUERY_TIMEOUT_MS = resolveQueryTimeoutMs(process.env.QUERY_TIMEOUT_MS);
  * postgres.js can't take it as written: an empty host (`@/`) throws
  * `Invalid URL`, and with any other host the `host=` parameter is silently
  * ignored and it connects over TCP to that host instead. So a socket `host=`
- * is removed from the URL and returned separately, to be passed as the
- * options-form `host` (which postgres.js resolves to the socket path).
+ * (an absolute path) is removed from the URL and returned separately, to be
+ * passed as the options-form `host` (which postgres.js resolves to the socket
+ * path). With several socket `host=` parameters, the last one wins.
  *
  * Keeping the socket inside `DATABASE_URL` means switching a service between
  * the pooler and the socket stays a swap of that one secret. URLs without a
- * socket `host=` (every TCP URL today) are returned unchanged.
+ * socket `host=` (every TCP URL today) are returned unchanged, including a
+ * TCP-style `host=` value. Two likely mistakes fail loudly instead of falling
+ * back to TCP or an opaque `Invalid URL`: a socket path missing its leading
+ * slash, and an empty URL host (`user:pass@/db`) without a socket `host=`.
+ * Neither error message includes the URL, which carries credentials.
  */
-const decodeQueryPart = (part: string) => {
-  try {
-    return decodeURIComponent(part.replace(/\+/g, " "));
-  } catch {
-    return part;
-  }
-};
-
 export const splitSocketHost = (
   databaseUrl: string,
 ): { url: string; socketHost?: string } => {
   const queryStart = databaseUrl.indexOf("?");
-  if (queryStart < 0) return { url: databaseUrl };
+  const base = queryStart < 0 ? databaseUrl : databaseUrl.slice(0, queryStart);
   // Filter the raw `key=value` pairs rather than parsing and re-serializing
   // the query: every other parameter must survive byte-for-byte (e.g.
   // `%20` must not become `+`), because migrationsDatabaseName names the
   // migrations table after this text.
   let host: string | undefined;
-  const kept = databaseUrl
-    .slice(queryStart + 1)
-    .split("&")
-    .filter((pair) => {
-      const eq = pair.indexOf("=");
-      if (decodeQueryPart(eq < 0 ? pair : pair.slice(0, eq)) !== "host") {
-        return true;
-      }
-      const value = decodeQueryPart(eq < 0 ? "" : pair.slice(eq + 1));
-      if (!value.startsWith("/")) return true;
-      host = value;
-      return false;
-    });
-  if (!host) return { url: databaseUrl };
+  const kept =
+    queryStart < 0
+      ? []
+      : databaseUrl
+          .slice(queryStart + 1)
+          .split("&")
+          .filter((pair) => {
+            const eq = pair.indexOf("=");
+            if (decodeQueryPart(eq < 0 ? pair : pair.slice(0, eq)) !== "host") {
+              return true;
+            }
+            const value = decodeQueryPart(eq < 0 ? "" : pair.slice(eq + 1));
+            if (!value.startsWith("/")) {
+              if (looksLikeSocketTypo(value)) {
+                throw new Error(
+                  "DATABASE_URL host= looks like a Cloud SQL socket path but does not start with '/'; use host=/cloudsql/<project>:<region>:<instance>",
+                );
+              }
+              return true;
+            }
+            host = value;
+            return false;
+          });
+  if (!host) {
+    if (base.includes("@/")) {
+      throw new Error(
+        "DATABASE_URL has no host after '@'; for a Cloud SQL socket add host=/cloudsql/<project>:<region>:<instance>",
+      );
+    }
+    return { url: databaseUrl };
+  }
   const query = kept.join("&");
   // postgres.js rejects an empty host; any placeholder works, since the
   // options-form host overrides it.
-  const base = databaseUrl
-    .slice(0, queryStart)
+  const tcpBase = base
     .replace(/@\//, "@localhost/")
     .replace(/^(postgres(?:ql)?:)\/\/\//, "$1//localhost/");
-  return { url: query ? `${base}?${query}` : base, socketHost: host };
+  return { url: query ? `${tcpBase}?${query}` : tcpBase, socketHost: host };
 };
 
 /**
  * `postgres(url, options)` arguments for a connection string: the URL with
  * any socket `host=` split out, plus the options-form `host` that makes
- * postgres.js connect to `<dir>/.s.PGSQL.5432`. Every client built from
- * DATABASE_URL goes through this, so none can skip the socket handling.
+ * postgres.js connect to `<dir>/.s.PGSQL.5432`. Used by createDbClient and
+ * createDatabaseIfNotExists. drizzle-kit (`drizzle.config.ts`) is given the
+ * raw URL instead: it connects through node-postgres, whose connection-string
+ * parser reads a socket `host=` natively.
  */
 export const postgresArgs = (
   databaseUrl: string,

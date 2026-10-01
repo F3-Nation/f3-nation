@@ -12,7 +12,7 @@ import {
 // available in CI, so the connection-level check below asserts what
 // postgres.js itself resolves from the client's arguments (constructing a
 // client is lazy — it never connects); the live socket path is exercised by
-// the staging cutover drill (ADR 0004 §7 step 3).
+// the staging cutover drill.
 const SOCKET = "/cloudsql/f3data:us-central1:f3data";
 
 describe("splitSocketHost", () => {
@@ -62,6 +62,95 @@ describe("splitSocketHost", () => {
     expect(splitSocketHost(`postgres:///f3_prod?host=${SOCKET}`)).toEqual({
       url: "postgres://localhost/f3_prod",
       socketHost: SOCKET,
+    });
+  });
+});
+
+describe("splitSocketHost query-string branches", () => {
+  it.each([
+    [
+      "host= as the only parameter leaves no stray ?",
+      "postgres://api:pw@/f3_prod?host=/s",
+      { url: "postgres://api:pw@localhost/f3_prod", socketHost: "/s" },
+    ],
+    [
+      "host= first of several leaves no leading &",
+      "postgres://api:pw@/f3_prod?host=/s&sslmode=disable",
+      {
+        url: "postgres://api:pw@localhost/f3_prod?sslmode=disable",
+        socketHost: "/s",
+      },
+    ],
+    [
+      "an encoded password survives",
+      "postgres://api:p%40ss%2Fw@/f3_prod?host=/s",
+      { url: "postgres://api:p%40ss%2Fw@localhost/f3_prod", socketHost: "/s" },
+    ],
+    [
+      "the last socket host= wins; a TCP host= stays in the URL",
+      "postgres://api:pw@h/f3_prod?host=10.0.0.5&host=/sock",
+      { url: "postgres://api:pw@h/f3_prod?host=10.0.0.5", socketHost: "/sock" },
+    ],
+  ])("%s", (_name, input, expected) => {
+    expect(splitSocketHost(input)).toEqual(expected);
+  });
+
+  it("names the only-parameter case's table after the bare database", () => {
+    expect(migrationsDatabaseName("postgres://api:pw@/f3_prod?host=/s")).toBe(
+      "f3_prod",
+    );
+  });
+
+  it.each([
+    ["an empty host=", "postgres://api:pw@h/f3_prod?host="],
+    ["a valueless host", "postgres://api:pw@h/f3_prod?host"],
+    ["a relative host=", "postgres://api:pw@h/f3_prod?host=relative/dir"],
+    ["a TCP host=", "postgres://api:pw@h/f3_prod?host=10.0.0.5"],
+  ])("leaves %s on a TCP URL unchanged", (_name, url) => {
+    expect(splitSocketHost(url)).toEqual({ url });
+  });
+
+  it.each([
+    [
+      "cloudsql/ without the leading slash",
+      `postgres://api:pw@/f3_prod?host=${encodeURIComponent("cloudsql/f3data:us-central1:f3data")}`,
+    ],
+    [
+      "a bare connection name",
+      "postgres://api:pw@h/f3_prod?host=f3data:us-central1:f3data",
+    ],
+  ])("rejects a socket typo: %s", (_name, url) => {
+    expect(() => splitSocketHost(url)).toThrow(/does not start with '\/'/);
+  });
+
+  it("does not leak the URL (credentials) in either error", () => {
+    for (const url of [
+      "postgres://api:s3cret@/f3_prod?host=cloudsql/x",
+      "postgres://api:s3cret@/f3_prod",
+    ]) {
+      let message = "";
+      try {
+        splitSocketHost(url);
+      } catch (err) {
+        message = (err as Error).message;
+      }
+      expect(message).not.toBe("");
+      expect(message).not.toContain("s3cret");
+    }
+  });
+
+  it("rejects an empty URL host with no socket host= clearly", () => {
+    expect(() => splitSocketHost("postgres://api:pw@/f3_prod")).toThrow(
+      /no host after '@'/,
+    );
+    expect(() =>
+      splitSocketHost("postgres://api:pw@/f3_prod?sslmode=disable"),
+    ).toThrow(/no host after '@'/);
+  });
+
+  it("still allows a credential-less, host-less URL (postgres.js defaults to localhost)", () => {
+    expect(splitSocketHost("postgres:///f3_prod")).toEqual({
+      url: "postgres:///f3_prod",
     });
   });
 });
