@@ -38,7 +38,10 @@ class ApiLocationRepositoryTest(unittest.TestCase):
 
         result = self.repo.get_by_org(10)
 
-        self.client.get.assert_called_once_with("/v1/location", params={"regionIds": [10]})
+        self.client.get.assert_called_once_with(
+            "/v1/location",
+            params={"regionIds": [10], "pageSize": 100, "pageIndex": 0},
+        )
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].id, 1)
         self.assertEqual(result[0].name, "Central Park")
