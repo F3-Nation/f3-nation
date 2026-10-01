@@ -25,6 +25,24 @@ describe.runIf(target.inProcess)("session and header rules", () => {
     );
   });
 
+  it.each(["https, https", "   "])(
+    "authorizes a valid session with x-forwarded-proto=%j",
+    async (proto) => {
+      const cookie = await sessionCookie({ roles: ADMIN_COOKIE_ROLES });
+      await expectAuthorized(
+        await target.invoke(
+          req("/v1/api-key", {
+            headers: {
+              "x-forwarded-for": IP(6),
+              "x-forwarded-proto": proto,
+              cookie,
+            },
+          }),
+        ),
+      );
+    },
+  );
+
   it("rejects a tampered cookie with 401, not 500", async () => {
     const cookie =
       (await sessionCookie({ roles: ADMIN_COOKIE_ROLES })) + "tamper";

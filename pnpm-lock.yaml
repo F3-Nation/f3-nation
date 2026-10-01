@@ -308,9 +308,6 @@ catalogs:
     '@scalar/hono-api-reference':
       specifier: ^0.12.3
       version: 0.12.7
-    '@scalar/nextjs-api-reference':
-      specifier: ^0.12.1
-      version: 0.12.5
     '@t3-oss/env-core':
       specifier: ^0.13.11
       version: 0.13.11
@@ -857,9 +854,6 @@ importers:
       '@scalar/hono-api-reference':
         specifier: 'catalog:'
         version: 0.12.7(hono@4.13.8)
-      '@scalar/nextjs-api-reference':
-        specifier: 'catalog:'
-        version: 0.12.5(next@16.3.8(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.19.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
       '@t3-oss/env-core':
         specifier: 'catalog:'
         version: 0.13.11(typescript@6.0.3)(zod@4.5.4)
@@ -869,22 +863,10 @@ importers:
       hono:
         specifier: 'catalog:'
         version: 4.13.8
-      next:
-        specifier: 'catalog:'
-        version: 16.3.8(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.19.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      react:
-        specifier: 'catalog:'
-        version: 19.3.0
-      react-dom:
-        specifier: 'catalog:'
-        version: 19.3.0(react@19.3.0)
       zod:
         specifier: ^4.5.4
         version: 4.5.4
     devDependencies:
-      '@acme/auth':
-        specifier: workspace:*
-        version: link:../../packages/auth
       '@acme/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -906,12 +888,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.0
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: 'catalog:'
-        version: 19.3.0(@types/react@19.3.0)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 5.0.2(vitest@5.0.2)
@@ -921,9 +897,6 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 10.11.0(jiti@2.7.0)(supports-color@8.1.1)
-      jiti:
-        specifier: 'catalog:'
-        version: 2.7.0
       jose:
         specifier: 'catalog:'
         version: 6.2.12
@@ -5074,13 +5047,6 @@ packages:
     engines: {node: '>=22'}
     peerDependencies:
       hono: ^4.12.5
-
-  '@scalar/nextjs-api-reference@0.12.5':
-    resolution: {integrity: sha512-XMj6uBr+k82TdLmkaU4NDCGPFbkbYZFdbHiBbP3OllqsyQ1O5dxVTkOhHzC860x1RCyKg1BoVJbgbOyuhLoOag==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      next: 16.3.8
-      react: ^19.0.0
 
   '@scalar/schemas@0.12.2':
     resolution: {integrity: sha512-LIqqT0G7Chj57h1XY1FC3mOJriqNvPOg41V8NOsWGP/VCHCL/lg6K+D3ejwUg4mYNR3TTYaQARlr630mzqKgDA==}
@@ -11177,12 +11143,6 @@ snapshots:
     dependencies:
       '@scalar/client-side-rendering': 0.4.6
       hono: 4.13.8
-
-  '@scalar/nextjs-api-reference@0.12.5(next@16.3.8(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.19.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)':
-    dependencies:
-      '@scalar/client-side-rendering': 0.4.6
-      next: 16.3.8(@babel/core@7.29.0(supports-color@8.1.1))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@24.19.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      react: 19.3.0
 
   '@scalar/schemas@0.12.2':
     dependencies:
