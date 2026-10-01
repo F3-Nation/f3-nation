@@ -45,6 +45,9 @@ class SlackSettings:
     calendar_image_current: Optional[str] = None
     calendar_image_next: Optional[str] = None
     calendar_image_third: Optional[str] = None
+    calendar_image_current_generated_at: Optional[str] = None
+    calendar_image_next_generated_at: Optional[str] = None
+    calendar_image_third_generated_at: Optional[str] = None
     calendar_weeks_shown: Optional[int] = None
     preblast_reminder_days: Optional[int] = None
     backblast_reminder_days: Optional[int] = None

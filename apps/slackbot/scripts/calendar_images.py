@@ -6,7 +6,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import random
 import shutil
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from math import isnan
 from numbers import Real
 
@@ -180,6 +180,9 @@ def remove_stale_week_images(slack_app_settings: dict, region_id: int, num_weeks
     """
     removed = False
     for stale_week in WEEK_LABELS[num_weeks:]:
+        if f"calendar_image_{stale_week}_generated_at" in slack_app_settings:
+            removed = True
+        slack_app_settings.pop(f"calendar_image_{stale_week}_generated_at", None)
         stale_file = slack_app_settings.pop(f"calendar_image_{stale_week}", None)
         if not stale_file:
             continue
@@ -278,6 +281,21 @@ def calendar_weeks_shown(slack_app_settings: dict) -> int:
     return max(1, min(num_weeks, MAX_CALENDAR_WEEKS))
 
 
+def calendar_image_is_stale(slack_app_settings: dict, week: str, max_changed: datetime) -> bool:
+    generated_at = slack_app_settings.get(f"calendar_image_{week}_generated_at")
+    # Missing, malformed, or timezone-less watermarks cannot establish freshness.
+    try:
+        generated = datetime.fromisoformat(generated_at)
+    except (TypeError, ValueError):
+        return True
+    if generated.tzinfo is None:
+        return True
+    # DB timestamp-without-timezone columns contain UTC values.
+    if max_changed.tzinfo is None:
+        max_changed = max_changed.replace(tzinfo=UTC)
+    return max_changed > generated
+
+
 def generate_calendar_images(force: bool = False):
     import dataframe_image as dfi
     import pandas as pd
@@ -370,6 +388,9 @@ def generate_calendar_images(force: bool = False):
             )
         )
 
+        # Use the query start, not export completion: changes during rendering must
+        # still trigger regeneration on the next run.
+        generation_started_at = datetime.now(UTC)
         results = query.all()
         df_all = pd.DataFrame(results)
 
@@ -438,7 +459,7 @@ def generate_calendar_images(force: bool = False):
 
                         if (
                             not slack_app_settings.get(f"calendar_image_{week}")
-                            or (max_changed > datetime.now() - timedelta(hours=1))
+                            or calendar_image_is_stale(slack_app_settings, week, max_changed)
                             or first_sunday_run
                             or LOCAL_DEVELOPMENT
                             or force
@@ -603,6 +624,9 @@ def generate_calendar_images(force: bool = False):
                                     except Exception as e:
                                         print(f"Error deleting old file {existing_file} from local storage: {e}")
                             slack_app_settings[f"calendar_image_{week}"] = filename
+                            slack_app_settings[f"calendar_image_{week}_generated_at"] = (
+                                generation_started_at.isoformat()
+                            )
                             calendar_updated = True
 
                     # post to slack channel if enabled
