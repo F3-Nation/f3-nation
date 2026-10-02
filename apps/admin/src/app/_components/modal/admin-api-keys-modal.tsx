@@ -1,5 +1,6 @@
 "use client";
 
+import uniqBy from "lodash/uniqBy";
 import { Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { z } from "zod";
@@ -37,7 +38,13 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
-import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import { closeModal } from "~/utils/store/modal";
 
 const ApiKeyFormSchema = z.object({
@@ -76,6 +83,11 @@ export default function AdminApiKeysModal() {
     );
   }, [allOrgs?.orgs]);
 
+  const nextUnusedOrgId = (roles: RoleEntry[] | undefined) => {
+    const usedOrgIds = new Set((roles ?? []).map((r) => r.orgId));
+    return allOrgs?.orgs.find((org) => !usedOrgIds.has(org.id))?.id;
+  };
+
   const createApiKey = useMutation(
     orpc.apiKey.create.mutationOptions({
       onSuccess: async (result) => {
@@ -91,8 +103,13 @@ export default function AdminApiKeysModal() {
         // Force refetch of the API keys list
         await invalidateQueries("apiKey");
       },
-      onError: () => {
-        toast.error("Unable to create API key");
+      onError: (err) => {
+        // FORBIDDEN names the org-role pair the caller can't grant
+        toast.error(
+          err instanceof ORPCError && err.code === "FORBIDDEN"
+            ? err.message
+            : "Unable to create API key",
+        );
       },
     }),
   );
@@ -155,7 +172,12 @@ export default function AdminApiKeysModal() {
                     await createApiKey.mutateAsync({
                       name: values.name,
                       description: values.description ?? undefined,
-                      roles: values.roles ?? [],
+                      // Two rows can land on the same org via the picker;
+                      // a duplicate pair fails the roles insert.
+                      roles: uniqBy(
+                        values.roles ?? [],
+                        (r) => `${r.orgId}:${r.roleName}`,
+                      ),
                       expiresAt,
                     });
                   },
@@ -292,11 +314,16 @@ export default function AdminApiKeysModal() {
                             variant="outline"
                             size="sm"
                             className="mt-2"
+                            // Disabled until org.mine loads, and once every org
+                            // already has a row, so a new row never starts on an
+                            // org the user can't grant or on a duplicate.
+                            disabled={!nextUnusedOrgId(field.value)}
                             onClick={() => {
-                              const firstOrgId = allOrgs?.orgs?.[0]?.id ?? 1;
+                              const orgId = nextUnusedOrgId(field.value);
+                              if (!orgId) return;
                               const newRoleEntry: RoleEntry = {
                                 roleName: "editor",
-                                orgId: firstOrgId,
+                                orgId,
                               };
                               field.onChange([
                                 ...((field.value as RoleEntry[]) ?? []),
