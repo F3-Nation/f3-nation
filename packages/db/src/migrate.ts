@@ -6,7 +6,10 @@ import { sql } from ".";
 import { db } from "./client";
 import { alembicVersionValue, reset } from "./reset";
 import { seed } from "./seed";
-import { createDatabaseIfNotExists } from "./utils/functions";
+import {
+  createDatabaseIfNotExists,
+  migrationsDatabaseName,
+} from "./utils/functions";
 
 const databaseUrl = env.DATABASE_URL;
 
@@ -27,7 +30,11 @@ const migrate = async () => {
     await reset();
   }
 
-  const database = databaseUrl.split("/").slice(-1)[0];
+  // Named like the TCP form of this URL, so migration history survives a
+  // transport switch. Changing any other URL parameter renames the table.
+  const database = migrationsDatabaseName(databaseUrl);
+  if (!database)
+    throw new Error("Could not read the database name from DATABASE_URL");
 
   console.log("Migrating database", database);
   await migrator(db, {
