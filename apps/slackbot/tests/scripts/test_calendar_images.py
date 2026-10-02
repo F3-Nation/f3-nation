@@ -624,6 +624,84 @@ def test_last_event_removal_refreshes_post_and_defers_deletion(calendar_generati
         assert remove_mock.call_count == (4 if schema == "f3_prod" else 1)
 
 
+@pytest.mark.parametrize("outcome", ["update", "fallback", "both_fail", "initial_fail"])
+@pytest.mark.parametrize("failure_mode", ["exception", "not_ok"])
+@pytest.mark.parametrize("change", ["empty", "replacement"])
+def test_slack_posting_controls_calendar_persistence_and_deletion(
+    calendar_generation, monkeypatch, outcome, failure_mode, change
+):
+    run, row, settings, session = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    run([row("Original AO", now - timedelta(days=1))], now)
+    old_backing = settings["calendar_image_current"]
+    settings.update(q_image_posting_enabled=True, q_image_posting_channel="TEST_CHANNEL", bot_token="test-token")
+    if outcome != "initial_fail":
+        settings["q_image_posting_ts"] = "old-ts"
+    before = deepcopy(settings)
+    monkeypatch.setattr(calendar_images, "DB_SCHEMA", "f3_prod")
+    copy = MagicMock()
+    monkeypatch.setattr(calendar_images.shutil, "copyfile", copy)
+    client = MagicMock()
+    client.chat_update.return_value = {"ok": True}
+    client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
+
+    def fail(method):
+        if failure_mode == "exception":
+            method.side_effect = RuntimeError("Slack API failed")
+        else:
+            method.return_value = {"ok": False, "error": "test_failure"}
+
+    if outcome in {"fallback", "both_fail"}:
+        fail(client.chat_update)
+    failed = outcome in {"both_fail", "initial_fail"}
+    if failed:
+        fail(client.chat_postMessage)
+    monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
+    monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings: [])
+
+    def remove(path):
+        assert session.commit.call_count == 2
+        assert settings != before
+
+    remove_mock = MagicMock(side_effect=remove)
+    monkeypatch.setattr(calendar_images.os, "remove", remove_mock)
+    changed_rows = [] if change == "empty" else [row("Changed AO", now - timedelta(days=1))]
+    exports = run(changed_rows, now + timedelta(hours=1))
+    assert len(exports) == (1 if change == "replacement" else 0)
+    assert copy.call_count == (1 if change == "replacement" else 0)
+    assert client.chat_update.call_count == (0 if outcome == "initial_fail" else 1)
+    assert client.chat_postMessage.call_count == (0 if outcome == "update" else 1)
+    if failed:
+        assert settings == before
+        assert session.query.return_value.update.call_count == 1
+        assert session.commit.call_count == 1
+        session.rollback.assert_called_once()
+        remove_mock.assert_not_called()
+        # The persisted old snapshot makes the next scheduled run retry naturally.
+        client.chat_update.side_effect = None
+        client.chat_update.return_value = {"ok": True}
+        client.chat_postMessage.side_effect = None
+        client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
+        client.reset_mock()
+        retry_exports = run(changed_rows, now + timedelta(hours=2))
+        assert len(retry_exports) == (1 if change == "replacement" else 0)
+        assert client.chat_update.call_count == (0 if outcome == "initial_fail" else 1)
+        assert client.chat_postMessage.call_count == (1 if outcome == "initial_fail" else 0)
+    else:
+        session.rollback.assert_not_called()
+    assert session.query.return_value.update.call_count == 2
+    assert session.commit.call_count == 2
+    assert settings.get("calendar_image_current") != old_backing
+    assert settings["q_image_posting_ts"] == ("new-ts" if outcome in {"fallback", "initial_fail"} else "old-ts")
+    remove_mock.assert_any_call(f"/mnt/calendar-images/{old_backing}")
+    if change == "empty":
+        assert "calendar_image_current" not in settings
+        remove_mock.assert_any_call("/mnt/calendar-images/1-current.png")
+    else:
+        assert settings["calendar_image_current"] == (retry_exports if failed else exports)[0][0].split("/")[-1]
+        assert all(call.args[0] != "/mnt/calendar-images/1-current.png" for call in remove_mock.call_args_list)
+
+
 @pytest.mark.parametrize("week_index", [0, 1, 2])
 @pytest.mark.parametrize("other_week_has_events", [False, True])
 def test_failed_stable_deletion_retries_without_settings_write_or_slack_post(

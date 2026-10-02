@@ -296,12 +296,14 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
     try:
         if slack_app_settings.get("q_image_posting_ts") and (not first_sunday_run):
             try:
-                client.chat_update(
+                response = client.chat_update(
                     channel=slack_app_settings["q_image_posting_channel"],
                     ts=slack_app_settings["q_image_posting_ts"],
                     blocks=block_list,
                     text="Q Sheet",
                 )
+                if not response["ok"]:
+                    raise RuntimeError("Slack calendar update failed")
             except Exception as e:
                 print(f"Error updating Slack message, posting new message: {e}")
                 response = client.chat_postMessage(
@@ -309,18 +311,21 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
                     text="Q Sheet",
                     blocks=block_list,
                 )
-                if response["ok"]:
-                    slack_app_settings["q_image_posting_ts"] = response["ts"]
+                if not response["ok"]:
+                    raise RuntimeError("Slack calendar post failed") from e
+                slack_app_settings["q_image_posting_ts"] = response["ts"]
         else:
             response = client.chat_postMessage(
                 channel=slack_app_settings["q_image_posting_channel"],
                 text="Q Sheet",
                 blocks=block_list,
             )
-            if response["ok"]:
-                slack_app_settings["q_image_posting_ts"] = response["ts"]
+            if not response["ok"]:
+                raise RuntimeError("Slack calendar post failed")
+            slack_app_settings["q_image_posting_ts"] = response["ts"]
     except Exception as e:
         print(f"Error posting to Slack channel: {e}")
+        raise
 
 
 def slack_posting_enabled(slack_app_settings: dict) -> bool:
