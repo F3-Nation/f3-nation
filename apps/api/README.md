@@ -11,17 +11,17 @@ apps/api is a pure API service: every route handler returns a raw `Response`, th
 - **RPC** (`/v1/*`) — typed procedure calls for first-party clients (the map app, F3 Me, internal tooling), matched by the `Client` header.
 - **REST/OpenAPI** (`/v1/*`, spec at `/docs/openapi.json`) — plain HTTP for external/third-party clients and `curl`.
 
-Interactive API docs (via [`@scalar/nextjs-api-reference`](https://github.com/scalar/scalar)) are served at [`/docs`](https://api.f3nation.com/docs); the root path (`/`) redirects there.
+Interactive API docs (via [`@scalar/hono-api-reference`](https://github.com/scalar/scalar)) are served at [`/docs`](https://api.f3nation.com/docs); the root path (`/`) redirects there.
 
 ## Tech Stack
 
-| Layer     | Choice                                    |
-| --------- | ----------------------------------------- |
-| Framework | Next.js (App Router, Route Handlers only) |
-| RPC/REST  | oRPC (`@orpc/server`, `@orpc/openapi`)    |
-| API Docs  | Scalar (`@scalar/nextjs-api-reference`)   |
-| Database  | Drizzle ORM (via `@acme/db`)              |
-| Hosting   | GCP Cloud Run (via GitHub Actions)        |
+| Layer     | Choice                                     |
+| --------- | ------------------------------------------ |
+| Framework | Hono on @hono/node-server (esbuild bundle) |
+| RPC/REST  | oRPC (`@orpc/server`, `@orpc/openapi`)     |
+| API Docs  | Scalar (`@scalar/hono-api-reference`)      |
+| Database  | Drizzle ORM (via `@acme/db`)               |
+| Hosting   | GCP Cloud Run (via GitHub Actions)         |
 
 ## Authentication
 
@@ -75,11 +75,11 @@ pnpm test
 # Run tests in watch mode (no coverage)
 pnpm test:watch
 
-# Run the characterization suite (Hono-migration parity gate)
+# Run the characterization suite (frozen behavior goldens)
 pnpm test:characterization
 ```
 
-The characterization suite in `characterization/` pins the current Next.js implementation's request/response behavior end-to-end (auth, rate limiting, error shapes) so it can be diffed against the in-progress Hono rewrite.
+The characterization suite in `characterization/` pins the API's request/response behavior end-to-end (auth, rate limiting, error shapes) against frozen goldens, so a change to the server layer can't silently alter what clients see. See [docs/testing.md](../../docs/testing.md).
 
 ## Deployment
 

@@ -11,6 +11,7 @@ import {
   CirclePile,
   Globe,
   KeyRound,
+  LandPlot,
   Mail,
   MapPin,
   PersonStanding,
@@ -50,7 +51,7 @@ type NavLink =
       nationAdminOnly?: boolean;
     };
 
-const orgIcons = { CircleSmall, CirclePile, Earth, Globe, Shield };
+const orgIcons = { CircleSmall, CirclePile, Earth, LandPlot, Globe, Shield };
 
 export const AdminNavLinks = ({
   className,

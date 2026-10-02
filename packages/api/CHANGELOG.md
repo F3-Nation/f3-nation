@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.11.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.10.0...pkg-api@0.11.0) (2026-09-23)
+
+
+### Features
+
+* **admin,api,db,shared:** surface territory in the admin UI and count AOs at any depth ([#1043](https://github.com/F3-Nation/f3-nation/issues/1043)) ([f9932d2](https://github.com/F3-Nation/f3-nation/commit/f9932d26700c733fb69ee02b703aedab63053f4f))
+* **api,admin:** sort areas by resolved sector and territory ([#1049](https://github.com/F3-Nation/f3-nation/issues/1049)) ([4e97ef7](https://github.com/F3-Nation/f3-nation/commit/4e97ef788e826c81d8b1975cf2b46b8d493393e8))
+* **api:** add territory to the map update-request escalation ladder ([#1055](https://github.com/F3-Nation/f3-nation/issues/1055)) ([d07c7d9](https://github.com/F3-Nation/f3-nation/commit/d07c7d9ca4450e68b8751a6f268577c8f5941e95))
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Bug Fixes
+
+* **auth,api:** pin better-auth packages to exact 1.7.4 ([#1023](https://github.com/F3-Nation/f3-nation/issues/1023)) ([7f2039d](https://github.com/F3-Nation/f3-nation/commit/7f2039d3ac6f5ad780c10b166e581759ad6ade74))
+* **map,api,scripts:** escape OTP email HTML and fix change-request email link ([#1037](https://github.com/F3-Nation/f3-nation/issues/1037)) ([cc93d06](https://github.com/F3-Nation/f3-nation/commit/cc93d06abada6052778a1da178a62d2a05eb7989))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.7
+    * @acme/db bumped to 0.7.0
+    * @acme/env bumped to 0.1.3
+    * @acme/logger bumped to 0.2.0
+    * @acme/mail bumped to 0.1.4
+    * @acme/shared bumped to 0.4.0
+    * @acme/validators bumped to 0.4.4
+
+## [0.10.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.9.1...pkg-api@0.10.0) (2026-09-16)
+
+
+### Features
+
+* **homepage:** aos on org chart ([#997](https://github.com/F3-Nation/f3-nation/issues/997)) ([e4b36ca](https://github.com/F3-Nation/f3-nation/commit/e4b36ca629e3c7c5366468e2eae3720ad5ff28ec))
+
+
+### Bug Fixes
+
+* **api:** ordinal server-side parent-type validation in org.crupdate ([#1002](https://github.com/F3-Nation/f3-nation/issues/1002)) ([d4a6317](https://github.com/F3-Nation/f3-nation/commit/d4a6317b03b49abbbd61f1cfec96060e6ace7324))
+* **api:** parallelize profile relation queries ([#1016](https://github.com/F3-Nation/f3-nation/issues/1016)) ([24cbd11](https://github.com/F3-Nation/f3-nation/commit/24cbd11f5fc5403f2c3144a11b36cb50a16dd2e7))
+* **slackbot, api:** persisting tags on series and allowing removal ([#979](https://github.com/F3-Nation/f3-nation/issues/979)) ([807630d](https://github.com/F3-Nation/f3-nation/commit/807630d961b09d9934b7deac33aafc927135173c))
+
+
+### Performance Improvements
+
+* **api:** project region map fields ([#1006](https://github.com/F3-Nation/f3-nation/issues/1006)) ([d52a642](https://github.com/F3-Nation/f3-nation/commit/d52a6425ab644b0ad6b3ce52dde49dad678f63d8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.6
+    * @acme/db bumped to 0.6.2
+    * @acme/shared bumped to 0.3.1
+    * @acme/validators bumped to 0.4.3
+
 ## [0.9.1](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.9.0...pkg-api@0.9.1) (2026-09-11)
 
 

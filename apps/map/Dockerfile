@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
 ARG TURBO_VERSION=2
-FROM node:24.20.0-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS builder
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS builder
 ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -17,7 +17,7 @@ COPY . .
 RUN turbo prune f3-map --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:24.20.0-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS installer
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS installer
 ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -46,6 +46,28 @@ ENV SKIP_ENV_VALIDATION=true
 # regeneration fetches real map data against the live DB. See page.tsx.
 ENV SKIP_SSG=1
 
+# Next.js inlines NEXT_PUBLIC_* at `next build` time into BOTH the client
+# bundle and the standalone server output — a Cloud Run runtime env var for a
+# NEXT_PUBLIC_* name does nothing on its own. These must be present during
+# the image build. Defaults empty: keyless builds succeed and client PostHog
+# is simply disabled (see instrumentation-client.ts).
+ARG NEXT_PUBLIC_POSTHOG_KEY
+ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
+# Defaulted, NOT bare: a bare `ARG` expands to an EMPTY STRING when no
+# --build-arg is supplied, and the ENV below then bakes "" into the client
+# bundle. env.ts validates this as z.enum(["true","false"]).optional(),
+# which accepts an ABSENT var but rejects "" — and the browser has neither
+# CI nor SKIP_ENV_VALIDATION set, so t3-env throws on import of ~/env and
+# the app white-screens. preview-env.yml builds this image without the arg,
+# so this default is load-bearing, not cosmetic.
+ARG NEXT_PUBLIC_POSTHOG_SESSION_RECORDING=false
+ENV NEXT_PUBLIC_POSTHOG_SESSION_RECORDING=$NEXT_PUBLIC_POSTHOG_SESSION_RECORDING
+# Never set NEXT_PUBLIC_CHANNEL or F3_CHANNEL at build time. This image is built
+# once and promoted unchanged from Staging to Production, so a build-time
+# channel would be frozen into the bundle (NEXT_PUBLIC_*) or become a fallback
+# default (F3_CHANNEL). The channel must come from the Cloud Run runtime env;
+# the dev-mode sign-in gate depends on it.
+
 # `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
 # app's subset into the pruned lockfile. pnpm's verify-deps-before-run check (run
 # by `pnpm run build`) flags that as catalog drift under strict catalogMode and
@@ -59,7 +81,7 @@ RUN pnpm turbo build --filter=f3-map
 RUN test -n "$(find apps/map/.next/standalone -name 'libvips-cpp*')"
 
 # ---------- Stage 3: Production runner ----------
-FROM node:24.20.0-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS runner
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app

@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { z } from "zod";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
+import { OrgType } from "@acme/shared/app/enums";
+import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import { safeParseInt } from "@acme/shared/common/functions";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
@@ -31,6 +33,7 @@ import { toast } from "@acme/ui/toast";
 import { PositionInsertSchema } from "@acme/validators";
 
 import gte from "lodash/gte";
+import { client } from "~/orpc/client";
 import {
   invalidateQueries,
   orpc,
@@ -39,6 +42,7 @@ import {
   useQuery,
 } from "~/orpc/react";
 import { useAuth } from "~/utils/hooks/use-auth";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
 import {
   closeModal,
@@ -48,13 +52,10 @@ import {
 } from "~/utils/store/modal";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
-const ORG_TYPE_OPTIONS = [
-  { label: "AO", value: "ao" },
-  { label: "Region", value: "region" },
-  { label: "Area", value: "area" },
-  { label: "Sector", value: "sector" },
-  { label: "Nation", value: "nation" },
-] as const;
+const ORG_TYPE_OPTIONS = OrgType.map((value) => ({
+  label: orgTypeDisplay[value].label,
+  value,
+}));
 
 const NATIONAL_ORG_VALUE = "__national__";
 
@@ -102,16 +103,23 @@ export default function AdminPositionsModal({
 
   const selectedOrgType = form.watch("orgType");
 
-  const { data: editableOrgsResponse } = useQuery(
-    orpc.org.all.queryOptions({
-      input: {
+  // This dropdown needs every editable org, not one page of them — org.all
+  // is capped server-side (see pagination.ts), so page through it instead
+  // of relying on an unbounded "omit both params" request.
+  const { data: editableOrgs } = useFetchAllPages({
+    path: ["org", "all"],
+    queryKey: ["org.all.everyEditable", selectedOrgType],
+    enabled: !!selectedOrgType,
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
         orgTypes: selectedOrgType ? [selectedOrgType] : ["region"],
         onlyMine: true,
-        pageSize: 1000,
-      },
-      enabled: !!selectedOrgType,
-    }),
-  );
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   const prevOrgTypeRef = useRef<string | null | undefined>(undefined);
 
@@ -126,7 +134,7 @@ export default function AdminPositionsModal({
   }, [selectedOrgType, form]);
 
   const orgOptions = useMemo(() => {
-    const orgs = editableOrgsResponse?.orgs ?? [];
+    const orgs = editableOrgs ?? [];
     const options: { value: string; label: string }[] = orgs.map((org) => ({
       value: org.id.toString(),
       label: org.name,
@@ -152,7 +160,7 @@ export default function AdminPositionsModal({
     }
 
     return options;
-  }, [editableOrgsResponse, isNationAdmin, selectedOrgType, position]);
+  }, [editableOrgs, isNationAdmin, selectedOrgType, position]);
 
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";

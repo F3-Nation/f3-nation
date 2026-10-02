@@ -22,7 +22,14 @@ export type Permissions = (typeof Permissions)[number];
 // schema.ts's `orgType = pgEnum("org_type", OrgType)` reads this array
 // directly). Inserting a new org type requires a migration that recreates
 // the Postgres enum in the new order, not just an edit here.
-export const OrgType = ["ao", "region", "area", "sector", "nation"] as const;
+export const OrgType = [
+  "ao",
+  "region",
+  "area",
+  "territory",
+  "sector",
+  "nation",
+] as const;
 export type OrgType = (typeof OrgType)[number];
 
 // Compile-time pin on OrgType's element order — fails typecheck if a future
@@ -30,7 +37,7 @@ export type OrgType = (typeof OrgType)[number];
 // generic rather than a conditional `? true : never`, which silently
 // resolves to `never` on a mismatch instead of producing a compile error.
 type AssertOrgTypeOrder<
-  T extends readonly ["ao", "region", "area", "sector", "nation"],
+  T extends readonly ["ao", "region", "area", "territory", "sector", "nation"],
 > = T;
 type _AssertOrgTypeOrder = AssertOrgTypeOrder<typeof OrgType>;
 

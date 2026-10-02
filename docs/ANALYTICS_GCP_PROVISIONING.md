@@ -11,9 +11,11 @@ shared WIF guidance; do not recreate its shared WIF pool/provider.
 
 Both jobs use project `f3data`, region `us-central1`, and Artifact Registry
 repository `cloud-run-builds`. Nonprod is job `analytics-etl-nonprod`, Cloud SQL
-`f3data-nonprod`, database `f3_staging`, and prefix
-`gs://f3-analytics-nonprod/parquets/`. Production is job `analytics-etl`, Cloud
-SQL `f3data`, database `f3_prod`, and prefix `gs://f3-analytics/parquets/`.
+`f3data-nonprod`, database `f3_staging`, and bucket
+`gs://f3-analytics-nonprod`. Production is job `analytics-etl`, Cloud SQL
+`f3data`, database `f3_prod`, and bucket `gs://f3-analytics`. Published objects
+are under `parquets/releases/<run-id>/<dataset>/`; the fixed catalog is
+`parquets/catalog.json`.
 Runtime SAs are `analytics-etl-nonprod@f3data.iam.gserviceaccount.com` and
 `analytics-etl@f3data.iam.gserviceaccount.com`. Nonprod is manual only;
 production is scheduled daily. Jobs have one task, parallelism one, zero task
@@ -127,13 +129,13 @@ gcloud iam service-accounts create analytics-etl-nonprod --display-name='Analyti
 gcloud iam service-accounts create analytics-etl --display-name='Analytics ETL production runtime' --project="$PROJECT_ID"
 ```
 
-| Identity           | Minimum grant and scope                                                                                                     | Explicitly excluded                             |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| Nonprod runtime    | Cloud SQL Client on `f3data`; accessor on its two secrets; approved GCS publisher role on `f3-analytics-nonprod/parquets/*` | Production, DB write/DDL/admin, object deletion |
-| Production runtime | Same grants, restricted to production resources and prefix                                                                  | Nonprod, DB write/DDL/admin, object deletion    |
-| Scheduler          | `roles/run.invoker` on `analytics-etl` only                                                                                 | Storage, secrets, deploy, Scheduler admin       |
-| PAX Vault consumer | `roles/storage.objectViewer` on approved prefix                                                                             | Write, pointer mutation, end-user access        |
-| GitHub deployer    | Run deploy, SA use, AR build/promote, usage viewer                                                                          | Runtime data, Scheduler admin, Owner/Editor     |
+| Identity           | Minimum grant and scope                                                                                                       | Explicitly excluded                                               |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Nonprod runtime    | Cloud SQL Client on `f3data`; accessor on its two secrets; approved GCS release create/get plus exact catalog metadata update | Production, DB write/DDL/admin, object deletion/content overwrite |
+| Production runtime | Same grants, restricted to production resources and release prefix/catalog object                                             | Nonprod, DB write/DDL/admin, object deletion/content overwrite    |
+| Scheduler          | `roles/run.invoker` on `analytics-etl` only                                                                                   | Storage, secrets, deploy, Scheduler admin                         |
+| PAX Vault consumer | Separate get-only catalog reader and release reader bindings                                                                  | Write, catalog mutation, end-user access                          |
+| GitHub deployer    | Run deploy, SA use, AR build/promote, usage viewer                                                                            | Runtime data, Scheduler admin, Owner/Editor                       |
 
 Never grant runtime SAs `roles/editor`, bucket admin, or database admin.
 
@@ -201,31 +203,120 @@ gcloud storage buckets describe "gs://$NONPROD_BUCKET" --project="$PROJECT_ID"
 gcloud storage buckets describe "gs://$PROD_BUCKET" --project="$PROJECT_ID"
 ```
 
-The publisher needs reviewed `storage.objects.get`, `list`, `create`, and
-`update` below `parquets/`, but not delete. Predefined
-`roles/storage.objectUser` is broader than the contract. A platform owner must
-create an approved custom project role omitting `storage.objects.delete`.
+The publisher needs reviewed `storage.objects.get` and `create` on release
+paths, but not delete or content overwrite. No bucket-level object listing is
+required; consumers resolve objects from the pinned manifests.
+`storage.objects.update` is needed only for metadata patches to the fixed
+catalog object. Predefined `roles/storage.objectUser` is broader than the
+contract. Platform must create separate custom roles omitting delete and broad
+object update.
 
 ```bash
-GCS_PUBLISHER_ROLE_ID="analyticsBucketAccess"
+GCS_PUBLISHER_ROLE_ID="analyticsReleaseAccess"
 PUBLISHER_ROLE="projects/${PROJECT_ID}/roles/${GCS_PUBLISHER_ROLE_ID}"
 gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" \
   --project="$PROJECT_ID" \
   --member="serviceAccount:${NONPROD_RUNTIME_SA}" \
   --role="$PUBLISHER_ROLE" \
-  --condition='title=Analytics nonprod parquet prefix,expression=resource.name.startsWith("projects/_/buckets/f3-analytics-nonprod/objects/parquets/")'
+  --condition='title=Analytics nonprod release objects,expression=resource.name.startsWith("projects/_/buckets/f3-analytics-nonprod/objects/parquets/releases/")'
 gcloud storage buckets add-iam-policy-binding "gs://$PROD_BUCKET" \
   --project="$PROJECT_ID" \
   --member="serviceAccount:${PROD_RUNTIME_SA}" \
   --role="$PUBLISHER_ROLE" \
-  --condition='title=Analytics production parquet prefix,expression=resource.name.startsWith("projects/_/buckets/f3-analytics/objects/parquets/")'
+  --condition='title=Analytics production release objects,expression=resource.name.startsWith("projects/_/buckets/f3-analytics/objects/parquets/releases/")'
 ```
 
-Grant approved consumers `roles/storage.objectViewer` with an equivalent prefix
-condition only. Security must approve uniform access, encryption, audit
-retention, and GC/retention. Consumers cannot mutate pointers.
+Grant catalog metadata update separately, with an exact object condition; do
+not add update to the release-prefix binding:
 
-## 8. Jobs and production Scheduler
+```bash
+PUBLISHER_CATALOG_ROLE="projects/${PROJECT_ID}/roles/analyticsCatalogMetadata"
+gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" \
+  --member="serviceAccount:${NONPROD_RUNTIME_SA}" --role="$PUBLISHER_CATALOG_ROLE" \
+  --condition='title=Analytics nonprod catalog only,expression=resource.name=="projects/_/buckets/f3-analytics-nonprod/objects/parquets/catalog.json"'
+gcloud storage buckets add-iam-policy-binding "gs://$PROD_BUCKET" \
+  --member="serviceAccount:${PROD_RUNTIME_SA}" --role="$PUBLISHER_CATALOG_ROLE" \
+  --condition='title=Analytics production catalog only,expression=resource.name=="projects/_/buckets/f3-analytics/objects/parquets/catalog.json"'
+```
+
+`analyticsCatalogMetadata` is an owner-created custom role containing only
+catalog get/create/update permissions required for metadata CAS. Neither role
+contains delete permission or permits replacing existing release content.
+
+Grant PAX Vault two separate get-only custom reader bindings: one exact
+`parquets/catalog.json` object and one `parquets/releases/` prefix. Do not grant
+`storage.objects.list` or use a broad bucket viewer role. The exact resource
+conditions are:
+
+```text
+projects/_/buckets/<bucket>/objects/parquets/catalog.json
+projects/_/buckets/<bucket>/objects/parquets/releases/
+```
+
+Security must approve uniform access, encryption, audit retention, and
+GC/retention. Consumers cannot mutate catalog metadata.
+
+For the approved PAX Vault identity, grant those two get-only roles separately
+(the roles contain `storage.objects.get` and no list permission):
+
+```bash
+PAX_VAULT_SA="<approved-pax-vault-service-account>"
+PAX_CATALOG_READER_ROLE="projects/${PROJECT_ID}/roles/analyticsCatalogReader"
+PAX_RELEASE_READER_ROLE="projects/${PROJECT_ID}/roles/analyticsReleaseReader"
+gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" \
+  --member="serviceAccount:${PAX_VAULT_SA}" --role="$PAX_CATALOG_READER_ROLE" \
+  --condition='title=PAX catalog read,expression=resource.name=="projects/_/buckets/f3-analytics-nonprod/objects/parquets/catalog.json"'
+gcloud storage buckets add-iam-policy-binding "gs://$NONPROD_BUCKET" \
+  --member="serviceAccount:${PAX_VAULT_SA}" --role="$PAX_RELEASE_READER_ROLE" \
+  --condition='title=PAX release read,expression=resource.name.startsWith("projects/_/buckets/f3-analytics-nonprod/objects/parquets/releases/")'
+```
+
+Repeat the two bindings for the production bucket only after the production
+consumer gate. Replace the placeholder identity with the approved external
+owner's identity; do not grant these roles to the producer runtime account.
+
+## 8. Ordered consumer/IAM migration
+
+This migration is human-approved and must be performed separately for nonprod
+and production. PAX Vault owners own the consumer rollout; analytics/platform
+owners own producer validation. Retain legacy consumer-read access until the
+consumer has proven the new catalog chain; the broad legacy runtime binding is
+removed earlier, before isolation validation.
+
+1. **Preflight PAX Vault.** With the catalog absent, verify that the consumer
+   can use its approved legacy pointer compatibility path and that it can read
+   a generation-pinned release manifest and its nine dataset manifests. Record
+   the compatibility result and the external owner.
+2. **Install replacement bindings.** Add the release-data get/create binding and the
+   exact-catalog get/create/update binding above. Do not grant update or delete
+   on release data; do not grant bucket object listing.
+3. **Remove broad runtime access.** Remove the runtime service account's broad
+   legacy `analyticsBucketAccess` binding now, before producer execution or
+   permission validation. Keep any legacy consumer read access needed for the
+   compatibility period. Preserve the prior IAM policy as the approved,
+   reversible rollback artifact.
+4. **Validate permissions.** As the producer and consumer identities, verify
+   allowed/denied operations against both environments. Confirm catalog
+   metadata update is limited to
+   `projects/_/buckets/<bucket>/objects/parquets/catalog.json`.
+5. **Deploy and run nonprod.** Deploy the immutable producer, execute one
+   complete nonprod batch, and verify that `release.json` is written last and
+   catalog CAS succeeds.
+6. **Validate the pinned chain.** Independently read catalog metadata, fetch
+   the pinned release manifest generation, and verify exactly nine pinned
+   dataset manifests and their object generations/checksums.
+7. **Switch PAX Vault.** After consumer-owner approval, switch discovery to
+   catalog metadata and monitor one complete consumption cycle.
+8. **Remove legacy consumer access when safe.** After the switch and
+   verification, remove only obsolete legacy consumer access, if approved.
+
+If migration fails, stop at the last safe step and restore the prior runtime or
+consumer IAM binding from the recorded policy snapshot, with human approval.
+This rollback changes IAM only; it does not overwrite or delete any GCS object.
+If catalog metadata was already activated, use the documented generation-pinned
+metadata-CAS rollback and retain its source high-water value.
+
+## 9. Jobs and production Scheduler
 
 The tagged workflow supplies runtime SA, SQL settings, secrets, resources,
 timeout, and retries. Inspect after deploy:
@@ -262,18 +353,19 @@ reason, digest/revision, start time, and outcome:
 gcloud run jobs execute "$NONPROD_JOB" --project="$PROJECT_ID" --region="$REGION" --wait
 ```
 
-## 9. Verification and ownership
+## 10. Verification and ownership
 
 - [ ] Owners verified APIs, shared WIF repository condition, AR repository,
       fixed targets, immutable digest promotion, and GitHub protection.
 - [ ] Deployers cannot read runtime data; runtime SAs are distinct and scoped
       to their own SQL, secrets, and GCS prefix; Scheduler is invoker-only.
-- [ ] Database owner approved read-only roles, measured all eight nonprod query
+- [ ] Database owner approved read-only roles, measured all nine nonprod query
       plans/read volume, and demonstrated write/DDL/admin denial.
 - [ ] Secret versions/access and bucket prefix/no-delete conditions are checked
       without exposing values; consumer access and alerts are approved.
-- [ ] Nonprod run verifies socket access, validation, immutable objects, leases,
-      generation-protected pointers, failure isolation, and alerts.
+- [ ] Nonprod run verifies socket access, validation, immutable release objects,
+      last-object release commit, catalog metadata CAS/source ordering,
+      failure isolation, and alerts.
 - [ ] Scheduler OAuth target, identity, cron/timezone, zero retries, and a
       completed execution are checked separately before production.
 - [ ] Approvals, digest, evidence, rollback, retention, and recovery decisions

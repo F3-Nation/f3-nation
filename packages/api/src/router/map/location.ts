@@ -49,7 +49,7 @@ const withinCurrentEventDateWindow = () =>
  * True when every org *above* `orgIdColumn` in the hierarchy is active.
  *
  * `org.delete` only cascades to events and instances for AOs, so deactivating a
- * region, area, sector, or nation leaves every descendant org, event, and
+ * region, area, territory, sector, or nation leaves every descendant org, event, and
  * instance active. Public read paths therefore have to walk the chain
  * themselves or they keep serving pins, pin statuses, and workout details for a
  * retired part of the tree.
@@ -207,7 +207,7 @@ export const mapLocationRouter = os.router({
             eq(schema.locations.isActive, true),
             // Deactivating an org does not cascade to child AOs or events, so
             // the public map must hide them here: the event's own org, plus
-            // every level above it (region, area, sector, nation).
+            // every level above it (region, area, territory, sector, nation).
             or(isNull(aoOrg.id), eq(aoOrg.isActive, true)),
             ancestorOrgsAreActive(schema.events.orgId),
           ),
@@ -435,7 +435,7 @@ export const mapLocationRouter = os.router({
             eq(schema.eventInstances.isActive, true),
             eq(schema.eventInstances.isPrivate, false),
             eq(aoOrg.isActive, true),
-            // Descendants stay active when a region, area, sector, or nation is
+            // Descendants stay active when any ancestor organization is
             // retired; exclude their instances from public markers and pin
             // statuses.
             ancestorOrgsAreActive(schema.eventInstances.orgId),

@@ -25,7 +25,9 @@ import { Input } from "@acme/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@acme/ui/select";
@@ -49,6 +51,8 @@ import {
   useMutation,
   useQuery,
 } from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import {
   closeModal,
   DeleteType,
@@ -67,9 +71,11 @@ export default function AdminOrgEditModal({
 }) {
   const config = orgEditorConfig[orgType];
   const label = orgTypeDisplay[orgType].label;
-  const parentLabel = config.parentType
-    ? orgTypeDisplay[config.parentType].label
-    : "";
+  const { parentTypes } = config;
+  const hasParent = parentTypes.length > 0;
+  const parentLabel = parentTypes
+    .map((parentType) => orgTypeDisplay[parentType].label)
+    .join(" or ");
   const schema = useMemo(() => orgEditorSchema(config), [config]);
   const fieldClass = config.compactLayout
     ? "mb-4 w-1/2 px-2"
@@ -81,13 +87,31 @@ export default function AdminOrgEditModal({
     }),
   );
   const org = orgResponse?.org;
-  const { data: parents } = useQuery(
-    orpc.org.all.queryOptions({
-      input: { orgTypes: config.parentType ? [config.parentType] : [] },
-      enabled: !!config.parentType,
-    }),
-  );
+  const { data: parents } = useFetchAllPages({
+    path: ["org", "all"],
+    queryKey: ["org.all.everyParent", parentTypes],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.all({
+        orgTypes: parentTypes,
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+    enabled: hasParent,
+  });
   const router = useRouter();
+  const parentOptions = (parents ?? [])
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const renderParentItem = (parent: (typeof parentOptions)[number]) => (
+    <SelectItem
+      key={`${parent.orgType}-${parent.id}`}
+      value={parent.id.toString()}
+    >
+      {parent.name}
+    </SelectItem>
+  );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -98,7 +122,7 @@ export default function AdminOrgEditModal({
     defaultValues: {
       id: org?.id ?? undefined,
       name: org?.name ?? config.defaultName,
-      ...(config.parentType ? { parentId: org?.parentId ?? -1 } : {}),
+      ...(hasParent ? { parentId: org?.parentId ?? -1 } : {}),
       defaultLocationId: org?.defaultLocationId ?? null,
       isActive: org?.isActive ?? true,
       description: org?.description ?? "",
@@ -124,7 +148,9 @@ export default function AdminOrgEditModal({
       ...(config.retainLoadedFields ? org : {}),
       id: org?.id ?? undefined,
       name: org?.name ?? config.defaultName,
-      ...(config.parentType ? { parentId: org?.parentId ?? -1 } : {}),
+      ...(config.parentTypes.length > 0
+        ? { parentId: org?.parentId ?? -1 }
+        : {}),
       defaultLocationId: org?.defaultLocationId ?? null,
       isActive: org?.isActive ?? true,
       description: org?.description ?? "",
@@ -255,7 +281,7 @@ export default function AdminOrgEditModal({
                 try {
                   const payload = {
                     ...data,
-                    ...(!config.parentType ? { parentId: undefined } : {}),
+                    ...(!hasParent ? { parentId: undefined } : {}),
                     orgType,
                   };
                   if (config.logoPosition) {
@@ -334,23 +360,23 @@ export default function AdminOrgEditModal({
                 />
               </div>
 
-              {config.parentType && (
+              {hasParent && (
                 <div className={fieldClass}>
                   <FormField
                     control={form.control}
                     name="parentId"
                     render={({ field }) => (
                       <FormItem
-                        key={`${config.parentType}-${String(field.value ?? "new")}`}
+                        key={`${parentTypes.join("-")}-${String(field.value ?? "new")}`}
                       >
                         <FormLabel>{parentLabel}</FormLabel>
                         {config.parentControl === "combobox" ? (
                           <VirtualizedCombobox
                             value={field.value?.toString()}
                             options={
-                              parents?.orgs
-                                .filter(
-                                  (org) => org.orgType === config.parentType,
+                              parents
+                                ?.filter((org) =>
+                                  parentTypes.includes(org.orgType),
                                 )
                                 .map((region) => ({
                                   value: region.id.toString(),
@@ -383,17 +409,25 @@ export default function AdminOrgEditModal({
                               />
                             </SelectTrigger>
                             <SelectContent>
-                              {parents?.orgs
-                                ?.slice()
-                                .sort((a, b) => a.name.localeCompare(b.name))
-                                .map((parent) => (
-                                  <SelectItem
-                                    key={`${config.parentType}-${parent.id}`}
-                                    value={parent.id.toString()}
-                                  >
-                                    {parent.name}
-                                  </SelectItem>
-                                ))}
+                              {parentTypes.length > 1
+                                ? parentTypes.map((parentType) => {
+                                    const group = parentOptions.filter(
+                                      (parent) => parent.orgType === parentType,
+                                    );
+                                    if (group.length === 0) return null;
+                                    return (
+                                      <SelectGroup key={parentType}>
+                                        <SelectLabel>
+                                          {
+                                            orgTypeDisplay[parentType]
+                                              .pluralLabel
+                                          }
+                                        </SelectLabel>
+                                        {group.map(renderParentItem)}
+                                      </SelectGroup>
+                                    );
+                                  })
+                                : parentOptions.map(renderParentItem)}
                             </SelectContent>
                           </Select>
                         )}
@@ -648,8 +682,8 @@ export default function AdminOrgEditModal({
                         form.setValue("name", `Fake ${label}`);
                         form.setValue(
                           "parentId",
-                          parents?.orgs?.[
-                            Math.floor(Math.random() * parents?.orgs.length)
+                          parents?.[
+                            Math.floor(Math.random() * (parents?.length ?? 0))
                           ]?.id ?? -1,
                         );
                         form.setValue("website", `https://fake${orgType}.com`);

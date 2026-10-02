@@ -63,15 +63,20 @@ export const authOptions: NextAuthConfig = {
         }
 
         // Step 2: Verify code
-        const user = await verifyEmailCode(email, credentials.code as string);
-        if (!user) return null;
+        try {
+          const user = await verifyEmailCode(email, credentials.code as string);
+          if (!user) return null;
 
-        return {
-          id: String(user.id),
-          email: user.email ?? undefined,
-          name: user.f3Name,
-          roles: [],
-        };
+          return {
+            id: String(user.id),
+            email: user.email ?? undefined,
+            name: user.f3Name,
+            roles: [],
+          };
+        } catch (err) {
+          logError("auth.authorize.verify_code_failed", {}, err);
+          throw new Error("Failed to verify code. Please try again.");
+        }
       },
     }),
   ],

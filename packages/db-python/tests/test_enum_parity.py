@@ -22,6 +22,7 @@ from typing import Dict, List
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from f3_data_models import models
 from f3_data_models.models import Base
@@ -159,3 +160,18 @@ def test_request_type_matches_postgres() -> None:
     """Explicit regression test for #848, where these two silently diverged."""
     assert MODEL_ENUMS["request_type"] == POSTGRES_ENUMS["request_type"]
     assert "create_location" not in MODEL_ENUMS["request_type"]
+
+
+@pytest.mark.parametrize("table_name", ["orgs", "positions"])
+def test_org_type_persists_names_after_ordinal_change(table_name: str) -> None:
+    column_type = Base.metadata.tables[table_name].c.org_type.type
+    dialect = postgresql.dialect()
+    bind = column_type.bind_processor(dialect)
+    result = column_type.result_processor(dialect, None)
+    assert models.Org_Type.sector.value == 5
+    assert models.Org_Type.nation.value == 6
+    for member in models.Org_Type:
+        assert bind(member) == member.name
+        assert result(member.name) is member
+    assert bind(None) is None
+    assert result(None) is None

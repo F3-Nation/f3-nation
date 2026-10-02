@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("posthog-js", () => ({ default: { captureException: vi.fn() } }));
 
 import { mergeUpcomingInstancesIntoMarkers } from "~/app/_components/map/filtered-map-results-provider";
 import type { LocationMarkerWithDistance } from "~/app/_components/map/filtered-map-results-provider";

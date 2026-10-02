@@ -52,20 +52,22 @@ vi.mock("~/orpc/react", () => ({
   useQuery: (
     options:
       | { __key: "position.all"; input: PositionQueryInput }
-      | { __key: "org.accessible" },
+      | { queryKey: unknown[]; enabled?: boolean },
   ) => {
-    if (options.__key === "org.accessible") {
+    // positions-table.tsx's org.accessible fetch goes through
+    // useFetchAllPages (client.org.accessible imperatively), never
+    // orpc.org.accessible.queryOptions -- identified by the absence of
+    // `__key`. Returns the flattened array useFetchAllPages produces,
+    // not the {orgs, total} page shape.
+    if (!("__key" in options)) {
       return {
-        data: {
-          orgs: mocks.accessibleOrgIds.map((id) => ({
-            id,
-            name: `Org ${id}`,
-            orgType: "region" as const,
-            parentId: null,
-            roles: [],
-          })),
-          total: mocks.accessibleOrgIds.length,
-        },
+        data: mocks.accessibleOrgIds.map((id) => ({
+          id,
+          name: `Org ${id}`,
+          orgType: "region" as const,
+          parentId: null,
+          roles: [],
+        })),
       };
     }
 
@@ -255,6 +257,7 @@ describe("PositionsTable org-level filter and column (single source of truth org
       "AO",
       "Region",
       "Area",
+      "Territory",
       "Sector",
       "Nation",
     ]);

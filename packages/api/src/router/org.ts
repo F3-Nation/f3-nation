@@ -1,10 +1,12 @@
 import { ORPCError } from "@orpc/server";
 import type { SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 import {
   aliasedTable,
   and,
+  asc,
   count,
   countDistinct,
   eq,
@@ -18,6 +20,8 @@ import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
 import { IsActiveStatus, OrgType } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import { ORG_ALL_SORT_IDS } from "@acme/shared/app/org-sorting";
+import type { OrgAllSortId } from "@acme/shared/app/org-sorting";
 import { OrgInsertSchema } from "@acme/validators";
 
 import { assertValidParentType } from "../assert-valid-parent-type";
@@ -26,10 +30,14 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { orgAncestorName } from "../org-ancestor-name";
 import type { Context } from "../shared";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
+
+const DEFAULT_ORG_TYPES = ["region"] as const satisfies readonly OrgType[];
 
 // Shared filter schema for orgs (used by both `all` and `count` endpoints)
 const orgFilterSchema = z.object({
@@ -37,9 +45,9 @@ const orgFilterSchema = z.object({
     .refine((val) => val.length >= 1, {
       message: "At least one orgType is required",
     })
-    .default(["region"])
+    .default([...DEFAULT_ORG_TYPES])
     .describe(
-      "Filter organizations by type. Returns orgs matching ANY of the given types (region, area, ao, sector, nation). Defaults to [region].",
+      `Filter organizations by type. Returns orgs matching ANY of the given types (${OrgType.join(", ")}). Defaults to [${DEFAULT_ORG_TYPES.join(", ")}].`,
     ),
   searchTerm: z
     .string()
@@ -50,7 +58,7 @@ const orgFilterSchema = z.object({
   statuses: arrayOrSingle(z.enum(IsActiveStatus))
     .optional()
     .describe(
-      "Filter organizations by status. Matches orgs with ANY of the given statuses (active, inactive).",
+      `Filter organizations by status. Matches orgs with ANY of the given statuses (${IsActiveStatus.join(", ")}).`,
     ),
   parentOrgIds: arrayOrSingle(z.coerce.number())
     .optional()
@@ -69,24 +77,16 @@ type OrgFilterInput = z.infer<typeof orgFilterSchema>;
 
 // Extended schema with pagination and sorting for the `all` endpoint
 const orgAllInputSchema = orgFilterSchema.extend({
-  pageIndex: z.coerce
-    .number()
-    .optional()
-    .describe("Zero-based page index for pagination. Defaults to 0."),
-  pageSize: z.coerce
-    .number()
-    .optional()
-    .describe("Number of organizations per page. Defaults to 10."),
+  ...paginationFields("organizations"),
   sorting: parseSorting().describe(
-    "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, name, orgType, isActive, created.",
+    `Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: ${ORG_ALL_SORT_IDS.join(", ")}. sectorName and territoryName require orgTypes to be exactly ["area"].`,
   ),
 });
 
 // Schema for the `accessible` endpoint with pagination and sorting
 const orgAccessibleInputSchema = z.object({
   orgTypes: arrayOrSingle(z.enum(OrgType)).optional(),
-  pageIndex: z.coerce.number().optional(),
-  pageSize: z.coerce.number().optional(),
+  ...paginationFields("organizations"),
   sorting: parseSorting(),
 });
 
@@ -256,10 +256,25 @@ export const orgRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const pageSize = input.pageSize ?? 10;
-      const pageIndex = (input.pageIndex ?? 0) * pageSize;
-      const usePagination =
-        input.pageIndex !== undefined && input.pageSize !== undefined;
+      // Correlated ancestor sorting is bounded to the Area table, not AO listings.
+      if (
+        input.sorting?.some(({ id }) =>
+          ["sectorName", "territoryName"].includes(id),
+        ) &&
+        (input.orgTypes.length !== 1 || input.orgTypes[0] !== "area")
+      ) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: 'Ancestor sorting requires orgTypes to be exactly ["area"].',
+        });
+      }
+
+      // orgAllInputSchema is a required object (not `.optional()`), same as
+      // the unguarded `input.onlyMine` below — no `?.` needed here.
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input.pageSize,
+        pageIndex: input.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
@@ -280,20 +295,31 @@ export const orgRouter = {
         isNationAdmin,
       });
 
+      // asc(id) is appended as a final tiebreaker -- a caller-supplied
+      // custom sort isn't guaranteed unique, so without one, offset
+      // pagination across separate requests (e.g. useFetchAllPages) could
+      // return the same org on two pages or skip one entirely.
       const sortedColumns = getSortingColumns(
         input.sorting,
         {
           id: org.id,
           name: org.name,
           parentOrgName: parentOrg.name,
+          sectorName: orgAncestorName(org.id, "sector"),
+          territoryName: orgAncestorName(org.id, "territory"),
           aoCount: org.aoCount,
           lastAnnualReview: org.lastAnnualReview,
           status: org.isActive,
           created: org.created,
-        },
+        } satisfies Record<OrgAllSortId, PgColumn | SQL>,
         "id",
-        new Set(["parentOrgName", "lastAnnualReview"] as const),
-      );
+        new Set([
+          "parentOrgName",
+          "lastAnnualReview",
+          "sectorName",
+          "territoryName",
+        ] as const),
+      ).concat(asc(org.id));
 
       const total = await getOrgCount({ db: ctx.db, where });
 
@@ -327,13 +353,8 @@ export const orgRouter = {
         .where(where);
 
       const orgs_untyped = usePagination
-        ? await withPagination(
-            query.$dynamic(),
-            sortedColumns,
-            pageIndex,
-            pageSize,
-          )
-        : await query.orderBy(...sortedColumns);
+        ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       // Something is broken with org to org types
       return { orgs: orgs_untyped, total };
@@ -417,10 +438,11 @@ export const orgRouter = {
         });
       }
 
-      const pageSize = input?.pageSize ?? 10;
-      const pageIndex = (input?.pageIndex ?? 0) * pageSize;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Check if user has a role with orgId = 1 (F3 Nation)
       const [nationRole] = await ctx.db
@@ -435,6 +457,11 @@ export const orgRouter = {
 
       // If user has F3 Nation role, return all orgs with pagination and sorting
       if (nationRole) {
+        // asc(id) is appended as a final tiebreaker -- neither the default
+        // sort (by name, not unique) nor a caller-supplied custom sort is
+        // guaranteed unique, so without one, offset pagination across
+        // separate requests (e.g. useFetchAllPages) could return the same
+        // org on two pages or skip one entirely.
         const sortedColumns = getSortingColumns(
           input?.sorting,
           {
@@ -444,7 +471,7 @@ export const orgRouter = {
             parentId: schema.orgs.parentId,
           },
           "name",
-        );
+        ).concat(asc(schema.orgs.id));
 
         const baseQuery = ctx.db
           .select({
@@ -476,10 +503,10 @@ export const orgRouter = {
           ? await withPagination(
               baseQuery.$dynamic(),
               sortedColumns,
-              pageIndex,
-              pageSize,
+              offset,
+              limit,
             )
-          : await baseQuery.orderBy(...sortedColumns);
+          : await baseQuery.orderBy(...sortedColumns).limit(limit);
 
         return {
           orgs: allOrgs.map((org) => ({
@@ -527,8 +554,34 @@ export const orgRouter = {
           ? await getDescendantOrgIds(ctx.db, editableRootOrgIds)
           : [];
 
-      // Query full org details for all editable orgs
-      const editableOrgsData = await ctx.db
+      const editableOrgsWhere = and(
+        inArray(schema.orgs.id, editableOrgIds),
+        input?.orgTypes?.length
+          ? inArray(schema.orgs.orgType, input.orgTypes)
+          : undefined,
+      );
+
+      // asc(id) is appended as a final tiebreaker, same reasoning as the F3
+      // Nation branch above -- without one, offset pagination across
+      // separate requests (e.g. useFetchAllPages) could return the same org
+      // on two pages or skip one entirely. Falls back to ordering by id
+      // alone (ascending) when the caller supplies no sorting, matching
+      // this endpoint's longstanding default.
+      const sortedColumns =
+        input?.sorting && input.sorting.length > 0
+          ? getSortingColumns(
+              input.sorting,
+              {
+                id: schema.orgs.id,
+                name: schema.orgs.name,
+                orgType: schema.orgs.orgType,
+                parentId: schema.orgs.parentId,
+              },
+              "id",
+            ).concat(asc(schema.orgs.id))
+          : [asc(schema.orgs.id)];
+
+      const editableOrgsQuery = ctx.db
         .select({
           id: schema.orgs.id,
           name: schema.orgs.name,
@@ -536,78 +589,37 @@ export const orgRouter = {
           parentId: schema.orgs.parentId,
         })
         .from(schema.orgs)
-        .where(
-          and(
-            inArray(schema.orgs.id, editableOrgIds),
-            input?.orgTypes?.length
-              ? inArray(schema.orgs.orgType, input.orgTypes)
-              : undefined,
-          ),
-        );
+        .where(editableOrgsWhere);
 
-      const allAssignedOrgs = editableOrgsData.map((org) => ({
+      const totalQuery = ctx.db
+        .select({ count: count(schema.orgs.id) })
+        .from(schema.orgs)
+        .where(editableOrgsWhere);
+
+      const [totalResult] = await totalQuery;
+      const total = totalResult?.count ?? 0;
+
+      // Sort/offset/limit pushed into SQL rather than loading every
+      // editable org into memory and slicing -- useFetchAllPages (the
+      // caller this endpoint's pagination exists for) requests one page at
+      // a time, so an in-memory sort-then-slice here re-fetched and
+      // re-sorted the entire dataset on every single page request.
+      const editableOrgsData = usePagination
+        ? await withPagination(
+            editableOrgsQuery.$dynamic(),
+            sortedColumns,
+            offset,
+            limit,
+          )
+        : await editableOrgsQuery.orderBy(...sortedColumns).limit(limit);
+
+      const paginatedOrgs = editableOrgsData.map((org) => ({
         id: org.id,
         name: org.name,
         orgType: org.orgType,
         parentId: org.parentId,
         roles: directRolesMap.get(String(org.id)) ?? [],
       }));
-
-      // Sort the orgs array manually since we're working with in-memory data
-      const sortedOrgs = [...allAssignedOrgs];
-      if (input?.sorting && input.sorting.length > 0) {
-        sortedOrgs.sort((a, b) => {
-          for (const sort of input.sorting ?? []) {
-            let aVal: string | number | null;
-            let bVal: string | number | null;
-
-            switch (sort.id) {
-              case "id":
-                aVal = a.id;
-                bVal = b.id;
-                break;
-              case "name":
-                aVal = a.name;
-                bVal = b.name;
-                break;
-              case "orgType":
-                aVal = a.orgType;
-                bVal = b.orgType;
-                break;
-              case "parentId":
-                aVal = a.parentId;
-                bVal = b.parentId;
-                break;
-              default:
-                continue;
-            }
-
-            if (aVal === null && bVal === null) continue;
-            if (aVal === null) return sort.desc ? 1 : -1;
-            if (bVal === null) return sort.desc ? -1 : 1;
-
-            const comparison =
-              typeof aVal === "string" && typeof bVal === "string"
-                ? aVal.localeCompare(bVal)
-                : aVal < bVal
-                  ? -1
-                  : aVal > bVal
-                    ? 1
-                    : 0;
-
-            if (comparison !== 0) {
-              return sort.desc ? -comparison : comparison;
-            }
-          }
-          return 0;
-        });
-      }
-
-      // Apply pagination
-      const total = sortedOrgs.length;
-      const paginatedOrgs = usePagination
-        ? sortedOrgs.slice(pageIndex, pageIndex + pageSize)
-        : sortedOrgs;
 
       return {
         orgs: paginatedOrgs,

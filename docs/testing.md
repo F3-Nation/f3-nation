@@ -36,7 +36,7 @@ import { coverageExclude, coverageInclude } from "@acme/vitest-config";
 
 - **`coverageInclude`** — the whole-`src` glob (keeps untested files counted).
 - **`coverageExclude`** — Vitest's built-in excludes plus non-testable
-  bootstrap/config files (Sentry init, `next.config.*`, `instrumentation*`,
+  bootstrap/config files (PostHog init, `next.config.*`, `instrumentation*`,
   Tailwind/PostCSS config, `middleware.*`). Those files would otherwise sit in
   the denominator at 0% and break thresholds on every edit.
 
@@ -77,14 +77,12 @@ backstop that `--no-verify` cannot skip.
 ## Characterization suite (apps/api)
 
 `apps/api/characterization/` is a behavior-pinning suite separate from the unit
-tests. It exists for one reason: the Hono migration (epic #644) replaces the
-framework underneath `apps/api`, and the code with the largest blast radius —
-auth resolution and the HTTP wire layer — had no end-to-end tests at all. The
-suite dispatches real `Request` objects into the real route handlers with the
-auth, codec, and CORS stack unmocked — only `next/headers` is shimmed, because
-it throws outside a Next request scope — so a port can be proven
+tests. It pins the behavior of the code with the largest blast radius — auth
+resolution and the HTTP wire layer — end to end, which unit tests don't. The
+suite dispatches real `Request` objects into the real app with the auth,
+codec, and CORS stack unmocked, so a change to the server layer can be proven
 behavior-identical instead of argued to be. The `live` target issues real HTTP
-over a socket; `next` dispatches in-process.
+over a socket; `hono` dispatches in-process.
 
 The framework decision itself is recorded in
 [ADR 0001](adr/0001-api-server-framework.md).
@@ -108,15 +106,18 @@ suites mutate the shared `f3_test` database and must never run concurrently.
 Every test is written against `type Invoke = (req: Request) => Promise<Response>`,
 selected by `CHAR_TEST_TARGET`:
 
-| Value            | Dispatch                                  | Used by                                              |
-| ---------------- | ----------------------------------------- | ---------------------------------------------------- |
-| `next` (default) | the real Next route handlers, in-process  | today, and CI                                        |
-| `hono`           | the Hono app's `fetch`                    | #649, run alongside `next` against identical goldens |
-| `live`           | real `fetch` against `CHAR_TEST_BASE_URL` | #650's staging gate                                  |
+| Value            | Dispatch                                  | Used by                                    |
+| ---------------- | ----------------------------------------- | ------------------------------------------ |
+| `hono` (default) | the Hono app's `fetch`, in-process        | local runs and CI                          |
+| `live`           | real `fetch` against `CHAR_TEST_BASE_URL` | CI's built-bundle leg and the Staging gate |
 
 Cases needing DB fixtures or in-process module state are gated behind
 `describe.runIf(target.inProcess)`, so the `live` target runs the black-box
-subset without any test rewrites.
+subset without any test rewrites. Cases that only need fixtures the server can
+see use `target.sharesDatabase` instead: CI's bundle leg sets
+`CHAR_TEST_SHARED_DB=1` because the booted bundle and the test process share
+`f3_test`, which lets it exercise `cascade-service`'s dynamic import. Staging
+leaves it unset and skips those cases.
 
 ### Golden files are frozen
 
@@ -144,4 +145,4 @@ directory. Do not add a `coverage` block to `vitest.characterization.config.ts`.
 Tests and QA flows that require sign-in go through `apps/auth`'s email-based MFA
 against a local mail backend (no real inbox). See the
 [Testing Guidelines in AGENTS.md](../AGENTS.md) and
-[`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md).
+[`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) for the full recipe.

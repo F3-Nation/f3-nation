@@ -30,6 +30,7 @@
     "E2E_API_URL",
     "CHAR_TEST_TARGET",
     "CHAR_TEST_BASE_URL",
+    "CHAR_TEST_SHARED_DB",
     "CHAR_TEST_SIGNING_JWK",
     "SUPER_ADMIN_API_KEY",
     "EMAIL_ADMIN_DESTINATIONS",
@@ -61,6 +62,8 @@
     "NEXT_PUBLIC_AUTH_URL",
     "NEXT_PUBLIC_MAP_URL",
     "NEXT_PUBLIC_CHANNEL",
+    "NEXT_PUBLIC_POSTHOG_KEY",
+    "NEXT_PUBLIC_POSTHOG_SESSION_RECORDING",
     "GCS_CREDENTIALS",
     "GCS_EMULATOR_HOST",
     "NODE_TLS_REJECT_UNAUTHORIZED",
@@ -75,18 +78,7 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [
-        ".next/**",
-        "!.next/cache/**",
-        "next-env.d.ts",
-        ".expo/**",
-        ".output/**",
-        "dist/**"
-      ]
-    },
-    "build:server": {
-      "dependsOn": ["^topo", "^build"],
-      "outputs": ["dist/**"]
+      "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts", "dist/**"]
     },
     "dev": {
       "persistent": true,

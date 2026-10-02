@@ -2,15 +2,93 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable, ClassVar
 
 import pytest
-from google.api_core.exceptions import PreconditionFailed
+from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from analytics.materializations import MATERIALIZATION_REGISTRY
-from analytics.publication import GcsPublisher, ObjectMetadata, PointerConflictError, publish
+from analytics.publication import CatalogConflictError, GcsPublisher, build_release_manifest, publish
 from analytics.settings import Settings
 from analytics.source import MaterializationArtifacts
+
+
+class Stored:
+    def __init__(self, value=b"", generation=0):
+        self.generation = generation
+        self.metageneration = 1
+        self.size = len(value)
+        self.crc32c = "crc"
+        self.content = value
+        self.metadata = {}
+
+
+class Blob:
+    objects: dict[str, Stored] = {}
+    next_generation = 0
+    conflict = False
+    reload_after_patch_failure = False
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def reload(self):
+        if self.__dict__.pop("fail_reload_once", False):
+            raise NotFound("reload confirmation unavailable")
+        if self.name not in self.objects:
+            raise NotFound("missing")
+
+    def __getattr__(self, name):
+        if name in {"generation", "metageneration", "size", "crc32c", "content", "metadata"}:
+            return getattr(self.objects[self.name], name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        if name == "metadata" and "name" in self.__dict__ and self.name in self.objects:
+            self.__dict__["pending_metadata"] = value
+        else:
+            object.__setattr__(self, name, value)
+
+    def upload_from_filename(self, filename, **kwargs):
+        self._put(Path(filename).read_bytes(), kwargs["if_generation_match"])
+
+    def upload_from_string(self, value, **kwargs):
+        self._put(value, kwargs["if_generation_match"])
+
+    def _put(self, value, expected):
+        current = self.objects.get(self.name)
+        if (current.generation if current else 0) != expected:
+            raise PreconditionFailed("generation conflict")
+        type(self).next_generation += 1
+        stored = Stored(value, type(self).next_generation)
+        stored.metadata = self.__dict__.get("pending_metadata", self.__dict__.get("metadata", {}))
+        self.objects[self.name] = stored
+
+    def patch(self, **kwargs):
+        current = self.objects[self.name]
+        if kwargs["if_metageneration_match"] != current.metageneration:
+            raise PreconditionFailed("metageneration conflict")
+        if self.conflict:
+            type(self).conflict = False
+            current.metadata = dict(current.metadata)
+            current.metadata.update(
+                {"competing_winner": "yes", "current_source_order": "s2", "high_water_source_order": "s2"}
+            )
+            current.metageneration += 1
+            raise PreconditionFailed("metageneration conflict")
+        current.metadata = self.__dict__.pop("pending_metadata", current.metadata)
+        current.metageneration += 1
+        if type(self).reload_after_patch_failure:
+            self.__dict__["fail_reload_once"] = True
+
+
+class Bucket:
+    def blob(self, name):
+        return Blob(name)
+
+
+class Storage:
+    def bucket(self, _name):
+        return Bucket()
 
 
 def settings(tmp_path: Path) -> Settings:
@@ -31,167 +109,264 @@ def settings(tmp_path: Path) -> Settings:
     )
 
 
-class Blob:
-    generation_counter = 0
-    objects = {}
-    after_reload: ClassVar[Callable[[Any], None] | None] = None
-
-    def __init__(self, name):
-        self.name = name
-
-    def upload_from_filename(self, filename, **kwargs):
-        self._store(Path(filename).read_bytes(), kwargs["if_generation_match"])
-
-    def upload_from_string(self, value, **kwargs):
-        self._store(value, kwargs["if_generation_match"])
-
-    def _store(self, value, expected):
-        current = Blob.objects.get(self.name)
-        actual = 0 if current is None else current.generation
-        if actual != expected:
-            raise PreconditionFailed("generation conflict")
-        Blob.generation_counter += 1
-        self.generation, self.size, self.crc32c, self.content = Blob.generation_counter, len(value), "crc", value
-        Blob.objects[self.name] = self
-
-    def reload(self):
-        current = Blob.objects.get(self.name)
-        if current is None:
-            from google.api_core.exceptions import NotFound
-
-            raise NotFound("missing")
-        self.__dict__.update(current.__dict__)
-        hook = Blob.after_reload
-        Blob.after_reload = None
-        if hook is not None:
-            hook(self)
-
-
-class Bucket:
-    def blob(self, name):
-        return Blob(name)
-
-
-class Storage:
-    def bucket(self, name):
-        return Bucket()
-
-
-def test_publication_durably_writes_manifest_before_pointer(tmp_path):
-    Blob.objects.clear()
-    Blob.after_reload = None
-    definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
-    root = tmp_path / "root"
+def artifacts(tmp_path: Path, name: str, content: bytes = b"data") -> MaterializationArtifacts:
+    root = tmp_path / name
     root.mkdir()
-    parquet = root / "regions.parquet"
-    parquet.write_bytes(b"parquet")
-    status = publish(
-        publisher, "run-1", MaterializationArtifacts(root, (parquet,), 2), "source", "published", definition
+    path = root / f"{name}.parquet"
+    path.write_bytes(content)
+    return MaterializationArtifacts(root, (path,), 1)
+
+
+def test_failed_dataset_has_no_release_or_catalog(tmp_path):
+    Blob.objects.clear()
+    storage = Storage()
+    publisher = GcsPublisher(storage, settings(tmp_path))
+    first = MATERIALIZATION_REGISTRY["pv_regions"]
+    second = MATERIALIZATION_REGISTRY["pv_pax"]
+    status = publish(publisher, "batch-1", artifacts(tmp_path, "regions"), "source", "published", first)
+    with pytest.raises(ValueError):
+        publish(
+            publisher, "batch-1", MaterializationArtifacts(tmp_path / "missing", (), 0), "source", "published", second
+        )
+    assert "parquets/releases/batch-1/release.json" not in Blob.objects
+    assert "parquets/catalog.json" not in Blob.objects
+    assert status.manifest_object.uri.endswith("releases/batch-1/pv_regions/manifest.json")
+
+
+def test_fake_gcs_catalog_create_and_patch_races_are_real_cas_operations():
+    Blob.objects.clear()
+    Blob.next_generation = 0
+    creator_a, creator_b = Blob("parquets/catalog.json"), Blob("parquets/catalog.json")
+    with pytest.raises(NotFound):
+        creator_a.reload()
+    with pytest.raises(NotFound):
+        creator_b.reload()
+    creator_a.upload_from_string(b"", if_generation_match=0)
+    with pytest.raises(PreconditionFailed):
+        creator_b.upload_from_string(b"", if_generation_match=0)
+
+    creator_a.reload()
+    creator_b.reload()
+    creator_a.metadata = {"winner": "old"}
+    creator_b.metadata = {"winner": "new"}
+    creator_b.patch(if_metageneration_match=1)
+    with pytest.raises(PreconditionFailed):
+        creator_a.patch(if_metageneration_match=1)
+    stored = Blob.objects["parquets/catalog.json"]
+    assert stored.metadata == {"winner": "new"}
+    assert stored.generation == 1
+    assert stored.metageneration == 2
+
+
+def test_release_manifest_and_catalog_are_committed_once_all_datasets_succeed(tmp_path):
+    Blob.objects.clear()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    statuses = {
+        item.name: publish(publisher, "batch-2", artifacts(tmp_path, item.name), "s", "p", item)
+        for item in MATERIALIZATION_REGISTRY.values()
+    }
+    release = publisher.upload_release_manifest("batch-2", build_release_manifest("batch-2", statuses, "p", "s"))
+    catalog = publisher.commit_catalog("batch-2", release, "s")
+    assert release.uri.endswith("releases/batch-2/release.json")
+    assert set(json.loads(Blob.objects["parquets/releases/batch-2/release.json"].content)["datasets"]) == set(
+        MATERIALIZATION_REGISTRY
     )
-    assert status.manifest_object.uri.endswith("run-1/manifest.json")
-    assert status.pointer.uri.endswith("current.json")
-    stored = json.loads(Blob.objects["parquets/pv_regions/run-1/manifest.json"].content)
-    assert stored["row_count"] == 2
-    pointer = json.loads(Blob.objects["parquets/pv_regions/current.json"].content)
-    assert pointer["manifest_uri"] == status.manifest_object.uri
+    assert catalog.metadata["current_release"] == "batch-2"
+    assert catalog.metadata["catalog_schema_version"] == "analytics.catalog.v1"
+    assert catalog.metadata["current_release_manifest_uri"] == release.uri
+    assert catalog.metadata["current_release_manifest_generation"] == release.generation
+    assert catalog.generation == Blob.objects["parquets/catalog.json"].generation
+    assert catalog.metageneration == 1
+    assert catalog.metadata["current_source_order"] == "s"
+    assert statuses["pv_regions"].manifest["run_prefix"].endswith("/batch-2/pv_regions")
+    assert "parquets/current.json" not in Blob.objects
 
 
-def test_publication_emits_only_gcs_phase_events(tmp_path):
+def test_release_rejects_missing_extra_and_mismatched_statuses(tmp_path):
     Blob.objects.clear()
-    Blob.after_reload = None
-    events = []
-    definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    root = tmp_path / "root"
-    root.mkdir()
-    parquet = root / "regions.parquet"
-    parquet.write_bytes(b"parquet")
-    publish(
-        GcsPublisher(Storage(), settings(tmp_path), definition),
-        "run-events",
-        MaterializationArtifacts(root, (parquet,), 4),
-        "source",
-        "published",
-        definition,
-        emit=lambda event, context: events.append((event, context)),
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    statuses = {
+        item.name: publish(publisher, "batch-contract", artifacts(tmp_path, item.name), "s", "p", item)
+        for item in MATERIALIZATION_REGISTRY.values()
+    }
+    with pytest.raises(ValueError, match="exact approved"):
+        build_release_manifest(
+            "batch-contract", {name: status for name, status in statuses.items() if name != "pv_pax"}, "p"
+        )
+    with pytest.raises(ValueError, match="exact approved"):
+        build_release_manifest("batch-contract", {**statuses, "unexpected": next(iter(statuses.values()))}, "p")
+    wrong_run = dict(statuses)
+    wrong_run["pv_pax"] = type(statuses["pv_pax"])(
+        {**statuses["pv_pax"].manifest, "run_id": "other-run"},
+        statuses["pv_pax"].parquet_files,
+        statuses["pv_pax"].manifest_object,
     )
-    assert [event for event, _ in events] == ["analytics.etl.gcs_committed", "analytics.etl.pointer_advanced"]
+    with pytest.raises(ValueError, match="mismatched"):
+        build_release_manifest("batch-contract", wrong_run, "p")
 
 
-def test_pointer_conflict_leaves_durable_manifest_and_is_observable(tmp_path):
+def test_catalog_advance_is_metadata_cas_and_conflict_is_safe(tmp_path):
     Blob.objects.clear()
-    Blob.after_reload = None
-    definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
-    root = tmp_path / "root"
-    root.mkdir()
-    parquet = root / "regions.parquet"
-    parquet.write_bytes(b"parquet")
-    publisher.advance_current = lambda *args, **kwargs: (_ for _ in ()).throw(PreconditionFailed("conflict"))
-    with pytest.raises(PointerConflictError) as raised:
-        publish(publisher, "run-3", MaterializationArtifacts(root, (parquet,), 1), "source", "published", definition)
-    assert raised.value.metadata["stage"] == "pointer_update"
-    assert raised.value.metadata["manifest_uri"].endswith("run-3/manifest.json")
-    assert "parquets/pv_regions/run-3/manifest.json" in Blob.objects
-    assert "parquets/pv_regions/current.json" not in Blob.objects
-
-
-def test_pointer_race_reports_the_winning_generation(tmp_path):
-    Blob.objects.clear()
-    Blob.after_reload = None
-    definition = MATERIALIZATION_REGISTRY["pv_regions"]
-    publisher = GcsPublisher(Storage(), settings(tmp_path), definition)
-    first_manifest = ObjectMetadata("gs://bucket/manifest-1", "manifest-1", 1, "crc")
-    second_manifest = ObjectMetadata("gs://bucket/manifest-2", "manifest-2", 1, "crc")
-    publisher.advance_current(first_manifest, None)
-    captured_generation = publisher.current_generation()
-    publisher.advance_current(second_manifest, captured_generation)
-    winning_generation = publisher.current_generation()
-
-    root = tmp_path / "root"
-    root.mkdir()
-    parquet = root / "regions.parquet"
-    parquet.write_bytes(b"parquet")
-
-    def advance_after_read(blob):
-        if blob.name != "parquets/pv_regions/current.json":
-            Blob.after_reload = advance_after_read
-            return
-        publisher.advance_current(second_manifest, str(blob.generation))
-
-    Blob.after_reload = advance_after_read
-    with pytest.raises(PointerConflictError) as raised:
-        publish(publisher, "run-race", MaterializationArtifacts(root, (parquet,), 1), "source", "published", definition)
-
-    assert raised.value.metadata["stage"] == "pointer_update"
-    assert raised.value.metadata["expected_pointer_generation"] == winning_generation
-    assert raised.value.metadata["current_pointer_generation"] != winning_generation
-    current_pointer = Blob.objects["parquets/pv_regions/current.json"]
-    assert raised.value.metadata["current_pointer_generation"] == str(current_pointer.generation)
-
-
-def test_publication_uploads_sorted_nested_artifacts_and_exact_manifest(tmp_path):
-    Blob.objects.clear()
-    definition = MATERIALIZATION_REGISTRY["pv_events"]
-    root = tmp_path / "events"
-    (root / "region_org_id=2").mkdir(parents=True)
-    (root / "region_org_id=1").mkdir()
-    first = root / "region_org_id=2" / "data_1.parquet"
-    second = root / "region_org_id=1" / "data_0.parquet"
-    first.write_bytes(b"one")
-    second.write_bytes(b"two!!")
-    artifacts = MaterializationArtifacts(root, (first, second), 7)
-
-    status = publish(
-        GcsPublisher(Storage(), settings(tmp_path), definition), "multi", artifacts, "source", "published", definition
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    statuses = {
+        item.name: publish(publisher, "batch-3", artifacts(tmp_path, item.name), "s", "p", item)
+        for item in MATERIALIZATION_REGISTRY.values()
+    }
+    release = publisher.upload_release_manifest("batch-3", build_release_manifest("batch-3", statuses, "p", "s"))
+    publisher.commit_catalog("batch-3", release, "s")
+    Blob.conflict = True
+    statuses2 = {
+        item.name: publish(publisher, "batch-4", artifacts(tmp_path, f"{item.name}2"), "s", "p", item)
+        for item in MATERIALIZATION_REGISTRY.values()
+    }
+    release2 = publisher.upload_release_manifest("batch-4", build_release_manifest("batch-4", statuses2, "p", "t"))
+    publisher.commit_catalog("batch-4", release2, "t")
+    assert Blob.objects["parquets/catalog.json"].metadata["current_release"] == "batch-4"
+    assert Blob.objects["parquets/catalog.json"].metageneration == 3
+    catalog = publisher.rollback_catalog(
+        "3", release_manifest_uri=release.uri, release_manifest_generation=release.generation, release_id="batch-3"
     )
+    assert catalog.metadata["current_release"] == "batch-3"
+    assert catalog.metadata["current_release_manifest_generation"] == release.generation
+    assert catalog.metadata["previous_source_order"] == "t"
+    assert catalog.metadata["high_water_source_order"] == "t"
+    assert catalog.generation == Blob.objects["parquets/catalog.json"].generation
+    assert catalog.metageneration == 4
+    with pytest.raises(CatalogConflictError):
+        publisher.commit_catalog("batch-3", release, "s")
 
-    assert [item.uri for item in status.parquet_files] == [
-        "gs://f3-analytics-nonprod/parquets/pv_events/multi/region_org_id=1/data_0.parquet",
-        "gs://f3-analytics-nonprod/parquets/pv_events/multi/region_org_id=2/data_1.parquet",
+
+def test_catalog_commit_reports_unconfirmed_reload_without_failing(tmp_path):
+    Blob.objects.clear()
+    Blob.reload_after_patch_failure = True
+    try:
+        publisher = _seed_catalog(
+            tmp_path,
+            {
+                "current_release": "batch-old",
+                "current_release_manifest_uri": "gs://bucket/old-release.json",
+                "current_release_manifest_generation": "1",
+                "current_source_order": "old-source",
+                "high_water_source_order": "old-source",
+            },
+        )
+        statuses = {
+            item.name: publish(publisher, "batch-unconfirmed", artifacts(tmp_path, item.name), "s", "p", item)
+            for item in MATERIALIZATION_REGISTRY.values()
+        }
+        release = publisher.upload_release_manifest(
+            "batch-unconfirmed", build_release_manifest("batch-unconfirmed", statuses, "p", "s")
+        )
+        events: list[tuple[str, dict[str, object]]] = []
+        catalog = publisher.commit_catalog(
+            "batch-unconfirmed", release, "s", emit=lambda event, context: events.append((event, context))
+        )
+    finally:
+        Blob.reload_after_patch_failure = False
+
+    assert catalog.metadata["current_release"] == "batch-unconfirmed"
+    assert events == [
+        (
+            "analytics.etl.catalog_committed_unconfirmed",
+            {
+                "run_id": "batch-unconfirmed",
+                "catalog_metageneration": "2",
+                "confirmation": "unconfirmed",
+            },
+        )
     ]
-    assert status.manifest["run_prefix"] == "gs://f3-analytics-nonprod/parquets/pv_events/multi"
-    assert status.manifest["dataset"] == "pv_events"
-    assert status.manifest["file_count"] == 2
-    assert status.manifest["byte_count"] == 8
-    assert [item["uri"] for item in status.manifest["objects"]] == [item.uri for item in status.parquet_files]
+
+
+def _seed_catalog(tmp_path: Path, metadata: dict[str, str]) -> GcsPublisher:
+    Blob.objects.clear()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    stored = Stored()
+    stored.metadata = metadata
+    Blob.objects["parquets/catalog.json"] = stored
+    return publisher
+
+
+def _rollback_metadata() -> dict[str, str]:
+    return {
+        "previous_release": "batch-previous",
+        "previous_release_manifest_uri": "gs://bucket/parquets/releases/batch-previous/release.json",
+        "previous_release_manifest_generation": "11",
+        "previous_source_order": "source-previous",
+        "current_release": "batch-current",
+        "current_release_manifest_uri": "gs://bucket/parquets/releases/batch-current/release.json",
+        "current_release_manifest_generation": "12",
+        "current_source_order": "source-current",
+        "high_water_source_order": "source-current",
+    }
+
+
+@pytest.mark.parametrize(
+    ("argument", "value"),
+    [
+        ("release_manifest_uri", "gs://bucket/parquets/releases/other/release.json"),
+        ("release_manifest_generation", "999"),
+        ("release_id", "batch-other"),
+    ],
+)
+def test_rollback_rejects_wrong_previous_release_argument(tmp_path, argument, value):
+    publisher = _seed_catalog(tmp_path, _rollback_metadata())
+    rollback = {
+        "release_manifest_uri": "gs://bucket/parquets/releases/batch-previous/release.json",
+        "release_manifest_generation": "11",
+        "release_id": "batch-previous",
+    }
+    rollback[argument] = value
+    with pytest.raises(ValueError):
+        publisher.rollback_catalog("1", **rollback)
+
+
+def test_rollback_rejects_catalog_without_previous_release(tmp_path):
+    publisher = _seed_catalog(tmp_path, {"current_release": "batch-current"})
+    with pytest.raises(ValueError, match="no retained previous release"):
+        publisher.rollback_catalog(
+            "1",
+            release_manifest_uri="gs://bucket/parquets/releases/batch-previous/release.json",
+            release_manifest_generation="11",
+            release_id="batch-previous",
+        )
+
+
+def test_rollback_rejects_stale_metageneration(tmp_path):
+    publisher = _seed_catalog(tmp_path, _rollback_metadata())
+    with pytest.raises(CatalogConflictError):
+        publisher.rollback_catalog(
+            "2",
+            release_manifest_uri="gs://bucket/parquets/releases/batch-previous/release.json",
+            release_manifest_generation="11",
+            release_id="batch-previous",
+        )
+
+
+def test_rollback_reports_unconfirmed_reload_without_failing(tmp_path):
+    Blob.reload_after_patch_failure = True
+    try:
+        publisher = _seed_catalog(tmp_path, _rollback_metadata())
+        events: list[tuple[str, dict[str, object]]] = []
+        catalog = publisher.rollback_catalog(
+            "1",
+            release_manifest_uri="gs://bucket/parquets/releases/batch-previous/release.json",
+            release_manifest_generation="11",
+            release_id="batch-previous",
+            emit=lambda event, context: events.append((event, context)),
+        )
+    finally:
+        Blob.reload_after_patch_failure = False
+
+    assert catalog.metadata["current_release"] == "batch-previous"
+    assert events == [
+        (
+            "analytics.etl.catalog_committed_unconfirmed",
+            {
+                "operation": "rollback",
+                "expected_metageneration": "1",
+                "catalog_metageneration": "2",
+                "release_manifest_generation": "11",
+                "confirmation": "unconfirmed",
+            },
+        )
+    ]

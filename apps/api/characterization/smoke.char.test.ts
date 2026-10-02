@@ -30,8 +30,8 @@ describe("transport seam", () => {
     expect(await res.text()).toBe("Not found");
   });
 
-  // Pin the pre-handler branches the seam synthesizes (targets/next.ts) so a
-  // future live/hono target that diverges from real Next is caught here.
+  // Pin the pre-handler branches app.ts synthesizes so a live target that
+  // diverges from the in-process one is caught here.
   it("redirects a trailing-slash path with 308", async () => {
     const res = await target.invoke(req("/v1/ping/"));
     expect(res.status).toBe(308);

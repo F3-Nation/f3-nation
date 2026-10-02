@@ -50,7 +50,11 @@ export const sendOtpVerificationRequestServer: NodemailerConfig["sendVerificatio
         apiKey: env.SUPER_ADMIN_API_KEY,
         identifier,
         url,
-        server: provider.server,
+        // @auth/core's NodemailerConfig["server"] type resolves to `any` under
+        // nodemailer 10 (its bundled provider types still import nodemailer's
+        // pre-v10 SMTPTransport namespace shape); assert the plain connection
+        // string this app always configures it with (see email-provider.ts).
+        server: provider.server as string,
         from: provider.from,
         token,
       }),

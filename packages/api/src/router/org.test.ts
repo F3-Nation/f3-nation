@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { and, eq, gte, schema } from "@acme/db";
+import { and, count, eq, gte, schema } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -39,6 +39,10 @@ const nextFutureMonday = (n: number): string => {
 describe("Org Router", () => {
   // Track created orgs for cleanup
   const createdOrgIds: number[] = [];
+  // Track created users for cleanup (only the accessible/non-nation-admin
+  // tests need a real DB-backed user — everything else uses a purely mocked
+  // session)
+  const createdUserIds: number[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,6 +56,16 @@ describe("Org Router", () => {
   });
 
   afterAll(async () => {
+    // Users first — roles_x_users_x_org rows on the orgs below reference
+    // them, and cleanup.user already deletes its own role rows, but doing
+    // it in this order avoids relying on that ordering being safe both ways.
+    for (const userId of createdUserIds.reverse()) {
+      try {
+        await cleanup.user(userId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
     // Clean up all created orgs in reverse order
     for (const orgId of createdOrgIds.reverse()) {
       try {
@@ -173,6 +187,333 @@ describe("Org Router", () => {
           org.description?.toLowerCase().includes(searchLower);
         expect(matches).toBe(true);
       });
+    });
+
+    it("does not duplicate or skip rows across pages when many orgs share a name", async () => {
+      // asc(id) is appended unconditionally after the caller's sort (see the
+      // `.concat(asc(org.id))` in this router) specifically so a non-unique
+      // sort key like `name` still gets a deterministic order. Without it,
+      // Postgres doesn't guarantee tie order is stable across the separate
+      // requests a paging client (e.g. useFetchAllPages) makes.
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const prefix = `TieBreakTest-${uniqueId()}`;
+      const sharedName = `${prefix} Shared Region`;
+      const insertedIds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: sharedName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        insertedIds.push(org.id);
+      }
+
+      const client = createTestClient();
+      const seenIds: number[] = [];
+      for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+        const page = await client.org.all({
+          orgTypes: ["region"],
+          searchTerm: prefix,
+          sorting: [{ id: "name", desc: false }],
+          pageIndex,
+          pageSize: 2,
+        });
+        seenIds.push(...page.orgs.map((o) => o.id));
+      }
+
+      expect(seenIds).toHaveLength(5);
+      expect(new Set(seenIds).size).toBe(5);
+      // Every id inserted must be seen exactly once, and (since all 5 rows
+      // share a name) they must come back in ascending id order -- that's
+      // what would break if the asc(id) tiebreaker were removed.
+      const sortedByIdAsc = insertedIds.slice().sort((a, b) => a - b);
+      expect(seenIds).toEqual(sortedByIdAsc);
+    });
+  });
+
+  describe("accessible", () => {
+    /**
+     * Sets up a real (DB-backed, not just a mocked session) editor user with
+     * a role on every org in `orgIds` — org.accessible's non-nation-admin
+     * branch reads roles_x_users_x_org straight from the DB via
+     * ctx.session.id (see getEditableOrgIdsForUser), so a purely mocked
+     * session like createEditorSession isn't enough to exercise it.
+     */
+    const createDbBackedEditorSession = async (orgIds: number[]) => {
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-editor-${uniqueId()}@example.com`,
+          f3Name: `TestEditor ${uniqueId()}`,
+        })
+        .returning();
+      if (!user) throw new Error("Failed to create test user");
+      createdUserIds.push(user.id);
+
+      const [editorRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"));
+      if (!editorRole) throw new Error("Editor role not found in DB");
+
+      for (const orgId of orgIds) {
+        await db.insert(schema.rolesXUsersXOrg).values({
+          roleId: editorRole.id,
+          userId: user.id,
+          orgId,
+        });
+      }
+
+      return {
+        id: user.id,
+        email: user.email,
+        user: {
+          id: String(user.id),
+          email: user.email,
+          name: user.f3Name,
+          roles: [],
+        },
+        roles: [],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+    };
+
+    /**
+     * org.accessible's nation-admin branch checks `roles_x_users_x_org`
+     * directly for (userId, F3 Nation orgId) via a raw DB query -- unlike
+     * createAdminSession's mocked `session.roles` claims (which other
+     * routers read instead), that check isn't satisfied unless a real row
+     * exists, so this inserts one for a fresh DB-backed user.
+     */
+    const createDbBackedNationAdminSession = async (f3NationOrgId: number) => {
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `test-nation-admin-${uniqueId()}@example.com`,
+          f3Name: `TestNationAdmin ${uniqueId()}`,
+        })
+        .returning();
+      if (!user) throw new Error("Failed to create test user");
+      createdUserIds.push(user.id);
+
+      const [anyRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .limit(1);
+      if (!anyRole) throw new Error("No roles found in DB");
+
+      await db.insert(schema.rolesXUsersXOrg).values({
+        roleId: anyRole.id,
+        userId: user.id,
+        orgId: f3NationOrgId,
+      });
+
+      return {
+        id: user.id,
+        email: user.email,
+        user: {
+          id: String(user.id),
+          email: user.email,
+          name: user.f3Name,
+          roles: [],
+        },
+        roles: [],
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+    };
+
+    it("paginates the non-nation-admin branch when only pageSize is sent", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const prefix = `AccessibleTest-${uniqueId()}`;
+      const orgIds: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `${prefix} Region ${i}`,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        orgIds.push(org.id);
+      }
+
+      // A direct editor role on each of the 3 orgs — this user is not a
+      // nation admin, so org.accessible resolves them through
+      // getEditableOrgIdsForUser, a distinct code path from the "all" tests
+      // above (which only exercise the nation-admin branch). Both branches
+      // paginate via SQL LIMIT/OFFSET.
+      const session = await createDbBackedEditorSession(orgIds);
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      // The regression this whole PR fixes: sending pageSize ALONE (no
+      // pageIndex) must still paginate, not silently return every row.
+      const page = await client.org.accessible({ pageSize: 2 });
+
+      expect(page.total).toBe(3);
+      expect(page.orgs).toHaveLength(2);
+      expect(orgIds).toEqual(
+        expect.arrayContaining(page.orgs.map((o) => o.id)),
+      );
+    });
+
+    it("returns every editable org exactly once when paging through with pageIndex", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const prefix = `AccessiblePagingTest-${uniqueId()}`;
+      const orgIds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `${prefix} Region ${i}`,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        orgIds.push(org.id);
+      }
+
+      const session = await createDbBackedEditorSession(orgIds);
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+
+      // Pages of 2 across 5 orgs: 3 requests, last one partial. Sorting
+      // pushed into SQL (this PR) still needs the asc(id) tiebreaker to
+      // guarantee this — with a non-unique sort key and no tiebreaker, a
+      // caller paging through separate requests (e.g. useFetchAllPages)
+      // could see the same org twice or skip one entirely.
+      const seenIds: number[] = [];
+      for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+        const page = await client.org.accessible({ pageIndex, pageSize: 2 });
+        expect(page.total).toBe(5);
+        seenIds.push(...page.orgs.map((o) => o.id));
+      }
+
+      expect(seenIds).toHaveLength(5);
+      expect(new Set(seenIds).size).toBe(5);
+      expect(seenIds.sort()).toEqual(orgIds.slice().sort());
+    });
+
+    it("does not duplicate or skip rows for a non-nation-admin editor when many orgs share a name", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const prefix = `AccessibleTieBreakTest-${uniqueId()}`;
+      const sharedName = `${prefix} Shared Region`;
+      const orgIds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: sharedName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        orgIds.push(org.id);
+      }
+
+      const session = await createDbBackedEditorSession(orgIds);
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+      const seenIds: number[] = [];
+      for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+        const page = await client.org.accessible({
+          sorting: [{ id: "name", desc: false }],
+          pageIndex,
+          pageSize: 2,
+        });
+        expect(page.total).toBe(5);
+        seenIds.push(...page.orgs.map((o) => o.id));
+      }
+
+      expect(seenIds).toHaveLength(5);
+      expect(new Set(seenIds).size).toBe(5);
+      // All 5 share a name, so only the asc(id) tiebreaker keeps their
+      // order stable across these separate paged requests.
+      expect(seenIds).toEqual(orgIds.slice().sort((a, b) => a - b));
+    });
+
+    it("does not duplicate or skip rows for a nation admin when many orgs share a name", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const session = await createDbBackedNationAdminSession(f3Nation.id);
+      await mockAuthWithSession(session);
+
+      const prefix = `AccessibleNationTieBreakTest-${uniqueId()}`;
+      const sharedName = `${prefix} Shared Region`;
+      const insertedIds: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const [org] = await db
+          .insert(schema.orgs)
+          .values({
+            name: sharedName,
+            orgType: "region",
+            parentId: f3Nation.id,
+            isActive: true,
+          })
+          .returning();
+        if (!org) throw new Error("Failed to create test org");
+        createdOrgIds.push(org.id);
+        insertedIds.push(org.id);
+      }
+
+      const [regionCountRow] = await db
+        .select({ value: count(schema.orgs.id) })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.orgType, "region"));
+      const regionCount = regionCountRow?.value ?? 0;
+
+      const client = createTestClient();
+      const pageSize = 2;
+      const pageCount = Math.ceil(regionCount / pageSize);
+      const seenIds: number[] = [];
+      let total = 0;
+      for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+        const page = await client.org.accessible({
+          orgTypes: ["region"],
+          sorting: [{ id: "name", desc: false }],
+          pageIndex,
+          pageSize,
+        });
+        total = page.total;
+        for (const org of page.orgs) {
+          expect(org.orgType).toBe("region");
+          expect(org.roles).toEqual([]);
+        }
+        seenIds.push(...page.orgs.map((o) => o.id));
+      }
+
+      expect(total).toBe(regionCount);
+      expect(seenIds).toHaveLength(regionCount);
+      expect(new Set(seenIds).size).toBe(regionCount);
+
+      // Within the equal-name group, ties must come back in a stable
+      // ascending id order across these separate page requests -- Postgres
+      // doesn't guarantee tie order on its own, so this is what the
+      // asc(id) tiebreaker in the nation branch's getSortingColumns call is
+      // actually for.
+      const seenSharedIds = seenIds.filter((id) => insertedIds.includes(id));
+      expect(seenSharedIds).toEqual(insertedIds.slice().sort((a, b) => a - b));
     });
   });
 
@@ -677,6 +1018,147 @@ describe("Org Router", () => {
           instagram: null,
         }),
       ).rejects.toThrow(/Region.*AO/);
+    });
+
+    const blankFields = {
+      isActive: true,
+      email: null,
+      phone: null,
+      description: null,
+      website: null,
+      twitter: null,
+      facebook: null,
+      instagram: null,
+    };
+
+    const createSectorAndTerritory = async (
+      client: ReturnType<typeof createTestClient>,
+    ) => {
+      const nation = await getOrCreateF3NationOrg();
+      const sector = await client.org.crupdate({
+        ...blankFields,
+        name: `Territory Sector ${uniqueId()}`,
+        orgType: "sector",
+        parentId: nation.id,
+      });
+      expect(sector.org).not.toBeNull();
+      createdOrgIds.push(sector.org!.id);
+      const territory = await client.org.crupdate({
+        ...blankFields,
+        name: `Territory ${uniqueId()}`,
+        orgType: "territory",
+        parentId: sector.org!.id,
+      });
+      expect(territory.org?.orgType).toBe("territory");
+      createdOrgIds.push(territory.org!.id);
+      return { sector: sector.org!, territory: territory.org! };
+    };
+
+    it("persists and lists Territory, allows Areas beneath it, and rejects a Territory beneath an Area", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const { sector, territory } = await createSectorAndTerritory(client);
+      const parentOf = async (id: number) =>
+        (await db.query.orgs.findFirst({ where: eq(schema.orgs.id, id) }))
+          ?.parentId;
+
+      const areaUnderTerritory = await client.org.crupdate({
+        ...blankFields,
+        name: `Territory Area ${uniqueId()}`,
+        orgType: "area",
+        parentId: territory.id,
+      });
+      expect(areaUnderTerritory.org?.parentId).toBe(territory.id);
+      createdOrgIds.push(areaUnderTerritory.org!.id);
+
+      const area = await client.org.crupdate({
+        ...blankFields,
+        name: `Sector Area ${uniqueId()}`,
+        orgType: "area",
+        parentId: sector.id,
+      });
+      expect(area.org?.parentId).toBe(sector.id);
+      createdOrgIds.push(area.org!.id);
+
+      const moveArea = (parentId: number) =>
+        client.org.crupdate({
+          ...blankFields,
+          id: area.org!.id,
+          name: area.org!.name,
+          orgType: "area",
+          parentId,
+        });
+      await moveArea(territory.id);
+      expect(await parentOf(area.org!.id)).toBe(territory.id);
+      await moveArea(sector.id);
+      expect(await parentOf(area.org!.id)).toBe(sector.id);
+
+      await expect(
+        client.org.crupdate({
+          ...blankFields,
+          name: `Invalid Territory ${uniqueId()}`,
+          orgType: "territory",
+          parentId: area.org!.id,
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      const listed = await client.org.all({
+        orgTypes: ["territory"],
+        sorting: [{ id: "orgType", desc: false }],
+        searchTerm: territory.name,
+      });
+      expect(listed.orgs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: territory.id, orgType: "territory" }),
+        ]),
+      );
+    });
+
+    it("counts an Area's AOs in its Territory and Sector, following the Area between parents", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const { sector, territory } = await createSectorAndTerritory(client);
+      const create = async (
+        orgType: "area" | "region" | "ao",
+        parentId: number,
+      ) => {
+        const result = await client.org.crupdate({
+          ...blankFields,
+          name: `Count ${orgType} ${uniqueId()}`,
+          orgType,
+          parentId,
+        });
+        createdOrgIds.push(result.org!.id);
+        return result.org!;
+      };
+      const area = await create("area", territory.id);
+      const region = await create("region", area.id);
+      await create("ao", region.id);
+      const aoCountOf = async (
+        org: { id: number; name: string },
+        orgType: "sector" | "territory" | "area",
+      ) => {
+        const listed = await client.org.all({
+          orgTypes: [orgType],
+          searchTerm: org.name,
+        });
+        return listed.orgs.find((candidate) => candidate.id === org.id)
+          ?.aoCount;
+      };
+
+      expect(await aoCountOf(area, "area")).toBe(1);
+      expect(await aoCountOf(territory, "territory")).toBe(1);
+      expect(await aoCountOf(sector, "sector")).toBe(1);
+
+      await client.org.crupdate({
+        ...blankFields,
+        id: area.id,
+        name: area.name,
+        orgType: "area",
+        parentId: sector.id,
+      });
+
+      expect(await aoCountOf(territory, "territory")).toBe(0);
+      expect(await aoCountOf(sector, "sector")).toBe(1);
     });
 
     it("should accept creating an area parented directly to a sector (un-migrated case)", async () => {

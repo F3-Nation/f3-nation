@@ -38,6 +38,7 @@ import {
 import { toast } from "@acme/ui/toast";
 import { CrupdateUserSchema } from "@acme/validators";
 
+import { client } from "~/orpc/client";
 import {
   ORPCError,
   invalidateQueries,
@@ -47,6 +48,8 @@ import {
 } from "~/orpc/react";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
+import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 export default function AdminManageAccessModal({
@@ -61,12 +64,21 @@ export default function AdminManageAccessModal({
   const [isCreatingNew, setIsCreatingNew] = useState(false);
 
   // Get orgs where user has admin role (required to manage access)
-  const { data: accessibleOrgsData, isLoading: isLoadingOrgs } = useQuery(
-    orpc.org.accessible.queryOptions({
-      input: {
-        orgTypes: ["region", "area", "sector", "nation"],
-      },
-    }),
+  const { data: accessibleOrgs, isLoading: isLoadingOrgs } = useFetchAllPages({
+    path: ["org", "accessible"],
+    queryKey: ["org.accessible.adminManageAccessModal"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.accessible({
+        orgTypes: AdminScopeOrgTypes,
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
+  const accessibleOrgsData = useMemo(
+    () => (accessibleOrgs ? { orgs: accessibleOrgs } : undefined),
+    [accessibleOrgs],
   );
 
   // Filter to only orgs where user is admin (or all orgs if nation admin - roles will be empty)

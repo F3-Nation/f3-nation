@@ -97,8 +97,21 @@ function botThreadsResolved(threads) {
     .every((thread) => thread.isResolved);
 }
 
+/**
+ * True only when GitHub positively reports a merge conflict with the base
+ * branch (GraphQL `PullRequest.mergeable === "CONFLICTING"`). Deliberately
+ * not "anything other than MERGEABLE": `UNKNOWN` just means GitHub hasn't
+ * computed mergeability yet, and must not read as a conflict. Unresolved
+ * review threads and a branch that is merely behind the base don't affect
+ * `mergeable` -- those surface on `mergeStateStatus`, which this ignores.
+ */
+function hasMergeConflicts(mergeable) {
+  return mergeable === "CONFLICTING";
+}
+
 module.exports = {
   LABEL,
   requiredChecksGreen,
   botThreadsResolved,
+  hasMergeConflicts,
 };
