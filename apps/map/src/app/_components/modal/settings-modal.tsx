@@ -19,7 +19,6 @@ import Link from "next/link";
 import { useCallback } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
-import { isDevelopment, isProd } from "@acme/shared/common/constants";
 import { ProviderId } from "@acme/shared/common/enums";
 import { cn } from "@acme/ui";
 import {
@@ -30,6 +29,7 @@ import {
 } from "@acme/ui/dialog";
 import { toast } from "@acme/ui/toast";
 
+import { shouldShowDevModeSignIn } from "~/utils/dev-mode-sign-in";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { useRuntimeConfig } from "~/utils/runtime-config";
 import { appStore } from "~/utils/store/app";
@@ -38,12 +38,15 @@ import { closeModal, ModalType, openModal } from "~/utils/store/modal";
 import { VersionInfo } from "../version-info";
 
 export default function SettingsModal() {
-  const showDebug = mapStore.use.showDebug();
   const mode = appStore.use.mode();
   const tiles = mapStore.use.tiles();
   const { theme, setTheme } = useTheme();
   const { session, isNationAdmin, isEditorOrAdmin } = useAuth();
-  const { adminUrl: configAdminUrl, channel } = useRuntimeConfig();
+  const {
+    adminUrl: configAdminUrl,
+    channel,
+    status: runtimeConfigStatus,
+  } = useRuntimeConfig();
   const center = mapStore.use.center();
   const zoom = mapStore.use.zoom();
 
@@ -241,7 +244,10 @@ export default function SettingsModal() {
                   <LogIn className="size-4" />
                   <span className="text-xs">Sign in</span>
                 </button>
-                {!isProd && (isDevelopment || showDebug) ? (
+                {shouldShowDevModeSignIn({
+                  channel,
+                  status: runtimeConfigStatus,
+                }) ? (
                   <button
                     className={cn(
                       "flex w-full flex-row items-center justify-center gap-1 rounded-md bg-primary p-2 text-primary-foreground shadow-xs hover:bg-primary/90",
