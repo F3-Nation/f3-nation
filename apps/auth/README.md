@@ -109,15 +109,15 @@ Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`. Variables pref
 | ---------------------- | ----------------------------------------------------------------------------------- | ------------------------------ |
 | `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)                     | Yes                            |
 | `AUTH_SECRET`          | Secret for signing/encrypting session JWTs. Generate with `openssl rand -base64 32` | Yes                            |
-| `DATABASE_HOST`        | PostgreSQL host (e.g. `/cloudsql/f3data:us-central1:f3data-nonprod` on Cloud Run)   | Yes                            |
-| `DATABASE_USER`        | PostgreSQL username (e.g. `app_auth`)                                               | Yes                            |
+| `DATABASE_HOST`        | PostgreSQL host, or a Unix socket path when connecting through Cloud SQL            | Yes                            |
+| `DATABASE_USER`        | PostgreSQL username                                                                 | Yes                            |
 | `DATABASE_PASSWORD`    | PostgreSQL password                                                                 | Yes                            |
-| `DATABASE_NAME`        | PostgreSQL database name (e.g. `f3_staging`)                                        | Yes                            |
-| `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://auth.f3nation.com`)                      | Yes                            |
-| `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)               | Yes                            |
+| `DATABASE_NAME`        | PostgreSQL database name                                                            | Yes                            |
+| `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://<auth-host>`)                            | Yes                            |
+| `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://<api-host>`)                     | Yes                            |
 | `API_KEY`              | API key for authenticating calls to the F3 API                                      | Yes                            |
 | `EMAIL_SERVER`         | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)           | Yes                            |
-| `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                                  | Yes                            |
+| `EMAIL_FROM`           | Sender email address (e.g. `noreply@<your-domain>`)                                 | Yes                            |
 | `NODE_ENV`             | `development`, `production`, or `test`                                              | No (defaults to `development`) |
 
 Set `SKIP_ENV_VALIDATION=1` to bypass validation during CI builds.

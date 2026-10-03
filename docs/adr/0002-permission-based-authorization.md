@@ -50,7 +50,7 @@ capabilities the org actually delegates.
 **The planned permission model is already in the database — dormant.**
 `packages/db/drizzle/schema.ts` defines `permissions` and
 `roles_x_permissions`, but nothing reads them; the seed code that would
-populate `permissions` was commented out in the since-removed `packages/db/src/seed.ts`, and two
+populate `permissions` was commented out and has since been removed, and two
 vestigial `Permissions` enums (`packages/shared/src/app/constants.ts`,
 `enums.ts` — both just `admin`/`edit`) have no meaningful consumers.
 

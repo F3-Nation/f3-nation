@@ -106,17 +106,10 @@ async function main() {
     config({ path: `.env.${targetEnv}` });
   }
 
-  // DATABASE_HOST may carry an inline port (e.g. localhost:5433); an explicit
-  // DATABASE_PORT wins. Unix-socket paths (/cloudsql/proj:region:instance)
-  // contain colons and are left intact.
-  const rawDatabaseHost = process.env.DATABASE_HOST ?? "";
-  const hostPortMatch = /^([^:/]+):(\d+)$/.exec(rawDatabaseHost);
-  const databaseHost = hostPortMatch?.[1] ?? rawDatabaseHost;
-  const inlinePort = hostPortMatch?.[2];
-  const databasePort = parseInt(
-    process.env.DATABASE_PORT ?? inlinePort ?? "5432",
-    10,
-  );
+  // postgres-js parses an inline port in DATABASE_HOST (e.g. localhost:5433)
+  // and keeps Unix-socket paths intact, so the host is passed through as-is.
+  const databaseHost = process.env.DATABASE_HOST;
+  const databasePort = parseInt(process.env.DATABASE_PORT ?? "5432", 10);
   const databaseUser = process.env.DATABASE_USER;
   const databasePassword = process.env.DATABASE_PASSWORD;
   const databaseName = process.env.DATABASE_NAME;
