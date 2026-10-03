@@ -6,6 +6,7 @@ from f3_data_models.models import SlackUser, User
 from f3_data_models.utils import DbManager
 from slack_sdk import WebClient
 
+from utilities import constants
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import get_user, safe_convert, safe_get, upload_files_to_storage
 from utilities.slack import actions
@@ -132,6 +133,9 @@ def build_user_form(body: dict, client: WebClient, logger: Logger, context: dict
 
 
 def handle_user_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
+    if not constants.is_production_deployment():
+        return
+
     form_data = FORM.get_selected_values(body)
     slack_user: SlackUser = get_user(
         safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger

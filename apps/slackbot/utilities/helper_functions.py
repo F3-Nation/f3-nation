@@ -1,8 +1,12 @@
 import copy
 import dataclasses
+import hashlib
 import json
+import logging
 import os
 import re
+import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from logging import Logger
@@ -20,11 +24,12 @@ from f3_data_models.models import (
     SlackUser,
     User,
 )
-from f3_data_models.utils import DbManager
+from f3_data_models.utils import DbManager, session_scope
 from slack_bolt.oauth.oauth_settings import OAuthSettings
 from slack_sdk.oauth.installation_store import FileInstallationStore
 from slack_sdk.oauth.state_store import FileOAuthStateStore
 from slack_sdk.web import SlackResponse, WebClient
+from sqlalchemy import select, text
 
 from utilities import constants
 from utilities.constants import LOCAL_DEVELOPMENT
@@ -234,6 +239,12 @@ def get_user_names(
 
 
 def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient, logger: Logger) -> SlackUser:
+    if not constants.is_production_deployment():
+        cached_user: SlackUser | None = safe_get(SLACK_USERS, slack_user_id)
+        if cached_user and safe_get(cached_user, "user_id"):
+            return cached_user
+        return create_user({"id": slack_user_id}, region_record.org_id, team_id=safe_get(region_record, "team_id"))
+
     if not SLACK_USERS:
         update_local_slack_users()
 
@@ -277,7 +288,64 @@ def _parse_view_private_metadata(body: dict) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def create_user(slack_user_info: dict, home_region_id: int | None = None) -> SlackUser:
+def create_user(slack_user_info: dict, home_region_id: int | None = None, team_id: str | None = None) -> SlackUser:
+    if not constants.is_production_deployment():
+        slack_id = safe_get(slack_user_info, "id")
+        if not slack_id:
+            raise ValueError("Slack user ID is required")
+
+        # The provisional address contains no Slack-supplied data. Replace it only
+        # after the database has assigned an ID, in the same transaction as linking.
+        provisional_email = f"dev.staging-email-sink+pending-{uuid.uuid4().hex}@f3nation.com"
+        lock_key = int.from_bytes(hashlib.sha256(slack_id.encode("utf-8")).digest()[:8], "big", signed=True)
+        with session_scope() as session:
+            session.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
+            slack_user_record = session.scalars(select(SlackUser).where(SlackUser.slack_id == slack_id)).first()
+
+            if slack_user_record and safe_get(slack_user_record, "user_id"):
+                session.expunge(slack_user_record)
+                resolved_slack_user = slack_user_record
+            else:
+                existing_team_id = safe_get(slack_user_record, "slack_team_id")
+                resolved_team_id = (
+                    team_id
+                    or safe_get(slack_user_info, "team_id")
+                    or (existing_team_id if existing_team_id and existing_team_id != "NOT FOUND" else None)
+                    or "NOT FOUND"
+                )
+                user_record = User(email=provisional_email, f3_name="F3 pending", home_region_id=home_region_id)
+                session.add(user_record)
+                session.flush()
+                user_record.email = f"dev.staging-email-sink+{user_record.id}@f3nation.com"
+                user_record.f3_name = f"F3 {user_record.id}"
+
+                if slack_user_record:
+                    slack_user_record.user_id = user_record.id
+                    slack_user_record.email = user_record.email
+                    slack_user_record.user_name = f"F3 {user_record.id}"
+                    slack_user_record.avatar_url = None
+                    slack_user_record.slack_team_id = resolved_team_id
+                else:
+                    slack_user_record = SlackUser(
+                        user_id=user_record.id,
+                        slack_id=slack_id,
+                        email=user_record.email,
+                        user_name=f"F3 {user_record.id}",
+                        avatar_url=None,
+                        is_admin=False,
+                        is_owner=False,
+                        is_bot=False,
+                        slack_team_id=resolved_team_id,
+                    )
+                    session.add(slack_user_record)
+                session.flush()
+                session.expunge(user_record)
+                session.expunge(slack_user_record)
+                resolved_slack_user = slack_user_record
+
+        SLACK_USERS[slack_id] = resolved_slack_user
+        return resolved_slack_user
+
     email = safe_get(slack_user_info, "profile", "email")
     email = email or safe_get(slack_user_info, "id")  # this means it's a bot
     email = email.lower()
@@ -415,6 +483,9 @@ def get_region_record(team_id: str, body, context, client, logger) -> SlackSetti
 
 
 def populate_users(client: WebClient, team_id: str, org_id: int = None) -> None:
+    if not constants.is_production_deployment():
+        return
+
     users = client.users_list().get("members") or []
     active_users = []
     for u in users:
@@ -487,7 +558,25 @@ def get_request_type(body: dict) -> Tuple[str]:
 def update_local_region_records() -> None:
     print("Updating local region records...")
     slack_space_records: List[SlackSpace] = DbManager.find_records(SlackSpace, filters=[True])
-    region_records = [SlackSettings(**s.settings) for s in slack_space_records]
+    region_records = []
+    for slack_space in slack_space_records:
+        settings = safe_get(slack_space, "settings")
+        if isinstance(settings, str):
+            try:
+                settings = json.loads(settings)
+            except (TypeError, json.JSONDecodeError):
+                settings = None
+
+        team_id = safe_get(slack_space, "team_id")
+        if not isinstance(settings, Mapping) or not settings.get("team_id") or settings.get("team_id") != team_id:
+            logging.getLogger(__name__).warning("Skipping Slack workspace with invalid settings")
+            continue
+
+        try:
+            region_records.append(SlackSettings(**settings))
+        except (TypeError, ValueError):
+            logging.getLogger(__name__).warning("Skipping Slack workspace with invalid settings")
+
     global REGION_RECORDS
     REGION_RECORDS.clear()
     REGION_RECORDS.update({region.team_id: region for region in region_records})
