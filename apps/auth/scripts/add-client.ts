@@ -107,10 +107,12 @@ async function main() {
   }
 
   // DATABASE_HOST may carry an inline port (e.g. localhost:5433); an explicit
-  // DATABASE_PORT wins.
-  const [databaseHost, inlinePort] = (process.env.DATABASE_HOST ?? "").split(
-    ":",
-  );
+  // DATABASE_PORT wins. Unix-socket paths (/cloudsql/proj:region:instance)
+  // contain colons and are left intact.
+  const rawDatabaseHost = process.env.DATABASE_HOST ?? "";
+  const hostPortMatch = /^([^:/]+):(\d+)$/.exec(rawDatabaseHost);
+  const databaseHost = hostPortMatch?.[1] ?? rawDatabaseHost;
+  const inlinePort = hostPortMatch?.[2];
   const databasePort = parseInt(
     process.env.DATABASE_PORT ?? inlinePort ?? "5432",
     10,
