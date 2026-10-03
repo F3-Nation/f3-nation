@@ -203,6 +203,21 @@ describe("oauth-client router", () => {
       expect(found?.createdAt).toBe(createdAt.toISOString());
       expect(found?.updatedAt).toBe(createdAt.toISOString());
     });
+
+    it("returns null timestamps when the client has none", async () => {
+      const clientId = `oauth-client-test-${uniqueId()}`;
+      createdClientIds.push(clientId);
+      await insertTestClient({ clientId });
+
+      await mockAuthWithSession(createNationAdminSession());
+      const client = createTestClient();
+
+      const result = await client.oauthClient.list();
+      const found = result.clients.find((c) => c.clientId === clientId);
+
+      expect(found?.createdAt).toBeNull();
+      expect(found?.updatedAt).toBeNull();
+    });
   });
 
   describe("update", () => {
@@ -229,6 +244,25 @@ describe("oauth-client router", () => {
       expect(result.client.scopes).toEqual(["openid", "profile"]);
       expect(result.client.disabled).toBe(true);
       expect(result.client).not.toHaveProperty("clientSecret");
+    });
+
+    it("returns updatedAt as an ISO string", async () => {
+      const clientId = `oauth-client-test-${uniqueId()}`;
+      createdClientIds.push(clientId);
+      await insertTestClient({ clientId });
+
+      await mockAuthWithSession(createNationAdminSession());
+      const client = createTestClient();
+
+      const result = await client.oauthClient.update({
+        clientId,
+        name: "Renamed Client",
+      });
+
+      expect(typeof result.client.updatedAt).toBe("string");
+      expect(new Date(result.client.updatedAt!).toISOString()).toBe(
+        result.client.updatedAt,
+      );
     });
 
     it("throws for a nonexistent client", async () => {
