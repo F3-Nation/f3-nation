@@ -136,7 +136,7 @@ async function main() {
 
   console.log(`Found ${clients.length} active client(s) in oauth_clients:\n`);
 
-  const now = new Date().toISOString();
+  const now = new Date();
   const rows = clients.map((client) => {
     let redirectUris: string[];
     try {
