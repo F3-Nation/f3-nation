@@ -1,5 +1,4 @@
-// An allowlist, not `!== "prod"`: an unset or unknown channel must fail closed.
-const DEV_MODE_CHANNELS = new Set(["local", "ci", "branch", "dev", "staging"]);
+import { isDevModeChannel } from "@acme/shared/common/dev-mode";
 
 /**
  * Whether the dev-mode credentials provider, which signs anyone in as a nation
@@ -13,5 +12,5 @@ const DEV_MODE_CHANNELS = new Set(["local", "ci", "branch", "dev", "staging"]);
 export function isDevModeSignInAllowed(
   channel: string | undefined = process.env.F3_CHANNEL,
 ): boolean {
-  return channel !== undefined && DEV_MODE_CHANNELS.has(channel);
+  return isDevModeChannel(channel);
 }
