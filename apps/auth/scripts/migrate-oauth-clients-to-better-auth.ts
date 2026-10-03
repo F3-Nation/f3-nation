@@ -77,38 +77,15 @@ async function main() {
   }
 
   const { config } = await import("dotenv");
-  // The repo has two documented local setups (docs/LOCAL_DEV_DOCKER.md's
-  // `pnpm local:setup` writes apps/auth/.env directly; docs/LOCAL_DEV_SETUP.md's
-  // `pnpm env:generate` writes a root .env and symlinks it in as
-  // apps/auth/.env.local) -- try both rather than assuming one.
-  //
   // Resolved relative to this script's own location, not the current
   // working directory: the documented invocation is `pnpm -C apps/auth
   // migrate-oauth-clients-to-better-auth`, but if someone runs it from the
-  // repo root instead, a CWD-relative lookup would find the root `.env`
-  // that `pnpm env:generate` writes there -- which holds staging
-  // credentials -- and mislabel it "local".
-  const { existsSync } = await import("fs");
+  // repo root instead, a CWD-relative lookup would miss apps/auth/.env.
   const authDir = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "..",
   );
-  const hasDotEnv = existsSync(path.join(authDir, ".env"));
-  const hasDotEnvLocal = existsSync(path.join(authDir, ".env.local"));
-  if (targetEnv === "local" && hasDotEnv && hasDotEnvLocal) {
-    console.log(
-      "Both .env and .env.local are present — using .env (the " +
-        "`pnpm local:setup` Docker layout). To use the `pnpm env:generate` " +
-        "GCP-connected layout instead, temporarily move .env aside.",
-    );
-  }
-  const usingEnvLocal = targetEnv === "local" && !hasDotEnv && hasDotEnvLocal;
-  const envName =
-    targetEnv === "local"
-      ? hasDotEnv
-        ? ".env"
-        : ".env.local"
-      : `.env.${targetEnv}`;
+  const envName = targetEnv === "local" ? ".env" : `.env.${targetEnv}`;
   const envPath = path.join(authDir, envName);
   // override: true so --env's file always wins over whatever DATABASE_* the
   // calling shell already has set (e.g. a leftover prod export) — without
@@ -119,22 +96,14 @@ async function main() {
     console.error(
       `Could not load ${envName}: ${result.error.message}` +
         (targetEnv === "local"
-          ? "\nRun 'pnpm local:setup' (writes apps/auth/.env) or 'pnpm env:generate' (symlinks apps/auth/.env.local) first."
+          ? "\nRun 'pnpm local:setup' (writes apps/auth/.env) first."
           : ""),
     );
     process.exit(1);
   }
 
   const databaseHost = process.env.DATABASE_HOST;
-  // `pnpm env:generate`'s layout never sets DATABASE_PORT and connects
-  // through the Cloud SQL Auth Proxy on 5433 (docs/LOCAL_DEV_SETUP.md); the
-  // Docker layout embeds its port in DATABASE_HOST itself (e.g.
-  // "localhost:5433"), which postgres-js parses ahead of the `port` option,
-  // so 5432 stays a safe default there.
-  const databasePort = parseInt(
-    process.env.DATABASE_PORT ?? (usingEnvLocal ? "5433" : "5432"),
-    10,
-  );
+  const databasePort = parseInt(process.env.DATABASE_PORT ?? "5432", 10);
   const databaseUser = process.env.DATABASE_USER;
   const databasePassword = process.env.DATABASE_PASSWORD;
   const databaseName = process.env.DATABASE_NAME;
@@ -146,17 +115,9 @@ async function main() {
     process.exit(1);
   }
 
-  // .env.local (the `pnpm env:generate` layout) points at the shared staging
-  // database via the Cloud SQL Auth Proxy, so confirm writes like --env
-  // staging. Dry runs skip the prompt.
-  if (
-    confirmed &&
-    (targetEnv === "prod" || targetEnv === "staging" || usingEnvLocal)
-  ) {
+  if (confirmed && (targetEnv === "prod" || targetEnv === "staging")) {
     console.log(
-      `\n⚠️  WARNING: You are about to write to ${
-        usingEnvLocal ? "the shared STAGING" : targetEnv.toUpperCase()
-      } data.\n`,
+      `\n⚠️  WARNING: You are about to write to ${targetEnv.toUpperCase()} data.\n`,
     );
     const answer = await ask("Are you sure you want to continue? (y/N): ");
     if (answer.toLowerCase() !== "y") process.exit(0);
@@ -174,13 +135,8 @@ async function main() {
   });
   const db = drizzle(sql);
 
-  // Label unconditionally (dry run or not) -- .env.local's connection is the
-  // real, shared staging database, not an isolated local one, and the dry-run
-  // preview below is exactly where an operator would otherwise mistake one
-  // for the other.
-  const connectionLabel = usingEnvLocal ? "the shared STAGING" : targetEnv;
   console.log(
-    `\nConnected to ${connectionLabel} database at ${databaseHost}/${databaseName}.\n`,
+    `\nConnected to ${targetEnv} database at ${databaseHost}/${databaseName}.\n`,
   );
 
   const clients = await db
