@@ -38,6 +38,4 @@ jobs:
       prod_environment: admin-production
       staging_url: https://staging.admin.f3nation.com
       prod_url: https://admin.f3nation.com
-      # Bound instances x per-instance db pool below the pooler's client
-      # ceiling — sizing rationale in docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
       flags: "--max-instances=25"
