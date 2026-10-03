@@ -483,10 +483,6 @@ lsof -ti:5433
 
 # Kill it:
 lsof -ti:5433 | xargs kill
-
-# Or, if Cloud SQL Auth Proxy is running as a service, stop it:
-launchctl unload ~/Library/LaunchAgents/com.google.cloud-sql-proxy.plist   # macOS
-systemctl --user stop cloud-sql-proxy                                        # Linux
 ```
 
 The same pattern works for ports 8080 and 9023.
