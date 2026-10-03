@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## [2.8.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.7.0...slackbot@2.8.0) (2026-10-03)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+* **slackbot:** remove _expanded view dependencies ([#1069](https://github.com/F3-Nation/f3-nation/issues/1069)) ([56ccb26](https://github.com/F3-Nation/f3-nation/commit/56ccb260485ef4bddbef208682e8c9f3e863aab3))
+
+
+### Bug Fixes
+
+* **slackbot:** fixing Kotter Report's remove-after default behavior ([#1116](https://github.com/F3-Nation/f3-nation/issues/1116)) ([d908f18](https://github.com/F3-Nation/f3-nation/commit/d908f18f50e0fe8675b18c2d40d09d3064f21219))
+
 ## [2.7.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.6.0...slackbot@2.7.0) (2026-09-27)
 
 
