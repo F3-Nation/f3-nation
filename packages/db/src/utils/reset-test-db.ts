@@ -47,7 +47,6 @@ export const resetTestDb = async (params?: {
   db?: AppDb;
   shouldReset?: boolean;
   shouldSeed?: boolean;
-  seedType?: "test" | "project";
 }) => {
   if (shouldSkipReset()) {
     return;
@@ -81,12 +80,6 @@ export const resetTestDb = async (params?: {
 
   if (shouldSeed) {
     console.log("Seeding database...");
-    if (params?.seedType === "test") {
-      await testSeed(params?.db ?? getDb());
-    } else {
-      // Import and run project seed
-      const { seed } = await import("../seed");
-      await seed();
-    }
+    await testSeed(params?.db ?? getDb());
   }
 };
