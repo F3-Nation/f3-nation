@@ -485,6 +485,19 @@ lsof -ti:5433
 lsof -ti:5433 | xargs kill
 ```
 
+If the port is taken again right after you kill the process, you probably have the legacy Cloud SQL Auth Proxy installed as an auto-restarting service (from the removed `db:proxy:install`). Disable and remove it rather than killing it:
+
+```bash
+# macOS:
+launchctl bootout "gui/$(id -u)/com.f3nation.cloud-sql-proxy" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.f3nation.cloud-sql-proxy.plist"
+
+# Linux / WSL:
+systemctl --user disable --now cloud-sql-proxy 2>/dev/null || true
+rm -f "$HOME/.config/systemd/user/cloud-sql-proxy.service"
+systemctl --user daemon-reload
+```
+
 The same pattern works for ports 8080 and 9023.
 
 ### WSL - Ports in use or 'could not translate host name

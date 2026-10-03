@@ -106,8 +106,15 @@ async function main() {
     config({ path: `.env.${targetEnv}` });
   }
 
-  const databaseHost = process.env.DATABASE_HOST;
-  const databasePort = parseInt(process.env.DATABASE_PORT ?? "5432", 10);
+  // DATABASE_HOST may carry an inline port (e.g. localhost:5433); an explicit
+  // DATABASE_PORT wins.
+  const [databaseHost, inlinePort] = (process.env.DATABASE_HOST ?? "").split(
+    ":",
+  );
+  const databasePort = parseInt(
+    process.env.DATABASE_PORT ?? inlinePort ?? "5432",
+    10,
+  );
   const databaseUser = process.env.DATABASE_USER;
   const databasePassword = process.env.DATABASE_PASSWORD;
   const databaseName = process.env.DATABASE_NAME;

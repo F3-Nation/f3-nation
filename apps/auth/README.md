@@ -155,16 +155,16 @@ AUTH_JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEv...base64...\n-----END P
 
 The corresponding public key is served automatically at `/.well-known/jwks.json` (derived from the private key at runtime). API consumers (`packages/api`) fetch this JWKS endpoint to verify access token signatures without sharing the private key.
 
-#### `NEXT_PUBLIC_AUTH_URL` in the Root `.env`
+#### `NEXT_PUBLIC_AUTH_URL` for the API
 
-`packages/api` (via `packages/env`) reads `NEXT_PUBLIC_AUTH_URL` from the root `.env` to discover the auth server's JWKS public key and verify JWT access tokens. The JWKS URL is derived automatically: `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`. This is the same variable that `apps/auth` uses for its own base URL -- no extra env var needed.
+`packages/api` (via `packages/env`) reads `NEXT_PUBLIC_AUTH_URL` from `apps/api/.env` locally (copied from `apps/api/.env.example`, which sets `http://localhost:3004`) and from the Cloud Run service env in deployed environments to discover the auth server's JWKS public key and verify JWT access tokens. The JWKS URL is derived automatically: `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`. This is the same variable that `apps/auth` uses for its own base URL -- no extra env var needed.
 
 ```
-# Root .env
+# apps/api/.env
 NEXT_PUBLIC_AUTH_URL=https://auth.f3nation.com
 ```
 
-- If `NEXT_PUBLIC_AUTH_URL` is **not set** in the root `.env`, the API ignores JWT auth entirely -- existing auth flows (NextAuth cookies, API keys) continue to work unchanged.
+- If `NEXT_PUBLIC_AUTH_URL` is **not set** for the API, the API ignores JWT auth entirely -- existing auth flows (NextAuth cookies, API keys) continue to work unchanged.
 - If `NEXT_PUBLIC_AUTH_URL` **is set**, the API fetches `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`, accepts `Authorization: Bearer <jwt>` tokens, and validates the issuer matches.
 
 ---
