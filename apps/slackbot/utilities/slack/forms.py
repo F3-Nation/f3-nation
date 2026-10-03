@@ -854,8 +854,8 @@ KOTTER_REPORT_CONFIG_FORM = orm.BlockView(
             action=actions.KOTTER_REPORT_REMOVE_WEEKS,
             optional=True,
             element=orm.NumberInputElement(is_decimal_allowed=False, min_value=0),
-            hint="The number of weeks after the no-post threshold before removing a user. "
-            "Disabled/unbounded unless set beyond the no-post threshold.",
+            hint="Weeks since last post before removing a user. Leave blank for two weeks beyond the no-post "
+            "threshold (four weeks total by default); enter 0 for no cutoff. A set cutoff must exceed the threshold.",
         ),
         orm.InputBlock(
             label="Home AO capture weeks",

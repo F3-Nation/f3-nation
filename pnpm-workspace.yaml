@@ -12,7 +12,6 @@ catalog:
   "@commitlint/config-conventional": ^21.2.3
   "@commitlint/cz-commitlint": ^21.2.3
   "@commitlint/types": ^21.2.3
-  "@faker-js/faker": ^10.6.0
   "@google-cloud/storage": ^8.2.0
   "@hono/node-server": ^2.1.1
   "@hookform/resolvers": ^5.9.1

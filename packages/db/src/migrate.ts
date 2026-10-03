@@ -5,7 +5,6 @@ import { env } from "@acme/env";
 import { sql } from ".";
 import { db } from "./client";
 import { alembicVersionValue, reset } from "./reset";
-import { seed } from "./seed";
 import {
   createDatabaseIfNotExists,
   migrationsDatabaseName,
@@ -47,11 +46,6 @@ const migrate = async () => {
     await db.execute(sql`
       INSERT INTO alembic_version (version_num) VALUES (${alembicVersionValue});
     `);
-  }
-
-  if (process.argv.includes("--seed")) {
-    console.log("Seeding database");
-    await seed();
   }
 };
 
