@@ -48,8 +48,36 @@ jobs:
       # into the CLIENT bundle, where skipValidation's CI/SKIP_ENV_VALIDATION
       # escape hatches are both absent, it throws in the browser on import.
       posthog_session_recording: ${{ vars.POSTHOG_SESSION_RECORDING || 'false' }}
-      # Bound instances x per-instance db pool below the pooler's client
-      # ceiling — sizing rationale in docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
-      flags: "--max-instances=25"
+      flags: "--max-instances=15"
     secrets:
       posthog_key: ${{ secrets.POSTHOG_KEY }}
+
+  # Staging allows the dev-mode sign-in (a nation-admin login); Production must
+  # never have it. The image is promoted unchanged from Staging, so assert it
+  # against the live Production service after every deploy, including one that
+  # fails after the new revision started serving.
+  verify-prod-no-dev-mode:
+    needs: deploy
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Assert Production does not register the dev-mode sign-in
+        run: |
+          providers=$(curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 \
+            https://map.f3nation.com/api/auth/providers)
+          # Validate the response first: jq -e on non-JSON would otherwise read
+          # as "no dev-mode" and pass.
+          if ! jq -e 'type == "object" and has("email")' <<<"$providers" >/dev/null; then
+            echo "::error::Unexpected /api/auth/providers response: ${providers}"
+            exit 1
+          fi
+          if jq -e 'has("dev-mode")' <<<"$providers" >/dev/null; then
+            # The cause is usually the service env, not the revision, so a
+            # rollback may not help. Report the channel the service is running.
+            channel=$(curl --silent --max-time 30 https://map.f3nation.com/api/runtime-config \
+              | jq -r '.channel // "unreadable"' 2>/dev/null || echo unreadable)
+            echo "::error::Production map registers the dev-mode sign-in provider (runtime F3_CHANNEL: ${channel}). Fix F3_CHANNEL on the Production service; if it is already prod, roll back the revision."
+            exit 1
+          fi
+          echo "Production providers: $(jq -c 'keys' <<<"$providers")"
