@@ -1,4 +1,4 @@
-import type Supercluster from "supercluster";
+import type { Options } from "supercluster";
 import { useCallback, useMemo } from "react";
 import { useMap } from "@vis.gl/react-google-maps";
 import { CLOSE_ZOOM } from "@acme/shared/app/constants";
@@ -8,6 +8,7 @@ import type {
   MarkerProperties,
   MarkersProps,
 } from "./types";
+import { getClusterFeatureKey } from "~/utils/get-cluster-feature-key";
 import { getGeojson } from "~/utils/get-geojson";
 import { getMapPosForLeaves } from "~/utils/get-map-pos-for-leaves";
 import { useSupercluster } from "~/utils/hooks/use-supercluster";
@@ -16,10 +17,7 @@ import { useFilteredMapResults } from "../map/filtered-map-results-provider";
 import { FeatureMarker } from "../map/group-marker";
 import { FeaturesClusterMarker } from "./features-cluster-marker";
 
-const superclusterOptions: Supercluster.Options<
-  MarkerProperties,
-  F3ClusterProperties
-> = {
+const superclusterOptions: Options<MarkerProperties, F3ClusterProperties> = {
   extent: 256, // smaller means more in a cluster
   radius: 64, // Adjust this. smaller means more smaller clusters
   maxZoom: 12,
@@ -80,14 +78,15 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
         const [lng, lat] = feature.geometry.coordinates;
         if (typeof lng !== "number" || typeof lat !== "number") return null;
         const featureId = feature.id?.toString();
-        if (!featureId) return null;
+        const key = getClusterFeatureKey(feature);
+        if (!featureId || !key) return null;
 
         const clusterProperties = feature.properties as F3ClusterProperties;
         const isCluster: boolean = clusterProperties.cluster;
 
         return isCluster ? (
           <FeaturesClusterMarker
-            key={featureId}
+            key={key}
             clusterId={clusterProperties.cluster_id}
             position={{ lat, lng }}
             size={clusterProperties.point_count}
@@ -96,7 +95,7 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
           />
         ) : (
           <FeatureMarker
-            key={featureId}
+            key={key}
             featureId={featureId}
             position={{ lat, lng }}
             isClose={isClose}

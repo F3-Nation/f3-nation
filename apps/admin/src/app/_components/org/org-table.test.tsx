@@ -1,11 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-import {
-  createTable,
-  flexRender,
-  getCoreRowModel,
-} from "@tanstack/react-table";
+import { flexRender, useTable } from "@tanstack/react-table";
 import type {
   ColumnDef,
   OnChangeFn,
@@ -19,6 +15,8 @@ import {
 } from "@acme/shared/app/org-hierarchy";
 import { OrgTable } from "./org-table";
 import type * as MDTableModule from "@acme/ui/md-table";
+import type { MdTableFeatures } from "@acme/ui/table-features";
+import { mdTableFeatures } from "@acme/ui/table-features";
 
 const mocks = vi.hoisted(
   (): {
@@ -35,21 +33,40 @@ const mocks = vi.hoisted(
 );
 vi.mock("~/orpc/react", () => ({
   orpc: { org: { all: { queryOptions: (options: unknown) => options } } },
-  useQuery: ({
-    input,
-    enabled,
-  }: {
-    input: Record<string, unknown>;
-    enabled?: boolean;
-  }) => {
-    if (enabled === false) return {};
-    mocks.inputs.push(input);
-    const orgTypes = (input.orgTypes ?? []) as string[];
+  useQuery: (
+    options:
+      | { input: Record<string, unknown>; enabled?: boolean }
+      | {
+          queryKey: [readonly string[], { key: [string, string[]?] }];
+          enabled?: boolean;
+        },
+  ) => {
+    // org-table.tsx's own direct paginated table query, unchanged.
+    if ("input" in options) {
+      const { input, enabled } = options;
+      if (enabled === false) return {};
+      mocks.inputs.push(input);
+      const orgTypes = (input.orgTypes ?? []) as string[];
+      return {
+        data: {
+          orgs: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
+          total: 100,
+        },
+      };
+    }
+
+    // useFetchAllPages-shaped calls -- use-org-filters.ts's hierarchy query
+    // and RegionFilter's region list -- identified by the absence of
+    // `input`. Returns the flattened array useFetchAllPages produces,
+    // not the {orgs, total} page shape the input-based branch returns.
+    const { queryKey, enabled } = options;
+    if (enabled === false) return { data: undefined };
+    const key = queryKey[1].key;
+    const orgTypes =
+      key[0] === "org.all.everyRegion" ? ["region"] : (key[1] ?? []);
+    mocks.inputs.push({ orgTypes });
     return {
-      data: {
-        orgs: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
-        total: 100,
-      },
+      data: mocks.orgs.filter((org) => orgTypes.includes(org.orgType)),
     };
   },
 }));
@@ -392,15 +409,18 @@ it("keeps the Area row action bound to its row after ancestor sorting", async ()
 });
 
 function capturedTable(data: Org[]) {
-  return createTable({
-    data,
-    columns: mocks.props.columns as ColumnDef<Org>[],
-    getCoreRowModel: getCoreRowModel(),
-    state: { sorting: (mocks.props.sorting as SortingState | undefined) ?? [] },
-    onSortingChange: mocks.props.setSorting as OnChangeFn<SortingState>,
-    onStateChange: vi.fn(),
-    renderFallbackValue: null,
-  });
+  return renderHook(() =>
+    useTable({
+      features: mdTableFeatures,
+      data,
+      columns: mocks.props.columns as ColumnDef<MdTableFeatures, Org>[],
+      state: {
+        sorting: (mocks.props.sorting as SortingState | undefined) ?? [],
+      },
+      onSortingChange: mocks.props.setSorting as OnChangeFn<SortingState>,
+      renderFallbackValue: null,
+    }),
+  ).result.current;
 }
 
 it.each(["sectorName", "territoryName"])(

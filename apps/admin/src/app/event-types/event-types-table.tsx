@@ -6,6 +6,7 @@ import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import type { SortingSchema } from "@acme/validators";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Button } from "@acme/ui/button";
 import {
   DropdownMenu,
@@ -16,9 +17,11 @@ import {
 import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
+import { client } from "~/orpc/client";
 import type { RouterOutputs } from "~/orpc/types";
 import { orpc, useQuery } from "~/orpc/react";
 import { useDebounce } from "~/utils/hooks/use-debounce";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
 import { ResetFilter } from "../_components/reset-filter";
@@ -40,13 +43,23 @@ export const EventTypesTable = () => {
   });
 
   // Get user's accessible orgs (all orgs if nation admin, otherwise assigned orgs)
-  const { data: accessibleOrgs } = useQuery(orpc.org.accessible.queryOptions());
+  const { data: accessibleOrgs } = useFetchAllPages({
+    path: ["org", "accessible"],
+    queryKey: ["org.accessible.eventTypesTable"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.accessible({
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
 
   // Use selectedOrgs if manually selected, otherwise use user's accessible orgIds
   const orgIdsToUse =
     selectedOrgs.length > 0
       ? selectedOrgs.map((org) => org.id)
-      : (accessibleOrgs?.orgs.map((org) => org.id) ?? []);
+      : (accessibleOrgs?.map((org) => org.id) ?? []);
 
   const { data: eventTypes } = useQuery({
     ...orpc.eventType.all.queryOptions({
@@ -153,6 +166,7 @@ export const EventTypesTable = () => {
 };
 
 const columns: TableOptions<
+  MdTableFeatures,
   RouterOutputs["eventType"]["all"]["eventTypes"][number]
 >["columns"] = [
   {

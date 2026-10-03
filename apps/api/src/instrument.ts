@@ -1,4 +1,4 @@
-// Preloaded via `tsx --import ./src/instrument.ts` in the dev:hono/start:hono
+// Preloaded via `tsx --import ./src/instrument.ts` in the dev/start
 // scripts (apps/api/package.json), not just imported first in server.ts.
 // Native ESM resolves and links the whole module graph before any module body
 // evaluates, so by the time server.ts's own `import "~/instrument"` runs,
@@ -9,9 +9,8 @@
 // as a fallback that registers the error reporter if the process is ever
 // started without the --import flag.
 //
-// This is the Hono server's entrypoint into the same OTel pipeline that
-// Next's instrumentation.ts registers for the API app — see
-// @acme/observability. Context redaction now lives in that package's logger
+// This is the server's entrypoint into the OTel pipeline — see
+// @acme/observability. Context redaction lives in that package's logger
 // bridge, so it applies to every app rather than only this file.
 import {
   registerLoggerErrorReporter,
@@ -19,6 +18,7 @@ import {
 } from "@acme/observability";
 
 import { env } from "~/env";
+import { logWarn } from "~/lib/logging";
 
 if (env.NODE_ENV === "production") {
   registerObservability({
@@ -27,4 +27,9 @@ if (env.NODE_ENV === "production") {
     posthog: { apiKey: env.NEXT_PUBLIC_POSTHOG_KEY },
   });
   registerLoggerErrorReporter();
+  if (!env.NEXT_PUBLIC_POSTHOG_KEY) {
+    logWarn("api.observability.posthog_disabled", {
+      channel: env.NEXT_PUBLIC_CHANNEL,
+    });
+  }
 }
