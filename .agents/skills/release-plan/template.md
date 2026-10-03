@@ -58,7 +58,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Stop if:** the tree isn't clean, or a different file prints.
 - [ ] **Confirm the migration target** from the repository root: `pnpm -F db with-env node -e 'const u=new URL(process.env.DATABASE_URL);console.log(u.host+u.pathname)'` prints the host and database name, never the password. Owner: Release lead
   - **Expected:** it ends in `/{{DATABASE_NAME: f3_staging or f3_prod}}`.
-  - **Stop if:** it names any other database. Fix `packages/env/.env` before going on.
+  - **Stop if:** it names any other database. Fix `packages/db/.env` before going on.
 - [ ] **Run the migration** from the repository root, pointed at the {{ENVIRONMENT}} database: `env -u CI pnpm db:migrate`. Owner: Release lead
 - [ ] **Run [the check query](#check-query-after-the-migration).** Every result must match. Owner: Monitor
   - **Expected:** {{WHAT_ERRORS_APPEAR_BETWEEN_DEPLOY_AND_MIGRATION_OR_"none"}}
