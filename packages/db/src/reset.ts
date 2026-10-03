@@ -74,6 +74,12 @@ export const reset = async (db?: AppDb) => {
     WHERE rolname NOT IN ('postgres', 'azure_pg_admin', 'azure_superuser', 'cloudsqlsuperuser')
   `);
 
+  // codex is bootstrapped by migration 0027; drop it too so local/test resets
+  // start clean and 0027 recreates it instead of skipping surviving tables.
+  // It goes FIRST: in an environment where codex is externally owned (prod
+  // layout) this is the drop most likely to be denied, and failing here
+  // leaves public/drizzle/auth untouched instead of half-reset.
+  await dbToUse.execute(sql`DROP SCHEMA IF EXISTS codex CASCADE`);
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS public CASCADE`);
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS drizzle CASCADE`);
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS auth CASCADE`);

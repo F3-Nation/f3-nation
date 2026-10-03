@@ -1619,3 +1619,118 @@ export const betterAuthOauthClientAssertion = authProviderSchema.table(
     expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
   },
 );
+
+// ─── codex schema ────────────────────────────────────────────────────────────
+// Mirrors the standalone Codex database's `codex` schema as captured by
+// pg_dump, plus a primary key on every table (required by audit history's
+// `audit.enable_tracking`, which derives row_id from pg_constraint). The PKs
+// were applied to prod as `app_codex` on 2026-09-22 — the migration's
+// CREATE TABLE IF NOT EXISTS is a no-op there and only bootstraps fresh
+// dev/CI/test databases. Remaining rough edges (camelCase columns on `tags`,
+// the `timestamp`/`references` reserved-word names) are reproduced faithfully.
+// Note: `serial` names the references sequence `references_id_seq` rather
+// than the dump's `codex_references_id_seq` — a cosmetic difference.
+
+export const codexSchema = pgSchema("codex");
+
+export const codexAdmins = codexSchema.table("admins", {
+  id: serial("id").primaryKey().notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow().notNull(),
+});
+
+// `references` is a reserved word; kept as the literal table name from the dump.
+// Legacy table (empty in prod): its integer from/to ids predate `entries`
+// moving to text ids and are NOT joinable to `codexEntries.id` — the live
+// relationship table is `codexEntryReferences` below.
+export const codexReferences = codexSchema.table("references", {
+  id: serial("id").primaryKey().notNull(),
+  fromEntryId: integer("from_entry_id").notNull(),
+  toEntryId: integer("to_entry_id").notNull(),
+  context: varchar("context"),
+  created: timestamp("created", { mode: "string" }).notNull(),
+  updated: timestamp("updated", { mode: "string" }).notNull(),
+});
+
+export const codexEntries = codexSchema.table("entries", {
+  id: text("id").primaryKey().notNull(),
+  title: text("title").notNull(),
+  definition: text("definition").notNull(),
+  type: text("type").notNull(),
+  aliases: jsonb("aliases"),
+  videoLink: text("video_link"),
+  createdAt: timestamp("created_at", { mode: "string" }).notNull(),
+  updatedAt: timestamp("updated_at", { mode: "string" }).notNull(),
+  mentionedEntries: jsonb("mentioned_entries"),
+});
+
+export const codexEntryReferences = codexSchema.table(
+  "entry_references",
+  {
+    id: integer("id").primaryKey().notNull(),
+    sourceEntryId: text("source_entry_id").notNull(),
+    targetEntryId: text("target_entry_id").notNull(),
+    context: text("context"),
+    createdAt: timestamp("created_at", { mode: "string" }),
+    updatedAt: timestamp("updated_at", { mode: "string" }),
+  },
+  (t) => [
+    unique("unique_source_target").on(t.sourceEntryId, t.targetEntryId),
+    index("idx_entry_references_target_entry_id").on(t.targetEntryId),
+  ],
+);
+
+export const codexEntryTags = codexSchema.table(
+  "entry_tags",
+  {
+    entryId: text("entry_id").notNull(),
+    tagId: text("tag_id").notNull(),
+  },
+  (t) => [
+    // The pre-existing UNIQUE (entry_id, tag_id) is redundant with this PK
+    // (Postgres drops such a duplicate at CREATE TABLE time); it was dropped
+    // in prod alongside the PK so both environments match.
+    primaryKey({ name: "entry_tags_pkey", columns: [t.entryId, t.tagId] }),
+    index("idx_entry_tags_tag_id").on(t.tagId),
+  ],
+);
+
+export const codexTags = codexSchema.table("tags", {
+  // The app upserts tags with ON CONFLICT (name); unique on all rows in prod.
+  name: text("name").notNull().unique("tags_name_unique"),
+  // The app keys tags by this uuid/slug string and entry_tags.tag_id points at
+  // it, so it is the PK (not `name`, which can be edited).
+  id: varchar("id").primaryKey(),
+  createdAt: timestamp("createdAt", {
+    withTimezone: true,
+    mode: "string",
+  }).defaultNow(),
+  updatedAt: timestamp("updatedAt", {
+    withTimezone: true,
+    mode: "string",
+  }).defaultNow(),
+});
+
+export const codexUserSubmissions = codexSchema.table("user_submissions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  submissionType: text("submission_type").notNull(),
+  data: jsonb("data").notNull(),
+  submitterName: text("submitter_name"),
+  submitterEmail: text("submitter_email"),
+  status: text("status").notNull(),
+  timestamp: timestamp("timestamp", {
+    withTimezone: true,
+    mode: "string",
+  }).notNull(),
+  createdAt: timestamp("created_at", {
+    withTimezone: true,
+    mode: "string",
+  }).notNull(),
+  updatedAt: timestamp("updated_at", {
+    withTimezone: true,
+    mode: "string",
+  }).notNull(),
+  rejectionReason: text("rejection_reason"),
+  adminNotes: text("admin_notes"),
+});
