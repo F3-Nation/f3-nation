@@ -1,18 +1,18 @@
 import copy
 from logging import Logger
 
-from f3_data_models.models import F3versaryAnnouncementSetting, Org_x_SlackSpace, SlackSpace
+from f3_data_models.models import Org_x_SlackSpace, SlackSpace
 from f3_data_models.utils import get_session
 from slack_sdk.web import WebClient
-from sqlalchemy import func
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import cast, func, update
+from sqlalchemy.dialects.postgresql import JSONB
 
 from utilities import constants
 from utilities.builders import update_submission_wait_view
 from utilities.constants import ALL_USERS_ARE_ADMINS
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users
-from utilities.helper_functions import get_user, safe_get
+from utilities.helper_functions import get_user, safe_get, update_local_region_records
 from utilities.slack import actions, orm
 
 DEFAULT_LEAD_DAYS = 14
@@ -52,44 +52,48 @@ def _resolve_setting_scope(session, region_record: SlackSettings) -> tuple[int, 
 
 
 def _load_f3versary_settings(region_record: SlackSettings) -> dict | None:
-    """Read the region-specific row, never the stale workspace settings cache."""
+    """Read the live workspace document after verifying the selected region link."""
     with get_session() as session:
         scope = _resolve_setting_scope(session, region_record)
         if scope is None:
             return None
-        setting = (
-            session.query(F3versaryAnnouncementSetting)
-            .filter(
-                F3versaryAnnouncementSetting.slack_space_id == scope[0],
-                F3versaryAnnouncementSetting.org_id == scope[1],
-            )
-            .one_or_none()
-        )
+
+        settings_row = session.query(SlackSpace.settings).filter(SlackSpace.id == scope[0]).one_or_none()
+        settings = settings_row[0] if settings_row and isinstance(settings_row[0], dict) else {}
+        lead_days = settings.get("f3versary_announcements_lead_days")
+        if (
+            not isinstance(lead_days, int)
+            or isinstance(lead_days, bool)
+            or not MIN_LEAD_DAYS <= lead_days <= MAX_LEAD_DAYS
+        ):
+            lead_days = DEFAULT_LEAD_DAYS
+
         return {
-            "enabled": bool(setting.enabled) if setting else False,
-            "channel": setting.channel if setting else None,
-            "lead_days": setting.lead_days if setting else DEFAULT_LEAD_DAYS,
+            "enabled": settings.get("f3versary_announcements_enabled") is True,
+            "channel": settings.get("f3versary_announcements_channel"),
+            "lead_days": lead_days,
         }
 
 
 def _save_f3versary_settings(region_record: SlackSettings, enabled: bool, channel: str | None, lead_days: int) -> bool:
-    """Upsert one region's independent row without rewriting SlackSpace.settings."""
+    """Atomically merge only this feature's keys into SlackSpace.settings."""
     with get_session() as session:
         scope = _resolve_setting_scope(session, region_record)
         if scope is None:
             return False
 
-        statement = insert(F3versaryAnnouncementSetting).values(
-            slack_space_id=scope[0], org_id=scope[1], enabled=enabled, channel=channel, lead_days=lead_days
+        patch = {
+            "f3versary_announcements_enabled": enabled,
+            "f3versary_announcements_channel": channel,
+            "f3versary_announcements_lead_days": lead_days,
+        }
+        settings = func.coalesce(SlackSpace.settings, cast({}, JSONB)).op("||")(cast(patch, JSONB))
+        result = session.execute(
+            update(SlackSpace).where(SlackSpace.id == scope[0]).values(settings=settings, updated=func.now())
         )
-        statement = statement.on_conflict_do_update(
-            index_elements=[
-                F3versaryAnnouncementSetting.slack_space_id,
-                F3versaryAnnouncementSetting.org_id,
-            ],
-            set_={"enabled": enabled, "channel": channel, "lead_days": lead_days, "updated_at": func.now()},
-        )
-        session.execute(statement)
+        if result.rowcount != 1:
+            session.rollback()
+            return False
         session.commit()
         return True
 
@@ -199,6 +203,11 @@ def handle_f3versary_announcements_edit(
             view_id=submission_view_id,
         )
         return
+
+    region_record.f3versary_announcements_enabled = enabled
+    region_record.f3versary_announcements_channel = channel
+    region_record.f3versary_announcements_lead_days = lead_days
+    update_local_region_records()
 
     update_submission_wait_view(
         client=client,

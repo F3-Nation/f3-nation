@@ -8,7 +8,7 @@ import os
 import sys
 import traceback
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import date, datetime, timedelta, timezone
 from html import escape
 from time import sleep
@@ -18,7 +18,6 @@ import pytz
 from f3_data_models.models import (
     Attendance,
     EventInstance,
-    F3versaryAnnouncementSetting,
     F3versaryDeliveryPage,
     F3versaryDeliveryRun,
     Org,
@@ -33,6 +32,8 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy import and_, func
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+from utilities.database.orm import SlackSettings
 
 logger = logging.getLogger(__name__)
 
@@ -122,20 +123,27 @@ def _effective_start_date(first_attendance_date: date | None, user_meta: object)
 def _load_settings(
     org: Org,
     slack_space: SlackSpace,
-    regional_setting: F3versaryAnnouncementSetting | None,
 ) -> F3versaryConfig:
-    """Use the region row for opt-in; workspace JSONB is read only for legacy cutover."""
-    lead_days = _bounded_lead_days(regional_setting.lead_days if regional_setting else None)
-    if regional_setting is not None and lead_days != regional_setting.lead_days:
-        logger.warning("Invalid stored F3versary lead time for org_id=%s; using default", org.id)
+    """Load F3versary configuration from the workspace settings JSON."""
+    values = dict(slack_space.settings or {})
+    values["team_id"] = slack_space.team_id
+    values["db_id"] = values.get("db_id") or slack_space.id
+    values["workspace_name"] = values.get("workspace_name") or slack_space.workspace_name
+    known_field_names = {field.name for field in fields(SlackSettings)}
+    known_values = {key: value for key, value in values.items() if key in known_field_names}
+    settings = SlackSettings(**known_values)
+
+    belongs_to_org = settings.org_id == org.id
+    raw_lead_days = settings.f3versary_announcements_lead_days
+    lead_days = _bounded_lead_days(raw_lead_days)
     return F3versaryConfig(
-        enabled=bool(regional_setting.enabled) if regional_setting else False,
+        enabled=belongs_to_org and bool(settings.f3versary_announcements_enabled),
         org_id=org.id,
         team_id=slack_space.team_id,
         bot_token=slack_space.bot_token,
-        channel=regional_setting.channel if regional_setting else None,
+        channel=settings.f3versary_announcements_channel if belongs_to_org else None,
         lead_days=lead_days,
-        last_processed_date=_parse_date((slack_space.settings or {}).get(LAST_PROCESSED_SETTING)),
+        last_processed_date=_parse_date(settings.f3versary_announcements_last_processed_date),
     )
 
 
@@ -326,18 +334,6 @@ def _read_slack_space(slack_space_id: int) -> SlackSpace:
         return session.query(SlackSpace).filter(SlackSpace.id == slack_space_id).one()
 
 
-def _read_region_setting(slack_space_id: int, org_id: int) -> F3versaryAnnouncementSetting | None:
-    with get_session() as session:
-        return (
-            session.query(F3versaryAnnouncementSetting)
-            .filter(
-                F3versaryAnnouncementSetting.slack_space_id == slack_space_id,
-                F3versaryAnnouncementSetting.org_id == org_id,
-            )
-            .first()
-        )
-
-
 def _run_for_date(slack_space_id: int, org_id: int, processing_date: date) -> F3versaryDeliveryRun | None:
     with get_session() as session:
         return (
@@ -398,19 +394,8 @@ def _create_run(
 ) -> int | None:
     """Atomically save the immutable page plan after rechecking current admin settings."""
     with get_session() as session:
-        regional_setting = (
-            session.query(F3versaryAnnouncementSetting)
-            .filter(
-                F3versaryAnnouncementSetting.slack_space_id == slack_space_id,
-                F3versaryAnnouncementSetting.org_id == org.id,
-            )
-            .with_for_update()
-            .one_or_none()
-        )
-        if regional_setting is None:
-            return None
-        slack_space = session.query(SlackSpace).filter(SlackSpace.id == slack_space_id).one()
-        current_config = _load_settings(org, slack_space, regional_setting)
+        slack_space = session.query(SlackSpace).filter(SlackSpace.id == slack_space_id).with_for_update().one()
+        current_config = _load_settings(org, slack_space)
         if not current_config.enabled or not _config_matches(config, current_config):
             return None
         if current_config.last_processed_date == processing_date:
@@ -507,17 +492,8 @@ def _claim_next_page(
         run = session.query(F3versaryDeliveryRun).filter(F3versaryDeliveryRun.id == run_id).with_for_update().one()
         if run.status != "planned" or not _run_matches_config(run, config, processing_date):
             return None
-        regional_setting = (
-            session.query(F3versaryAnnouncementSetting)
-            .filter(
-                F3versaryAnnouncementSetting.slack_space_id == run.slack_space_id,
-                F3versaryAnnouncementSetting.org_id == org.id,
-            )
-            .with_for_update()
-            .one_or_none()
-        )
-        slack_space = session.query(SlackSpace).filter(SlackSpace.id == run.slack_space_id).one()
-        current_config = _load_settings(org, slack_space, regional_setting)
+        slack_space = session.query(SlackSpace).filter(SlackSpace.id == run.slack_space_id).with_for_update().one()
+        current_config = _load_settings(org, slack_space)
         if not _config_matches(config, current_config):
             logger.warning("Pausing F3versary delivery for org_id=%s: settings changed", org.id)
             return None
@@ -626,8 +602,7 @@ def send_f3versary_announcements(
 
         try:
             current_slack_space = _read_slack_space(slack_space.id)
-            regional_setting = _read_region_setting(slack_space.id, org.id)
-            config = _load_settings(org, current_slack_space, regional_setting)
+            config = _load_settings(org, current_slack_space)
             if not dry_run:
                 _abandon_old_runs(slack_space.id, org.id, processing_date)
             if not config.enabled:

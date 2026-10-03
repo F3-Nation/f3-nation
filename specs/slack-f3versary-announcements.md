@@ -18,12 +18,13 @@ Provide each F3 region with an optional daily Slack announcement recognizing PAX
   - `apps/slackbot/utilities/slack/actions.py`
   - `apps/slackbot/utilities/slack/forms.py`
 - Start-date sources: the existing PostgreSQL user profile metadata and attendance/event-instance records.
-- Regional opt-in: a separate PostgreSQL F3versary settings table keyed by
-  Slack workspace and region, so unrelated cached Slackbot settings writes
-  cannot revert this feature's enabled flag, channel, or lead time.
-- Delivery state: dedicated PostgreSQL F3versary run and page tables. Both
-  delivery state and regional settings are created by one additive migration,
-  which must be applied before the revised Slackbot job is deployed.
+- Regional opt-in: the existing `public.slack_spaces.settings` JSON document stores
+  the enabled flag, channel, and lead time. The settings handler atomically
+  merges only those three F3versary keys so it does not overwrite unrelated
+  Slackbot settings.
+- Delivery state: dedicated `slackbot.f3versary_delivery_runs` and
+  `slackbot.f3versary_delivery_pages` PostgreSQL tables, which must be created
+  by an additive migration before the revised Slackbot job is deployed.
 
 ## 3. User stories
 
@@ -33,11 +34,11 @@ Provide each F3 region with an optional daily Slack announcement recognizing PAX
 
 ## 4. Acceptance criteria
 
-- **AC-1 — Default off:** GIVEN a region without a F3versary settings row, WHEN the hourly job runs, THEN no F3versary query or Slack post is made for that region.
+- **AC-1 — Default off:** GIVEN a workspace without enabled F3versary keys in `public.slack_spaces.settings`, WHEN the hourly job runs, THEN no F3versary query or Slack post is made for that region.
 
 - **AC-2 — Settings location:** GIVEN an authorized regional administrator, WHEN they open F3 Nation Settings, THEN “F3versary Announcements” appears as its own option under Bot Management.
 
-- **AC-3 — Configurable settings:** GIVEN an authorized regional administrator, WHEN they configure F3versary Announcements, THEN they can enable or disable the feature, select a destination channel, and enter a whole-number lead time from 0 through 30 days. These choices are saved and reopened from the settings row for the region bound to their current Slackbot settings context, not the cached shared `SlackSpace.settings` document. Storage keys include both region and workspace, so separate rows cannot overwrite one another.
+- **AC-3 — Configurable settings:** GIVEN an authorized regional administrator, WHEN they configure F3versary Announcements, THEN they can enable or disable the feature, select a destination channel, and enter a whole-number lead time from 0 through 30 days. These choices are saved in and reopened from the live `public.slack_spaces.settings` JSON document for the workspace bound to their server-selected region context. Saving atomically merges only `f3versary_announcements_enabled`, `f3versary_announcements_channel`, and `f3versary_announcements_lead_days`, preserving every unrelated settings key.
 
 - **AC-4 — Defaults and validation:** GIVEN a region that has not selected a lead time, WHEN its settings are displayed or processed, THEN the lead time defaults to 14 days. The settings form rejects values below 0, above 30, or containing something other than a whole number. If a stored value is corrupt despite that validation, the job logs a non-sensitive warning and uses the 14-day default rather than silently treating it as intentional.
 
@@ -76,7 +77,7 @@ Provide each F3 region with an optional daily Slack announcement recognizing PAX
 
 - **AC-15 — Failure and retry:** GIVEN a database or Slack failure, WHEN the task runs, THEN the failure is logged without sensitive information, the other hourly jobs continue, and the affected region remains eligible for a later hourly retry on the same Central calendar date. The ordered page plan and its exact text/blocks are committed before posting. Slack calls occur without a database row lock or transaction held across the network call. A same-day retry resumes at the first unrecorded page without recomputing or reordering candidates and reuses that page's deterministic Slack message ID. An expired claim may be reclaimed. If a run remains unfinished on a later Central calendar date, it is abandoned with a warning rather than sending stale pages or blocking future daily announcements; the current day's run may then proceed.
 
-- **AC-16 — Concurrent settings safety:** GIVEN an administrator saves F3versary settings while the job or an unrelated Slackbot settings screen is processing, WHEN their database writes complete, THEN the administrator’s enabled, channel, and lead-time values in the independent settings row and the separate delivery state are all preserved. A stale full-document rewrite of `SlackSpace.settings` must not revert these F3versary choices. The job rechecks current settings before saving a plan and claiming each next page, and pauses the saved run when it detects changed enablement, channel, or lead time. A settings edit that races after a page is claimed cannot recall a post already in flight; that race requires maintainer reliability review.
+- **AC-16 — Concurrent settings safety:** GIVEN an administrator saves F3versary settings while the job is processing, WHEN both database writes complete, THEN the administrator’s enabled, channel, and lead-time values in `public.slack_spaces.settings` and the run/page delivery state in the PostgreSQL `slackbot` schema are preserved. The settings handler uses an atomic JSONB merge of only the three F3versary keys; delivery writes never rewrite the shared settings document. The job rechecks current settings before saving a plan and claiming each next page, and pauses the saved run when it detects changed enablement, channel, or lead time. A settings edit that races after a page is claimed cannot recall a post already in flight; that race requires maintainer reliability review.
 
 - **AC-17 — Forced local execution:** GIVEN a local or automated test invocation with forced execution enabled, WHEN the task runs outside its normal time, THEN it bypasses only the time gate and still observes regional enablement and duplicate protection.
 
@@ -103,10 +104,19 @@ No new API endpoint or authorization tier is introduced.
 - Lead times longer than 30 days.
 - Production deployment by the contributor.
 
-The two dedicated delivery tables and the independent regional settings table
-are in scope for this PR with contributor approval. Applying the migration
-and deploying the job remain maintainer-controlled operations. Maintainers must
-apply the additive migration before deploying code that queries the new tables
+The dedicated `slackbot.f3versary_delivery_runs` and
+`slackbot.f3versary_delivery_pages` tables are in scope for this PR with
+contributor approval; F3versary configuration remains in the existing
+`public.slack_spaces.settings` document and requires no settings-table
+migration. Applying the delivery migration and deploying the job remain
+maintainer-controlled operations. Repository history does not establish the
+deployed database state. Before applying this create-only migration, maintainers
+must confirm that no earlier F3versary migration was applied. If public-schema
+F3versary tables or their delivery rows already exist, this migration does not
+move or reconcile them; a separately reviewed transition must preserve those
+rows and configuration before deployment. Maintainers must apply the additive migration
+that creates the PostgreSQL `slackbot` schema and its delivery tables before
+deploying code that queries them
 and decide how an
 existing `last_processed_date` marker is honored at cutover.
 The release must avoid overlapping old marker-based and new outbox-based
@@ -122,15 +132,15 @@ decision. Maintainers must verify the existing Bot Management authorization
 applies to the selected region/workspace association before production release.
 The current Slackbot settings context resolves one region organization per
 workspace. If a workspace is linked to multiple active regions, it needs a
-human-approved region-selection UI before administrators can configure every
-linked region from that same workspace; independent storage alone does not
-make the second region selectable in Bot Management.
+human-approved region-selection UI and storage semantics before administrators
+can configure every linked region from that same workspace; the current shared
+settings document represents one workspace-level F3versary configuration.
 
 ## 7. Critical-path test cases
 
 - An opted-out region is skipped.
-- Two region/workspace settings rows are independent in storage; stale cached
-  writes from unrelated settings screens cannot undo either row.
+- A settings save atomically updates only the three F3versary JSON keys and
+  preserves unrelated keys in `public.slack_spaces.settings`.
 - An opted-in region processes once after 5:00 PM Central.
 - Lead times of 0, 14, and 30 days identify the correct target date.
 - Invalid lead times are rejected.
@@ -149,8 +159,9 @@ make the second region selectable in Bot Management.
 - A February 29 anniversary is recognized on February 28 in a non-leap year.
 - Concurrent hourly runs create one run and claim each page at most once while
   a claim lease is valid.
-- A settings save preserves separate delivery rows; a mid-run settings change
-  does not send later pages to the old channel.
+- A settings save preserves separate delivery rows; delivery writes do not
+  overwrite the shared settings JSON, and a mid-run settings change does not
+  send later pages to the old channel.
 - Failed pages retry using their original text, blocks, and message ID; sent
   pages remain recorded and are not resent.
 - Expired claims can be reclaimed, and unfinished prior-day runs do not block

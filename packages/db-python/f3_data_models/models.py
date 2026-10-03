@@ -384,28 +384,6 @@ class SlackSpace(Base):
     updated: Mapped[dt_update]
 
 
-class F3versaryAnnouncementSetting(Base):
-    """Independent opt-in and delivery settings for one region and Slack workspace."""
-
-    __tablename__ = "f3versary_announcement_settings"
-
-    slack_space_id: Mapped[int] = mapped_column(ForeignKey("slack_spaces.id"), primary_key=True)
-    org_id: Mapped[int] = mapped_column(ForeignKey("orgs.id"), primary_key=True)
-    enabled: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
-    channel: Mapped[Optional[str]] = mapped_column(TEXT)
-    lead_days: Mapped[int] = mapped_column(Integer, server_default="14", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    __table_args__ = (
-        CheckConstraint("lead_days BETWEEN 0 AND 30", name="f3versary_announcement_settings_lead_days_check"),
-        CheckConstraint(
-            "NOT enabled OR (channel IS NOT NULL AND length(channel) > 0)",
-            name="f3versary_announcement_settings_enabled_channel_check",
-        ),
-    )
-
-
 class F3versaryDeliveryRun(Base):
     """A saved daily F3versary delivery plan for one region and Slack workspace."""
 
@@ -431,6 +409,7 @@ class F3versaryDeliveryRun(Base):
         CheckConstraint("status IN ('planned', 'complete', 'abandoned')", name="f3versary_delivery_runs_status_check"),
         CheckConstraint("lead_days BETWEEN 0 AND 30", name="f3versary_delivery_runs_lead_days_check"),
         CheckConstraint("page_count >= 0", name="f3versary_delivery_runs_page_count_check"),
+        {"schema": "slackbot"},
     )
 
 
@@ -440,7 +419,7 @@ class F3versaryDeliveryPage(Base):
     __tablename__ = "f3versary_delivery_pages"
 
     id: Mapped[intpk]
-    run_id: Mapped[int] = mapped_column(ForeignKey("f3versary_delivery_runs.id"))
+    run_id: Mapped[int] = mapped_column(ForeignKey("slackbot.f3versary_delivery_runs.id"))
     page_number: Mapped[int]
     text: Mapped[text]
     blocks: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB)
@@ -459,6 +438,7 @@ class F3versaryDeliveryPage(Base):
         Index("idx_f3versary_delivery_pages_run_status_page", "run_id", "status", "page_number"),
         CheckConstraint("page_number >= 1", name="f3versary_delivery_pages_page_number_check"),
         CheckConstraint("status IN ('pending', 'claimed', 'sent')", name="f3versary_delivery_pages_status_check"),
+        {"schema": "slackbot"},
     )
 
 

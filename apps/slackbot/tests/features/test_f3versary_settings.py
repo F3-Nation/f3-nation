@@ -45,10 +45,11 @@ def test_region_admin_check_uses_selected_server_side_region(monkeypatch):
     assert REAL_REGION_AUTH(body, MagicMock(), MagicMock(), region_record) is True
 
 
-def test_settings_upsert_targets_only_independent_region_table(monkeypatch):
+def test_settings_save_atomically_merges_only_f3versary_keys(monkeypatch):
     session = MagicMock()
     session.__enter__.return_value = session
     session.query.return_value.join.return_value.filter.return_value.one_or_none.return_value = (10,)
+    session.execute.return_value.rowcount = 1
     monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
     region_record = SlackSettings(team_id="T1", org_id=6)
 
@@ -58,15 +59,20 @@ def test_settings_upsert_targets_only_independent_region_table(monkeypatch):
     statement = session.execute.call_args.args[0]
     compiled = statement.compile(dialect=postgresql.dialect())
     sql = str(compiled).lower()
-    assert sql.startswith("insert into f3versary_announcement_settings")
-    assert "on conflict (slack_space_id, org_id) do update" in sql
-    assert "slack_spaces.settings" not in sql
-    assert compiled.params["slack_space_id"] == 10
-    assert compiled.params["org_id"] == 6
-    assert compiled.params["enabled"] is True
-    assert compiled.params["channel"] == "C1"
-    assert compiled.params["lead_days"] == 14
+    assert sql.startswith("update slack_spaces set settings=")
+    assert "coalesce(slack_spaces.settings" in sql
+    assert " || " in sql
+    assert "where slack_spaces.id =" in sql
+    json_patches = [value for value in compiled.params.values() if isinstance(value, dict) and value]
+    assert json_patches == [
+        {
+            "f3versary_announcements_enabled": True,
+            "f3versary_announcements_channel": "C1",
+            "f3versary_announcements_lead_days": 14,
+        }
+    ]
     session.commit.assert_called_once()
+    session.rollback.assert_not_called()
 
 
 def test_unlinked_region_never_reads_or_writes_settings(monkeypatch):
@@ -93,44 +99,33 @@ def test_missing_region_id_fails_closed_before_database_access(monkeypatch):
     get_session.return_value.__enter__.return_value.query.assert_not_called()
 
 
-def test_two_regions_in_one_workspace_use_distinct_setting_rows(monkeypatch):
+def test_settings_save_reports_failure_if_linked_workspace_disappears(monkeypatch):
     session = MagicMock()
     session.__enter__.return_value = session
     session.query.return_value.join.return_value.filter.return_value.one_or_none.return_value = (10,)
+    session.execute.return_value.rowcount = 0
     monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
 
-    assert f3versary_announcements._save_f3versary_settings(SlackSettings(team_id="T1", org_id=6), True, "C6", 0)
-    assert f3versary_announcements._save_f3versary_settings(SlackSettings(team_id="T1", org_id=7), False, "C7", 30)
-
-    first, second = [
-        call.args[0].compile(dialect=postgresql.dialect()).params for call in session.execute.call_args_list
-    ]
-    assert (first["slack_space_id"], first["org_id"], first["enabled"], first["channel"], first["lead_days"]) == (
-        10,
-        6,
-        True,
-        "C6",
-        0,
-    )
-    assert (second["slack_space_id"], second["org_id"], second["enabled"], second["channel"], second["lead_days"]) == (
-        10,
-        7,
-        False,
-        "C7",
-        30,
-    )
+    assert not f3versary_announcements._save_f3versary_settings(SlackSettings(team_id="T1", org_id=6), True, "C1", 14)
+    session.rollback.assert_called_once()
+    session.commit.assert_not_called()
 
 
-def test_form_read_prefers_region_row_over_stale_cached_document(monkeypatch):
+def test_form_read_uses_live_workspace_document_over_stale_cached_values(monkeypatch):
     session = MagicMock()
     session.__enter__.return_value = session
     linked_query = MagicMock()
     linked_query.join.return_value.filter.return_value.one_or_none.return_value = (10,)
-    row_query = MagicMock()
-    row_query.filter.return_value.one_or_none.return_value = SimpleNamespace(
-        enabled=True, channel="C-new", lead_days=14
+    settings_query = MagicMock()
+    settings_query.filter.return_value.one_or_none.return_value = (
+        {
+            "f3versary_announcements_enabled": True,
+            "f3versary_announcements_channel": "C-new",
+            "f3versary_announcements_lead_days": 14,
+            "unrelated_setting": "preserved",
+        },
     )
-    session.query.side_effect = [linked_query, row_query]
+    session.query.side_effect = [linked_query, settings_query]
     monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
     stale_record = SlackSettings(
         team_id="T1",
@@ -146,6 +141,24 @@ def test_form_read_prefers_region_row_over_stale_cached_document(monkeypatch):
         "lead_days": 14,
     }
     assert session.query.call_count == 2
+
+
+@pytest.mark.parametrize("stored_lead_days", [None, True, -1, 31, "14"])
+def test_form_read_defaults_corrupt_lead_days(monkeypatch, stored_lead_days):
+    session = MagicMock()
+    session.__enter__.return_value = session
+    linked_query = MagicMock()
+    linked_query.join.return_value.filter.return_value.one_or_none.return_value = (10,)
+    settings_query = MagicMock()
+    settings_query.filter.return_value.one_or_none.return_value = (
+        {"f3versary_announcements_lead_days": stored_lead_days},
+    )
+    session.query.side_effect = [linked_query, settings_query]
+    monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
+
+    settings = f3versary_announcements._load_f3versary_settings(SlackSettings(team_id="T1", org_id=6))
+
+    assert settings["lead_days"] == 14
 
 
 @pytest.mark.parametrize("lead_days", ["-1", "31", "1.5", "not-a-number", None])
@@ -226,7 +239,7 @@ def test_unlinked_region_submission_reports_failure_without_success(monkeypatch)
     assert "No settings were saved" in update_view.call_args.kwargs["text"]
 
 
-def test_valid_settings_save_without_mutating_cached_workspace_document(monkeypatch):
+def test_valid_settings_save_refreshes_cached_workspace_values_without_touching_marker(monkeypatch):
     region_record = SlackSettings(
         team_id="T1",
         org_id=6,
@@ -237,6 +250,7 @@ def test_valid_settings_save_without_mutating_cached_workspace_document(monkeypa
     )
     update_view = MagicMock()
     update_db = MagicMock(return_value=True)
+    refresh = MagicMock()
     monkeypatch.setattr(
         f3versary_announcements.F3VERSARY_ANNOUNCEMENTS_FORM,
         "get_selected_values",
@@ -244,6 +258,7 @@ def test_valid_settings_save_without_mutating_cached_workspace_document(monkeypa
     )
     monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", update_view)
     monkeypatch.setattr(f3versary_announcements, "_save_f3versary_settings", update_db)
+    monkeypatch.setattr(f3versary_announcements, "update_local_region_records", refresh)
 
     f3versary_announcements.handle_f3versary_announcements_edit(
         {"submission_view_id": "V2"}, MagicMock(), MagicMock(), {}, region_record
@@ -251,9 +266,10 @@ def test_valid_settings_save_without_mutating_cached_workspace_document(monkeypa
 
     update_db.assert_called_once()
     assert update_db.call_args.args == (region_record, True, "C1", 30)
-    assert region_record.f3versary_announcements_enabled is False
-    assert region_record.f3versary_announcements_channel == "C-stale"
-    assert region_record.f3versary_announcements_lead_days == 0
+    refresh.assert_called_once()
+    assert region_record.f3versary_announcements_enabled is True
+    assert region_record.f3versary_announcements_channel == "C1"
+    assert region_record.f3versary_announcements_lead_days == 30
     assert region_record.f3versary_announcements_last_processed_date == "2026-09-01"
     assert update_view.call_args.kwargs["level"] == constants.AlertLevel.SUCCESS
 
@@ -274,6 +290,7 @@ def test_disabled_settings_can_save_without_a_channel(monkeypatch):
     )
     monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", MagicMock())
     monkeypatch.setattr(f3versary_announcements, "_save_f3versary_settings", update_db)
+    monkeypatch.setattr(f3versary_announcements, "update_local_region_records", MagicMock())
 
     f3versary_announcements.handle_f3versary_announcements_edit(
         {"view": {"id": "V3"}}, MagicMock(), MagicMock(), {}, region_record
@@ -337,6 +354,7 @@ def test_enabled_submission_reads_actual_checkbox_payload(monkeypatch):
     update_db = MagicMock(return_value=True)
     monkeypatch.setattr(f3versary_announcements, "_save_f3versary_settings", update_db)
     monkeypatch.setattr(f3versary_announcements, "update_submission_wait_view", MagicMock())
+    monkeypatch.setattr(f3versary_announcements, "update_local_region_records", MagicMock())
     enabled_action = actions.F3VERSARY_ANNOUNCEMENTS_ENABLED
     channel_action = actions.F3VERSARY_ANNOUNCEMENTS_CHANNEL
     lead_days_action = actions.F3VERSARY_ANNOUNCEMENTS_LEAD_DAYS

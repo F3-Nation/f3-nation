@@ -183,48 +183,9 @@ export const slackSpaces = pgTable(
   (table) => [unique("slack_spaces_team_id_key").on(table.teamId)],
 );
 
-export const f3versaryAnnouncementSettings = pgTable(
-  "f3versary_announcement_settings",
-  {
-    slackSpaceId: integer("slack_space_id").notNull(),
-    orgId: integer("org_id").notNull(),
-    enabled: boolean().default(false).notNull(),
-    channel: text(),
-    leadDays: integer("lead_days").default(14).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    primaryKey({
-      columns: [table.slackSpaceId, table.orgId],
-      name: "f3versary_announcement_settings_pkey",
-    }),
-    foreignKey({
-      columns: [table.slackSpaceId],
-      foreignColumns: [slackSpaces.id],
-      name: "f3versary_announcement_settings_slack_space_id_fkey",
-    }),
-    foreignKey({
-      columns: [table.orgId],
-      foreignColumns: [orgs.id],
-      name: "f3versary_announcement_settings_org_id_fkey",
-    }),
-    check(
-      "f3versary_announcement_settings_lead_days_check",
-      sql`${table.leadDays} BETWEEN 0 AND 30`,
-    ),
-    check(
-      "f3versary_announcement_settings_enabled_channel_check",
-      sql`NOT ${table.enabled} OR (${table.channel} IS NOT NULL AND length(${table.channel}) > 0)`,
-    ),
-  ],
-);
+export const slackbotSchema = pgSchema("slackbot");
 
-export const f3versaryDeliveryRuns = pgTable(
+export const f3versaryDeliveryRuns = slackbotSchema.table(
   "f3versary_delivery_runs",
   {
     id: serial().primaryKey().notNull(),
@@ -280,7 +241,7 @@ export const f3versaryDeliveryRuns = pgTable(
   ],
 );
 
-export const f3versaryDeliveryPages = pgTable(
+export const f3versaryDeliveryPages = slackbotSchema.table(
   "f3versary_delivery_pages",
   {
     id: serial().primaryKey().notNull(),

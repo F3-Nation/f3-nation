@@ -41,18 +41,16 @@ def candidate(**overrides):
 
 
 def slack_record(**setting_overrides):
-    settings = {"f3versary_announcements_last_processed_date": None}
-    regional_setting = SimpleNamespace(slack_space_id=10, org_id=1, enabled=True, channel="C1", lead_days=14)
-    field_names = {
-        "f3versary_announcements_enabled": "enabled",
-        "f3versary_announcements_channel": "channel",
-        "f3versary_announcements_lead_days": "lead_days",
+    settings = {
+        "team_id": "T1",
+        "org_id": 1,
+        "bot_token": "xoxb-test",
+        "f3versary_announcements_enabled": True,
+        "f3versary_announcements_channel": "C1",
+        "f3versary_announcements_lead_days": 14,
+        "f3versary_announcements_last_processed_date": None,
     }
-    for name, value in setting_overrides.items():
-        if name in field_names:
-            setattr(regional_setting, field_names[name], value)
-        else:
-            settings[name] = value
+    settings.update(setting_overrides)
     org = SimpleNamespace(id=1, name="Test Region")
     slack_space = SimpleNamespace(
         id=10,
@@ -60,7 +58,6 @@ def slack_record(**setting_overrides):
         workspace_name="Test Workspace",
         bot_token="xoxb-test",
         settings=settings,
-        regional_settings={1: regional_setting},
     )
     return (None, org, slack_space)
 
@@ -79,7 +76,6 @@ class FakeOutbox:
         self.sleeps = []
         monkeypatch.setattr(f3versary_announcements, "sleep", self.sleeps.append)
         monkeypatch.setattr(f3versary_announcements, "_read_slack_space", self.read_space)
-        monkeypatch.setattr(f3versary_announcements, "_read_region_setting", self.read_region_setting)
         monkeypatch.setattr(f3versary_announcements, "_run_for_date", self.run_for_date)
         monkeypatch.setattr(f3versary_announcements, "_abandon_old_runs", self.abandon_old_runs)
         monkeypatch.setattr(f3versary_announcements, "_create_run", self.create_run)
@@ -89,10 +85,6 @@ class FakeOutbox:
     def read_space(self, slack_space_id):
         assert slack_space_id == self.slack_space.id
         return self.slack_space
-
-    def read_region_setting(self, slack_space_id, org_id):
-        assert slack_space_id == self.slack_space.id
-        return self.slack_space.regional_settings.get(org_id)
 
     def run_for_date(self, slack_space_id, org_id, processing_date):
         return self.runs.get((slack_space_id, org_id, processing_date))
@@ -195,6 +187,38 @@ def test_bounded_lead_days(value, expected, warning_expected, caplog):
     assert bool(warnings) is warning_expected
     assert all("F3versary lead-time" in record.message for record in warnings)
     assert "bad" not in caplog.text
+
+
+def test_load_settings_uses_workspace_json_and_ignores_legacy_unknown_keys():
+    _, org, slack_space = slack_record(
+        f3versary_announcements_enabled=True,
+        f3versary_announcements_channel="C-settings",
+        f3versary_announcements_lead_days=30,
+        f3versary_announcements_delivery_plan={"next_page": 1},
+    )
+    slack_space.bot_token = "xoxb-current"
+
+    loaded = f3versary_announcements._load_settings(org, slack_space)
+
+    assert loaded == config(bot_token="xoxb-current", channel="C-settings", lead_days=30)
+
+
+def test_load_settings_uses_authoritative_workspace_team_id():
+    _, org, slack_space = slack_record(team_id="T-stale-json")
+    slack_space.team_id = "T-current-column"
+
+    loaded = f3versary_announcements._load_settings(org, slack_space)
+
+    assert loaded.team_id == "T-current-column"
+
+
+def test_load_settings_does_not_apply_workspace_json_to_another_region():
+    _, _, slack_space = slack_record()
+
+    loaded = f3versary_announcements._load_settings(SimpleNamespace(id=2), slack_space)
+
+    assert loaded.enabled is False
+    assert loaded.channel is None
 
 
 def test_observed_anniversary_handles_leap_day():
@@ -559,11 +583,7 @@ def test_admin_settings_change_pauses_saved_same_day_run(monkeypatch, changed_se
     outbox = FakeOutbox(monkeypatch, slack_space)
     messages = f3versary_announcements.build_f3versary_messages([candidate()], date(2026, 9, 15))
     run_id = outbox.create_run(org, 10, config(), date(2026, 9, 1), date(2026, 9, 15), messages)
-    regional_setting = slack_space.regional_settings[org.id]
-    if "f3versary_announcements_channel" in changed_settings:
-        regional_setting.channel = changed_settings["f3versary_announcements_channel"]
-    if "f3versary_announcements_lead_days" in changed_settings:
-        regional_setting.lead_days = changed_settings["f3versary_announcements_lead_days"]
+    slack_space.settings.update(changed_settings)
     monkeypatch.setattr(f3versary_announcements.DbManager, "find_join_records3", lambda *args, **kwargs: records)
 
     def reject_candidates(*args, **kwargs):
@@ -579,17 +599,17 @@ def test_admin_settings_change_pauses_saved_same_day_run(monkeypatch, changed_se
 
     assert outbox.pages[run_id][0].status == "pending"
     assert outbox.run_for_date(10, 1, date(2026, 9, 1)).status == "planned"
-    assert regional_setting.channel == changed_settings.get("f3versary_announcements_channel", "C1")
-    assert regional_setting.lead_days == changed_settings.get("f3versary_announcements_lead_days", 14)
-    assert "f3versary_announcements_channel" not in slack_space.settings
+    assert slack_space.settings["f3versary_announcements_channel"] == changed_settings.get(
+        "f3versary_announcements_channel", "C1"
+    )
+    assert slack_space.settings["f3versary_announcements_lead_days"] == changed_settings.get(
+        "f3versary_announcements_lead_days", 14
+    )
 
 
-def test_two_regions_in_one_workspace_have_distinct_run_and_page_keys(monkeypatch):
+def test_workspace_settings_apply_only_to_the_configured_region(monkeypatch):
     records = [slack_record()]
     other_org = SimpleNamespace(id=2, name="Other Region")
-    records[0][2].regional_settings[2] = SimpleNamespace(
-        slack_space_id=10, org_id=2, enabled=True, channel="C2", lead_days=30
-    )
     records.append((None, other_org, records[0][2]))
     outbox = FakeOutbox(monkeypatch, records[0][2])
     posts = []
@@ -609,26 +629,22 @@ def test_two_regions_in_one_workspace_have_distinct_run_and_page_keys(monkeypatc
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 17))
 
     assert outbox.run_for_date(10, 1, date(2026, 9, 1)).status == "complete"
-    assert outbox.run_for_date(10, 2, date(2026, 9, 1)).status == "complete"
-    assert len(posts) == 2
-    assert posts[0]["client_msg_id"] != posts[1]["client_msg_id"]
-    assert [post["channel"] for post in posts] == ["C1", "C2"]
+    assert outbox.run_for_date(10, 2, date(2026, 9, 1)) is None
+    assert len(posts) == 1
+    assert posts[0]["channel"] == "C1"
     assert outbox.run_for_date(10, 1, date(2026, 9, 1)).target_date == date(2026, 9, 15)
-    assert outbox.run_for_date(10, 2, date(2026, 9, 1)).target_date == date(2026, 10, 1)
 
 
-def test_missing_region_row_defaults_off_without_suppressing_other_region(monkeypatch):
+def test_missing_workspace_org_id_defaults_off(monkeypatch):
     records = [slack_record()]
-    other_org = SimpleNamespace(id=2, name="Other Region")
-    records.append((None, other_org, records[0][2]))
+    records[0][2].settings["org_id"] = None
     outbox = FakeOutbox(monkeypatch, records[0][2])
     monkeypatch.setattr(f3versary_announcements.DbManager, "find_join_records3", lambda *args, **kwargs: records)
     monkeypatch.setattr(f3versary_announcements, "get_f3versary_candidates", lambda *args, **kwargs: [])
 
     f3versary_announcements.send_f3versary_announcements(force=True, now_cst=datetime(2026, 9, 1, 17))
 
-    assert outbox.run_for_date(10, 1, date(2026, 9, 1)).status == "complete"
-    assert outbox.run_for_date(10, 2, date(2026, 9, 1)) is None
+    assert outbox.run_for_date(10, 1, date(2026, 9, 1)) is None
 
 
 def test_unfinished_prior_day_run_is_abandoned_and_new_day_proceeds(monkeypatch):
@@ -709,18 +725,14 @@ def test_active_claim_lease_blocks_reclaim_then_expired_claim_is_reused(monkeypa
         claim_token="old",
         claim_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
     )
-    run_query, region_query, space_query, page_query = MagicMock(), MagicMock(), MagicMock(), MagicMock()
+    run_query, space_query, page_query = MagicMock(), MagicMock(), MagicMock()
     run_query.filter.return_value.with_for_update.return_value.one.return_value = run
-    region_query.filter.return_value.with_for_update.return_value.one_or_none.return_value = (
-        slack_space.regional_settings[org.id]
-    )
-    space_query.filter.return_value.one.return_value = slack_space
+    space_query.filter.return_value.with_for_update.return_value.one.return_value = slack_space
     page_query.filter.return_value.order_by.return_value.first.return_value = page
     session = MagicMock()
     session.__enter__.return_value = session
     queries = {
         f3versary_announcements.F3versaryDeliveryRun: run_query,
-        f3versary_announcements.F3versaryAnnouncementSetting: region_query,
         f3versary_announcements.SlackSpace: space_query,
         f3versary_announcements.F3versaryDeliveryPage: page_query,
     }
@@ -876,17 +888,12 @@ def test_slack_success_and_failed_db_finalize_reuses_same_message_id_on_retry(mo
 
 def test_create_run_rechecks_admin_settings_under_row_lock(monkeypatch):
     org, slack_space = slack_record()[1:]
-    regional_setting = slack_space.regional_settings[org.id]
-    regional_setting.channel = "C2"
-    region_query, space_query = MagicMock(), MagicMock()
-    region_query.filter.return_value.with_for_update.return_value.one_or_none.return_value = regional_setting
-    space_query.filter.return_value.one.return_value = slack_space
+    slack_space.settings["f3versary_announcements_channel"] = "C2"
+    space_query = MagicMock()
+    space_query.filter.return_value.with_for_update.return_value.one.return_value = slack_space
     session = MagicMock()
     session.__enter__.return_value = session
-    session.query.side_effect = lambda model: {
-        f3versary_announcements.F3versaryAnnouncementSetting: region_query,
-        f3versary_announcements.SlackSpace: space_query,
-    }[model]
+    session.query.side_effect = lambda model: {f3versary_announcements.SlackSpace: space_query}[model]
     monkeypatch.setattr(f3versary_announcements, "get_session", lambda: session)
 
     result = f3versary_announcements._create_run(
@@ -899,7 +906,7 @@ def test_create_run_rechecks_admin_settings_under_row_lock(monkeypatch):
     )
 
     assert result is None
-    region_query.filter.return_value.with_for_update.assert_called_once()
+    space_query.filter.return_value.with_for_update.assert_called_once()
     session.add.assert_not_called()
     session.commit.assert_not_called()
 
