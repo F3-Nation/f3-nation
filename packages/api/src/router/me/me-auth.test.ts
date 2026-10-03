@@ -280,17 +280,35 @@ describe("Personal operations authentication", () => {
 
   it("reports an unreachable signing-key set instead of failing silently into 401s", async () => {
     mocks.error.mockClear();
+    const down = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("connect ECONNREFUSED"), {
+        code: "ECONNREFUSED",
+      }),
+    });
+    mocks.key.mockRejectedValueOnce(down);
+    await expect(clientFor(userToken).identity()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    expect(mocks.error).toHaveBeenCalledWith(
+      "api.auth.jwks_unavailable",
+      { reason: "ECONNREFUSED" },
+      down,
+    );
+  });
+
+  it("stays silent for a token whose key id isn't in the set", async () => {
+    mocks.error.mockClear();
     mocks.key.mockRejectedValueOnce(
-      Object.assign(new Error("JWKS request timed out"), {
-        code: "ERR_JWKS_TIMEOUT",
+      Object.assign(new Error("no applicable key found"), {
+        code: "ERR_JWKS_NO_MATCHING_KEY",
       }),
     );
     await expect(clientFor(userToken).identity()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
     });
-    expect(mocks.error).toHaveBeenCalledWith("api.auth.jwks_unavailable", {
-      code: "ERR_JWKS_TIMEOUT",
-    });
+    expect(
+      mocks.error.mock.calls.map(([event]) => String(event)),
+    ).not.toContain("api.auth.jwks_unavailable");
   });
 
   it("stays silent for an ordinary bad token or an API key on the JWT path", async () => {
@@ -299,10 +317,9 @@ describe("Personal operations authentication", () => {
       code: "UNAUTHORIZED",
     });
     await clientFor(keys.unprivileged).identity();
-    expect(mocks.error).not.toHaveBeenCalledWith(
-      "api.auth.jwks_unavailable",
-      expect.anything(),
-    );
+    expect(
+      mocks.error.mock.calls.map(([event]) => String(event)),
+    ).not.toContain("api.auth.jwks_unavailable");
   });
 
   it.each(["session", "jwt", "session-and-key"] as const)(
