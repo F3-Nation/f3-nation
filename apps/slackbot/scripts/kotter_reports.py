@@ -544,10 +544,10 @@ def build_kotter_message(delivery: Delivery, stats_url: str | None = None) -> li
     def make_cells(row: KotterRow) -> list[dict]:
         return [
             _pax_table_cell(row, stats_url),
-            {"type": "raw_text", "text": _truncate_table_text(_reason_text(row))},
-            {"type": "raw_text", "text": _truncate_table_text(row.home_ao_name or "")},
-            {"type": "raw_text", "text": row.last_post_date.isoformat() if row.last_post_date else ""},
-            {"type": "raw_text", "text": row.last_q_date.isoformat() if row.last_q_date else ""},
+            {"type": "raw_text", "text": _truncate_table_text(_reason_text(row) or "unknown")},
+            {"type": "raw_text", "text": _truncate_table_text(row.home_ao_name or "unknown")},
+            {"type": "raw_text", "text": row.last_post_date.isoformat() if row.last_post_date else "unknown"},
+            {"type": "raw_text", "text": row.last_q_date.isoformat() if row.last_q_date else "unknown"},
         ]
 
     def cell_chars(cells: list[dict]) -> int:
@@ -636,6 +636,7 @@ def _post_delivery_message(
     blocks: list[dict],
     org_id: int | None,
     destination_label: str,
+    part: str,
 ) -> bool:
     try:
         client.chat_postMessage(channel=channel, text=text, blocks=blocks)
@@ -645,19 +646,27 @@ def _post_delivery_message(
         if error not in {"invalid_blocks", "msg_too_long"}:
             raise
         logger.error(
-            "Kotter Report rich payload failed (org_id=%s, destination=%s, error=%s)",
+            "Kotter Report rich payload failed (org_id=%s, destination=%s, part=%s, error=%s)",
             org_id,
             destination_label,
+            part,
             error,
         )
         try:
             client.chat_postMessage(channel=channel, text=text, blocks=None)
+            logger.warning(
+                "Kotter Report sent as text-only fallback (org_id=%s, destination=%s, part=%s)",
+                org_id,
+                destination_label,
+                part,
+            )
             return True
         except SlackApiError as retry_error:
             logger.error(
-                "Kotter Report text-only retry failed (org_id=%s, destination=%s, error=%s)",
+                "Kotter Report text-only retry failed (org_id=%s, destination=%s, part=%s, error=%s)",
                 org_id,
                 destination_label,
+                part,
                 retry_error.response.get("error"),
             )
             return False
@@ -668,34 +677,44 @@ def _send_delivery(client: WebClient, delivery: Delivery, stats_url: str | None,
     destination_label = _delivery_destination_label(delivery)
     try:
         channel = _delivery_channel(client, delivery)
-        for text, blocks in messages:
+        total_parts = len(messages)
+        for part_number, (text, blocks) in enumerate(messages, start=1):
+            part = f"{part_number}/{total_parts}"
             try:
-                sent = _post_delivery_message(client, channel, text, blocks, org_id, destination_label)
+                sent = _post_delivery_message(client, channel, text, blocks, org_id, destination_label, part)
             except SlackApiError as e:
                 if e.response.get("error") == "not_in_channel" and delivery.destination:
                     try:
                         client.conversations_join(channel=delivery.destination)
                         sent = _post_delivery_message(
-                            client, delivery.destination, text, blocks, org_id, destination_label
+                            client, delivery.destination, text, blocks, org_id, destination_label, part
                         )
                     except SlackApiError as e2:
                         logger.error(
-                            "Error joining/sending Kotter Report (org_id=%s, destination=%s, error=%s)",
+                            "Error joining/sending Kotter Report (org_id=%s, destination=%s, part=%s, error=%s)",
                             org_id,
                             destination_label,
+                            part,
                             e2.response.get("error"),
                         )
                         return
                 else:
                     logger.error(
-                        "Error sending Kotter Report (org_id=%s, destination=%s, error=%s)",
+                        "Error sending Kotter Report (org_id=%s, destination=%s, part=%s, error=%s)",
                         org_id,
                         destination_label,
+                        part,
                         e.response.get("error"),
                     )
                     return
             if not sent:
                 # Stop on a failed text-only retry so later parts do not imply a complete report.
+                logger.error(
+                    "Kotter Report part was not sent (org_id=%s, destination=%s, part=%s)",
+                    org_id,
+                    destination_label,
+                    part,
+                )
                 return
         print(f"Sent Kotter Report to {destination_label} ({len(delivery.rows)} rows)")
     except SlackApiError as e:

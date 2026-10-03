@@ -282,6 +282,8 @@ def test_build_kotter_message_table_summary_and_oversized():
     assert "None/stats" not in text
     assert any(block["type"] == "data_table" for block in blocks)
     table = next(block for block in blocks if block["type"] == "data_table")
+    assert table["page_size"] == 20
+    assert table["caption"] == delivery.title
     headers = [cell["text"] for cell in table["rows"][0]]
     assert "Last Q" in headers
     assert "Posts in window" not in headers
@@ -310,6 +312,26 @@ def test_build_kotter_message_table_summary_and_oversized():
     assert "Part 2 of 2" in messages[1][0]
 
 
+def test_build_kotter_message_uses_unknown_for_missing_table_cells():
+    missing = row(1)
+    missing.f3_name = "PAX 1"
+    missing.slack_user_id = None
+    missing.home_ao_org_id = None
+    missing.home_ao_name = None
+    missing.last_post_date = None
+    missing.last_q_date = None
+    missing.reasons = []
+
+    messages = kotter_reports.build_kotter_message(kotter_reports.Delivery("C1", [missing]))
+    table = next(block for _, blocks in messages for block in blocks if block["type"] == "data_table")
+
+    for table_row in table["rows"]:
+        for cell in table_row:
+            if cell["type"] == "raw_text":
+                assert cell["text"]
+    assert [cell["text"] for cell in table["rows"][1][1:]] == ["unknown"] * 4
+
+
 def test_build_kotter_message_limits_section_and_table_rows():
     rows = [row(i) for i in range(kotter_reports.SLACK_TABLE_MAX_DATA_ROWS)]
     text, blocks = kotter_reports.build_kotter_message(kotter_reports.Delivery("C1", rows))[0]
@@ -320,18 +342,38 @@ def test_build_kotter_message_limits_section_and_table_rows():
     assert "<@U0>: No recent posts" in text
 
 
-def test_build_kotter_message_splits_on_table_character_limit():
+def test_build_kotter_message_splits_on_table_character_limit(monkeypatch):
     rows = [row(i, ao_name="A" * 900) for i in range(25)]
     messages = kotter_reports.build_kotter_message(kotter_reports.Delivery("C1", rows))
 
     assert len(messages) == 2
-    assert (
-        sum(len(next(block for block in blocks if block["type"] == "data_table")["rows"]) - 1 for _, blocks in messages)
-        == 25
-    )
+    assert [
+        len(next(block for block in blocks if block["type"] == "data_table")["rows"]) - 1 for _, blocks in messages
+    ] == [18, 7]
     for _, blocks in messages:
         table = next(block for block in blocks if block["type"] == "data_table")
-        assert sum(len(cell.get("text", "")) for table_row in table["rows"] for cell in table_row) <= 20_000
+        table_chars = len(table["caption"])
+        for table_row in table["rows"]:
+            for cell in table_row:
+                if cell["type"] == "rich_text":
+                    for section in cell["elements"]:
+                        for element in section["elements"]:
+                            table_chars += len(element.get("text", "")) + len(element.get("url", ""))
+                            if element.get("type") == "user":
+                                table_chars += len(element["user_id"])
+                else:
+                    table_chars += len(cell.get("text", ""))
+        assert table_chars <= 18_000
+
+    # Prove the exact split assertion detects a regression to the reviewed 20k budget.
+    with monkeypatch.context() as patch:
+        patch.setattr(kotter_reports, "SLACK_DATA_TABLE_MAX_CHARS", 20_000)
+        oversized_budget_messages = kotter_reports.build_kotter_message(kotter_reports.Delivery("C1", rows))
+    oversized_counts = [
+        len(next(block for block in blocks if block["type"] == "data_table")["rows"]) - 1
+        for _, blocks in oversized_budget_messages
+    ]
+    assert oversized_counts != [18, 7]
 
 
 def test_build_kotter_message_bounds_pathological_table_row():
@@ -348,8 +390,15 @@ def test_build_kotter_message_bounds_pathological_table_row():
     assert len(text) <= 4_000
     assert pax_cell["type"] == "raw_text"
     assert pax_cell["text"].endswith("…")
+    assert all(
+        len(cell["text"]) <= kotter_reports.SLACK_TABLE_MAX_CELL_CHARS
+        for table_row in table["rows"]
+        for cell in table_row
+        if cell["type"] == "raw_text"
+    )
+    assert len(pax_cell["text"]) == 1_000
     assert table["rows"][1][2]["text"].endswith("…")
-    assert sum(len(cell.get("text", "")) for table_row in table["rows"] for cell in table_row) <= 20_000
+    assert len(table["rows"][1][2]["text"]) == 1_000
 
 
 def test_build_kotter_message_budgets_rich_text_ids_and_links():
@@ -413,6 +462,9 @@ def test_send_delivery_posts_all_data_table_chunks():
     assert [
         len(next(block for block in call["blocks"] if block["type"] == "data_table")["rows"]) for call in calls
     ] == [201, 2]
+    tables = [next(block for block in call["blocks"] if block["type"] == "data_table") for call in calls]
+    assert all(table["page_size"] == 20 for table in tables)
+    assert all(table["caption"] == delivery.title for table in tables)
 
 
 def test_send_delivery_joins_and_retries_only_failed_chunk(monkeypatch):
@@ -441,6 +493,64 @@ def test_send_delivery_joins_and_retries_only_failed_chunk(monkeypatch):
         "403 PAX need attention. Part 2 of 3.",
         "403 PAX need attention. Part 3 of 3.",
     ]
+
+
+def test_send_delivery_nonretryable_failure_on_part_two_stops(caplog, capsys):
+    calls = []
+
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            calls.append(kwargs)
+            if "Part 2 of 3" in kwargs["text"]:
+                raise SlackApiError("forbidden", {"error": "restricted_action"})
+
+    delivery = kotter_reports.Delivery("C1", [row(i) for i in range(403)])
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=42)
+
+    assert len(calls) == 2
+    assert "ERROR" in caplog.text
+    assert "part=2/3" in caplog.text
+    assert "Sent Kotter Report" not in capsys.readouterr().out
+
+
+def test_send_delivery_join_failure_stops(caplog, capsys):
+    calls = []
+
+    class Client:
+        def chat_postMessage(self, **kwargs):
+            calls.append(kwargs)
+            raise SlackApiError("not in channel", {"error": "not_in_channel"})
+
+        def conversations_join(self, **kwargs):
+            raise SlackApiError("not allowed", {"error": "restricted_action"})
+
+    delivery = kotter_reports.Delivery("C1", [row(i) for i in range(403)])
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=42)
+
+    assert len(calls) == 1
+    assert "ERROR" in caplog.text
+    assert "part=1/3" in caplog.text
+    assert "Sent Kotter Report" not in capsys.readouterr().out
+
+
+def test_send_group_delivery_opens_dm_once_for_all_parts():
+    opened = []
+    posts = []
+
+    class Client:
+        def conversations_open(self, users):
+            opened.append(users)
+            return {"channel": {"id": "D123"}}
+
+        def chat_postMessage(self, **kwargs):
+            posts.append(kwargs)
+
+    delivery = kotter_reports.Delivery(None, [row(i) for i in range(403)], destination_users=["U1"])
+    kotter_reports._send_delivery(Client(), delivery, stats_url=None, org_id=42)
+
+    assert opened == ["U1"]
+    assert len(posts) == 3
+    assert all(post["channel"] == "D123" for post in posts)
 
 
 def test_send_kotter_reports_schedule_guard(monkeypatch):
@@ -601,8 +711,10 @@ def test_send_delivery_falls_back_to_text_only(error_code, caplog):
     assert calls[0]["blocks"]
     assert calls[1]["blocks"] is None
     assert any(record.levelname == "ERROR" for record in caplog.records)
+    assert any(record.levelname == "WARNING" and "text-only fallback" in record.message for record in caplog.records)
     assert "org_id=42" in caplog.text
     assert "destination=C1" in caplog.text
+    assert "part=1/1" in caplog.text
 
 
 def test_send_delivery_text_only_retry_failure_stops_remaining_parts_and_is_suppressed(caplog, capsys):
@@ -623,6 +735,7 @@ def test_send_delivery_text_only_retry_failure_stops_remaining_parts_and_is_supp
     assert "text-only retry failed" in caplog.text
     assert "org_id=42" in caplog.text
     assert "destination=C1" in caplog.text
+    assert "part=1/3" in caplog.text
 
 
 def test_send_delivery_rate_limited_does_not_fall_back(caplog):
@@ -641,6 +754,19 @@ def test_send_delivery_rate_limited_does_not_fall_back(caplog):
     assert "error=rate_limited" in caplog.text
     assert "org_id=42" in caplog.text
     assert "destination=C1" in caplog.text
+    assert "part=1/1" in caplog.text
+
+
+def test_build_kotter_message_bounds_long_title():
+    delivery = kotter_reports.Delivery("C1", [row(1)], title="T" * 5_000)
+
+    _, blocks = kotter_reports.build_kotter_message(delivery)[0]
+
+    table = next(block for block in blocks if block["type"] == "data_table")
+    section = next(block for block in blocks if block["type"] == "section")
+    assert len(table["caption"]) <= 1_000
+    assert table["caption"].endswith("…")
+    assert len(section["text"]["text"]) <= 3_000
 
 
 def test_hourly_runner_calls_kotter_only_when_reporting(monkeypatch):
