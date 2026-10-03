@@ -18,6 +18,8 @@ export const env = createEnv({
       process.env.NODE_ENV === "production"
         ? z.string().min(1)
         : z.string().min(1).optional(),
+    // Normal DB connection for app/dev usage. Test runs switch to
+    // TEST_DATABASE_URL automatically when NODE_ENV === "test".
     DATABASE_URL: z.string().min(1).optional(),
     EMAIL_SERVER: z.string().min(1),
     EMAIL_FROM: z.string().min(1),
@@ -29,6 +31,7 @@ export const env = createEnv({
       .default("info"),
     EMAIL_ADMIN_DESTINATIONS: z.string().min(1),
     EMAIL_REGION_IN_A_BOX_CC: z.string().min(1).optional(),
+    // Test-only database override; not used by normal local dev or production.
     TEST_DATABASE_URL: z.string().min(1).optional(),
     API_KEY: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1).optional(),
