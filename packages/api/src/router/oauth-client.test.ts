@@ -183,6 +183,26 @@ describe("oauth-client router", () => {
 
       expect(found?.isPublic).toBe(true);
     });
+
+    it("returns timestamps as ISO strings", async () => {
+      const clientId = `oauth-client-test-${uniqueId()}`;
+      createdClientIds.push(clientId);
+      const createdAt = new Date("2026-10-02T12:34:56.000Z");
+      await insertTestClient({ clientId });
+      await db
+        .update(authSchema.betterAuthOauthClient)
+        .set({ createdAt, updatedAt: createdAt })
+        .where(eq(authSchema.betterAuthOauthClient.clientId, clientId));
+
+      await mockAuthWithSession(createNationAdminSession());
+      const client = createTestClient();
+
+      const result = await client.oauthClient.list();
+      const found = result.clients.find((c) => c.clientId === clientId);
+
+      expect(found?.createdAt).toBe(createdAt.toISOString());
+      expect(found?.updatedAt).toBe(createdAt.toISOString());
+    });
   });
 
   describe("update", () => {

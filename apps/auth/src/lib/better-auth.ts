@@ -365,6 +365,26 @@ export function createAuthInstance(options: CreateAuthInstanceOptions) {
 // env vars or open a DB connection as a side effect.
 // ---------------------------------------------------------------------------
 
+/**
+ * Better Auth model name -> Drizzle table, as handed to drizzleAdapter.
+ * Exported so tests run Better Auth's schema check against the exact
+ * mapping production uses.
+ */
+export const betterAuthDrizzleSchema = {
+  user: betterAuthUser,
+  session: betterAuthSession,
+  account: betterAuthAccount,
+  verification: betterAuthVerification,
+  jwks: betterAuthJwks,
+  oauthClient: betterAuthOauthClient,
+  oauthResource: betterAuthOauthResource,
+  oauthClientResource: betterAuthOauthClientResource,
+  oauthRefreshToken: betterAuthOauthRefreshToken,
+  oauthAccessToken: betterAuthOauthAccessToken,
+  oauthConsent: betterAuthOauthConsent,
+  oauthClientAssertion: betterAuthOauthClientAssertion,
+};
+
 let _auth: ReturnType<typeof createAuthInstance> | null = null;
 
 type AuthDb = typeof authDbType;
@@ -442,20 +462,7 @@ export async function getAuth() {
     database: drizzleAdapter(db, {
       provider: "pg",
       schemaName: "auth",
-      schema: {
-        user: betterAuthUser,
-        session: betterAuthSession,
-        account: betterAuthAccount,
-        verification: betterAuthVerification,
-        jwks: betterAuthJwks,
-        oauthClient: betterAuthOauthClient,
-        oauthResource: betterAuthOauthResource,
-        oauthClientResource: betterAuthOauthClientResource,
-        oauthRefreshToken: betterAuthOauthRefreshToken,
-        oauthAccessToken: betterAuthOauthAccessToken,
-        oauthConsent: betterAuthOauthConsent,
-        oauthClientAssertion: betterAuthOauthClientAssertion,
-      },
+      schema: betterAuthDrizzleSchema,
     }),
     sendVerificationOTP: async ({ email, otp }) => {
       await sendBetterAuthOtpEmail(email, otp);
