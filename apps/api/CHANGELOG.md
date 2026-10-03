@@ -1,5 +1,22 @@
 # Changelog
 
+## [6.10.0](https://github.com/F3-Nation/f3-nation/compare/api@6.9.0...api@6.10.0) (2026-10-03)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.12.0
+    * @acme/shared bumped to 0.4.1
+  * devDependencies
+    * @acme/db bumped to 0.8.0
+
 ## [6.9.0](https://github.com/F3-Nation/f3-nation/compare/api@6.8.0...api@6.9.0) (2026-09-27)
 
 

@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.12.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.11.0...pkg-api@0.12.0) (2026-10-03)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+* **auth:** resolve [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3's OAuth client-secret-issuance gap ([#1046](https://github.com/F3-Nation/f3-nation/issues/1046)) ([0bf5b66](https://github.com/F3-Nation/f3-nation/commit/0bf5b66daf882e7199643eb9d43ab28c2795087f))
+* **db:** connect over a Cloud SQL Unix socket named in DATABASE_URL ([#1118](https://github.com/F3-Nation/f3-nation/issues/1118)) ([d32a88d](https://github.com/F3-Nation/f3-nation/commit/d32a88d79ee19981c9bc901becdaf9cbab292d14))
+
+
+### Bug Fixes
+
+* **auth,db,api:** let Better Auth start and sign in against the Drizzle schema ([#1143](https://github.com/F3-Nation/f3-nation/issues/1143)) ([2a9026f](https://github.com/F3-Nation/f3-nation/commit/2a9026fe8f9124f68331bb024a160a27f1e26949))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.8
+    * @acme/db bumped to 0.8.0
+    * @acme/shared bumped to 0.4.1
+    * @acme/validators bumped to 0.4.5
+
 ## [0.11.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.10.0...pkg-api@0.11.0) (2026-09-23)
 
 

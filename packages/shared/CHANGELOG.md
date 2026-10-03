@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.4.0...pkg-shared@0.4.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **map,repo:** show the Dev Mode sign-in button on branch previews ([#1111](https://github.com/F3-Nation/f3-nation/issues/1111)) ([dcbb924](https://github.com/F3-Nation/f3-nation/commit/dcbb924178e63e741610e26ab3ae46a183ab1ad1))
+
 ## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.3.1...pkg-shared@0.4.0) (2026-09-23)
 
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.8](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.7...pkg-auth@0.2.8) (2026-10-03)
+
+
+### Bug Fixes
+
+* **auth,map:** never register dev-mode sign-in in Production ([#1123](https://github.com/F3-Nation/f3-nation/issues/1123)) ([6d7f712](https://github.com/F3-Nation/f3-nation/commit/6d7f712c142016af41dd08b9544062e791bd746f))
+* **map,repo:** show the Dev Mode sign-in button on branch previews ([#1111](https://github.com/F3-Nation/f3-nation/issues/1111)) ([dcbb924](https://github.com/F3-Nation/f3-nation/commit/dcbb924178e63e741610e26ab3ae46a183ab1ad1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.8.0
+    * @acme/shared bumped to 0.4.1
+
 ## [0.2.7](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.6...pkg-auth@0.2.7) (2026-09-23)
 
 
