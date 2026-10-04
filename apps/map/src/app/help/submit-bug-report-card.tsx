@@ -191,7 +191,6 @@ export const SubmitBugReportCard = () => {
             type="button"
             disabled={submitFeedback.isPending}
             onClick={() => {
-              console.log("SubmitBugReportCard", form.getValues());
               void form.handleSubmit(onSubmit, () =>
                 window.alert("form error"),
               )();

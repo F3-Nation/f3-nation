@@ -17,6 +17,13 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
+// No cookie is ever presented in these tests, so getSessionFromHeaders
+// always resolves null regardless of environment -- this isolates dev-mock
+// session behavior from NextAuth's own request handling.
+vi.mock("@acme/auth", () => ({
+  getSessionFromHeaders: vi.fn(() => Promise.resolve(null)),
+}));
+
 // Helper to create a test client with custom headers
 const createTestClientWithHeaders = async (headers: Headers) => {
   const { publicProcedure } = await import("./shared");
@@ -199,5 +206,53 @@ describe("Rate Limiting Middleware", () => {
 
     // Should trim whitespace from the first IP
     expect(mockLimit).toHaveBeenCalledWith("192.168.1.100");
+  });
+});
+
+describe("Development mock session", () => {
+  beforeEach(() => {
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: maxRequests,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("publicReadProcedure sees a null session for an unauthenticated dev request", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const { publicReadProcedure } = await import("./shared");
+
+    const testRouter = {
+      test: publicReadProcedure.handler(({ context }) => ({
+        session: context.session,
+      })),
+    };
+    const client = createRouterClient(testRouter, {
+      context: () => ({ reqHeaders: new Headers() }),
+    });
+
+    await expect(client.test()).resolves.toEqual({ session: null });
+  });
+
+  it("protectedProcedure still succeeds with the dev mock session for an unauthenticated dev request", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const { protectedProcedure } = await import("./shared");
+
+    const testRouter = {
+      test: protectedProcedure.handler(({ context }) => ({
+        userId: context.session?.user?.id,
+      })),
+    };
+    const client = createRouterClient(testRouter, {
+      context: () => ({ reqHeaders: new Headers() }),
+    });
+
+    await expect(client.test()).resolves.toEqual({ userId: "0" });
   });
 });

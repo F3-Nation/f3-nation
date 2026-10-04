@@ -24,11 +24,11 @@ export interface Context extends BaseContext {
 }
 
 /**
- * Returns a mock session for development mode.
- * This allows the app to work without an API key when running locally.
- * The mock session has no roles, so it only clears `protectedProcedure`'s
- * "a user is present" check — `editorProcedure`/`adminProcedure`/
- * `nationAdminProcedure` still reject it.
+ * Mock session used in development when a request reaching a tier that
+ * requires a user carries no credential. It has no roles, so
+ * `editorProcedure`/`adminProcedure`/`nationAdminProcedure` still reject it.
+ * `publicReadProcedure` never receives it, so its anonymous branches run
+ * locally exactly as in production.
  */
 const getDevMockSession = (): Session => ({
   id: 0,
@@ -125,6 +125,9 @@ export const publicReadProcedure = withSessionAndDb;
 
 export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
   if (!context.session?.user) {
+    if (isDevelopment) {
+      return next({ context: { ...context, session: getDevMockSession() } });
+    }
     throw new ORPCError("UNAUTHORIZED");
   }
   return next({ context });
@@ -227,7 +230,6 @@ const getSession = async ({ context }: { context: BaseContext }) => {
 
   // No session or bearer token provided
   if (!bearerToken) {
-    if (isDevelopment) return getDevMockSession();
     return null;
   }
 
