@@ -63,11 +63,14 @@ export const SubmitBugReportCard = () => {
 
   const type = form.watch("type");
 
-  const onSubmit = (values: FeedbackSchema) => {
-    console.log("SubmitBugReportCard", values);
-    submitFeedback.mutate(values);
-    toast.success(`${typeToTitle(values.type)} submitted`);
-    form.reset();
+  const onSubmit = async (values: FeedbackSchema) => {
+    try {
+      await submitFeedback.mutateAsync(values);
+      toast.success(`${typeToTitle(values.type)} submitted`);
+      form.reset();
+    } catch {
+      toast.error("Failed to submit. Please try again.");
+    }
   };
 
   return (

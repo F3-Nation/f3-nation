@@ -268,6 +268,14 @@ done
 for var in "${!REFERENCED_SECRET_MAP[@]}"; do
   secret_id="${REFERENCED_SECRET_MAP[$var]}"
   echo " [$var] Mapping to secret $secret_id (referenced, owned by f3-auth)"
+  # auth3's own runtime service account may differ from f3-auth's — grant it
+  # access too, without pushing a version (push_secret() is deliberately
+  # never called for this map, see its declaration above).
+  gcloud secrets add-iam-policy-binding "$secret_id" \
+    --project "$PROJECT" \
+    --member "serviceAccount:${SA_EMAIL}" \
+    --role "roles/secretmanager.secretAccessor" \
+    --quiet > /dev/null || echo " [$var] WARNING: Failed to bind $secret_id"
   SECRET_ARGS+=("${var}=${secret_id}:latest")
 done
 
