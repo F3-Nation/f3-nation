@@ -1079,10 +1079,15 @@ export const eventRouter = {
           ),
         )
         // publicReadProcedure lets an anonymous caller reach this endpoint
-        // (#378) — don't leak a private event's ID (even bare, with no other
-        // fields) to a caller with no session at all.
+        // (#378) — don't leak a private OR inactive event's ID (even bare,
+        // with no other fields) to a caller with no session at all.
         .where(
-          !ctx.session?.user ? eq(schema.events.isPrivate, false) : undefined,
+          !ctx.session?.user
+            ? and(
+                eq(schema.events.isPrivate, false),
+                eq(schema.events.isActive, true),
+              )
+            : undefined,
         )
         .groupBy(schema.events.id, regionOrg.id);
 

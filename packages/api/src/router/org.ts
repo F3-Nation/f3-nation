@@ -388,8 +388,18 @@ export const orgRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
+      // publicReadProcedure lets an anonymous caller reach `all` (#378) --
+      // the `select` above pulls email/phone/meta/lastAnnualReview for
+      // every row, same as `byId` does, so mask them the same way here.
+      const isAnonymousAll = !ctx.session?.user;
+      const orgs = isAnonymousAll
+        ? orgs_untyped.map((o) =>
+            Object.assign({}, o, SENSITIVE_ORG_FIELD_MASK),
+          )
+        : orgs_untyped;
+
       // Something is broken with org to org types
-      return { orgs: orgs_untyped, total };
+      return { orgs, total };
     }),
 
   count: protectedProcedure
