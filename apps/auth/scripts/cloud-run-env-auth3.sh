@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Push secrets and env vars to GCP Cloud Run for the f3-auth3 service — #876
-# Phase 3's standalone Better Auth deployment. This is a SEPARATE Cloud Run
+# Push secrets and env vars to GCP Cloud Run for the f3-auth3 service, the
+# standalone Better Auth deployment. This is a SEPARATE Cloud Run
 # service from f3-auth (the existing hand-rolled OAuth2/OIDC server, still
 # serving every /api/oauth/* request unconditionally): the phased epic's
 # decision was to stand Better Auth up on its own, not flip
@@ -27,8 +27,8 @@ set -euo pipefail
 # Requires:
 #   - gcloud CLI authenticated (`gcloud auth login`)
 #   - .env.cloud-run.auth3.prod / .env.cloud-run.auth3.staging populated
-#     (copy .env.cloud-run.example, add AUTH_USE_BETTER_AUTH=true and a
-#     generated BETTER_AUTH_SECRET, and point NEXT_PUBLIC_AUTH_URL /
+#     (copy .env.cloud-run.example, add a generated BETTER_AUTH_SECRET (the
+#     script itself sets AUTH_USE_BETTER_AUTH=true), and point NEXT_PUBLIC_AUTH_URL /
 #     NEXTAUTH_URL at auth3's own domain, not the existing auth2 one — the
 #     Better Auth token issuer is derived from NEXT_PUBLIC_AUTH_URL, so
 #     reusing the existing value would make auth3 mint tokens under an
@@ -172,10 +172,9 @@ push_secret() {
     return 0
   fi
 
-  # Secret already exists (e.g. created by hand, as better-auth-secret may
-  # be — see this script's header). Bind the service account every run,
-  # not just on creation, since a manually-created secret may not have
-  # granted it access yet.
+  # Secret already exists (e.g. created by hand in Secret Manager). Bind the
+  # service account every run, not just on creation, since a manually-created
+  # secret may not have granted it access yet.
   echo " [$var] Granting access to Cloud Run service account."
   gcloud secrets add-iam-policy-binding "$secret_id" \
     --project "$project" \
@@ -210,7 +209,11 @@ push_secret() {
     --filter="state!=DESTROYED" --format='value(name)' 2>/dev/null)
 }
 
-# Get the Cloud Run service account email to grant it access to secrets. If the service doesn't exist yet, we'll default to the Compute Engine default service account, which is what Cloud Run
+# Get the Cloud Run service account to grant secret access. If the service
+# doesn't exist yet, fall back to the Compute Engine default service account,
+# which is what Cloud Run uses when none is configured. The final
+# `gcloud run services update` still requires the service to exist, so deploy
+# it once via deploy-auth3.yml first.
 echo ""
 echo "Preparing Cloud Run service account email for granting secret permissions."
 

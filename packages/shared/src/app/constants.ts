@@ -117,11 +117,9 @@ export const MOBILE_SEARCH_RESULT_ITEM_HEIGHT = 128;
 
 export const MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS = 3;
 
-// Length caps mirror packages/api/src/router/map/index.ts's own
-// feedbackSchema so the form rejects an over-length submission before
-// the API ever does — otherwise the optimistic success toast in
-// submit-bug-report-card.tsx would fire for a submission the API silently
-// drops.
+// Length caps mirror packages/api/src/router/map/index.ts's feedbackSchema so
+// the form flags an over-length field inline instead of round-tripping to an
+// API validation error.
 export const feedbackSchema = z.object({
   type: z.enum(["bug", "feature request", "feedback", "other"]),
   subject: z.string().max(200),

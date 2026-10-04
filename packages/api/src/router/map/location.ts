@@ -920,7 +920,7 @@ export const mapLocationRouter = os.router({
             isNotNull(schema.events.locationId),
             eq(schema.events.isActive, true),
             // publicReadProcedure lets an anonymous caller reach this
-            // endpoint (#378) — keep the public total consistent with the
+            // endpoint — keep the public total consistent with the
             // map's own event listing, which excludes private events.
             eq(schema.events.isPrivate, false),
           ),
@@ -1039,7 +1039,7 @@ export const mapLocationRouter = os.router({
             eq(schema.events.orgId, schema.orgs.id),
             eq(schema.events.isActive, true),
             // publicReadProcedure lets an anonymous caller reach this
-            // endpoint (#378) — a private event's name shouldn't surface in
+            // endpoint — a private event's name shouldn't surface in
             // an AO's public workout list.
             eq(schema.events.isPrivate, false),
           ),

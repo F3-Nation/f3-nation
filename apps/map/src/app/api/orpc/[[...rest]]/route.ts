@@ -10,10 +10,11 @@ const PROXY_PREFIX = "/api/orpc";
 
 // Anonymous-reachable paths the map calls — see specs/map-browse-and-search.md
 // AC-1. These back onto `publicReadProcedure` (packages/api/src/shared.ts),
-// which requires no credential at all, so the proxy forwards them as-is
-// (cookies included, in case a signed-in caller's session is useful to the
-// handler — none of these currently use it, but there's no harm in passing
-// it through). This is a defense-in-depth allowlist, not the auth boundary:
+// which requires no credential, so the proxy forwards them as-is. Cookies are
+// still forwarded because these handlers read `ctx.session` to decide what to
+// return: anonymous callers get active, non-private rows with contact fields
+// masked; signed-in callers get full rows and `onlyMine` scoping.
+// This is a defense-in-depth allowlist, not the auth boundary:
 // the API itself now enforces which procedures anonymous callers may reach.
 export const PUBLIC_PATHS = new Set([
   "/v1/ping",

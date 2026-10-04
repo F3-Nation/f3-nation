@@ -103,7 +103,7 @@ describe("oRPC proxy route", () => {
       const { POST } =
         await import("../../../src/app/api/orpc/[[...rest]]/route");
 
-      // No cookie, no bearer: these moved to the public read tier (#378), so
+      // No cookie, no bearer: these moved to the public read tier, so
       // an anonymous caller must still reach the upstream API, not get a 404.
       const request = new NextRequest(`http://localhost:3000/api/orpc${path}`, {
         method: "POST",

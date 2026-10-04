@@ -133,7 +133,7 @@ async function resolveEditableOrgIds(params: {
   return { editableOrgIds: [], isNationAdmin };
 }
 
-// publicReadProcedure lets an anonymous caller reach `all`/`byId` (#378).
+// publicReadProcedure lets an anonymous caller reach `all`/`byId`.
 // email/phone/meta/lastAnnualReview are org-entered contact/admin details
 // that the public map never surfaces — masked out below for a caller with
 // no session, without changing what an authenticated caller (e.g. the
@@ -156,7 +156,7 @@ function buildOrgWhereClause(params: {
 }): SQL | undefined {
   const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
 
-  // publicReadProcedure lets an anonymous caller reach `all`/`count` (#378) —
+  // publicReadProcedure lets an anonymous caller reach `all`/`count` —
   // clamp to active-only regardless of what `statuses` it passes, since
   // inactive orgs were never meant to be public. Authenticated behavior
   // (including an explicit request for inactive/both) is unchanged.
@@ -296,9 +296,9 @@ export const orgRouter = {
 
       // orgAllInputSchema is a required object (not `.optional()`), same as
       // the unguarded `input.onlyMine` below — no `?.` needed here.
-      // #912's resolvePagination already bounds the "omit both params"
+      // resolvePagination already bounds the "omit both params"
       // branch to a single default-sized page for every caller, so an
-      // anonymous caller reaching this endpoint (#378) can no longer scrape
+      // anonymous caller reaching this endpoint can no longer scrape
       // the whole table in one request — no anonymous-specific override
       // needed here (unlike isActive/email/meta/etc, which still is below).
       const { limit, offset, usePagination } = resolvePagination({
@@ -388,7 +388,7 @@ export const orgRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
-      // publicReadProcedure lets an anonymous caller reach `all` (#378) --
+      // publicReadProcedure lets an anonymous caller reach `all` --
       // the `select` above pulls email/phone/meta/lastAnnualReview for
       // every row, same as `byId` does, so mask them the same way here.
       const isAnonymousAll = !ctx.session?.user;
@@ -665,7 +665,7 @@ export const orgRouter = {
       }));
 
       // Sorting and pagination are pushed into the SQL query above
-      // (editableOrgsQuery/withPagination, #912) rather than done here in
+      // (editableOrgsQuery/withPagination) rather than done here in
       // memory; `paginatedOrgs` and `total` are already final. No anonymous
       // masking needed here: `protectedProcedure` already requires
       // `ctx.session.user`, so an anonymous caller never reaches this
@@ -760,7 +760,7 @@ export const orgRouter = {
         );
       const isAnonymous = !ctx.session?.user;
       // publicReadProcedure lets an anonymous caller reach this endpoint
-      // (#378) — don't let a guessed/enumerated ID return an inactive org's
+      // don't let a guessed/enumerated ID return an inactive org's
       // details to someone with no session at all.
       if (org?.isActive === false && isAnonymous) {
         return { org: null };

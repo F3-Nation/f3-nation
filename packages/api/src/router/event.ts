@@ -145,7 +145,7 @@ function buildEventWhereClause(params: {
 }): SQL | undefined {
   const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
 
-  // publicReadProcedure lets an anonymous caller reach `all`/`count` (#378) —
+  // publicReadProcedure lets an anonymous caller reach `all`/`count` —
   // clamp to active-only regardless of what `statuses` it passes, since
   // inactive events were never meant to be public. Authenticated behavior
   // (including an explicit request for inactive/both) is unchanged.
@@ -159,7 +159,7 @@ function buildEventWhereClause(params: {
       : effectiveStatuses.length === IsActiveStatus.length
         ? undefined
         : eq(schema.events.isActive, effectiveStatuses.includes("active")),
-    // publicReadProcedure lets an anonymous caller reach this endpoint (#378);
+    // publicReadProcedure lets an anonymous caller reach this endpoint;
     // isPrivate events were never filtered because every prior caller was at
     // least a signed-in user. Keep that behavior unchanged for authenticated
     // callers and only hide private events from anonymous ones.
@@ -322,9 +322,9 @@ export const eventRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      // #912's resolvePagination already bounds the "omit both params"
+      // resolvePagination already bounds the "omit both params"
       // branch to a single default-sized page for every caller, so an
-      // anonymous caller reaching this endpoint (#378) can no longer scrape
+      // anonymous caller reaching this endpoint can no longer scrape
       // the whole table in one request — no anonymous-specific override
       // needed here (unlike isActive/isPrivate filtering, which still is).
       const { limit, offset, usePagination } = resolvePagination({
@@ -502,7 +502,7 @@ export const eventRouter = {
         ...event,
         location: getFullAddress(event),
         // publicReadProcedure lets an anonymous caller reach this endpoint
-        // (#378) — an event's contact email isn't part of the map's own
+        // an event's contact email isn't part of the map's own
         // public browse payload, so don't let it leak here either.
         email: isAnonymousAll ? null : event.email,
       }));
@@ -718,7 +718,7 @@ export const eventRouter = {
         .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
 
       // publicReadProcedure lets an anonymous caller reach this endpoint
-      // (#378) — don't let a guessed/enumerated ID leak a private OR
+      // don't let a guessed/enumerated ID leak a private OR
       // inactive event's details to someone with no session at all (the
       // `all` list endpoint already clamps anonymous callers to active,
       // non-private events; byId must not be a backdoor around that).
@@ -1079,7 +1079,7 @@ export const eventRouter = {
           ),
         )
         // publicReadProcedure lets an anonymous caller reach this endpoint
-        // (#378) — don't leak a private OR inactive event's ID (even bare,
+        // don't leak a private OR inactive event's ID (even bare,
         // with no other fields) to a caller with no session at all.
         .where(
           !ctx.session?.user

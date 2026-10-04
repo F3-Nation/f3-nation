@@ -121,9 +121,9 @@ export const locationRouter = {
     )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
-      // #912's resolvePagination already bounds the "omit both params"
+      // resolvePagination already bounds the "omit both params"
       // branch to a single default-sized page for every caller, so an
-      // anonymous caller reaching this endpoint (#378) can no longer scrape
+      // anonymous caller reaching this endpoint can no longer scrape
       // the whole table in one request — no anonymous-specific override
       // needed here (unlike isActive/email/meta, which still is below).
       const { limit, offset, usePagination } = resolvePagination({
@@ -155,7 +155,7 @@ export const locationRouter = {
       }
 
       // publicReadProcedure lets an anonymous caller reach this endpoint
-      // (#378). Every authenticated-caller behavior below is unchanged
+      // Every authenticated-caller behavior below is unchanged
       // (including "no statuses means no filter"); an anonymous caller is
       // additionally clamped to active-only, whatever `statuses` it passes,
       // since inactive locations were never meant to be public.
@@ -242,7 +242,7 @@ export const locationRouter = {
         : await query.orderBy(...sortedColumns).limit(limit);
 
       // publicReadProcedure lets an anonymous caller reach this endpoint
-      // (#378) — a location's contact email/metadata isn't part of the
+      // a location's contact email/metadata isn't part of the
       // map's own public browse payload, so don't let it leak here either.
       const maskedLocations = isAnonymous
         ? locations.map((loc) => ({ ...loc, email: null, meta: null }))

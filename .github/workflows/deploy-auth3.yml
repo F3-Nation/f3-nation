@@ -1,20 +1,19 @@
 name: Deploy Auth3
 
-# #876 Phase 3: Better Auth's own Cloud Run service, standing up alongside
+# Better Auth's own Cloud Run service, standing up alongside
 # (not replacing) the existing f3-auth deployment that deploy-auth.yml
 # manages. Same image/Dockerfile, same GCP projects, separate service name
 # and URL — see apps/auth/scripts/cloud-run-env-auth3.sh for why this isn't
 # just a new input set on deploy-auth.yml.
 
 # workflow_dispatch only, deliberately — NOT a push-tag trigger. auth3
-# shares its release tag with f3-auth's existing deploy-auth.yml (there is
-# no separate "auth3@" component), so a push trigger here would fire this
-# workflow on every future routine auth release, before BETTER_AUTH_SECRET
-# exists in Secret Manager (apps/auth/scripts/cloud-run-env-auth3.sh is a
-# manual, separate step from this deploy) and before DNS exists for
-# staging.auth3./auth3.f3nation.com — the first automatic run would stand
-# up a Cloud Run revision with no env vars at all. Switch this to a tag
-# push once the org has actually provisioned auth3 (#876 Phase 3/4 sign-off).
+# shares its release tag with f3-auth (there is no separate "auth3@"
+# component), so a push trigger would redeploy auth3 on every routine auth
+# release. First-time setup order: dispatch this once to create the service
+# (it will fail health checks until configured), then run
+# apps/auth/scripts/cloud-run-env-auth3.sh to set its env and secrets — that
+# script updates an existing service and can't create one. Revisit a tag
+# trigger once auth3 is provisioned and has real DNS.
 on:
   workflow_dispatch:
     inputs:
@@ -57,5 +56,5 @@ jobs:
       prod_url: https://auth3.f3nation.com
       # Same rationale as deploy-auth.yml: in-memory rate limiter needs a
       # single instance to stay authoritative until it moves to a shared
-      # store. See #356.
+      # store.
       flags: "--min-instances=1 --max-instances=1"

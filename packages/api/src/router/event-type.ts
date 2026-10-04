@@ -179,7 +179,7 @@ export const eventTypeRouter = {
           : undefined;
 
       // publicReadProcedure lets an anonymous caller reach this endpoint
-      // (#378) — clamp to active-only regardless of what `statuses` it
+      // clamp to active-only regardless of what `statuses` it
       // passes (an omitted `statuses` previously meant "no filter," i.e.
       // inactive types included by default). Authenticated behavior is
       // unchanged.

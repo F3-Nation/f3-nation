@@ -211,7 +211,7 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
     });
   });
 
-  // #378: publicReadProcedure — anonymous reaches the map's browse endpoints,
+  // publicReadProcedure — anonymous reaches the map's browse endpoints,
   // but not the endpoints that stayed protectedProcedure/editorProcedure.
   describe("publicReadProcedure GET /v1/map/location/events-and-locations", () => {
     const PATH = "/v1/map/location/events-and-locations";
@@ -268,7 +268,7 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
 // createFixtureUser, sessionCookie all need the in-process DB/cookie-signing
 // machinery), so unlike everything in the describe.runIf(target.inProcess)
 // block above, this runs against ANY target including a live deployment
-// (apps/api/characterization/targets/live.ts) — #876 Phase 3 names this
+// (apps/api/characterization/targets/live.ts) names this
 // live-mode auth coverage as a cutover prerequisite that didn't exist before
 // (every other auth characterization test is gated to in-process only).
 describe("role guards — live-safe (no fixtures, every target)", () => {

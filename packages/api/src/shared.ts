@@ -117,8 +117,8 @@ export const publicProcedure = base;
  * on this tier (`map.submitFeedback`) derives nothing from `ctx.session`, so
  * anonymity doesn't change what it's allowed to do. Use only for endpoints
  * whose response — or, for a write, whose effect — is safe for an anonymous
- * caller; see docs/AI_GUARDRAILS.md for the "when to pick this tier"
- * checklist. `protectedProcedure` remains the default for anything that
+ * caller; see the procedure-tier table in docs/AI_DEVELOPMENT_GUIDE.md before
+ * adding an endpoint here. `protectedProcedure` remains the default for anything that
  * requires a real credential.
  */
 export const publicReadProcedure = withSessionAndDb;
