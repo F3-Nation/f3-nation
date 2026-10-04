@@ -183,6 +183,115 @@ export const slackSpaces = pgTable(
   (table) => [unique("slack_spaces_team_id_key").on(table.teamId)],
 );
 
+export const slackbotSchema = pgSchema("slackbot");
+
+export const f3versaryDeliveryRuns = slackbotSchema.table(
+  "f3versary_delivery_runs",
+  {
+    id: serial().primaryKey().notNull(),
+    slackSpaceId: integer("slack_space_id").notNull(),
+    orgId: integer("org_id").notNull(),
+    processingDate: date("processing_date").notNull(),
+    targetDate: date("target_date").notNull(),
+    channel: text().notNull(),
+    leadDays: integer("lead_days").notNull(),
+    status: varchar({ length: 16 }).default("planned").notNull(),
+    pageCount: integer("page_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("f3versary_delivery_runs_space_org_date_key").on(
+      table.slackSpaceId,
+      table.orgId,
+      table.processingDate,
+    ),
+    index("idx_f3versary_delivery_runs_space_org_status").on(
+      table.slackSpaceId,
+      table.orgId,
+      table.status,
+      table.processingDate,
+    ),
+    foreignKey({
+      columns: [table.slackSpaceId],
+      foreignColumns: [slackSpaces.id],
+      name: "f3versary_delivery_runs_slack_space_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.orgId],
+      foreignColumns: [orgs.id],
+      name: "f3versary_delivery_runs_org_id_fkey",
+    }),
+    check(
+      "f3versary_delivery_runs_status_check",
+      sql`${table.status} IN ('planned', 'complete', 'abandoned')`,
+    ),
+    check(
+      "f3versary_delivery_runs_lead_days_check",
+      sql`${table.leadDays} BETWEEN 0 AND 30`,
+    ),
+    check(
+      "f3versary_delivery_runs_page_count_check",
+      sql`${table.pageCount} >= 0`,
+    ),
+  ],
+);
+
+export const f3versaryDeliveryPages = slackbotSchema.table(
+  "f3versary_delivery_pages",
+  {
+    id: serial().primaryKey().notNull(),
+    runId: integer("run_id").notNull(),
+    pageNumber: integer("page_number").notNull(),
+    text: text().notNull(),
+    blocks: jsonb().$type<Record<string, unknown>[]>().notNull(),
+    clientMsgId: uuid("client_msg_id").notNull(),
+    status: varchar({ length: 16 }).default("pending").notNull(),
+    claimToken: uuid("claim_token"),
+    claimExpiresAt: timestamp("claim_expires_at", {
+      withTimezone: true,
+      mode: "string",
+    }),
+    slackTs: varchar("slack_ts", { length: 32 }),
+    sentAt: timestamp("sent_at", { withTimezone: true, mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("f3versary_delivery_pages_run_page_key").on(
+      table.runId,
+      table.pageNumber,
+    ),
+    unique("f3versary_delivery_pages_client_msg_id_key").on(table.clientMsgId),
+    index("idx_f3versary_delivery_pages_run_status_page").on(
+      table.runId,
+      table.status,
+      table.pageNumber,
+    ),
+    foreignKey({
+      columns: [table.runId],
+      foreignColumns: [f3versaryDeliveryRuns.id],
+      name: "f3versary_delivery_pages_run_id_fkey",
+    }),
+    check(
+      "f3versary_delivery_pages_page_number_check",
+      sql`${table.pageNumber} >= 1`,
+    ),
+    check(
+      "f3versary_delivery_pages_status_check",
+      sql`${table.status} IN ('pending', 'claimed', 'sent')`,
+    ),
+  ],
+);
+
 export const expansions = pgTable("expansions", {
   id: serial().primaryKey().notNull(),
   area: varchar().notNull(),

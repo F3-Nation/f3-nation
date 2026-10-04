@@ -114,3 +114,38 @@ One tag deploys two runtimes:
 4. Deploys staging main service and staging scripts job
 5. Waits for production environment approval
 6. Promotes images and deploys production service and production job
+
+### Production profile-privacy rollout
+
+The regular release workflow passes `SLACKBOT_ENV=staging` and
+`SLACKBOT_ENV=production` in the deploy flags for the matching staging and
+production service and job. For production, the classification is applied
+with the image deployment, so the privacy image is not deployed unclassified.
+For a manual or other out-of-workflow deployment, first backfill the current
+production service and job with `SLACKBOT_ENV=production`, then explicitly
+include that variable on the deployment of the privacy image. Editing an env
+file does not update existing Cloud Run resources or revisions.
+
+Use these commands to backfill both current production resources before a
+manual/out-of-workflow privacy deployment or rollback deployment:
+
+```bash
+gcloud run services update f3-slackbot --project=f3-slackbot --region=us-central1 \
+  --update-env-vars=SLACKBOT_ENV=production
+gcloud run jobs update f3-slackbot-scripts --project=f3-slackbot --region=us-central1 \
+  --update-env-vars=SLACKBOT_ENV=production
+```
+
+After a manual deployment or backfill, inspect the service with
+`gcloud run services describe f3-slackbot --project=f3-slackbot --region=us-central1`
+and confirm the revision receiving traffic has
+`SLACKBOT_ENV=production`; inspect `gcloud run jobs describe
+f3-slackbot-scripts --project=f3-slackbot --region=us-central1` and confirm its
+job template has the same value. Include `SLACKBOT_ENV=production` explicitly
+in the rollback deployment when redeploying an older image. Do not route traffic
+to an older immutable service revision or run an older job template unless it
+has been confirmed to already contain the production classification; updating
+the current service or job does not retrofit older revisions/templates. These
+are operator-run commands for manual changes/rollback, not an automated
+cleanup. The app does not automatically delete synthetic users or clean up
+historical profile data.
