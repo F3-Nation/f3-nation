@@ -27,10 +27,10 @@ export const env = createEnv({
    */
   server: {
     AUTH_SECRET: z.string().min(1),
-    // Normal app database connection. Test-only DB overrides are managed by the
-    // DB package helpers, not by this app env schema.
+    // Normal DB connection. Test runs automatically switch to
+    // TEST_DATABASE_URL when NODE_ENV === "test".
     DATABASE_URL: z.string().min(1).optional(),
-    // Test-only override used by DB package reset/test flows.
+    // Test-only override for reset/test workflows.
     TEST_DATABASE_URL: z.string().min(1).optional(),
     NODE_ENV: z
       .enum(["development", "production", "test"])
