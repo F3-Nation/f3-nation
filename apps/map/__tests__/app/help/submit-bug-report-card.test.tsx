@@ -54,6 +54,18 @@ describe("SubmitBugReportCard", () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
+  it("alerts and skips the mutation when the subject exceeds the schema's length cap", async () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => void 0);
+    render(<SubmitBugReportCard />);
+
+    fillAndSubmit("x".repeat(201));
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("form error"));
+    expect(mutateAsync).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
   it("does not erase a draft typed while the first submission was still in flight", async () => {
     let resolveSubmit!: () => void;
     mutateAsync.mockReturnValue(
