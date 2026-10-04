@@ -152,12 +152,20 @@ function buildEventWhereClause(params: {
 }): SQL | undefined {
   const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
 
+  // publicReadProcedure lets an anonymous caller reach `all`/`count` (#378) —
+  // clamp to active-only regardless of what `statuses` it passes, since
+  // inactive events were never meant to be public. Authenticated behavior
+  // (including an explicit request for inactive/both) is unchanged.
+  const effectiveStatuses = isAnonymous
+    ? (["active"] as NonNullable<EventFilterInput["statuses"]>)
+    : input?.statuses;
+
   return and(
-    !input?.statuses?.length // no statuses provided, default to active
+    !effectiveStatuses?.length // no statuses provided, default to active
       ? eq(schema.events.isActive, true)
-      : input.statuses.length === IsActiveStatus.length
+      : effectiveStatuses.length === IsActiveStatus.length
         ? undefined
-        : eq(schema.events.isActive, input.statuses.includes("active")),
+        : eq(schema.events.isActive, effectiveStatuses.includes("active")),
     // publicReadProcedure lets an anonymous caller reach this endpoint (#378);
     // isPrivate events were never filtered because every prior caller was at
     // least a signed-in user. Keep that behavior unchanged for authenticated

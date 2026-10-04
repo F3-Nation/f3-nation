@@ -160,17 +160,26 @@ function buildOrgWhereClause(params: {
   input: OrgFilterInput;
   editableOrgIds: number[];
   isNationAdmin: boolean;
+  isAnonymous: boolean;
 }): SQL | undefined {
-  const { input, editableOrgIds, isNationAdmin } = params;
+  const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
+
+  // publicReadProcedure lets an anonymous caller reach `all`/`count` (#378) —
+  // clamp to active-only regardless of what `statuses` it passes, since
+  // inactive orgs were never meant to be public. Authenticated behavior
+  // (including an explicit request for inactive/both) is unchanged.
+  const effectiveStatuses = isAnonymous
+    ? (["active"] as NonNullable<OrgFilterInput["statuses"]>)
+    : input.statuses;
 
   return and(
     inArray(org.orgType, input.orgTypes),
-    !input.statuses
+    !effectiveStatuses
       ? eq(org.isActive, true)
-      : !input.statuses.length ||
-          input.statuses.length === IsActiveStatus.length
+      : !effectiveStatuses.length ||
+          effectiveStatuses.length === IsActiveStatus.length
         ? undefined
-        : input.statuses.includes("active")
+        : effectiveStatuses.includes("active")
           ? eq(org.isActive, true)
           : eq(org.isActive, false),
     input.searchTerm
@@ -319,6 +328,7 @@ export const orgRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: !ctx.session?.user,
       });
 
       const sortedColumns = getSortingColumns(
@@ -429,6 +439,7 @@ export const orgRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: false,
       });
 
       const count = await getOrgCount({ db: ctx.db, where });
