@@ -464,7 +464,9 @@ export const buildSingleUserQuery = async (
   };
 };
 
-// Helper to check PII access for a user
+// Helper to check PII access for a user: F3 Nation admins can access any
+// user's PII, including users with no roles; otherwise the requester must be
+// an admin of an org the user has a role on.
 export const checkUserPiiAccess = async ({
   ctx,
   userId,
@@ -472,6 +474,23 @@ export const checkUserPiiAccess = async ({
   ctx: Context;
   userId: number;
 }): Promise<boolean> => {
+  const [nation] = await ctx.db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.orgType, "nation"));
+
+  if (nation) {
+    const { success } = await checkHasRoleOnOrg({
+      orgId: nation.id,
+      session: ctx.session,
+      db: ctx.db,
+      roleName: "admin",
+    });
+    if (success) {
+      return true;
+    }
+  }
+
   // Get the user's orgs to check if requester is admin of any
   const userOrgs = await ctx.db
     .selectDistinct({

@@ -173,30 +173,9 @@ export const userRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      let includePii = false;
-      if (input?.includePii) {
-        // First, get the user's orgs to check if requester is admin of any
-        const userOrgs = await ctx.db
-          .selectDistinct({
-            orgId: schema.rolesXUsersXOrg.orgId,
-          })
-          .from(schema.rolesXUsersXOrg)
-          .where(eq(schema.rolesXUsersXOrg.userId, input.id));
-
-        // Check if requester is an admin for any of the user's orgs
-        for (const userOrg of userOrgs) {
-          const { success } = await checkHasRoleOnOrg({
-            orgId: userOrg.orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "admin",
-          });
-          if (success) {
-            includePii = true;
-            break;
-          }
-        }
-      }
+      const includePii = input?.includePii
+        ? await checkUserPiiAccess({ ctx, userId: input.id })
+        : false;
 
       return buildSingleUserQuery({
         ctx,
@@ -366,27 +345,7 @@ export const userRouter = {
       // Check if this is an update (has id) and if requester has PII access
       let hasPiiAccess = false;
       if (input.id) {
-        // Get the user's orgs to check if requester is admin of any
-        const userOrgs = await ctx.db
-          .selectDistinct({
-            orgId: schema.rolesXUsersXOrg.orgId,
-          })
-          .from(schema.rolesXUsersXOrg)
-          .where(eq(schema.rolesXUsersXOrg.userId, input.id));
-
-        // Check if requester is an admin for any of the user's orgs
-        for (const userOrg of userOrgs) {
-          const { success } = await checkHasRoleOnOrg({
-            orgId: userOrg.orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "admin",
-          });
-          if (success) {
-            hasPiiAccess = true;
-            break;
-          }
-        }
+        hasPiiAccess = await checkUserPiiAccess({ ctx, userId: input.id });
       } else {
         // For new users, check if requester has admin access to the orgs being assigned
         for (const role of roles) {
@@ -412,6 +371,36 @@ export const userRouter = {
         emergencyNotes: _emergencyNotes,
         ...nonPiiData
       } = rest;
+
+      // Without PII access, reject a request that would change PII rather than
+      // silently dropping it. An empty value means "no change" (the Edit User
+      // window sends email: "" when the PII fields are hidden), and resending
+      // the current value is not a change (the Manage Access window sends back
+      // the email it found the user by).
+      if (input.id && !hasPiiAccess) {
+        const [existingPii] = await ctx.db
+          .select({
+            email: schema.users.email,
+            phone: schema.users.phone,
+            emergencyContact: schema.users.emergencyContact,
+            emergencyPhone: schema.users.emergencyPhone,
+            emergencyNotes: schema.users.emergencyNotes,
+          })
+          .from(schema.users)
+          .where(eq(schema.users.id, input.id));
+        const changesPii = [
+          [_email && normalizeEmail(_email), existingPii?.email],
+          [_phone, existingPii?.phone],
+          [_emergencyContact, existingPii?.emergencyContact],
+          [_emergencyPhone, existingPii?.emergencyPhone],
+          [_emergencyNotes, existingPii?.emergencyNotes],
+        ].some(([sent, stored]) => !!sent && sent !== stored);
+        if (changesPii) {
+          throw new ORPCError("FORBIDDEN", {
+            message: "You do not have permission to change this user's PII",
+          });
+        }
+      }
 
       // Build updateSet based on access and whether values are provided
       let updateSet: typeof rest;
