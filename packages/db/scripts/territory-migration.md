@@ -146,7 +146,7 @@ of 0024 through 0026 does (0026 compares `org_type::text`).
 
 From the repository root, use `env -u CI pnpm db:migrate` with the separately
 approved target configured through the repository's `with-env` helper. Never
-add `--reset` or `--seed` to a production migration. The current runner skips
+add `--reset` to a production migration. The current runner skips
 migration entirely when `CI` is set, still exiting zero and logging
 `Migration done`; it exits non-zero when a migration fails. Neither its exit
 code nor the completion message establishes success. The post-run schema and
@@ -287,7 +287,7 @@ Migration 0026 replaces the fixed three-ancestor AO counting with a depth-agnost
 recount. `orgs.ao_count` is carried by every organization type except AO and
 Nation. It is the number of active AOs in the organization's subtree, reached only
 through active intermediate organizations; the organization's own status is not
-checked. The trigger, the migration backfill, and `pnpm db:seed` all call
+checked. The trigger and the migration backfill both call
 `recount_org_ao_counts()`, so Sector and Territory counts stay correct for an
 Area directly under a Sector, an Area under a Territory, and any move between them.
 
