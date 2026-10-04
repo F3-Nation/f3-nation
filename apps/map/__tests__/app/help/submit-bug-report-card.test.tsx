@@ -65,6 +65,13 @@ describe("SubmitBugReportCard", () => {
 
     fillAndSubmit("Original subject");
 
+    // Wait for the submission to actually start before changing the draft.
+    // Validation runs asynchronously, so changing the input right after the
+    // click could land before `onSubmit` captures its `values` snapshot --
+    // that snapshot would then already read "New draft" too, and the guard
+    // this test exercises would never actually see values diverge.
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+
     // The visitor starts a new message before the first submit resolves.
     fireEvent.change(subjectInput(), {
       target: { value: "New draft" },
