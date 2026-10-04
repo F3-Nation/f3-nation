@@ -19,6 +19,13 @@ import {
 } from "@opentelemetry/semantic-conventions";
 import { PostHog } from "posthog-node";
 
+import {
+  ATTR_EXCEPTION_CAUSE_CODE,
+  ATTR_EXCEPTION_CAUSE_MESSAGE,
+  ATTR_EXCEPTION_CAUSE_STACKTRACE,
+  ATTR_EXCEPTION_CAUSE_TYPE,
+} from "./error-details";
+
 export interface PostHogExceptionExporterOptions {
   apiKey: string;
   host?: string;
@@ -85,6 +92,15 @@ export class PostHogExceptionExporter implements LogRecordExporter {
         [ATTR_EXCEPTION_TYPE]: type,
         [ATTR_EXCEPTION_MESSAGE]: message,
         [ATTR_EXCEPTION_STACKTRACE]: stacktrace,
+        [ATTR_EXCEPTION_CAUSE_TYPE]: causeType,
+        [ATTR_EXCEPTION_CAUSE_MESSAGE]: causeMessage,
+        [ATTR_EXCEPTION_CAUSE_STACKTRACE]: causeStacktrace,
+        [ATTR_EXCEPTION_CAUSE_CODE]: causeCode,
+        // Dropped from the record so only the canonical values below (or
+        // none, for an error without a cause) reach PostHog.
+        root_cause_type: _rootCauseType,
+        root_cause_message: _rootCauseMessage,
+        root_cause_code: _rootCauseCode,
         ...rest
       } = record.attributes;
 
@@ -101,6 +117,24 @@ export class PostHogExceptionExporter implements LogRecordExporter {
       if (typeof stacktrace === "string" && stacktrace)
         error.stack = stacktrace;
 
+      // Re-attach the root cause as `.cause`: posthog-node turns a cause
+      // chain into chained entries in $exception_list, so the issue view
+      // shows the real reason under the wrapper (e.g. ECONNREFUSED under
+      // Drizzle's "Failed query"). Also stamped as flat root_cause_*
+      // properties, which is what an alert filters on.
+      const rootCause: Record<string, string> = {};
+      if (typeof causeMessage === "string") {
+        const cause = new Error(causeMessage);
+        if (typeof causeType === "string" && causeType) cause.name = causeType;
+        if (typeof causeStacktrace === "string" && causeStacktrace)
+          cause.stack = causeStacktrace;
+        error.cause = cause;
+        rootCause.root_cause_type = cause.name;
+        rootCause.root_cause_message = causeMessage;
+        if (typeof causeCode === "string" && causeCode)
+          rootCause.root_cause_code = causeCode;
+      }
+
       // Both apps report into one PostHog project (single shared POSTHOG_KEY),
       // so without this every $exception is distinguishable only by
       // environment — "api" and "map" errors comingle, the exact Sentry
@@ -111,11 +145,12 @@ export class PostHogExceptionExporter implements LogRecordExporter {
       // a resource-less record, so PostHog never shows an empty facet value.
       const serviceName = record.resource?.attributes[ATTR_SERVICE_NAME];
 
-      // service.name and environment are spread AFTER the record attributes:
-      // a caller-supplied key of either name must not be able to overwrite
-      // the canonical one.
+      // root_cause_*, service.name and environment are spread AFTER the
+      // record attributes: a caller-supplied key of any of those names must
+      // not be able to overwrite the canonical one.
       await this.getClient().captureExceptionImmediate(error, undefined, {
         ...rest,
+        ...rootCause,
         ...(serviceName === undefined
           ? {}
           : { [ATTR_SERVICE_NAME]: serviceName }),
