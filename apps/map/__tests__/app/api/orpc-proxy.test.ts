@@ -256,14 +256,19 @@ describe("oRPC proxy route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("does not force Cache-Control on a public response", async () => {
+  it("also sets Cache-Control: no-store on a public response", async () => {
+    // Every path here forwards the caller's own cookie, including several
+    // PUBLIC_PATHS entries whose response still varies per caller via
+    // `onlyMine` for a signed-in editor -- a shared cache keyed on URL alone
+    // can't tell that apart from the anonymous response for the same
+    // path/query, so every response is uncached, not just SIGNED_IN_ONLY_PATHS.
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
 
     const response = await GET(request);
 
-    expect(response.headers.has("cache-control")).toBe(false);
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   // fetch() decodes a compressed upstream body but keeps its headers; passing
