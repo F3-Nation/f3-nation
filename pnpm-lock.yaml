@@ -1838,9 +1838,15 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 5.0.2(vitest@5.0.2)
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.3(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(kysely@0.29.5)(pg@8.23.0)(postgres@3.4.9)
       eslint:
         specifier: 'catalog:'
         version: 10.11.0(jiti@2.7.0)(supports-color@8.1.1)
+      postgres:
+        specifier: 'catalog:'
+        version: 3.4.9
       prettier:
         specifier: 'catalog:'
         version: 3.9.9
