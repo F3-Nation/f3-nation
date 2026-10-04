@@ -10,7 +10,9 @@ def is_production_deployment() -> bool:
     """Return whether this process is explicitly configured for production."""
     deployment_environment = os.environ.get("SLACKBOT_ENV", "local")
     if deployment_environment not in {"local", "staging", "test", "production"}:
-        raise ValueError("SLACKBOT_ENV must be one of: local, staging, test, production")
+        raise ValueError(
+            f"SLACKBOT_ENV must be one of: local, staging, test, production; got {deployment_environment!r}"
+        )
     return deployment_environment == "production"
 
 

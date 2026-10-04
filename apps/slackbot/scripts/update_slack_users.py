@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 
@@ -18,6 +19,7 @@ def update_slack_users(force=False):
     Update Slack users in the database with their latest information from Slack.
     """
     if not is_production_deployment():
+        logging.getLogger(__name__).info("Skipping Slack user profile sync outside production.")
         return
 
     all_slack_users = DbManager.find_records(cls=SlackUser, filters=[True])
@@ -122,6 +124,14 @@ def update_home_regions():
             session.commit()
 
 
-if __name__ == "__main__":
+def main():
+    production = is_production_deployment()
     update_slack_users()
-    update_home_regions()
+    if production:
+        update_home_regions()
+    else:
+        logging.getLogger(__name__).info("Skipping home-region refresh outside production.")
+
+
+if __name__ == "__main__":
+    main()

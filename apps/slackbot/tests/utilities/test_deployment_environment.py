@@ -31,6 +31,13 @@ def test_invalid_environment_raises_value_error(environment, monkeypatch):
         is_production_deployment()
 
 
+def test_invalid_environment_error_includes_repr_of_value(monkeypatch):
+    monkeypatch.setenv("SLACKBOT_ENV", "bad\nvalue")
+
+    with pytest.raises(ValueError, match=r"got 'bad\\nvalue'"):
+        is_production_deployment()
+
+
 def test_local_development_does_not_disable_explicit_production(monkeypatch):
     monkeypatch.setenv("SLACKBOT_ENV", "production")
     monkeypatch.setenv("LOCAL_DEVELOPMENT", "true")

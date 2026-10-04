@@ -1,5 +1,6 @@
 import os
 import sys
+from copy import copy
 from types import SimpleNamespace
 
 import pytest
@@ -99,10 +100,10 @@ def test_get_region_record_creates_workspace_when_unrelated_settings_are_malform
 class _FakeSession:
     def __init__(self, existing_slack_user=None, after_lock=None):
         self.records = []
-        self.observed_records = []
         self.expunged = []
         self.expired_on_commit = []
         self.lock_calls = []
+        self.events = []
         self.lookup_count = 0
         self.next_id = 101
         self.database_slack_user = existing_slack_user
@@ -112,12 +113,11 @@ class _FakeSession:
         return self
 
     def __exit__(self, *_args):
-        self.expired_on_commit = [
-            record for record in [*self.records, *self.observed_records] if record not in self.expunged
-        ]
+        self.expired_on_commit = [record for record in self.records if record not in self.expunged]
         return False
 
     def add(self, record):
+        self.events.append(("add", record))
         self.records.append(record)
         if getattr(record, "id", None) is None:
             record.id = self.next_id
@@ -126,25 +126,25 @@ class _FakeSession:
             self.database_slack_user = record
 
     def flush(self):
-        if self.database_slack_user and self.observed_records:
-            session_row = self.observed_records[-1]
-            for field, value in vars(session_row).items():
-                setattr(self.database_slack_user, field, value)
+        self.events.append(("flush",))
 
     def expunge(self, record):
+        self.events.append(("expunge", record))
         self.expunged.append(record)
 
     def execute(self, statement, parameters):
+        self.events.append(("lock",))
         self.lock_calls.append((str(statement), parameters))
         if self.after_lock:
             self.after_lock(self)
 
     def scalars(self, _query):
+        self.events.append(("select",))
         self.lookup_count += 1
         if self.database_slack_user:
-            session_row = SimpleNamespace(**vars(self.database_slack_user))
-            self.observed_records.append(session_row)
-            return SimpleNamespace(first=lambda: session_row)
+            loaded_slack_user = copy(self.database_slack_user)
+            self.records.append(loaded_slack_user)
+            return SimpleNamespace(first=lambda: loaded_slack_user)
         return SimpleNamespace(first=lambda: None)
 
 
@@ -155,7 +155,9 @@ def _use_fake_nonproduction_db(monkeypatch, slack_users=None, after_lock=None):
     monkeypatch.setattr(
         helper_functions.DbManager,
         "find_records",
-        lambda *_args, **_kwargs: pytest.fail("non-production creation must query inside its locked session"),
+        lambda model, *_args, **_kwargs: (
+            [session.database_slack_user] if model is helper_functions.SlackUser and session.database_slack_user else []
+        ),
     )
     monkeypatch.setattr(helper_functions, "session_scope", lambda: session)
     helper_functions.SLACK_USERS.clear()
@@ -170,7 +172,7 @@ def test_nonproduction_unknown_user_is_synthetic_and_repeatable(monkeypatch):
     slack_user = helper_functions.get_user("U_SYNTHETIC", region, client, None)
     same_slack_user = helper_functions.get_user("U_SYNTHETIC", region, client, None)
 
-    user = session.records[0]
+    user = next(record for record in session.records if isinstance(record, helper_functions.User))
     assert same_slack_user.id == slack_user.id
     assert same_slack_user.user_id == slack_user.user_id
     assert user.email == f"dev.staging-email-sink+{user.id}@f3nation.com"
@@ -186,6 +188,16 @@ def test_nonproduction_unknown_user_is_synthetic_and_repeatable(monkeypatch):
     assert user in session.expunged
     assert slack_user in session.expunged
     assert session.expired_on_commit == []
+    assert [event[0] for event in session.events] == [
+        "lock",
+        "select",
+        "add",
+        "flush",
+        "add",
+        "flush",
+        "expunge",
+        "expunge",
+    ]
 
 
 def test_nonproduction_known_user_preserves_link_without_slack_lookup(monkeypatch):
@@ -195,8 +207,32 @@ def test_nonproduction_known_user_preserves_link_without_slack_lookup(monkeypatc
 
     result = helper_functions.get_user("U_KNOWN", SimpleNamespace(org_id=9, team_id="T_KNOWN"), client, None)
 
-    assert result is not known
+    assert result is known
     assert result.user_id == 77
+
+
+def test_nonproduction_get_user_preloads_complete_cache_for_positions(monkeypatch):
+    from features import positions
+
+    first = SimpleNamespace(slack_id="U_FIRST", user_id=78, slack_team_id="T_CACHE")
+    second = SimpleNamespace(slack_id="U_SECOND", user_id=79, slack_team_id="T_CACHE")
+    session = _use_fake_nonproduction_db(monkeypatch, {"record": first})
+    monkeypatch.setattr(
+        helper_functions.DbManager,
+        "find_records",
+        lambda model, *_args, **_kwargs: [first, second] if model is helper_functions.SlackUser else [],
+    )
+
+    result = helper_functions.get_user(
+        first.slack_id,
+        SimpleNamespace(org_id=9, team_id="T_CACHE"),
+        SimpleNamespace(users_info=lambda **_kwargs: pytest.fail("users_info must not be called")),
+        None,
+    )
+
+    assert result is first
+    assert positions._user_id_to_slack_id_map("T_CACHE") == {78: "U_FIRST", 79: "U_SECOND"}
+    assert session.lookup_count == 0
 
 
 def test_nonproduction_get_user_returns_linked_cache_without_database_lookup(monkeypatch):
@@ -249,7 +285,8 @@ def test_nonproduction_direct_create_links_unlinked_row_without_email_matching(m
         home_region_id=12,
     )
 
-    user = session.records[0]
+    user = next(record for record in session.records if isinstance(record, helper_functions.User))
+    assert result.id == old_slack_user.id
     assert result is not old_slack_user
     assert result.user_id == user.id
     assert user.email == f"dev.staging-email-sink+{user.id}@f3nation.com"
@@ -258,12 +295,13 @@ def test_nonproduction_direct_create_links_unlinked_row_without_email_matching(m
     assert result.user_name == f"F3 {user.id}"
     assert result.avatar_url is None
     assert result.slack_team_id == "T_STORED"
-    assert old_slack_user.user_id == user.id
-    assert old_slack_user.email == user.email
-    assert old_slack_user.user_name == f"F3 {user.id}"
-    assert old_slack_user.avatar_url is None
-    assert old_slack_user.slack_team_id == "T_STORED"
-    assert old_slack_user in session.expunged
+    assert result.user_id == user.id
+    assert result.email == user.email
+    assert result.user_name == f"F3 {user.id}"
+    assert result.avatar_url is None
+    assert result.slack_team_id == "T_STORED"
+    loaded_slack_user = next(record for record in session.records if record is not user)
+    assert loaded_slack_user in session.expunged
     assert user in session.expunged
     assert session.expired_on_commit == []
 
@@ -288,18 +326,19 @@ def test_nonproduction_get_user_links_cached_orphan(monkeypatch):
         None,
     )
 
-    user = session.records[0]
+    user = next(record for record in session.records if isinstance(record, helper_functions.User))
+    assert result.id == orphan.id
     assert result is not orphan
     assert result.user_id == user.id
     assert result.email == user.email == f"dev.staging-email-sink+{user.id}@f3nation.com"
     assert result.user_name == f"F3 {user.id}"
     assert result.avatar_url is None
     assert result.slack_team_id == "T_CACHED"
-    assert orphan.user_id == user.id
-    assert orphan.email == result.email
-    assert orphan.user_name == result.user_name
-    assert orphan.avatar_url is None
-    assert orphan.slack_team_id == "T_CACHED"
+    assert session.events[0][0] == "lock"
+    assert session.events[1][0] == "select"
+    loaded_slack_user = next(record for record in session.records if record is not user)
+    assert ("expunge", loaded_slack_user) in session.events
+    assert loaded_slack_user in session.expunged
 
 
 def test_nonproduction_requeries_after_advisory_lock_and_uses_worker_created_row(monkeypatch):
@@ -313,10 +352,12 @@ def test_nonproduction_requeries_after_advisory_lock_and_uses_worker_created_row
 
     result = helper_functions.create_user({"id": "U_LOCKED", "profile": {"email": "ignored@example.invalid"}})
 
+    assert result.id == created_by_worker.id
     assert result is not created_by_worker
     assert result.user_id == created_by_worker.user_id
-    assert session.records == []
+    assert not any(isinstance(record, helper_functions.User) for record in session.records)
     assert session.lookup_count == 1
+    assert [event[0] for event in session.events[:2]] == ["lock", "select"]
     assert len(session.lock_calls) == 1
     statement, parameters = session.lock_calls[0]
     assert "pg_advisory_xact_lock(:lock_key)" in statement
@@ -342,9 +383,10 @@ def test_nonproduction_requeries_orphan_linked_by_worker_without_creating_user(m
 
     result = helper_functions.create_user({"id": orphan.slack_id})
 
+    assert result.id == orphan.id
     assert result is not orphan
     assert result.user_id == 777
-    assert session.records == []
+    assert not any(isinstance(record, helper_functions.User) for record in session.records)
     assert session.lookup_count == 1
 
 
@@ -358,9 +400,11 @@ def test_nonproduction_create_user_does_not_read_profile_before_lookup(monkeypat
                 raise AssertionError("profile must not be accessed")
             return super().__getitem__(key)
 
-    result = helper_functions.create_user(ProfileGuard(id="U_LINKED"))
+    result = helper_functions.create_user(
+        ProfileGuard(id="U_LINKED", profile={"email": "must-not-be-read@example.invalid"})
+    )
 
-    assert result is not known
+    assert result.slack_id == known.slack_id
     assert result.user_id == known.user_id
 
 

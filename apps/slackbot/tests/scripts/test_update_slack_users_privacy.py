@@ -30,6 +30,41 @@ def test_nonproduction_sync_returns_before_database_or_slack_calls(monkeypatch, 
     web_client.assert_not_called()
 
 
+def test_nonproduction_sync_logs_safe_skip_message(monkeypatch, caplog):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: False)
+    caplog.set_level("INFO")
+
+    update_slack_users.update_slack_users()
+
+    assert "Skipping Slack user profile sync outside production." in caplog.text
+
+
+def test_script_skips_home_region_refresh_outside_production(monkeypatch, caplog):
+    monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: False)
+    caplog.set_level("INFO")
+    sync = Mock()
+    home_regions = Mock(side_effect=AssertionError("home regions should not be updated"))
+    monkeypatch.setattr(update_slack_users, "update_slack_users", sync)
+    monkeypatch.setattr(update_slack_users, "update_home_regions", home_regions)
+
+    update_slack_users.main()
+
+    sync.assert_called_once_with()
+    home_regions.assert_not_called()
+    assert "Skipping home-region refresh outside production." in caplog.text
+
+
+def test_script_validates_environment_before_running_jobs(monkeypatch):
+    monkeypatch.setenv("SLACKBOT_ENV", "invalid")
+    sync = Mock(side_effect=AssertionError("sync should not run"))
+    monkeypatch.setattr(update_slack_users, "update_slack_users", sync)
+
+    with pytest.raises(ValueError, match="SLACKBOT_ENV"):
+        update_slack_users.main()
+
+    sync.assert_not_called()
+
+
 def test_production_sync_imports_slack_name_and_avatar(monkeypatch):
     monkeypatch.setattr(update_slack_users, "is_production_deployment", lambda: True)
     slack_user = SimpleNamespace(id=17, slack_id="UFAKE001", user_id=42, slack_updated=1)

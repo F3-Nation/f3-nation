@@ -240,6 +240,8 @@ def get_user_names(
 
 def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient, logger: Logger) -> SlackUser:
     if not constants.is_production_deployment():
+        if not SLACK_USERS:
+            update_local_slack_users()
         cached_user: SlackUser | None = safe_get(SLACK_USERS, slack_user_id)
         if cached_user and safe_get(cached_user, "user_id"):
             return cached_user
