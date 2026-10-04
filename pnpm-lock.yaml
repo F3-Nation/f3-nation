@@ -185,9 +185,6 @@ catalogs:
     '@commitlint/types':
       specifier: ^21.2.3
       version: 21.2.3
-    '@faker-js/faker':
-      specifier: ^10.6.0
-      version: 10.6.0
     '@google-cloud/storage':
       specifier: ^8.2.0
       version: 8.2.0
@@ -632,9 +629,6 @@ importers:
       commitizen:
         specifier: 'catalog:'
         version: 4.3.2(@types/node@25.9.2)(typescript@6.0.3)
-      dotenv-cli:
-        specifier: 'catalog:'
-        version: 11.0.0
       eslint:
         specifier: 'catalog:'
         version: 10.11.0(jiti@2.7.0)(supports-color@8.1.1)
@@ -1629,9 +1623,6 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../shared
-      dayjs:
-        specifier: 'catalog:'
-        version: 1.11.23
       dotenv-cli:
         specifier: 'catalog:'
         version: 11.0.0
@@ -1893,9 +1884,6 @@ importers:
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript
-      '@faker-js/faker':
-        specifier: 'catalog:'
-        version: 10.6.0
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.25
@@ -2325,45 +2313,21 @@ importers:
 
   tooling/scripts:
     devDependencies:
-      '@acme/api':
-        specifier: workspace:*
-        version: link:../../packages/api
-      '@acme/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@acme/env':
-        specifier: workspace:*
-        version: link:../../packages/env
       '@acme/eslint-config':
         specifier: workspace:*
         version: link:../eslint
-      '@acme/mail':
-        specifier: workspace:*
-        version: link:../../packages/mail
       '@acme/prettier-config':
         specifier: workspace:*
         version: link:../prettier
-      '@acme/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../typescript
-      dotenv-cli:
-        specifier: 'catalog:'
-        version: 11.0.0
-      drizzle-orm:
-        specifier: 'catalog:'
-        version: 0.45.3(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(kysely@0.29.5)(pg@8.23.0)(postgres@3.4.9)
       eslint:
         specifier: 'catalog:'
         version: 10.11.0(jiti@2.7.0)(supports-color@8.1.1)
       prettier:
         specifier: 'catalog:'
         version: 3.9.9
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.15
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -3444,10 +3408,6 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
-
-  '@faker-js/faker@10.6.0':
-    resolution: {integrity: sha512-3RQHgEtvL1Frl/d1cSreo7qhJ3Gk1OdNUai/CtZ8G+wYeRQnJih3s9xJ9/kgYekPQRdwgh0HXRPqMlzWGwivIQ==}
-    engines: {node: ^20.19.0 || ^22.13.0 || ^23.5.0 || >=24.0.0, npm: '>=10'}
 
   '@floating-ui/core@1.7.5':
     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
@@ -9731,8 +9691,6 @@ snapshots:
   '@exodus/bytes@1.15.1(@noble/hashes@2.4.0)':
     optionalDependencies:
       '@noble/hashes': 2.4.0
-
-  '@faker-js/faker@10.6.0': {}
 
   '@floating-ui/core@1.7.5':
     dependencies:
