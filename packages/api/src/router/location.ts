@@ -23,6 +23,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import {
   adminProcedure,
@@ -43,15 +44,7 @@ export const locationRouter = {
             .describe(
               "Search locations by name or description. Case-insensitive partial matching.",
             ),
-          pageIndex: z.coerce
-            .number()
-            .optional()
-            .describe("Zero-based page index for pagination. Defaults to 0."),
-          pageSize: z.coerce
-            .number()
-            .max(200)
-            .optional()
-            .describe("Number of locations per page. Defaults to 10, max 200."),
+          ...paginationFields("locations"),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, locationName, regionName, isActive, latitude, longitude, addressStreet, addressCity, addressState, addressZip, created.",
           ),
@@ -128,14 +121,16 @@ export const locationRouter = {
     )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      // publicReadProcedure lets an anonymous caller reach this endpoint
-      // (#378) — force pagination for an anonymous caller so omitting both
-      // params can't scrape the whole table in one request.
-      const usePagination =
-        (input?.pageIndex !== undefined && input?.pageSize !== undefined) ||
-        !ctx.session?.user;
+      // #912's resolvePagination already bounds the "omit both params"
+      // branch to a single default-sized page for every caller, so an
+      // anonymous caller reaching this endpoint (#378) can no longer scrape
+      // the whole table in one request — no anonymous-specific override
+      // needed here (unlike isActive/email/meta, which still is below).
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Determine if filter by editable org IDs is needed
       let editableOrgIds: number[] = [];
@@ -244,7 +239,7 @@ export const locationRouter = {
 
       const locations = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       // publicReadProcedure lets an anonymous caller reach this endpoint
       // (#378) — a location's contact email/metadata isn't part of the

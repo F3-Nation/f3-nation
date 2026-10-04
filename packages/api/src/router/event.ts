@@ -29,8 +29,9 @@ import { EventCrupdateSchema } from "@acme/validators";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
-import { logError } from "../logger";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { logError } from "../logger";
 import type { Context } from "../shared";
 import {
   editorProcedure,
@@ -85,15 +86,7 @@ type EventFilterInput = z.infer<typeof eventFilterSchema>;
 // Extended schema with pagination and sorting for the `all` endpoint
 const eventAllInputSchema = eventFilterSchema
   .extend({
-    pageIndex: z.coerce
-      .number()
-      .optional()
-      .describe("Zero-based page index for pagination. Defaults to 0."),
-    pageSize: z.coerce
-      .number()
-      .max(200)
-      .optional()
-      .describe("Number of events per page. Defaults to 10, max 200."),
+    ...paginationFields("events"),
     sorting: z
       .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
       .optional()
@@ -329,15 +322,16 @@ export const eventRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      // publicReadProcedure lets an anonymous caller reach this endpoint
-      // (#378) — omitting both pageIndex and pageSize returns every matching
-      // row unpaginated, which an authenticated admin UI relies on but an
-      // anonymous caller could use to scrape the whole table in one request.
-      const usePagination =
-        (input?.pageIndex !== undefined && input?.pageSize !== undefined) ||
-        !ctx.session?.user;
+      // #912's resolvePagination already bounds the "omit both params"
+      // branch to a single default-sized page for every caller, so an
+      // anonymous caller reaching this endpoint (#378) can no longer scrape
+      // the whole table in one request — no anonymous-specific override
+      // needed here (unlike isActive/isPrivate filtering, which still is).
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
@@ -501,7 +495,7 @@ export const eventRouter = {
 
       const events = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       const isAnonymousAll = !ctx.session?.user;
       const eventsWithLocation = events.map((event) => ({

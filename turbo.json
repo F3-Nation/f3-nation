@@ -30,6 +30,7 @@
     "E2E_API_URL",
     "CHAR_TEST_TARGET",
     "CHAR_TEST_BASE_URL",
+    "CHAR_TEST_SHARED_DB",
     "CHAR_TEST_SIGNING_JWK",
     "SUPER_ADMIN_API_KEY",
     "EMAIL_ADMIN_DESTINATIONS",
@@ -76,18 +77,7 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [
-        ".next/**",
-        "!.next/cache/**",
-        "next-env.d.ts",
-        ".expo/**",
-        ".output/**",
-        "dist/**"
-      ]
-    },
-    "build:server": {
-      "dependsOn": ["^topo", "^build"],
-      "outputs": ["dist/**"]
+      "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts", "dist/**"]
     },
     "dev": {
       "persistent": true,

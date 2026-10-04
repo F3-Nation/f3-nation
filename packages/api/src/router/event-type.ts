@@ -20,6 +20,7 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { paginationFields, resolvePagination } from "../lib/pagination";
 import {
   editorProcedure,
   protectedProcedure,
@@ -47,14 +48,7 @@ export const eventTypeRouter = {
             .describe(
               "Filter event types by status. Matches event types with ANY of the given statuses (active, inactive).",
             ),
-          pageIndex: z.coerce
-            .number()
-            .optional()
-            .describe("Zero-based page index for pagination. Defaults to 0."),
-          pageSize: z.coerce
-            .number()
-            .optional()
-            .describe("Number of event types per page. Defaults to 10."),
+          ...paginationFields("event types"),
           searchTerm: z
             .string()
             .optional()
@@ -126,30 +120,40 @@ export const eventTypeRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
-      const sortedColumns = input?.sorting?.map((sorting) => {
-        const direction = sorting.desc ? desc : asc;
-        switch (sorting.id) {
-          case "name":
-            return direction(schema.eventTypes.name);
-          case "description":
-            return direction(sql`NULLIF(${schema.eventTypes.description}, '')`);
-          case "eventCategory":
-            return direction(schema.eventTypes.eventCategory);
-          case "specificOrgName":
-            return direction(schema.orgs.name);
-          case "count":
-            return direction(count(schema.eventsXEventTypes.eventTypeId));
-          case "created":
-            return direction(schema.eventTypes.created);
-          default:
-            return direction(schema.eventTypes.id);
-        }
-      }) ?? [desc(schema.eventTypes.id)];
+      // asc(id) is appended as a final tiebreaker so event types sharing the
+      // same sort value (e.g. two regions' event types with the same name)
+      // still get a total order -- without one, offset pagination across
+      // separate requests (e.g. useFetchAllPages) can return the same row on
+      // two pages or skip one entirely.
+      const sortedColumns = (
+        input?.sorting?.map((sorting) => {
+          const direction = sorting.desc ? desc : asc;
+          switch (sorting.id) {
+            case "name":
+              return direction(schema.eventTypes.name);
+            case "description":
+              return direction(
+                sql`NULLIF(${schema.eventTypes.description}, '')`,
+              );
+            case "eventCategory":
+              return direction(schema.eventTypes.eventCategory);
+            case "specificOrgName":
+              return direction(schema.orgs.name);
+            case "count":
+              return direction(count(schema.eventsXEventTypes.eventTypeId));
+            case "created":
+              return direction(schema.eventTypes.created);
+            default:
+              return direction(schema.eventTypes.id);
+          }
+        }) ?? [desc(schema.eventTypes.id)]
+      ).concat(asc(schema.eventTypes.id));
 
       const select = {
         id: schema.eventTypes.id,
@@ -174,6 +178,16 @@ export const eventTypeRouter = {
             )
           : undefined;
 
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — clamp to active-only regardless of what `statuses` it
+      // passes (an omitted `statuses` previously meant "no filter," i.e.
+      // inactive types included by default). Authenticated behavior is
+      // unchanged.
+      const isAnonymous = !ctx.session?.user;
+      const effectiveStatuses = isAnonymous
+        ? (["active"] as IsActiveStatus[])
+        : input?.statuses;
+
       const where = and(
         input?.searchTerm
           ? or(
@@ -182,10 +196,10 @@ export const eventTypeRouter = {
             )
           : undefined,
         orgScopeFilter,
-        !input?.statuses?.length ||
-          input.statuses.length === IsActiveStatus.length
+        !effectiveStatuses?.length ||
+          effectiveStatuses.length === IsActiveStatus.length
           ? undefined
-          : input.statuses.includes("active")
+          : effectiveStatuses.includes("active")
             ? eq(schema.eventTypes.isActive, true)
             : eq(schema.eventTypes.isActive, false),
       );
@@ -218,7 +232,7 @@ export const eventTypeRouter = {
 
       const eventTypes = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       return { eventTypes, totalCount };
     }),

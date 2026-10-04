@@ -43,7 +43,7 @@ export const mapRouter = os.router({
         "Trigger cache revalidation. Auth: nation admin session OR x-api-key header with SUPER_ADMIN_API_KEY",
     })
     .handler(async () => {
-      // Trigger Map app revalidation via HTTP - API and Map are separate Next.js instances
+      // Trigger Map app revalidation via HTTP - API and Map are separate services
       await triggerMapAppRevalidation();
 
       return { success: true };

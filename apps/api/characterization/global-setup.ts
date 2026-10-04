@@ -58,7 +58,7 @@ export async function setup(): Promise<void> {
 
   // Make a reduced (e.g. live) run visible so a stray CHAR_TEST_TARGET in .env
   // can't be mistaken for a full run.
-  const kind = process.env.CHAR_TEST_TARGET ?? "next";
+  const kind = process.env.CHAR_TEST_TARGET ?? "hono";
   // Origin only — a configured base URL can carry credentials or a query token.
   const base = URL.parse(process.env.CHAR_TEST_BASE_URL ?? CHAR_BASE)?.origin;
   logInfo("characterization.setup.target_selected", {
