@@ -10,7 +10,13 @@ export { createDbClient } from "./functions";
 // Postgres — the wrapper's behavior depends on postgres-js internals (lazy
 // dispatch, out-of-band CancelRequest) that mocks cannot meaningfully pin.
 export { withQueryTimeout } from "./query-timeout";
-export { resolveQueryTimeoutMs } from "./functions";
+export {
+  getDatabaseNameFromUri,
+  migrationsDatabaseName,
+  postgresArgs,
+  resolveQueryTimeoutMs,
+  splitSocketHost,
+} from "./functions";
 
 const shouldSkipReset = () => {
   if (
@@ -41,7 +47,6 @@ export const resetTestDb = async (params?: {
   db?: AppDb;
   shouldReset?: boolean;
   shouldSeed?: boolean;
-  seedType?: "test" | "project";
 }) => {
   if (shouldSkipReset()) {
     return;
@@ -75,12 +80,6 @@ export const resetTestDb = async (params?: {
 
   if (shouldSeed) {
     console.log("Seeding database...");
-    if (params?.seedType === "test") {
-      await testSeed(params?.db ?? getDb());
-    } else {
-      // Import and run project seed
-      const { seed } = await import("../seed");
-      await seed();
-    }
+    await testSeed(params?.db ?? getDb());
   }
 };

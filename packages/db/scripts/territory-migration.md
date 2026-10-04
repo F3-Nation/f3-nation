@@ -146,10 +146,11 @@ of 0024 through 0026 does (0026 compares `org_type::text`).
 
 From the repository root, use `env -u CI pnpm db:migrate` with the separately
 approved target configured through the repository's `with-env` helper. Never
-add `--reset` or `--seed` to a production migration. The current runner skips
-migration entirely when `CI` is set and can exit zero after logging a failure;
-neither its exit code nor the completion message establishes success. The
-post-run schema and journal checks below are mandatory.
+add `--reset` to a production migration. The current runner skips
+migration entirely when `CI` is set, still exiting zero and logging
+`Migration done`; it exits non-zero when a migration fails. Neither its exit
+code nor the completion message establishes success. The post-run schema and
+journal checks below are mandatory.
 
 Use the repository's Drizzle migrator so the schema changes and migration
 journal entry share a transaction. The installed `drizzle-orm` implementation
@@ -238,8 +239,8 @@ individual migration has a row. After step 4 the newest remaining row is 0025
   Territory creation fails.
 - 0026 (`1789775437096`) is newer than 0025 and runs again. It never references
   Territory, so it applies cleanly to the five-member enum.
-- The runner still logs `Migration done`. It also exits zero after logging a
-  failure, so check the schema and journal rather than its output.
+- The runner still logs `Migration done` and exits zero, because nothing failed.
+  Check the schema and journal rather than its output.
 
 Do not deploy a build that contains 0023 through 0026 to a rolled-back database
 and expect Territory to return. Restore it explicitly:
@@ -286,7 +287,7 @@ Migration 0026 replaces the fixed three-ancestor AO counting with a depth-agnost
 recount. `orgs.ao_count` is carried by every organization type except AO and
 Nation. It is the number of active AOs in the organization's subtree, reached only
 through active intermediate organizations; the organization's own status is not
-checked. The trigger, the migration backfill, and `pnpm db:seed` all call
+checked. The trigger and the migration backfill both call
 `recount_org_ao_counts()`, so Sector and Territory counts stay correct for an
 Area directly under a Sector, an Area under a Territory, and any move between them.
 

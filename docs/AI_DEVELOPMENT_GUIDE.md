@@ -299,12 +299,12 @@ violation is a `BAD_REQUEST`, not a 500.
     Postgres through PgBouncer in `pool_mode = transaction` — hence
     `prepare: false` in the shared client. PgBouncer caps client connections
     at `max_client_conn = 1000` and its own connections into Postgres at
-    `max_db_connections = 40`, so the server side is well bounded and the
-    binding constraint is the **client** side: each db-backed service
-    (api/map/admin/me) pins `--max-instances=25` in its deploy workflow,
-    which with `max: 5` per instance bounds the fleet at 4 × 25 × 5 = 500
-    clients. Raising a service's `--max-instances` or the client's `max`
-    means redoing that arithmetic against `max_client_conn`.
+    `max_db_connections = 40`. For the direct path the architecture is
+    moving to, sum the peak connections of every database client — a
+    service's `--max-instances` × its maximum pool connections (overflow
+    included), a Cloud Run job's concurrent tasks (overlapping executions
+    included) × its maximum pool connections (overflow included) — and keep
+    the total under the Postgres connection budget (see ADR 0004).
   - Leave `max_lifetime` on the postgres-js default: it is a per-connection
     jittered 30–60 min; a fixed value synchronizes expiry into reconnect
     stampedes through the pooler.

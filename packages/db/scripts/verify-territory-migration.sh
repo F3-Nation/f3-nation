@@ -240,8 +240,8 @@ verify '{ao,region,area,territory,sector,nation}'
 # Journal rehearsal with the real runner (packages/db/src/migrate.ts). It selects
 # pending migrations by comparing each `when` with the NEWEST journal row only,
 # so deleting 0023's row after a rollback never makes it run again. The runner
-# also exits zero after logging a failure, so assert on its log text and on
-# database state rather than its exit code.
+# exits non-zero when a migration fails, so assert on its exit code, its log text
+# and on database state.
 db_port="$(docker port "$container" 5432/tcp | head -1 | sed 's/.*://')"
 db_password="$(docker exec "$container" printenv POSTGRES_PASSWORD)"
 migration_count="$(ls "$repo_root"/packages/db/drizzle/*.sql | wc -l | tr -d ' ')"
@@ -275,11 +275,11 @@ runner_process() {
   (cd "$repo_root/packages/db" && env -u CI -u TEST_DATABASE_URL NODE_ENV=development \
     SKIP_ENV_VALIDATION=1 QUERY_TIMEOUT_MS=0 \
     DATABASE_URL="postgres://f3local:$db_password@localhost:$db_port/$1" \
-    node -r esbuild-register src/migrate.ts) > "$2" 2>&1 || true
+    node -r esbuild-register src/migrate.ts) > "$2" 2>&1
 }
 run_runner() {
   local log="$artifact_dir/runner-$1.log"
-  runner_process "$1" "$log"
+  runner_process "$1" "$log" || fail "Drizzle runner exited non-zero for $1; see $log"
   if ! grep -qx 'Migration done' "$log" || grep -q 'Migration failed' "$log"; then
     fail "Drizzle runner did not complete for $1; see $log"
   fi
@@ -385,7 +385,9 @@ pre_batch_rows="$(query "$batch_db" "SELECT count(*) FROM $(journal_table "$batc
 session_step batch_locked "\\c $batch_db
 BEGIN;
 LOCK TABLE orgs IN SHARE MODE;"
-runner_process "$batch_db" "$artifact_dir/runner-$batch_db-locked.log"
+if runner_process "$batch_db" "$artifact_dir/runner-$batch_db-locked.log"; then
+  fail 'Runner exited zero although its migration batch failed'
+fi
 grep -q 'lock timeout' "$artifact_dir/runner-$batch_db-locked.log" \
   || fail "Batch did not fail on 0026's lock timeout; see $artifact_dir"
 assert_state "$batch_db" "$legacy_enum" "$pre_batch_rows"

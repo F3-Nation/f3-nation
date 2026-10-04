@@ -105,28 +105,28 @@ For the full canonical recipe (CSRF token, triggering a send, pulling the code f
 
 Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`. Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser; all others are server-side only.
 
-| Variable               | Description                                                                                   | Required                       |
-| ---------------------- | --------------------------------------------------------------------------------------------- | ------------------------------ |
-| `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)                               | Yes                            |
-| `AUTH_SECRET`          | Secret for signing/encrypting session JWTs. Generate with `openssl rand -base64 32`           | Yes                            |
-| `DATABASE_HOST`        | PostgreSQL host (e.g. `/cloudsql/f3data:us-central1:f3data-nonprod` for Cloud SQL Auth Proxy) | Yes                            |
-| `DATABASE_USER`        | PostgreSQL username (e.g. `app_auth`)                                                         | Yes                            |
-| `DATABASE_PASSWORD`    | PostgreSQL password                                                                           | Yes                            |
-| `DATABASE_NAME`        | PostgreSQL database name (e.g. `f3_staging`)                                                  | Yes                            |
-| `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://auth.f3nation.com`)                                | Yes                            |
-| `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)                         | Yes                            |
-| `API_KEY`              | API key for authenticating calls to the F3 API                                                | Yes                            |
-| `EMAIL_SERVER`         | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)                     | Yes                            |
-| `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                                            | Yes                            |
-| `NODE_ENV`             | `development`, `production`, or `test`                                                        | No (defaults to `development`) |
+| Variable               | Description                                                                         | Required                       |
+| ---------------------- | ----------------------------------------------------------------------------------- | ------------------------------ |
+| `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)                     | Yes                            |
+| `AUTH_SECRET`          | Secret for signing/encrypting session JWTs. Generate with `openssl rand -base64 32` | Yes                            |
+| `DATABASE_HOST`        | PostgreSQL host, or a Unix socket path when connecting through Cloud SQL            | Yes                            |
+| `DATABASE_USER`        | PostgreSQL username                                                                 | Yes                            |
+| `DATABASE_PASSWORD`    | PostgreSQL password                                                                 | Yes                            |
+| `DATABASE_NAME`        | PostgreSQL database name                                                            | Yes                            |
+| `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://<auth-host>`)                            | Yes                            |
+| `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://<api-host>`)                     | Yes                            |
+| `API_KEY`              | API key for authenticating calls to the F3 API                                      | Yes                            |
+| `EMAIL_SERVER`         | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)           | Yes                            |
+| `EMAIL_FROM`           | Sender email address (e.g. `noreply@<your-domain>`)                                 | Yes                            |
+| `NODE_ENV`             | `development`, `production`, or `test`                                              | No (defaults to `development`) |
 
 Set `SKIP_ENV_VALIDATION=1` to bypass validation during CI builds.
 
 ### Shared vs. Auth-Only Variables
 
-Most of these variables (`AUTH_SECRET`, `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`, `API_KEY`, `EMAIL_SERVER`, `EMAIL_FROM`) are already in the root `.env` and shared across all apps. **You only need to define them once** -- `apps/auth` reads from the same root `.env` as `apps/map` and `apps/api`.
+`apps/auth` reads its own `apps/auth/.env`, which `pnpm local:setup` copies from `apps/auth/.env.example` (see [docs/LOCAL_DEV_DOCKER.md](../../docs/LOCAL_DEV_DOCKER.md)). Values such as `AUTH_SECRET`, `DATABASE_*`, `API_KEY`, `EMAIL_SERVER`, and `EMAIL_FROM` are defined there, not shared with other apps.
 
-The only variable unique to `apps/auth` is **`AUTH_JWT_PRIVATE_KEY`** -- the RSA key for signing OAuth access tokens. Add it to your root `.env` alongside the existing variables. No duplication needed.
+The variable unique to `apps/auth` is **`AUTH_JWT_PRIVATE_KEY`** -- the RSA key for signing OAuth access tokens. `pnpm local:setup` generates one in `apps/auth/.env` when `openssl` is available.
 
 ### Generating the JWT Private Key
 
@@ -155,16 +155,16 @@ AUTH_JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEv...base64...\n-----END P
 
 The corresponding public key is served automatically at `/.well-known/jwks.json` (derived from the private key at runtime). API consumers (`packages/api`) fetch this JWKS endpoint to verify access token signatures without sharing the private key.
 
-#### `NEXT_PUBLIC_AUTH_URL` in the Root `.env`
+#### `NEXT_PUBLIC_AUTH_URL` for the API
 
-`packages/api` (via `packages/env`) reads `NEXT_PUBLIC_AUTH_URL` from the root `.env` to discover the auth server's JWKS public key and verify JWT access tokens. The JWKS URL is derived automatically: `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`. This is the same variable that `apps/auth` uses for its own base URL -- no extra env var needed.
+`packages/api` (via `packages/env`) reads `NEXT_PUBLIC_AUTH_URL` from `apps/api/.env` locally (copied from `apps/api/.env.example`, which sets `http://localhost:3004`) and from the Cloud Run service env in deployed environments to discover the auth server's JWKS public key and verify JWT access tokens. The JWKS URL is derived automatically: `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`. This is the same variable that `apps/auth` uses for its own base URL -- no extra env var needed.
 
 ```
-# Root .env
+# apps/api/.env
 NEXT_PUBLIC_AUTH_URL=https://auth.f3nation.com
 ```
 
-- If `NEXT_PUBLIC_AUTH_URL` is **not set** in the root `.env`, the API ignores JWT auth entirely -- existing auth flows (NextAuth cookies, API keys) continue to work unchanged.
+- If `NEXT_PUBLIC_AUTH_URL` is **not set** for the API, the API ignores JWT auth entirely -- existing auth flows (NextAuth cookies, API keys) continue to work unchanged.
 - If `NEXT_PUBLIC_AUTH_URL` **is set**, the API fetches `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`, accepts `Authorization: Bearer <jwt>` tokens, and validates the issuer matches.
 
 ---
@@ -549,7 +549,7 @@ gcloud artifacts repositories create cloud-run-builds \
 #### 2. Create Cloud Run services
 
 ```bash
-# Deploy a placeholder first (Cloud Run needs an initial image). Note that this enables Cloud SQL Auth Proxy
+# Deploy a placeholder first (Cloud Run needs an initial image).
 
 # Staging
 gcloud run deploy f3-auth \
