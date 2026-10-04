@@ -67,7 +67,12 @@ export const SubmitBugReportCard = () => {
     try {
       await submitFeedback.mutateAsync(values);
       toast.success(`${typeToTitle(values.type)} submitted`);
-      form.reset();
+      // Only clear the form if the visitor hasn't started a new message
+      // while this one was in flight -- otherwise the reset would erase
+      // the draft they're now typing.
+      if (JSON.stringify(form.getValues()) === JSON.stringify(values)) {
+        form.reset();
+      }
     } catch {
       toast.error("Failed to submit. Please try again.");
     }
