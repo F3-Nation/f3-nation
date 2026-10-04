@@ -217,10 +217,27 @@ push_secret() {
 echo ""
 echo "Preparing Cloud Run service account email for granting secret permissions."
 
-SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
+SA_LOOKUP_ERR="$(mktemp)"
+if SA_EMAIL="$(gcloud run services describe "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
-  --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null)" || SA_EMAIL=""
+  --format='value(spec.template.spec.serviceAccountName)' 2>"$SA_LOOKUP_ERR")"; then
+  :
+elif grep -qi 'not found' "$SA_LOOKUP_ERR"; then
+  # Genuinely first-time setup -- fall through to the default-SA branch below.
+  SA_EMAIL=""
+else
+  # Some other failure (permissions, API outage, ...). Don't silently treat
+  # this the same as "doesn't exist yet": that would grant the broad
+  # Compute Engine default SA access to every referenced secret below
+  # (database credentials, AUTH_JWT_PRIVATE_KEY) even though the service
+  # and its real, narrower SA may already exist.
+  cat "$SA_LOOKUP_ERR" >&2
+  rm -f "$SA_LOOKUP_ERR"
+  echo "ERROR: Failed to look up Cloud Run service $SERVICE_NAME (not a 'does not exist' error -- see above)." >&2
+  exit 1
+fi
+rm -f "$SA_LOOKUP_ERR"
 
 if [[ -z "$SA_EMAIL" ]]; then
   echo "Service $SERVICE_NAME not found in project $PROJECT. Defaulting to default Compute Engine service account."
@@ -288,10 +305,16 @@ done
 
 echo ""
 echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
+# A custom delimiter (gcloud's own "^DELIM^" syntax) instead of a plain comma
+# join -- EMAIL_FROM can legitimately contain a comma (e.g. a quoted display
+# name), which a comma-joined --update-env-vars value would misparse as a
+# vars boundary instead of part of the value. "|" doesn't occur in any of
+# this script's env values (URLs, an email address, the hardcoded flags).
+ENV_VARS_DELIM="|"
 gcloud run services update "$SERVICE_NAME" \
     --project "$PROJECT" \
     --region "$REGION" \
-    --update-env-vars "$(IFS=,; echo "${UPDATE_ARGS[*]}")" \
+    --update-env-vars "^${ENV_VARS_DELIM}^$(IFS="$ENV_VARS_DELIM"; echo "${UPDATE_ARGS[*]}")" \
     --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
     --quiet
 
