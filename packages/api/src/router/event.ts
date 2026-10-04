@@ -91,8 +91,9 @@ const eventAllInputSchema = eventFilterSchema
       .describe("Zero-based page index for pagination. Defaults to 0."),
     pageSize: z.coerce
       .number()
+      .max(200)
       .optional()
-      .describe("Number of events per page. Defaults to 10."),
+      .describe("Number of events per page. Defaults to 10, max 200."),
     sorting: z
       .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
       .optional()
@@ -322,8 +323,13 @@ export const eventRouter = {
     .handler(async ({ context: ctx, input }) => {
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — omitting both pageIndex and pageSize returns every matching
+      // row unpaginated, which an authenticated admin UI relies on but an
+      // anonymous caller could use to scrape the whole table in one request.
       const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+        (input?.pageIndex !== undefined && input?.pageSize !== undefined) ||
+        !ctx.session?.user;
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
@@ -489,9 +495,14 @@ export const eventRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns);
 
+      const isAnonymousAll = !ctx.session?.user;
       const eventsWithLocation = events.map((event) => ({
         ...event,
         location: getFullAddress(event),
+        // publicReadProcedure lets an anonymous caller reach this endpoint
+        // (#378) — an event's contact email isn't part of the map's own
+        // public browse payload, so don't let it leak here either.
+        email: isAnonymousAll ? null : event.email,
       }));
 
       return { events: eventsWithLocation, totalCount };
@@ -707,11 +718,21 @@ export const eventRouter = {
       // publicReadProcedure lets an anonymous caller reach this endpoint
       // (#378) — don't let a guessed/enumerated ID leak a private event's
       // details to someone with no session at all.
-      if (event?.isPrivate && !ctx.session?.user) {
+      const isAnonymousById = !ctx.session?.user;
+      if (event?.isPrivate && isAnonymousById) {
         return { event: null };
       }
 
-      return { event: event ?? null };
+      // email/meta aren't part of the map's own public event payload.
+      return {
+        event: event
+          ? {
+              ...event,
+              email: isAnonymousById ? null : event.email,
+              meta: isAnonymousById ? null : event.meta,
+            }
+          : null,
+      };
     }),
   crupdate: editorProcedure
     .input(EventCrupdateSchema)
@@ -1052,6 +1073,12 @@ export const eventRouter = {
               eq(regionOrg.orgType, "region"),
             ),
           ),
+        )
+        // publicReadProcedure lets an anonymous caller reach this endpoint
+        // (#378) — don't leak a private event's ID (even bare, with no other
+        // fields) to a caller with no session at all.
+        .where(
+          !ctx.session?.user ? eq(schema.events.isPrivate, false) : undefined,
         )
         .groupBy(schema.events.id, regionOrg.id);
 

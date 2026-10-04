@@ -87,8 +87,9 @@ const orgAllInputSchema = orgFilterSchema.extend({
     .describe("Zero-based page index for pagination. Defaults to 0."),
   pageSize: z.coerce
     .number()
+    .max(200)
     .optional()
-    .describe("Number of organizations per page. Defaults to 10."),
+    .describe("Number of organizations per page. Defaults to 10, max 200."),
   sorting: parseSorting().describe(
     `Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: ${ORG_ALL_SORT_IDS.join(", ")}. sectorName and territoryName require orgTypes to be exactly ["area"].`,
   ),
@@ -139,6 +140,18 @@ async function resolveEditableOrgIds(params: {
 
   return { editableOrgIds: [], isNationAdmin };
 }
+
+// publicReadProcedure lets an anonymous caller reach `all`/`byId` (#378).
+// email/phone/meta/lastAnnualReview are org-entered contact/admin details
+// that the public map never surfaces — masked out below for a caller with
+// no session, without changing what an authenticated caller (e.g. the
+// admin UI) sees.
+const SENSITIVE_ORG_FIELD_MASK = {
+  email: null,
+  phone: null,
+  meta: null,
+  lastAnnualReview: null,
+} as const;
 
 /**
  * Builds the WHERE clause for org queries based on filter input
@@ -282,8 +295,12 @@ export const orgRouter = {
 
       const pageSize = input.pageSize ?? 10;
       const pageIndex = (input.pageIndex ?? 0) * pageSize;
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — force pagination for an anonymous caller so omitting both
+      // params can't scrape the whole table in one request.
       const usePagination =
-        input.pageIndex !== undefined && input.pageSize !== undefined;
+        (input.pageIndex !== undefined && input.pageSize !== undefined) ||
+        !ctx.session?.user;
 
       // Resolve editable org IDs for "onlyMine" filter
       const editableResult = await resolveEditableOrgIds({
@@ -649,8 +666,11 @@ export const orgRouter = {
         ? sortedOrgs.slice(pageIndex, pageIndex + pageSize)
         : sortedOrgs;
 
+      const isAnonymous = !ctx.session?.user;
       return {
-        orgs: paginatedOrgs,
+        orgs: isAnonymous
+          ? paginatedOrgs.map((o) => ({ ...o, ...SENSITIVE_ORG_FIELD_MASK }))
+          : paginatedOrgs,
         total,
       };
     }),
@@ -739,7 +759,20 @@ export const orgRouter = {
             input.orgType ? eq(schema.orgs.orgType, input.orgType) : undefined,
           ),
         );
-      return { org: org ?? null };
+      const isAnonymous = !ctx.session?.user;
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — don't let a guessed/enumerated ID return an inactive org's
+      // details to someone with no session at all.
+      if (org?.isActive === false && isAnonymous) {
+        return { org: null };
+      }
+      return {
+        org: org
+          ? isAnonymous
+            ? { ...org, ...SENSITIVE_ORG_FIELD_MASK }
+            : org
+          : null,
+      };
     }),
 
   crupdate: editorProcedure

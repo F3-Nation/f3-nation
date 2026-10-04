@@ -49,8 +49,9 @@ export const locationRouter = {
             .describe("Zero-based page index for pagination. Defaults to 0."),
           pageSize: z.coerce
             .number()
+            .max(200)
             .optional()
-            .describe("Number of locations per page. Defaults to 10."),
+            .describe("Number of locations per page. Defaults to 10, max 200."),
           sorting: parseSorting().describe(
             "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: id, locationName, regionName, isActive, latitude, longitude, addressStreet, addressCity, addressState, addressZip, created.",
           ),
@@ -129,8 +130,12 @@ export const locationRouter = {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const limit = input?.pageSize ?? 10;
       const offset = (input?.pageIndex ?? 0) * limit;
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — force pagination for an anonymous caller so omitting both
+      // params can't scrape the whole table in one request.
       const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+        (input?.pageIndex !== undefined && input?.pageSize !== undefined) ||
+        !ctx.session?.user;
 
       // Determine if filter by editable org IDs is needed
       let editableOrgIds: number[] = [];
@@ -241,7 +246,17 @@ export const locationRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns);
 
-      return { locations, totalCount: locationCount?.count ?? 0 };
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — a location's contact email/metadata isn't part of the
+      // map's own public browse payload, so don't let it leak here either.
+      const maskedLocations = isAnonymous
+        ? locations.map((loc) => ({ ...loc, email: null, meta: null }))
+        : locations;
+
+      return {
+        locations: maskedLocations,
+        totalCount: locationCount?.count ?? 0,
+      };
     }),
 
   byId: protectedProcedure

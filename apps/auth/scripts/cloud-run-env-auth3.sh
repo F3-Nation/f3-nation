@@ -63,9 +63,13 @@ declare -A SECRET_MAP=(
 # compare this file's copy of the value against the live secret and
 # silently rotate (and destroy old versions of) a secret f3-auth also
 # depends on, the moment .env.cloud-run.auth3.* drifts from the canonical
-# value. AUTH_SECRET (NextAuth's own signing key) is deliberately excluded
-# entirely: auth3 only runs Better Auth.
+# value. AUTH_SECRET is included even though auth3 only runs Better Auth:
+# apps/auth/src/env.ts requires it unconditionally (NextAuth's own env
+# validation runs regardless of AUTH_USE_BETTER_AUTH), so omitting it would
+# fail every request that loads the env module, not just NextAuth's code
+# paths.
 declare -A REFERENCED_SECRET_MAP=(
+  [AUTH_SECRET]="auth-secret"
   [DATABASE_HOST]="database-host"
   [DATABASE_USER]="database-user"
   [DATABASE_PASSWORD]="database-password"
@@ -146,14 +150,13 @@ push_secret() {
   local var="$1" secret_id="$2" value="$3" project="$4" sa_email="$5"
   echo " [$var] Processing secret $secret_id..."
 
-  if [[ -z "$value" ]]; then
-    echo " [$var] Value not in environment. Skipping."
-    return 0
-  fi
-
   # Create secret if it doesn't exist
   echo " [$var] Checking if secret exists."
   if ! gcloud secrets describe "$secret_id" --project "$project" &>/dev/null; then
+    if [[ -z "$value" ]]; then
+      echo " [$var] Value not in environment. Skipping."
+      return 0
+    fi
 
     echo " [$var] Secret $secret_id does not exist. Creating."
     gcloud secrets create "$secret_id" --project "$project" --replication-policy="automatic" 2>/dev/null || true
@@ -166,6 +169,22 @@ push_secret() {
       --role "roles/secretmanager.secretAccessor" \
       --quiet > /dev/null || echo " [$var] WARNING: Failed to bind $secret_id"
 
+    return 0
+  fi
+
+  # Secret already exists (e.g. created by hand, as better-auth-secret may
+  # be — see this script's header). Bind the service account every run,
+  # not just on creation, since a manually-created secret may not have
+  # granted it access yet.
+  echo " [$var] Granting access to Cloud Run service account."
+  gcloud secrets add-iam-policy-binding "$secret_id" \
+    --project "$project" \
+    --member "serviceAccount:${sa_email}" \
+    --role "roles/secretmanager.secretAccessor" \
+    --quiet > /dev/null || echo " [$var] WARNING: Failed to bind $secret_id"
+
+  if [[ -z "$value" ]]; then
+    echo " [$var] Value not in environment. Skipping version update."
     return 0
   fi
 

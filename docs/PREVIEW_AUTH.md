@@ -33,9 +33,10 @@ for every session hop:
 2. **The map app never sends its cookie cross-origin.** The browser client
    calls same-origin `/api/orpc` (`apps/map/src/orpc/client.ts:12-15`); the
    map server proxies to `F3_API_BASE_URL`, forwarding all request headers —
-   **including `Cookie`** — for signed-in-only paths, and forwards public
-   paths with no credential at all (`packages/api/src/shared.ts`'s
-   `publicReadProcedure` needs none) (`apps/map/src/app/api/orpc/[[...rest]]/route.ts`).
+   **including `Cookie`** — for every path, public ones included; public
+   paths just require no credential to begin with
+   (`packages/api/src/shared.ts`'s `publicReadProcedure` needs none)
+   (`apps/map/src/app/api/orpc/[[...rest]]/route.ts`).
    The api decodes the forwarded NextAuth session cookie because map and api
    share `AUTH_SECRET` (both set to the same placeholder in previews).
 
