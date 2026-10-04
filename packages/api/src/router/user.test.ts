@@ -31,6 +31,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
+  createEditorSession,
   getOrCreateF3NationOrg,
   mockAuthWithSession,
   uniqueId,
@@ -393,7 +394,7 @@ describe("User Router", () => {
       });
     });
 
-    it("should include PII for a user with no roles when requester is an F3 Nation admin", async () => {
+    it("should include PII for a user with no roles and no home region when requester is an F3 Nation admin", async () => {
       const email = `byid-no-roles-${uniqueId()}@example.com`;
       const [testUser] = await db
         .insert(schema.users)
@@ -417,7 +418,7 @@ describe("User Router", () => {
       }
     });
 
-    it("should not include PII for a user with no roles when requester is only a region admin", async () => {
+    it("should not include PII for a user with no roles and no home region when requester is only a region admin", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
       const [region] = await db
         .insert(schema.orgs)
@@ -454,6 +455,147 @@ describe("User Router", () => {
       } finally {
         await cleanup.user(testUser.id);
         await cleanup.org(region.id);
+      }
+    });
+
+    it("should include PII for a user with no roles when requester is an editor of the user's home region", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `ByIdHomeRegion-${uniqueId()}`,
+          orgType: "region",
+          isActive: true,
+          parentId: f3Nation.id,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create test region");
+      const email = `byid-home-editor-${uniqueId()}@example.com`;
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({ email, f3Name: "HomeRegionEditor", homeRegionId: region.id })
+        .returning();
+      if (!testUser) throw new Error("Failed to create test user");
+
+      try {
+        await mockAuthWithSession(
+          createEditorSession({ orgId: region.id, orgName: region.name }),
+        );
+        const client = createTestClient();
+
+        const result = await client.user.byId({
+          id: testUser.id,
+          includePii: true,
+        });
+
+        expect(result.includePii).toBe(true);
+        expect(result.user?.email).toBe(email);
+      } finally {
+        await cleanup.user(testUser.id);
+        await cleanup.org(region.id);
+      }
+    });
+
+    it("should include PII for a user with no roles when requester is an admin of an org above the user's home region", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const [area] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `ByIdPiiArea-${uniqueId()}`,
+          orgType: "area",
+          isActive: true,
+          parentId: f3Nation.id,
+        })
+        .returning();
+      if (!area) throw new Error("Failed to create test area");
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `ByIdPiiAreaRegion-${uniqueId()}`,
+          orgType: "region",
+          isActive: true,
+          parentId: area.id,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create test region");
+      const email = `byid-area-admin-${uniqueId()}@example.com`;
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({ email, f3Name: "AreaAdminTarget", homeRegionId: region.id })
+        .returning();
+      if (!testUser) throw new Error("Failed to create test user");
+
+      try {
+        await mockAuthWithSession(
+          createRegionAdminSession({ orgId: area.id, orgName: area.name }),
+        );
+        const client = createTestClient();
+
+        const result = await client.user.byId({
+          id: testUser.id,
+          includePii: true,
+        });
+
+        expect(result.includePii).toBe(true);
+        expect(result.user?.email).toBe(email);
+      } finally {
+        await cleanup.user(testUser.id);
+        await cleanup.org(region.id);
+        await cleanup.org(area.id);
+      }
+    });
+
+    it("should not include PII when requester is an admin of a different region than the user's home region", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const [homeRegion, otherRegion] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `ByIdPiiHome-${uniqueId()}`,
+            orgType: "region",
+            isActive: true,
+            parentId: f3Nation.id,
+          },
+          {
+            name: `ByIdPiiOther-${uniqueId()}`,
+            orgType: "region",
+            isActive: true,
+            parentId: f3Nation.id,
+          },
+        ])
+        .returning();
+      if (!homeRegion || !otherRegion)
+        throw new Error("Failed to create test regions");
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({
+          email: `byid-other-region-${uniqueId()}@example.com`,
+          f3Name: "OtherRegionTarget",
+          homeRegionId: homeRegion.id,
+        })
+        .returning();
+      if (!testUser) throw new Error("Failed to create test user");
+
+      try {
+        await mockAuthWithSession(
+          createRegionAdminSession({
+            orgId: otherRegion.id,
+            orgName: otherRegion.name,
+          }),
+        );
+        const client = createTestClient();
+
+        const result = await client.user.byId({
+          id: testUser.id,
+          includePii: true,
+        });
+
+        expect(result.includePii).toBe(false);
+        expect(result.user?.email).toBeUndefined();
+      } finally {
+        await cleanup.user(testUser.id);
+        await cleanup.org(homeRegion.id);
+        await cleanup.org(otherRegion.id);
       }
     });
   });
@@ -1343,7 +1485,54 @@ describe("User Router", () => {
       await dbInstance.delete(schema.orgs).where(eq(schema.orgs.id, region.id));
     });
 
-    it("should let an F3 Nation admin update the email of a user with no roles", async () => {
+    it("should let an editor of the user's home region update the email of a user with no roles", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `CrupdateHomeEditor-${uniqueId()}`,
+          orgType: "region",
+          isActive: true,
+          parentId: f3Nation.id,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create test region");
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({
+          email: `crupdate-home-editor-${uniqueId()}@example.com`,
+          f3Name: "HomeEditorCrupdate",
+          homeRegionId: region.id,
+        })
+        .returning();
+      if (!testUser) throw new Error("Failed to create test user");
+      const newEmail = `crupdate-home-editor-new-${uniqueId()}@example.com`;
+
+      try {
+        await mockAuthWithSession(
+          createEditorSession({ orgId: region.id, orgName: region.name }),
+        );
+        const client = createTestClient();
+
+        await client.user.crupdate({
+          id: testUser.id,
+          f3Name: "HomeEditorCrupdate",
+          email: newEmail,
+          roles: [],
+        });
+
+        const [dbUser] = await db
+          .select({ email: schema.users.email })
+          .from(schema.users)
+          .where(eq(schema.users.id, testUser.id));
+        expect(dbUser?.email).toBe(newEmail);
+      } finally {
+        await cleanup.user(testUser.id);
+        await cleanup.org(region.id);
+      }
+    });
+
+    it("should let an F3 Nation admin update the email of a user with no roles and no home region", async () => {
       const [testUser] = await db
         .insert(schema.users)
         .values({

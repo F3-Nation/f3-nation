@@ -464,9 +464,11 @@ export const buildSingleUserQuery = async (
   };
 };
 
-// Helper to check PII access for a user: F3 Nation admins can access any
-// user's PII, including users with no roles; otherwise the requester must be
-// an admin of an org the user has a role on.
+// Helper to check PII access for a user: editors and admins of the user's home
+// region or any org above it (checkHasRoleOnOrg walks up the org tree), or
+// admins of an org the user has a role on. A user with no home region is
+// treated as sitting at the top of the tree, so F3 Nation editors and admins
+// can still reach them.
 export const checkUserPiiAccess = async ({
   ctx,
   userId,
@@ -474,17 +476,26 @@ export const checkUserPiiAccess = async ({
   ctx: Context;
   userId: number;
 }): Promise<boolean> => {
-  const [nation] = await ctx.db
-    .select({ id: schema.orgs.id })
-    .from(schema.orgs)
-    .where(eq(schema.orgs.orgType, "nation"));
+  const [user] = await ctx.db
+    .select({ homeRegionId: schema.users.homeRegionId })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId));
 
-  if (nation) {
+  let homeOrgId = user?.homeRegionId ?? null;
+  if (user && homeOrgId === null) {
+    const [nation] = await ctx.db
+      .select({ id: schema.orgs.id })
+      .from(schema.orgs)
+      .where(eq(schema.orgs.orgType, "nation"));
+    homeOrgId = nation?.id ?? null;
+  }
+
+  if (homeOrgId !== null) {
     const { success } = await checkHasRoleOnOrg({
-      orgId: nation.id,
+      orgId: homeOrgId,
       session: ctx.session,
       db: ctx.db,
-      roleName: "admin",
+      roleName: "editor",
     });
     if (success) {
       return true;

@@ -154,7 +154,7 @@ export const userRouter = {
           .optional()
           .default(false)
           .describe(
-            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (or an org above it), or an admin for one of the user's organizations.",
           ),
       }),
     )
@@ -164,7 +164,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by ID",
       description:
-        "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester has admin role for any of the user's organizations.",
+        "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (or an org above it), or an admin for one of the user's organizations.",
     })
     .output(
       z.object({
@@ -193,7 +193,7 @@ export const userRouter = {
           .optional()
           .default(false)
           .describe(
-            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (or an org above it), or an admin for one of the user's organizations.",
           ),
       }),
     )
@@ -203,7 +203,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by email",
       description:
-        "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
+        "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (or an org above it), or an admin for one of the user's organizations.",
     })
     .output(
       z.object({
@@ -298,7 +298,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Create or update user",
       description:
-        "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set if requester has admin access.",
+        "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be changed on an existing user if requester is an editor or admin of the user's home region (or an org above it), or an admin for one of the user's organizations.",
     })
     .output(
       UserSelectSchema.extend({
