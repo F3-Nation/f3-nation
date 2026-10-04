@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
-vi.stubEnv("F3_MAP_API_KEY", "test-map-key");
 
 const fetchSpy = vi
   .fn<(url: URL, init: RequestInit) => Promise<Response>>()
@@ -35,7 +34,7 @@ describe("oRPC proxy route", () => {
     expect(headers.get("cookie")).toContain("authjs.session-token");
   });
 
-  it("sets API key as Authorization for a map-key path", async () => {
+  it("forwards a public path with no Authorization header", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
@@ -44,10 +43,10 @@ describe("oRPC proxy route", () => {
 
     const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
 
-    expect(headers.get("authorization")).toBe("Bearer test-map-key");
+    expect(headers.has("authorization")).toBe(false);
   });
 
-  it("does not attach the map API key on a signed-in-only path", async () => {
+  it("does not attach any Authorization header on a signed-in-only path", async () => {
     const { POST } =
       await import("../../../src/app/api/orpc/[[...rest]]/route");
 
@@ -99,22 +98,23 @@ describe("oRPC proxy route", () => {
     "/v1/org/all",
     "/v1/org/byId",
   ])(
-    "moved edit-mode read %s to signed-in-only, not the map key",
+    "forwards %s with no credential at all — publicReadProcedure needs none",
     async (path) => {
       const { POST } =
         await import("../../../src/app/api/orpc/[[...rest]]/route");
 
+      // No cookie, no bearer: these moved to the public read tier (#378), so
+      // an anonymous caller must still reach the upstream API, not get a 404.
       const request = new NextRequest(`http://localhost:3000/api/orpc${path}`, {
         method: "POST",
         body: JSON.stringify({}),
-        headers: { cookie: "authjs.session-token=abc" },
       });
 
-      await POST(request);
+      const response = await POST(request);
 
+      expect(response.status).not.toBe(404);
       const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
       expect(headers.has("authorization")).toBe(false);
-      expect(headers.get("cookie")).toContain("authjs.session-token");
     },
   );
 
@@ -184,7 +184,7 @@ describe("oRPC proxy route", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("strips host, content-length, crafted authorization, and crafted x-api-key on a map-key path", async () => {
+  it("strips host, content-length, crafted authorization, and crafted x-api-key on a public path", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
@@ -203,7 +203,7 @@ describe("oRPC proxy route", () => {
     expect(headers.has("host")).toBe(false);
     expect(headers.has("content-length")).toBe(false);
     expect(headers.has("x-api-key")).toBe(false);
-    expect(headers.get("authorization")).toBe("Bearer test-map-key");
+    expect(headers.has("authorization")).toBe(false);
   });
 
   it("proxies to the correct upstream URL", async () => {
@@ -222,7 +222,7 @@ describe("oRPC proxy route", () => {
     expect(url.searchParams.get("foo")).toBe("bar");
   });
 
-  it("forwards POST requests to upstream for a map-key path", async () => {
+  it("forwards POST requests to upstream for a public path", async () => {
     const { POST } =
       await import("../../../src/app/api/orpc/[[...rest]]/route");
 
@@ -256,7 +256,7 @@ describe("oRPC proxy route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("does not force Cache-Control on a map-key response", async () => {
+  it("does not force Cache-Control on a public response", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
@@ -294,26 +294,4 @@ describe("oRPC proxy route", () => {
       expect(await response.json()).toEqual({ ok: true });
     },
   );
-
-  it("drops crafted Authorization header when F3_MAP_API_KEY is unset", async () => {
-    vi.stubEnv("F3_MAP_API_KEY", "");
-
-    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
-
-    const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
-      headers: {
-        authorization: "Bearer crafted-token",
-      },
-    });
-
-    await GET(request);
-
-    const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
-
-    expect(headers.has("authorization")).toBe(false);
-
-    // Restore so this test's env stub can't leak into whatever test runs
-    // next if a test is appended after this one in the file.
-    vi.stubEnv("F3_MAP_API_KEY", "test-map-key");
-  });
 });

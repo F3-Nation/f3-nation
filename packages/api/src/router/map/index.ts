@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { MailService, Templates } from "@acme/mail";
 import { triggerMapAppRevalidation } from "../../lib/revalidate-map";
-import { protectedProcedure, revalidateAuthProcedure } from "../../shared";
+import { publicReadProcedure, revalidateAuthProcedure } from "../../shared";
 import { mapEventRouter } from "./event";
 import { mapLocationRouter } from "./location";
 
@@ -34,7 +34,10 @@ export const mapRouter = os.router({
       return { success: true };
     }),
 
-  submitFeedback: protectedProcedure
+  // Anonymous-reachable by design: the map's /help bug-report form has no
+  // sign-in gate, and this handler derives nothing from ctx.session — it only
+  // relays the caller-supplied email to the F3 Nation team.
+  submitFeedback: publicReadProcedure
     .input(feedbackSchema)
     .route({
       method: "POST",

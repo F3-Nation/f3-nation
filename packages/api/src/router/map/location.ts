@@ -301,7 +301,7 @@ export const mapLocationRouter = os.router({
 
       return lowBandwidthLocationEvents;
     }),
-  upcomingInstances: protectedProcedure
+  upcomingInstances: publicReadProcedure
     .route({
       method: "GET",
       path: "/upcoming-instances",

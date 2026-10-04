@@ -18,7 +18,7 @@ city X" to "this workout, this address, this time" in a few interactions.
   `apps/map/src/app/_components/map/` (Google map, search, panels, filters),
   `apps/map/src/app/_components/marker-clusters/`,
   `packages/api/src/router/map/location.ts`,
-  `apps/map/src/app/api/orpc/[[...rest]]/route.ts` (API-key proxy),
+  `apps/map/src/app/api/orpc/[[...rest]]/route.ts` (allowlist proxy),
   `apps/map/src/app/api/revalidate/route.ts`.
 
 ## 3. User stories
@@ -93,16 +93,34 @@ city X" to "this workout, this address, this time" in a few interactions.
 
 ## 5. Roles & authorization (RBAC)
 
-Browsing is anonymous by design. The map **API read procedures are
-`protectedProcedure`, not `publicProcedure`**: the map app itself is the
-trusted caller. Server-side (SSG) calls and the browser's `/api/orpc` proxy
-inject `F3_MAP_API_KEY` (the proxy strips any inbound auth headers first), so
-the end user never authenticates.
+Browsing is anonymous by design, and (as of #378) that includes the API
+layer: the browse/search/detail endpoints listed below sit on
+`publicReadProcedure` (`packages/api/src/shared.ts`), which resolves a
+session if one happens to be present but never requires one. There is no
+shared map credential anymore — `F3_MAP_API_KEY` was removed from both the
+SSG client (`apps/map/src/orpc/client.server.ts`) and the browser-facing
+proxy (`apps/map/src/app/api/orpc/[[...rest]]/route.ts`). A direct,
+unauthenticated call to one of these endpoints is expected to succeed; that
+used to require a credential meant for a different purpose (see #378 for
+the history), which is exactly what this re-tiering removed.
 
-| Action                                                     | Allowed                                                         | Explicitly denied                           |
-| ---------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------- |
-| Browse map, search, view location detail (via the map app) | Everyone, anonymous included                                    | —                                           |
-| Call map read procedures directly (no credential)          | Trusted callers holding the map API key; authenticated sessions | Unauthenticated direct calls (UNAUTHORIZED) |
+The proxy's `PUBLIC_PATHS`/`SIGNED_IN_ONLY_PATHS` allowlists are
+defense-in-depth (they stop the map's own proxy from being used to reach
+endpoints the map doesn't call), not the authorization boundary — the API's
+procedure tier is. `request.submit*` and the edit-mode reads it depends on
+stay `protectedProcedure`/cookie-forwarded; see
+`specs/map-update-request-flow.md` §5 for that half.
+
+Public read endpoints: `map.location.eventsAndLocations`, `getAOsInRegion`,
+`locationIdToRegionNameLookup`, `locationWorkout`, `regionsWithLocation`,
+`upcomingInstances`, `workoutCount`, `map.submitFeedback`, `event.all`,
+`event.byId`, `event.eventIdToRegionNameLookup`, `eventType.all`,
+`location.all`, `org.all`, `org.byId`, plus `ping`.
+
+| Action                                                     | Allowed                      | Explicitly denied |
+| ---------------------------------------------------------- | ---------------------------- | ----------------- |
+| Browse map, search, view location detail (via the map app) | Everyone, anonymous included | —                 |
+| Call a public read procedure directly (no credential)      | Everyone, anonymous included | —                 |
 
 All callers are subject to an in-memory per-IP rate limit (~500 req/min per
 instance in production; requests without a forwarded client IP fall into a

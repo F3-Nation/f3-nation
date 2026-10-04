@@ -59,16 +59,17 @@ The API (`packages/api`, served via oRPC) defines procedure tiers in
 **most restrictive** tier that fits, and remember what each one actually
 guarantees:
 
-| Procedure                 | Guarantee                                                                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `publicProcedure`         | No auth. Rate-limited only. Safe for truly public, read-only data.                                                                   |
-| `protectedProcedure`      | A valid session/credential exists. **Does _not_ check what that user may touch.**                                                    |
-| `personalUserProcedure`   | A user session or Auth access token exists; rejects API-key sessions. Personal handlers must still scope resources to that user.     |
-| `editorProcedure`         | Caller has editor or admin role on **any** org. Resource-scoped auth (`checkHasRoleOnOrg`) is still required for specific resources. |
-| `adminProcedure`          | Caller has admin role on **any** org. Resource-scoped auth still required.                                                           |
-| `nationAdminProcedure`    | Caller has the nation-level admin role specifically.                                                                                 |
-| `revalidateAuthProcedure` | Accepts either a valid `SUPER_ADMIN_API_KEY` header or a nation admin session. Used for cache revalidation.                          |
-| `apiKeyProcedure`         | Accepts a valid API key (`x-api-key` header), either the super-admin key or a DB-registered key.                                     |
+| Procedure                 | Guarantee                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `publicProcedure`         | No auth. Rate-limited only, no `ctx.db`. Safe for truly public data that needs no DB access (e.g. `ping`).                                                                                                                                                                                                                                                                              |
+| `publicReadProcedure`     | No auth required; session is resolved if present but never asserted, `ctx.db` is available. Safe for public surfaces (e.g. the map's browse/search) whose response — or, for the rare write on this tier, effect — is fine for an anonymous caller. Audit the payload before adding an endpoint here: no user emails, no data scoped to "mine" without a real session to define "mine". |
+| `protectedProcedure`      | A valid session/credential exists. **Does _not_ check what that user may touch.**                                                                                                                                                                                                                                                                                                       |
+| `personalUserProcedure`   | A user session or Auth access token exists; rejects API-key sessions. Personal handlers must still scope resources to that user.                                                                                                                                                                                                                                                        |
+| `editorProcedure`         | Caller has editor or admin role on **any** org. Resource-scoped auth (`checkHasRoleOnOrg`) is still required for specific resources.                                                                                                                                                                                                                                                    |
+| `adminProcedure`          | Caller has admin role on **any** org. Resource-scoped auth still required.                                                                                                                                                                                                                                                                                                              |
+| `nationAdminProcedure`    | Caller has the nation-level admin role specifically.                                                                                                                                                                                                                                                                                                                                    |
+| `revalidateAuthProcedure` | Accepts either a valid `SUPER_ADMIN_API_KEY` header or a nation admin session. Used for cache revalidation.                                                                                                                                                                                                                                                                             |
+| `apiKeyProcedure`         | Accepts a valid API key (`x-api-key` header), either the super-admin key or a DB-registered key.                                                                                                                                                                                                                                                                                        |
 
 ### The critical pitfall: `protectedProcedure` ≠ authorized
 
@@ -122,11 +123,14 @@ the same rigor as writes.
 ### Public data without a browser credential
 
 If a surface is genuinely public (e.g. the map), prefer making the specific read
-endpoints `publicProcedure` over shipping an API key to the browser. A
-`NEXT_PUBLIC_*` API key is extractable from the bundle and, because an API-key
-session passes every `protectedProcedure`, it grants far more than the public
-surface intends. Scope public access at the endpoint, not via a shared public
-credential.
+endpoints `publicReadProcedure` (or `publicProcedure`, if the handler needs no
+`ctx.db`) over shipping an API key to the browser or a server-side proxy. A
+shared API key — `NEXT_PUBLIC_*` extractable from the bundle, or injected
+server-side by a proxy — grants far more than the public surface intends,
+because an API-key session passes every `protectedProcedure` it's handed to,
+not just the endpoints the public surface actually calls. `apps/map`'s
+`F3_MAP_API_KEY` was exactly this trap (#378): scope public access at the
+endpoint tier, not via a shared credential of any kind.
 
 ---
 

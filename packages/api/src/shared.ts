@@ -110,10 +110,13 @@ const withSessionAndDb = base.use(async ({ context, next }) => {
 export const publicProcedure = base;
 
 /**
- * Read-only, no credential required — session is resolved if present (so a
- * signed-in caller's identity is still available to handlers) but never
- * asserted. Use only for endpoints whose response is safe for an anonymous
- * caller to see; see docs/AI_GUARDRAILS.md for the "when to pick this tier"
+ * No credential required — session is resolved if present (so a signed-in
+ * caller's identity is still available to handlers) but never asserted.
+ * Mostly for reads (the map's public browse/search surface); the one write
+ * on this tier (`map.submitFeedback`) derives nothing from `ctx.session`, so
+ * anonymity doesn't change what it's allowed to do. Use only for endpoints
+ * whose response — or, for a write, whose effect — is safe for an anonymous
+ * caller; see docs/AI_GUARDRAILS.md for the "when to pick this tier"
  * checklist. `protectedProcedure` remains the default for anything that
  * requires a real credential.
  */

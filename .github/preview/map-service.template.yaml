@@ -38,8 +38,6 @@ spec:
               value: ${API_URL}
             - name: F3_MAP_BASE_URL
               value: ${MAP_URL}
-            - name: F3_MAP_API_KEY
-              value: local-map-key
             - name: F3_GOOGLE_API_KEY
               value: ${MAPS_KEY}
             - name: AUTH_SECRET

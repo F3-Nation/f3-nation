@@ -191,4 +191,57 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
       );
     });
   });
+
+  // #378: publicReadProcedure — anonymous reaches the map's browse endpoints,
+  // but not the endpoints that stayed protectedProcedure/editorProcedure.
+  describe("publicReadProcedure GET /v1/map/location/events-and-locations", () => {
+    const PATH = "/v1/map/location/events-and-locations";
+
+    it("authorizes a fully anonymous caller (no cookie, no bearer)", async () => {
+      await expectAuthorized(await target.invoke(guardReq(PATH, { ip: 13 })));
+    });
+  });
+
+  describe("still-protected endpoints reject an anonymous caller", () => {
+    it("protected POST /v1/request/create-event-request", async () => {
+      await expectUnauthorized(
+        await target.invoke(
+          guardReq("/v1/request/create-event-request", {
+            ip: 14,
+            method: "POST",
+          }),
+        ),
+        "Unauthorized",
+      );
+    });
+
+    it("protected GET /v1/attendance/event-instance/{id}", async () => {
+      await expectUnauthorized(
+        await target.invoke(
+          guardReq("/v1/attendance/event-instance/1", { ip: 15 }),
+        ),
+        "Unauthorized",
+      );
+    });
+
+    it("editor GET /v1/user/id/{id}", async () => {
+      await expectUnauthorized(
+        await target.invoke(guardReq("/v1/user/id/1", { ip: 16 })),
+        "Unauthorized",
+      );
+    });
+
+    it("a signed-in user's cookie still authorizes /v1/request/create-event-request", async () => {
+      const cookie = await sessionCookie({ roles: [] });
+      await expectAuthorized(
+        await target.invoke(
+          guardReq("/v1/request/create-event-request", {
+            ip: 17,
+            method: "POST",
+            cookie,
+          }),
+        ),
+      );
+    });
+  });
 });
