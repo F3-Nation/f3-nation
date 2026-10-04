@@ -110,6 +110,30 @@ describe("PostHogExceptionExporter", () => {
     expect(reported.stack).toBeDefined();
   });
 
+  it("rebuilds a root cause that arrives without a type or stack", async () => {
+    const exporter = new PostHogExceptionExporter({
+      apiKey: "k",
+      environment: "ci",
+    });
+    await exportRecords(exporter, [
+      record({
+        "exception.type": "Error",
+        "exception.message": "Failed query: select 1",
+        "exception.cause.message": "sorry, too many clients already",
+      }),
+    ]);
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as [Error, undefined, Record<string, unknown>];
+    const cause = reported.cause as Error;
+    expect(cause.message).toBe("sorry, too many clients already");
+    expect(cause.name).toBe("Error");
+    expect(properties).toMatchObject({
+      root_cause_type: "Error",
+      root_cause_message: "sorry, too many clients already",
+    });
+    expect(properties).not.toHaveProperty("exception.cause.message");
+  });
+
   it("carries the resource's service.name onto the event", async () => {
     const exporter = new PostHogExceptionExporter({
       apiKey: "test-key",
