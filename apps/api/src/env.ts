@@ -27,10 +27,10 @@ export const env = createEnv({
    */
   server: {
     AUTH_SECRET: z.string().min(1),
-    // Normal DB connection. Test runs automatically switch to
-    // TEST_DATABASE_URL when NODE_ENV === "test".
+    // DB connection strings consumed by @acme/db. This schema only declares and
+    // validates them; the DATABASE_URL -> TEST_DATABASE_URL switch for
+    // NODE_ENV=test happens in getDbUrl() (packages/db), not here.
     DATABASE_URL: z.string().min(1).optional(),
-    // Test-only override for reset/test workflows.
     TEST_DATABASE_URL: z.string().min(1).optional(),
     NODE_ENV: z
       .enum(["development", "production", "test"])

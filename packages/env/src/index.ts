@@ -18,8 +18,9 @@ export const env = createEnv({
       process.env.NODE_ENV === "production"
         ? z.string().min(1)
         : z.string().min(1).optional(),
-    // Normal DB connection for app/dev usage. Test runs switch to
-    // TEST_DATABASE_URL automatically when NODE_ENV === "test".
+    // DB connection string consumed by @acme/db. This schema only declares and
+    // validates it; the DATABASE_URL -> TEST_DATABASE_URL switch for
+    // NODE_ENV=test happens in getDbUrl() (packages/db), not here.
     DATABASE_URL: z.string().min(1).optional(),
     EMAIL_SERVER: z.string().min(1),
     EMAIL_FROM: z.string().min(1),
