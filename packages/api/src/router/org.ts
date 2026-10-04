@@ -34,7 +34,12 @@ import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { orgAncestorName } from "../org-ancestor-name";
 import type { Context } from "../shared";
-import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
+import {
+  adminProcedure,
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 const DEFAULT_ORG_TYPES = ["region"] as const satisfies readonly OrgType[];
@@ -128,6 +133,18 @@ async function resolveEditableOrgIds(params: {
   return { editableOrgIds: [], isNationAdmin };
 }
 
+// publicReadProcedure lets an anonymous caller reach `all`/`byId` (#378).
+// email/phone/meta/lastAnnualReview are org-entered contact/admin details
+// that the public map never surfaces — masked out below for a caller with
+// no session, without changing what an authenticated caller (e.g. the
+// admin UI) sees.
+const SENSITIVE_ORG_FIELD_MASK = {
+  email: null,
+  phone: null,
+  meta: null,
+  lastAnnualReview: null,
+} as const;
+
 /**
  * Builds the WHERE clause for org queries based on filter input
  */
@@ -135,17 +152,26 @@ function buildOrgWhereClause(params: {
   input: OrgFilterInput;
   editableOrgIds: number[];
   isNationAdmin: boolean;
+  isAnonymous: boolean;
 }): SQL | undefined {
-  const { input, editableOrgIds, isNationAdmin } = params;
+  const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
+
+  // publicReadProcedure lets an anonymous caller reach `all`/`count` (#378) —
+  // clamp to active-only regardless of what `statuses` it passes, since
+  // inactive orgs were never meant to be public. Authenticated behavior
+  // (including an explicit request for inactive/both) is unchanged.
+  const effectiveStatuses = isAnonymous
+    ? (["active"] as NonNullable<OrgFilterInput["statuses"]>)
+    : input.statuses;
 
   return and(
     inArray(org.orgType, input.orgTypes),
-    !input.statuses
+    !effectiveStatuses
       ? eq(org.isActive, true)
-      : !input.statuses.length ||
-          input.statuses.length === IsActiveStatus.length
+      : !effectiveStatuses.length ||
+          effectiveStatuses.length === IsActiveStatus.length
         ? undefined
-        : input.statuses.includes("active")
+        : effectiveStatuses.includes("active")
           ? eq(org.isActive, true)
           : eq(org.isActive, false),
     input.searchTerm
@@ -184,7 +210,7 @@ async function getOrgCount(params: {
 }
 
 export const orgRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(orgAllInputSchema)
     .route({
       method: "GET",
@@ -270,6 +296,11 @@ export const orgRouter = {
 
       // orgAllInputSchema is a required object (not `.optional()`), same as
       // the unguarded `input.onlyMine` below — no `?.` needed here.
+      // #912's resolvePagination already bounds the "omit both params"
+      // branch to a single default-sized page for every caller, so an
+      // anonymous caller reaching this endpoint (#378) can no longer scrape
+      // the whole table in one request — no anonymous-specific override
+      // needed here (unlike isActive/email/meta/etc, which still is below).
       const { limit, offset, usePagination } = resolvePagination({
         pageSize: input.pageSize,
         pageIndex: input.pageIndex,
@@ -293,6 +324,7 @@ export const orgRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: !ctx.session?.user,
       });
 
       // asc(id) is appended as a final tiebreaker -- a caller-supplied
@@ -356,8 +388,18 @@ export const orgRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
+      // publicReadProcedure lets an anonymous caller reach `all` (#378) --
+      // the `select` above pulls email/phone/meta/lastAnnualReview for
+      // every row, same as `byId` does, so mask them the same way here.
+      const isAnonymousAll = !ctx.session?.user;
+      const orgs = isAnonymousAll
+        ? orgs_untyped.map((o) =>
+            Object.assign({}, o, SENSITIVE_ORG_FIELD_MASK),
+          )
+        : orgs_untyped;
+
       // Something is broken with org to org types
-      return { orgs: orgs_untyped, total };
+      return { orgs, total };
     }),
 
   count: protectedProcedure
@@ -393,6 +435,7 @@ export const orgRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: false,
       });
 
       const count = await getOrgCount({ db: ctx.db, where });
@@ -621,13 +664,17 @@ export const orgRouter = {
         roles: directRolesMap.get(String(org.id)) ?? [],
       }));
 
-      return {
-        orgs: paginatedOrgs,
-        total,
-      };
+      // Sorting and pagination are pushed into the SQL query above
+      // (editableOrgsQuery/withPagination, #912) rather than done here in
+      // memory; `paginatedOrgs` and `total` are already final. No anonymous
+      // masking needed here: `protectedProcedure` already requires
+      // `ctx.session.user`, so an anonymous caller never reaches this
+      // handler at all (unlike `all`/`byId`, which run on
+      // `publicReadProcedure`).
+      return { orgs: paginatedOrgs, total };
     }),
 
-  byId: protectedProcedure
+  byId: publicReadProcedure
     .input(
       z.object({
         id: z.coerce
@@ -711,7 +758,20 @@ export const orgRouter = {
             input.orgType ? eq(schema.orgs.orgType, input.orgType) : undefined,
           ),
         );
-      return { org: org ?? null };
+      const isAnonymous = !ctx.session?.user;
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — don't let a guessed/enumerated ID return an inactive org's
+      // details to someone with no session at all.
+      if (org?.isActive === false && isAnonymous) {
+        return { org: null };
+      }
+      return {
+        org: org
+          ? isAnonymous
+            ? { ...org, ...SENSITIVE_ORG_FIELD_MASK }
+            : org
+          : null,
+      };
     }),
 
   crupdate: editorProcedure

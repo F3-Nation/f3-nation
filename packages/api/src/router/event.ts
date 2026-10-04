@@ -33,7 +33,11 @@ import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { logError } from "../logger";
 import type { Context } from "../shared";
-import { editorProcedure, protectedProcedure } from "../shared";
+import {
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 // Shared filter schema for events (used by both `all` and `count` endpoints)
@@ -137,15 +141,29 @@ function buildEventWhereClause(params: {
   input?: EventFilterInput;
   editableOrgIds: number[];
   isNationAdmin: boolean;
+  isAnonymous: boolean;
 }): SQL | undefined {
-  const { input, editableOrgIds, isNationAdmin } = params;
+  const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
+
+  // publicReadProcedure lets an anonymous caller reach `all`/`count` (#378) —
+  // clamp to active-only regardless of what `statuses` it passes, since
+  // inactive events were never meant to be public. Authenticated behavior
+  // (including an explicit request for inactive/both) is unchanged.
+  const effectiveStatuses = isAnonymous
+    ? (["active"] as NonNullable<EventFilterInput["statuses"]>)
+    : input?.statuses;
 
   return and(
-    !input?.statuses?.length // no statuses provided, default to active
+    !effectiveStatuses?.length // no statuses provided, default to active
       ? eq(schema.events.isActive, true)
-      : input.statuses.length === IsActiveStatus.length
+      : effectiveStatuses.length === IsActiveStatus.length
         ? undefined
-        : eq(schema.events.isActive, input.statuses.includes("active")),
+        : eq(schema.events.isActive, effectiveStatuses.includes("active")),
+    // publicReadProcedure lets an anonymous caller reach this endpoint (#378);
+    // isPrivate events were never filtered because every prior caller was at
+    // least a signed-in user. Keep that behavior unchanged for authenticated
+    // callers and only hide private events from anonymous ones.
+    isAnonymous ? eq(schema.events.isPrivate, false) : undefined,
     input?.searchTerm
       ? or(
           ilike(schema.events.name, `%${input.searchTerm}%`),
@@ -229,7 +247,7 @@ async function getEventCount(params: {
 }
 
 export const eventRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(eventAllInputSchema)
     .route({
       method: "GET",
@@ -304,6 +322,11 @@ export const eventRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      // #912's resolvePagination already bounds the "omit both params"
+      // branch to a single default-sized page for every caller, so an
+      // anonymous caller reaching this endpoint (#378) can no longer scrape
+      // the whole table in one request — no anonymous-specific override
+      // needed here (unlike isActive/isPrivate filtering, which still is).
       const { limit, offset, usePagination } = resolvePagination({
         pageSize: input?.pageSize,
         pageIndex: input?.pageIndex,
@@ -327,6 +350,7 @@ export const eventRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: !ctx.session?.user,
       });
 
       const sortedColumns = input?.sorting?.map((sorting) => {
@@ -473,9 +497,14 @@ export const eventRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
+      const isAnonymousAll = !ctx.session?.user;
       const eventsWithLocation = events.map((event) => ({
         ...event,
         location: getFullAddress(event),
+        // publicReadProcedure lets an anonymous caller reach this endpoint
+        // (#378) — an event's contact email isn't part of the map's own
+        // public browse payload, so don't let it leak here either.
+        email: isAnonymousAll ? null : event.email,
       }));
 
       return { events: eventsWithLocation, totalCount };
@@ -513,13 +542,15 @@ export const eventRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        // protectedProcedure: always an authenticated caller.
+        isAnonymous: false,
       });
 
       const count = await getEventCount({ db: ctx.db, where });
 
       return { count };
     }),
-  byId: protectedProcedure
+  byId: publicReadProcedure
     .input(
       z.object({
         id: z.coerce.number().describe("The unique identifier of the event"),
@@ -686,7 +717,26 @@ export const eventRouter = {
         .where(eq(schema.events.id, input.id))
         .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
 
-      return { event: event ?? null };
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — don't let a guessed/enumerated ID leak a private OR
+      // inactive event's details to someone with no session at all (the
+      // `all` list endpoint already clamps anonymous callers to active,
+      // non-private events; byId must not be a backdoor around that).
+      const isAnonymousById = !ctx.session?.user;
+      if (isAnonymousById && (event?.isPrivate || event?.isActive === false)) {
+        return { event: null };
+      }
+
+      // email/meta aren't part of the map's own public event payload.
+      return {
+        event: event
+          ? {
+              ...event,
+              email: isAnonymousById ? null : event.email,
+              meta: isAnonymousById ? null : event.meta,
+            }
+          : null,
+      };
     }),
   crupdate: editorProcedure
     .input(EventCrupdateSchema)
@@ -991,7 +1041,7 @@ export const eventRouter = {
 
       return { event: result ?? null };
     }),
-  eventIdToRegionNameLookup: protectedProcedure
+  eventIdToRegionNameLookup: publicReadProcedure
     .route({
       method: "GET",
       path: "/event-id-to-region-name-lookup",
@@ -1027,6 +1077,17 @@ export const eventRouter = {
               eq(regionOrg.orgType, "region"),
             ),
           ),
+        )
+        // publicReadProcedure lets an anonymous caller reach this endpoint
+        // (#378) — don't leak a private OR inactive event's ID (even bare,
+        // with no other fields) to a caller with no session at all.
+        .where(
+          !ctx.session?.user
+            ? and(
+                eq(schema.events.isPrivate, false),
+                eq(schema.events.isActive, true),
+              )
+            : undefined,
         )
         .groupBy(schema.events.id, regionOrg.id);
 

@@ -21,7 +21,11 @@ import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { paginationFields, resolvePagination } from "../lib/pagination";
-import { editorProcedure, protectedProcedure } from "../shared";
+import {
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const eventTypeRouter = {
@@ -30,7 +34,7 @@ export const eventTypeRouter = {
    * To get only the event types for a specific org, set ignoreNationEventTypes to true
    * Use nationalOnly to return only nation-wide types (specific_org_id is null); cannot be combined with orgIds
    */
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(
       z
         .object({
@@ -174,6 +178,16 @@ export const eventTypeRouter = {
             )
           : undefined;
 
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — clamp to active-only regardless of what `statuses` it
+      // passes (an omitted `statuses` previously meant "no filter," i.e.
+      // inactive types included by default). Authenticated behavior is
+      // unchanged.
+      const isAnonymous = !ctx.session?.user;
+      const effectiveStatuses = isAnonymous
+        ? (["active"] as IsActiveStatus[])
+        : input?.statuses;
+
       const where = and(
         input?.searchTerm
           ? or(
@@ -182,10 +196,10 @@ export const eventTypeRouter = {
             )
           : undefined,
         orgScopeFilter,
-        !input?.statuses?.length ||
-          input.statuses.length === IsActiveStatus.length
+        !effectiveStatuses?.length ||
+          effectiveStatuses.length === IsActiveStatus.length
           ? undefined
-          : input.statuses.includes("active")
+          : effectiveStatuses.includes("active")
             ? eq(schema.eventTypes.isActive, true)
             : eq(schema.eventTypes.isActive, false),
       );
