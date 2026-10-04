@@ -167,7 +167,7 @@ push_secret() {
       --project "$project" \
       --member "serviceAccount:${sa_email}" \
       --role "roles/secretmanager.secretAccessor" \
-      --quiet > /dev/null || echo " [$var] WARNING: Failed to bind $secret_id"
+      --quiet > /dev/null || { echo " [$var] ERROR: Failed to bind $secret_id" >&2; exit 1; }
 
     return 0
   fi
@@ -181,7 +181,7 @@ push_secret() {
     --project "$project" \
     --member "serviceAccount:${sa_email}" \
     --role "roles/secretmanager.secretAccessor" \
-    --quiet > /dev/null || echo " [$var] WARNING: Failed to bind $secret_id"
+    --quiet > /dev/null || { echo " [$var] ERROR: Failed to bind $secret_id" >&2; exit 1; }
 
   if [[ -z "$value" ]]; then
     echo " [$var] Value not in environment. Skipping version update."
@@ -275,7 +275,7 @@ for var in "${!REFERENCED_SECRET_MAP[@]}"; do
     --project "$PROJECT" \
     --member "serviceAccount:${SA_EMAIL}" \
     --role "roles/secretmanager.secretAccessor" \
-    --quiet > /dev/null || echo " [$var] WARNING: Failed to bind $secret_id"
+    --quiet > /dev/null || { echo " [$var] ERROR: Failed to bind $secret_id" >&2; exit 1; }
   SECRET_ARGS+=("${var}=${secret_id}:latest")
 done
 

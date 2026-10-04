@@ -189,6 +189,7 @@ export const SubmitBugReportCard = () => {
             size="sm"
             className="bg-black text-white hover:bg-gray-800"
             type="button"
+            disabled={submitFeedback.isPending}
             onClick={() => {
               console.log("SubmitBugReportCard", form.getValues());
               void form.handleSubmit(onSubmit, () =>

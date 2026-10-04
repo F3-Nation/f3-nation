@@ -656,14 +656,12 @@ export const orgRouter = {
 
       // Sorting and pagination are pushed into the SQL query above
       // (editableOrgsQuery/withPagination, #912) rather than done here in
-      // memory; `paginatedOrgs` and `total` are already final.
-      const isAnonymous = !ctx.session?.user;
-      return {
-        orgs: isAnonymous
-          ? paginatedOrgs.map((o) => ({ ...o, ...SENSITIVE_ORG_FIELD_MASK }))
-          : paginatedOrgs,
-        total,
-      };
+      // memory; `paginatedOrgs` and `total` are already final. No anonymous
+      // masking needed here: `protectedProcedure` already requires
+      // `ctx.session.user`, so an anonymous caller never reaches this
+      // handler at all (unlike `all`/`byId`, which run on
+      // `publicReadProcedure`).
+      return { orgs: paginatedOrgs, total };
     }),
 
   byId: publicReadProcedure

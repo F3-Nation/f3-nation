@@ -718,10 +718,12 @@ export const eventRouter = {
         .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
 
       // publicReadProcedure lets an anonymous caller reach this endpoint
-      // (#378) — don't let a guessed/enumerated ID leak a private event's
-      // details to someone with no session at all.
+      // (#378) — don't let a guessed/enumerated ID leak a private OR
+      // inactive event's details to someone with no session at all (the
+      // `all` list endpoint already clamps anonymous callers to active,
+      // non-private events; byId must not be a backdoor around that).
       const isAnonymousById = !ctx.session?.user;
-      if (event?.isPrivate && isAnonymousById) {
+      if (isAnonymousById && (event?.isPrivate || event?.isActive === false)) {
         return { event: null };
       }
 
