@@ -1,0 +1,58 @@
+name: Deploy Auth3
+
+# #876 Phase 3: Better Auth's own Cloud Run service, standing up alongside
+# (not replacing) the existing f3-auth deployment that deploy-auth.yml
+# manages. Same image/Dockerfile, same GCP projects, separate service name
+# and URL — see apps/auth/scripts/cloud-run-env-auth3.sh for why this isn't
+# just a new input set on deploy-auth.yml.
+
+on:
+  push:
+    tags:
+      # Same release-please component as f3-auth (apps/auth has one
+      # component, "auth" — there's no separate "auth3" tag to trigger on,
+      # since this deploys the exact same image to a second service).
+      - "auth@*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re-)deploy, e.g. auth@1.2.3"
+        required: true
+        type: string
+
+# Prevent concurrent deploys of the same tag
+concurrency:
+  group: deploy-auth3-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+# Reusable workflows can't elevate GITHUB_TOKEN beyond what the caller grants.
+# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate.
+permissions:
+  contents: read
+  id-token: write
+  checks: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_deploy-cloudrun.yml
+    with:
+      ref: ${{ inputs.tag }}
+      image_name: f3-auth
+      service_name: f3-auth3
+      staging_project: f3-authentication-staging
+      prod_project: f3-authentication
+      tag_prefix: auth@
+      dockerfile: apps/auth/Dockerfile
+      # Reuses the existing auth-staging/auth-production GitHub Environments:
+      # auth3 deploys into the same GCP projects as f3-auth, so the same
+      # WIF_PROVIDER/WIF_SA (and prod approval gate) already apply.
+      staging_environment: auth-staging
+      prod_environment: auth-production
+      # Placeholder — update once DNS/domain mapping for auth3 exists (not
+      # automated in this repo; see apps/auth/scripts/cloud-run-env-auth3.sh).
+      staging_url: https://staging.auth3.f3nation.com
+      prod_url: https://auth3.f3nation.com
+      # Same rationale as deploy-auth.yml: in-memory rate limiter needs a
+      # single instance to stay authoritative until it moves to a shared
+      # store. See #356.
+      flags: "--min-instances=1 --max-instances=1"

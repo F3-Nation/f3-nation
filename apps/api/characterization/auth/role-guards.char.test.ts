@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApiKey } from "../fixtures/api-keys";
 import { sessionCookie } from "../fixtures/cookies";
-import { signFixtureJwt } from "../fixtures/jwt";
+import { generateForeignKey, signFixtureJwt } from "../fixtures/jwt";
 import { createFixtureUser } from "../fixtures/users";
 import { req, target } from "../transport";
 import { expectAuthorized, expectUnauthorized } from "./verdict";
@@ -243,5 +243,73 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
         ),
       );
     });
+  });
+});
+// Fixture-free subset of the guards above: no DB fixtures (createApiKey,
+// createFixtureUser, sessionCookie all need the in-process DB/cookie-signing
+// machinery), so unlike everything in the describe.runIf(target.inProcess)
+// block above, this runs against ANY target including a live deployment
+// (apps/api/characterization/targets/live.ts) — #876 Phase 3 names this
+// live-mode auth coverage as a cutover prerequisite that didn't exist before
+// (every other auth characterization test is gated to in-process only).
+describe("role guards — live-safe (no fixtures, every target)", () => {
+  it("protected GET rejects with no auth", async () => {
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/position/assignments/all", { ip: 18 })),
+      "Unauthorized",
+    );
+  });
+
+  it("editor POST rejects with no auth", async () => {
+    await expectUnauthorized(
+      await target.invoke(
+        guardReq("/v1/position/assignments", { ip: 19, method: "POST" }),
+      ),
+      "Unauthorized",
+    );
+  });
+
+  it("admin GET rejects with no auth", async () => {
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/api-key", { ip: 20 })),
+      "Unauthorized",
+    );
+  });
+
+  it("nationAdmin GET rejects with no auth, with the exact message", async () => {
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/mail/templates", { ip: 21 })),
+      "This action requires F3 Nation admin privileges",
+    );
+  });
+
+  it("rejects a garbage bearer token (not a JWT, not a known API key)", async () => {
+    await expectUnauthorized(
+      await target.invoke(
+        guardReq("/v1/api-key", { ip: 22, bearer: "not-a-real-credential" }),
+      ),
+      "Unauthorized",
+    );
+  });
+
+  it("rejects a structurally-invalid JWT (garbage segments, not valid base64url JSON)", async () => {
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/api-key", { ip: 23, bearer: "a.b.c" })),
+      "Unauthorized",
+    );
+  });
+
+  // Signed with a key the real deployment's JWKS never published under this
+  // kid — proves the live target actually verifies the signature rather than
+  // trusting any well-formed RS256 JWT with a recognized kid/issuer shape.
+  it("rejects a JWT signed by a key the real JWKS never published", async () => {
+    const token = await signFixtureJwt({
+      sub: 999999,
+      key: await generateForeignKey(),
+    });
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/api-key", { ip: 24, bearer: token })),
+      "Unauthorized",
+    );
   });
 });
