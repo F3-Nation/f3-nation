@@ -117,10 +117,14 @@ async function proxyRequest(request: NextRequest) {
   // fetch() already decoded the body; these describe the encoded bytes.
   headers.delete("content-encoding");
   headers.delete("content-length");
-  // These responses can carry PII scoped to the caller's own session
-  // (see SIGNED_IN_ONLY_PATHS above) — never let a shared browser cache or
-  // intermediate proxy retain a copy for the next visitor on this device.
-  if (isSignedInOnly) headers.set("Cache-Control", "no-store");
+  // Every path here forwards the caller's own cookie (see
+  // getForwardedHeaders), including several PUBLIC_PATHS entries
+  // (event/all, location/all, org/all, getAOsInRegion) whose response
+  // still varies per caller via `onlyMine` for a signed-in editor. A
+  // shared cache keyed on URL alone can't tell that apart from the
+  // anonymous response for the same path/query, so every response here —
+  // not just SIGNED_IN_ONLY_PATHS — must stay uncached.
+  headers.set("Cache-Control", "no-store");
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,

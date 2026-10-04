@@ -48,13 +48,24 @@ declare -A PROJECT_MAP=(
 SERVICE_NAME="f3-auth3"
 REGION="us-central1"
 
-# Env vars that map to GCP secrets (var name → secret ID).
-# Only genuinely sensitive values go here. DATABASE_*/AUTH_JWT_PRIVATE_KEY/
-# EMAIL_SERVER/API_KEY reuse the SAME secret IDs cloud-run-env.sh already
-# created for f3-auth — same database, same mail transport, same secret
-# value, just read into a second service. AUTH_SECRET (NextAuth's own
-# signing key) is deliberately NOT here: auth3 only runs Better Auth.
+# Secrets this service OWNS: pushed/rotated here the normal way (create,
+# update on change, destroy stale versions). BETTER_AUTH_SECRET is
+# auth3-exclusive, so this is the only entry.
 declare -A SECRET_MAP=(
+  [BETTER_AUTH_SECRET]="better-auth-secret"
+)
+
+# Secrets this service only REFERENCES — the SAME secret IDs
+# cloud-run-env.sh already created and rotates for f3-auth (same database,
+# same mail transport, same API key, just read into a second service).
+# These are wired into Cloud Run via --update-secrets below, but this
+# script never pushes a value for them: push_secret() would otherwise
+# compare this file's copy of the value against the live secret and
+# silently rotate (and destroy old versions of) a secret f3-auth also
+# depends on, the moment .env.cloud-run.auth3.* drifts from the canonical
+# value. AUTH_SECRET (NextAuth's own signing key) is deliberately excluded
+# entirely: auth3 only runs Better Auth.
+declare -A REFERENCED_SECRET_MAP=(
   [DATABASE_HOST]="database-host"
   [DATABASE_USER]="database-user"
   [DATABASE_PASSWORD]="database-password"
@@ -62,7 +73,6 @@ declare -A SECRET_MAP=(
   [AUTH_JWT_PRIVATE_KEY]="auth-jwt-private-key"
   [EMAIL_SERVER]="email-server"
   [API_KEY]="api-key"
-  [BETTER_AUTH_SECRET]="better-auth-secret"
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
@@ -227,11 +237,18 @@ for var in "${ENV_FILE_VARS[@]}"; do
   [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
 done
 
-# Secret-backed env vars
+# Secret-backed env vars — both owned (pushed above) and referenced
+# (f3-auth's own secrets, never pushed here) are wired into Cloud Run the
+# same way; only the push step above treats them differently.
 SECRET_ARGS=()
 for var in "${!SECRET_MAP[@]}"; do
   secret_id="${SECRET_MAP[$var]}"
   echo " [$var] Mapping to secret $secret_id"
+  SECRET_ARGS+=("${var}=${secret_id}:latest")
+done
+for var in "${!REFERENCED_SECRET_MAP[@]}"; do
+  secret_id="${REFERENCED_SECRET_MAP[$var]}"
+  echo " [$var] Mapping to secret $secret_id (referenced, owned by f3-auth)"
   SECRET_ARGS+=("${var}=${secret_id}:latest")
 done
 

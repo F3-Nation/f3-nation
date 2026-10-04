@@ -17,7 +17,7 @@ import { logWarn } from "./logger";
 
 type BaseContext = RequestHeadersPluginContext;
 
-export interface Context {
+export interface Context extends BaseContext {
   session: Session | null;
   db: AppDb;
 }
@@ -73,7 +73,7 @@ const limiter = new MemoryRatelimiter({
  * Extract client IP from request headers.
  * Handles x-forwarded-for chains by taking the first (client) IP.
  */
-const getClientIP = (headers: Headers | null): string => {
+export const getClientIP = (headers: Headers | null): string => {
   const forwarded = headers?.get("x-forwarded-for");
   if (forwarded) {
     // Take first IP in chain (closest to client)

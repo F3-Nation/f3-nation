@@ -1,17 +1,32 @@
-import { os } from "@orpc/server";
+import { MemoryRatelimiter } from "@orpc/experimental-ratelimit/memory";
+import { ORPCError, os } from "@orpc/server";
 import { z } from "zod";
 
 import { MailService, Templates } from "@acme/mail";
 import { triggerMapAppRevalidation } from "../../lib/revalidate-map";
-import { publicReadProcedure, revalidateAuthProcedure } from "../../shared";
+import {
+  getClientIP,
+  publicReadProcedure,
+  revalidateAuthProcedure,
+} from "../../shared";
 import { mapEventRouter } from "./event";
 import { mapLocationRouter } from "./location";
 
 const feedbackSchema = z.object({
-  type: z.string(),
-  subject: z.string(),
-  email: z.string(),
-  description: z.string(),
+  type: z.string().max(200),
+  subject: z.string().max(200),
+  email: z.string().max(320), // RFC 5321 max mailbox length
+  description: z.string().max(5000),
+});
+
+// submitFeedback sends a real email per call and is reachable by any
+// anonymous caller — the generic 500 req/min limiter in shared.ts is meant
+// for ordinary reads, not for something that can be turned into an
+// email-flooding tool against the F3 Nation team's inbox. A separate,
+// much tighter limiter scopes that risk to this one endpoint.
+const feedbackLimiter = new MemoryRatelimiter({
+  maxRequests: 5,
+  window: 60_000,
 });
 
 export const mapRouter = os.router({
@@ -53,6 +68,17 @@ export const mapRouter = os.router({
           .describe("Whether the feedback was submitted successfully"),
       }),
     )
+    .use(async ({ context, next }) => {
+      const key = getClientIP(context.reqHeaders ?? null);
+      const result = await feedbackLimiter.limit(key);
+      if (!result.success) {
+        const retryAfterMs = result.reset ? result.reset - Date.now() : 60_000;
+        throw new ORPCError("TOO_MANY_REQUESTS", {
+          message: `Rate limit exceeded. Try again in ${Math.ceil(retryAfterMs / 1000)}s`,
+        });
+      }
+      return next({ context });
+    })
     .handler(async ({ input }) => {
       // testing type validation of overridden next-auth Session in @acme/auth package
 

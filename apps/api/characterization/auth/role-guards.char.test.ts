@@ -192,6 +192,25 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
     });
   });
 
+  describe("rejects a forged signature even for a real user", () => {
+    // Unlike the live-safe forged-signature test below (sub: 999999, a user
+    // that can't exist), this signs for jwtUser — a real row. If signature
+    // verification were ever skipped or short-circuited, getSessionFromJWT
+    // would find this user and authorize the request, so this test actually
+    // fails closed on that regression instead of passing for the unrelated
+    // reason that the subject doesn't exist.
+    it("rejects a JWT for a real user signed with a key the JWKS never published", async () => {
+      const token = await signFixtureJwt({
+        sub: jwtUser.userId,
+        key: await generateForeignKey(),
+      });
+      await expectUnauthorized(
+        await target.invoke(guardReq("/v1/api-key", { ip: 25, bearer: token })),
+        "Unauthorized",
+      );
+    });
+  });
+
   // #378: publicReadProcedure — anonymous reaches the map's browse endpoints,
   // but not the endpoints that stayed protectedProcedure/editorProcedure.
   describe("publicReadProcedure GET /v1/map/location/events-and-locations", () => {
@@ -300,8 +319,11 @@ describe("role guards — live-safe (no fixtures, every target)", () => {
   });
 
   // Signed with a key the real deployment's JWKS never published under this
-  // kid — proves the live target actually verifies the signature rather than
-  // trusting any well-formed RS256 JWT with a recognized kid/issuer shape.
+  // kid. Fixture-free, so `sub` can't be a real user — meaning this alone
+  // can't tell "signature correctly rejected" apart from "signature wrongly
+  // accepted, then correctly rejected for a nonexistent user." The
+  // real-user variant above (in-process only) closes that gap; this one's
+  // job is just to extend the same shape of coverage to a live deployment.
   it("rejects a JWT signed by a key the real JWKS never published", async () => {
     const token = await signFixtureJwt({
       sub: 999999,

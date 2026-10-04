@@ -147,8 +147,9 @@ function buildEventWhereClause(params: {
   input?: EventFilterInput;
   editableOrgIds: number[];
   isNationAdmin: boolean;
+  isAnonymous: boolean;
 }): SQL | undefined {
-  const { input, editableOrgIds, isNationAdmin } = params;
+  const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
 
   return and(
     !input?.statuses?.length // no statuses provided, default to active
@@ -156,6 +157,11 @@ function buildEventWhereClause(params: {
       : input.statuses.length === IsActiveStatus.length
         ? undefined
         : eq(schema.events.isActive, input.statuses.includes("active")),
+    // publicReadProcedure lets an anonymous caller reach this endpoint (#378);
+    // isPrivate events were never filtered because every prior caller was at
+    // least a signed-in user. Keep that behavior unchanged for authenticated
+    // callers and only hide private events from anonymous ones.
+    isAnonymous ? eq(schema.events.isPrivate, false) : undefined,
     input?.searchTerm
       ? or(
           ilike(schema.events.name, `%${input.searchTerm}%`),
@@ -336,6 +342,7 @@ export const eventRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: !ctx.session?.user,
       });
 
       const sortedColumns = input?.sorting?.map((sorting) => {
@@ -522,6 +529,8 @@ export const eventRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        // protectedProcedure: always an authenticated caller.
+        isAnonymous: false,
       });
 
       const count = await getEventCount({ db: ctx.db, where });
@@ -694,6 +703,13 @@ export const eventRouter = {
         )
         .where(eq(schema.events.id, input.id))
         .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
+
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378) — don't let a guessed/enumerated ID leak a private event's
+      // details to someone with no session at all.
+      if (event?.isPrivate && !ctx.session?.user) {
+        return { event: null };
+      }
 
       return { event: event ?? null };
     }),

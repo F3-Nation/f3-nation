@@ -154,11 +154,21 @@ export const locationRouter = {
         }
       }
 
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // (#378). Every authenticated-caller behavior below is unchanged
+      // (including "no statuses means no filter"); an anonymous caller is
+      // additionally clamped to active-only, whatever `statuses` it passes,
+      // since inactive locations were never meant to be public.
+      const isAnonymous = !ctx.session?.user;
+      const effectiveStatuses = isAnonymous
+        ? ["active" as const]
+        : input?.statuses;
+
       const where = and(
-        !input?.statuses?.length ||
-          input.statuses.length === IsActiveStatus.length
+        !effectiveStatuses?.length ||
+          effectiveStatuses.length === IsActiveStatus.length
           ? undefined
-          : input.statuses.includes("active")
+          : effectiveStatuses.includes("active")
             ? eq(schema.locations.isActive, true)
             : eq(schema.locations.isActive, false),
         input?.searchTerm
