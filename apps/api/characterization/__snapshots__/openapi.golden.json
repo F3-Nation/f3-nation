@@ -10179,15 +10179,19 @@
               "schema": {
                 "properties": {
                   "description": {
+                    "maxLength": 5000,
                     "type": "string"
                   },
                   "email": {
+                    "maxLength": 320,
                     "type": "string"
                   },
                   "subject": {
+                    "maxLength": 200,
                     "type": "string"
                   },
                   "type": {
+                    "maxLength": 200,
                     "type": "string"
                   }
                 },
