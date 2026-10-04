@@ -1,5 +1,6 @@
 "use client";
 
+import uniqBy from "lodash/uniqBy";
 import { Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { z } from "zod";
@@ -37,8 +38,13 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
-import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
-import { useAuth } from "~/utils/hooks/use-auth";
+import {
+  invalidateQueries,
+  orpc,
+  ORPCError,
+  useMutation,
+  useQuery,
+} from "~/orpc/react";
 import { closeModal } from "~/utils/store/modal";
 
 const ApiKeyFormSchema = z.object({
@@ -55,7 +61,6 @@ const ApiKeyFormSchema = z.object({
 
 export default function AdminApiKeysModal() {
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
-  const { isNationAdmin } = useAuth();
   const { data: allOrgs, isLoading: isLoadingOrgs } = useQuery(
     orpc.org.mine.queryOptions(),
   );
@@ -78,6 +83,11 @@ export default function AdminApiKeysModal() {
     );
   }, [allOrgs?.orgs]);
 
+  const nextUnusedOrgId = (roles: RoleEntry[] | undefined) => {
+    const usedOrgIds = new Set((roles ?? []).map((r) => r.orgId));
+    return allOrgs?.orgs.find((org) => !usedOrgIds.has(org.id))?.id;
+  };
+
   const createApiKey = useMutation(
     orpc.apiKey.create.mutationOptions({
       onSuccess: async (result) => {
@@ -93,8 +103,13 @@ export default function AdminApiKeysModal() {
         // Force refetch of the API keys list
         await invalidateQueries("apiKey");
       },
-      onError: () => {
-        toast.error("Unable to create API key");
+      onError: (err) => {
+        // FORBIDDEN names the org-role pair the caller can't grant
+        toast.error(
+          err instanceof ORPCError && err.code === "FORBIDDEN"
+            ? err.message
+            : "Unable to create API key",
+        );
       },
     }),
   );
@@ -157,7 +172,12 @@ export default function AdminApiKeysModal() {
                     await createApiKey.mutateAsync({
                       name: values.name,
                       description: values.description ?? undefined,
-                      roles: values.roles ?? [],
+                      // Two rows can land on the same org via the picker;
+                      // a duplicate pair fails the roles insert.
+                      roles: uniqBy(
+                        values.roles ?? [],
+                        (r) => `${r.orgId}:${r.roleName}`,
+                      ),
                       expiresAt,
                     });
                   },
@@ -197,128 +217,129 @@ export default function AdminApiKeysModal() {
                     </FormItem>
                   )}
                 />
-                {isNationAdmin && (
-                  <FormField
-                    control={form.control}
-                    name="roles"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Roles</FormLabel>
-                        <FormDescription>
-                          Assign roles to orgs for this API key.
-                        </FormDescription>
-                        <div className="space-y-2">
-                          {((field.value as RoleEntry[]) || []).map(
-                            (roleEntry, index) => (
-                              <div
-                                key={index}
-                                className="flex items-center gap-2"
-                              >
-                                <Select
-                                  onValueChange={(value) => {
-                                    const newRoles = [
-                                      ...(field.value as RoleEntry[]),
-                                    ];
-                                    newRoles[index] = {
-                                      orgId: roleEntry.orgId,
-                                      roleName: value as "editor" | "admin",
-                                    };
-                                    field.onChange(newRoles);
-                                  }}
-                                  value={roleEntry.roleName}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger className="w-[200px]">
-                                      <SelectValue placeholder="Select a role" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="editor">
-                                      Editor
-                                    </SelectItem>
-                                    <SelectItem value="admin">Admin</SelectItem>
-                                  </SelectContent>
-                                </Select>
-
-                                <VirtualizedCombobox
-                                  value={roleEntry.orgId.toString()}
-                                  options={orgOptions}
-                                  searchPlaceholder="Select an org"
-                                  disabled={isLoadingOrgs}
-                                  onSelect={(value) => {
-                                    const orgId = safeParseInt(value as string);
-                                    if (orgId == undefined) {
-                                      toast.error("Invalid orgId");
-                                      return;
-                                    }
-                                    const newRoles = [
-                                      ...(field.value as RoleEntry[]),
-                                    ];
-                                    newRoles[index] = {
-                                      roleName:
-                                        newRoles[index]?.roleName ?? "editor",
-                                      orgId,
-                                    };
-                                    field.onChange(newRoles);
-                                  }}
-                                  isMulti={false}
-                                />
-
-                                <Button
-                                  variant="ghost"
-                                  type="button"
-                                  size="sm"
-                                  onClick={() => {
-                                    const newRoles = [
-                                      ...(field.value as RoleEntry[]),
-                                    ];
-                                    newRoles.splice(index, 1);
-                                    field.onChange(newRoles);
-                                  }}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ),
-                          )}
-
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex flex-col">
-                              <p className="text-xs text-gray-500">
-                                Admins can invite & edit
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Editors can edit
-                              </p>
-                            </div>
-
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="mt-2"
-                              onClick={() => {
-                                const firstOrgId = allOrgs?.orgs?.[0]?.id ?? 1;
-                                const newRoleEntry: RoleEntry = {
-                                  roleName: "editor",
-                                  orgId: firstOrgId,
-                                };
-                                field.onChange([
-                                  ...((field.value as RoleEntry[]) ?? []),
-                                  newRoleEntry,
-                                ]);
-                              }}
+                <FormField
+                  control={form.control}
+                  name="roles"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Roles</FormLabel>
+                      <FormDescription>
+                        Assign roles to orgs for this API key.
+                      </FormDescription>
+                      <div className="space-y-2">
+                        {((field.value as RoleEntry[]) || []).map(
+                          (roleEntry, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center gap-2"
                             >
-                              <Plus className="mr-2 h-4 w-4" />
-                              Add Role
-                            </Button>
+                              <Select
+                                onValueChange={(value) => {
+                                  const newRoles = [
+                                    ...(field.value as RoleEntry[]),
+                                  ];
+                                  newRoles[index] = {
+                                    orgId: roleEntry.orgId,
+                                    roleName: value as "editor" | "admin",
+                                  };
+                                  field.onChange(newRoles);
+                                }}
+                                value={roleEntry.roleName}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="Select a role" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="editor">Editor</SelectItem>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+
+                              <VirtualizedCombobox
+                                value={roleEntry.orgId.toString()}
+                                options={orgOptions}
+                                searchPlaceholder="Select an org"
+                                disabled={isLoadingOrgs}
+                                onSelect={(value) => {
+                                  const orgId = safeParseInt(value as string);
+                                  if (orgId == undefined) {
+                                    toast.error("Invalid orgId");
+                                    return;
+                                  }
+                                  const newRoles = [
+                                    ...(field.value as RoleEntry[]),
+                                  ];
+                                  newRoles[index] = {
+                                    roleName:
+                                      newRoles[index]?.roleName ?? "editor",
+                                    orgId,
+                                  };
+                                  field.onChange(newRoles);
+                                }}
+                                isMulti={false}
+                              />
+
+                              <Button
+                                variant="ghost"
+                                type="button"
+                                size="sm"
+                                onClick={() => {
+                                  const newRoles = [
+                                    ...(field.value as RoleEntry[]),
+                                  ];
+                                  newRoles.splice(index, 1);
+                                  field.onChange(newRoles);
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ),
+                        )}
+
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-col">
+                            <p className="text-xs text-gray-500">
+                              Admins can invite & edit
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Editors can edit
+                            </p>
                           </div>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            // Disabled until org.mine loads, and once every org
+                            // already has a row, so a new row never starts on an
+                            // org the user can't grant or on a duplicate.
+                            disabled={!nextUnusedOrgId(field.value)}
+                            onClick={() => {
+                              const orgId = nextUnusedOrgId(field.value);
+                              if (!orgId) return;
+                              const newRoleEntry: RoleEntry = {
+                                roleName: "editor",
+                                orgId,
+                              };
+                              field.onChange([
+                                ...((field.value as RoleEntry[]) ?? []),
+                                newRoleEntry,
+                              ]);
+                            }}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Role
+                          </Button>
                         </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="expiresAt"
