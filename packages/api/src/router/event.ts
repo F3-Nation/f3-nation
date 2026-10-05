@@ -786,6 +786,33 @@ export const eventRouter = {
       let shouldNotifyFirstEventForRegion = false;
       const result = await ctx.db.transaction(async (tx) => {
         const transactionDb = tx as unknown as AppDb;
+        const [transactionExistingEvent] = input.id
+          ? await transactionDb
+              .select()
+              .from(schema.events)
+              .where(eq(schema.events.id, input.id))
+              .for("update")
+          : [];
+        const isDeactivationTransition =
+          transactionExistingEvent?.isActive === true && !input.isActive;
+        const isStatusTransition =
+          transactionExistingEvent !== undefined &&
+          transactionExistingEvent.isActive !== input.isActive;
+
+        if (isDeactivationTransition && transactionExistingEvent) {
+          const adminRoleCheck = await checkHasRoleOnOrg({
+            orgId: transactionExistingEvent.orgId,
+            session: ctx.session,
+            db: transactionDb,
+            roleName: "admin",
+          });
+          if (!adminRoleCheck.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to deactivate this Event",
+            });
+          }
+        }
+
         const [result] = await transactionDb
           .insert(schema.events)
           .values(eventToUpdate)
@@ -834,7 +861,7 @@ export const eventRouter = {
         }
 
         const effectiveEventTagIds =
-          normalizedEventTagIds === undefined && existingEvent
+          normalizedEventTagIds === undefined && transactionExistingEvent
             ? (
                 await transactionDb
                   .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
@@ -873,12 +900,13 @@ export const eventRouter = {
 
         // Handle event instance cascade operations for series (events with recurrence patterns).
         // null recurrencePattern defaults to weekly in createEventInstancesForSeries.
-        if (result.dayOfWeek) {
+        if (result.dayOfWeek || transactionExistingEvent?.dayOfWeek) {
           const {
             isStructuralChange,
             createEventInstancesForSeries,
             updateFutureInstances,
             recreateFutureInstances,
+            softDeleteFutureInstancesForSeries,
           } = await import("../lib/cascade-service");
 
           // Build series data for cascade operations
@@ -907,7 +935,17 @@ export const eventRouter = {
             eventTagIds: effectiveEventTagIds,
           };
 
-          if (!existingEvent) {
+          if (isStatusTransition) {
+            // A status transition is not a series schedule edit. Deactivation
+            // preserves future-instance history by soft-deleting in place;
+            // activation must not recreate or otherwise cascade instances.
+            if (isDeactivationTransition) {
+              await softDeleteFutureInstancesForSeries(
+                transactionDb,
+                result.id,
+              );
+            }
+          } else if (!transactionExistingEvent) {
             // New series: create event instances from series start date
             await createEventInstancesForSeries(
               transactionDb,
@@ -918,15 +956,15 @@ export const eventRouter = {
 
             // Run this notification only after the transaction commits.
             shouldNotifyFirstEventForRegion = true;
-          } else if (existingEvent.dayOfWeek) {
+          } else if (transactionExistingEvent.dayOfWeek) {
             // Existing series: check for structural changes
             const existingSeriesData = {
-              dayOfWeek: existingEvent.dayOfWeek,
-              recurrencePattern: existingEvent.recurrencePattern,
-              recurrenceInterval: existingEvent.recurrenceInterval,
-              indexWithinInterval: existingEvent.indexWithinInterval,
-              startDate: existingEvent.startDate,
-              endDate: existingEvent.endDate,
+              dayOfWeek: transactionExistingEvent.dayOfWeek,
+              recurrencePattern: transactionExistingEvent.recurrencePattern,
+              recurrenceInterval: transactionExistingEvent.recurrenceInterval,
+              indexWithinInterval: transactionExistingEvent.indexWithinInterval,
+              startDate: transactionExistingEvent.startDate,
+              endDate: transactionExistingEvent.endDate,
             };
 
             const updatedSeriesData = {

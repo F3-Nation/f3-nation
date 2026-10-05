@@ -902,20 +902,6 @@ export const orgRouter = {
         );
       }
 
-      // If the parentId is changing and this is an AO, we need to move the locations for the org
-      if (
-        isChangingParent &&
-        input.orgType === "ao" &&
-        destinationParentOrgId !== null &&
-        existingOrg.parentId !== null
-      ) {
-        await moveAOLocsToNewRegion(ctx, {
-          oldRegionId: existingOrg.parentId,
-          newRegionId: destinationParentOrgId,
-          aoId: existingOrg.id,
-        });
-      }
-
       // 2. Update the org with the new values
 
       const orgToCrupdate: typeof schema.orgs.$inferInsert = {
@@ -923,14 +909,77 @@ export const orgRouter = {
         meta: input.meta,
       };
 
-      const [result] = await ctx.db
-        .insert(schema.orgs)
-        .values(orgToCrupdate)
-        .onConflictDoUpdate({
-          target: [schema.orgs.id],
-          set: orgToCrupdate,
-        })
-        .returning();
+      const result = await ctx.db.transaction(async (tx) => {
+        const [lockedOrg] = await tx
+          .select()
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, input.id!))
+          .for("update");
+
+        if (!lockedOrg) {
+          throw new ORPCError("NOT_FOUND", { message: "Org not found" });
+        }
+
+        const deactivatingAo =
+          lockedOrg.orgType === "ao" &&
+          lockedOrg.isActive &&
+          input.isActive === false;
+
+        if (deactivatingAo) {
+          const adminRoleCheck = await checkHasRoleOnOrg({
+            orgId: lockedOrg.id,
+            session: ctx.session,
+            db: tx as unknown as AppDb,
+            roleName: "admin",
+          });
+          if (!adminRoleCheck.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to deactivate this AO",
+            });
+          }
+        }
+
+        const isChangingLockedParent =
+          input.parentId !== undefined && input.parentId !== lockedOrg.parentId;
+
+        if (
+          isChangingLockedParent &&
+          lockedOrg.orgType === "ao" &&
+          destinationParentOrgId !== null &&
+          lockedOrg.parentId !== null
+        ) {
+          await moveAOLocsToNewRegion(
+            { ...ctx, db: tx as unknown as AppDb },
+            {
+              oldRegionId: lockedOrg.parentId,
+              newRegionId: destinationParentOrgId,
+              aoId: lockedOrg.id,
+            },
+          );
+        }
+
+        const [updatedOrg] = await tx
+          .insert(schema.orgs)
+          .values(orgToCrupdate)
+          .onConflictDoUpdate({
+            target: [schema.orgs.id],
+            set: orgToCrupdate,
+          })
+          .returning();
+
+        if (deactivatingAo) {
+          const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
+            await import("../lib/cascade-service");
+
+          await softDeleteSeriesForOrg(tx as unknown as AppDb, existingOrg.id);
+          await softDeleteFutureInstancesForOrg(
+            tx as unknown as AppDb,
+            existingOrg.id,
+          );
+        }
+
+        return updatedOrg;
+      });
 
       // Notify webhooks about the org update
       if (result) {
