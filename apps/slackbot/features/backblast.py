@@ -668,16 +668,11 @@ def build_backblast_form(
         # De-duplicate in case a location appears in both sources.
         location_records = list({location.id: location for location in location_records}.values())
         location_records.sort(key=lambda location: (get_location_display_name(location) or "").lower())
-        region_org_record: Org = DbManager.get(Org, region_record.org_id, joinedloads=[Org.event_types])
         backblast_form.set_options(
             {
                 actions.BACKBLAST_AO: slack_orm.as_selector_options(
                     names=[ao.name for ao in aos],
                     values=[str(ao.id) for ao in aos],
-                ),
-                actions.BACKBLAST_EVENT_TYPE: slack_orm.as_selector_options(
-                    names=[event_type.name for event_type in region_org_record.event_types],
-                    values=[str(event_type.id) for event_type in region_org_record.event_types],
                 ),
                 actions.BACKBLAST_LOCATION: slack_orm.as_selector_options(
                     names=[get_location_display_name(location) for location in location_records],
@@ -694,8 +689,10 @@ def build_backblast_form(
         attendance_non_slack_users = []
 
     org_event_types: Org = DbManager.get(Org, region_record.org_id, joinedloads=[Org.event_types])
+    active_event_types = [event_type for event_type in org_event_types.event_types if event_type.is_active]
     event_type_options = slack_orm.as_selector_options(
-        [r.name for r in org_event_types.event_types], [str(r.id) for r in org_event_types.event_types]
+        [event_type.name for event_type in active_event_types],
+        [str(event_type.id) for event_type in active_event_types],
     )
 
     if (current_date_cst() < (safe_get(event_record, "start_date") or current_date_cst())) or is_paxminer_backblast:
