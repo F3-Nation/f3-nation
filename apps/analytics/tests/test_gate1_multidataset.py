@@ -292,6 +292,22 @@ def test_failed_dataset_log_captures_partial_output_before_workspace_cleanup(mon
             False,
         ),
         (
+            PointerConflictError("pointer write outcome is unconfirmed", outcome="unconfirmed"),
+            "analytics.etl.pointer_commit_ambiguous",
+            "ambiguous",
+            False,
+        ),
+        (
+            PointerConflictError(
+                "pointer write committed but readback could not be confirmed",
+                committed=True,
+                outcome="unconfirmed",
+            ),
+            "analytics.etl.pointer_commit_ambiguous",
+            "ambiguous",
+            True,
+        ),
+        (
             PointerConflictError("candidate was committed and immediately superseded", committed=True),
             "analytics.etl.pointer_commit_superseded",
             "committed_superseded",

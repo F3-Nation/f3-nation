@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import math
+import multiprocessing
+import os
+import shutil
 import tempfile
 import threading
 import time
@@ -24,6 +28,13 @@ _STAGED_EVENTS_CHUNK_SIZE = 1_000
 _STAGED_EVENTS_TIMEOUT = "15min"
 _STAGED_EVENTS_IDLE_TIMEOUT = "15min"
 _CTAS_EVENTS_DEADLINE_SECONDS = 50 * 60
+_CTAS_EVENTS_GRACE_SECONDS = 3
+_CTAS_EVENTS_TERMINATE_SECONDS = 1
+_CTAS_EVENTS_REAP_SECONDS = 2
+_CTAS_EVENTS_POST_REAP_SECONDS = 13
+_CTAS_EVENTS_CLEANUP_OPERATION_SECONDS = 10
+_CTAS_EVENTS_CLEANUP_TERMINATE_SECONDS = 1
+_CTAS_EVENTS_CLEANUP_REAP_SECONDS = 2
 _STAGED_EVENTS_TABLES = (
     (
         "orgs",
@@ -741,20 +752,19 @@ def run_staged_events_diagnostic(
     return {"status": "succeeded", "row_count": row_count}
 
 
-def run_ctas_events_diagnostic(
+def _run_ctas_events_worker(
     settings: Settings,
-    connection_factory: Callable[[Settings, Path], Any] | None = None,
-    logger: JsonLogger | None = None,
-    deadline_seconds: float | None = None,
+    workspace_path: Path,
+    deadline: float,
+    connection_factory: Callable[[Settings, Path], Any],
+    log: JsonLogger,
 ) -> dict[str, Any]:
-    """Run the approved one-shot pv_events CTAS isolation diagnostic."""
-    log = logger or JsonLogger()
+    """Run one CTAS diagnostic in its supervised process (or directly in tests)."""
     probe = "pv_events"
     phase = "source_staging"
     failure: BaseException | None = None
     connection: Any | None = None
     attached = False
-    workspace = tempfile.TemporaryDirectory(prefix="analytics-ctas-events-")
     watchdog_stop = threading.Event()
     watchdog: threading.Thread | None = None
     timestamp = datetime.now(timezone.utc)
@@ -767,13 +777,9 @@ def run_ctas_events_diagnostic(
             raise TimeoutError("ctas diagnostic deadline exceeded")
 
     try:
-        factory = connection_factory or connect_ctas_diagnostic
-        db = factory(settings, Path(workspace.name))
+        db = connection_factory(settings, workspace_path)
         connection = db
-        active_deadline = _CTAS_EVENTS_DEADLINE_SECONDS if deadline_seconds is None else deadline_seconds
-        if active_deadline < 0:
-            raise ValueError("deadline_seconds must not be negative")
-        deadline = time.monotonic() + active_deadline
+        active_deadline = max(0.0, deadline - time.monotonic())
 
         def interrupt_on_deadline() -> None:
             if not watchdog_stop.wait(active_deadline):
@@ -837,31 +843,27 @@ def run_ctas_events_diagnostic(
         watchdog_stop.set()
         if watchdog is not None:
             watchdog.join()
-        cleanup_error: BaseException | None = None
+        cleanup_errors: list[BaseException] = []
         if connection is not None and attached:
             try:
                 connection.execute("DETACH pg")
                 attached = False
             except Exception as error:
-                cleanup_error = error
+                cleanup_errors.append(error)
         if connection is not None:
             try:
                 connection.close()
             except Exception as error:
-                cleanup_error = error
-        try:
-            workspace.cleanup()
-        except Exception as error:
-            cleanup_error = error
-        if cleanup_error is not None:
+                cleanup_errors.append(error)
+        if cleanup_errors:
             if failure is None:
-                failure = cleanup_error
+                failure = cleanup_errors[0]
             log.error(
                 "analytics.etl.diagnostic_phase_failed",
-                cleanup_error,
+                cleanup_errors[0],
                 probe=probe,
                 phase="cleanup",
-                error_type=type(cleanup_error).__name__,
+                error_type=type(cleanup_errors[0]).__name__,
             )
         else:
             log.info("analytics.etl.diagnostic_phase_succeeded", probe=probe, phase="cleanup")
@@ -869,3 +871,277 @@ def run_ctas_events_diagnostic(
     if failure is not None:
         return {"status": "failed", "error_type": type(failure).__name__}
     return {"status": "succeeded", "row_count": local_count}
+
+
+def _ctas_child(
+    settings: Settings,
+    workspace_path: str,
+    deadline: float,
+    factory: Callable[[Settings, Path], Any],
+    sender: Any,
+) -> None:
+    try:
+        result = _run_ctas_events_worker(settings, Path(workspace_path), deadline, factory, JsonLogger())
+    except BaseException as error:
+        result = {"status": "failed", "error_type": type(error).__name__}
+    try:
+        sender.send({"kind": "result", "result": result})
+    finally:
+        sender.close()
+
+
+def _remove_ctas_workspace(workspace_path: str) -> None:
+    shutil.rmtree(workspace_path)
+
+
+def _cleanup_ctas_workspace(
+    workspace_path: str,
+    sender: Any,
+    cleanup: Callable[[str], None] = _remove_ctas_workspace,
+) -> None:
+    try:
+        cleanup(workspace_path)
+    except FileNotFoundError:
+        result: dict[str, Any] = {"ok": True}
+    except Exception as error:
+        result = {"ok": False, "error_type": type(error).__name__}
+    else:
+        result = {"ok": True}
+    try:
+        sender.send(result)
+    finally:
+        sender.close()
+
+
+def _valid_ctas_result(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    if value.get("status") == "succeeded":
+        return set(value) == {"status", "row_count"} and type(value["row_count"]) is int and value["row_count"] >= 0
+    if value.get("status") == "failed":
+        return set(value) == {"status", "error_type"} and isinstance(value["error_type"], str)
+    return False
+
+
+def _fatal_if_ctas_process_unreaped(process: Any) -> None:
+    """Fail closed if SIGKILL did not stop a CTAS-related child process."""
+    if process.is_alive():
+        os._exit(70)
+
+
+def _terminate_kill_reap_ctas_process(
+    process: Any,
+    terminate_deadline: float,
+    reap_deadline: float,
+) -> None:
+    if process.is_alive():
+        try:
+            process.terminate()
+        except BaseException:
+            pass
+        try:
+            process.join(timeout=max(0.0, terminate_deadline - time.monotonic()))
+        except BaseException:
+            pass
+    if process.is_alive() and hasattr(process, "kill"):
+        try:
+            process.kill()
+        except BaseException:
+            pass
+        try:
+            process.join(timeout=max(0.0, reap_deadline - time.monotonic()))
+        except BaseException:
+            pass
+    _fatal_if_ctas_process_unreaped(process)
+
+
+def _supervise_ctas_workspace_cleanup(
+    context: Any,
+    workspace_path: str,
+    hard_deadline: float,
+    cleanup: Callable[[str], None],
+) -> tuple[bool, str | None]:
+    receiver, sender = context.Pipe(duplex=False)
+    process = context.Process(
+        target=_cleanup_ctas_workspace,
+        args=(workspace_path, sender, cleanup),
+        name="analytics-ctas-workspace-cleanup",
+        daemon=True,
+    )
+    started = False
+    cleanup_ok = False
+    failure_type: str | None = None
+    cleanup_started_at = time.monotonic()
+    cleanup_deadline = min(
+        cleanup_started_at + _CTAS_EVENTS_CLEANUP_OPERATION_SECONDS,
+        hard_deadline - _CTAS_EVENTS_CLEANUP_TERMINATE_SECONDS - _CTAS_EVENTS_CLEANUP_REAP_SECONDS,
+    )
+    terminate_deadline = cleanup_deadline + _CTAS_EVENTS_CLEANUP_TERMINATE_SECONDS
+    reap_deadline = terminate_deadline + _CTAS_EVENTS_CLEANUP_REAP_SECONDS
+    try:
+        process.start()
+        started = True
+        sender.close()
+        process.join(max(0.0, cleanup_deadline - time.monotonic()))
+        operation_timed_out = process.is_alive() or time.monotonic() > cleanup_deadline
+        if operation_timed_out:
+            failure_type = "TimeoutError"
+        if process.is_alive():
+            _terminate_kill_reap_ctas_process(process, terminate_deadline, reap_deadline)
+        if process.exitcode == 0 and receiver.poll():
+            try:
+                cleanup_result = receiver.recv()
+            except (EOFError, OSError):
+                cleanup_result = None
+            cleanup_ok = (
+                not operation_timed_out and isinstance(cleanup_result, dict) and cleanup_result.get("ok") is True
+            )
+            if not cleanup_ok and isinstance(cleanup_result, dict):
+                candidate = cleanup_result.get("error_type")
+                if isinstance(candidate, str):
+                    failure_type = candidate
+        elif failure_type is None:
+            failure_type = "CleanupError"
+    except Exception as error:
+        failure_type = type(error).__name__
+    finally:
+        if started and process.is_alive():
+            _terminate_kill_reap_ctas_process(process, terminate_deadline, reap_deadline)
+        receiver.close()
+        sender.close()
+    return cleanup_ok, failure_type
+
+
+def run_ctas_events_diagnostic(
+    settings: Settings,
+    connection_factory: Callable[[Settings, Path], Any] | None = None,
+    logger: JsonLogger | None = None,
+    deadline_seconds: float | None = None,
+    *,
+    _workspace_cleanup: Callable[[str], None] = _remove_ctas_workspace,
+) -> dict[str, Any]:
+    """Run CTAS in a spawned process with a parent-enforced hard deadline.
+
+    The normal factory, or a supplied safe/picklable factory, always runs in a
+    spawned child. Direct worker tests should call ``_run_ctas_events_worker``.
+    An unreaped worker or cleanup child after bounded SIGKILL/reaping invokes
+    ``os._exit(70)`` to prevent unsafe interpreter continuation.
+    """
+    log = logger or JsonLogger()
+    soft_seconds = _CTAS_EVENTS_DEADLINE_SECONDS if deadline_seconds is None else deadline_seconds
+    if not isinstance(soft_seconds, (int, float)) or not math.isfinite(soft_seconds) or soft_seconds < 0:
+        raise ValueError("deadline_seconds must be a finite non-negative number")
+    child_factory: Callable[[Settings, Path], Any] = connection_factory or connect_ctas_diagnostic
+    workspace_path = tempfile.mkdtemp(prefix="analytics-ctas-events-")
+    context = multiprocessing.get_context("spawn")
+    receiver, sender = context.Pipe(duplex=False)
+    started_at = time.monotonic()
+    soft_deadline = started_at + float(soft_seconds)
+    grace_deadline = soft_deadline + _CTAS_EVENTS_GRACE_SECONDS
+    terminate_deadline = grace_deadline + _CTAS_EVENTS_TERMINATE_SECONDS
+    reap_deadline = terminate_deadline + _CTAS_EVENTS_REAP_SECONDS
+    hard_deadline = reap_deadline + _CTAS_EVENTS_POST_REAP_SECONDS
+    process = context.Process(
+        target=_ctas_child,
+        args=(settings, workspace_path, soft_deadline, child_factory, sender),
+        name="analytics-ctas-events",
+        daemon=True,
+    )
+    result: dict[str, Any] = {"status": "failed", "error_type": "ChildProcessError"}
+    result_ready = False
+    timed_out = False
+    child_reaped = False
+    cleanup_ok = False
+    cleanup_error_type: str | None = None
+    try:
+        process.start()
+        sender.close()
+        process.join(max(0.0, soft_deadline - time.monotonic()))
+        if process.is_alive():
+            timed_out = True
+            log.error(
+                "analytics.etl.diagnostic_phase_failed",
+                TimeoutError("ctas soft deadline exceeded"),
+                probe="pv_events",
+                phase="supervisor",
+                error_type="TimeoutError",
+            )
+            process.join(max(0.0, grace_deadline - time.monotonic()))
+        if process.is_alive():
+            process.terminate()
+            process.join(max(0.0, terminate_deadline - time.monotonic()))
+        if process.is_alive() and hasattr(process, "kill"):
+            process.kill()
+            process.join(max(0.0, reap_deadline - time.monotonic()))
+            _fatal_if_ctas_process_unreaped(process)
+        child_reaped = not process.is_alive()
+        if not child_reaped:
+            timed_out = True
+            result = {"status": "failed", "error_type": "TimeoutError"}
+        elif timed_out or time.monotonic() > soft_deadline:
+            timed_out = True
+            result = {"status": "failed", "error_type": "TimeoutError"}
+        elif process.exitcode != 0:
+            result = {"status": "failed", "error_type": "ChildProcessError"}
+        elif receiver.poll():
+            try:
+                message = receiver.recv()
+            except (EOFError, OSError):
+                message = None
+            if (
+                isinstance(message, dict)
+                and message.get("kind") == "result"
+                and _valid_ctas_result(message.get("result"))
+            ):
+                result = message["result"]
+                result_ready = True
+            else:
+                result = {"status": "failed", "error_type": "ChildProcessError"}
+        else:
+            result = {"status": "failed", "error_type": "ChildProcessError"}
+    except Exception as error:
+        log.error(
+            "analytics.etl.diagnostic_phase_failed",
+            error,
+            probe="pv_events",
+            phase="supervisor",
+            error_type=type(error).__name__,
+        )
+        result = {"status": "failed", "error_type": type(error).__name__}
+    finally:
+        if process.pid is None:
+            child_reaped = True
+        else:
+            if process.is_alive():
+                _terminate_kill_reap_ctas_process(process, terminate_deadline, reap_deadline)
+            child_reaped = not process.is_alive()
+        receiver.close()
+        sender.close()
+        if child_reaped:
+            try:
+                cleanup_ok, cleanup_error_type = _supervise_ctas_workspace_cleanup(
+                    context, workspace_path, hard_deadline, _workspace_cleanup
+                )
+            except Exception as error:
+                cleanup_error_type = type(error).__name__
+        elif result["status"] == "succeeded":
+            result = {"status": "failed", "error_type": "TimeoutError"}
+        if child_reaped and not cleanup_ok:
+            if result["status"] == "succeeded":
+                result = {
+                    "status": "failed",
+                    "error_type": "TimeoutError" if cleanup_error_type == "TimeoutError" else "CleanupError",
+                }
+            result["cleanup_error_type"] = cleanup_error_type or "CleanupError"
+            log.error(
+                "analytics.etl.diagnostic_phase_failed",
+                RuntimeError("ctas workspace cleanup failed"),
+                probe="pv_events",
+                phase="cleanup",
+                error_type=cleanup_error_type or "CleanupError",
+            )
+    if timed_out:
+        return result
+    if not child_reaped or not result_ready and result["status"] == "succeeded":
+        return {"status": "failed", "error_type": "ChildProcessError"}
+    return result

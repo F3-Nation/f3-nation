@@ -141,13 +141,28 @@ ANALYTICS_ENVIRONMENT=local \
 
 It is fixed to `pv_events`, accepts no selectors, creates no Parquet or cloud
 publication artifacts, and removes its private DuckDB spill workspace during
-cleanup. This can hold full projected PII in memory or spill storage; run it
+cleanup when the worker has been reaped. This can hold full projected PII in memory or spill storage; run it
 only under explicit security, platform, and analytics-operator approval. It
-does not change the regular ETL or bounded diagnostics paths. A fixed
-sub-60-minute watchdog uses DuckDB's supported connection interrupt mechanism
-to cancel an active operation before the Cloud Run limit; cleanup still closes
-the connection and removes the workspace. The reported row count is the final
-local `pv_events` output count.
+does not change the regular ETL or bounded diagnostics paths. The normal CLI
+path always runs in a spawned, parent-supervised child: a 50-minute soft
+deadline requests DuckDB interruption, followed by grace, termination, and
+bounded kill/reap. If cleanup is needed, it has its own bounded operation,
+termination, and positive kill/reap windows. Startup, connection creation, and
+cleanup are included in the absolute hard budget, which remains below the
+60-minute Cloud Run limit. Forced termination does not claim DuckDB connection
+cleanup; the parent removes the owned workspace only after the worker is
+confirmed reaped. If a worker or workspace-cleanup process is still alive after
+SIGKILL and bounded reaping, the supervisor calls `os._exit(70)` immediately to
+prevent interpreter continuation; direct Python callers therefore may not
+receive a result and the CLI completion summary is bypassed. An unreaped
+worker's workspace may retain PII and is intentionally not cleaned while that
+worker might still use it. After status 70, operators must confirm the child has
+stopped before manually inspecting/removing any residual workspace. Cleanup
+timeouts and failures return failed results (a cleanup timeout remains a
+`TimeoutError` and includes `cleanup_error_type`). The Python factory injection
+is also supervised and must be safe to pickle; direct worker tests use the
+private worker seam. The reported row count is the final local `pv_events`
+output count.
 
 ## Read-only ETL diagnostics
 

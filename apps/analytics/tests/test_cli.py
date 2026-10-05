@@ -390,6 +390,15 @@ def test_ctas_events_diagnostics_command_returns_status_without_gcs_or_selectors
     with pytest.raises(SystemExit):
         cli.main()
 
+    monkeypatch.setattr(
+        diagnostics,
+        "run_ctas_events_diagnostic",
+        lambda _settings, *, logger: {"status": "failed", "error_type": "TimeoutError"},
+    )
+    monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics-ctas-events"])
+    assert cli.main() == 1
+    assert events[-1][1]["failed_count"] == 1
+
     monkeypatch.setattr(sys, "argv", ["analytics-etl", "diagnostics-full-query", "--scanner-mode", "invalid"])
     with pytest.raises(SystemExit):
         cli.main()

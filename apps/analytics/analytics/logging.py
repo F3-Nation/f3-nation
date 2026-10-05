@@ -42,14 +42,14 @@ def _safe_error_detail(error: BaseException) -> str:
             marker in message for marker in _DUCKDB_IO_MARKERS["read"]
         ):
             return "duckdb_io_postgres_network_read"
-        if any(marker in message for marker in _DUCKDB_IO_MARKERS["write"]):
-            return "duckdb_io_write"
         if any(marker in message for marker in _DUCKDB_IO_MARKERS["postgres_transport"]):
             return "duckdb_io_postgres_transport"
         if any(marker in message for marker in _DUCKDB_IO_MARKERS["parquet_serialization"]):
             return "duckdb_io_parquet_serialization"
         if any(marker in message for marker in _DUCKDB_IO_MARKERS["compression"]):
             return "duckdb_io_compression"
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["write"]):
+            return "duckdb_io_write"
         if any(marker in message for marker in _DUCKDB_IO_MARKERS["local_or_spill_io"]):
             return "duckdb_io_local_or_spill_io"
         if any(marker in message for marker in _DUCKDB_IO_MARKERS["resource_allocation"]):

@@ -2,11 +2,20 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
 import duckdb
+import pytest
 
 import analytics.diagnostics as diagnostics
 from analytics.logging import JsonLogger
@@ -129,6 +138,36 @@ def _settings():
             postgres_port=None,
         ),
     )
+
+
+def _run_ctas_worker_for_test(settings, connection_factory, logger, deadline_seconds: float = 30):
+    with tempfile.TemporaryDirectory(prefix="ctas-worker-test-") as directory:
+        return diagnostics._run_ctas_events_worker(
+            settings,
+            Path(directory),
+            time.monotonic() + deadline_seconds,
+            connection_factory,
+            cast(JsonLogger, logger),
+        )
+
+
+def _run_with_process_group_timeout(command, *, environment, timeout=20):
+    process = subprocess.Popen(
+        command,
+        cwd=Path(__file__).resolve().parents[1],
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        output, _ = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        output, _ = process.communicate()
+        pytest.fail(f"isolated CTAS scenario exceeded {timeout}s; output:\n{output}")
+    return process.returncode, output
 
 
 def test_diagnostics_use_bounded_source_queries_and_one_materialization_execution(monkeypatch):
@@ -829,9 +868,7 @@ def test_ctas_events_stages_tables_detaches_then_runs_local_query(monkeypatch):
         return connection
 
     monkeypatch.setattr(diagnostics, "attach_postgres", lambda connection, _settings: attached.append(connection))
-    result = diagnostics.run_ctas_events_diagnostic(
-        _settings(), connection_factory=make_connection, logger=cast(JsonLogger, _logger(events))
-    )
+    result = _run_ctas_worker_for_test(_settings(), make_connection, _logger(events))
 
     assert result == {"status": "succeeded", "row_count": 3}
     connection = connections[0]
@@ -864,11 +901,7 @@ def test_ctas_events_failure_reports_source_phase_and_cleanup(monkeypatch):
             pass
 
     monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
-    result = diagnostics.run_ctas_events_diagnostic(
-        _settings(),
-        connection_factory=lambda _settings, _directory: Connection(),
-        logger=cast(JsonLogger, _logger(events)),
-    )
+    result = _run_ctas_worker_for_test(_settings(), lambda _settings, _directory: Connection(), _logger(events))
 
     assert result == {"status": "failed", "error_type": "RuntimeError"}
     failure = next(item for item in events if item[0].endswith("phase_failed"))
@@ -889,20 +922,38 @@ def test_ctas_events_local_query_failure_is_classified_after_detach(monkeypatch)
             pass
 
     monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
-    result = diagnostics.run_ctas_events_diagnostic(
-        _settings(),
-        connection_factory=lambda _settings, _directory: Connection(),
-        logger=cast(JsonLogger, _logger(events)),
-    )
+    result = _run_ctas_worker_for_test(_settings(), lambda _settings, _directory: Connection(), _logger(events))
 
     assert result == {"status": "failed", "error_type": "RuntimeError"}
     failure = next(item for item in events if item[0].endswith("phase_failed"))
     assert failure[1]["phase"] == "local_full_query"
 
 
-def test_ctas_events_deadline_interrupts_blocking_operation_and_cleans_up(monkeypatch):
+def test_ctas_worker_cleanup_failure_cannot_report_success():
+    events = []
+
+    class Connection:
+        def execute(self, _statement, _parameters=()):
+            return _Result([(0,)])
+
+        def close(self):
+            raise RuntimeError("cleanup detail must remain redacted")
+
+    result = _run_ctas_worker_for_test(_settings(), lambda _settings, _directory: Connection(), _logger(events))
+
+    assert result == {"status": "failed", "error_type": "RuntimeError"}
+    cleanup_failure = next(
+        event for event in events if event[0].endswith("phase_failed") and event[1]["phase"] == "cleanup"
+    )
+    assert cleanup_failure[1]["error_type"] == "RuntimeError"
+    assert set(cleanup_failure[1]) == {"probe", "phase", "error_type"}
+
+
+def test_ctas_worker_deadline_interrupts_blocking_operation_and_cleans_up(monkeypatch):
     events = []
     directories = []
+
+    interrupted = threading.Event()
 
     class Connection:
         def __init__(self):
@@ -911,13 +962,14 @@ def test_ctas_events_deadline_interrupts_blocking_operation_and_cleans_up(monkey
 
         def execute(self, statement, _parameters=()):
             if statement.startswith("CREATE TABLE staged.orgs"):
-                while not self.interrupted:
-                    pass
+                if not interrupted.wait(2):
+                    raise TimeoutError("test interrupt did not arrive")
                 raise RuntimeError("interrupted")
             return _Result([(0,)])
 
         def interrupt(self):
             self.interrupted = True
+            interrupted.set()
 
         def close(self):
             self.closed = True
@@ -929,18 +981,269 @@ def test_ctas_events_deadline_interrupts_blocking_operation_and_cleans_up(monkey
         return connection
 
     monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
-    result = diagnostics.run_ctas_events_diagnostic(
-        _settings(),
-        connection_factory=make_connection,
-        logger=cast(JsonLogger, _logger(events)),
-        deadline_seconds=0.01,
-    )
+    result = _run_ctas_worker_for_test(_settings(), make_connection, _logger(events), deadline_seconds=0.01)
 
     assert result == {"status": "failed", "error_type": "RuntimeError"}
     assert connection.interrupted is True and connection.closed is True
     assert all(not directory.exists() for directory in directories)
     failure = next(item for item in events if item[0].endswith("phase_failed"))
     assert failure[1]["phase"] == "source_staging"
+
+
+class _SpawnStuckConnection:
+    def __init__(self, settings):
+        self.settings = settings
+
+    def execute(self, statement, parameters=()):
+        if self.settings.block_phase == "execute" and statement.startswith("CREATE TABLE staged.orgs"):
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            Path(self.settings.operation_marker).write_text("sigterm_ignored", encoding="utf-8")
+            threading.Event().wait(30)
+        return _Result([(0,)])
+
+    def interrupt(self):
+        Path(self.settings.interrupt_marker).write_text("called", encoding="utf-8")
+        if self.settings.interrupt_mode == "raise":
+            raise RuntimeError("interrupt failed")
+
+    def close(self):
+        if self.settings.block_phase == "close":
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            Path(self.settings.close_marker).write_text("sigterm_ignored", encoding="utf-8")
+            Path(self.settings.operation_marker).write_text("sigterm_ignored", encoding="utf-8")
+            threading.Event().wait(30)
+        else:
+            Path(self.settings.close_marker).write_text("closed", encoding="utf-8")
+
+
+def _spawn_stuck_factory(settings, directory):
+    Path(settings.workspace_record).write_text(str(directory), encoding="utf-8")
+    Path(settings.pid_record).write_text(str(os.getpid()), encoding="utf-8")
+    if settings.block_phase == "factory":
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        Path(settings.operation_marker).write_text("sigterm_ignored", encoding="utf-8")
+        threading.Event().wait(30)
+    return _SpawnStuckConnection(settings)
+
+
+def _blocking_workspace_cleanup(workspace_path):
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    Path(os.environ["CTAS_CLEANUP_PID_MARKER"]).write_text(f"{os.getpid()}:sigterm_ignored", encoding="utf-8")
+    Path(os.environ["CTAS_CLEANUP_WORKSPACE_MARKER"]).write_text(workspace_path, encoding="utf-8")
+    threading.Event().wait(30)
+
+
+def test_ctas_supervisor_contains_blocked_workspace_cleanup():
+    if os.environ.get("CTAS_BLOCKED_CLEANUP_INNER") != "1":
+        environment = os.environ.copy()
+        environment["CTAS_BLOCKED_CLEANUP_INNER"] = "1"
+        node_id = f"{Path(__file__).resolve()}::test_ctas_supervisor_contains_blocked_workspace_cleanup"
+        return_code, output = _run_with_process_group_timeout(
+            [sys.executable, "-m", "pytest", node_id, "-q"], environment=environment, timeout=45
+        )
+        assert return_code == 0, output
+        return
+
+    with tempfile.TemporaryDirectory(prefix="ctas-cleanup-test-") as directory:
+        base = Path(directory)
+        settings = cast(
+            Settings,
+            SimpleNamespace(
+                **vars(_settings()),
+                interrupt_mode="noop",
+                block_phase="none",
+                workspace_record=str(base / "workspace-record"),
+                operation_marker=str(base / "operation"),
+                interrupt_marker=str(base / "interrupt"),
+                close_marker=str(base / "close"),
+                pid_record=str(base / "worker-pid"),
+            ),
+        )
+        environment = os.environ.copy()
+        environment["CTAS_CLEANUP_PID_MARKER"] = str(base / "cleanup-pid")
+        environment["CTAS_CLEANUP_WORKSPACE_MARKER"] = str(base / "cleanup-workspace")
+        os.environ.update(
+            {
+                "CTAS_CLEANUP_PID_MARKER": environment["CTAS_CLEANUP_PID_MARKER"],
+                "CTAS_CLEANUP_WORKSPACE_MARKER": environment["CTAS_CLEANUP_WORKSPACE_MARKER"],
+            }
+        )
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_CLEANUP_OPERATION_SECONDS", 2)
+        try:
+            result = diagnostics.run_ctas_events_diagnostic(
+                settings,
+                connection_factory=_spawn_stuck_factory,
+                deadline_seconds=10,
+                _workspace_cleanup=_blocking_workspace_cleanup,
+            )
+        finally:
+            monkeypatch.undo()
+            os.environ.pop("CTAS_CLEANUP_PID_MARKER", None)
+            os.environ.pop("CTAS_CLEANUP_WORKSPACE_MARKER", None)
+
+        assert result == {
+            "status": "failed",
+            "error_type": "TimeoutError",
+            "cleanup_error_type": "TimeoutError",
+        }
+        cleanup_workspace = Path((base / "cleanup-workspace").read_text(encoding="utf-8"))
+        cleanup_pid_marker = (base / "cleanup-pid").read_text(encoding="utf-8")
+        assert cleanup_pid_marker.endswith(":sigterm_ignored")
+        cleanup_pid = int(cleanup_pid_marker.split(":", maxsplit=1)[0])
+        worker_pid = int((base / "worker-pid").read_text(encoding="utf-8"))
+        assert cleanup_workspace.exists()
+        with pytest.raises(ProcessLookupError):
+            os.kill(cleanup_pid, 0)
+        with pytest.raises(ProcessLookupError):
+            os.kill(worker_pid, 0)
+        shutil.rmtree(cleanup_workspace)
+
+
+@pytest.mark.parametrize("fatal_child", ["worker", "cleanup"])
+def test_ctas_unreaped_child_uses_process_fatal_exit(fatal_child):
+    with tempfile.TemporaryDirectory(prefix="ctas-fatal-test-") as directory:
+        marker = Path(directory) / "workspace-path"
+        script = f"""
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+
+import analytics.diagnostics as diagnostics
+
+marker = Path({str(marker)!r})
+real_mkdtemp = tempfile.mkdtemp
+def record_workspace(**kwargs):
+    path = real_mkdtemp(**kwargs)
+    marker.write_text(path, encoding="utf-8")
+    return path
+tempfile.mkdtemp = record_workspace
+
+class Receiver:
+    def __init__(self, worker):
+        self.worker = worker
+    def poll(self):
+        return self.worker
+    def recv(self):
+        return {{"kind": "result", "result": {{"status": "succeeded", "row_count": 0}}}}
+    def close(self):
+        pass
+
+class Sender:
+    def close(self):
+        pass
+
+class FakeProcess:
+    def __init__(self, name):
+        self.name = name
+        self.pid = None
+        self.exitcode = 0 if name == "analytics-ctas-events" else None
+    def start(self):
+        self.pid = 12345
+    def join(self, timeout=None):
+        pass
+    def is_alive(self):
+        return self.name == "analytics-ctas-workspace-cleanup" or {fatal_child!r} == "worker"
+    def terminate(self):
+        pass
+    def kill(self):
+        pass
+
+class FakeContext:
+    def __init__(self):
+        self.pipe_number = 0
+    def Pipe(self, duplex=False):
+        self.pipe_number += 1
+        return Receiver(self.pipe_number == 1), Sender()
+    def Process(self, *, name, **kwargs):
+        return FakeProcess(name)
+
+context = FakeContext()
+diagnostics.multiprocessing.get_context = lambda _method: context
+diagnostics._CTAS_EVENTS_GRACE_SECONDS = 0.01
+diagnostics._CTAS_EVENTS_TERMINATE_SECONDS = 0.01
+diagnostics._CTAS_EVENTS_REAP_SECONDS = 0.01
+diagnostics._CTAS_EVENTS_CLEANUP_OPERATION_SECONDS = 0
+diagnostics._CTAS_EVENTS_CLEANUP_TERMINATE_SECONDS = 0.01
+diagnostics._CTAS_EVENTS_CLEANUP_REAP_SECONDS = 0.01
+diagnostics.run_ctas_events_diagnostic(SimpleNamespace(), deadline_seconds=0)
+raise AssertionError("fatal containment did not call os._exit(70)")
+"""
+        environment = os.environ.copy()
+        return_code, output = _run_with_process_group_timeout(
+            [sys.executable, "-c", script], environment=environment, timeout=10
+        )
+        assert return_code == 70, output
+        workspace_path = Path(marker.read_text(encoding="utf-8"))
+        assert workspace_path.exists(), "fatal exit must occur before workspace cleanup"
+        shutil.rmtree(workspace_path)
+
+
+@pytest.mark.parametrize("interrupt_mode", ["noop", "raise"])
+@pytest.mark.parametrize("block_phase", ["factory", "execute", "close"])
+def test_ctas_supervisor_kills_stuck_child_with_bounded_runtime(interrupt_mode, block_phase):
+    case = f"{block_phase}-{interrupt_mode}"
+    if os.environ.get("CTAS_STUCK_CHILD_CASE") != case:
+        environment = os.environ.copy()
+        environment["CTAS_STUCK_CHILD_CASE"] = case
+        node_id = f"{Path(__file__).resolve()}::test_ctas_supervisor_kills_stuck_child_with_bounded_runtime[{case}]"
+        return_code, output = _run_with_process_group_timeout(
+            [sys.executable, "-m", "pytest", node_id, "-q"], environment=environment, timeout=45
+        )
+        assert return_code == 0, output
+        return
+
+    with tempfile.TemporaryDirectory(prefix="ctas-supervisor-test-") as directory:
+        base = Path(directory)
+        settings = cast(
+            Settings,
+            SimpleNamespace(
+                **vars(_settings()),
+                interrupt_mode=interrupt_mode,
+                block_phase=block_phase,
+                workspace_record=str(base / "workspace"),
+                operation_marker=str(base / "operation"),
+                interrupt_marker=str(base / "interrupt"),
+                close_marker=str(base / "close"),
+                pid_record=str(base / "pid"),
+            ),
+        )
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_GRACE_SECONDS", 0.2)
+        monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_TERMINATE_SECONDS", 0.1)
+        monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_REAP_SECONDS", 2)
+        monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_CLEANUP_OPERATION_SECONDS", 2)
+        started = time.monotonic()
+        try:
+            result = diagnostics.run_ctas_events_diagnostic(
+                settings, connection_factory=_spawn_stuck_factory, deadline_seconds=2
+            )
+        finally:
+            monkeypatch.undo()
+        elapsed = time.monotonic() - started
+
+        assert result == {"status": "failed", "error_type": "TimeoutError"}
+        assert elapsed < 8.0
+        assert (base / "operation").read_text(encoding="utf-8") == "sigterm_ignored"
+        if block_phase in {"factory", "close"}:
+            assert not (base / "interrupt").exists()
+        else:
+            assert (base / "interrupt").read_text(encoding="utf-8") == "called"
+        if block_phase == "close":
+            assert (base / "close").read_text(encoding="utf-8") == "sigterm_ignored"
+        else:
+            assert not (base / "close").exists()
+        workspace_path = Path((base / "workspace").read_text(encoding="utf-8"))
+        assert not workspace_path.exists()
+        child_pid = int((base / "pid").read_text(encoding="utf-8"))
+        with pytest.raises(ProcessLookupError):
+            os.kill(child_pid, 0)
+
+
+@pytest.mark.parametrize("deadline", [-1, float("nan"), float("inf"), -float("inf")])
+def test_ctas_rejects_invalid_deadlines(deadline):
+    with pytest.raises(ValueError, match="finite non-negative"):
+        diagnostics.run_ctas_events_diagnostic(_settings(), deadline_seconds=deadline)
 
 
 def test_ctas_events_real_ctas_detach_and_local_production_query(tmp_path):

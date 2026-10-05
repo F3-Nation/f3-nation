@@ -65,9 +65,11 @@ def _candidate_count_golden(connection: Any, artifacts: Any, definition: Materia
 
 def _pointer_conflict_outcome(error: PointerConflictError) -> str:
     detail = str(error).lower()
+    if error.outcome == "unconfirmed":
+        return "ambiguous"
     if error.committed:
-        return "committed_superseded" if "supersed" in detail else "committed"
-    if "ambiguous" in detail:
+        return "committed_superseded" if error.outcome == "superseded" or "supersed" in detail else "committed"
+    if error.outcome == "ambiguous" or "ambiguous" in detail:
         return "ambiguous"
     return "not_committed"
 

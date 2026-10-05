@@ -283,8 +283,11 @@ def test_logging_duckdb_io_categories_are_fixed(message, category):
     ("message", "category"),
     (
         ("IO Error: PostgreSQL transport unavailable", "duckdb_io_postgres_transport"),
+        ("IO Error: PostgreSQL socket write failed", "duckdb_io_postgres_transport"),
         ("IO Error: Parquet serialization failed", "duckdb_io_parquet_serialization"),
+        ("IO Error: failed to write parquet footer", "duckdb_io_parquet_serialization"),
         ("IO Error: zstd compression failed", "duckdb_io_compression"),
+        ("IO Error: zstd compression failed while writing", "duckdb_io_compression"),
         ("IO Error: local spill file unavailable", "duckdb_io_local_or_spill_io"),
         ("IO Error: resource allocation failed", "duckdb_io_resource_allocation"),
         ("IO Error: unusual condition secret@example.test", "duckdb_io"),
