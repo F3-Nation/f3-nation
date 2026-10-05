@@ -30,6 +30,7 @@ from __future__ import annotations
 from application.series import SeriesData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
+from infrastructure.api_client.pagination import fetch_all_pages
 
 _repo: "ApiSeriesRepository | None" = None
 
@@ -158,8 +159,7 @@ class ApiSeriesRepository:
             params: dict = {"aoIds": [ao_id], "statuses": ["active"]}
         else:
             params = {"regionIds": [region_id], "statuses": ["active"]}
-        result = self._client.get("/v1/event", params=params)
-        events_raw: list[dict] = result.get("events") or result.get("results") or []
+        events_raw = fetch_all_pages(self._client, "/v1/event", params=params, items_key="events")
         return [_parse_series(e) for e in events_raw]
 
     def get_by_id(self, series_id: int) -> SeriesData | None:

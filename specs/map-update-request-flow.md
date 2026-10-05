@@ -89,8 +89,11 @@ accurate while regions retain control over their own data.
   change is live (an `approved` request is recorded), and the map reflects it.
 - **AC-10** — GIVEN a pending request is created WHEN submission succeeds THEN
   the affected region's editors/admins are emailed a link to the admin
-  requests page (escalating up the org hierarchy if the region has none), and
-  a notification failure does not fail the submission.
+  requests page. If the region has none, the request escalates up the org
+  hierarchy one ancestor at a time, and the first ancestor — regardless of
+  its org type — with an editor/admin is emailed. If no ancestor up to the
+  root of the hierarchy has an editor/admin, no email is sent. A
+  notification failure does not fail the submission.
 
 ### Admin review
 
@@ -127,7 +130,7 @@ accurate while regions retain control over their own data.
 
 Tiers from `packages/api/src/shared.ts`; per-org scoping via
 `checkHasRoleOnOrg` (role on the org itself or any ancestor org — AO → Region
-→ Sector → Area → Nation; `admin` satisfies `editor`).
+→ Area → Territory (optional) → Sector → Nation; `admin` satisfies `editor`).
 
 | Action                                                   | Allowed                                                                                                                          | Explicitly denied                                                                                                                       |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -172,6 +175,9 @@ Tiers from `packages/api/src/shared.ts`; per-org scoping via
 5. Admin reject → no live data change (AC-13).
 6. Cross-region reject is denied, request stays pending (AC-15).
 7. Invalid form values never reach the API (AC-5).
+8. Escalation notifies the nearest ancestor with an editor/admin regardless
+   of its org type (e.g. a territory ahead of a sector), and reaching the
+   root of the hierarchy with nobody eligible sends no email (AC-10).
 
 ## 9. Observability
 

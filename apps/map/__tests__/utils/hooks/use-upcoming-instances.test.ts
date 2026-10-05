@@ -25,7 +25,9 @@ const { captureException, queryCalls, queryResult } = vi.hoisted(() => {
   return { captureException: vi.fn(), queryCalls, queryResult };
 });
 
-vi.mock("@sentry/nextjs", () => ({ captureException }));
+vi.mock("posthog-js", () => ({ default: { captureException } }));
+
+vi.mock("~/env", () => ({ env: { NEXT_PUBLIC_POSTHOG_KEY: "phc_test" } }));
 
 // `queryOptions` echoes its argument so the test can read exactly what the hook
 // asked react-query for.
@@ -91,7 +93,7 @@ describe("useUpcomingInstances", () => {
     expect(result.current.instances).toBeUndefined();
   });
 
-  it("sends one Sentry report however many callers observe the same failure", () => {
+  it("sends one exception report however many callers observe the same failure", () => {
     const error = new Error("500");
     queryResult.current = { data: undefined, isError: true, error };
 
@@ -102,7 +104,7 @@ describe("useUpcomingInstances", () => {
 
     expect(captureException).toHaveBeenCalledTimes(1);
     expect(captureException).toHaveBeenCalledWith(error, {
-      tags: { event: "map.upcoming_instances.fetch_failed" },
+      event: "map.upcoming_instances.fetch_failed",
     });
   });
 
@@ -122,5 +124,24 @@ describe("useUpcomingInstances", () => {
     renderHook(() => useUpcomingInstances());
 
     expect(captureException).toHaveBeenCalledTimes(2);
+  });
+
+  it("survives a throwing reporter rather than taking the map down with it", () => {
+    // The hook exists precisely so a failed fetch can't replace a working map
+    // with the global error page. An ad-blocker making captureException throw
+    // must not reintroduce that failure by the back door.
+    captureException.mockImplementationOnce(() => {
+      throw new Error("ingest host blocked");
+    });
+    queryResult.current = {
+      data: undefined,
+      isError: true,
+      error: new Error("500"),
+    };
+
+    expect(() => renderHook(() => useUpcomingInstances())).not.toThrow();
+
+    const { result } = renderHook(() => useUpcomingInstances());
+    expect(result.current.isUnavailable).toBe(true);
   });
 });

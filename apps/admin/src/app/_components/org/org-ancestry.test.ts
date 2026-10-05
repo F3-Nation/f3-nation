@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { OrgHierarchyNode } from "./org-ancestry";
 import {
+  AdminAreaAncestorOrgTypes,
+  AdminHierarchyOrgTypes,
+  AdminScopeOrgTypes,
   findAncestorByType,
-  getAdminHierarchyOrgTypes,
   getOrgById,
   getParentOrgIdsForFilter,
   isDescendantOfAny,
@@ -116,16 +118,24 @@ describe("org ancestry", () => {
     expect(findAncestorByType(region, "sector", withInactive)).toEqual(sector);
   });
 
-  it("includes a future intermediate type regardless of enum ordering", () => {
-    expect(
-      getAdminHierarchyOrgTypes([
-        "ao",
-        "region",
-        "area",
-        "sector",
-        "nation",
-        "territory",
-      ]),
-    ).toEqual(["area", "sector", "nation", "territory"]);
+  it("derives the admin hierarchy types from rank rather than a hand-written list", () => {
+    expect(AdminHierarchyOrgTypes).toEqual([
+      "area",
+      "territory",
+      "sector",
+      "nation",
+    ]);
+    expect(AdminAreaAncestorOrgTypes).toEqual([
+      "territory",
+      "sector",
+      "nation",
+    ]);
+    expect(AdminScopeOrgTypes).toEqual([
+      "region",
+      "area",
+      "territory",
+      "sector",
+      "nation",
+    ]);
   });
 });

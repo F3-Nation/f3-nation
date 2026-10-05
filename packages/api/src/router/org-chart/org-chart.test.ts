@@ -29,7 +29,7 @@ import {
   uniqueId,
 } from "../../__tests__/test-utils";
 
-type OrgType = "nation" | "sector" | "area" | "region" | "ao";
+import type { OrgType } from "@acme/shared/app/enums";
 
 describe("Org Chart Router", () => {
   const createdEventIds: number[] = [];

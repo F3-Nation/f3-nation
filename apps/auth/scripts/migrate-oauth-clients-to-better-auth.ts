@@ -21,18 +21,16 @@
  * default secret hashing is preferred over matching the hand-rolled
  * server's sha256 scheme.
  *
- * OPEN QUESTION for Phase 4, not solved by this script: how a migrated
- * confidential client (admin, me) actually gets a new secret issued.
- * oauth-provider's only secret-issuing paths are adminCreateOAuthClient
- * (mints a brand new client_id — breaks the continuity this script exists
- * to preserve) and rotateClientSecret (session-scoped, checked against the
- * client's userId — a migrated row has none, since it was never created via
- * a real user's dynamic registration). Neither is a clean "admin sets a
- * secret on an existing, unowned client" operation. Needs a decision before
- * cutover: e.g. set a real userId on migrated confidential clients so
- * rotateClientSecret's ownership check passes, or a small server-only
- * wrapper added alongside admin-create/update in apps/auth/src/lib/
- * better-auth.ts.
+ * How a migrated confidential client (admin, me) gets a new secret issued,
+ * resolved in apps/auth/src/lib/better-auth.ts: give it referenceId =
+ * "f3-nation" and no userId, so any current or future nation admin passes
+ * oauth-provider's ownership check and can call rotateClientSecret on it —
+ * see that file's F3_NATION_CLIENT_REFERENCE_ID and clientReference. Setting
+ * a real userId instead would defeat that shared ownership, since
+ * oauth-provider checks userId before referenceId — a client with a userId
+ * set is pinned to that one individual, not any nation admin. Not solved by
+ * this script yet: writing referenceId on migrated rows is Phase 4's
+ * provisioning work, tracked separately.
  *
  * Usage:
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth [--env local|staging|prod]
@@ -40,7 +38,9 @@
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth --confirm
  *   (actually writes)
  */
+import path from "path";
 import readline from "readline";
+import { fileURLToPath } from "url";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq, inArray } from "drizzle-orm";
@@ -77,14 +77,28 @@ async function main() {
   }
 
   const { config } = await import("dotenv");
-  const envPath = targetEnv === "local" ? "../../.env" : `.env.${targetEnv}`;
+  // Resolved relative to this script's own location, not the current
+  // working directory: the documented invocation is `pnpm -C apps/auth
+  // migrate-oauth-clients-to-better-auth`, but if someone runs it from the
+  // repo root instead, a CWD-relative lookup would miss apps/auth/.env.
+  const authDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+  );
+  const envName = targetEnv === "local" ? ".env" : `.env.${targetEnv}`;
+  const envPath = path.join(authDir, envName);
   // override: true so --env's file always wins over whatever DATABASE_* the
   // calling shell already has set (e.g. a leftover prod export) — without
   // it, dotenv only fills in variables that aren't already present, so
   // --env local could silently connect using ambient prod credentials.
   const result = config({ path: envPath, override: true });
   if (result.error) {
-    console.error(`Could not load ${envPath}: ${result.error.message}`);
+    console.error(
+      `Could not load ${envName}: ${result.error.message}` +
+        (targetEnv === "local"
+          ? "\nRun 'pnpm local:setup' (writes apps/auth/.env) first."
+          : ""),
+    );
     process.exit(1);
   }
 
@@ -101,7 +115,7 @@ async function main() {
     process.exit(1);
   }
 
-  if (targetEnv === "prod" || targetEnv === "staging") {
+  if (confirmed && (targetEnv === "prod" || targetEnv === "staging")) {
     console.log(
       `\n⚠️  WARNING: You are about to write to ${targetEnv.toUpperCase()} data.\n`,
     );
@@ -138,7 +152,7 @@ async function main() {
 
   console.log(`Found ${clients.length} active client(s) in oauth_clients:\n`);
 
-  const now = new Date().toISOString();
+  const now = new Date();
   const rows = clients.map((client) => {
     let redirectUris: string[];
     try {

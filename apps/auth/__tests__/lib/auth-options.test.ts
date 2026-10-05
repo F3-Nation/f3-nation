@@ -181,3 +181,23 @@ describe("authOptions.callbacks.session — auth_time", () => {
     expect(session.authTime).toBe(authTime);
   });
 });
+
+describe("authOptions.callbacks.session — user.name", () => {
+  it('sets session.user.name to null, not the string "null", when token.name is null', async () => {
+    const session = (await authOptions.callbacks!.session!({
+      session: { user: {} },
+      token: { userId: 42, name: null, email: "pax@example.com" },
+    } as never)) as { user: { name: string | null } };
+
+    expect(session.user.name).toBeNull();
+  });
+
+  it("passes a real name through unchanged", async () => {
+    const session = (await authOptions.callbacks!.session!({
+      session: { user: {} },
+      token: { userId: 42, name: "PermVac", email: "pax@example.com" },
+    } as never)) as { user: { name: string | null } };
+
+    expect(session.user.name).toBe("PermVac");
+  });
+});

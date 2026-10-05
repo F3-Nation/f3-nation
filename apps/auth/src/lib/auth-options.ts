@@ -126,7 +126,11 @@ export const authOptions: NextAuthConfig = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = String(token.userId);
-        session.user.name = String(token.name);
+        // Not String(token.name): token.name is null when f3Name is unset,
+        // and String(null) is the literal string "null", which then wins
+        // over page.tsx's `session.user.name ?? session.user.email`
+        // fallback instead of actually falling back.
+        session.user.name = token.name ?? null;
         session.user.email = String(token.email);
         session.user.image = token.picture;
       }

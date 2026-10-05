@@ -67,8 +67,6 @@ __pycache__/
 # db exports
 .data
 
-# sentry
-.env.sentry-build-plugin 
 
 pr.md
 .eslintcache
@@ -83,3 +81,6 @@ pr.md
 
 # A spot to keep scripts, skills, and docs just for you
 .personal/
+
+# superpowers subagent-driven-development scratch workspaces
+.superpowers/

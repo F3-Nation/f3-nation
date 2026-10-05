@@ -142,10 +142,8 @@ describe("handler dispatch", () => {
       }),
     );
     // Not the 200 the CORS allowMethods list advertises: the OpenAPI handler
-    // serves only the verbs a procedure declares, so HEAD reaches route.ts's
-    // hand-built 404 instead. Pinned as-is. This is also what makes the body
-    // strip in targets/next.ts load-bearing — it strips THIS body, which is
-    // where the in-process target would otherwise disagree with live/hono.
+    // serves only the verbs a procedure declares, so HEAD reaches the handler's
+    // hand-built 404 instead. Pinned as-is.
     expect(res.status).toBe(404);
     expect(res.headers.get("content-type")).toBe("text/plain;charset=UTF-8");
     expect(await res.text()).toBe("");

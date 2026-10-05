@@ -75,64 +75,29 @@ pnpm -C apps/auth typecheck
 
 ## Local QA / Email Preview
 
-In local development the auth server uses [Ethereal](https://ethereal.email/) -- a free, no-auth SMTP relay that publishes a public preview URL for every message. **No real email account is involved**, no SendGrid credentials are needed, and no inbox has to be polled. This makes the email-MFA flow scriptable end-to-end.
+In local development the auth server sends mail through [Mailpit](https://mailpit.axllent.org/), a local SMTP catcher started by `pnpm docker:up`. **No real email account is involved**, no SendGrid credentials are needed, and no inbox has to be polled. This makes the email-MFA flow scriptable end-to-end.
 
-The transport switches on `NODE_ENV` (`apps/auth/src/lib/email-mfa.ts`):
+There is no environment branching in the transport itself (`apps/auth/src/lib/email-mfa.ts`) -- it is a single nodemailer transport built from the `EMAIL_SERVER` connection string, so which mail server receives a message is purely a matter of configuration:
 
-| `NODE_ENV`    | SMTP host                                                  | Preview URL?             | Real inbox?    |
-| ------------- | ---------------------------------------------------------- | ------------------------ | -------------- |
-| `production`  | `smtp.sendgrid.net:587`                                    | No                       | Yes (SendGrid) |
-| anything else | `smtp.ethereal.email:587` (fresh test account per process) | Yes -- printed to stdout | No             |
+| Environment | `EMAIL_SERVER`                                | Where the mail lands                          |
+| ----------- | --------------------------------------------- | --------------------------------------------- |
+| Local dev   | `smtp://localhost:1025` (from `.env.example`) | Mailpit -- read it at `http://localhost:8025` |
+| Production  | SendGrid SMTP credentials                     | The recipient's real inbox                    |
 
-In dev, every send is followed by a log line of the shape:
+**Nothing is logged when a message is sent** -- retrieve mail from Mailpit's web UI or REST API, never from the auth server's stdout.
 
-```
-Preview email: https://ethereal.email/message/abc123...
-```
+Mailpit's REST API returns the full email HTML -- both the **6-digit code** and a magic link. Headless QA pulls the **code** out of that HTML and POSTs it to NextAuth's `/api/auth/callback/email-mfa` endpoint (the `email-mfa` Credentials provider) to complete sign-in.
 
-That URL is publicly fetchable with `curl` and contains the full email HTML -- both the **6-digit code** and a magic link. Headless QA pulls the **code** out of that HTML and POSTs it to NextAuth's standard `/api/auth/callback/credentials` endpoint to complete sign-in.
+> Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. See [`AGENTS.md`](AGENTS.md) for the CSRF + callback recipe for headless flows, or drive the magic link from a JS-capable browser (CDP) for browser-based regression testing.
 
-> Note: a raw `curl` of the magic link does **not** complete sign-in. The verify page (`/login/email/verify`) is a client component that calls `signIn("email-mfa", ...)` from a `useEffect`. Hitting the URL with `curl -L` only returns HTML -- the cookie jar gets no session. Use the CSRF + callback recipe below for headless flows, or drive the magic link from a JS-capable browser (CDP) for browser-based regression testing.
+In dev (`NODE_ENV !== "production"`), `/api/verify-email`'s 10-requests-per-minute-per-IP rate limit is bypassed. This is only safe while `EMAIL_SERVER` points at Mailpit (the `.env.example` value): the bypass keys on `NODE_ENV`, not on the mail server, so a non-production `.env` with real SMTP or SendGrid credentials still delivers real mail with no rate limit. Production traffic remains capped.
 
-In dev (`NODE_ENV !== "production"`), `/api/verify-email`'s 10-requests-per-minute-per-IP rate limit is bypassed -- the email transport is Ethereal, so there is no real inbox to bomb. Production traffic remains capped.
-
-### Quick recipe (headless)
-
-```bash
-# 1. Capture the auth dev log
-pnpm --filter f3-auth dev > /tmp/f3-auth.log 2>&1 &
-
-# 2. Get a NextAuth CSRF token + cookie
-CSRF=$(curl -sc /tmp/jar http://localhost:3004/api/auth/csrf | jq -r .csrfToken)
-
-# 3. Trigger an MFA send
-curl -sb /tmp/jar -X POST -H 'Content-Type: application/json' \
-  -d '{"email":"qa-bot@f3nation.test"}' \
-  'http://localhost:3004/api/verify-email?action=send'
-
-# 4. Pull the 6-digit code out of the latest preview email
-CODE=$(scripts/qa/extract-mfa-link.sh --code)
-
-# 5. POST email + code to NextAuth's Credentials callback -- auth completes
-curl -sb /tmp/jar -c /tmp/jar -L -X POST \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  --data-urlencode "csrfToken=$CSRF" \
-  --data-urlencode "email=qa-bot@f3nation.test" \
-  --data-urlencode "code=$CODE" \
-  --data-urlencode "callbackUrl=http://localhost:3004/" \
-  --data-urlencode "json=true" \
-  http://localhost:3004/api/auth/callback/credentials
-```
-
-The cookie jar `/tmp/jar` now contains a `next-auth.session-token` cookie. Use it for any follow-up requests.
-
-`scripts/qa/extract-mfa-link.sh` returns the magic link by default if you're driving a JS-capable browser instead.
+For the full canonical recipe (CSRF token, triggering a send, pulling the code from Mailpit, and POSTing to the callback), see [`AGENTS.md`](AGENTS.md) -- it is the source of truth for this flow and is kept up to date for AI/QA-automation agents.
 
 ### Where to learn more
 
-- **[`AGENTS.md`](AGENTS.md)** -- full agent-friendly recipe, error modes, and the source-of-truth log line patterns
-- **[`../../docs/QA_LOCAL_AUTH.md`](../../docs/QA_LOCAL_AUTH.md)** -- cookbook version cross-referenced from every consuming app
-- **[`src/lib/email-mfa.ts`](src/lib/email-mfa.ts)** -- the actual code that decides between SendGrid and Ethereal
+- **[`AGENTS.md`](AGENTS.md)** -- full agent-friendly recipe, error modes, and the Mailpit REST API calls for pulling the code
+- **[`src/lib/email-mfa.ts`](src/lib/email-mfa.ts)** -- the actual code; a single nodemailer transport driven entirely by the `EMAIL_SERVER` connection string (SendGrid in production, Mailpit locally)
 
 ---
 
@@ -140,28 +105,28 @@ The cookie jar `/tmp/jar` now contains a `next-auth.session-token` cookie. Use i
 
 Defined and validated in `src/env.ts` using `@t3-oss/env-nextjs`. Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser; all others are server-side only.
 
-| Variable               | Description                                                                                   | Required                       |
-| ---------------------- | --------------------------------------------------------------------------------------------- | ------------------------------ |
-| `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)                               | Yes                            |
-| `AUTH_SECRET`          | Secret for signing/encrypting session JWTs. Generate with `openssl rand -base64 32`           | Yes                            |
-| `DATABASE_HOST`        | PostgreSQL host (e.g. `/cloudsql/f3data:us-central1:f3data-nonprod` for Cloud SQL Auth Proxy) | Yes                            |
-| `DATABASE_USER`        | PostgreSQL username (e.g. `app_auth`)                                                         | Yes                            |
-| `DATABASE_PASSWORD`    | PostgreSQL password                                                                           | Yes                            |
-| `DATABASE_NAME`        | PostgreSQL database name (e.g. `f3_staging`)                                                  | Yes                            |
-| `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://auth.f3nation.com`)                                | Yes                            |
-| `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://api.f3nation.com`)                         | Yes                            |
-| `API_KEY`              | API key for authenticating calls to the F3 API                                                | Yes                            |
-| `EMAIL_SERVER`         | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)                     | Yes                            |
-| `EMAIL_FROM`           | Sender email address (e.g. `noreply@f3nation.com`)                                            | Yes                            |
-| `NODE_ENV`             | `development`, `production`, or `test`                                                        | No (defaults to `development`) |
+| Variable               | Description                                                                         | Required                       |
+| ---------------------- | ----------------------------------------------------------------------------------- | ------------------------------ |
+| `AUTH_JWT_PRIVATE_KEY` | RSA private key (PEM) for signing JWT access tokens (see below)                     | Yes                            |
+| `AUTH_SECRET`          | Secret for signing/encrypting session JWTs. Generate with `openssl rand -base64 32` | Yes                            |
+| `DATABASE_HOST`        | PostgreSQL host, or a Unix socket path when connecting through Cloud SQL            | Yes                            |
+| `DATABASE_USER`        | PostgreSQL username                                                                 | Yes                            |
+| `DATABASE_PASSWORD`    | PostgreSQL password                                                                 | Yes                            |
+| `DATABASE_NAME`        | PostgreSQL database name                                                            | Yes                            |
+| `NEXT_PUBLIC_AUTH_URL` | Base URL of the auth server (e.g. `https://<auth-host>`)                            | Yes                            |
+| `NEXT_PUBLIC_API_URL`  | F3 API endpoint for user management (e.g. `https://<api-host>`)                     | Yes                            |
+| `API_KEY`              | API key for authenticating calls to the F3 API                                      | Yes                            |
+| `EMAIL_SERVER`         | SMTP connection string (e.g. `smtp://apikey:<key>@smtp.sendgrid.net:587`)           | Yes                            |
+| `EMAIL_FROM`           | Sender email address (e.g. `noreply@<your-domain>`)                                 | Yes                            |
+| `NODE_ENV`             | `development`, `production`, or `test`                                              | No (defaults to `development`) |
 
 Set `SKIP_ENV_VALIDATION=1` to bypass validation during CI builds.
 
 ### Shared vs. Auth-Only Variables
 
-Most of these variables (`AUTH_SECRET`, `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`, `API_KEY`, `EMAIL_SERVER`, `EMAIL_FROM`) are already in the root `.env` and shared across all apps. **You only need to define them once** -- `apps/auth` reads from the same root `.env` as `apps/map` and `apps/api`.
+`apps/auth` reads its own `apps/auth/.env`, which `pnpm local:setup` copies from `apps/auth/.env.example` (see [docs/LOCAL_DEV_DOCKER.md](../../docs/LOCAL_DEV_DOCKER.md)). Values such as `AUTH_SECRET`, `DATABASE_*`, `API_KEY`, `EMAIL_SERVER`, and `EMAIL_FROM` are defined there, not shared with other apps.
 
-The only variable unique to `apps/auth` is **`AUTH_JWT_PRIVATE_KEY`** -- the RSA key for signing OAuth access tokens. Add it to your root `.env` alongside the existing variables. No duplication needed.
+The variable unique to `apps/auth` is **`AUTH_JWT_PRIVATE_KEY`** -- the RSA key for signing OAuth access tokens. `pnpm local:setup` generates one in `apps/auth/.env` when `openssl` is available.
 
 ### Generating the JWT Private Key
 
@@ -190,16 +155,16 @@ AUTH_JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEv...base64...\n-----END P
 
 The corresponding public key is served automatically at `/.well-known/jwks.json` (derived from the private key at runtime). API consumers (`packages/api`) fetch this JWKS endpoint to verify access token signatures without sharing the private key.
 
-#### `NEXT_PUBLIC_AUTH_URL` in the Root `.env`
+#### `NEXT_PUBLIC_AUTH_URL` for the API
 
-`packages/api` (via `packages/env`) reads `NEXT_PUBLIC_AUTH_URL` from the root `.env` to discover the auth server's JWKS public key and verify JWT access tokens. The JWKS URL is derived automatically: `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`. This is the same variable that `apps/auth` uses for its own base URL -- no extra env var needed.
+`packages/api` (via `packages/env`) reads `NEXT_PUBLIC_AUTH_URL` from `apps/api/.env` locally (copied from `apps/api/.env.example`, which sets `http://localhost:3004`) and from the Cloud Run service env in deployed environments to discover the auth server's JWKS public key and verify JWT access tokens. The JWKS URL is derived automatically: `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`. This is the same variable that `apps/auth` uses for its own base URL -- no extra env var needed.
 
 ```
-# Root .env
+# apps/api/.env
 NEXT_PUBLIC_AUTH_URL=https://auth.f3nation.com
 ```
 
-- If `NEXT_PUBLIC_AUTH_URL` is **not set** in the root `.env`, the API ignores JWT auth entirely -- existing auth flows (NextAuth cookies, API keys) continue to work unchanged.
+- If `NEXT_PUBLIC_AUTH_URL` is **not set** for the API, the API ignores JWT auth entirely -- existing auth flows (NextAuth cookies, API keys) continue to work unchanged.
 - If `NEXT_PUBLIC_AUTH_URL` **is set**, the API fetches `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`, accepts `Authorization: Bearer <jwt>` tokens, and validates the issuer matches.
 
 ---
@@ -584,7 +549,7 @@ gcloud artifacts repositories create cloud-run-builds \
 #### 2. Create Cloud Run services
 
 ```bash
-# Deploy a placeholder first (Cloud Run needs an initial image). Note that this enables Cloud SQL Auth Proxy
+# Deploy a placeholder first (Cloud Run needs an initial image).
 
 # Staging
 gcloud run deploy f3-auth \
@@ -837,7 +802,7 @@ The current rate limiter is in-memory (suitable for single Cloud Run instances).
 ### Email Transport
 
 - **Production**: SendGrid SMTP (`smtp.sendgrid.net:587`)
-- **Development**: Ethereal (auto-generated test account, preview URLs logged to console). See [Local QA / Email Preview](#local-qa--email-preview) and [`AGENTS.md`](AGENTS.md) for the full automation recipe.
+- **Development**: [Mailpit](https://mailpit.axllent.org/) (`smtp://localhost:1025` by default, started by `pnpm docker:up`; read captured mail at `http://localhost:8025`). See [Local QA / Email Preview](#local-qa--email-preview) and [`AGENTS.md`](AGENTS.md) for the full automation recipe.
 
 ### Security Features
 

@@ -172,7 +172,7 @@ file.arrayBuffer()` on untrusted input.
 ### 4.6 Observability & operations
 
 - Inconsistent or missing structured logging; `console.*` sprawl.
-- Error monitoring (e.g. Sentry) configured for only some apps; sampling/release
+- Error monitoring (e.g. PostHog) configured for only some apps; sampling/release
   config that's wrong for production.
 - Health checks, graceful shutdown, and DB connection teardown.
 

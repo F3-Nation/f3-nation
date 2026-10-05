@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   customType,
   date,
   doublePrecision,
@@ -180,6 +181,115 @@ export const slackSpaces = pgTable(
       .notNull(),
   },
   (table) => [unique("slack_spaces_team_id_key").on(table.teamId)],
+);
+
+export const slackbotSchema = pgSchema("slackbot");
+
+export const f3versaryDeliveryRuns = slackbotSchema.table(
+  "f3versary_delivery_runs",
+  {
+    id: serial().primaryKey().notNull(),
+    slackSpaceId: integer("slack_space_id").notNull(),
+    orgId: integer("org_id").notNull(),
+    processingDate: date("processing_date").notNull(),
+    targetDate: date("target_date").notNull(),
+    channel: text().notNull(),
+    leadDays: integer("lead_days").notNull(),
+    status: varchar({ length: 16 }).default("planned").notNull(),
+    pageCount: integer("page_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("f3versary_delivery_runs_space_org_date_key").on(
+      table.slackSpaceId,
+      table.orgId,
+      table.processingDate,
+    ),
+    index("idx_f3versary_delivery_runs_space_org_status").on(
+      table.slackSpaceId,
+      table.orgId,
+      table.status,
+      table.processingDate,
+    ),
+    foreignKey({
+      columns: [table.slackSpaceId],
+      foreignColumns: [slackSpaces.id],
+      name: "f3versary_delivery_runs_slack_space_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.orgId],
+      foreignColumns: [orgs.id],
+      name: "f3versary_delivery_runs_org_id_fkey",
+    }),
+    check(
+      "f3versary_delivery_runs_status_check",
+      sql`${table.status} IN ('planned', 'complete', 'abandoned')`,
+    ),
+    check(
+      "f3versary_delivery_runs_lead_days_check",
+      sql`${table.leadDays} BETWEEN 0 AND 30`,
+    ),
+    check(
+      "f3versary_delivery_runs_page_count_check",
+      sql`${table.pageCount} >= 0`,
+    ),
+  ],
+);
+
+export const f3versaryDeliveryPages = slackbotSchema.table(
+  "f3versary_delivery_pages",
+  {
+    id: serial().primaryKey().notNull(),
+    runId: integer("run_id").notNull(),
+    pageNumber: integer("page_number").notNull(),
+    text: text().notNull(),
+    blocks: jsonb().$type<Record<string, unknown>[]>().notNull(),
+    clientMsgId: uuid("client_msg_id").notNull(),
+    status: varchar({ length: 16 }).default("pending").notNull(),
+    claimToken: uuid("claim_token"),
+    claimExpiresAt: timestamp("claim_expires_at", {
+      withTimezone: true,
+      mode: "string",
+    }),
+    slackTs: varchar("slack_ts", { length: 32 }),
+    sentAt: timestamp("sent_at", { withTimezone: true, mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("f3versary_delivery_pages_run_page_key").on(
+      table.runId,
+      table.pageNumber,
+    ),
+    unique("f3versary_delivery_pages_client_msg_id_key").on(table.clientMsgId),
+    index("idx_f3versary_delivery_pages_run_status_page").on(
+      table.runId,
+      table.status,
+      table.pageNumber,
+    ),
+    foreignKey({
+      columns: [table.runId],
+      foreignColumns: [f3versaryDeliveryRuns.id],
+      name: "f3versary_delivery_pages_run_id_fkey",
+    }),
+    check(
+      "f3versary_delivery_pages_page_number_check",
+      sql`${table.pageNumber} >= 1`,
+    ),
+    check(
+      "f3versary_delivery_pages_status_check",
+      sql`${table.status} IN ('pending', 'claimed', 'sent')`,
+    ),
+  ],
 );
 
 export const expansions = pgTable("expansions", {
@@ -1229,18 +1339,21 @@ export const emailMfaCodes = authProviderSchema.table("email_mfa_codes", {
 });
 
 // ---------------------------------------------------------------------------
-// Better Auth tables — DRAFTED, NOT APPLIED. See
-// docs/AI_GUARDRAILS.md's schema-migration sign-off rule for what that means.
-// Included here so the shape can be reviewed alongside the code that depends
-// on it; nothing above this point is touched, and the existing oauth_* tables
-// keep serving the hand-rolled OAuth server unchanged regardless of whether
-// this migration is ever applied.
+// Better Auth tables. The existing oauth_* tables keep serving the
+// hand-rolled OAuth server unchanged — these are additive, not a
+// replacement, and AUTH_USE_BETTER_AUTH stays the gate for any live traffic
+// reaching them.
 //
 // Field shapes were not hand-derived from docs — they're the literal output
 // of `getAuthTables()` (from @better-auth/core/db) run against this app's
 // actual plugin stack (emailOTP + jwt + oauthProvider + bearer), so this
 // schema matches exactly what the adapter in
 // apps/auth/src/lib/better-auth.ts will read and write, not a guess at it.
+//
+// Timestamps here use `mode: "date"`, unlike the rest of this file: Better
+// Auth writes Date objects, which postgres-js rejects in "string" mode. Keep
+// it that way if pasting `drizzle-kit pull` output, which emits "string".
+// apps/auth/__tests__/lib/better-auth-drizzle-schema.test.ts enforces this.
 //
 // `betterAuthUser.id` deliberately holds the existing `users.id`, cast to
 // text, rather than a separately-generated id. See the
@@ -1260,26 +1373,62 @@ export const betterAuthUser = authProviderSchema.table(
     email: text().notNull(),
     emailVerified: boolean("email_verified").default(false).notNull(),
     image: text(),
-    createdAt: timestamp("created_at", { mode: "string" })
+    createdAt: timestamp("created_at", { mode: "date" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string" })
+    updatedAt: timestamp("updated_at", { mode: "date" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
+    // Mirrors `id` (text) as an integer purely so Postgres can enforce a real
+    // FK to users.id below — Better Auth itself needs `id` to stay text (see
+    // block comment above), so this column exists mainly for referential
+    // integrity; nothing in application code reads or writes it directly
+    // (the email-sync trigger does query it — see the unique-constraint
+    // comment below). Without the FK, deleting/merging a `users` row (e.g.
+    // an account-merge admin action) leaves a dangling `better_auth_user`
+    // row that can sign tokens for a user id that no longer exists, or that
+    // gets reassigned to someone else.
+    f3UserId: integer("f3_user_id").generatedAlwaysAs(sql`(id)::integer`),
   },
-  (table) => [unique("better_auth_user_email_key").on(table.email)],
+  (table) => [
+    unique("better_auth_user_email_key").on(table.email),
+    // Unique, not just indexed: this is a 1:1 shadow row per real user, and
+    // a plain index wouldn't stop two different `id` text values that cast
+    // to the same integer (e.g. "1" and "01") from both pointing at the
+    // same `users.id`. The unique constraint also backs the email-sync
+    // trigger's `WHERE f3_user_id = NEW.id` lookup (see the email-sync
+    // migration's trigger function), so it stays an index scan as this
+    // table grows.
+    unique("better_auth_user_f3_user_id_key").on(table.f3UserId),
+    // The application only ever writes `id` via one code path today, but
+    // that's an app-level guarantee, not a database-level one — nothing
+    // stops a manual UPDATE/INSERT (e.g. an admin doing incident surgery)
+    // from writing a value the cast below can't handle safely. Requiring
+    // `id` to already look like a canonical positive integer (no leading
+    // zeros, no sign, no whitespace) closes that gap before it ever reaches
+    // the `f3_user_id` cast or the unique/FK constraints above.
+    check(
+      "better_auth_user_id_is_canonical_integer",
+      sql`${table.id} ~ '^[1-9][0-9]*$'`,
+    ),
+    foreignKey({
+      columns: [table.f3UserId],
+      foreignColumns: [users.id],
+      name: "better_auth_user_f3_user_id_fkey",
+    }).onDelete("cascade"),
+  ],
 );
 
 export const betterAuthSession = authProviderSchema.table(
   "better_auth_session",
   {
     id: text().primaryKey().notNull(),
-    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
     token: text().notNull(),
-    createdAt: timestamp("created_at", { mode: "string" })
+    createdAt: timestamp("created_at", { mode: "date" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string" })
+    updatedAt: timestamp("updated_at", { mode: "date" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
     ipAddress: text("ip_address"),
@@ -1298,7 +1447,6 @@ export const betterAuthAccount = authProviderSchema.table(
   "better_auth_account",
   {
     id: text().primaryKey().notNull(),
-    issuer: text().notNull(),
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
     userId: text("user_id")
@@ -1308,17 +1456,17 @@ export const betterAuthAccount = authProviderSchema.table(
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
     accessTokenExpiresAt: timestamp("access_token_expires_at", {
-      mode: "string",
+      mode: "date",
     }),
     refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
-      mode: "string",
+      mode: "date",
     }),
     scope: text(),
     password: text(),
-    createdAt: timestamp("created_at", { mode: "string" })
+    createdAt: timestamp("created_at", { mode: "date" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string" })
+    updatedAt: timestamp("updated_at", { mode: "date" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
   },
@@ -1333,11 +1481,11 @@ export const betterAuthVerification = authProviderSchema.table(
     id: text().primaryKey().notNull(),
     identifier: text().notNull(),
     value: text().notNull(),
-    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
-    createdAt: timestamp("created_at", { mode: "string" })
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string" })
+    updatedAt: timestamp("updated_at", { mode: "date" })
       .default(sql`timezone('utc'::text, now())`)
       .notNull(),
   },
@@ -1352,10 +1500,10 @@ export const betterAuthJwks = authProviderSchema.table("better_auth_jwks", {
   id: text().primaryKey().notNull(),
   publicKey: text("public_key").notNull(),
   privateKey: text("private_key").notNull(),
-  createdAt: timestamp("created_at", { mode: "string" })
+  createdAt: timestamp("created_at", { mode: "date" })
     .default(sql`timezone('utc'::text, now())`)
     .notNull(),
-  expiresAt: timestamp("expires_at", { mode: "string" }),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
   alg: text(),
   crv: text(),
 });
@@ -1382,9 +1530,15 @@ export const betterAuthOauthClient = authProviderSchema.table(
     subjectType: text("subject_type"),
     scopes: text().array(),
     clientCredentialsScopes: text("client_credentials_scopes").array(),
-    userId: text("user_id").references(() => betterAuthUser.id),
-    createdAt: timestamp("created_at", { mode: "string" }),
-    updatedAt: timestamp("updated_at", { mode: "string" }),
+    // set null, not cascade: this is the client *owner* reference (who
+    // registered the app), not a user-owned auth artifact. Deleting the
+    // owning user shouldn't delete a registered OAuth client app out from
+    // under whoever's still using it.
+    userId: text("user_id").references(() => betterAuthUser.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { mode: "date" }),
+    updatedAt: timestamp("updated_at", { mode: "date" }),
     name: text(),
     uri: text(),
     icon: text(),
@@ -1442,8 +1596,8 @@ export const betterAuthOauthResource = authProviderSchema.table(
     customClaims: jsonb("custom_claims"),
     dpopBoundAccessTokensRequired: boolean("dpop_bound_access_tokens_required"),
     disabled: boolean(),
-    createdAt: timestamp("created_at", { mode: "string" }),
-    updatedAt: timestamp("updated_at", { mode: "string" }),
+    createdAt: timestamp("created_at", { mode: "date" }),
+    updatedAt: timestamp("updated_at", { mode: "date" }),
     policyVersion: integer("policy_version"),
     metadata: jsonb(),
   },
@@ -1467,7 +1621,7 @@ export const betterAuthOauthClientResource = authProviderSchema.table(
         onDelete: "cascade",
       }),
     metadata: jsonb(),
-    createdAt: timestamp("created_at", { mode: "string" }),
+    createdAt: timestamp("created_at", { mode: "date" }),
   },
 );
 
@@ -1482,22 +1636,24 @@ export const betterAuthOauthRefreshToken = authProviderSchema.table(
     sessionId: text("session_id").references(() => betterAuthSession.id, {
       onDelete: "set null",
     }),
+    // cascade: this token is a user-owned artifact — deleting the user
+    // should revoke every refresh token they hold, not block the deletion.
     userId: text("user_id")
       .notNull()
-      .references(() => betterAuthUser.id),
+      .references(() => betterAuthUser.id, { onDelete: "cascade" }),
     referenceId: text("reference_id"),
     authorizationCodeId: text("authorization_code_id"),
     resources: text().array(),
     requestedUserInfoClaims: text("requested_user_info_claims").array(),
-    expiresAt: timestamp("expires_at", { mode: "string" }),
-    createdAt: timestamp("created_at", { mode: "string" }),
-    revoked: timestamp({ mode: "string" }),
-    rotatedAt: timestamp("rotated_at", { mode: "string" }),
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }),
+    revoked: timestamp({ mode: "date" }),
+    rotatedAt: timestamp("rotated_at", { mode: "date" }),
     rotationReplayResponse: text("rotation_replay_response"),
     rotationReplayExpiresAt: timestamp("rotation_replay_expires_at", {
-      mode: "string",
+      mode: "date",
     }),
-    authTime: timestamp("auth_time", { mode: "string" }),
+    authTime: timestamp("auth_time", { mode: "date" }),
     confirmation: jsonb(),
     scopes: text().array().notNull(),
   },
@@ -1522,7 +1678,10 @@ export const betterAuthOauthAccessToken = authProviderSchema.table(
     sessionId: text("session_id").references(() => betterAuthSession.id, {
       onDelete: "set null",
     }),
-    userId: text("user_id").references(() => betterAuthUser.id),
+    // cascade: same reasoning as the refresh token table above.
+    userId: text("user_id").references(() => betterAuthUser.id, {
+      onDelete: "cascade",
+    }),
     referenceId: text("reference_id"),
     authorizationCodeId: text("authorization_code_id"),
     resources: text().array(),
@@ -1530,9 +1689,9 @@ export const betterAuthOauthAccessToken = authProviderSchema.table(
     refreshId: text("refresh_id").references(
       () => betterAuthOauthRefreshToken.id,
     ),
-    expiresAt: timestamp("expires_at", { mode: "string" }),
-    createdAt: timestamp("created_at", { mode: "string" }),
-    revoked: timestamp({ mode: "string" }),
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" }),
+    revoked: timestamp({ mode: "date" }),
     confirmation: jsonb(),
     scopes: text().array().notNull(),
   },
@@ -1548,13 +1707,16 @@ export const betterAuthOauthConsent = authProviderSchema.table(
     clientId: text("client_id")
       .notNull()
       .references(() => betterAuthOauthClient.clientId),
-    userId: text("user_id").references(() => betterAuthUser.id),
+    // cascade: same reasoning as the refresh/access token tables above.
+    userId: text("user_id").references(() => betterAuthUser.id, {
+      onDelete: "cascade",
+    }),
     referenceId: text("reference_id"),
     resources: text().array(),
     requestedUserInfoClaims: text("requested_user_info_claims").array(),
     scopes: text().array().notNull(),
-    createdAt: timestamp("created_at", { mode: "string" }),
-    updatedAt: timestamp("updated_at", { mode: "string" }),
+    createdAt: timestamp("created_at", { mode: "date" }),
+    updatedAt: timestamp("updated_at", { mode: "date" }),
   },
 );
 
@@ -1567,6 +1729,6 @@ export const betterAuthOauthClientAssertion = authProviderSchema.table(
   "better_auth_oauth_client_assertion",
   {
     id: text().primaryKey().notNull(),
-    expiresAt: timestamp("expires_at", { mode: "string" }).notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
   },
 );

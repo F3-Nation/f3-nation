@@ -36,9 +36,11 @@ import { TestId } from "@acme/shared/common/enums";
  *
  * DATA ASSUMPTIONS (deterministic local seed — packages/db/src/local-seed-lib):
  *   - Org tree: F3 Nation → F3 Southeast → { F3 Western NC → region "Boone",
- *     F3 Metrolina → region "F3 Charlotte" }.
+ *     F3 Metrolina → region "F3 Charlotte" }, plus Local Test Territory →
+ *     Local Territory Area → Local Territory Region beneath F3 Southeast.
  *   - Boone AOs: "The Dark Tower", "The Viaduct".
  *     Charlotte AOs: "The Colosseum", "South End Station", "The Foundry".
+ *     Local Territory Region AO: "Local Territory AO" (near Boone).
  *   - Every AO has exactly one weekly "<AO name> Bootcamp" event on Monday
  *     05:30–06:15 AM.
  *   - The dev-mode credentials provider is enabled and signs in ANY email as

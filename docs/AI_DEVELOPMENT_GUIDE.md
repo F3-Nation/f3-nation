@@ -18,12 +18,12 @@ Different developers use different assistants. To keep one source of truth, this
 repo uses the **`AGENTS.md` standard** as canonical and adds thin pointer files
 so each tool resolves to the same content:
 
-| Tool                     | Entry point it reads                         | What it contains                   |
-| ------------------------ | -------------------------------------------- | ---------------------------------- |
-| **All / standard**       | [`AGENTS.md`](../AGENTS.md) (root + per-app) | Canonical conventions              |
-| **Claude** (Claude Code) | `CLAUDE.md`                                  | Pointer → `AGENTS.md` + this guide |
-| **GitHub Copilot**       | `.github/copilot-instructions.md`            | Pointer → `AGENTS.md` + this guide |
-| **Cursor**               | `.cursor/rules/*.mdc`                        | Pointer → `AGENTS.md` + this guide |
+| Tool                     | Entry point it reads                         | What it contains                          |
+| ------------------------ | -------------------------------------------- | ----------------------------------------- |
+| **All / standard**       | [`AGENTS.md`](../AGENTS.md) (root + per-app) | Canonical conventions                     |
+| **Claude** (Claude Code) | [`AGENTS.md`](../AGENTS.md) (root + per-app) | Read directly (v2.1.281+); no `CLAUDE.md` |
+| **GitHub Copilot**       | `.github/copilot-instructions.md`            | Pointer → `AGENTS.md` + this guide        |
+| **Cursor**               | `.cursor/rules/*.mdc`                        | Pointer → `AGENTS.md` + this guide        |
 
 **Rule of thumb:** put durable guidance in `AGENTS.md` (or, for deep topics, in
 `docs/` and link it). Keep the tool-specific pointer files thin so they never
@@ -244,9 +244,9 @@ violation is a `BAD_REQUEST`, not a 500.
   logouts. Either give rotation a short grace window with chain-linking on the
   server, or single-flight the refresh on the client. See
   [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) and the `me`/`admin` middleware.
-- **MFA / email codes in local dev** are captured by Mailpit / Ethereal — see
-  [`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md). Don't disable verification to make
-  flows pass; drive them properly.
+- **MFA / email codes in local dev** are captured by Mailpit — see
+  [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md). Don't disable verification to
+  make flows pass; drive them properly.
 
 ---
 
@@ -299,12 +299,12 @@ violation is a `BAD_REQUEST`, not a 500.
     Postgres through PgBouncer in `pool_mode = transaction` — hence
     `prepare: false` in the shared client. PgBouncer caps client connections
     at `max_client_conn = 1000` and its own connections into Postgres at
-    `max_db_connections = 40`, so the server side is well bounded and the
-    binding constraint is the **client** side: each db-backed service
-    (api/map/admin/me) pins `--max-instances=25` in its deploy workflow,
-    which with `max: 5` per instance bounds the fleet at 4 × 25 × 5 = 500
-    clients. Raising a service's `--max-instances` or the client's `max`
-    means redoing that arithmetic against `max_client_conn`.
+    `max_db_connections = 40`. For the direct path the architecture is
+    moving to, sum the peak connections of every database client — a
+    service's `--max-instances` × its maximum pool connections (overflow
+    included), a Cloud Run job's concurrent tasks (overlapping executions
+    included) × its maximum pool connections (overflow included) — and keep
+    the total under the Postgres connection budget (see ADR 0004).
   - Leave `max_lifetime` on the postgres-js default: it is a per-connection
     jittered 30–60 min; a fixed value synchronizes expiry into reconnect
     stampedes through the pooler.
@@ -356,5 +356,4 @@ Before proposing a diff, confirm:
 - [`docs/AI_AUDIT_PLAYBOOK.md`](AI_AUDIT_PLAYBOOK.md) — how to audit the repo.
 - [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) — auth app specifics & local QA.
 - [`apps/me/AGENTS.md`](../apps/me/AGENTS.md) — token-scoped client app pattern.
-- [`docs/QA_LOCAL_AUTH.md`](QA_LOCAL_AUTH.md) — driving auth flows in local dev.
 - [`docs/LOCAL_DEV_DOCKER.md`](LOCAL_DEV_DOCKER.md) — local environment setup.

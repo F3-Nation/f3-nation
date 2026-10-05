@@ -5,9 +5,9 @@ import type { ReactElement } from "react";
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Layout pulls `useUpcomingInstances` (Sentry). `vi.resetModules()` below can
-// re-evaluate the real package unless this file mocks it itself.
-vi.mock("@sentry/nextjs", async () => import("../mocks/sentry-nextjs"));
+// Layout pulls `useUpcomingInstances` (posthog-js). `vi.resetModules()` below
+// can re-evaluate the real package unless this file mocks it itself.
+vi.mock("posthog-js", () => ({ default: { captureException: vi.fn() } }));
 
 // RootLayout mounts RuntimeConfigProvider, which fetches /api/runtime-config on
 // mount. Stub it so the suite doesn't hit an unmocked (and unresolvable)

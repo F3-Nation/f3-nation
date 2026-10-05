@@ -6,7 +6,7 @@
   "engines": {
     "node": ">=24.18.0 <25"
   },
-  "packageManager": "pnpm@12.4.0+sha512.37536c26ed40ab4134b6511e09f6b27f3ebb45687468f2406ca3805279a4e5ca158c1931350ad9774d6ab2108d71b3dbaeb39943159294375e4d053e8e05685c",
+  "packageManager": "pnpm@12.5.1+sha512.e3f305bc784a2bc89f5ad3b6138889470fae8d2af5f36b61216ec91c2c3d64089775f9de38aac331044ea40f245cb0d5666392dfdf65824e1907ef6a2c62de5f",
   "scripts": {
     "build": "turbo build",
     "ci:local": "pnpm format && pnpm lint && pnpm lint:unused && pnpm typecheck && pnpm build && pnpm test",
@@ -17,24 +17,16 @@
     "db:generate_empty": "pnpm -F db generate:empty",
     "db:generate": "pnpm -F db generate",
     "db:migrate": "pnpm -F db migrate",
-    "db:proxy:install": "bash scripts/db-proxy-install.sh install",
-    "db:proxy:status": "bash scripts/db-proxy-install.sh status",
-    "db:proxy:uninstall": "bash scripts/db-proxy-install.sh uninstall",
-    "db:proxy": "bash scripts/db-proxy.sh",
     "db:pull": "pnpm -F db pull",
     "db:push": "pnpm -F db push",
     "db:reset": "pnpm -F db reset",
     "db:seed:local": "pnpm -F db seed:local",
-    "db:seed": "pnpm -F db seed",
     "db:studio": "pnpm -F db studio",
-    "db:update-db": "pnpm -F db update-db",
     "dev": "bash scripts/dev.sh",
     "docker:down": "docker compose -f docker-compose.yml down",
     "docker:up": "docker compose -f docker-compose.yml up -d",
     "docker:up:logs": "docker compose -f docker-compose.yml up",
     "env:delete": "bash scripts/delete-env-files.sh",
-    "env:generate:dry-run": "bash scripts/generate-env.sh --dry-run",
-    "env:generate": "bash scripts/generate-env.sh",
     "format:fix": "turbo format --continue -- --write --cache --cache-location node_modules/.cache/.prettiercache",
     "format": "turbo format --continue",
     "lint:fix": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
@@ -47,8 +39,7 @@
     "reset-test-db": "turbo run reset-test-db",
     "test": "turbo test",
     "test:characterization": "turbo test:characterization",
-    "typecheck": "turbo typecheck",
-    "with-env": "dotenv -e .env --"
+    "typecheck": "turbo typecheck"
   },
   "devDependencies": {
     "@acme/prettier-config": "workspace:^0.1.0",
@@ -58,7 +49,6 @@
     "@commitlint/types": "catalog:",
     "@turbo/gen": "catalog:",
     "commitizen": "catalog:",
-    "dotenv-cli": "catalog:",
     "eslint": "catalog:",
     "inquirer": "catalog:",
     "knip": "catalog:",

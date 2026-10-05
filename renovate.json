@@ -69,6 +69,12 @@
       "allowedVersions": "<7.0.0"
     },
     {
+      "description": "Hold pandas at 2.x indefinitely: the team has decided not to adopt pandas 3.x. Patch/minor 2.x releases still flow through the Python non-major group. Remove this rule only when the team decides to migrate to 3.x.",
+      "matchManagers": ["pep621"],
+      "matchPackageNames": ["pandas"],
+      "allowedVersions": "<3.0.0"
+    },
+    {
       "description": "Hold at <1.9.0: 1.9.0 rewired AdvancedMarker onClick to the gmp-click DOM event (upstream PR #997), dropping event.stop()/event.latLng. Shipped as a minor but breaks marker clicks at runtime. Remove this rule with the migration.",
       "matchDatasources": ["npm"],
       "matchPackageNames": ["@vis.gl/react-google-maps"],
@@ -85,6 +91,12 @@
       "matchDatasources": ["npm"],
       "matchDepNames": ["fast-uri@<3.1.5"],
       "allowedVersions": "<4.0.0"
+    },
+    {
+      "description": "Skip zod 4.6.x: 4.6.0's JSON-Schema-converter rewrite (colinhacks/zod#6550, PR #6554) drops format/minLength/int32 bounds when @orpc/zod's ZodToJsonSchemaConverter converts apps/api's whole router in one pass, failing apps/api's openapi-spec.char.test.ts golden snapshot. Isolated single-schema conversions are unaffected — only the bulk multi-schema document path regresses. Filed upstream as colinhacks/zod#6613. `>=4.7.0` has no upper bound, so 4.7.x and any later major are proposed automatically once published; remove this rule once #6613 is fixed or a 4.6.x/4.7+ release is otherwise confirmed to fix the bulk-conversion case.",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["zod"],
+      "allowedVersions": "<4.6.0 || >=4.7.0"
     }
   ]
 }

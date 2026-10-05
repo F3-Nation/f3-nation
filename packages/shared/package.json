@@ -1,6 +1,6 @@
 {
   "name": "@acme/shared",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "module",
   "private": true,
   "license": "AGPL-3.0-or-later",
@@ -31,7 +31,6 @@
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
-    "@faker-js/faker": "catalog:",
     "@types/lodash": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

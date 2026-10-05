@@ -4,7 +4,8 @@ import { TestId } from "@acme/shared/common/enums";
 import { NationInsertSchema, SectorInsertSchema } from "@acme/validators";
 
 interface OrgEditorConfig {
-  parentType: OrgType | null;
+  /** Types offered in the parent selector; empty when the type has no parent. */
+  parentTypes: OrgType[];
   parentPlaceholder?: string;
   parentControl?: "select" | "combobox";
   parentTestId?: TestId;
@@ -27,7 +28,7 @@ interface OrgEditorConfig {
 // Preserve presentation and submission exceptions at the configuration boundary.
 export const orgEditorConfig: Record<OrgType, OrgEditorConfig> = {
   nation: {
-    parentType: null,
+    parentTypes: [],
     defaultName: "",
     retainLogo: false,
     compactLayout: true,
@@ -35,7 +36,7 @@ export const orgEditorConfig: Record<OrgType, OrgEditorConfig> = {
     submitErrorToast: true,
   },
   sector: {
-    parentType: "nation",
+    parentTypes: ["nation"],
     parentPlaceholder: "Select a nation",
     defaultName: "Unknown",
     retainLogo: false,
@@ -43,21 +44,22 @@ export const orgEditorConfig: Record<OrgType, OrgEditorConfig> = {
     deactivate: "existing",
   },
   territory: {
-    parentType: "sector",
+    parentTypes: ["sector"],
     parentPlaceholder: "Select a sector",
     defaultName: "",
     retainLogo: false,
     deactivate: "existing",
   },
   area: {
-    parentType: "sector",
-    parentPlaceholder: "Select a sector",
+    // An area may sit under a territory or directly under a sector.
+    parentTypes: ["sector", "territory"],
+    parentPlaceholder: "Select a sector or territory",
     defaultName: "",
     retainLogo: true,
     deactivate: "existing",
   },
   region: {
-    parentType: "area",
+    parentTypes: ["area"],
     parentPlaceholder: "Select an area",
     defaultName: "",
     retainLogo: true,
@@ -68,7 +70,7 @@ export const orgEditorConfig: Record<OrgType, OrgEditorConfig> = {
     awaitInvalidation: true,
   },
   ao: {
-    parentType: "region",
+    parentTypes: ["region"],
     parentPlaceholder: "Select a region",
     parentControl: "combobox",
     defaultName: "",
@@ -93,9 +95,10 @@ export type EditableOrgType = keyof typeof orgEditorConfig;
  */
 export function orgEditorSchema(config: OrgEditorConfig) {
   return SectorInsertSchema.extend({
-    parentId: config.parentType
-      ? SectorInsertSchema.shape.parentId
-      : NationInsertSchema.shape.parentId,
+    parentId:
+      config.parentTypes.length > 0
+        ? SectorInsertSchema.shape.parentId
+        : NationInsertSchema.shape.parentId,
     // Only logo editors supply this preview state in their submitted values.
     badImage: config.logoPosition
       ? z.boolean().default(false)
