@@ -54,7 +54,7 @@ IAM, Cloud Run, or real-GCS validation.
 
 A live local `run` is a publication operation, not a sandbox. It requires
 explicit security/platform and analytics-operator approval, real read-only
-database credentials and approved connectivity, a valid DuckDB 1.5.5 signed
+database credentials and approved connectivity, a valid DuckDB 1.5.6 signed
 PostgreSQL extension at the configured absolute path, and ADC with reviewed
 least-privilege permissions. Do not use production targets for local testing.
 Follow [`apps/analytics/README.md`](../apps/analytics/README.md) for safe local
