@@ -160,10 +160,12 @@ rollback. Do not retry a conflict with guessed values. Rollback uses
 
 ## Release gates and current status
 
-Production release is **BLOCKED**. The focused Phase 2 review passed for
-controlled nonprod testing only; it is not a production review or signoff. No
-production IAM/deployment action or live production validation is claimed.
-Before production deployment, owners must complete and record all of these
+Production release gates remain required and are not asserted as complete. The
+focused Phase 2 review passed for controlled nonprod testing only; it is not a
+production review or signoff. The tagged workflow is configured with
+`deploy_prod=true`, but that configuration does not establish that a production
+deployment occurred, that the job executed, or that data was published. Before
+each production job deployment, owners must complete and record the applicable
 gates:
 
 1. Verify that no enabled Cloud Scheduler job or other unattended invocation
@@ -172,9 +174,9 @@ gates:
    complete all production release gates before deployment so an immediate run
    is allowed. Tie production GitHub environment reviewer approval to this
    evidence and disposition; do not assume reviewers are currently configured.
-2. The Analytics tagged deploy defaults to staging only (`deploy_prod=false`).
-   Enabling production deployment later requires a separate reviewed workflow
-   change; do not bypass the default.
+2. Production deployment is enabled in the Analytics tagged workflow
+   (`deploy_prod=true`). Image/job deployment is distinct from execution and
+   publication; an enabled unattended invoker could execute the updated job.
 3. External consumer compatibility against every serving and
    rollback-eligible consumer revision, including staged generation-race and
    pointer-replacement tests.

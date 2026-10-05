@@ -41,11 +41,13 @@ jobs:
       ar_repo: cloud-run-builds
       staging_runtime_service_account: analytics-etl-nonprod@f3data.iam.gserviceaccount.com
       prod_runtime_service_account: analytics-etl@f3data.iam.gserviceaccount.com
-      # Staging still builds and deploys, but production stays disabled pending human security,
-      # source-load, consumer, GCS, IAM, retention, and review gates, plus the existing Scheduler check.
+      # Production job deployment is enabled. Deploying the image/job does not execute the job
+      # or publish data, but an enabled unattended invoker could execute the updated job; human
+      # security, source-load, consumer, IAM, and release gates remain required and unverified.
       deploy_prod: true
-      # Track this deployment run and retry, not github.sha: workflow_dispatch may re-deploy a tag whose image commit differs.
-      # The reusable deploy resolves that tag to the immutable image digest used by this run.
+      # The producer revision identifies this deployment attempt for tracking/retry, not github.sha:
+      # workflow_dispatch may re-deploy a tag whose image commit differs. The reusable deploy
+      # resolves that tag to the immutable image digest used by this run.
       staging_flags: >-
         --set-cloudsql-instances=f3data:us-central1:f3data-nonprod
         --tasks=1

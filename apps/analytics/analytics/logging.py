@@ -14,10 +14,10 @@ import duckdb
 
 _EVENT = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
 _DUCKDB_IO_EXCEPTION = duckdb.IOException
+_POSTGRES_READ_MARKER = re.compile(r"\b(?:read|recv|receive)\b")
 _DUCKDB_IO_MARKERS = {
     "no_space": ("no space left", "disk full", "out of disk space", "enospc"),
     "postgres": ("postgres", "network", "socket"),
-    "read": ("read", "recv", "receive"),
     "write": ("write", "writing", "flush", "fsync", "checkpoint"),
     "postgres_transport": ("postgres", "postgresql", "libpq", "socket", "connection", "transport"),
     "parquet_serialization": ("parquet", "serialize", "serialization", "footer", "encoding"),
@@ -38,8 +38,8 @@ def _safe_error_detail(error: BaseException) -> str:
         message = str(error).lower()
         if any(marker in message for marker in _DUCKDB_IO_MARKERS["no_space"]):
             return "duckdb_io_no_space"
-        if any(marker in message for marker in _DUCKDB_IO_MARKERS["postgres"]) and any(
-            marker in message for marker in _DUCKDB_IO_MARKERS["read"]
+        if any(marker in message for marker in _DUCKDB_IO_MARKERS["postgres"]) and _POSTGRES_READ_MARKER.search(
+            message
         ):
             return "duckdb_io_postgres_network_read"
         if any(marker in message for marker in _DUCKDB_IO_MARKERS["postgres_transport"]):

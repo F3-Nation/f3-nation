@@ -84,7 +84,13 @@ def _safe(value: str, label: str) -> str:
 
 def canonical_json_bytes(value: Any) -> bytes:
     """Serialize one value to deterministic canonical UTF-8 JSON bytes."""
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
 
 
 _canonical = canonical_json_bytes
@@ -686,13 +692,25 @@ class GcsPublisher:
                     checksum="crc32c",
                 )
             except PreconditionFailed:
-                _, observed, observed_generation = self._read_pointer()
+                try:
+                    _, observed, observed_generation = self._read_pointer()
+                except Exception as readback_error:
+                    raise PointerConflictError(
+                        "pointer write outcome is unconfirmed after compare-and-swap failure",
+                        outcome="unconfirmed",
+                    ) from readback_error
                 if observed == new:
                     return {**new, "pointerGeneration": observed_generation, "publicationOutcome": "committed"}
                 continue
             except Exception:
                 # Transport errors are ambiguous: inspect the pointer before any retry.
-                _, observed, observed_generation = self._read_pointer()
+                try:
+                    _, observed, observed_generation = self._read_pointer()
+                except Exception as readback_error:
+                    raise PointerConflictError(
+                        "pointer write outcome is unconfirmed after transport failure",
+                        outcome="unconfirmed",
+                    ) from readback_error
                 if observed == new and observed_generation is not None:
                     return {**new, "pointerGeneration": observed_generation, "publicationOutcome": "committed"}
                 if observed and (observed.get("retainedPrevious") or {}).get("releaseId") == run_id:
@@ -837,12 +855,24 @@ class GcsPublisher:
                 checksum="crc32c",
             )
         except PreconditionFailed as error:
-            _, observed, observed_generation = self._read_pointer()
+            try:
+                _, observed, observed_generation = self._read_pointer()
+            except Exception as readback_error:
+                raise PointerConflictError(
+                    "rollback write outcome is unconfirmed after compare-and-swap failure",
+                    outcome="unconfirmed",
+                ) from readback_error
             if observed == previous:
                 return {**previous, "pointerGeneration": observed_generation, "publicationOutcome": "committed"}
             raise PointerConflictError("pointer changed during rollback", outcome="conflict") from error
         except Exception:
-            _, observed, observed_generation = self._read_pointer()
+            try:
+                _, observed, observed_generation = self._read_pointer()
+            except Exception as readback_error:
+                raise PointerConflictError(
+                    "rollback write outcome is unconfirmed after transport failure",
+                    outcome="unconfirmed",
+                ) from readback_error
             if observed == previous and observed_generation is not None:
                 return {**previous, "pointerGeneration": observed_generation, "publicationOutcome": "committed"}
             raise PointerConflictError("rollback write outcome is unconfirmed", outcome="unconfirmed") from None

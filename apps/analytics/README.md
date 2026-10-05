@@ -26,7 +26,7 @@ not a shared database snapshot.
 The ETL disables DuckDB PostgreSQL filter pushdown as a read-only correctness
 workaround for the extension's `Unsupported table filter type` compatibility
 issue. This can increase source read volume, so measure it in nonprod before
-enabling production workloads.
+allowing production execution or publication.
 
 Runtime targets are deliberately limited to two environments. Approved GCS
 prefixes are selected from the immutable materialization registry; they are
@@ -45,15 +45,18 @@ advances pointer sequence without lowering source high-water order. See
 [`docs/ANALYTICS_ETL_OPERATIONS.md`](../../docs/ANALYTICS_ETL_OPERATIONS.md) for
 the operator procedure and retention/IAM requirements.
 
-Publication in production is **blocked**. The focused Phase 2 review passed for
-controlled nonprod testing only; it is not a production review or signoff. No
-production IAM/deployment action or live production validation is claimed.
-External consumer compatibility/security signoff, source-plan/load review,
-production IAM, staging race/rollback validation, unattended-invocation review,
-and consumer cutover remain release gates. Keep the prior serving path and data
-until consumer owners sign off; after cutover, do not continue dual-publishing
-pointers. A synthetic DuckDB/fake-GCS integration test is not live SQL, IAM, or
-GCS evidence.
+The tagged deployment workflow is configured to deploy the production Cloud Run
+Job (`deploy_prod: true`). This configuration is not evidence that a production
+deployment has run or that any release gate has passed. Image/job deployment is
+distinct from job execution and data publication; however, if an unattended
+invoker is enabled, it could execute the updated job. The focused Phase 2 review
+passed for controlled nonprod testing only; it is not a production review or
+signoff. Human security, source-plan/load, consumer compatibility, production
+IAM, staging race/rollback, unattended-invocation, and consumer-cutover gates
+remain required; their completion is not asserted here. Keep the prior serving
+path and data until consumer owners sign off; after cutover, do not continue
+dual-publishing pointers. A synthetic DuckDB/fake-GCS integration test is not
+live SQL, IAM, or GCS evidence.
 
 ## Local testing (safe and offline by default)
 
@@ -407,12 +410,12 @@ Cloud Run execution is a separate operation from running the local CLI.
 
 ## Remaining external release gates
 
-Before enabling production:
+The tagged workflow is currently configured with `deploy_prod: true`. For each
+production deployment, retain the human release gates below; enabling deployment
+does not itself execute the job or publish data, but an enabled unattended
+invoker could run it:
 
-1. The Analytics tagged deployment is staging-only by default
-   (`deploy_prod=false`). Enabling production deployment later requires a
-   separate reviewed workflow change; do not bypass that default.
-2. Before any production image deployment, inventory enabled Cloud Scheduler
+1. Before each production job deployment, inventory enabled Cloud Scheduler
    jobs and every other unattended invocation path that can trigger the updated
    `analytics-etl` job. Verify no enabled path can run it. If one exists, either
    obtain human approval to suspend it and confirm suspension, or complete all
@@ -420,18 +423,18 @@ Before enabling production:
    immediately. Tie production GitHub environment reviewer approval to recorded
    evidence of this check and its disposition. Do not assume a reviewer is
    currently configured; verify the environment policy.
-3. Run `actionlint` for the deployment workflows.
-4. Create the approved nonprod/production runtime identities, Scheduler invoker
+2. Run `actionlint` for the deployment workflows.
+3. Verify/obtain approval for the nonprod/production runtime identities, Scheduler invoker
    identity, read-only database roles, Secret Manager versions, and narrowly
    scoped GCS IAM bindings. See
    [`docs/ANALYTICS_ETL_OPERATIONS.md`](../../docs/ANALYTICS_ETL_OPERATIONS.md).
-5. Deploy and manually execute `analytics-etl-nonprod`; verify Unix-socket
+4. Deploy and manually execute `analytics-etl-nonprod`; verify Unix-socket
    access, database write denial, immutable release objects, last-object
    `release.json` validation, product-specific pointer generation CAS, and
    source-order behavior.
-6. Verify failed-release, stale-run, rollback, and alert handling with the configured log
+5. Verify failed-release, stale-run, rollback, and alert handling with the configured log
    alerts before approving production.
-7. After human approval of the daily cron and timezone, provision the production
+6. After human approval of the daily cron and timezone, provision the production
    Scheduler with `scripts/provision-analytics-scheduler.sh`, then confirm its
    OAuth dispatch and the completed Cloud Run execution separately.
 

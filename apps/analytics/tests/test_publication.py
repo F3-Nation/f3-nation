@@ -52,6 +52,7 @@ class Blob:
     post_write_open_error: BaseException | None = None
     post_write_open_corrupt = False
     post_write_confirmation_reload_error: BaseException | None = None
+    pointer_upload_error: BaseException | None = None
 
     def __init__(self, name: str):
         self.name = name
@@ -79,6 +80,11 @@ class Blob:
         self._upload(content, kwargs["if_generation_match"])
 
     def _upload(self, content, expected):
+        if self.name.endswith("/current.json") and type(self).pointer_upload_error is not None:
+            error = type(self).pointer_upload_error
+            type(self).pointer_upload_error = None
+            assert error is not None
+            raise error
         existing = self.objects.get(self.name)
         if self.name.endswith("/current.json") and type(self).race_pointer and existing:
             type(self).race_pointer = False
@@ -234,6 +240,7 @@ def reset():
     Blob.post_write_open_error = None
     Blob.post_write_open_corrupt = False
     Blob.post_write_confirmation_reload_error = None
+    Blob.pointer_upload_error = None
 
 
 def golden(name="candidate_transport_check"):
@@ -573,6 +580,56 @@ def test_pointer_ambiguous_transport_is_reconciled_as_committed(tmp_path):
     result = publisher.commit_pointer("ambiguous", release, digest, "ambiguous", "revision", "2026-09-01T00:02:00Z")
     assert result["publicationOutcome"] == "committed"
     assert result["pointerGeneration"] == str(Blob.objects["pax-vault/current.json"].generation)
+
+
+@pytest.mark.parametrize("operation", ("forward", "rollback"))
+@pytest.mark.parametrize("upload_error", (PreconditionFailed, TimeoutError))
+def test_unclear_pointer_write_and_failed_pointer_readback_are_unconfirmed(tmp_path, operation, upload_error):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    if operation == "forward":
+        release, digest = _release(publisher, "unconfirmed-1")
+    else:
+        previous_release, previous_digest = _release(publisher, "unconfirmed-1")
+        publisher.commit_pointer(
+            "unconfirmed-1",
+            previous_release,
+            previous_digest,
+            "unconfirmed-1",
+            "revision",
+            "2026-09-01T00:02:00Z",
+        )
+        release, digest = _release(publisher, "unconfirmed-2")
+        publisher.commit_pointer("unconfirmed-2", release, digest, "unconfirmed-2", "revision", "2026-09-01T00:03:00Z")
+
+    read_pointer = publisher._read_pointer
+    read_count = 0
+
+    def fail_readback():
+        nonlocal read_count
+        read_count += 1
+        if read_count == 2:
+            raise OSError("transient pointer readback failure")
+        return read_pointer()
+
+    publisher._read_pointer = fail_readback
+    Blob.pointer_upload_error = upload_error("simulated unclear pointer write")
+
+    with pytest.raises(PointerConflictError) as raised:
+        if operation == "forward":
+            publisher.commit_pointer(
+                "unconfirmed-1", release, digest, "unconfirmed-1", "revision", "2026-09-01T00:02:00Z"
+            )
+        else:
+            publisher.rollback_pointer(
+                "unconfirmed-1",
+                expected_generation=str(Blob.objects["pax-vault/current.json"].generation),
+            )
+
+    assert raised.value.outcome == "unconfirmed"
+    assert raised.value.committed is False
+    assert isinstance(raised.value.__cause__, OSError)
+    assert read_count == 2
 
 
 @pytest.mark.parametrize("operation", ("forward", "rollback"))

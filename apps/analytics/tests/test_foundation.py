@@ -262,6 +262,11 @@ def test_logging_exception_detail_is_normalized_without_message_values(message):
         ("IO Error: No space left on device; path=/private/report.csv", "duckdb_io_no_space"),
         ("IO Error: failed to write checkpoint; SQL=INSERT INTO secrets", "duckdb_io_write"),
         ("IO Error: PostgreSQL socket read failed; token=not-for-logs", "duckdb_io_postgres_network_read"),
+        ("IO Error: PostgreSQL socket recv failed", "duckdb_io_postgres_network_read"),
+        ("IO Error: PostgreSQL socket receive failed", "duckdb_io_postgres_network_read"),
+        ("IO Error: PostgreSQL connection already closed", "duckdb_io_postgres_transport"),
+        ("IO Error: PostgreSQL thread failed", "duckdb_io_postgres_transport"),
+        ("IO Error: PostgreSQL spread failure", "duckdb_io_postgres_transport"),
         ("IO Error: unexpected storage condition; row=customer@example.test", "duckdb_io"),
     ),
 )
