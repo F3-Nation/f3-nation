@@ -233,12 +233,23 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
   const parentOrgIds = useMemo(() => {
     if (config.filters === "region")
       return selectedRegions.map((region) => region.id);
-    if (config.filters === "sectorArea")
-      return getParentOrgIdsForFilter(
-        selectedAreas.map((area) => area.id),
-        selectedSectors.length > 0,
-        availableAreas?.map((area) => area.id),
-      );
+    if (config.filters === "sectorTerritoryArea") {
+      const selectedAncestorIds = [
+        selectedSectorIds,
+        new Set(selectedTerritories.map((territory) => territory.id)),
+        new Set(selectedAreas.map((area) => area.id)),
+      ].filter((ids) => ids.size > 0);
+      if (selectedAncestorIds.length === 0) return undefined;
+
+      const matchingParentIds = hierarchyOrgs
+        ?.filter((org) =>
+          selectedAncestorIds.every(
+            (ids) => ids.has(org.id) || isDescendantOfAny(org, ids, orgById),
+          ),
+        )
+        .map((org) => org.id);
+      return getParentOrgIdsForFilter([], true, matchingParentIds);
+    }
     if (config.filters === "sector")
       return getParentOrgIdsForFilter(
         [],
@@ -258,7 +269,9 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
     selectedAreas,
     selectedTerritories,
     selectedSectors,
-    availableAreas,
+    selectedSectorIds,
+    hierarchyOrgs,
+    orgById,
     sectorAndDescendantIds,
   ]);
   return {

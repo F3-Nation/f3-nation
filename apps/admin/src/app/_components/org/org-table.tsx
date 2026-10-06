@@ -199,7 +199,7 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
   const extraFilters = [
     ...(config.filters === "sector" ||
     config.filters === "sectorTerritory" ||
-    config.filters === "sectorArea"
+    config.filters === "sectorTerritoryArea"
       ? [
           {
             label: "Sector",
@@ -213,7 +213,8 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
           },
         ]
       : []),
-    ...(config.filters === "sectorTerritory"
+    ...(config.filters === "sectorTerritory" ||
+    config.filters === "sectorTerritoryArea"
       ? [
           {
             label: "Territory",
@@ -227,7 +228,7 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
           },
         ]
       : []),
-    ...(config.filters === "sectorArea"
+    ...(config.filters === "sectorTerritoryArea"
       ? [
           {
             label: "Area",

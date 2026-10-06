@@ -12,7 +12,12 @@ export interface OrgAdminConfig {
   serverPagination: boolean;
   serverSorting: boolean;
   filters:
-    "none" | "status" | "sector" | "sectorTerritory" | "sectorArea" | "region";
+    | "none"
+    | "status"
+    | "sector"
+    | "sectorTerritory"
+    | "sectorTerritoryArea"
+    | "region";
   ancestorTypes?: OrgType[];
   /**
    * Display-only traversal of irregular legacy/imported or directly written data.
@@ -86,7 +91,7 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     add: true,
     serverPagination: true,
     serverSorting: false,
-    filters: "sectorArea",
+    filters: "sectorTerritoryArea",
     ancestorTypes: AdminHierarchyOrgTypes,
     displayAncestors: ["area", "sector"],
     columns: [

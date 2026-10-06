@@ -200,8 +200,8 @@ const record = {
   meta: { region_location_short_description: "Keep this metadata" },
 };
 const parents = [
-  { id: 2, name: "Zulu", orgType: "sector" },
-  { id: 3, name: "Alpha", orgType: "sector" },
+  { id: 2, name: "Zulu", orgType: "sector", isActive: true },
+  { id: 3, name: "Alpha", orgType: "sector", isActive: true },
 ];
 const clients: QueryClient[] = [];
 
@@ -425,10 +425,10 @@ describe.each([
 
 describe("Area parent selection", () => {
   const sectorsAndTerritories = [
-    { id: 2, name: "Zulu Sector", orgType: "sector" },
-    { id: 3, name: "Alpha Sector", orgType: "sector" },
-    { id: 12, name: "Beta Territory", orgType: "territory" },
-    { id: 11, name: "Alpha Territory", orgType: "territory" },
+    { id: 2, name: "Zulu Sector", orgType: "sector", isActive: true },
+    { id: 3, name: "Alpha Sector", orgType: "sector", isActive: true },
+    { id: 12, name: "Beta Territory", orgType: "territory", isActive: true },
+    { id: 11, name: "Alpha Territory", orgType: "territory", isActive: true },
   ];
   const areaUnder = (parentId: number) =>
     mocks.byId.mockResolvedValue({ org: { ...record, parentId } });
@@ -521,6 +521,187 @@ describe("Area parent selection", () => {
     ).toBe(true);
     expect(screen.getByText("Sector")).toBeTruthy();
   });
+});
+
+describe("Region Area or Territory parent selection", () => {
+  const regionParents = [
+    { id: 2, name: "Zulu Area", orgType: "area", isActive: true },
+    { id: 3, name: "Alpha Area", orgType: "area", isActive: true },
+    { id: 12, name: "Beta Territory", orgType: "territory", isActive: true },
+    { id: 11, name: "Alpha Territory", orgType: "territory", isActive: true },
+  ];
+
+  beforeEach(() => {
+    mocks.all.mockResolvedValue({ orgs: regionParents, total: 4 });
+  });
+
+  it("groups sorted Areas before Territories without offering other parent types", async () => {
+    mount("region");
+
+    await waitFor(() => expect(parentSelect().options.length).toBe(6));
+    expect(screen.getByText("Area or Territory")).toBeTruthy();
+    expect(mocks.all).toHaveBeenCalledWith({
+      orgTypes: ["area", "territory"],
+      statuses: ["active", "inactive"],
+      pageIndex: 0,
+      pageSize: 100,
+    });
+    expect(
+      Array.from(parentSelect().options).map((option) => [
+        option.disabled ? "group" : "org",
+        option.text,
+      ]),
+    ).toEqual([
+      ["group", "Areas"],
+      ["org", "Alpha Area"],
+      ["org", "Zulu Area"],
+      ["group", "Territories"],
+      ["org", "Alpha Territory"],
+      ["org", "Beta Territory"],
+    ]);
+  });
+
+  it.each([2, 12])("saves an unchanged current parent %i", async (parentId) => {
+    mocks.byId.mockResolvedValue({ org: { ...record, parentId } });
+    mount("region", record.id);
+    await waitFor(() => expect(parentSelect().value).toBe(String(parentId)));
+
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+      id: record.id,
+      orgType: "region",
+      parentId,
+      logoUrl: record.logoUrl,
+      meta: record.meta,
+      email: record.email,
+    });
+  });
+
+  it.each(["area", "territory"])(
+    "retains the inactive current %s but excludes other inactive parent choices",
+    async (orgType) => {
+      const current = {
+        id: 20,
+        name: "Inactive Current Parent",
+        orgType,
+        isActive: false,
+      };
+      mocks.all.mockResolvedValue({
+        orgs: [
+          ...regionParents,
+          current,
+          { ...current, id: 21, name: "Other Inactive Area", orgType: "area" },
+          {
+            ...current,
+            id: 22,
+            name: "Other Inactive Territory",
+            orgType: "territory",
+          },
+        ],
+        total: 7,
+      });
+      mocks.byId.mockResolvedValue({
+        org: { ...record, parentId: current.id },
+      });
+      mount("region", record.id);
+
+      await waitFor(() =>
+        expect(parentSelect().value).toBe(String(current.id)),
+      );
+      expect(parentOptions().map((option) => option.value)).toEqual(
+        expect.arrayContaining(["2", "3", "11", "12", "20"]),
+      );
+      expect(parentOptions()).toHaveLength(5);
+      save();
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(mocks.save.mock.calls[0]![0].parentId).toBe(current.id);
+    },
+  );
+
+  it("offers only active parents when creating a Region", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: [
+        ...regionParents,
+        { id: 20, name: "Inactive Area", orgType: "area", isActive: false },
+        {
+          id: 21,
+          name: "Inactive Territory",
+          orgType: "territory",
+          isActive: false,
+        },
+      ],
+      total: 6,
+    });
+    mount("region");
+
+    await waitFor(() => expect(parentOptions()).toHaveLength(4));
+    expect(
+      parentOptions()
+        .map((option) => option.value)
+        .sort(),
+    ).toEqual(["11", "12", "2", "3"]);
+  });
+
+  it.each([2, 12])(
+    "creates beneath parent %i with the existing two-save flow",
+    async (parentId) => {
+      mocks.save.mockImplementation(async (input) => ({
+        org: { ...input, id: 55 },
+      }));
+      mount("region");
+      await waitFor(() => expect(parentOptions()).toHaveLength(4));
+      fireEvent.change(field("Name"), { target: { value: "New Region" } });
+      fireEvent.change(parentSelect(), { target: { value: String(parentId) } });
+
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2));
+      expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+        name: "New Region",
+        orgType: "region",
+        parentId,
+      });
+      expect(mocks.save.mock.calls[1]![0]).toMatchObject({
+        id: 55,
+        name: "New Region",
+        orgType: "region",
+        parentId,
+      });
+      expect(mocks.upload).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [2, 12],
+    [12, 2],
+  ])(
+    "moves from parent %i to %i and retains the saved parent on reopening",
+    async (oldParent, newParent) => {
+      mocks.byId.mockResolvedValue({ org: { ...record, parentId: oldParent } });
+      const view = mount("region", record.id);
+      await waitFor(() => expect(parentSelect().value).toBe(String(oldParent)));
+      fireEvent.change(parentSelect(), {
+        target: { value: String(newParent) },
+      });
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      const saved = mocks.save.mock.calls[0]![0];
+      expect(saved).toMatchObject({
+        id: record.id,
+        orgType: "region",
+        parentId: newParent,
+        logoUrl: record.logoUrl,
+        meta: record.meta,
+      });
+      view.unmount();
+      mocks.byId.mockResolvedValue({ org: saved });
+      mount("region", record.id);
+      await waitFor(() => expect(parentSelect().value).toBe(String(newParent)));
+    },
+  );
 });
 
 describe("Nation exceptions", () => {
@@ -648,7 +829,7 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
       });
       const view = mount(type);
       fireEvent.change(field("Name"), { target: { value: "New org" } });
-      await waitFor(() => expect(parentSelect().options.length).toBe(2));
+      await waitFor(() => expect(parentOptions()).toHaveLength(2));
       fireEvent.change(parentSelect(), { target: { value: "3" } });
       const file = new File(["synthetic"], "logo.png", { type: "image/png" });
       if (withFile)

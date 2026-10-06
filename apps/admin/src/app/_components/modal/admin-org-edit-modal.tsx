@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
+import { IsActiveStatus } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import {
@@ -73,6 +74,7 @@ export default function AdminOrgEditModal({
   const label = orgTypeDisplay[orgType].label;
   const { parentTypes } = config;
   const hasParent = parentTypes.length > 0;
+  const includeInactiveCurrentParent = orgType === "region";
   const parentLabel = parentTypes
     .map((parentType) => orgTypeDisplay[parentType].label)
     .join(" or ");
@@ -89,10 +91,15 @@ export default function AdminOrgEditModal({
   const org = orgResponse?.org;
   const { data: parents } = useFetchAllPages({
     path: ["org", "all"],
-    queryKey: ["org.all.everyParent", parentTypes],
+    queryKey: [
+      "org.all.everyParent",
+      parentTypes,
+      includeInactiveCurrentParent,
+    ],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
         orgTypes: parentTypes,
+        ...(includeInactiveCurrentParent ? { statuses: IsActiveStatus } : {}),
         pageIndex,
         pageSize,
       });
@@ -102,6 +109,12 @@ export default function AdminOrgEditModal({
   });
   const router = useRouter();
   const parentOptions = (parents ?? [])
+    .filter(
+      (parent) =>
+        !includeInactiveCurrentParent ||
+        parent.isActive ||
+        parent.id === org?.parentId,
+    )
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name));
   const renderParentItem = (parent: (typeof parentOptions)[number]) => (

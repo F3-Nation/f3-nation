@@ -111,6 +111,15 @@ describe("org AO counts", () => {
         { parentId: sector.id },
       );
       await tree.create({ orgType: "ao", parentId: must(regionUnder).id });
+      const [regionUnderTerritory, directAo] = await tree.chain(
+        ["region", "ao"],
+        { parentId: must(territory).id },
+      );
+      await tree.create({
+        orgType: "ao",
+        parentId: must(regionUnderTerritory).id,
+        isActive: false,
+      });
 
       expect(
         await countsOf(tree, {
@@ -120,14 +129,34 @@ describe("org AO counts", () => {
           areaUnder: must(areaUnder),
           regionDirect: must(regionDirect),
           regionUnder: must(regionUnder),
+          regionUnderTerritory: must(regionUnderTerritory),
         }),
       ).toEqual({
-        sector: 3,
-        territory: 1,
+        sector: 4,
+        territory: 2,
         areaDirect: 2,
         areaUnder: 1,
         regionDirect: 2,
         regionUnder: 1,
+        regionUnderTerritory: 1,
+      });
+
+      const directBranch = {
+        sector,
+        territory: must(territory),
+        region: must(regionUnderTerritory),
+      };
+      await tree.setActive(must(directAo).id, false);
+      expect(await countsOf(tree, directBranch)).toEqual({
+        sector: 3,
+        territory: 1,
+        region: 0,
+      });
+      await tree.setActive(must(directAo).id, true);
+      expect(await countsOf(tree, directBranch)).toEqual({
+        sector: 4,
+        territory: 2,
+        region: 1,
       });
     });
 
@@ -192,6 +221,38 @@ describe("org AO counts", () => {
   });
 
   describe("inactive intermediates", () => {
+    it.each(["region", "territory"] as const)(
+      "preserves the inactive %s cutoff for a direct Territory Region branch",
+      async (deactivated) => {
+        const tree = newTree();
+        const [sector, territory, region] = await tree.chain([
+          "sector",
+          "territory",
+          "region",
+          "ao",
+        ]);
+        const named = {
+          sector: must(sector),
+          territory: must(territory),
+          region: must(region),
+        };
+
+        await tree.setActive(named[deactivated].id, false);
+        expect(await countsOf(tree, named)).toEqual({
+          sector: 0,
+          territory: deactivated === "territory" ? 1 : 0,
+          region: 1,
+        });
+
+        await tree.setActive(named[deactivated].id, true);
+        expect(await countsOf(tree, named)).toEqual({
+          sector: 1,
+          territory: 1,
+          region: 1,
+        });
+      },
+    );
+
     it.each(["region", "area", "territory"] as const)(
       "drops AOs beneath an inactive %s from the tiers above it, not from itself, and restores them",
       async (deactivated) => {
@@ -324,6 +385,61 @@ describe("org AO counts", () => {
         }),
       ).toEqual({ sectorA: 0, areaA: 0, sectorB: 1, areaB: 1 });
     });
+
+    it.each([true, false])(
+      "recounts both chains when a Region with isActive=%s moves between an Area and a Territory across sectors",
+      async (isActive) => {
+        const tree = newTree();
+        const [sectorA, territoryA, area] = await tree.chain([
+          "sector",
+          "territory",
+          "area",
+        ]);
+        const [sectorB, territoryB] = await tree.chain(["sector", "territory"]);
+        const region = await tree.create({
+          orgType: "region",
+          parentId: must(area).id,
+          isActive,
+        });
+        await tree.create({ orgType: "ao", parentId: region.id });
+        await tree.create({
+          orgType: "ao",
+          parentId: region.id,
+          isActive: false,
+        });
+        const named = {
+          sectorA: must(sectorA),
+          territoryA: must(territoryA),
+          area: must(area),
+          sectorB: must(sectorB),
+          territoryB: must(territoryB),
+          region,
+        };
+        const counted = isActive ? 1 : 0;
+        const before = {
+          sectorA: counted,
+          territoryA: counted,
+          area: counted,
+          sectorB: 0,
+          territoryB: 0,
+          region: 1,
+        };
+        expect(await countsOf(tree, named)).toEqual(before);
+
+        await tree.move(region.id, must(territoryB).id);
+        expect(await countsOf(tree, named)).toEqual({
+          sectorA: 0,
+          territoryA: 0,
+          area: 0,
+          sectorB: counted,
+          territoryB: counted,
+          region: 1,
+        });
+
+        await tree.move(region.id, must(area).id);
+        expect(await countsOf(tree, named)).toEqual(before);
+      },
+    );
 
     it("recounts both sectors when a territory moves between sectors", async () => {
       const tree = newTree();
