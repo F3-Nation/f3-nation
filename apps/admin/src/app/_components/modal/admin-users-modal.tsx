@@ -44,6 +44,7 @@ import {
   invalidateQueries,
   orpc,
   useMutation,
+  useQueries,
   useQuery,
 } from "~/orpc/react";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
@@ -52,7 +53,10 @@ import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
-import { canEditUserProfile } from "./user-editor-config";
+import {
+  canEditUserProfile,
+  roleOrgIdsNeedingParent,
+} from "./user-editor-config";
 
 function isAdminSessionRoleName(
   roleName: string | null,
@@ -123,15 +127,24 @@ export default function UserModal({
     return { orgs: adminOrgs };
   }, [accessibleOrgsData]);
 
-  const canEditUser = useMemo(
-    () =>
-      canEditUserProfile({
-        user,
-        sessionUserId: session?.id,
-        editableOrgs: orgs?.orgs ?? [],
-      }),
-    [user, session?.id, orgs?.orgs],
+  const roleOrgParentQueries = useQueries({
+    queries: roleOrgIdsNeedingParent({
+      user,
+      editableOrgs: orgs?.orgs ?? [],
+    }).map((id) => orpc.org.byId.queryOptions({ input: { id } })),
+  });
+  const roleOrgParentIds = new Map(
+    roleOrgParentQueries.flatMap(({ data }) =>
+      data?.org ? [[data.org.id, data.org.parentId] as const] : [],
+    ),
   );
+
+  const canEditUser = canEditUserProfile({
+    user,
+    sessionUserId: session?.id,
+    editableOrgs: orgs?.orgs ?? [],
+    roleOrgParentIds,
+  });
 
   const isHomeRegionDisabled = !canEditUser;
 
