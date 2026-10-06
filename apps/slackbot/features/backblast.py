@@ -15,6 +15,7 @@ from f3_data_models.models import (
     Attendance_x_AttendanceType,
     AttendanceType,
     EventInstance,
+    EventType,
     EventType_x_EventInstance,
     Location,
     Org,
@@ -805,7 +806,16 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
             backblast_form.blocks.append(block)
         backblast_data: dict = backblast_form.get_selected_values(body)
         event_type = safe_convert(safe_get(backblast_data, actions.BACKBLAST_EVENT_TYPE), int)
-        if event_type is None or event_type <= 0:
+        selected_event_type = (
+            DbManager.find_first_record(EventType, [EventType.id == event_type])
+            if event_type is not None and event_type > 0
+            else None
+        )
+        if (
+            selected_event_type is None
+            or not selected_event_type.is_active
+            or selected_event_type.specific_org_id not in (None, region_record.org_id)
+        ):
             send_error_response(
                 body=body,
                 client=client,
