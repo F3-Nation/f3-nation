@@ -31,7 +31,14 @@ vi.mock("../services/map-request-notification", () => ({
 }));
 
 import { eq, schema } from "@acme/db";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -272,6 +279,27 @@ describe("Request Router", () => {
 
       if (!testRequest) throw new Error("Failed to create test request");
       createdRequestIds.push(testRequest.id);
+
+      // byId scopes by the caller's DB roles, so seed a real editor.
+      const [editor] = await db
+        .insert(schema.users)
+        .values({ email: `${uniqueId()}@example.com`, f3Name: "Editor" })
+        .returning({ id: schema.users.id });
+      const [editorRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"));
+      if (!editor || !editorRole) throw new Error("Failed to seed editor");
+      onTestFinished(() => cleanup.user(editor.id));
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: editor.id,
+        orgId: region.id,
+        roleId: editorRole.id,
+      });
+      await mockAuthWithSession({
+        ...createEditorSession({ orgId: region.id, orgName: region.name }),
+        id: editor.id,
+      });
 
       const client = createTestClient();
       const result = await client.request.byId({

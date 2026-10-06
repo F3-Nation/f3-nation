@@ -609,24 +609,32 @@ describe("API Key Router", () => {
       }
     });
 
-    it("does not grant key-owner access to an API-key session", async () => {
-      const owned = [
-        await insertKey(regionAdminId),
-        await insertKey(regionAdminId, [
-          { orgId: tree.nation.id, roleName: "admin" },
-        ]),
-      ];
+    it("rejects every API-key management endpoint for an API-key session", async () => {
+      const owned = await insertKey(regionAdminId);
 
       await mockAuthWithSession(regionAdminSession(true));
       const client = createTestClient();
-      const ids = (await client.apiKey.list()).apiKeys.map((k) => k.id);
+      const unauthorized = { code: "UNAUTHORIZED" };
 
-      for (const key of owned) {
-        expect(ids).not.toContain(key.id);
-        await expect(
-          client.apiKey.revoke({ id: key.id, revoke: true }),
-        ).rejects.toMatchObject({ code: "NOT_FOUND" });
-      }
+      await expect(client.apiKey.list()).rejects.toMatchObject(unauthorized);
+      await expect(
+        client.apiKey.create({ name: "child", roles: [], expiresAt: null }),
+      ).rejects.toMatchObject(unauthorized);
+      await expect(
+        client.apiKey.revoke({ id: owned.id, revoke: true }),
+      ).rejects.toMatchObject(unauthorized);
+      await expect(client.apiKey.purge({ id: owned.id })).rejects.toMatchObject(
+        unauthorized,
+      );
+      await expect(
+        client.apiKey.validate({ key: "anything" }),
+      ).rejects.toMatchObject(unauthorized);
+
+      const [row] = await db
+        .select({ revokedAt: schema.apiKeys.revokedAt })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.id, owned.id));
+      expect(row?.revokedAt).toBeNull();
     });
 
     it("lets an owner see and revoke, but not restore or purge, a key wider than them", async () => {
@@ -663,49 +671,46 @@ describe("API Key Router", () => {
       expect(row?.revokedAt).not.toBeNull();
     });
 
-    it.each([false, true])(
-      "rejects revoke, restore, and purge of an out-of-scope key (API-key session: %s)",
-      async (viaApiKey) => {
-        const outOfScope = [
-          await insertKey(otherUserId, [
-            { orgId: tree.nation.id, roleName: "admin" },
-          ]),
-          await insertKey(otherUserId, [
-            { orgId: tree.directBranch.ao.id, roleName: "admin" },
-            { orgId: tree.unrelatedBranch.ao.id, roleName: "editor" },
-          ]),
-          await insertKey(otherUserId, [
-            { orgId: tree.directBranch.ao.id, roleName: "admin" },
-            { orgId: inactiveOrgId, roleName: "editor" },
-          ]),
-          await insertKey(otherUserId, [
-            { orgId: inactiveOrgId, roleName: "editor" },
-          ]),
-        ];
+    it("rejects revoke, restore, and purge of an out-of-scope key", async () => {
+      const outOfScope = [
+        await insertKey(otherUserId, [
+          { orgId: tree.nation.id, roleName: "admin" },
+        ]),
+        await insertKey(otherUserId, [
+          { orgId: tree.directBranch.ao.id, roleName: "admin" },
+          { orgId: tree.unrelatedBranch.ao.id, roleName: "editor" },
+        ]),
+        await insertKey(otherUserId, [
+          { orgId: tree.directBranch.ao.id, roleName: "admin" },
+          { orgId: inactiveOrgId, roleName: "editor" },
+        ]),
+        await insertKey(otherUserId, [
+          { orgId: inactiveOrgId, roleName: "editor" },
+        ]),
+      ];
 
-        await mockAuthWithSession(regionAdminSession(viaApiKey));
-        const client = createTestClient();
-        const ids = (await client.apiKey.list()).apiKeys.map((k) => k.id);
+      await mockAuthWithSession(regionAdminSession());
+      const client = createTestClient();
+      const ids = (await client.apiKey.list()).apiKeys.map((k) => k.id);
 
-        for (const key of outOfScope) {
-          expect(ids).not.toContain(key.id);
-          for (const revoke of [false, true]) {
-            await expect(
-              client.apiKey.revoke({ id: key.id, revoke }),
-            ).rejects.toMatchObject({ code: "NOT_FOUND" });
-          }
+      for (const key of outOfScope) {
+        expect(ids).not.toContain(key.id);
+        for (const revoke of [false, true]) {
           await expect(
-            client.apiKey.purge({ id: key.id }),
+            client.apiKey.revoke({ id: key.id, revoke }),
           ).rejects.toMatchObject({ code: "NOT_FOUND" });
-
-          const [row] = await db
-            .select({ revokedAt: schema.apiKeys.revokedAt })
-            .from(schema.apiKeys)
-            .where(eq(schema.apiKeys.id, key.id));
-          expect(row).toEqual({ revokedAt: null });
         }
-      },
-    );
+        await expect(client.apiKey.purge({ id: key.id })).rejects.toMatchObject(
+          { code: "NOT_FOUND" },
+        );
+
+        const [row] = await db
+          .select({ revokedAt: schema.apiKeys.revokedAt })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.id, key.id));
+        expect(row).toEqual({ revokedAt: null });
+      }
+    });
 
     it("does not count an editor role toward key-management scope", async () => {
       const editorScoped = await insertKey(otherUserId, [

@@ -15140,7 +15140,7 @@
     },
     "/v1/request": {
       "get": {
-        "description": "Get a paginated list of map change requests with optional filtering and sorting",
+        "description": "Get a paginated list of map change requests with optional filtering and sorting. Limited to regions where the requester has editor or admin role, unless they hold a Nation-level role.",
         "operationId": "request.all",
         "parameters": [
           {
@@ -15213,7 +15213,7 @@
             "in": "query",
             "name": "onlyMine",
             "schema": {
-              "description": "If true, only return requests from regions where the requester has editor or admin role.",
+              "description": "Deprecated and ignored. Results are always limited to regions where the requester has editor or admin role, unless they hold a Nation-level role.",
               "type": "boolean"
             }
           },
@@ -16309,7 +16309,7 @@
     },
     "/v1/request/id/{id}": {
       "get": {
-        "description": "Retrieve detailed information about a specific map change request including the proposed changes and current status",
+        "description": "Retrieve detailed information about a specific map change request including the proposed changes and current status. Returns null for requests outside the regions where the requester has editor or admin role.",
         "operationId": "request.byId",
         "parameters": [
           {
