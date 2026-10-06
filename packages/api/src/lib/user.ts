@@ -43,6 +43,29 @@ interface HomeRegionSummary {
   homeRegionName: string | null;
 }
 
+/** User columns only returned to callers with PII access. */
+const userPiiColumns = {
+  email: schema.users.email,
+  emailVerified: schema.users.emailVerified,
+  phone: schema.users.phone,
+  emergencyContact: schema.users.emergencyContact,
+  emergencyPhone: schema.users.emergencyPhone,
+  emergencyNotes: schema.users.emergencyNotes,
+};
+
+/** Strips PII columns from a full user row unless the caller may see them. */
+export const shapeUserPii = <T extends Partial<UserSelectType>>(
+  user: T,
+  includePii: boolean,
+): T | Omit<T, keyof typeof userPiiColumns> => {
+  if (includePii) return user;
+  const publicUser = { ...user };
+  for (const column of Object.keys(userPiiColumns)) {
+    delete publicUser[column as keyof typeof userPiiColumns];
+  }
+  return publicUser;
+};
+
 // Shared function to build user select fields
 const buildUserSelect = ({
   includePii,
@@ -102,15 +125,7 @@ const buildUserSelect = ({
 
   // Add PII fields if requested
   if (includePii) {
-    select = {
-      ...select,
-      email: schema.users.email,
-      emailVerified: schema.users.emailVerified,
-      phone: schema.users.phone,
-      emergencyContact: schema.users.emergencyContact,
-      emergencyPhone: schema.users.emergencyPhone,
-      emergencyNotes: schema.users.emergencyNotes,
-    };
+    select = { ...select, ...userPiiColumns };
   } else if (includeEmail) {
     // Add only email if requested (without full PII)
     select = {
