@@ -380,6 +380,9 @@ export const locationRouter = {
           message: "Parent ID or ID is required",
         });
       }
+      if (input.id && !existingLocation) {
+        throw new ORPCError("NOT_FOUND", { message: "Location not found" });
+      }
       await requireEditorOnRescope({
         ctx,
         currentOrgId: existingLocation?.orgId,

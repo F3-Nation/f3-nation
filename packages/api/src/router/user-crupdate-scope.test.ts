@@ -16,6 +16,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 
 import type { Session } from "@acme/auth";
 import { eq, schema } from "@acme/db";
+import { ERRORS } from "@acme/shared/app/errors";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -118,18 +119,19 @@ describe("user.crupdate org scoping", () => {
     }
   });
 
-  it("does not write the profile of a user with no home region and no role in the caller's orgs", async () => {
+  it("rejects a profile write to a user with no home region and no role in the caller's orgs", async () => {
     const target = await createUser({ homeRegionId: null });
     await mockAuthWithSession(editorOf(regionA));
 
-    const result = await createTestClient().user.crupdate({
-      id: target.id,
-      f3Name: "Hijacked",
-      status: "inactive",
-      homeRegionId: regionA.id,
-      roles: [],
-    });
-    expect(result.f3Name).toBe("Original");
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        f3Name: "Hijacked",
+        status: "inactive",
+        homeRegionId: regionA.id,
+        roles: [],
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
     const after = await readUser(target.id);
     expect(after?.f3Name).toBe("Original");
@@ -286,13 +288,64 @@ describe("user.crupdate org scoping", () => {
     };
     await mockAuthWithSession(keySession);
 
-    await createTestClient().user.crupdate({
-      id: owner.id,
-      f3Name: "Hijacked",
-      roles: [],
-    });
+    await expect(
+      createTestClient().user.crupdate({
+        id: owner.id,
+        f3Name: "Hijacked",
+        roles: [],
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
     expect((await readUser(owner.id))?.f3Name).toBe("Original");
+  });
+
+  it("allows a role change that resends the unchanged profile it can't edit", async () => {
+    const target = await createUser({ homeRegionId: null, firstName: null });
+    const session = editorOf(regionA);
+    const roles = [
+      { orgId: regionA.id, orgName: regionA.name, roleName: "admin" as const },
+    ];
+    await mockAuthWithSession({ ...session, roles });
+
+    await createTestClient().user.crupdate({
+      id: target.id,
+      f3Name: "Original",
+      firstName: "",
+      homeRegionId: null,
+      status: "active",
+      roles: [{ orgId: regionA.id, roleName: "editor" }],
+    });
+
+    const granted = await db
+      .select()
+      .from(schema.rolesXUsersXOrg)
+      .where(eq(schema.rolesXUsersXOrg.userId, target.id));
+    expect(granted.map((role) => role.orgId)).toEqual([regionA.id]);
+    expect((await readUser(target.id))?.firstName).toBeNull();
+  });
+
+  it("rejects a non-admin removing a role and writes nothing", async () => {
+    const target = await createUser({ homeRegionId: regionA.id });
+    await grantRole(target.id, regionA.id, "editor");
+    await mockAuthWithSession(editorOf(regionA));
+
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        f3Name: "Renamed",
+        roles: [],
+      }),
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      message: ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
+    });
+
+    const remaining = await db
+      .select()
+      .from(schema.rolesXUsersXOrg)
+      .where(eq(schema.rolesXUsersXOrg.userId, target.id));
+    expect(remaining).toHaveLength(1);
+    expect((await readUser(target.id))?.f3Name).toBe("Original");
   });
 
   it("leaves the profile untouched when a role change is rejected", async () => {

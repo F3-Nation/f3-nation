@@ -94,8 +94,8 @@ const eventAllInputSchema = eventFilterSchema
   .optional();
 
 /**
- * A location or region-specific event type must belong to the event's AO or
- * its region. Only references the request adds (or all of them, when the
+ * A location or region-specific event type must belong to the event's AO,
+ * its region, or another AO in that region. Only references the request adds (or all of them, when the
  * event is created or moved) are checked, so pre-existing links don't block
  * unrelated edits.
  */
@@ -132,13 +132,26 @@ async function assertEventRefsInScope({
   if (!checkLocation && typeIdsToCheck.length === 0) return;
 
   const [ao] = await ctx.db
-    .select({ parentId: schema.orgs.parentId })
+    .select({ parentId: schema.orgs.parentId, orgType: schema.orgs.orgType })
     .from(schema.orgs)
     .where(eq(schema.orgs.id, aoId));
   if (!ao) {
     throw new ORPCError("NOT_FOUND", { message: "AO not found" });
   }
   const allowedOrgIds = ao.parentId == null ? [aoId] : [aoId, ao.parentId];
+  // AOs in one region share that region's locations and event types.
+  if (ao.orgType === "ao" && ao.parentId != null) {
+    const siblings = await ctx.db
+      .select({ id: schema.orgs.id })
+      .from(schema.orgs)
+      .where(
+        and(
+          eq(schema.orgs.parentId, ao.parentId),
+          eq(schema.orgs.orgType, "ao"),
+        ),
+      );
+    allowedOrgIds.push(...siblings.map(({ id }) => id));
+  }
 
   if (checkLocation) {
     const [location] = await ctx.db

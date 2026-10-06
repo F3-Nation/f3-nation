@@ -63,6 +63,30 @@ const getProfileScopeOrgIds = async (
   return nations.map(({ id }) => id);
 };
 
+// id is the lookup key; PII is already dropped without admin access.
+const PROFILE_COMPARE_SKIP = new Set([
+  "id",
+  "email",
+  "phone",
+  "emergencyContact",
+  "emergencyPhone",
+  "emergencyNotes",
+]);
+
+const sortedJson = (value: object) =>
+  JSON.stringify(value, Object.keys(value).sort());
+
+// Forms send "" for an empty text field that is stored as null.
+const isSameProfileValue = (submitted: unknown, stored: unknown) => {
+  const a = submitted === "" ? null : submitted;
+  const b = stored === "" ? null : stored;
+  if (a == null || b == null) return a == null && b == null;
+  if (typeof a === "object" && typeof b === "object") {
+    return sortedJson(a) === sortedJson(b);
+  }
+  return a === b;
+};
+
 export const userRouter = {
   all: editorProcedure
     .input(userListInputSchema)
@@ -391,7 +415,7 @@ export const userRouter = {
 
       const [existingUser] = input.id
         ? await ctx.db
-            .select({ homeRegionId: schema.users.homeRegionId })
+            .select()
             .from(schema.users)
             .where(eq(schema.users.id, input.id))
         : [];
@@ -423,6 +447,24 @@ export const userRouter = {
           ),
           "editor",
         ));
+
+      // Clients resend the whole form, so only reject fields that change.
+      if (existingUser && !canEditProfile) {
+        const changesProfile = Object.entries(rest).some(
+          ([key, value]) =>
+            value !== undefined &&
+            !PROFILE_COMPARE_SKIP.has(key) &&
+            !isSameProfileValue(
+              value,
+              existingUser[key as keyof typeof existingUser],
+            ),
+        );
+        if (changesProfile) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to edit this user's profile",
+          });
+        }
+      }
 
       const newHomeRegionId = rest.homeRegionId;
       if (
@@ -545,101 +587,110 @@ export const userRouter = {
 
       logDebug("api.user.update_set", { updateFields: Object.keys(updateSet) });
 
-      const user = await ctx.db.transaction(async (tx) => {
-        const transactionDb = tx as unknown as AppDb;
-        let user: typeof schema.users.$inferSelect;
+      let user: typeof schema.users.$inferSelect;
+      try {
+        user = await ctx.db.transaction(async (tx) => {
+          const transactionDb = tx as unknown as AppDb;
+          let user: typeof schema.users.$inferSelect;
 
-        if (input.id && !canEditProfile) {
-          // Cannot edit profile data but can still manage roles.
-          // Just fetch the existing user without modifying profile fields.
-          const [existing] = await transactionDb
-            .select()
-            .from(schema.users)
-            .where(eq(schema.users.id, input.id));
-          if (!existing) {
-            throw new ORPCError("NOT_FOUND", {
-              message: "User not found",
-            });
-          }
-          user = existing;
-        } else {
-          try {
-            const result = await transactionDb
-              .insert(schema.users)
-              .values({
-                ...rest,
-                email: normalizedEmail ?? "",
-              })
-              .onConflictDoUpdate({
-                target: [schema.users.id],
-                set: updateSet,
-              })
-              .returning();
-
-            const insertedUser = result[0];
-            if (!insertedUser) {
-              throw new ORPCError("INTERNAL_SERVER_ERROR", {
-                message: "Failed to save user",
+          if (input.id && !canEditProfile) {
+            // Cannot edit profile data but can still manage roles.
+            // Just fetch the existing user without modifying profile fields.
+            const [existing] = await transactionDb
+              .select()
+              .from(schema.users)
+              .where(eq(schema.users.id, input.id));
+            if (!existing) {
+              throw new ORPCError("NOT_FOUND", {
+                message: "User not found",
               });
             }
-            user = insertedUser;
-          } catch (error) {
-            if (isDuplicateEmailError(error)) {
-              throw new ORPCError("BAD_REQUEST", {
-                message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
-              });
-            }
-            // The empty-result ORPCError thrown just above is already typed and
-            // client-safe, so it passes through untouched.
-            if (error instanceof ORPCError) throw error;
-            // Anything else is an unexpected DB/driver fault. Rethrowing it raw
-            // lets oRPC mask it as an opaque 500 and lose the cause, so log the
-            // original and surface a generic message that leaks no internals.
-            // No email in the log context — it is PII.
-            logError("api.user.insert_failed", { userId: input.id }, error);
-            throw new ORPCError("INTERNAL_SERVER_ERROR", {
-              message: "Unable to save user",
-            });
-          }
-        }
+            user = existing;
+          } else {
+            try {
+              const result = await transactionDb
+                .insert(schema.users)
+                .values({
+                  ...rest,
+                  email: normalizedEmail ?? "",
+                })
+                .onConflictDoUpdate({
+                  target: [schema.users.id],
+                  set: updateSet,
+                })
+                .returning();
 
-        logDebug("api.user.resolved_user", { userId: user.id });
-
-        for (const role of rolesToDelete) {
-          await transactionDb
-            .delete(schema.rolesXUsersXOrg)
-            .where(
-              and(
-                eq(schema.rolesXUsersXOrg.userId, user.id),
-                eq(schema.rolesXUsersXOrg.orgId, role.orgId),
-                eq(schema.rolesXUsersXOrg.roleId, role.roleId),
-              ),
-            );
-        }
-
-        if (newRolesToInsert.length > 0) {
-          await transactionDb.insert(schema.rolesXUsersXOrg).values(
-            newRolesToInsert.map((role) => {
-              const roleId = roleNameToId[role.roleName];
-              if (roleId === undefined) {
-                // roleName is schema-constrained to "user"/"editor"/"admin", so
-                // this only fires if the roles table is missing its seeded
-                // rows — a server data-integrity problem, not a client error.
+              const insertedUser = result[0];
+              if (!insertedUser) {
                 throw new ORPCError("INTERNAL_SERVER_ERROR", {
-                  message: `Role ${role.roleName} not found`,
+                  message: "Failed to save user",
                 });
               }
-              return {
-                userId: user.id,
-                roleId,
-                orgId: role.orgId,
-              };
-            }),
-          );
-        }
+              user = insertedUser;
+            } catch (error) {
+              if (isDuplicateEmailError(error)) {
+                throw new ORPCError("BAD_REQUEST", {
+                  message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
+                });
+              }
+              // The empty-result ORPCError thrown just above is already typed and
+              // client-safe, so it passes through untouched.
+              if (error instanceof ORPCError) throw error;
+              // Anything else is an unexpected DB/driver fault. Rethrowing it raw
+              // lets oRPC mask it as an opaque 500 and lose the cause, so log the
+              // original and surface a generic message that leaks no internals.
+              // No email in the log context — it is PII.
+              logError("api.user.insert_failed", { userId: input.id }, error);
+              throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                message: "Unable to save user",
+              });
+            }
+          }
 
-        return user;
-      });
+          logDebug("api.user.resolved_user", { userId: user.id });
+
+          for (const role of rolesToDelete) {
+            await transactionDb
+              .delete(schema.rolesXUsersXOrg)
+              .where(
+                and(
+                  eq(schema.rolesXUsersXOrg.userId, user.id),
+                  eq(schema.rolesXUsersXOrg.orgId, role.orgId),
+                  eq(schema.rolesXUsersXOrg.roleId, role.roleId),
+                ),
+              );
+          }
+
+          if (newRolesToInsert.length > 0) {
+            await transactionDb.insert(schema.rolesXUsersXOrg).values(
+              newRolesToInsert.map((role) => {
+                const roleId = roleNameToId[role.roleName];
+                if (roleId === undefined) {
+                  // roleName is schema-constrained to "user"/"editor"/"admin", so
+                  // this only fires if the roles table is missing its seeded
+                  // rows — a server data-integrity problem, not a client error.
+                  throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                    message: `Role ${role.roleName} not found`,
+                  });
+                }
+                return {
+                  userId: user.id,
+                  roleId,
+                  orgId: role.orgId,
+                };
+              }),
+            );
+          }
+
+          return user;
+        });
+      } catch (error) {
+        if (error instanceof ORPCError) throw error;
+        logError("api.user.crupdate_tx_failed", { userId: input.id }, error);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unable to save user",
+        });
+      }
 
       const updatedRoles = await ctx.db
         .select({

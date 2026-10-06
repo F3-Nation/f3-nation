@@ -1,5 +1,7 @@
 import { ORPCError } from "@orpc/server";
 
+import { eq, schema } from "@acme/db";
+
 import { checkHasRoleOnOrg } from "./check-has-role-on-org";
 import type { Context } from "./shared";
 
@@ -28,6 +30,14 @@ export const requireEditorOnRescope = async ({
         roleName: "editor",
       })
     ).success;
+
+  const [target] = await ctx.db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, targetOrgId));
+  if (!target) {
+    throw new ORPCError("NOT_FOUND", { message: "Organization not found" });
+  }
 
   if (currentOrgId == null) {
     if (!(await isEditorOn(targetOrgId))) {

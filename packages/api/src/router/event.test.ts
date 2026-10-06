@@ -1552,7 +1552,53 @@ describe("Event Router", () => {
           eventTypeIds: [eventType.id],
           email: null,
         };
-        return { regionA, regionB, aoA, aoB, locationB, eventType, input };
+        return {
+          regionA,
+          regionB,
+          aoA,
+          aoB,
+          locationA,
+          locationB,
+          eventType,
+          input,
+        };
+      };
+
+      const editorOfBoth = (
+        a: { id: number; name: string },
+        b: { id: number; name: string },
+      ) => {
+        const session = createEditorSession({ orgId: a.id, orgName: a.name });
+        return {
+          ...session,
+          roles: [
+            ...session.roles!,
+            { orgId: b.id, orgName: b.name, roleName: "editor" as const },
+          ],
+        };
+      };
+
+      const insertTypeSpecificTo = async (orgId: number) => {
+        const [type] = await db
+          .insert(schema.eventTypes)
+          .values({
+            name: `Scoped Type ${uniqueId()}`,
+            eventCategory: "first_f",
+            specificOrgId: orgId,
+            isActive: true,
+          })
+          .returning();
+        if (!type) throw new Error("Failed to create event type");
+        createdEventTypeIds.push(type.id);
+        return type;
+      };
+
+      const readEvent = async (id: number) => {
+        const [stored] = await db
+          .select()
+          .from(schema.events)
+          .where(eq(schema.events.id, id));
+        return stored;
       };
 
       const findByName = async (name: string) =>
@@ -1616,6 +1662,7 @@ describe("Event Router", () => {
             regionId: regionA.id,
           }),
         ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        expect((await readEvent(event.id))?.orgId).toBe(aoB.id);
       });
 
       it("rejects moving an event into another region's AO", async () => {
@@ -1674,6 +1721,137 @@ describe("Event Router", () => {
           }),
         ).rejects.toMatchObject({ code: "BAD_REQUEST" });
         expect(await findByName(input.name)).toEqual([]);
+      });
+      it("rejects adding another region's event type on update", async () => {
+        const { regionB, eventType, input } = await setup();
+        const otherType = await insertTypeSpecificTo(regionB.id);
+        const client = createTestClient();
+        const { event } = await client.event.crupdate(input);
+        if (!event) throw new Error("Failed to create event");
+        createdEventIds.push(event.id);
+
+        await expect(
+          client.event.crupdate({
+            ...input,
+            id: event.id,
+            eventTypeIds: [eventType.id, otherType.id],
+          }),
+        ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+        const linked = await db
+          .select({ id: schema.eventsXEventTypes.eventTypeId })
+          .from(schema.eventsXEventTypes)
+          .where(eq(schema.eventsXEventTypes.eventId, event.id));
+        expect(linked.map(({ id }) => id)).toEqual([eventType.id]);
+      });
+
+      it("rejects switching to another region's location on update", async () => {
+        const { locationA, locationB, input } = await setup();
+        const client = createTestClient();
+        const { event } = await client.event.crupdate(input);
+        if (!event) throw new Error("Failed to create event");
+        createdEventIds.push(event.id);
+
+        await expect(
+          client.event.crupdate({
+            ...input,
+            id: event.id,
+            locationId: locationB.id,
+          }),
+        ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+        expect((await readEvent(event.id))?.locationId).toBe(locationA.id);
+      });
+
+      it("re-checks existing links when moving an event", async () => {
+        const { regionA, regionB, aoA, aoB, input } = await setup();
+        await mockAuthWithSession(editorOfBoth(regionA, regionB));
+        const client = createTestClient();
+        const { event } = await client.event.crupdate(input);
+        if (!event) throw new Error("Failed to create event");
+        createdEventIds.push(event.id);
+
+        await expect(
+          client.event.crupdate({
+            ...input,
+            id: event.id,
+            aoId: aoB.id,
+            regionId: regionB.id,
+          }),
+        ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+        expect((await readEvent(event.id))?.orgId).toBe(aoA.id);
+      });
+
+      it("moves an event when the caller edits both regions", async () => {
+        const { regionA, regionB, aoB, locationB, input } = await setup();
+        await mockAuthWithSession(editorOfBoth(regionA, regionB));
+        const client = createTestClient();
+        const { event } = await client.event.crupdate(input);
+        if (!event) throw new Error("Failed to create event");
+        createdEventIds.push(event.id);
+
+        await client.event.crupdate({
+          ...input,
+          id: event.id,
+          aoId: aoB.id,
+          regionId: regionB.id,
+          locationId: locationB.id,
+        });
+        expect((await readEvent(event.id))?.orgId).toBe(aoB.id);
+      });
+
+      it("lets legacy out-of-region links through on unrelated edits", async () => {
+        const { regionB, eventType, input } = await setup();
+        const legacyType = await insertTypeSpecificTo(regionB.id);
+        const client = createTestClient();
+        const { event } = await client.event.crupdate(input);
+        if (!event) throw new Error("Failed to create event");
+        createdEventIds.push(event.id);
+        await db
+          .insert(schema.eventsXEventTypes)
+          .values({ eventId: event.id, eventTypeId: legacyType.id });
+
+        await client.event.crupdate({
+          ...input,
+          id: event.id,
+          name: `${input.name} renamed`,
+          eventTypeIds: [eventType.id, legacyType.id],
+        });
+        expect((await readEvent(event.id))?.name).toBe(`${input.name} renamed`);
+      });
+
+      it("accepts a location owned by another AO in the same region", async () => {
+        const { regionA, aoA, input } = await setup();
+        await mockAuthWithSession(await createAdminSession());
+        const siblingAo = await createTestAO(regionA.id);
+        if (!siblingAo) throw new Error("Failed to create AO");
+        const siblingLocation = await createTestLocation(siblingAo.id);
+        const aoLocation = await createTestLocation(aoA.id);
+        if (!siblingLocation || !aoLocation) {
+          throw new Error("Failed to create locations");
+        }
+        await mockAuthWithSession(
+          createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+        );
+        const client = createTestClient();
+
+        const { event } = await client.event.crupdate({
+          ...input,
+          locationId: siblingLocation.id,
+        });
+        if (!event) throw new Error("Failed to create event");
+        createdEventIds.push(event.id);
+        expect((await readEvent(event.id))?.locationId).toBe(
+          siblingLocation.id,
+        );
+
+        const { event: moved } = await client.event.crupdate({
+          ...input,
+          id: event.id,
+          aoId: siblingAo.id,
+          locationId: aoLocation.id,
+        });
+        expect(moved?.id).toBe(event.id);
+        expect((await readEvent(event.id))?.orgId).toBe(siblingAo.id);
       });
     });
 

@@ -122,26 +122,28 @@ export default function UserModal({
     return { orgs: adminOrgs };
   }, [accessibleOrgsData]);
 
-  const isAdmin = useMemo(() => {
-    return session?.roles?.some((r) => r.roleName === "admin") ?? false;
-  }, [session?.roles]);
+  // Mirrors the server's profile scope: home region, else the user's role
+  // orgs, else Nation.
+  const canEditProfileScope = useMemo(() => {
+    const editableOrgs = orgs?.orgs ?? [];
+    const editableOrgIds = new Set(editableOrgs.map((org) => org.id));
+    if (user?.homeRegionId != null) {
+      return editableOrgIds.has(user.homeRegionId);
+    }
+    const roleOrgIds = (user?.roles ?? []).map((role) => role.orgId);
+    if (roleOrgIds.length > 0) {
+      return roleOrgIds.some((orgId) => editableOrgIds.has(orgId));
+    }
+    return editableOrgs.some((org) => org.orgType === "nation");
+  }, [orgs?.orgs, user?.homeRegionId, user?.roles]);
 
   const canEditUser = useMemo(() => {
     if (!user?.id) return true;
     if (session?.id === user.id) return true;
-    if (user.homeRegionId == null) return isAdmin;
+    return canEditProfileScope;
+  }, [user?.id, session?.id, canEditProfileScope]);
 
-    const accessibleOrgIds = new Set((orgs?.orgs ?? []).map((org) => org.id));
-    return accessibleOrgIds.has(user.homeRegionId);
-  }, [user?.id, user?.homeRegionId, orgs?.orgs, session?.id, isAdmin]);
-
-  const isHomeRegionDisabled = useMemo(() => {
-    if (session?.id === user?.id) return false;
-    if (user?.homeRegionId == null) return !isAdmin;
-
-    const accessibleOrgIds = new Set((orgs?.orgs ?? []).map((org) => org.id));
-    return !accessibleOrgIds.has(user.homeRegionId);
-  }, [session?.id, user?.id, user?.homeRegionId, orgs?.orgs, isAdmin]);
+  const isHomeRegionDisabled = !canEditUser;
 
   const form = useForm({
     schema: CrupdateUserSchema.extend({

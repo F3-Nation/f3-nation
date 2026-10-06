@@ -543,7 +543,7 @@ describe("Event Type Router", () => {
       }
     });
 
-    const setup = async (specificOrg: "regionA" | "nation") => {
+    const setup = async (specificOrg: "regionA" | "regionB" | "nation") => {
       const f3Nation = await getOrCreateF3NationOrg();
       const regions = await db
         .insert(schema.orgs)
@@ -565,7 +565,12 @@ describe("Event Type Router", () => {
         .values({
           name: `Rescope Type ${uniqueId()}`,
           eventCategory: "first_f",
-          specificOrgId: specificOrg === "regionA" ? regionA.id : null,
+          specificOrgId:
+            specificOrg === "nation"
+              ? null
+              : specificOrg === "regionA"
+                ? regionA.id
+                : regionB.id,
           isActive: true,
         })
         .returning();
@@ -613,6 +618,14 @@ describe("Event Type Router", () => {
         code: "UNAUTHORIZED",
       });
       expect(await storedOrgId()).toBe(regionA.id);
+    });
+
+    it("rejects pulling another region's event type into the caller's region", async () => {
+      const { regionA, regionB, update, storedOrgId } = await setup("regionB");
+      await expect(update(regionA.id)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+      expect(await storedOrgId()).toBe(regionB.id);
     });
 
     it("rejects pulling a nation-wide event type into a region", async () => {

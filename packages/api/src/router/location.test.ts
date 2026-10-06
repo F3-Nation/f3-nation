@@ -424,6 +424,92 @@ describe("Location Router", () => {
       expect(stored?.orgId).toBe(regionA.id);
     });
 
+    it("should reject pulling a location from an org the caller can't edit", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) throw new Error("Failed to create regions");
+
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Pulled Location ${uniqueId()}`,
+          orgId: regionB.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create location");
+      createdLocationIds.push(location.id);
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+
+      await expect(
+        createTestClient().location.crupdate({
+          id: location.id,
+          name: location.name,
+          orgId: regionA.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const [stored] = await db
+        .select({ orgId: schema.locations.orgId })
+        .from(schema.locations)
+        .where(eq(schema.locations.id, location.id));
+      expect(stored?.orgId).toBe(regionB.id);
+    });
+
+    it("should return NOT_FOUND for an org that doesn't exist", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      if (!regionA) throw new Error("Failed to create region");
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+
+      await expect(
+        createTestClient().location.crupdate({
+          name: `Orphan Location ${uniqueId()}`,
+          orgId: 999_999_999,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("should return NOT_FOUND for a location id that doesn't exist", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      if (!regionA) throw new Error("Failed to create region");
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+
+      await expect(
+        createTestClient().location.crupdate({
+          id: 2_000_000_000,
+          name: `Ghost Location ${uniqueId()}`,
+          orgId: regionA.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      const stored = await db
+        .select({ id: schema.locations.id })
+        .from(schema.locations)
+        .where(eq(schema.locations.id, 2_000_000_000));
+      expect(stored).toEqual([]);
+    });
+
     it("should reject creating a location in an org the caller can't edit", async () => {
       await mockAuthWithSession(await createAdminSession());
       const regionA = await createTestRegion();
