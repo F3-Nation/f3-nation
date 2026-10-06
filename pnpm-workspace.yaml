@@ -182,6 +182,8 @@ overrides:
   "nanoid@<3.3.17": "^6.0.1" # GHSA-2v37-7h3g-55p8
   "nanoid@>=4.0.0 <5.1.16": "^6.0.1" # GHSA-28wg-ghj8-5hjv
   "browserslist@<=4.28.6": "4.29.0" # GHSA-c83g-rgw3-j3cx (unbounded memory growth) / GHSA-73wf-gq98-2v4g (prototype write crash via browserslist-stats.json)
+  "seroval@<1.6.3": "1.6.8" # GHSA-p6vx-979v-rg4c (fromJSON thenable callable bypass) / GHSA-jp82-f5mq-hwhp (TypedArray memory exhaustion); via solid-js in @tanstack/query-devtools
+  "source-map-js@<1.2.2": "1.2.2" # GHSA-68fv-2mgg-jv7q (indexed source-map offset event-loop DoS); via next>postcss
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"
