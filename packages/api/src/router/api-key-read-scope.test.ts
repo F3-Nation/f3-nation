@@ -5,7 +5,15 @@
  * These tests require TEST_DATABASE_URL to point at the seeded test database.
  */
 
-import { vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 const mockLimit = vi.hoisted(() => vi.fn());
 
@@ -17,7 +25,6 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 
 import type { Session } from "@acme/auth";
 import { count, eq, schema } from "@acme/db";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createTestClient,
@@ -37,8 +44,10 @@ describe("API-key and request read scoping", () => {
   let nation: Org;
   let regionA: Org;
   let regionB: Org;
+  let aoA: Org;
   let ownerId: number;
   let regionEditorId: number;
+  let aoEditorId: number;
   let positionId: number;
   const requestIds: string[] = [];
 
@@ -86,15 +95,32 @@ describe("API-key and request read scoping", () => {
     expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
   });
 
+  const aoEditorSession = (): Session => {
+    const roles: Session["roles"] = [
+      { orgId: aoA.id, orgName: aoA.name, roleName: "editor" },
+    ];
+    return {
+      id: aoEditorId,
+      email: "ao-editor@example.com",
+      user: { id: String(aoEditorId), email: "ao-editor@example.com", roles },
+      roles,
+      expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+    };
+  };
+
   const editorKeyOn = (org: Org) =>
     keySession([{ orgId: org.id, orgName: org.name, roleName: "editor" }]);
 
-  const insertRequest = async (regionId: number) => {
+  const insertRequest = async (
+    regionId: number,
+    extra: Partial<typeof schema.updateRequests.$inferInsert> = {},
+  ) => {
     const [request] = await db
       .insert(schema.updateRequests)
       .values({
         regionId,
         requestType: "create_event",
+        ...extra,
         eventName: `Scope Request ${uniqueId()}`,
         submittedBy: "submitter@example.com",
         status: "pending",
@@ -123,6 +149,18 @@ describe("API-key and request read scoping", () => {
       .returning({ id: schema.orgs.id, name: schema.orgs.name });
     if (!regions[0] || !regions[1]) throw new Error("Failed to create regions");
     [regionA, regionB] = [regions[0], regions[1]];
+
+    const [ao] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `Read Scope AO ${uniqueId()}`,
+        orgType: "ao",
+        parentId: regionA.id,
+        isActive: true,
+      })
+      .returning({ id: schema.orgs.id, name: schema.orgs.name });
+    if (!ao) throw new Error("Failed to create AO");
+    aoA = ao;
 
     const [owner] = await db
       .insert(schema.users)
@@ -153,6 +191,18 @@ describe("API-key and request read scoping", () => {
     await db.insert(schema.rolesXUsersXOrg).values({
       userId: regionEditorId,
       orgId: regionA.id,
+      roleId: editorRole.id,
+    });
+
+    const [aoEditor] = await db
+      .insert(schema.users)
+      .values({ email: `${uniqueId()}@example.com`, f3Name: "AO Editor" })
+      .returning({ id: schema.users.id });
+    if (!aoEditor) throw new Error("Failed to seed AO editor");
+    aoEditorId = aoEditor.id;
+    await db.insert(schema.rolesXUsersXOrg).values({
+      userId: aoEditorId,
+      orgId: aoA.id,
       roleId: editorRole.id,
     });
 
@@ -194,7 +244,8 @@ describe("API-key and request read scoping", () => {
       .catch(() => undefined);
     await cleanup.user(ownerId).catch(() => undefined);
     await cleanup.user(regionEditorId).catch(() => undefined);
-    for (const org of [regionA, regionB]) {
+    await cleanup.user(aoEditorId).catch(() => undefined);
+    for (const org of [aoA, regionA, regionB]) {
       await cleanup.org(org.id).catch(() => undefined);
     }
   });
@@ -281,6 +332,14 @@ describe("API-key and request read scoping", () => {
       expect(ids).toContain(inB);
     });
 
+    it("request.byId returns any region's request to a nation admin", async () => {
+      const inB = await insertRequest(regionB.id);
+
+      await mockAuthWithSession(ownerSession());
+      const { request } = await createTestClient().request.byId({ id: inB });
+      expect(request?.id).toBe(inB);
+    });
+
     it("request.byId reads other regions' requests as missing", async () => {
       const inA = await insertRequest(regionA.id);
       const inB = await insertRequest(regionB.id);
@@ -319,6 +378,49 @@ describe("API-key and request read scoping", () => {
       const client = createTestClient();
       expect((await client.request.byId({ id: inA })).request?.id).toBe(inA);
       expect((await client.request.byId({ id: inB })).request).toBeNull();
+    });
+
+    it("an AO-only editor sees requests for their AO, not the whole region", async () => {
+      const forAo = await insertRequest(regionA.id, { aoId: aoA.id });
+      const regionWide = await insertRequest(regionA.id);
+
+      await mockAuthWithSession(aoEditorSession());
+      const client = createTestClient();
+      const { requests } = await client.request.all({
+        searchTerm: "Scope Request",
+        pageSize: 100,
+      });
+      const ids = requests.map((r) => r.id);
+      expect(ids).toContain(forAo);
+      expect(ids).not.toContain(regionWide);
+      expect((await client.request.byId({ id: forAo })).request?.id).toBe(
+        forAo,
+      );
+      expect(
+        (await client.request.byId({ id: regionWide })).request,
+      ).toBeNull();
+    });
+
+    it("a source-region editor keeps a move filed under its destination", async () => {
+      const moved = await insertRequest(regionB.id, {
+        requestType: "move_ao_to_different_region",
+        meta: { originalRegionId: regionA.id, newRegionId: regionB.id },
+      });
+
+      await mockAuthWithSession(
+        regionEditorSession([
+          { orgId: regionA.id, orgName: regionA.name, roleName: "editor" },
+        ]),
+      );
+      const client = createTestClient();
+      const { requests } = await client.request.all({
+        searchTerm: "Scope Request",
+        pageSize: 100,
+      });
+      expect(requests.map((r) => r.id)).toContain(moved);
+      expect((await client.request.byId({ id: moved })).request?.id).toBe(
+        moved,
+      );
     });
   });
 });
