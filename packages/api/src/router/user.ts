@@ -71,8 +71,15 @@ const PII_FIELDS = new Set([
   "emergencyNotes",
 ]);
 
+// Sorts keys at every depth so nested meta compares by content.
 const sortedJson = (value: object) =>
-  JSON.stringify(value, Object.keys(value).sort());
+  JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : item,
+  );
 
 // Forms send "" for an empty text field that is stored as null.
 const isSameProfileValue = (submitted: unknown, stored: unknown) => {

@@ -375,6 +375,44 @@ describe("user.crupdate org scoping", () => {
     });
   });
 
+  it("rejects a nested meta change to a profile the caller can't edit", async () => {
+    const target = await createUser({
+      homeRegionId: regionB.id,
+      meta: { settings: { sms: false } },
+    });
+    await mockAuthWithSession(editorOf(regionA));
+
+    await expect(
+      createTestClient().user.crupdate({
+        id: target.id,
+        meta: { settings: { sms: true } },
+        roles: [],
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+    expect((await readUser(target.id))?.meta).toEqual({
+      settings: { sms: false },
+    });
+  });
+
+  it("accepts nested meta resent unchanged in a different key order", async () => {
+    const target = await createUser({
+      homeRegionId: regionB.id,
+      meta: { settings: { email: true, sms: false } },
+    });
+    await mockAuthWithSession(editorOf(regionA));
+
+    await createTestClient().user.crupdate({
+      id: target.id,
+      meta: { settings: { sms: false, email: true } },
+      roles: [],
+    });
+
+    expect((await readUser(target.id))?.meta).toEqual({
+      settings: { email: true, sms: false },
+    });
+  });
+
   it("rejects a non-admin removing a role and writes nothing", async () => {
     const target = await createUser({ homeRegionId: regionA.id });
     await grantRole(target.id, regionA.id, "editor");
