@@ -68,8 +68,8 @@ inserts no Territory records and reparents no existing organizations.
   organization or position types.
 - As an authorized admin-app user, I can reach the basic Territories page
   from the sidebar through the shared organization route.
-- As a release operator, I have verified forward and reverse migration
-  procedures before any real Territory records are introduced.
+- As a release operator, I have verified the forward migration on a populated
+  database before any real Territory records are introduced.
 
 ## 4. Acceptance criteria
 
@@ -83,12 +83,9 @@ inserts no Territory records and reparents no existing organizations.
   a production-shaped dump, with preservation evidence captured before and
   after. A fresh seed alone does not satisfy this criterion. Record the
   dump's provenance and limitations without recording sensitive row data.
-- **AC-4** — On the migrated isolated database with no Territory values in
-  either dependent column, exercise a transactional rollback to the original
-  five-member enum and verify data, index, and column properties again. Also
-  verify rollback refuses safely if either column contains Territory, without
-  deleting or coercing those rows. Document migration-journal reconciliation
-  and application-version coordination for an operator-led rollback.
+- **AC-4** — Retired. This required a rehearsed rollback of the enum migration.
+  Territory is live in Production, so the rollback tooling was removed and this
+  criterion no longer applies.
 - **AC-5** — All exhaustive shared/admin configuration records include the
   new type; workspace typechecking passes. Python persistence tests establish
   member-name storage despite changed numeric ordinals.
@@ -102,7 +99,7 @@ inserts no Territory records and reparents no existing organizations.
   basic page/editor behavior. Homepage enum-driven behavior is checked for
   exhaustive configuration gaps.
 - **AC-8** — Verification results distinguish automated tests, browser checks,
-  dump/rollback rehearsal, and any unavailable checks. Required local lint,
+  dump rehearsal, and any unavailable checks. Required local lint,
   formatting, typecheck, and CI gates pass before declaring the change ready.
 
 ## 5. Roles & authorization
@@ -110,12 +107,12 @@ inserts no Territory records and reparents no existing organizations.
 Preserve current endpoint tiers and resource checks; this adds no permission
 rule. Add-button visibility is configuration, not authorization.
 
-| Action                                     | Allowed                                                              | Explicitly denied                                     |
-| ------------------------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------- |
-| Read organizations                         | Existing `protectedProcedure` callers under current list scoping     | Unauthenticated callers                               |
-| Create/edit via shared editor              | Existing `editorProcedure` and `org.crupdate` resource/parent checks | Callers failing the current role or resource checks   |
-| Deactivate                                 | Existing `adminProcedure` and target-org role check                  | Callers failing the current admin or target-org check |
-| Execute a production migration or rollback | Human-approved release operation                                     | Automatic execution from this development task        |
+| Action                         | Allowed                                                              | Explicitly denied                                     |
+| ------------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------- |
+| Read organizations             | Existing `protectedProcedure` callers under current list scoping     | Unauthenticated callers                               |
+| Create/edit via shared editor  | Existing `editorProcedure` and `org.crupdate` resource/parent checks | Callers failing the current role or resource checks   |
+| Deactivate                     | Existing `adminProcedure` and target-org role check                  | Callers failing the current admin or target-org check |
+| Execute a production migration | Human-approved release operation                                     | Automatic execution from this development task        |
 
 ## 6. Out of scope / non-goals
 
@@ -130,9 +127,8 @@ rule. Add-button visibility is configuration, not authorization.
 
 ## 7. Critical-path test cases
 
-- Forward/reverse migration on a restored, populated isolated database;
-  compare row data internally and report only aggregate preservation results.
-- Rollback refusal for Territory in `orgs` and separately in `positions`.
+- Forward migration on a restored, populated isolated database; compare row
+  data internally and report only aggregate preservation results.
 - TypeScript/Python/PostgreSQL enum order and Python storage-name assertions.
 - Territory sidebar navigation, page loading, Add gating, and editor parent
   configuration; existing route and enum-consumer regression suites.
@@ -149,5 +145,5 @@ implementation criteria are approved.
 
 No new application events are needed. Retain migration/test evidence with
 schema versions, enum order, index validity, and aggregate preservation results.
-Do not include secrets or production row contents. Migration lock behavior and
-rollback readiness are release-review items; report timings only when measured.
+Do not include secrets or production row contents. Migration lock behavior is a
+release-review item; report timings only when measured.
