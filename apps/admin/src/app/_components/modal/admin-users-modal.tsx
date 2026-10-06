@@ -52,6 +52,7 @@ import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
+import { canEditUserProfile } from "./user-editor-config";
 
 function isAdminSessionRoleName(
   roleName: string | null,
@@ -122,26 +123,15 @@ export default function UserModal({
     return { orgs: adminOrgs };
   }, [accessibleOrgsData]);
 
-  // Mirrors the server's profile scope: home region, else the user's role
-  // orgs, else Nation.
-  const canEditProfileScope = useMemo(() => {
-    const editableOrgs = orgs?.orgs ?? [];
-    const editableOrgIds = new Set(editableOrgs.map((org) => org.id));
-    if (user?.homeRegionId != null) {
-      return editableOrgIds.has(user.homeRegionId);
-    }
-    const roleOrgIds = (user?.roles ?? []).map((role) => role.orgId);
-    if (roleOrgIds.length > 0) {
-      return roleOrgIds.some((orgId) => editableOrgIds.has(orgId));
-    }
-    return editableOrgs.some((org) => org.orgType === "nation");
-  }, [orgs?.orgs, user?.homeRegionId, user?.roles]);
-
-  const canEditUser = useMemo(() => {
-    if (!user?.id) return true;
-    if (session?.id === user.id) return true;
-    return canEditProfileScope;
-  }, [user?.id, session?.id, canEditProfileScope]);
+  const canEditUser = useMemo(
+    () =>
+      canEditUserProfile({
+        user,
+        sessionUserId: session?.id,
+        editableOrgs: orgs?.orgs ?? [],
+      }),
+    [user, session?.id, orgs?.orgs],
+  );
 
   const isHomeRegionDisabled = !canEditUser;
 
