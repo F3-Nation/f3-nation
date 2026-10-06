@@ -7,7 +7,15 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import { ORPCError } from "@orpc/client";
 
 import AdminOrgEditModal from "~/app/_components/modal/admin-org-edit-modal";
@@ -974,6 +982,20 @@ describe("Territory organization integration", () => {
     const actualStore = await vi.importActual<typeof ModalStore>(
       "~/utils/store/modal",
     );
+    // Keep modal-close timeouts owned by this test while async queries settle.
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout"],
+      shouldAdvanceTime: true,
+    });
+    onTestFinished(async () => {
+      try {
+        vi.setTimerTickMode("manual");
+        actualStore.closeModal(undefined, "all");
+        await vi.runOnlyPendingTimersAsync();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
     actualStore.closeModal(undefined, "all");
     mocks.open.mockImplementation(actualStore.openModal);
     mocks.close.mockImplementation(actualStore.closeModal);
@@ -1063,7 +1085,6 @@ describe("Territory organization integration", () => {
     });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).toBeNull();
-    actualStore.closeModal(undefined, "all");
     // Heaviest test in the suite (full render + navigation + validation
     // round-trip + save); the default 5s timeout flakes under parallel CI load.
   }, 15_000);
