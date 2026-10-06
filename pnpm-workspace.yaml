@@ -132,7 +132,7 @@ catalog:
   react-qr-code: ^2.2.0
   react-responsive: ^10.0.1
   server-only: ^0.0.1
-  sharp: ^0.35.4
+  sharp: ^0.35.5
   sonner: ^2.0.8
   supercluster: ^9.1.0
   tailwind-merge: ^3.7.0
@@ -176,7 +176,7 @@ overrides:
   "brace-expansion@<1.1.16": "2.1.7" # GHSA-3jxr-9vmj-r5cp (DoS)
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.12" # GHSA-rgw5-rvv9-x895 (DoS)
   "fast-uri@<3.1.5": "3.1.8" # host confusion via failed backslash authority introducer
-  "sharp@<0.35.4": "0.35.4" # GHSA-rgj7-g3m4-5g8c / GHSA-g89c-p67h-r497 / GHSA-2jg2-4ch7-h545 (libheif vulnerabilities); next's optional sharp dep resolved to 0.35.3, outside the old <0.35.0 range
+  "sharp@<0.35.5": "0.35.5" # GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889) and earlier libheif advisories; next's optional sharp dep resolved to 0.35.3, outside the old <0.35.0 range
   "next@>=16.0.0 <16.3.8": "16.3.8" # GHSA-vcvr-r3jv-pc5j (RCE in next/og ImageResponse) / GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
   "postcss@<8.5.12": "^8.5.28" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
   "nanoid@<3.3.17": "^6.0.1" # GHSA-2v37-7h3g-55p8
