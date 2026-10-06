@@ -324,6 +324,57 @@ describe("user.crupdate org scoping", () => {
     expect((await readUser(target.id))?.firstName).toBeNull();
   });
 
+  describe("PII from an admin of a role org outside the home region", () => {
+    const setupPiiCase = async () => {
+      const target = await createUser({
+        homeRegionId: regionB.id,
+        phone: "555-0100",
+      });
+      await grantRole(target.id, regionA.id, "editor");
+      const session = editorOf(regionA);
+      await mockAuthWithSession({
+        ...session,
+        roles: [
+          {
+            orgId: regionA.id,
+            orgName: regionA.name,
+            roleName: "admin" as const,
+          },
+        ],
+      });
+      return target;
+    };
+
+    it("rejects a PII change instead of dropping it", async () => {
+      const target = await setupPiiCase();
+
+      await expect(
+        createTestClient().user.crupdate({
+          id: target.id,
+          phone: "555-0199",
+          roles: [{ orgId: regionA.id, roleName: "editor" }],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      expect((await readUser(target.id))?.phone).toBe("555-0100");
+    });
+
+    it("accepts PII resent unchanged", async () => {
+      const target = await setupPiiCase();
+
+      await createTestClient().user.crupdate({
+        id: target.id,
+        email: target.email.toUpperCase(),
+        phone: "",
+        roles: [{ orgId: regionA.id, roleName: "editor" }],
+      });
+
+      const after = await readUser(target.id);
+      expect(after?.email).toBe(target.email);
+      expect(after?.phone).toBe("555-0100");
+    });
+  });
+
   it("rejects a non-admin removing a role and writes nothing", async () => {
     const target = await createUser({ homeRegionId: regionA.id });
     await grantRole(target.id, regionA.id, "editor");

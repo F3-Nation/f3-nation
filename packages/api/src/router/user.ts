@@ -63,9 +63,7 @@ const getProfileScopeOrgIds = async (
   return nations.map(({ id }) => id);
 };
 
-// id is the lookup key; PII is already dropped without admin access.
-const PROFILE_COMPARE_SKIP = new Set([
-  "id",
+const PII_FIELDS = new Set([
   "email",
   "phone",
   "emergencyContact",
@@ -448,17 +446,27 @@ export const userRouter = {
           "editor",
         ));
 
+      // PII access: admin on any of an existing user's orgs, or on any org
+      // being assigned to a new user.
+      const piiOrgIds = existingUser
+        ? existingRoles.map((role) => role.orgId)
+        : roles.map((role) => role.orgId);
+      const hasPiiAccess = await hasRoleOnAny(ctx, piiOrgIds, "admin");
+
       // Clients resend the whole form, so only reject fields that change.
+      // PII without access, or sent as "", is never written, so skip it.
       if (existingUser && !canEditProfile) {
-        const changesProfile = Object.entries(rest).some(
-          ([key, value]) =>
-            value !== undefined &&
-            !PROFILE_COMPARE_SKIP.has(key) &&
-            !isSameProfileValue(
-              value,
-              existingUser[key as keyof typeof existingUser],
-            ),
-        );
+        const changesProfile = Object.entries(rest).some(([key, value]) => {
+          if (key === "id" || value === undefined) return false;
+          if (PII_FIELDS.has(key) && (!hasPiiAccess || value === "")) {
+            return false;
+          }
+          const stored = existingUser[key as keyof typeof existingUser];
+          if (key === "email" && typeof value === "string") {
+            return normalizeEmail(value) !== normalizeEmail(existingUser.email);
+          }
+          return !isSameProfileValue(value, stored);
+        });
         if (changesProfile) {
           throw new ORPCError("UNAUTHORIZED", {
             message: "You are not authorized to edit this user's profile",
@@ -478,13 +486,6 @@ export const userRouter = {
           message: "You are not authorized to set this home region",
         });
       }
-
-      // PII access: admin on any of an existing user's orgs, or on any org
-      // being assigned to a new user.
-      const piiOrgIds = existingUser
-        ? existingRoles.map((role) => role.orgId)
-        : roles.map((role) => role.orgId);
-      const hasPiiAccess = await hasRoleOnAny(ctx, piiOrgIds, "admin");
 
       const dbRoles = await ctx.db.select().from(schema.roles);
       const roleNameToId = dbRoles.reduce(
