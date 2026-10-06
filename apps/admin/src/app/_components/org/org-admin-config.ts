@@ -5,14 +5,36 @@ import {
   AdminHierarchyOrgTypes,
 } from "./org-ancestry";
 
-export interface OrgAdminConfig {
+/**
+ * Ancestor filters for an org table. `tiers` are the pickers, top-down: the
+ * first tier narrows the later pickers and prunes their selections. Pickers
+ * always offer active orgs only.
+ *
+ * `match` turns selections into the query's `parentOrgIds`. The deepest tier
+ * with a selection decides:
+ * - In `match.tiers`: its selected IDs are sent as-is.
+ * - Otherwise it expands to the loaded orgs beneath it, and the table's
+ *   active/inactive policy applies:
+ *   - `includeInactive: true` keeps the selection plus every descendant of any
+ *     loaded type, active or not, so rows under an inactive parent stay
+ *     reachable (Territory and Area tables).
+ *   - `includeInactive: false` keeps only active descendants whose type is in
+ *     `match.tiers` (Region table: its Area filter is active-only, so a sector
+ *     reaches only the active areas beneath it).
+ * An expansion that matches nothing sends no valid parent, so the table is
+ * empty rather than unfiltered.
+ */
+interface OrgHierarchyFilter {
+  tiers: OrgType[];
+  match: { tiers: OrgType[]; includeInactive: boolean };
+}
+
+interface OrgAdminConfigBase {
   heading?: string;
   nameColumn?: string;
   add: boolean;
   serverPagination: boolean;
   serverSorting: boolean;
-  filters:
-    "none" | "status" | "sector" | "sectorTerritory" | "sectorArea" | "region";
   ancestorTypes?: OrgType[];
   /**
    * Display-only traversal of irregular legacy/imported or directly written data.
@@ -34,6 +56,16 @@ export interface OrgAdminConfig {
   emptySearch?: string;
   containerClassName?: string;
 }
+
+/**
+ * `region` is the AO table's own-fetch region picker, whose selection is sent
+ * as-is.
+ */
+export type OrgAdminConfig = OrgAdminConfigBase &
+  (
+    | { filters: "hierarchy"; hierarchyFilter: OrgHierarchyFilter }
+    | { filters: "none" | "status" | "region"; hierarchyFilter?: undefined }
+  );
 
 export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
   nation: {
@@ -61,7 +93,11 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     add: true,
     serverPagination: true,
     serverSorting: true,
-    filters: "sector",
+    filters: "hierarchy",
+    hierarchyFilter: {
+      tiers: ["sector"],
+      match: { tiers: [], includeInactive: true },
+    },
     ancestorTypes: orgTypesAbove("territory"),
     columns: [{ key: "parentOrgName", label: "Sector", parentType: "sector" }],
     statusId: "status",
@@ -71,7 +107,11 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     add: true,
     serverPagination: true,
     serverSorting: true,
-    filters: "sectorTerritory",
+    filters: "hierarchy",
+    hierarchyFilter: {
+      tiers: ["sector", "territory"],
+      match: { tiers: ["territory"], includeInactive: true },
+    },
     ancestorTypes: AdminAreaAncestorOrgTypes,
     intermediateTypes: ["area"],
     displayAncestors: ["territory", "sector"],
@@ -86,7 +126,11 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     add: true,
     serverPagination: true,
     serverSorting: false,
-    filters: "sectorArea",
+    filters: "hierarchy",
+    hierarchyFilter: {
+      tiers: ["sector", "area"],
+      match: { tiers: ["area"], includeInactive: false },
+    },
     ancestorTypes: AdminHierarchyOrgTypes,
     displayAncestors: ["area", "sector"],
     columns: [

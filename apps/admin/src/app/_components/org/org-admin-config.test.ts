@@ -61,13 +61,41 @@ describe("organization table ancestry configuration", () => {
     }
   });
 
-  it("filters territories by sector and areas by sector and territory", () => {
-    expect(orgAdminConfig.territory.filters).toBe("sector");
-    expect(orgAdminConfig.area.filters).toBe("sectorTerritory");
+  it("declares each table's filter tiers and active/inactive policy", () => {
+    expect(orgAdminConfig.territory.hierarchyFilter).toEqual({
+      tiers: ["sector"],
+      match: { tiers: [], includeInactive: true },
+    });
+    expect(orgAdminConfig.area.hierarchyFilter).toEqual({
+      tiers: ["sector", "territory"],
+      match: { tiers: ["territory"], includeInactive: true },
+    });
+    expect(orgAdminConfig.region.hierarchyFilter).toEqual({
+      tiers: ["sector", "area"],
+      match: { tiers: ["area"], includeInactive: false },
+    });
     expect(orgAdminConfig.area.displayAncestors).toEqual([
       "territory",
       "sector",
     ]);
+  });
+
+  it.each(OrgType)("%s has a coherent filter declaration", (orgType) => {
+    const { filters, hierarchyFilter, ancestorTypes } = orgAdminConfig[orgType];
+
+    expect(filters === "hierarchy").toBe(hierarchyFilter !== undefined);
+    if (!hierarchyFilter) return;
+
+    const topDown = hierarchyFilter.tiers.map((tier) => OrgType.indexOf(tier));
+    expect([...topDown].sort((a, b) => b - a)).toEqual(topDown);
+    expect(new Set(topDown).size).toBe(topDown.length);
+    for (const tier of hierarchyFilter.tiers) {
+      expect(orgTypesAbove(orgType)).toContain(tier);
+      expect(ancestorTypes).toContain(tier);
+    }
+    for (const tier of hierarchyFilter.match.tiers) {
+      expect(hierarchyFilter.tiers).toContain(tier);
+    }
   });
 
   it("maps only Area ancestors to the new server sort ids", () => {
