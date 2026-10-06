@@ -32,6 +32,7 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { logError } from "../logger";
+import { requireEditorOnRescope } from "../require-editor-on-rescope";
 import type { Context } from "../shared";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -91,6 +92,89 @@ const eventAllInputSchema = eventFilterSchema
       ),
   })
   .optional();
+
+/**
+ * A location or region-specific event type must belong to the event's AO or
+ * its region. Only references the request adds (or all of them, when the
+ * event is created or moved) are checked, so pre-existing links don't block
+ * unrelated edits.
+ */
+async function assertEventRefsInScope({
+  ctx,
+  aoId,
+  existingEvent,
+  locationId,
+  eventTypeIds,
+}: {
+  ctx: Context;
+  aoId: number;
+  existingEvent: typeof schema.events.$inferSelect | undefined;
+  locationId: number | null | undefined;
+  eventTypeIds: number[];
+}): Promise<void> {
+  // True on create, since there is no current org.
+  const isNewPlacement = existingEvent?.orgId !== aoId;
+
+  const checkLocation =
+    locationId != null &&
+    (isNewPlacement || existingEvent?.locationId !== locationId);
+
+  let typeIdsToCheck = eventTypeIds;
+  if (!isNewPlacement && existingEvent) {
+    const linked = await ctx.db
+      .select({ id: schema.eventsXEventTypes.eventTypeId })
+      .from(schema.eventsXEventTypes)
+      .where(eq(schema.eventsXEventTypes.eventId, existingEvent.id));
+    const linkedIds = new Set(linked.map(({ id }) => id));
+    typeIdsToCheck = eventTypeIds.filter((id) => !linkedIds.has(id));
+  }
+
+  if (!checkLocation && typeIdsToCheck.length === 0) return;
+
+  const [ao] = await ctx.db
+    .select({ parentId: schema.orgs.parentId })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, aoId));
+  if (!ao) {
+    throw new ORPCError("NOT_FOUND", { message: "AO not found" });
+  }
+  const allowedOrgIds = ao.parentId == null ? [aoId] : [aoId, ao.parentId];
+
+  if (checkLocation) {
+    const [location] = await ctx.db
+      .select({ orgId: schema.locations.orgId })
+      .from(schema.locations)
+      .where(eq(schema.locations.id, locationId));
+    if (!location) {
+      throw new ORPCError("NOT_FOUND", { message: "Location not found" });
+    }
+    if (!allowedOrgIds.includes(location.orgId)) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Location must belong to the event's region",
+      });
+    }
+  }
+
+  if (typeIdsToCheck.length > 0) {
+    const eventTypes = await ctx.db
+      .select({ specificOrgId: schema.eventTypes.specificOrgId })
+      .from(schema.eventTypes)
+      .where(inArray(schema.eventTypes.id, typeIdsToCheck));
+    if (eventTypes.length !== new Set(typeIdsToCheck).size) {
+      throw new ORPCError("NOT_FOUND", { message: "Event type not found" });
+    }
+    const allInScope = eventTypes.every(
+      ({ specificOrgId }) =>
+        specificOrgId == null || allowedOrgIds.includes(specificOrgId),
+    );
+    if (!allInScope) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Event types must be nation-wide or belong to the event's region",
+      });
+    }
+  }
+}
 
 // Aliased tables used across event queries
 const regionOrg = aliasedTable(schema.orgs, "region_org");
@@ -748,23 +832,24 @@ export const eventRouter = {
             .where(eq(schema.events.id, input.id))
         : [];
 
-      const orgIdToCheck = input.aoId ?? input.regionId;
-      if (!orgIdToCheck) {
+      if (!input.aoId) {
         throw new ORPCError("BAD_REQUEST", {
-          message: "AO ID or Region ID is required",
+          message: "AO ID is required",
         });
       }
-      const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: existingEvent?.orgId ?? orgIdToCheck,
-        session: ctx.session,
-        db: ctx.db,
-        roleName: "editor",
+      await requireEditorOnRescope({
+        ctx,
+        currentOrgId: existingEvent?.orgId,
+        targetOrgId: input.aoId,
+        entity: "Event",
       });
-      if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to update this Event",
-        });
-      }
+      await assertEventRefsInScope({
+        ctx,
+        aoId: input.aoId,
+        existingEvent,
+        locationId: input.locationId,
+        eventTypeIds: input.eventTypeIds,
+      });
 
       const { eventTypeIds, eventTagIds, meta, ...eventData } = input;
       const normalizedEventTagIds =

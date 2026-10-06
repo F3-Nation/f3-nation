@@ -1090,7 +1090,7 @@ describe("User Router", () => {
         .where(eq(schema.orgs.id, regionB.id));
     });
 
-    it("should allow update when user has null home region", async () => {
+    it("should allow update when user has null home region but a role in the caller's region", async () => {
       const dbInstance = db;
 
       let [f3Nation] = await dbInstance
@@ -1138,6 +1138,17 @@ describe("User Router", () => {
         .returning();
 
       if (!testUser) throw new Error("Failed to create test user");
+
+      const [editorRole] = await dbInstance
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"));
+      if (!editorRole) throw new Error("Editor role not seeded");
+      await dbInstance.insert(schema.rolesXUsersXOrg).values({
+        userId: testUser.id,
+        orgId: region.id,
+        roleId: editorRole.id,
+      });
 
       // Mock session as admin of the region (not nation)
       const mockSession: Session = {

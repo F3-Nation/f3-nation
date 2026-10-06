@@ -1,4 +1,5 @@
 import { and, eq, schema } from "@acme/db";
+import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
 import { normalizeEmail } from "@acme/shared/common/functions";
@@ -24,7 +25,43 @@ import {
   userListInputSchema,
   userListUserOutputSchema,
 } from "../lib/user";
+import type { Context } from "../shared";
 import { adminProcedure, editorProcedure } from "../shared";
+
+const hasRoleOnAny = async (
+  ctx: Context,
+  orgIds: number[],
+  roleName: "editor" | "admin",
+): Promise<boolean> => {
+  for (const orgId of new Set(orgIds)) {
+    const { success } = await checkHasRoleOnOrg({
+      orgId,
+      session: ctx.session,
+      db: ctx.db,
+      roleName,
+    });
+    if (success) return true;
+  }
+  return false;
+};
+
+/**
+ * Orgs whose editors may edit a user's profile: the home region, else any org
+ * the user holds a role on, else the nation.
+ */
+const getProfileScopeOrgIds = async (
+  ctx: Context,
+  homeRegionId: number | null,
+  roleOrgIds: number[],
+): Promise<number[]> => {
+  if (homeRegionId) return [homeRegionId];
+  if (roleOrgIds.length > 0) return roleOrgIds;
+  const nations = await ctx.db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.orgType, "nation"));
+  return nations.map(({ id }) => id);
+};
 
 export const userRouter = {
   all: editorProcedure
@@ -348,68 +385,111 @@ export const userRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const { roles: rawRoles, ...rest } = input;
+      // emailVerified is set by the sign-in flow, never by callers.
+      const { roles: rawRoles, emailVerified: _emailVerified, ...rest } = input;
       const roles = rawRoles as RoleInput[];
 
-      let canEditProfile = true;
-      if (input.id && ctx.session?.id !== input.id) {
-        const [existingUser] = await ctx.db
-          .select({ homeRegionId: schema.users.homeRegionId })
-          .from(schema.users)
-          .where(eq(schema.users.id, input.id));
+      const [existingUser] = input.id
+        ? await ctx.db
+            .select({ homeRegionId: schema.users.homeRegionId })
+            .from(schema.users)
+            .where(eq(schema.users.id, input.id))
+        : [];
+      if (input.id && !existingUser) {
+        throw new ORPCError("NOT_FOUND", { message: "User not found" });
+      }
+      const existingRoles = input.id
+        ? await ctx.db
+            .select()
+            .from(schema.rolesXUsersXOrg)
+            .where(eq(schema.rolesXUsersXOrg.userId, input.id))
+        : [];
 
-        if (existingUser?.homeRegionId) {
-          const { success } = await checkHasRoleOnOrg({
-            orgId: existingUser.homeRegionId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "editor",
-          });
-          if (!success) {
-            canEditProfile = false;
-          }
-        }
+      // An API key's session.id is its owner, so keys never edit "themselves".
+      const isSelf =
+        !ctx.session?.apiKey &&
+        input.id !== undefined &&
+        ctx.session?.id === input.id;
+
+      const canEditProfile =
+        isSelf ||
+        !existingUser ||
+        (await hasRoleOnAny(
+          ctx,
+          await getProfileScopeOrgIds(
+            ctx,
+            existingUser.homeRegionId,
+            existingRoles.map((role) => role.orgId),
+          ),
+          "editor",
+        ));
+
+      const newHomeRegionId = rest.homeRegionId;
+      if (
+        !isSelf &&
+        canEditProfile &&
+        newHomeRegionId != null &&
+        newHomeRegionId !== existingUser?.homeRegionId &&
+        !(await hasRoleOnAny(ctx, [newHomeRegionId], "editor"))
+      ) {
+        throw new ORPCError("UNAUTHORIZED", {
+          message: "You are not authorized to set this home region",
+        });
       }
 
-      // Check if this is an update (has id) and if requester has PII access
-      let hasPiiAccess = false;
-      if (input.id) {
-        // Get the user's orgs to check if requester is admin of any
-        const userOrgs = await ctx.db
-          .selectDistinct({
-            orgId: schema.rolesXUsersXOrg.orgId,
-          })
-          .from(schema.rolesXUsersXOrg)
-          .where(eq(schema.rolesXUsersXOrg.userId, input.id));
+      // PII access: admin on any of an existing user's orgs, or on any org
+      // being assigned to a new user.
+      const piiOrgIds = existingUser
+        ? existingRoles.map((role) => role.orgId)
+        : roles.map((role) => role.orgId);
+      const hasPiiAccess = await hasRoleOnAny(ctx, piiOrgIds, "admin");
 
-        // Check if requester is an admin for any of the user's orgs
-        for (const userOrg of userOrgs) {
-          const { success } = await checkHasRoleOnOrg({
-            orgId: userOrg.orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "admin",
-          });
-          if (success) {
-            hasPiiAccess = true;
-            break;
+      const dbRoles = await ctx.db.select().from(schema.roles);
+      const roleNameToId = dbRoles.reduce(
+        (acc, role) => {
+          if (role.name) {
+            acc[role.name] = role.id;
+          }
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
+      const newRolesToInsert = roles.filter(
+        (role) =>
+          !existingRoles.some(
+            (existingRole) =>
+              existingRole.roleId === roleNameToId[role.roleName] &&
+              existingRole.orgId === role.orgId,
+          ),
+      );
+      logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
+
+      const rolesToDelete = existingRoles.filter(
+        (existingRole) =>
+          !roles.some(
+            (role) =>
+              roleNameToId[role.roleName] === existingRole.roleId &&
+              role.orgId === existingRole.orgId,
+          ),
+      );
+      logDebug("api.user.roles_to_delete", { rolesToDelete });
+
+      const requireAdminOn = async (orgIds: number[], message: string) => {
+        for (const orgId of orgIds) {
+          if (!(await hasRoleOnAny(ctx, [orgId], "admin"))) {
+            throw new ORPCError("UNAUTHORIZED", { message });
           }
         }
-      } else {
-        // For new users, check if requester has admin access to the orgs being assigned
-        for (const role of roles) {
-          const { success } = await checkHasRoleOnOrg({
-            orgId: role.orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "admin",
-          });
-          if (success) {
-            hasPiiAccess = true;
-            break;
-          }
-        }
-      }
+      };
+      await requireAdminOn(
+        newRolesToInsert.map((role) => role.orgId),
+        ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
+      );
+      await requireAdminOn(
+        rolesToDelete.map((role) => role.orgId),
+        ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
+      );
 
       // Prepare update data - only include PII if user has access
       const {
@@ -465,162 +545,102 @@ export const userRouter = {
 
       logDebug("api.user.update_set", { updateFields: Object.keys(updateSet) });
 
-      let user: typeof schema.users.$inferSelect;
+      const user = await ctx.db.transaction(async (tx) => {
+        const transactionDb = tx as unknown as AppDb;
+        let user: typeof schema.users.$inferSelect;
 
-      if (input.id && !canEditProfile) {
-        // Cannot edit profile data but can still manage roles.
-        // Just fetch the existing user without modifying profile fields.
-        const [existingUser] = await ctx.db
-          .select()
-          .from(schema.users)
-          .where(eq(schema.users.id, input.id));
-        if (!existingUser) {
-          throw new ORPCError("NOT_FOUND", {
-            message: "User not found",
-          });
-        }
-        user = existingUser;
-      } else {
-        try {
-          const result = await ctx.db
-            .insert(schema.users)
-            .values({
-              ...rest,
-              email: normalizedEmail ?? "",
-            })
-            .onConflictDoUpdate({
-              target: [schema.users.id],
-              set: updateSet,
-            })
-            .returning();
-
-          const insertedUser = result[0];
-          if (!insertedUser) {
-            throw new ORPCError("INTERNAL_SERVER_ERROR", {
-              message: "Failed to save user",
+        if (input.id && !canEditProfile) {
+          // Cannot edit profile data but can still manage roles.
+          // Just fetch the existing user without modifying profile fields.
+          const [existing] = await transactionDb
+            .select()
+            .from(schema.users)
+            .where(eq(schema.users.id, input.id));
+          if (!existing) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "User not found",
             });
           }
-          user = insertedUser;
-        } catch (error) {
-          if (isDuplicateEmailError(error)) {
-            throw new ORPCError("BAD_REQUEST", {
-              message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
-            });
-          }
-          // The empty-result ORPCError thrown just above is already typed and
-          // client-safe, so it passes through untouched.
-          if (error instanceof ORPCError) throw error;
-          // Anything else is an unexpected DB/driver fault. Rethrowing it raw
-          // lets oRPC mask it as an opaque 500 and lose the cause, so log the
-          // original and surface a generic message that leaks no internals.
-          // No email in the log context — it is PII.
-          logError("api.user.insert_failed", { userId: input.id }, error);
-          throw new ORPCError("INTERNAL_SERVER_ERROR", {
-            message: "Unable to save user",
-          });
-        }
-      }
+          user = existing;
+        } else {
+          try {
+            const result = await transactionDb
+              .insert(schema.users)
+              .values({
+                ...rest,
+                email: normalizedEmail ?? "",
+              })
+              .onConflictDoUpdate({
+                target: [schema.users.id],
+                set: updateSet,
+              })
+              .returning();
 
-      logDebug("api.user.resolved_user", { userId: user.id });
-
-      const dbRoles = await ctx.db.select().from(schema.roles);
-
-      const roleNameToId = dbRoles.reduce(
-        (acc, role) => {
-          if (role.name) {
-            acc[role.name] = role.id;
-          }
-          return acc;
-        },
-        {} as Record<string, number>,
-      );
-
-      const existingRoles = await ctx.db
-        .select()
-        .from(schema.rolesXUsersXOrg)
-        .where(eq(schema.rolesXUsersXOrg.userId, user.id));
-      logDebug("api.user.existing_roles", { existingRoles });
-
-      const newRolesToInsert = roles.filter(
-        (role) =>
-          !existingRoles.some(
-            (existingRole) =>
-              existingRole.roleId === roleNameToId[role.roleName] &&
-              existingRole.orgId === role.orgId,
-          ),
-      );
-      logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
-
-      for (const role of newRolesToInsert) {
-        const { success } = await checkHasRoleOnOrg({
-          orgId: role.orgId,
-          session: ctx.session,
-          db: ctx.db,
-          roleName: "admin",
-        });
-        if (!success) {
-          throw new ORPCError("UNAUTHORIZED", {
-            message: ERRORS.MUST_BE_ADMIN_TO_GRANT_ROLES,
-          });
-        }
-      }
-
-      const rolesToDelete = existingRoles.filter(
-        (existingRole) =>
-          !roles.some(
-            (role) =>
-              roleNameToId[role.roleName] === existingRole.roleId &&
-              role.orgId === existingRole.orgId,
-          ),
-      );
-      logDebug("api.user.roles_to_delete", { rolesToDelete });
-
-      for (const role of rolesToDelete) {
-        const { success } = await checkHasRoleOnOrg({
-          orgId: role.orgId,
-          session: ctx.session,
-          db: ctx.db,
-          roleName: "admin",
-        });
-        if (!success) {
-          throw new ORPCError("UNAUTHORIZED", {
-            message: ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
-          });
-        }
-
-        await ctx.db
-          .delete(schema.rolesXUsersXOrg)
-          .where(
-            and(
-              eq(schema.rolesXUsersXOrg.userId, user.id),
-              eq(schema.rolesXUsersXOrg.orgId, role.orgId),
-              eq(schema.rolesXUsersXOrg.roleId, role.roleId),
-            ),
-          );
-      }
-
-      if (newRolesToInsert.length > 0) {
-        await ctx.db.insert(schema.rolesXUsersXOrg).values(
-          newRolesToInsert.map((role) => {
-            const roleId = roleNameToId[role.roleName];
-            if (roleId === undefined) {
-              // roleName is schema-constrained to "user"/"editor"/"admin", so
-              // this only fires if the roles table is missing its seeded
-              // rows — a server data-integrity problem, not a client error.
+            const insertedUser = result[0];
+            if (!insertedUser) {
               throw new ORPCError("INTERNAL_SERVER_ERROR", {
-                message: `Role ${role.roleName} not found`,
+                message: "Failed to save user",
               });
             }
-            return {
-              userId: user.id,
-              roleId,
-              orgId: role.orgId,
-            };
-          }),
-        );
-      }
+            user = insertedUser;
+          } catch (error) {
+            if (isDuplicateEmailError(error)) {
+              throw new ORPCError("BAD_REQUEST", {
+                message: `A user with the email address "${_email ?? ""}" already exists. Please use a different email address.`,
+              });
+            }
+            // The empty-result ORPCError thrown just above is already typed and
+            // client-safe, so it passes through untouched.
+            if (error instanceof ORPCError) throw error;
+            // Anything else is an unexpected DB/driver fault. Rethrowing it raw
+            // lets oRPC mask it as an opaque 500 and lose the cause, so log the
+            // original and surface a generic message that leaks no internals.
+            // No email in the log context — it is PII.
+            logError("api.user.insert_failed", { userId: input.id }, error);
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Unable to save user",
+            });
+          }
+        }
 
-      logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
+        logDebug("api.user.resolved_user", { userId: user.id });
+
+        for (const role of rolesToDelete) {
+          await transactionDb
+            .delete(schema.rolesXUsersXOrg)
+            .where(
+              and(
+                eq(schema.rolesXUsersXOrg.userId, user.id),
+                eq(schema.rolesXUsersXOrg.orgId, role.orgId),
+                eq(schema.rolesXUsersXOrg.roleId, role.roleId),
+              ),
+            );
+        }
+
+        if (newRolesToInsert.length > 0) {
+          await transactionDb.insert(schema.rolesXUsersXOrg).values(
+            newRolesToInsert.map((role) => {
+              const roleId = roleNameToId[role.roleName];
+              if (roleId === undefined) {
+                // roleName is schema-constrained to "user"/"editor"/"admin", so
+                // this only fires if the roles table is missing its seeded
+                // rows — a server data-integrity problem, not a client error.
+                throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                  message: `Role ${role.roleName} not found`,
+                });
+              }
+              return {
+                userId: user.id,
+                roleId,
+                orgId: role.orgId,
+              };
+            }),
+          );
+        }
+
+        return user;
+      });
+
       const updatedRoles = await ctx.db
         .select({
           orgId: schema.rolesXUsersXOrg.orgId,

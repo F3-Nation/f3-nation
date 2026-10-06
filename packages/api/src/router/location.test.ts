@@ -382,6 +382,123 @@ describe("Location Router", () => {
     });
   });
 
+  describe("crupdate destination org", () => {
+    it("should reject moving a location to an org the caller can't edit", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) throw new Error("Failed to create regions");
+
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Rescope Location ${uniqueId()}`,
+          orgId: regionA.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create location");
+      createdLocationIds.push(location.id);
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+
+      await expect(
+        createTestClient().location.crupdate({
+          id: location.id,
+          name: location.name,
+          orgId: regionB.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const [stored] = await db
+        .select({ orgId: schema.locations.orgId })
+        .from(schema.locations)
+        .where(eq(schema.locations.id, location.id));
+      expect(stored?.orgId).toBe(regionA.id);
+    });
+
+    it("should reject creating a location in an org the caller can't edit", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) throw new Error("Failed to create regions");
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+      const name = `Planted Location ${uniqueId()}`;
+
+      await expect(
+        createTestClient().location.crupdate({
+          name,
+          orgId: regionB.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const stored = await db
+        .select({ id: schema.locations.id })
+        .from(schema.locations)
+        .where(eq(schema.locations.name, name));
+      createdLocationIds.push(...stored.map(({ id }) => id));
+      expect(stored).toEqual([]);
+    });
+
+    it("should move a location when the caller edits both orgs", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) throw new Error("Failed to create regions");
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Moving Location ${uniqueId()}`,
+          orgId: regionA.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create location");
+      createdLocationIds.push(location.id);
+
+      const session = createEditorSession({
+        orgId: regionA.id,
+        orgName: regionA.name,
+      });
+      await mockAuthWithSession({
+        ...session,
+        roles: [
+          ...session.roles!,
+          {
+            orgId: regionB.id,
+            orgName: regionB.name,
+            roleName: "editor" as const,
+          },
+        ],
+      });
+
+      const result = await createTestClient().location.crupdate({
+        id: location.id,
+        name: location.name,
+        orgId: regionB.id,
+        latitude: 35.0,
+        longitude: -80.0,
+        isActive: true,
+      });
+
+      expect(result.location?.orgId).toBe(regionB.id);
+    });
+  });
+
   describe("delete", () => {
     it("should soft delete a location (mark as inactive)", async () => {
       const session = await createAdminSession();
