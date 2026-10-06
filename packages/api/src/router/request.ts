@@ -12,7 +12,7 @@ import {
   schema,
   sql,
 } from "@acme/db";
-import type { ActiveRequestType, OrgType } from "@acme/shared/app/enums";
+import type { ActiveRequestType } from "@acme/shared/app/enums";
 import { DayOfWeek } from "@acme/shared/app/enums";
 import { RequestType, UpdateRequestStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -196,6 +196,20 @@ const updateRequestMutationOutput = z.object({
   }),
 });
 
+/**
+ * Requests visible to an editor of `orgIds`. `regionId` holds the destination
+ * of a move, so the source region and AO (kept in `meta`) count too.
+ */
+const requestScope = (orgIds: number[]) => {
+  const textIds = orgIds.map(String);
+  return or(
+    inArray(schema.updateRequests.regionId, orgIds),
+    inArray(schema.updateRequests.aoId, orgIds),
+    inArray(sql`${schema.updateRequests.meta}->>'originalRegionId'`, textIds),
+    inArray(sql`${schema.updateRequests.meta}->>'originalAoId'`, textIds),
+  );
+};
+
 export const requestRouter = {
   all: editorProcedure
     .input(
@@ -215,7 +229,7 @@ export const requestRouter = {
             .boolean()
             .optional()
             .describe(
-              "If true, only return requests from regions where the requester has editor or admin role.",
+              "Deprecated and ignored. Results are always limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
             ),
           statuses: arrayOrSingle(z.enum(UpdateRequestStatus))
             .optional()
@@ -231,7 +245,7 @@ export const requestRouter = {
       tags: ["request"],
       summary: "List all requests",
       description:
-        "Get a paginated list of map change requests with optional filtering and sorting",
+        "Get a paginated list of map change requests with optional filtering and sorting. Limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
     })
     .output(
       z.object({
@@ -376,7 +390,6 @@ export const requestRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const onlyMine = input?.onlyMine ?? false;
       const oldAoOrg = aliasedTable(schema.orgs, "old_ao_org");
       const oldRegionOrg = aliasedTable(schema.orgs, "old_region_org");
       const oldLocation = aliasedTable(schema.locations, "old_location");
@@ -389,21 +402,12 @@ export const requestRouter = {
         defaultPageSize: 10,
       });
 
-      // Determine if filter by region IDs is needed
-      let editableOrgs: { id: number; type: OrgType }[] = [];
-      let isNationAdmin = false;
-
-      if (onlyMine) {
-        const result = await getEditableOrgIdsForUser(ctx);
-        // Requests are scoped by non-AO regionId values, so retain the
-        // helper's non-AO editable set instead of expanding direct roots.
-        editableOrgs = result.editableOrgs;
-        isNationAdmin = result.isNationAdmin;
-
-        if (editableOrgs.length === 0 && !isNationAdmin) {
-          // User has no editable orgs and is not a nation admin
-          return { requests: [], totalCount: 0 };
-        }
+      // Requests carry submitter emails, so they're always scoped to the
+      // caller's orgs.
+      const { editableOrgs, isNationAdmin } =
+        await getEditableOrgIdsForUser(ctx);
+      if (editableOrgs.length === 0 && !isNationAdmin) {
+        return { requests: [], totalCount: 0 };
       }
 
       const where = and(
@@ -432,13 +436,9 @@ export const requestRouter = {
               ),
             )
           : undefined,
-        // Filter by editable orgs if onlyMine is true and not a nation admin
-        onlyMine && !isNationAdmin && editableOrgs.length > 0
-          ? inArray(
-              schema.updateRequests.regionId,
-              editableOrgs.map((org) => org.id),
-            )
-          : undefined,
+        isNationAdmin
+          ? undefined
+          : requestScope(editableOrgs.map((org) => org.id)),
       );
 
       const sortedColumns = getSortingColumns(
@@ -555,7 +555,7 @@ export const requestRouter = {
       tags: ["request"],
       summary: "Get request by ID",
       description:
-        "Retrieve detailed information about a specific map change request including the proposed changes and current status",
+        "Retrieve detailed information about a specific map change request including the proposed changes and current status. Returns null for requests that do not affect a region or AO where the requester has editor or admin role.",
     })
     .output(
       z.object({
@@ -656,10 +656,24 @@ export const requestRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      // Same scope as `all`; out-of-scope requests read as missing so their
+      // ids can't be probed.
+      const { editableOrgs, isNationAdmin } =
+        await getEditableOrgIdsForUser(ctx);
+      if (editableOrgs.length === 0 && !isNationAdmin) {
+        return { request: null };
+      }
       const [request] = await ctx.db
         .select()
         .from(schema.updateRequests)
-        .where(eq(schema.updateRequests.id, input.id));
+        .where(
+          and(
+            eq(schema.updateRequests.id, input.id),
+            isNationAdmin
+              ? undefined
+              : requestScope(editableOrgs.map((org) => org.id)),
+          ),
+        );
       return { request: request ?? null };
     }),
   canDeleteEvent: protectedProcedure

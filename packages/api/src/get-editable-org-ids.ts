@@ -1,6 +1,7 @@
 import { eq, inArray, schema, sql } from "@acme/db";
 
 import type { OrgType } from "../../shared/src/app/enums";
+import { getSessionRoles } from "./get-session-roles";
 import { logDebug, logError } from "./logger";
 import { ORG_TREE_MAX_DEPTH } from "./org-tree";
 import type { Context } from "./shared";
@@ -26,14 +27,7 @@ export const getEditableOrgIdsForUser = async (
     };
   }
 
-  const userRoles = await ctx.db
-    .select({
-      roleName: schema.roles.name,
-      orgId: schema.rolesXUsersXOrg.orgId,
-    })
-    .from(schema.rolesXUsersXOrg)
-    .innerJoin(schema.roles, eq(schema.rolesXUsersXOrg.roleId, schema.roles.id))
-    .where(eq(schema.rolesXUsersXOrg.userId, ctx.session.id));
+  const userRoles = await getSessionRoles(ctx);
 
   const rolesWithEditPermission = userRoles.filter(
     (role) => role.roleName === "admin" || role.roleName === "editor",

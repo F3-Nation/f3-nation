@@ -10,7 +10,7 @@ import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { logError, logWarn } from "../logger";
 import type { Context } from "../shared";
-import { adminProcedure } from "../shared";
+import { userSessionAdminProcedure } from "../shared";
 
 const createApiKeySchema = z.object({
   name: z.string().min(1, { error: "Name is required" }),
@@ -161,7 +161,7 @@ const assertCanManageKey = async (
 };
 
 export const apiKeyRouter = {
-  list: adminProcedure
+  list: userSessionAdminProcedure
     .route({
       method: "GET",
       path: "/",
@@ -278,7 +278,7 @@ export const apiKeyRouter = {
         }),
       };
     }),
-  create: adminProcedure
+  create: userSessionAdminProcedure
     .input(createApiKeySchema)
     .route({
       method: "POST",
@@ -413,7 +413,7 @@ export const apiKeyRouter = {
         });
       }
     }),
-  revoke: adminProcedure
+  revoke: userSessionAdminProcedure
     .input(revokeApiKeySchema)
     .route({
       method: "POST",
@@ -452,7 +452,7 @@ export const apiKeyRouter = {
 
       return { apiKey };
     }),
-  purge: adminProcedure
+  purge: userSessionAdminProcedure
     .input(
       z.object({
         id: z.coerce.number().describe("The unique identifier of the API key"),
@@ -481,7 +481,7 @@ export const apiKeyRouter = {
 
       return { apiKey };
     }),
-  validate: adminProcedure
+  validate: userSessionAdminProcedure
     .input(z.object({ key: z.string().describe("The API key to validate") }))
     .route({
       method: "POST",
