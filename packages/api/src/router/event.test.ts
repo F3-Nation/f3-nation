@@ -45,6 +45,7 @@ describe("Event Router", () => {
   const createdEventTagIds: number[] = [];
   const createdLocationIds: number[] = [];
   const createdOrgIds: number[] = [];
+  const createdUserIds: number[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -63,6 +64,13 @@ describe("Event Router", () => {
       for (const eventId of createdEventIds.reverse()) {
         try {
           await cleanup.event(eventId);
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+      for (const userId of createdUserIds.reverse()) {
+        try {
+          await cleanup.user(userId);
         } catch {
           // Ignore errors during cleanup
         }
@@ -1193,6 +1201,243 @@ describe("Event Router", () => {
         );
       expect(instanceStatuses).toHaveLength(2);
       expect(instanceStatuses.every(({ isActive }) => isActive)).toBe(true);
+    });
+
+    it("reactivates existing instances from today onward without changing history", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const eventType = await createTestEventType();
+      const eventTag = await createTestEventTag();
+      if (!eventType || !eventTag) return;
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `Reactivated Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2020-01-06",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series) throw new Error("Failed to create test series");
+      createdEventIds.push(series.id);
+      const [attendanceUser] = await db
+        .insert(schema.users)
+        .values({
+          email: `series-reactivation-${uniqueId()}@example.com`,
+          f3Name: `Series Reactivation ${uniqueId()}`,
+        })
+        .returning();
+      if (!attendanceUser) throw new Error("Failed to create test user");
+      createdUserIds.push(attendanceUser.id);
+
+      const today = new Date().toISOString().split("T")[0]!;
+      const yesterdayDate = new Date(`${today}T00:00:00.000Z`);
+      yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
+      const yesterday = yesterdayDate.toISOString().split("T")[0]!;
+      const createInstance = async (params: {
+        seriesId: number;
+        startDate: string;
+        isActive: boolean;
+        seriesException?: "closed" | null;
+      }) => {
+        const [instance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Reactivation Instance ${uniqueId()}`,
+            orgId: ao.id,
+            locationId: null,
+            startTime: "0530",
+            endTime: "0615",
+            startDate: params.startDate,
+            isActive: params.isActive,
+            highlight: false,
+            seriesId: params.seriesId,
+            isPrivate: false,
+            seriesException: params.seriesException ?? null,
+            paxCount: 7,
+            preblast: "Existing preblast",
+          })
+          .returning();
+        if (!instance) throw new Error("Failed to create test instance");
+        return instance;
+      };
+
+      const past = await createInstance({
+        seriesId: series.id,
+        startDate: yesterday,
+        isActive: false,
+      });
+      const todayInactive = await createInstance({
+        seriesId: series.id,
+        startDate: today,
+        isActive: false,
+        seriesException: "closed",
+      });
+      const futureInactive = await createInstance({
+        seriesId: series.id,
+        startDate: nextFutureMonday(2),
+        isActive: false,
+        seriesException: "closed",
+      });
+      const futureActive = await createInstance({
+        seriesId: series.id,
+        startDate: nextFutureMonday(3),
+        isActive: true,
+      });
+      await db.insert(schema.eventInstancesXEventTypes).values({
+        eventInstanceId: futureInactive.id,
+        eventTypeId: eventType.id,
+      });
+      await db.insert(schema.eventTagsXEventInstances).values({
+        eventInstanceId: futureInactive.id,
+        eventTagId: eventTag.id,
+      });
+      await db.insert(schema.attendance).values({
+        userId: attendanceUser.id,
+        eventInstanceId: futureInactive.id,
+        isPlanned: false,
+      });
+
+      const [otherSeries] = await db
+        .insert(schema.events)
+        .values({
+          name: `Unrelated Inactive Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          startDate: "2020-01-06",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!otherSeries) throw new Error("Failed to create unrelated series");
+      createdEventIds.push(otherSeries.id);
+      const otherInstance = await createInstance({
+        seriesId: otherSeries.id,
+        startDate: nextFutureMonday(4),
+        isActive: false,
+      });
+
+      const client = createTestClient();
+      await client.event.crupdate({
+        id: series.id,
+        name: series.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        // Structural schedule edit exercises status-transition precedence.
+        startDate: "2020-01-13",
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      const observed = await db
+        .select({
+          id: schema.eventInstances.id,
+          isActive: schema.eventInstances.isActive,
+          seriesException: schema.eventInstances.seriesException,
+          paxCount: schema.eventInstances.paxCount,
+          preblast: schema.eventInstances.preblast,
+        })
+        .from(schema.eventInstances)
+        .where(
+          inArray(schema.eventInstances.id, [
+            past.id,
+            todayInactive.id,
+            futureInactive.id,
+            futureActive.id,
+            otherInstance.id,
+          ]),
+        );
+      expect(observed).toHaveLength(5);
+      const seriesInstanceIds = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      expect(seriesInstanceIds.map(({ id }) => id).sort()).toEqual(
+        [past.id, todayInactive.id, futureInactive.id, futureActive.id].sort(),
+      );
+      const byId = new Map(observed.map((instance) => [instance.id, instance]));
+      expect(byId.get(past.id)).toMatchObject({
+        id: past.id,
+        isActive: false,
+        seriesException: null,
+      });
+      expect(byId.get(todayInactive.id)).toMatchObject({
+        id: todayInactive.id,
+        isActive: true,
+        seriesException: "closed",
+        paxCount: 7,
+        preblast: "Existing preblast",
+      });
+      expect(byId.get(futureInactive.id)).toMatchObject({
+        id: futureInactive.id,
+        isActive: true,
+        seriesException: "closed",
+        paxCount: 7,
+        preblast: "Existing preblast",
+      });
+      expect(byId.get(futureActive.id)).toMatchObject({
+        id: futureActive.id,
+        isActive: true,
+      });
+      expect(byId.get(otherInstance.id)).toMatchObject({
+        id: otherInstance.id,
+        isActive: false,
+      });
+
+      const retainedEventTypes = await db
+        .select({ eventTypeId: schema.eventInstancesXEventTypes.eventTypeId })
+        .from(schema.eventInstancesXEventTypes)
+        .where(
+          eq(
+            schema.eventInstancesXEventTypes.eventInstanceId,
+            futureInactive.id,
+          ),
+        );
+      const retainedTags = await db
+        .select({ eventTagId: schema.eventTagsXEventInstances.eventTagId })
+        .from(schema.eventTagsXEventInstances)
+        .where(
+          eq(
+            schema.eventTagsXEventInstances.eventInstanceId,
+            futureInactive.id,
+          ),
+        );
+      expect(retainedEventTypes).toEqual([{ eventTypeId: eventType.id }]);
+      expect(retainedTags).toEqual([{ eventTagId: eventTag.id }]);
+      const retainedAttendance = await db
+        .select({ userId: schema.attendance.userId })
+        .from(schema.attendance)
+        .where(eq(schema.attendance.eventInstanceId, futureInactive.id));
+      expect(retainedAttendance).toEqual([{ userId: attendanceUser.id }]);
     });
 
     it("requires admin permission to deactivate an existing event", async () => {

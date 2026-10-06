@@ -143,6 +143,32 @@ export async function softDeleteFutureInstancesForSeries(
 }
 
 /**
+ * Reactivate existing future event instances for a series (including today).
+ * This only changes status; it does not generate instances or alter exceptions.
+ */
+export async function reactivateFutureInstancesForSeries(
+  db: AppDb,
+  seriesId: number,
+  startDate?: string,
+): Promise<number> {
+  const fromDate = startDate ?? getCurrentDate();
+
+  const result = await db
+    .update(schema.eventInstances)
+    .set({ isActive: true })
+    .where(
+      and(
+        eq(schema.eventInstances.seriesId, seriesId),
+        eq(schema.eventInstances.isActive, false),
+        gte(schema.eventInstances.startDate, fromDate),
+      ),
+    )
+    .returning({ id: schema.eventInstances.id });
+
+  return result.length;
+}
+
+/**
  * Hard delete future event instances for a series (used when recreating)
  */
 export async function deleteFutureInstancesForSeries(

@@ -848,7 +848,7 @@ describe("Org Router", () => {
           recurrencePattern: "weekly",
           recurrenceInterval: 1,
           startDate: "2026-01-01",
-          isActive: true,
+          isActive: false,
           highlight: false,
           isPrivate: false,
         })
@@ -861,7 +861,7 @@ describe("Org Router", () => {
           orgId: ao.id,
           seriesId: series.id,
           startDate: nextFutureMonday(2),
-          isActive: true,
+          isActive: false,
           highlight: false,
           isPrivate: false,
         })
@@ -892,8 +892,8 @@ describe("Org Router", () => {
         .select({ isActive: schema.eventInstances.isActive })
         .from(schema.eventInstances)
         .where(eq(schema.eventInstances.id, futureInstance.id));
-      expect(unchangedSeries?.isActive).toBe(true);
-      expect(unchangedFuture?.isActive).toBe(true);
+      expect(unchangedSeries?.isActive).toBe(false);
+      expect(unchangedFuture?.isActive).toBe(false);
 
       await db
         .delete(schema.eventInstances)

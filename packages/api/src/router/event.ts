@@ -907,6 +907,7 @@ export const eventRouter = {
             updateFutureInstances,
             recreateFutureInstances,
             softDeleteFutureInstancesForSeries,
+            reactivateFutureInstancesForSeries,
           } = await import("../lib/cascade-service");
 
           // Build series data for cascade operations
@@ -936,11 +937,15 @@ export const eventRouter = {
           };
 
           if (isStatusTransition) {
-            // A status transition is not a series schedule edit. Deactivation
-            // preserves future-instance history by soft-deleting in place;
-            // activation must not recreate or otherwise cascade instances.
+            // Status transitions take precedence over schedule edits so they
+            // never delete/recreate history or generate missing instances.
             if (isDeactivationTransition) {
               await softDeleteFutureInstancesForSeries(
+                transactionDb,
+                result.id,
+              );
+            } else {
+              await reactivateFutureInstancesForSeries(
                 transactionDb,
                 result.id,
               );
