@@ -901,7 +901,7 @@ describe("User Router", () => {
       ).rejects.toThrow("already exists");
     });
 
-    it("should skip profile update but allow role changes when admin does not manage user's home region", async () => {
+    it("should allow role changes that resend the unchanged profile when admin does not manage user's home region", async () => {
       const dbInstance = db;
 
       // Create two region orgs
@@ -958,10 +958,10 @@ describe("User Router", () => {
 
       const client = createTestClient();
 
-      // Should succeed — profile data is skipped, roles are processed
+      // Should succeed — the profile is resent unchanged, roles are processed
       const result = await client.user.crupdate({
         id: testUser.id,
-        f3Name: "Updated",
+        f3Name: "HomeRegionTest",
         roles: [{ orgId: regionA.id, roleName: "admin" }],
       });
 
@@ -991,7 +991,7 @@ describe("User Router", () => {
         .where(eq(schema.orgs.id, regionB.id));
     });
 
-    it("should not modify profile fields when admin does not manage user's home region", async () => {
+    it("should reject profile changes and grant nothing when admin does not manage user's home region", async () => {
       const dbInstance = db;
 
       const [regionA] = await dbInstance
@@ -1049,16 +1049,14 @@ describe("User Router", () => {
       const client = createTestClient();
 
       // Attempt to modify profile fields and add a role on regionA
-      const result = await client.user.crupdate({
-        id: testUser.id,
-        f3Name: "AttemptedChange",
-        firstName: "AttemptedFirst",
-        roles: [{ orgId: regionA.id, roleName: "editor" }],
-      });
-
-      // Profile fields must be unchanged
-      expect(result.f3Name).toBe(originalF3Name);
-      expect(result.firstName).toBe(originalFirstName);
+      await expect(
+        client.user.crupdate({
+          id: testUser.id,
+          f3Name: "AttemptedChange",
+          firstName: "AttemptedFirst",
+          roles: [{ orgId: regionA.id, roleName: "editor" }],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
       // Verify directly in DB that profile wasn't modified
       const [dbUser] = await dbInstance
@@ -1068,17 +1066,14 @@ describe("User Router", () => {
       expect(dbUser?.f3Name).toBe(originalF3Name);
       expect(dbUser?.firstName).toBe(originalFirstName);
 
-      // Role on regionA should have been granted
+      // The rejected request must not grant the role either
       const grantedRoles = await dbInstance
         .select()
         .from(schema.rolesXUsersXOrg)
         .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
-      expect(grantedRoles.some((r) => r.orgId === regionA.id)).toBe(true);
+      expect(grantedRoles).toEqual([]);
 
       // Clean up
-      await dbInstance
-        .delete(schema.rolesXUsersXOrg)
-        .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
       await dbInstance
         .delete(schema.users)
         .where(eq(schema.users.id, testUser.id));
@@ -1090,7 +1085,7 @@ describe("User Router", () => {
         .where(eq(schema.orgs.id, regionB.id));
     });
 
-    it("should allow update when user has null home region", async () => {
+    it("should allow update when user has null home region but a role in the caller's region", async () => {
       const dbInstance = db;
 
       let [f3Nation] = await dbInstance
@@ -1138,6 +1133,17 @@ describe("User Router", () => {
         .returning();
 
       if (!testUser) throw new Error("Failed to create test user");
+
+      const [editorRole] = await dbInstance
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"));
+      if (!editorRole) throw new Error("Editor role not seeded");
+      await dbInstance.insert(schema.rolesXUsersXOrg).values({
+        userId: testUser.id,
+        orgId: region.id,
+        roleId: editorRole.id,
+      });
 
       // Mock session as admin of the region (not nation)
       const mockSession: Session = {

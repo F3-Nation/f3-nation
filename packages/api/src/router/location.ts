@@ -25,6 +25,7 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { requireEditorOnRescope } from "../require-editor-on-rescope";
 import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -379,17 +380,15 @@ export const locationRouter = {
           message: "Parent ID or ID is required",
         });
       }
-      const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: existingLocation?.orgId ?? input.orgId,
-        session: ctx.session,
-        db: ctx.db,
-        roleName: "editor",
-      });
-      if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to update this Location",
-        });
+      if (input.id && !existingLocation) {
+        throw new ORPCError("NOT_FOUND", { message: "Location not found" });
       }
+      await requireEditorOnRescope({
+        ctx,
+        currentOrgId: existingLocation?.orgId,
+        targetOrgId: input.orgId,
+        entity: "Location",
+      });
       const locationToCrupdate: typeof schema.locations.$inferInsert = {
         ...input,
         meta: {
