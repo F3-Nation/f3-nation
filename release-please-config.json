@@ -60,7 +60,8 @@
       "component": "analytics",
       "changelog-path": "CHANGELOG.md",
       "path": "apps/analytics",
-      "release-type": "python"
+      "release-type": "python",
+      "release-as": "1.0.0"
     },
     "packages/api": {
       "component": "pkg-api",
