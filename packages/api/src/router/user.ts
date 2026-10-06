@@ -19,6 +19,7 @@ import {
   buildUserListQuery,
   checkUserPiiAccess,
   isDuplicateEmailError,
+  shapeUserPii,
   userDetailOutputSchema,
   userListInputSchema,
   userListUserOutputSchema,
@@ -319,10 +320,17 @@ export const userRouter = {
       tags: ["user"],
       summary: "Create or update user",
       description:
-        "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set if requester has admin access.",
+        "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set, and are only returned, if requester has admin access.",
     })
     .output(
-      UserSelectSchema.extend({
+      UserSelectSchema.partial({
+        email: true,
+        emailVerified: true,
+        phone: true,
+        emergencyContact: true,
+        emergencyPhone: true,
+        emergencyNotes: true,
+      }).extend({
         roles: z
           .array(
             z.object({
@@ -628,7 +636,7 @@ export const userRouter = {
         .where(eq(schema.rolesXUsersXOrg.userId, user.id));
 
       return {
-        ...user,
+        ...shapeUserPii(user, hasPiiAccess),
         roles: updatedRoles,
       };
     }),

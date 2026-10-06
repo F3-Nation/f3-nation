@@ -214,38 +214,44 @@ export const ApiKeysTable = () => {
                         {formatDateTime(row.created)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Open menu</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Manage</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                revokeKey.mutate({
-                                  id: row.id,
-                                  revoke: status === "revoked" ? false : true,
-                                })
-                              }
-                            >
-                              <RotateCcw className="mr-2 h-4 w-4" />
-                              {status === "revoked"
-                                ? "Restore access"
-                                : "Revoke access"}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => confirmDelete(row.id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete key
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {(row.canManage || status !== "revoked") && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                                <span className="sr-only">Open menu</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Manage</DropdownMenuLabel>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  revokeKey.mutate({
+                                    id: row.id,
+                                    revoke: status === "revoked" ? false : true,
+                                  })
+                                }
+                              >
+                                <RotateCcw className="mr-2 h-4 w-4" />
+                                {status === "revoked"
+                                  ? "Restore access"
+                                  : "Revoke access"}
+                              </DropdownMenuItem>
+                              {row.canManage && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => confirmDelete(row.id)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete key
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

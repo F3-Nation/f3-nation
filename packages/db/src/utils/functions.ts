@@ -172,7 +172,10 @@ export const getDatabaseNameFromUri = (uri: string) => {
 
 export const getDbUrl = () => {
   const databaseUrl = isTest ? env.TEST_DATABASE_URL : env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL is not defined");
+  if (!databaseUrl)
+    throw new Error(
+      "DATABASE_URL is not defined (or TEST_DATABASE_URL when NODE_ENV=test)",
+    );
   const databaseName = getDatabaseNameFromUri(databaseUrl);
   // Remove SSL to enable PGBouncer to work
   const useSsl = false; //  isProduction || (databaseName?.includes("_prod") ?? false);
