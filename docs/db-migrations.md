@@ -31,7 +31,9 @@ grants and comment.
 
 List what depends on the enum, and on any column that uses it, in the target
 database before writing the migration. Replace the placeholders with the enum,
-the tables that have a column of that type, and the column name:
+the tables that have a column of that type, and the column name. Add one entry
+to the `IN (...)` list for each such table; if the column has a different name
+in some of them, run the query once per name:
 
 ```sql
 SELECT DISTINCT r.ev_class::regclass AS view
@@ -40,7 +42,8 @@ WHERE d.classid = 'pg_rewrite'::regclass
   AND ((d.refclassid = 'pg_type'::regclass
       AND d.refobjid = 'public.<enum_type>'::regtype)
     OR (d.refclassid = 'pg_class'::regclass
-      AND d.refobjid IN ('public.<table>'::regclass)
+      AND d.refobjid IN ('public.<table_a>'::regclass,
+        'public.<table_b>'::regclass)
       AND d.refobjsubid = (SELECT attnum FROM pg_attribute
         WHERE attrelid = d.refobjid AND attname = '<column>')));
 ```
