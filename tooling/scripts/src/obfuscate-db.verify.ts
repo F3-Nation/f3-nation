@@ -253,6 +253,15 @@ interface PlantedIds {
   privateEventId: number;
 }
 
+/**
+ * An invalidated secret: `revoked:` + 64 hex chars of an unknown input. Not
+ * derivable from anything in the row, so `revoked:<id>` (the old scheme's
+ * working secret) must not be it.
+ */
+function secretRevoked(secret: string | null): boolean {
+  return !!secret && /^revoked:[0-9a-f]{64}$/.test(secret);
+}
+
 async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
   console.log("\nPlanting synthetic PII fixtures...");
   const [region] = await sql<{ id: number }[]>`
@@ -851,11 +860,9 @@ async function main(): Promise<void> {
         contacts: string[] | null;
         metadata: string | null;
         client_secret: string | null;
-        expected_secret: string;
       }[]
     >`
-      SELECT contacts, metadata::text AS metadata, client_secret,
-        encode(sha256(('revoked:' || id)::bytea), 'hex') AS expected_secret
+      SELECT contacts, metadata::text AS metadata, client_secret
       FROM auth.better_auth_oauth_client WHERE id = 'synthetic-client' LIMIT 1`;
     const clientOk =
       !!client &&
@@ -864,12 +871,12 @@ async function main(): Promise<void> {
       !!client.metadata &&
       !client.metadata.includes("carl@aol.com") &&
       client.metadata.includes(SINK_PREFIX) &&
-      client.client_secret === client.expected_secret;
+      secretRevoked(client.client_secret);
     check(
       "better_auth_oauth_client contacts[]/metadata scrubbed, secret invalidated",
       clientOk,
       client
-        ? `${(client.contacts ?? []).join(",")} | ${client.metadata} | secret ${client.client_secret === client.expected_secret ? "invalidated" : "INTACT"}`
+        ? `${(client.contacts ?? []).join(",")} | ${client.metadata} | secret ${secretRevoked(client.client_secret) ? "invalidated" : "INTACT"}`
         : "missing",
     );
 

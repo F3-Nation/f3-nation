@@ -362,7 +362,7 @@ async function main(): Promise<void> {
       const [pluralSecrets] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM auth.oauth_clients
         WHERE client_secret_hash IS NOT NULL
-          AND client_secret_hash != encode(sha256(('revoked:' || id)::bytea), 'hex')`;
+          AND client_secret_hash NOT LIKE 'revoked:%'`;
       pluralSecretsLive = pluralSecrets?.n ?? 0;
     }
     let singularSecretsLive = 0;
@@ -370,14 +370,24 @@ async function main(): Promise<void> {
       checkedAny = true;
       const [singularSecrets] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM auth.oauth_client
-        WHERE client_secret IS NOT NULL AND client_secret NOT LIKE 'revoked-%'`;
+        WHERE client_secret IS NOT NULL AND client_secret NOT LIKE 'revoked:%'`;
       singularSecretsLive = singularSecrets?.n ?? 0;
+    }
+    let betterAuthSecretsLive = 0;
+    if (await tableExists(sql, "auth.better_auth_oauth_client")) {
+      checkedAny = true;
+      const [betterAuthSecrets] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM auth.better_auth_oauth_client
+        WHERE client_secret IS NOT NULL AND client_secret NOT LIKE 'revoked:%'`;
+      betterAuthSecretsLive = betterAuthSecrets?.n ?? 0;
     }
     check(
       "oauth client secrets invalidated",
-      pluralSecretsLive === 0 && singularSecretsLive === 0,
+      pluralSecretsLive === 0 &&
+        singularSecretsLive === 0 &&
+        betterAuthSecretsLive === 0,
       checkedAny
-        ? `${pluralSecretsLive} plural / ${singularSecretsLive} singular live secrets`
+        ? `${pluralSecretsLive} plural / ${singularSecretsLive} singular / ${betterAuthSecretsLive} Better Auth live secrets`
         : "absent (neither oauth client table in this schema — skipped)",
     );
 

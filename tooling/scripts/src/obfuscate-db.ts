@@ -826,9 +826,13 @@ async function obfuscate(sql: Sql): Promise<void> {
   ]);
 
   // ---- auth.oauth_clients: invalidate secrets --------------------------------
-  // Overwrite the secret hash with one derived from a non-secret string, so no
-  // plaintext secret can authenticate against staging. Local dev clients
-  // (*-local, committed plaintext) survive only with --preserve-local-seed.
+  // Overwrite every secret (hash) with `revoked:` + the hash of two random
+  // UUIDs that are never kept. Nothing hashes to that shape and nobody knows
+  // the input, so no secret can authenticate against staging. (Deriving it
+  // from the client id, as before, meant `revoked:<id>` was a working
+  // secret.) The prefix is what the verify suites check for. Local dev
+  // clients (*-local, committed plaintext) survive only with
+  // --preserve-local-seed.
   await runSetBased(sql, {
     table: "auth.oauth_clients",
     column: "client_secret_hash",
@@ -836,10 +840,10 @@ async function obfuscate(sql: Sql): Promise<void> {
     countWhere: PRESERVE_LOCAL_SEED ? sql`id NOT LIKE '%-local'` : sql`true`,
     update: PRESERVE_LOCAL_SEED
       ? sql`UPDATE auth.oauth_clients
-          SET client_secret_hash = encode(sha256(('revoked:' || id)::bytea), 'hex')
+          SET client_secret_hash = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')
           WHERE id NOT LIKE '%-local'`
       : sql`UPDATE auth.oauth_clients
-          SET client_secret_hash = encode(sha256(('revoked:' || id)::bytea), 'hex')`,
+          SET client_secret_hash = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')`,
   });
 
   // Same prod -> staging repoint as better_auth_oauth_client (toStagingUri),
@@ -884,7 +888,7 @@ async function obfuscate(sql: Sql): Promise<void> {
     action: "invalidate",
     countWhere: sql`true`,
     update: sql`UPDATE auth.oauth_client
-        SET client_secret = 'revoked-' || encode(sha256(('revoked:' || id)::bytea), 'hex')`,
+        SET client_secret = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')`,
   });
 
   // ---- users ----------------------------------------------------------------
@@ -1494,7 +1498,7 @@ async function obfuscate(sql: Sql): Promise<void> {
     action: "invalidate",
     countWhere: sql`client_secret IS NOT NULL`,
     update: sql`UPDATE auth.better_auth_oauth_client
-        SET client_secret = encode(sha256(('revoked:' || id)::bytea), 'hex')
+        SET client_secret = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')
         WHERE client_secret IS NOT NULL`,
   });
 
