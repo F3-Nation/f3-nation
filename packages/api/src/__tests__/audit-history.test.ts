@@ -3,6 +3,7 @@ import type { AppDb } from "@acme/db/client";
 import { createLogger, setErrorReporter } from "@acme/logger";
 import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 
 import {
   db,
@@ -152,6 +153,11 @@ describe("audit history migration (#664)", () => {
       CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) x
       WHERE n.nspname='audit' AND x.grantee <> p.proowner`);
     expect(publicGrants).toHaveLength(0);
+    const auditSchemaGrants = await db.execute(sql`
+      SELECT x.grantee FROM pg_namespace n
+      CROSS JOIN LATERAL aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) x
+      WHERE n.nspname='audit' AND x.grantee <> n.nspowner`);
+    expect(auditSchemaGrants).toHaveLength(0);
     const writes = await db.execute(sql`
       SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
       CROSS JOIN LATERAL aclexplode(c.relacl) x
@@ -159,6 +165,55 @@ describe("audit history migration (#664)", () => {
       AND (x.privilege_type <> 'SELECT' OR x.grantee=0)`);
     expect(writes).toHaveLength(0);
   });
+
+  it("removes audit schema grants inherited from default privileges", async () => {
+    const { env } = await import("@acme/env");
+    const { drizzle } = await import("drizzle-orm/postgres-js");
+    const { migrate } = await import("drizzle-orm/postgres-js/migrator");
+    const { default: postgres } = await import("postgres");
+    const database = `audit_schema_acl_${randomUUID().replaceAll("-", "")}_test`;
+    const role = `audit_acl_${randomUUID().replaceAll("-", "")}`;
+    const adminUrl = new URL(env.TEST_DATABASE_URL!);
+    const targetUrl = new URL(adminUrl);
+    adminUrl.pathname = "/postgres";
+    targetUrl.pathname = `/${database}`;
+    const admin = postgres(adminUrl.toString(), { max: 1, prepare: false });
+    let client: ReturnType<typeof postgres> | undefined;
+    let databaseCreated = false;
+    let roleCreated = false;
+    try {
+      await admin`CREATE ROLE ${admin(role)} NOLOGIN`;
+      roleCreated = true;
+      await admin`CREATE DATABASE ${admin(database)}`;
+      databaseCreated = true;
+      client = postgres(targetUrl.toString(), { max: 1, prepare: false });
+      await client`ALTER DEFAULT PRIVILEGES GRANT USAGE, CREATE ON SCHEMAS TO ${client(role)}`;
+      await migrate(drizzle(client), {
+        migrationsFolder: resolve(import.meta.dirname, "../../../db/drizzle"),
+        migrationsTable: "__drizzle_migrations_acl_probe",
+      });
+      const [grants] = await client<
+        { usage: boolean; create: boolean }[]
+      >`SELECT has_schema_privilege(${role}, 'audit', 'USAGE') AS usage,
+        has_schema_privilege(${role}, 'audit', 'CREATE') AS create`;
+      expect(grants).toEqual({ usage: false, create: false });
+    } finally {
+      try {
+        await client?.end({ timeout: 5 });
+      } finally {
+        try {
+          if (databaseCreated)
+            await admin`DROP DATABASE IF EXISTS ${admin(database)}`;
+        } finally {
+          try {
+            if (roleCreated) await admin`DROP ROLE IF EXISTS ${admin(role)}`;
+          } finally {
+            await admin.end({ timeout: 5 });
+          }
+        }
+      }
+    }
+  }, 30_000);
 
   it("captures I/U/D snapshots, no backfill, no-op suppression and transaction timestamps", async () =>
     fixture(async (tx) => {
@@ -188,7 +243,7 @@ describe("audit history migration (#664)", () => {
       });
       expect(rows[1]).toMatchObject({
         row_id: "1",
-        old_row: { value: "before" },
+        old_row: { value: "before", secret: "[redacted]" },
         new_row: { value: "after", secret: "[redacted]", updated: 2 },
       });
       expect(rows[2]).toMatchObject({
@@ -503,6 +558,10 @@ describe("audit history migration (#664)", () => {
         sql`SELECT audit.enable_tracking('audit_member_fixture.rows')`,
       );
       await tx.execute(sql`INSERT INTO audit_member_fixture.rows VALUES (1)`);
+      await tx.execute(
+        sql`SELECT audit.disable_tracking('audit_member_fixture.rows')`,
+      );
+      await tx.execute(sql`INSERT INTO audit_member_fixture.rows VALUES (2)`);
       await tx.execute(sql`RESET ROLE`);
       const owners = await tx.execute<{ kind: string; owner: string }>(sql`
         SELECT 'schema' AS kind, pg_get_userbyid(nspowner) AS owner
@@ -745,6 +804,114 @@ describe("audit history migration (#664)", () => {
         expect(safe.cause).toBeUndefined();
         expect(safe.stack).not.toContain("synthetic-secret");
         expect(output).toHaveBeenCalledWith({ err: safe }, "api.audit.failed");
+      } finally {
+        output.mockRestore();
+        setErrorReporter(() => undefined);
+      }
+      expect(
+        await tx.execute(sql`SELECT id FROM audit_fixture.rows WHERE id=1`),
+      ).toHaveLength(0);
+      expect(await history(tx)).toHaveLength(0);
+    }));
+
+  it("sanitizes canceled audit captures before logging", async () =>
+    fixture(async (tx) => {
+      await tx.execute(sql`CREATE FUNCTION audit_fixture.slow_history() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN PERFORM pg_sleep(10); RETURN NEW; END $$`);
+      await tx.execute(sql`CREATE TRIGGER slow_history BEFORE INSERT ON audit_fixture_history.rows
+      FOR EACH ROW EXECUTE FUNCTION audit_fixture.slow_history()`);
+      let failure: unknown;
+      try {
+        await tx.transaction(async (sp) => {
+          await sp.execute(sql`SET LOCAL statement_timeout = '250ms'`);
+          await sp.execute(
+            sql`INSERT INTO audit_fixture.rows VALUES (1, 'x', 'synthetic-cancel-secret', 0)`,
+          );
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeDefined();
+      expect((failure as { cause?: unknown }).cause).toMatchObject({
+        message: "Audit history capture failed",
+        code: "57014",
+      });
+      expect(
+        JSON.stringify((failure as { cause?: unknown }).cause),
+      ).not.toContain("synthetic-cancel-secret");
+      const instance = createLogger("audit-cancel-integration");
+      const output = vi
+        .spyOn(instance.logger, "error")
+        .mockImplementation(() => undefined);
+      const reporter = vi.fn();
+      setErrorReporter(reporter);
+      try {
+        instance.logError("api.audit.canceled", {}, failure);
+        const safe = reporter.mock.lastCall?.[2] as Error;
+        expect(safe).toMatchObject({
+          message: "Audit history capture failed",
+          code: "57014",
+        });
+        expect(safe.cause).toBeUndefined();
+        expect(safe.stack).not.toContain("synthetic-cancel-secret");
+        expect(JSON.stringify(safe)).not.toContain("synthetic-cancel-secret");
+        expect(output).toHaveBeenCalledWith(
+          { err: safe },
+          "api.audit.canceled",
+        );
+      } finally {
+        output.mockRestore();
+        setErrorReporter(() => undefined);
+      }
+      expect(
+        await tx.execute(sql`SELECT id FROM audit_fixture.rows WHERE id=1`),
+      ).toHaveLength(0);
+      expect(await history(tx)).toHaveLength(0);
+    }));
+
+  it("sanitizes audit assertion failures before logging", async () =>
+    fixture(async (tx) => {
+      await tx.execute(sql`CREATE FUNCTION audit_fixture.assert_history() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN ASSERT false, 'synthetic-assert-secret'; RETURN NEW; END $$`);
+      await tx.execute(sql`CREATE TRIGGER assert_history BEFORE INSERT ON audit_fixture_history.rows
+      FOR EACH ROW EXECUTE FUNCTION audit_fixture.assert_history()`);
+      let failure: unknown;
+      try {
+        await tx.transaction(async (sp) => {
+          await sp.execute(
+            sql`INSERT INTO audit_fixture.rows VALUES (1, 'x', 'synthetic-assert-secret', 0)`,
+          );
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeDefined();
+      expect((failure as { cause?: unknown }).cause).toMatchObject({
+        message: "Audit history capture failed",
+        code: "P0004",
+      });
+      expect(
+        JSON.stringify((failure as { cause?: unknown }).cause),
+      ).not.toContain("synthetic-assert-secret");
+      const instance = createLogger("audit-assert-integration");
+      const output = vi
+        .spyOn(instance.logger, "error")
+        .mockImplementation(() => undefined);
+      const reporter = vi.fn();
+      setErrorReporter(reporter);
+      try {
+        instance.logError("api.audit.assertion", {}, failure);
+        const safe = reporter.mock.lastCall?.[2] as Error;
+        expect(safe).toMatchObject({
+          message: "Audit history capture failed",
+          code: "P0004",
+        });
+        expect(safe.cause).toBeUndefined();
+        expect(safe.stack).not.toContain("synthetic-assert-secret");
+        expect(output).toHaveBeenCalledWith(
+          { err: safe },
+          "api.audit.assertion",
+        );
       } finally {
         output.mockRestore();
         setErrorReporter(() => undefined);

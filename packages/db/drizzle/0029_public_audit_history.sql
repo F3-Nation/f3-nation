@@ -67,7 +67,13 @@ BEGIN
     VALUES ($1, $2, $3, $4, $5, $6)', TG_TABLE_SCHEMA || '_history', TG_TABLE_NAME)
     USING rid, left(TG_OP, 1), uid, NULLIF(current_setting('app.source', true), ''), old_j, new_j;
   RETURN NULL;
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION
+WHEN query_canceled OR assert_failure THEN
+  -- OTHERS deliberately excludes query_canceled and assert_failure. Sanitize
+  -- those diagnostics before the driver can log source binds.
+  RAISE EXCEPTION USING ERRCODE = SQLSTATE, MESSAGE = 'Audit history capture failed',
+    SCHEMA = TG_TABLE_SCHEMA, TABLE = TG_TABLE_NAME;
+WHEN OTHERS THEN
   -- A driver may log PostgreSQL DETAIL/CONTEXT. Do not propagate a constraint's
   -- failing-row detail or a trigger's message, which can contain raw secrets.
   -- Preserve the SQLSTATE (including retryable failures), but not its payload.
@@ -246,10 +252,17 @@ BEGIN
   EXECUTE format('ALTER FUNCTION audit.disable_tracking(regclass) OWNER TO %I', owner_name);
 END $$;
 --> statement-breakpoint
--- Also remove explicit function grants inherited from global default ACLs.
+-- Also remove explicit schema/function grants inherited from global default ACLs.
 DO $$
-DECLARE entry record;
+DECLARE
+  entry record;
+  grantee text;
 BEGIN
+  FOR grantee IN SELECT DISTINCT CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE quote_ident(r.rolname) END
+    FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) x
+    LEFT JOIN pg_roles r ON r.oid=x.grantee
+    WHERE n.nspname='audit' AND x.grantee <> n.nspowner
+  LOOP EXECUTE format('REVOKE ALL ON SCHEMA audit FROM %s', grantee); END LOOP;
   FOR entry IN SELECT p.oid::regprocedure AS signature,
     CASE WHEN x.grantee = 0 THEN 'PUBLIC' ELSE quote_ident(r.rolname) END AS grantee
     FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
