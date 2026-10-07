@@ -1243,7 +1243,7 @@ async function main(): Promise<number> {
       keys: `${keepPlan.keep.length} kept of ${keepPlan.stashedCount} stashed (${keepPlan.keep.join(", ")})`,
       slack: slackResult,
       slackbot,
-      oauth: await oauthClients(stg),
+      clientIds: await preservedClientIds(stg),
       preservedBefore,
       preservedAfter,
       fks: `${validation.validated}/${toValidate.length} validated${savedFks.length > toValidate.length ? ` (${savedFks.length - toValidate.length} were NOT VALID before the run and stay so)` : ""}`,
@@ -1284,7 +1284,8 @@ async function main(): Promise<number> {
   }
 }
 
-async function oauthClients(sql: Sql): Promise<string> {
+/** Client ids (public identifiers, never secrets) in the preserved tables. */
+async function preservedClientIds(sql: Sql): Promise<string> {
   const parts: string[] = [];
   for (const t of PRESERVED_TABLES) {
     const [present] = await sql<
@@ -1421,7 +1422,7 @@ function printSummary(s: {
   keys?: string;
   slack?: string;
   slackbot?: string;
-  oauth?: string;
+  clientIds?: string;
   preservedBefore?: Map<string, string>;
   preservedAfter?: Map<string, string>;
   fks?: string;
@@ -1449,11 +1450,14 @@ function printSummary(s: {
   if (s.keys) log(`API keys: ${s.keys}`);
   if (s.slack) log(`Slack: ${s.slack.replace(/\n/g, "\n   ")}`);
   if (s.slackbot) log(`slackbot: ${s.slackbot}`);
-  if (s.oauth) log(`OAuth clients on staging: ${s.oauth}`);
+  if (s.clientIds) log(`client registrations on staging: ${s.clientIds}`);
   for (const [t, before] of s.preservedBefore ?? []) {
     const after = s.preservedAfter?.get(t);
     if (after !== undefined)
-      log(`   ${t} ${after === before ? "unchanged" : "CHANGED"} (${after})`);
+      // Row count only: the hash covers secret hashes too.
+      log(
+        `   ${t} ${after === before ? "unchanged" : "CHANGED"} (${after.split(",")[0]})`,
+      );
   }
   if (s.fks) log(`foreign keys: ${s.fks}`);
   if (warnings.length > 0) log(`warnings:\n   - ${warnings.join("\n   - ")}`);
