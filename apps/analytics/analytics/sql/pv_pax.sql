@@ -41,6 +41,20 @@ observed AS (
     JOIN eligible_events e ON e.event_id = a.event_instance_id
     WHERE a.user_id IS NOT NULL AND a.is_planned = false AND e.region_id IS NOT NULL
 ),
+lifetime_counts AS (
+    SELECT a.user_id,
+           COUNT(DISTINCT a.event_instance_id)::INTEGER AS lifetime_posts,
+           COUNT(DISTINCT CASE WHEN EXISTS (
+               SELECT 1
+               FROM pg.public.attendance_x_attendance_types ax
+               JOIN pg.public.attendance_types att_type ON att_type.id = ax.attendance_type_id
+               WHERE ax.attendance_id = a.id AND att_type.type = 'Q'
+           ) THEN a.event_instance_id END)::INTEGER AS lifetime_qs
+    FROM pg.public.attendance a
+    JOIN eligible_events e ON e.event_id = a.event_instance_id
+    WHERE a.user_id IS NOT NULL AND a.is_planned = false
+    GROUP BY a.user_id
+),
 region_values AS (
     SELECT u.*, hr.name AS home_region_name,
            COALESCE((SELECT list(struct_pack(region_org_id := x.region_org_id, region_name := x.region_name)
@@ -86,7 +100,11 @@ SELECT p.refreshed_at, r.user_id, r.f3_name, r.home_region_id, r.home_region_nam
                                 AND user_id IS NOT NULL AND role_id IS NOT NULL AND org_id IS NOT NULL) assignments
                         LEFT JOIN pg.public.roles role ON role.id = assignments.role_id
                         LEFT JOIN pg.public.orgs o ON o.id = assignments.org_id) x),
-                 []::STRUCT(role_id INTEGER, role_name VARCHAR, org_id INTEGER,
-                            org_name VARCHAR, org_type VARCHAR)[]) AS roles
-FROM region_values r CROSS JOIN params p
+                  []::STRUCT(role_id INTEGER, role_name VARCHAR, org_id INTEGER,
+                             org_name VARCHAR, org_type VARCHAR)[]) AS roles,
+        COALESCE(lc.lifetime_posts, 0)::INTEGER AS lifetime_posts,
+        COALESCE(lc.lifetime_qs, 0)::INTEGER AS lifetime_qs
+FROM region_values r
+LEFT JOIN lifetime_counts lc ON lc.user_id = r.user_id
+CROSS JOIN params p
 ORDER BY r.f3_name, r.user_id

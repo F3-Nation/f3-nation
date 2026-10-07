@@ -47,6 +47,7 @@ PAX_VAULT_NAMES = (
     "pv_areas",
     "pv_aos",
     "pv_events",
+    "pv_attendance",
 )
 ANALYTICS_NAMES = (
     "event_info",
@@ -63,7 +64,7 @@ PRODUCT_NAMES = MappingProxyType(
 
 _SCHEMA_VERSIONS = MappingProxyType(
     {
-        "pv_pax": "pv_pax.v2",
+        "pv_pax": "pv_pax.v3",
         "pv_sectors": "pv_sectors.v2",
         "pv_areas": "pv_areas.v2",
         "pv_events": "pv_events.v2",

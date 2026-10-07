@@ -76,7 +76,7 @@ _SCHEMAS = (
     ),
     ExpectedSchema(
         "pv_pax",
-        "pv_pax.v2",
+        "pv_pax.v3",
         _columns(
             ("refreshed_at", "TIMESTAMP WITH TIME ZONE"),
             ("user_id", "INTEGER"),
@@ -95,6 +95,8 @@ _SCHEMAS = (
                 "roles",
                 "STRUCT(role_id INTEGER, role_name VARCHAR, org_id INTEGER, org_name VARCHAR, org_type VARCHAR)[]",
             ),
+            ("lifetime_posts", "INTEGER"),
+            ("lifetime_qs", "INTEGER"),
         ),
     ),
     ExpectedSchema(
@@ -230,6 +232,32 @@ _SCHEMAS = (
                 "STRUCT(user_id INTEGER, f3_name VARCHAR, q_ind INTEGER, coq_ind INTEGER, avatar_url VARCHAR, "
                 "attended BOOLEAN, ghost BOOLEAN, fartsack BOOLEAN)[]",
             ),
+        ),
+    ),
+    ExpectedSchema(
+        "pv_attendance",
+        "pv_attendance.v1",
+        _columns(
+            ("refreshed_at", "TIMESTAMP WITH TIME ZONE"),
+            ("id", "INTEGER"),
+            ("user_id", "INTEGER"),
+            ("event_instance_id", "INTEGER"),
+            ("attendance_meta", "JSON"),
+            ("created", "TIMESTAMP"),
+            ("updated", "TIMESTAMP"),
+            ("q_ind", "INTEGER"),
+            ("coq_ind", "INTEGER"),
+            ("f3_name", "VARCHAR"),
+            ("home_region_id", "INTEGER"),
+            ("home_region_name", "VARCHAR"),
+            ("avatar_url", "VARCHAR"),
+            ("user_status", "VARCHAR"),
+            ("start_date", "DATE"),
+            ("ao_org_id", "INTEGER"),
+            ("ao_name", "VARCHAR"),
+            ("tags", 'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR)[]'),
+            ("types", 'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]'),
+            ("categories", "VARCHAR[]"),
         ),
     ),
     ExpectedSchema(

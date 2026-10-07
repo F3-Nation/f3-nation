@@ -1,0 +1,185 @@
+from datetime import date, datetime
+from pathlib import Path
+
+import duckdb
+import pytest
+
+from analytics.schema_registry import SCHEMAS_BY_NAME
+
+SQL = Path(__file__).parents[1].joinpath("analytics/sql/pv_attendance.sql").read_text()
+
+
+def source():
+    db = duckdb.connect(":memory:")
+    db.execute("ATTACH ':memory:' AS pg")
+    db.execute("CREATE SCHEMA pg.public")
+    db.execute("CREATE TABLE pg.public.orgs(id INTEGER, parent_id INTEGER, name VARCHAR, org_type VARCHAR)")
+    db.execute(
+        "CREATE TABLE pg.public.event_instances(id INTEGER, org_id INTEGER, is_active BOOLEAN, "
+        "pax_count INTEGER, meta JSON, start_date DATE)"
+    )
+    db.execute(
+        "CREATE TABLE pg.public.users(id INTEGER, email VARCHAR, f3_name VARCHAR, home_region_id INTEGER, "
+        "avatar_url VARCHAR, status VARCHAR)"
+    )
+    db.execute(
+        "CREATE TABLE pg.public.attendance(id INTEGER, user_id INTEGER, event_instance_id INTEGER, "
+        "is_planned BOOLEAN, meta VARCHAR, created TIMESTAMP, updated TIMESTAMP)"
+    )
+    db.execute("CREATE TABLE pg.public.event_instances_x_event_types(event_instance_id INTEGER, event_type_id INTEGER)")
+    db.execute(
+        "CREATE TABLE pg.public.event_types(id INTEGER, name VARCHAR, description VARCHAR, event_category VARCHAR)"
+    )
+    db.execute("CREATE TABLE pg.public.event_tags_x_event_instances(event_instance_id INTEGER, event_tag_id INTEGER)")
+    db.execute("CREATE TABLE pg.public.event_tags(id INTEGER, name VARCHAR, description VARCHAR)")
+    db.execute("CREATE TABLE pg.public.attendance_types(id INTEGER, type VARCHAR)")
+    db.execute(
+        "CREATE TABLE pg.public.attendance_x_attendance_types(attendance_id INTEGER, attendance_type_id INTEGER)"
+    )
+    db.executemany(
+        "INSERT INTO pg.public.orgs VALUES (?, ?, ?, ?)",
+        [(1, None, "Region", "region"), (2, 1, "AO", "ao"), (3, None, "Orphan", "sector")],
+    )
+    db.executemany(
+        "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (10, 2, True, 5, "{}", "2026-01-01"),
+            (11, 2, True, 3, '{"exclude_from_pax_vault":null}', "2026-01-01"),
+            (12, 2, False, 1, "{}", "2026-01-02"),
+            (13, 2, True, None, "{}", "2026-01-02"),
+            (14, 2, True, 2, '{"exclude_from_pax_vault":true}', "2026-01-02"),
+            (15, 999, True, 2, "{}", "2026-01-02"),
+        ],
+    )
+    db.executemany(
+        "INSERT INTO pg.public.users VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (1, "alpha@example.test", "Alpha", 1, "alpha.png", "active"),
+            (2, "invalid", "Invalid", 1, None, "inactive"),
+            (3, None, "No email", None, None, "active"),
+        ],
+    )
+    db.executemany(
+        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            (100, 1, 10, False, None, "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (101, 1, 10, True, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (102, 2, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (103, 3, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (104, 1, 11, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (105, 1, 12, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
+            (106, 1, 13, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
+            (107, 1, 14, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
+            (108, 1, 15, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
+            (109, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+        ],
+    )
+    db.executemany(
+        "INSERT INTO pg.public.event_types VALUES (?, ?, ?, ?)",
+        [
+            (1, "Beta", "second", "second_f"),
+            (2, "Alpha", "first", "first_f"),
+            (3, "Null category", "none", None),
+        ],
+    )
+    db.executemany(
+        "INSERT INTO pg.public.event_instances_x_event_types VALUES (?, ?)", [(10, 1), (10, 2), (10, 3), (10, 2)]
+    )
+    db.execute("INSERT INTO pg.public.event_tags VALUES (7, 'Morning', 'Workout')")
+    db.execute("INSERT INTO pg.public.event_tags_x_event_instances VALUES (10, 7), (10, 7)")
+    db.executemany("INSERT INTO pg.public.attendance_types VALUES (?, ?)", [(1, "Q"), (2, "CoQ")])
+    db.execute("INSERT INTO pg.public.attendance_x_attendance_types VALUES (100, 1), (100, 1), (100, 2)")
+    return db
+
+
+def query(db):
+    return db.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"])
+
+
+def test_attendance_rows_filter_and_aggregate_without_fanout():
+    db = source()
+    result = query(db)
+    columns = result.description
+    rows = result.fetchall()
+    assert [column[0] for column in columns] == [
+        "refreshed_at",
+        "id",
+        "user_id",
+        "event_instance_id",
+        "attendance_meta",
+        "created",
+        "updated",
+        "q_ind",
+        "coq_ind",
+        "f3_name",
+        "home_region_id",
+        "home_region_name",
+        "avatar_url",
+        "user_status",
+        "start_date",
+        "ao_org_id",
+        "ao_name",
+        "tags",
+        "types",
+        "categories",
+    ]
+    assert len(rows) == 3
+    row = rows[0]
+    assert row[1:17] == (
+        100,
+        1,
+        10,
+        None,
+        datetime(2026, 1, 1, 8),
+        datetime(2026, 1, 1, 9),
+        1,
+        1,
+        "Alpha",
+        1,
+        "Region",
+        "alpha.png",
+        "active",
+        date(2026, 1, 1),
+        2,
+        "AO",
+    )
+    assert row[17] == [{"id": 7, "name": "Morning", "description": "Workout"}]
+    assert row[18] == [
+        {"id": 2, "name": "Alpha", "description": "first", "event_category": "first_f"},
+        {"id": 1, "name": "Beta", "description": "second", "event_category": "second_f"},
+        {"id": 3, "name": "Null category", "description": "none", "event_category": None},
+    ]
+    assert row[19] == ["first_f", "second_f"]
+    assert rows[1][1:4] == (109, 1, 10)
+    assert rows[1][7:9] == (0, 0)
+    assert rows[2][1] == 104
+
+
+def test_attendance_without_tags_or_types_has_typed_empty_arrays_and_null_meta(tmp_path: Path):
+    db = source()
+    # A direct region event has no AO; pv_events' ancestor lookup also returns NULL for AO.
+    db.execute("INSERT INTO pg.public.event_instances VALUES (20, 1, true, 1, '{}', '2026-01-03')")
+    db.execute("INSERT INTO pg.public.attendance VALUES (200, 1, 20, false, NULL, NULL, NULL)")
+    row = next(r for r in query(db).fetchall() if r[1] == 200)
+    assert row[4] is None
+    assert row[7:9] == (0, 0)
+    assert row[15:17] == (None, None)
+    assert row[17:20] == ([], [], [])
+    output = tmp_path / "pv_attendance.parquet"
+    db.execute("COPY (" + SQL + ") TO ? (FORMAT PARQUET)", [str(output), "2026-01-03T00:00:00Z", "2026-01-03"])
+    columns = db.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(output)]).fetchall()
+    assert [(column[0], column[1], column[2] == "YES") for column in columns] == [
+        (column.name, column.duckdb_type, column.nullable) for column in SCHEMAS_BY_NAME["pv_attendance"].columns
+    ]
+
+
+def test_malformed_event_exclusion_and_attendance_metadata_fail():
+    db = source()
+    db.execute('UPDATE pg.public.event_instances SET meta = \'{"exclude_from_pax_vault":"yes"}\' WHERE id = 10')
+    with pytest.raises(Exception, match="exclude_from_pax_vault"):
+        query(db)
+
+    db = source()
+    db.execute("UPDATE pg.public.attendance SET meta = 'not-json' WHERE id = 100")
+    with pytest.raises(duckdb.ConversionException, match="Malformed JSON"):
+        query(db)

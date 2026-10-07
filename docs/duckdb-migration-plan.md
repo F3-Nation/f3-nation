@@ -58,8 +58,8 @@ object generation returned by the SDK. A GCS **object generation** identifies
 the version of pointer content; GCS **metageneration** counts metadata updates
 and is a different value, not `releaseSequence` and not a substitute for
 content CAS. Hashes cover canonical manifest bytes, not parsed/re-serialized
-JSON. The Pax Vault manifest contains exactly its nine allowlisted dataset/file
-names (including `pv_territories`); analytics has exactly its four named
+JSON. The Pax Vault manifest contains exactly its ten allowlisted dataset/file
+names (including `pv_territories` and `pv_attendance`); analytics has exactly its four named
 datasets. Manifests contain byte sizes, object GCS generations, CRC32C values,
 row/schema fingerprints, and total size.
 
@@ -89,11 +89,12 @@ unexpected files, unknown schema versions, missing manifest entries,
 generation/hash mismatch, duplicate datasets, and any dataset outside that
 product's exact set. Pax Vault's `pv_events` schema includes rich event fields,
 `description`, `preblast`, `preblast_rich`, `backblast`, `backblast_rich`,
-`meta`, and type/tag descriptions; `pv_pax` includes `email` and `roles` (a
-list of role records). `pv_areas` and `pv_sectors` use schema v2 for revised
-hierarchy outputs. The declared v2 datasets are `pv_pax.v2`, `pv_events.v2`,
-`pv_areas.v2`, and `pv_sectors.v2`; other currently declared Pax Vault datasets
-are v1. DuckDB types/nullability are determined by the approved registry and
+`meta`, and type/tag descriptions; `pv_pax.v3` includes `email`, `roles` (a
+list of role records), and the appended `lifetime_posts`/`lifetime_qs` fields.
+`pv_areas` and `pv_sectors` use schema v2 for revised hierarchy outputs. The
+declared v2 datasets are `pv_events.v2`, `pv_areas.v2`, and `pv_sectors.v2`;
+`pv_attendance` is `pv_attendance.v1`, and other currently declared Pax Vault
+datasets are v1. DuckDB types/nullability are determined by the approved registry and
 remain a compatibility verification gate; do not infer nullable properties
 from these summaries. The consumer verifies the
 manifest and every object's GCS generation and CRC32C before opening DuckDB,

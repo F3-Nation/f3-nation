@@ -24,7 +24,13 @@ def test_pax_materialization_contract(tmp_path: Path):
         "CREATE TABLE pg.public.event_instances (id INTEGER, org_id INTEGER, is_active BOOLEAN, "
         "pax_count INTEGER, meta JSON)"
     )
-    db.execute("CREATE TABLE pg.public.attendance (user_id INTEGER, event_instance_id INTEGER, is_planned BOOLEAN)")
+    db.execute(
+        "CREATE TABLE pg.public.attendance (id INTEGER, user_id INTEGER, event_instance_id INTEGER, is_planned BOOLEAN)"
+    )
+    db.execute("CREATE TABLE pg.public.attendance_types (id INTEGER, type VARCHAR)")
+    db.execute(
+        "CREATE TABLE pg.public.attendance_x_attendance_types (attendance_id INTEGER, attendance_type_id INTEGER)"
+    )
     db.execute(
         "CREATE TABLE pg.public.event_instances_x_event_types (event_instance_id INTEGER, event_type_id INTEGER)"
     )
@@ -81,9 +87,34 @@ def test_pax_materialization_contract(tmp_path: Path):
     db.execute("INSERT INTO pg.public.roles_x_users_x_org VALUES (3, 1, 20), (2, 1, 10), (3, 1, 20), (99, 1, 99)")
     db.executemany(
         "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?)",
-        [(1, 20, True, 1, "{}"), (2, 10, True, 1, "{}"), (3, 10, False, 1, "{}"), (4, 10, True, None, "{}")],
+        [
+            (1, 20, True, 1, "{}"),
+            (2, 10, True, 1, "{}"),
+            (3, 10, False, 1, "{}"),
+            (4, 10, True, None, "{}"),
+            (5, 10, True, 1, '{"exclude_from_pax_vault":true}'),
+            (6, 10, False, 1, "{}"),
+            (7, 30, True, 1, "{}"),
+        ],
     )
-    db.execute("INSERT INTO pg.public.attendance VALUES (1, 1, false), (1, 2, true), (NULL, 1, false)")
+    # Event 7 has an org without a region parent; it still counts for lifetime totals.
+    db.execute("INSERT INTO pg.public.orgs VALUES (30, NULL, 'Other', 'chapter')")
+    db.executemany(
+        "INSERT INTO pg.public.attendance VALUES (?, ?, ?, ?)",
+        [
+            (1, 1, 1, False),
+            (2, 1, 1, False),  # duplicate attendance row does not inflate event counts
+            (3, 1, 2, True),
+            (4, 1, 3, False),
+            (5, 1, 4, False),
+            (6, 1, 5, False),
+            (7, 1, 6, False),
+            (8, 1, 7, False),
+            (9, None, 1, False),
+        ],
+    )
+    db.execute("INSERT INTO pg.public.attendance_types VALUES (1, 'Q'), (2, 'Co-Q')")
+    db.execute("INSERT INTO pg.public.attendance_x_attendance_types VALUES (2, 1), (2, 1), (3, 1), (8, 2)")
     db.execute("INSERT INTO pg.public.event_instances_x_event_types VALUES (1, 7)")
     db.execute("INSERT INTO pg.public.event_types VALUES (7, 'Run')")
     db.execute("INSERT INTO pg.public.event_tags_x_event_instances VALUES (1, 8)")
@@ -102,8 +133,10 @@ def test_pax_materialization_contract(tmp_path: Path):
         {"role_id": 3, "role_name": "Q", "org_id": 20, "org_name": "AO", "org_type": "ao"},
         {"role_id": 99, "role_name": "99", "org_id": 99, "org_name": "99", "org_type": None},
     ]
+    assert rows[0][14:16] == (2, 1)
     assert rows[1][1] == 3 and rows[1][2:9] == ("3", 99, None, None, "solo@example.test", "active", None)
     assert rows[1][9:14] == ([], [], [], [], [])
+    assert rows[1][14:16] == (0, 0)
     by_id = {row[1]: row for row in rows}
     assert by_id[7][8] == "42"
     assert by_id[8][8] == "true"
@@ -125,12 +158,16 @@ def test_pax_materialization_contract(tmp_path: Path):
         "types",
         "tags",
         "roles",
+        "lifetime_posts",
+        "lifetime_qs",
     ]
     assert columns[9][1] == "STRUCT(region_org_id INTEGER, region_name VARCHAR)[]"
     assert columns[10][1] == "STRUCT(ao_org_id INTEGER, ao_name VARCHAR)[]"
     assert columns[13][1] == (
         "STRUCT(role_id INTEGER, role_name VARCHAR, org_id INTEGER, org_name VARCHAR, org_type VARCHAR)[]"
     )
+    assert columns[14][1] == "INTEGER"
+    assert columns[15][1] == "INTEGER"
     assert [(column[0], column[1], column[2] == "YES") for column in columns] == [
         (column.name, column.duckdb_type, column.nullable) for column in SCHEMAS_BY_NAME["pv_pax"].columns
     ]

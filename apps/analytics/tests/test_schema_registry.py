@@ -53,6 +53,57 @@ def test_schema_registry_is_complete_and_ordered_for_all_registered_datasets():
         'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]'
     )
 
+    assert tuple(column.name for column in SCHEMAS_BY_NAME["pv_pax"].columns[-2:]) == (
+        "lifetime_posts",
+        "lifetime_qs",
+    )
+    attendance = SCHEMAS_BY_NAME["pv_attendance"]
+    assert attendance.schema_version == "pv_attendance.v1"
+    assert tuple(column.name for column in attendance.columns) == (
+        "refreshed_at",
+        "id",
+        "user_id",
+        "event_instance_id",
+        "attendance_meta",
+        "created",
+        "updated",
+        "q_ind",
+        "coq_ind",
+        "f3_name",
+        "home_region_id",
+        "home_region_name",
+        "avatar_url",
+        "user_status",
+        "start_date",
+        "ao_org_id",
+        "ao_name",
+        "tags",
+        "types",
+        "categories",
+    )
+    assert tuple(column.duckdb_type for column in attendance.columns) == (
+        "TIMESTAMP WITH TIME ZONE",
+        "INTEGER",
+        "INTEGER",
+        "INTEGER",
+        "JSON",
+        "TIMESTAMP",
+        "TIMESTAMP",
+        "INTEGER",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "VARCHAR",
+        "VARCHAR",
+        "VARCHAR",
+        "DATE",
+        "INTEGER",
+        "VARCHAR",
+        'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR)[]',
+        'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]',
+        "VARCHAR[]",
+    )
+
 
 def test_manifest_columns_keep_projection_order_and_fingerprint_is_stable():
     columns = (ExpectedColumn("zeta", "VARCHAR", True), ExpectedColumn("alpha", "INTEGER", False))
