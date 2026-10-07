@@ -39,8 +39,16 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 ### Step 1: Deploy (~20–30 min)
 
+<!-- Already merged: mark the merge item complete, omit its pre-merge checks, and adapt the wait item to the verified deployment state. Leave unverified work unchecked. -->
+
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 - [ ] **Merge release PR #{{PR}}.** The deploys start automatically. Owner: Release lead
+  - **Expected:** immediately before merging, `gh pr view {{PR}} --json state,headRefOid --jq '[.state, .headRefOid] | join(" ")'` prints `OPEN {{RELEASE_SHA}}`.
+  - **Stop if:** the state or SHA differs, or the check fails. Update and review this plan before continuing.
+
+<!-- OPTIONAL (only if this plan merges before a pending migration; omit when already merged or when the migration precedes merge): -->
+
+- [ ] **Refresh the migration steps after merging.** Record the actual merge commit, rerun migration discovery, and update the checkout to fetch `main` at that SHA and expect the newest migration filename. Review the migration list and rollout order before continuing. Owner: Release lead
 
 <!-- Production: replace the item below with "Approve each paused production deploy job and wait for it to finish", and drop "Leave those paused". Watch: every `deploy-prod` job (environment `*-production`) turns green, and each Production service shows a new Ready revision. Stop if: a `deploy-prod` job fails (red). -->
 
@@ -49,16 +57,19 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Stop if:** a deploy-staging job fails (red).
 
 <!-- OPTIONAL (only if there is a migration): -->
-<!-- Production: if Staging's "Expected" line was not "none", move Step 2 before the production approval, unless the migration drops or renames something the old app still uses. State the chosen order in the Overview. -->
+<!-- Staging or Production: if the new app or job requires the migration first, move Step 2 before its deployment or execution and renumber. Check old-app compatibility and state the chosen order in the Overview. If already deployed, confirm migration and worker state before testing. -->
 
 ### Step 2: Run the database migration (~5 min)
 
-- [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `git fetch origin && git switch --detach "$(git log origin/main --grep '^chore: release main (#{{PR}})' --format=%H -n 1)" && pnpm install --frozen-lockfile`. Owner: Release lead
-  - **Expected:** `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
-  - **Stop if:** the tree isn't clean, or a different file prints.
+- [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `git fetch origin {{RELEASE_FETCH_REF}} && git switch --detach {{RELEASE_SHA}} && pnpm install --frozen-lockfile`. Owner: Release lead
+  - **Expected:** `git rev-parse HEAD` prints `{{RELEASE_SHA}}`, and `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
+  - **Stop if:** the tree isn't clean, fetch/checkout/install fails, the SHA differs, or a different file prints.
 - [ ] **Confirm the migration target** from the repository root: `pnpm -F db with-env node -e 'const u=new URL(process.env.DATABASE_URL);console.log(u.host+u.pathname)'` prints the host and database name, never the password. Owner: Release lead
   - **Expected:** it ends in `/{{DATABASE_NAME: f3_staging or f3_prod}}`.
   - **Stop if:** it names any other database. Fix `packages/db/.env` before going on.
+- [ ] **Confirm the release snapshot** immediately before running the migration: `gh pr view {{PR}} --json state,headRefOid,mergeCommit --jq 'if .state == "OPEN" then .headRefOid elif .state == "MERGED" then .mergeCommit.oid else "STOP" end'`. Owner: Release lead
+  - **Expected:** it prints `{{RELEASE_SHA}}`: the current PR head while open, or the actual merge commit after merging.
+  - **Stop if:** it prints anything else, or the check fails. Update and review the migration list, rollout order, and checkout steps before continuing; do not repeat a migration already run.
 - [ ] **Run the migration** from the repository root, pointed at the {{ENVIRONMENT}} database: `env -u CI pnpm db:migrate`. Owner: Release lead
 - [ ] **Run [the check query](#check-query-after-the-migration).** Every result must match. Owner: Monitor
   - **Expected:** {{WHAT_ERRORS_APPEAR_BETWEEN_DEPLOY_AND_MIGRATION_OR_"none"}}
