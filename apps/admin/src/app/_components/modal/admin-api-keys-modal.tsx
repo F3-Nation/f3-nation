@@ -74,18 +74,23 @@ export default function AdminApiKeysModal() {
     },
   });
 
+  // apiKey.create only accepts orgs the caller administers; org.mine also
+  // returns orgs where they are just an editor.
+  const adminOrgs = useMemo(
+    () => allOrgs?.orgs.filter((org) => org.roles.includes("admin")) ?? [],
+    [allOrgs?.orgs],
+  );
+
   const orgOptions = useMemo(() => {
-    return (
-      allOrgs?.orgs.map((org) => ({
-        value: org.id.toString(),
-        label: `${org.name} (${org.orgType})`,
-      })) ?? []
-    );
-  }, [allOrgs?.orgs]);
+    return adminOrgs.map((org) => ({
+      value: org.id.toString(),
+      label: `${org.name} (${org.orgType})`,
+    }));
+  }, [adminOrgs]);
 
   const nextUnusedOrgId = (roles: RoleEntry[] | undefined) => {
     const usedOrgIds = new Set((roles ?? []).map((r) => r.orgId));
-    return allOrgs?.orgs.find((org) => !usedOrgIds.has(org.id))?.id;
+    return adminOrgs.find((org) => !usedOrgIds.has(org.id))?.id;
   };
 
   const createApiKey = useMutation(
@@ -314,9 +319,10 @@ export default function AdminApiKeysModal() {
                             variant="outline"
                             size="sm"
                             className="mt-2"
-                            // Disabled until org.mine loads, and once every org
-                            // already has a row, so a new row never starts on an
-                            // org the user can't grant or on a duplicate.
+                            // Disabled until org.mine loads, and once every
+                            // administered org already has a row, so a new row
+                            // never starts on an org the user can't grant or on
+                            // a duplicate.
                             disabled={!nextUnusedOrgId(field.value)}
                             onClick={() => {
                               const orgId = nextUnusedOrgId(field.value);
