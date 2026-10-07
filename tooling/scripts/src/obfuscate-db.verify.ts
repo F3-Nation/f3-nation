@@ -1000,6 +1000,39 @@ async function main(): Promise<void> {
             .join("; ")}`,
     );
 
+    // The sweep must also read array columns: put one real-looking address
+    // back into the Better Auth client's contacts[] and expect a FAIL that
+    // names that column (location only), then undo it.
+    const [contactsBefore] = await sql<{ contacts: string[] | null }[]>`
+      SELECT contacts FROM auth.better_auth_oauth_client LIMIT 1`;
+    await sql`
+      UPDATE auth.better_auth_oauth_client
+      SET contacts = array_append(contacts, 'array.leak@example.com')`;
+    const arraySuite = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.verify-target.ts",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const arrayOut = arraySuite.stdout.toString();
+    await sql`
+      UPDATE auth.better_auth_oauth_client
+      SET contacts = ${contactsBefore?.contacts ?? null}`;
+    check(
+      "verify-target catches an email left in an array column",
+      arraySuite.status !== 0 &&
+        arrayOut.includes("auth.better_auth_oauth_client.contacts") &&
+        !arrayOut.includes("array.leak@example.com"),
+      arraySuite.status !== 0
+        ? "FAIL names auth.better_auth_oauth_client.contacts, value withheld"
+        : "verify-target passed with a real address in contacts[]",
+    );
+
     // --- 4b. Preserved staging tables stay consistent with a load ----------------
     // staging-refresh keeps PRESERVED_TABLES as staging has them and loads the
     // rest from an obfuscated copy like this one. Every FK from a preserved

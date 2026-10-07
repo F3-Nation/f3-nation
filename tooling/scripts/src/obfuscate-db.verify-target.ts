@@ -162,7 +162,13 @@ async function sweepForEmails(sql: Sql): Promise<void> {
     WHERE c.table_schema IN ('public', 'auth', 'slackbot')
       AND t.table_type = 'BASE TABLE'
       AND (c.data_type IN ('text', 'character varying', 'json', 'jsonb')
-        OR c.udt_name = 'citext')`;
+        OR c.udt_name = 'citext'
+        -- Arrays of strings/JSON too (e.g. better_auth_oauth_client.contacts
+        -- is a text[] of real addresses): their ::text form is an array
+        -- literal the email regex still scans.
+        OR (c.data_type = 'ARRAY'
+          AND c.udt_name IN ('_text', '_varchar', '_bpchar', '_citext',
+            '_json', '_jsonb')))`;
 
   const violations: string[] = [];
   const mentionViolations: string[] = [];
