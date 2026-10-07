@@ -1,7 +1,8 @@
 /**
- * Pure decision logic for staging-refresh.ts (no I/O), so the gates can be
- * exercised on their own.
+ * Decision logic for staging-refresh.ts, kept apart (and, but for fkEdges,
+ * free of I/O) so the gates can be exercised on their own.
  */
+import type postgres from "postgres";
 
 /** A row of drizzle.__drizzle_migrations_<db>. */
 export interface AppliedMigration {
@@ -197,4 +198,138 @@ export function filterToc(toc: string, tables: string[]): string[] {
     if (!m) return false;
     return m[1] === "SEQUENCE SET" || want.has(`${m[2]}.${m[3]}`);
   });
+}
+
+/** A foreign key as the staging catalog describes it. */
+export interface FkEdge {
+  name: string;
+  table: string; // "schema.table" holding the FK
+  columns: string[];
+  refTable: string;
+  refColumns: string[];
+  nullable: boolean; // every FK column is nullable
+  onDelete: string; // pg_constraint.confdeltype: a, r, c, n, d
+}
+
+/** NULL a kept row's FK column whose loaded parent no longer exists. */
+export interface FkFixup {
+  name: string;
+  table: string;
+  column: string;
+  refTable: string;
+  refColumn: string;
+}
+
+/**
+ * Staging tables the load leaves as they are (preserved, or staging-only)
+ * still point at loaded tables, and at the copy's rows once the load is in:
+ * staging's own OAuth client's `user_id` names a staging user the copy
+ * doesn't have. Each such FK needs a fix-up after the load, or validation
+ * fails. The one fix-up there is mirrors the FK's own ON DELETE SET NULL
+ * (the parent row is gone, so do what deleting it would have done); any
+ * other kind is refused up front, before staging is touched.
+ *
+ * The other direction too: a loaded table pointing INTO a kept table gets
+ * the copy's rows, which name prod's parents. Those are only safe when the
+ * copy's table is empty (obfuscate-db truncates every token/consent table
+ * that points at an OAuth client).
+ */
+export function planKeptFks(
+  fks: FkEdge[],
+  load: string[],
+  kept: string[],
+  copyCounts: Map<string, number>,
+): { fixups: FkFixup[]; errors: string[] } {
+  const loaded = new Set(load);
+  const keptSet = new Set(kept);
+  const fixups: FkFixup[] = [];
+  const errors: string[] = [];
+  for (const fk of fks) {
+    const label = `${fk.table}(${fk.columns.join(", ")}) -> ${fk.refTable} [${fk.name}]`;
+    if (keptSet.has(fk.table) && loaded.has(fk.refTable)) {
+      const [column] = fk.columns;
+      const [refColumn] = fk.refColumns;
+      if (
+        fk.columns.length === 1 &&
+        fk.nullable &&
+        fk.onDelete === "n" &&
+        column !== undefined &&
+        refColumn !== undefined
+      ) {
+        fixups.push({
+          name: fk.name,
+          table: fk.table,
+          column,
+          refTable: fk.refTable,
+          refColumn,
+        });
+      } else {
+        errors.push(
+          `${label}: a kept table points at a loaded one, and only a single nullable ` +
+            `ON DELETE SET NULL column can be fixed up after the load. Handle it in ` +
+            `staging-refresh.ts (or stop preserving ${fk.table}).`,
+        );
+      }
+    } else if (loaded.has(fk.table) && keptSet.has(fk.refTable)) {
+      const rows = copyCounts.get(fk.table) ?? 0;
+      if (rows > 0) {
+        errors.push(
+          `${label}: the copy has ${rows} row(s) in ${fk.table}, which would point at prod's ` +
+            `${fk.refTable} rows, but staging keeps its own ${fk.refTable}. Empty it in ` +
+            `obfuscate-db.ts or preserve it too.`,
+        );
+      }
+    }
+  }
+  return { fixups, errors };
+}
+
+/**
+ * FKs between tables in `schemas`, with what planKeptFks needs. The one
+ * catalog read here: staging-refresh.ts and the verify harness share it.
+ */
+export async function fkEdges(
+  sql: postgres.Sql,
+  schemas: string[],
+): Promise<FkEdge[]> {
+  const rows = await sql<
+    {
+      name: string;
+      tbl: string;
+      ref: string;
+      cols: string[];
+      ref_cols: string[];
+      nullable: boolean;
+      on_delete: string;
+    }[]
+  >`
+    SELECT co.conname AS name,
+      n.nspname || '.' || c.relname AS tbl,
+      rn.nspname || '.' || rc.relname AS ref,
+      ARRAY(SELECT a.attname::text FROM unnest(co.conkey) WITH ORDINALITY k(attnum, i)
+            JOIN pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = k.attnum
+            ORDER BY k.i) AS cols,
+      ARRAY(SELECT a.attname::text FROM unnest(co.confkey) WITH ORDINALITY k(attnum, i)
+            JOIN pg_attribute a ON a.attrelid = co.confrelid AND a.attnum = k.attnum
+            ORDER BY k.i) AS ref_cols,
+      (SELECT bool_and(NOT a.attnotnull) FROM unnest(co.conkey) k(attnum)
+       JOIN pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = k.attnum) AS nullable,
+      co.confdeltype::text AS on_delete
+    FROM pg_constraint co
+    JOIN pg_class c ON c.oid = co.conrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_class rc ON rc.oid = co.confrelid
+    JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+    WHERE co.contype = 'f' AND co.conparentid = 0
+      AND n.nspname = ANY(${schemas}) AND rn.nspname = ANY(${schemas})
+    ORDER BY 2, 1`;
+  return rows.map((r) => ({
+    name: r.name,
+    table: r.tbl,
+    columns: r.cols,
+    refTable: r.ref,
+    refColumns: r.ref_cols,
+    nullable: r.nullable,
+    onDelete: r.on_delete,
+  }));
 }

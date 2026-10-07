@@ -43,6 +43,8 @@ import {
   readTargetColumns,
   unreviewedColumns,
 } from "./obfuscate-db.columns";
+import { fkEdges, planKeptFks } from "./staging-refresh.checks";
+import { PRESERVED_TABLES } from "./staging-refresh.config";
 
 const CONTAINER = "f3-obfuscate-verify-pg";
 const PORT = 5434;
@@ -996,6 +998,46 @@ async function main(): Promise<void> {
             .filter((l) => l.includes("FAIL"))
             .slice(0, 3)
             .join("; ")}`,
+    );
+
+    // --- 4b. Preserved staging tables stay consistent with a load ----------------
+    // staging-refresh keeps PRESERVED_TABLES as staging has them and loads the
+    // rest from an obfuscated copy like this one. Every FK from a preserved
+    // table into a loaded one must be one it can fix up after the load, and
+    // every loaded table pointing into a preserved one must be empty here (it
+    // would name prod's rows), so a migration that breaks either fails on its
+    // own PR instead of at the next refresh's FK validation.
+    const loadSchemas = ["public", "auth", "slackbot"];
+    const allTables = (
+      await sql<{ t: string }[]>`
+        SELECT n.nspname || '.' || c.relname AS t FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind = 'r' AND NOT c.relispartition
+          AND n.nspname = ANY(${loadSchemas})`
+    ).map((r) => r.t);
+    const preservedHere = PRESERVED_TABLES.filter((t) => allTables.includes(t));
+    const loadedHere = allTables.filter((t) => !preservedHere.includes(t));
+    const edges = await fkEdges(sql, loadSchemas);
+    const intoPreserved = new Map<string, number>();
+    for (const e of edges) {
+      if (loadedHere.includes(e.table) && preservedHere.includes(e.refTable)) {
+        const [row] = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM ${sql(e.table)}`;
+        intoPreserved.set(e.table, row?.n ?? 0);
+      }
+    }
+    const keptPlan = planKeptFks(
+      edges,
+      loadedHere,
+      preservedHere,
+      intoPreserved,
+    );
+    check(
+      "preserved staging tables stay consistent with a load",
+      keptPlan.errors.length === 0 && preservedHere.length > 0,
+      keptPlan.errors.length > 0
+        ? keptPlan.errors.join("; ")
+        : `${preservedHere.length} preserved, fix-ups: ${keptPlan.fixups.map((f) => `${f.table}.${f.column}`).join(", ") || "none"}, ${intoPreserved.size} loaded table(s) into them, all empty`,
     );
 
     // --- 5a. Unclassified-table gate ------------------------------------------

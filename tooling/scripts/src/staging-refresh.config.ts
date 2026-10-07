@@ -32,8 +32,26 @@ export const STAGING_API_KEYS_TO_KEEP = [
  * Tables staging keeps as they are: never truncated, never loaded. Staging
  * registers its own OAuth clients (f3-admin-staging, f3-me-staging, …);
  * loading the copy's (revoked) rows instead broke admin login on 2026-09-24.
+ *
+ * Both generations of client registration: the legacy oauth_clients /
+ * oauth_client, and Better Auth's, which is the active auth path. Better
+ * Auth's is a unit: a client_resource row FKs to both a client (client_id)
+ * and a resource (identifier), so the three are kept together. The token,
+ * consent and assertion tables that point at clients are loaded from the
+ * copy, where obfuscate-db empties them.
+ *
+ * Adding a table here: if it has an FK into a loaded table, the refresh
+ * re-points it after the load only when that FK is a single nullable
+ * column with ON DELETE SET NULL (better_auth_oauth_client.user_id is), and
+ * refuses before touching staging otherwise.
  */
-export const PRESERVED_TABLES = ["auth.oauth_clients", "auth.oauth_client"];
+export const PRESERVED_TABLES = [
+  "auth.oauth_clients",
+  "auth.oauth_client",
+  "auth.better_auth_oauth_client",
+  "auth.better_auth_oauth_resource",
+  "auth.better_auth_oauth_client_resource",
+];
 
 /**
  * Restarted after the load so it drops its cached Slack member links

@@ -36,7 +36,8 @@
  *   2. dump prod (public, auth, drizzle, slackbot if present)
  *   3. restore into the copy; the raw dump is deleted right after
  *   4. obfuscate-db, then obfuscate-db.verify-target (must pass 100%)
- *   5. plan the load: shared tables minus PRESERVED_TABLES, identical columns
+ *   5. plan the load: shared tables minus PRESERVED_TABLES, identical columns,
+ *      and a fix-up for every FK from a kept table into a loaded one
  *   6. dump the obfuscated load set                         <- --dry-run stops here
  *   7. back up staging's load set (data only), stash API keys + Slack rows
  *   8. drop FKs + truncate (one transaction)                <- staging changes here
@@ -57,6 +58,7 @@ import type postgres from "postgres";
 
 import type {
   AppliedMigration,
+  FkFixup,
   JournalEntry,
   LoadPlan,
   TableColumns,
@@ -68,8 +70,10 @@ import {
   openPostgres,
 } from "./db-url";
 import {
+  fkEdges,
   filterToc,
   migrationGate,
+  planKeptFks,
   planKeptKeys,
   planLoad,
   quoteTable,
@@ -145,6 +149,9 @@ function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
   return typeof e === "string" ? e : JSON.stringify(e);
 }
+
+const fixupColumns = (fixups: FkFixup[], table: string): string[] =>
+  fixups.filter((f) => f.table === table).map((f) => f.column);
 
 const listOrNone = (items: string[]): string =>
   items.length > 0 ? items.join(", ") : "none";
@@ -376,13 +383,83 @@ async function rowCounts(
   return out;
 }
 
-/** md5 over every row, to prove a table was left alone. */
-async function tableHash(sql: Sql, table: string): Promise<string> {
+/**
+ * md5 over every row, to prove a table was left alone. `exclude` leaves out
+ * columns the refresh changes on purpose (a fix-up's nulled FK).
+ */
+async function tableHash(
+  sql: Sql,
+  table: string,
+  exclude: string[] = [],
+): Promise<string> {
   const [row] = await sql.unsafe<{ h: string | null; n: string }[]>(
-    `SELECT md5(string_agg(x::text, '|' ORDER BY x::text)) AS h, count(*)::text AS n
-     FROM ${quoteTable(table)} x`,
+    `SELECT md5(string_agg(r, '|' ORDER BY r)) AS h, count(*)::text AS n
+     FROM (SELECT (to_jsonb(x) - $1::text[])::text AS r FROM ${quoteTable(table)} x) rows`,
+    [exclude],
   );
   return `${row?.n ?? "0"} rows, ${row?.h ?? "empty"}`;
+}
+
+const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
+
+/** A kept table's primary-key columns (a fix-up needs them to be undone). */
+async function primaryKey(sql: Sql, table: string): Promise<string[]> {
+  const rows = await sql<{ col: string }[]>`
+    SELECT a.attname::text AS col
+    FROM pg_index i
+    JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+    WHERE i.indrelid = ${quoteTable(table)}::regclass AND i.indisprimary`;
+  return rows.map((r) => r.col);
+}
+
+/**
+ * Apply one fix-up: NULL the column where its loaded parent is gone. The old
+ * values go into the FK stash first (keyed by primary key), so a rollback
+ * can put them back without ever truncating a kept table.
+ */
+async function applyFixup(sql: Sql, f: FkFixup, pk: string[]): Promise<number> {
+  const col = quoteIdent(f.column);
+  const orphan = `k.${col} IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM ${quoteTable(f.refTable)} p WHERE p.${quoteIdent(f.refColumn)} = k.${col})`;
+  let n = 0;
+  await sql.begin(async (tx) => {
+    await tx.unsafe(
+      `INSERT INTO ${FK_STASH}.fixups (tbl, col, pk, val)
+       SELECT $1, $2,
+         (SELECT jsonb_object_agg(e.key, e.value) FROM jsonb_each(to_jsonb(k)) e
+          WHERE e.key = ANY($3::text[])),
+         k.${col}::text
+       FROM ${quoteTable(f.table)} k WHERE ${orphan}`,
+      [f.table, f.column, pk],
+    );
+    const res = await tx.unsafe(
+      `UPDATE ${quoteTable(f.table)} k SET ${col} = NULL WHERE ${orphan}`,
+    );
+    n = res.count;
+  });
+  return n;
+}
+
+/** Undo every recorded fix-up (rollback; the parents are back by then). */
+async function revertFixups(sql: Sql): Promise<number> {
+  const [present] = await sql<{ ok: boolean }[]>`
+    SELECT to_regclass(${`${FK_STASH}.fixups`}) IS NOT NULL AS ok`;
+  if (!present?.ok) return 0;
+  const targets = await sql<{ tbl: string; col: string; type: string }[]>`
+    SELECT DISTINCT f.tbl, f.col, format_type(a.atttypid, a.atttypmod) AS type
+    FROM ${sql(`${FK_STASH}.fixups`)} f
+    JOIN pg_attribute a ON a.attrelid = to_regclass(f.tbl) AND a.attname = f.col`;
+  let n = 0;
+  for (const t of targets) {
+    const res = await sql.unsafe(
+      `UPDATE ${quoteTable(t.tbl)} k SET ${quoteIdent(t.col)} = CAST(f.val AS ${t.type})
+       FROM ${FK_STASH}.fixups f
+       WHERE f.tbl = $1 AND f.col = $2 AND to_jsonb(k) @> f.pk`,
+      [t.tbl, t.col],
+    );
+    n += res.count;
+  }
+  return n;
 }
 
 async function hasSchema(sql: Sql, schema: string): Promise<boolean> {
@@ -424,6 +501,10 @@ async function stashFks(sql: Sql, fks: ForeignKey[]): Promise<void> {
     await tx.unsafe(`CREATE SCHEMA ${FK_STASH}`);
     await tx.unsafe(
       `CREATE TABLE ${FK_STASH}.foreign_keys (tbl text NOT NULL, name text NOT NULL, def text NOT NULL, validated boolean NOT NULL, PRIMARY KEY (tbl, name))`,
+    );
+    // Values a fix-up replaced on a kept table (see applyFixup).
+    await tx.unsafe(
+      `CREATE TABLE ${FK_STASH}.fixups (tbl text NOT NULL, col text NOT NULL, pk jsonb NOT NULL, val text NOT NULL)`,
     );
     for (const fk of fks) {
       await tx`
@@ -897,7 +978,7 @@ async function main(): Promise<number> {
     });
 
     // ---- 5. load plan --------------------------------------------------------
-    const counts = await step("5/12 plan the load", async () => {
+    const planned = await step("5/12 plan the load", async () => {
       plan = planLoad(
         await tableColumns(copy, LOAD_SCHEMAS),
         await tableColumns(stg, LOAD_SCHEMAS),
@@ -931,9 +1012,46 @@ async function main(): Promise<number> {
           `staging has ${notLoaded.join(", ")} but the copy doesn't; the Slack stash can't go back. Run the refresh once prod has the same migrations.`,
         );
       }
-      return rowCounts(copy, plan.load);
+      const copyCounts = await rowCounts(copy, plan.load);
+      // Tables the load leaves alone, and the FKs between them and the load.
+      const keptTables = [...plan.preserved, ...plan.stagingOnly];
+      const kept = planKeptFks(
+        await fkEdges(stg, LOAD_SCHEMAS),
+        plan.load,
+        keptTables,
+        copyCounts,
+      );
+      if (kept.errors.length > 0) {
+        throw new Refusal(
+          `a table staging keeps and a loaded table are linked in a way the refresh can't keep consistent:\n   - ${kept.errors.join("\n   - ")}`,
+        );
+      }
+      for (const f of kept.fixups) {
+        log(
+          `   after the load: ${f.table}.${f.column} -> ${f.refTable} is set NULL where its row is gone (${f.name})`,
+        );
+      }
+      // Undoing a fix-up on rollback finds the row by its primary key.
+      const fixups: { fixup: FkFixup; pk: string[] }[] = [];
+      const noPk: string[] = [];
+      for (const fixup of kept.fixups) {
+        const pk = await primaryKey(stg, fixup.table);
+        if (pk.length === 0) noPk.push(fixup.table);
+        fixups.push({ fixup, pk });
+      }
+      if (noPk.length > 0) {
+        throw new Refusal(
+          `kept table(s) ${[...new Set(noPk)].join(", ")} need a fix-up after the load but have no primary key to undo it by.`,
+        );
+      }
+      return { copyCounts, fixups };
     });
+    const counts = planned.copyCounts;
     const load = plan?.load ?? [];
+    const plannedFixups = planned.fixups.map((f) => f.fixup);
+    // Only the load set is backed up and restored: kept tables are never
+    // truncated, and a rollback undoes their fix-ups from the FK stash.
+    const backupTables = load;
 
     // ---- 6. dump the load set ------------------------------------------------
     await step("6/12 dump the obfuscated load set", async () => {
@@ -973,7 +1091,10 @@ async function main(): Promise<number> {
 
     const preservedBefore = new Map<string, string>();
     for (const t of plan?.preserved ?? [])
-      preservedBefore.set(t, await tableHash(stg, t));
+      preservedBefore.set(
+        t,
+        await tableHash(stg, t, fixupColumns(plannedFixups, t)),
+      );
 
     if (DRY_RUN) {
       printSummary({ ctx, plan, counts, dryRun: true });
@@ -995,7 +1116,7 @@ async function main(): Promise<number> {
             "-a",
             "--no-owner",
             "--no-privileges",
-            ...load.flatMap((t) => ["-t", quoteTable(t)]),
+            ...backupTables.flatMap((t) => ["-t", quoteTable(t)]),
             "-f",
             files.backup,
           ],
@@ -1012,11 +1133,11 @@ async function main(): Promise<number> {
         );
         const backedUp = filterToc(
           readFileSync(files.toc, "utf8"),
-          load,
+          backupTables,
         ).filter((l) => l.includes(" TABLE DATA ")).length;
-        if (backedUp !== load.length) {
+        if (backedUp !== backupTables.length) {
           throw new Refusal(
-            `staging backup holds ${backedUp} tables, expected ${load.length}`,
+            `staging backup holds ${backedUp} tables, expected ${backupTables.length}`,
           );
         }
         log(`   backup: ${backedUp} tables`);
@@ -1107,6 +1228,7 @@ async function main(): Promise<number> {
 
     // ---- 9. load + put staging's own rows back -------------------------------------
     let slackResult = "";
+    const fixupResults: string[] = [];
     try {
       await step(
         "9/12 load the obfuscated data, restore staging's keys and Slack rows",
@@ -1134,6 +1256,14 @@ async function main(): Promise<number> {
             );
           }
           log(`   row counts match the copy for all ${load.length} tables`);
+
+          for (const { fixup: f, pk } of planned.fixups) {
+            const n = await applyFixup(stg, f, pk);
+            fixupResults.push(`${f.table}.${f.column}: ${n} row(s) set NULL`);
+            log(
+              `   ${f.table}.${f.column}: ${n} row(s) pointed at a ${f.refTable} row the load replaced; set NULL`,
+            );
+          }
 
           await addFksNotValid(stg, savedFks);
           const now = await foreignKeys(stg);
@@ -1183,7 +1313,7 @@ async function main(): Promise<number> {
         ctx,
         files.backup,
         files.toc,
-        load,
+        backupTables,
         savedFks,
         stashedHere,
       );
@@ -1215,7 +1345,7 @@ async function main(): Promise<number> {
     const problems: string[] = [];
     const preservedAfter = new Map<string, string>();
     for (const t of plan?.preserved ?? []) {
-      const h = await tableHash(stg, t);
+      const h = await tableHash(stg, t, fixupColumns(plannedFixups, t));
       preservedAfter.set(t, h);
       if (h !== preservedBefore.get(t))
         problems.push(`preserved table ${t} changed during the run`);
@@ -1246,6 +1376,7 @@ async function main(): Promise<number> {
       clientIds: await preservedClientIds(stg),
       preservedBefore,
       preservedAfter,
+      fixups: fixupResults,
       fks: `${validation.validated}/${toValidate.length} validated${savedFks.length > toValidate.length ? ` (${savedFks.length - toValidate.length} were NOT VALID before the run and stay so)` : ""}`,
     });
     if (problems.length > 0) {
@@ -1371,6 +1502,8 @@ async function rollback(
         { pgoptions: "-c app.disable_ao_count_trigger=true" },
       );
       log(`   ${load.length} tables restored from the backup`);
+      const reverted = await revertFixups(sql);
+      if (reverted > 0) log(`   ${reverted} kept row(s) re-pointed back`);
       const readded = await addMissingFks(sql, savedFks);
       log(`   ${readded} FKs re-added (NOT VALID), ${savedFks.length} in all`);
       // The backup was taken before the stash, so it already holds staging's
@@ -1426,6 +1559,7 @@ function printSummary(s: {
   preservedBefore?: Map<string, string>;
   preservedAfter?: Map<string, string>;
   fks?: string;
+  fixups?: string[];
 }): void {
   log("\n================ SUMMARY ================");
   const pick = (m: Map<string, number> | undefined, t: string) =>
@@ -1460,6 +1594,10 @@ function printSummary(s: {
       );
   }
   if (s.fks) log(`foreign keys: ${s.fks}`);
+  if (s.fixups)
+    log(
+      `kept rows re-pointed: ${s.fixups.length > 0 ? s.fixups.join("; ") : "none needed"}`,
+    );
   if (warnings.length > 0) log(`warnings:\n   - ${warnings.join("\n   - ")}`);
   log("timings:");
   for (const t of timings) log(`   ${minutes(t.ms).padStart(7)}  ${t.step}`);

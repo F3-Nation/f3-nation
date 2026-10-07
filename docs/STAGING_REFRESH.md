@@ -51,10 +51,11 @@ gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1
    obfuscator refuses a table **or column** nobody has reviewed (see
    [Review gate](#review-gate)).
 5. Works out what to load: every table staging and the copy both have, except
-   `auth.oauth_clients` / `auth.oauth_client` (staging keeps its own OAuth
-   client registrations; loading the copy's broke admin login on 2026-09-24).
-   Each table must have identical columns on both sides. Up to here, staging
-   is untouched.
+   staging's own OAuth client registrations, which it keeps as they are (see
+   below; loading the copy's broke admin login on 2026-09-24). Each table must
+   have identical columns on both sides, and every foreign key between a kept
+   table and a loaded one must be one the job can keep consistent. Up to
+   here, staging is untouched.
 6. Backs up staging's data, stashes staging's own API keys and Slack rows,
    empties the loaded tables and loads the obfuscated copy.
 7. Puts back the API keys in the keep list
@@ -186,9 +187,26 @@ it is, learned on the hand-run refreshes.
      to several roles (`dev_generic`, `tackle`, `app_auth`) whose grants the
      other apps need; a drop-and-restore loses them. Skip any prod table
      staging doesn't have.
-   - **Leave `auth.oauth_clients` and `auth.oauth_client` alone.** Staging
-     registers its own clients (`f3-admin-staging`, `f3-me-staging`);
-     loading the copy's revoked rows broke admin login on 2026-09-24.
+   - **Leave staging's OAuth client registrations alone** (`PRESERVED_TABLES`
+     in `tooling/scripts/src/staging-refresh.config.ts`). Staging registers
+     its own clients (`f3-admin-staging`, `f3-me-staging`); loading the
+     copy's revoked rows broke admin login on 2026-09-24. Both generations
+     are kept: the legacy `auth.oauth_clients` / `auth.oauth_client`, and
+     Better Auth's (the active auth path) as a unit:
+     `auth.better_auth_oauth_client`, `auth.better_auth_oauth_resource` and
+     `auth.better_auth_oauth_client_resource`, which points at both. The
+     token, consent and assertion tables that point at clients are loaded
+     from the copy, where the obfuscator empties them; the job refuses to
+     load if one isn't empty.
+   - **Fix kept rows that point at loaded ones.** A staging client's
+     `better_auth_oauth_client.user_id` names a staging user the copy doesn't
+     have. After the load the job sets it NULL (what the FK's own `ON DELETE
+SET NULL` would do; the summary gives the count) and keeps the old
+     value in `refresh_keep_fks` so a rollback can put it back. Kept tables
+     are never truncated. An FK from a kept table into a loaded one that
+     isn't a single nullable `ON DELETE SET NULL` column is refused at plan
+     time, and the verify harness checks the preserve list against the
+     schema at head on every PR.
    - **Back up staging's data first** (`pg_dump -Fc -a` of the tables about
      to be loaded): the job restores it automatically if anything fails
      after the truncate.
