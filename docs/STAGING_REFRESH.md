@@ -1,14 +1,153 @@
 # Staging Refresh: Prod → Obfuscate → Staging (F3-65)
 
-> **Status: Phase 1 — proven against the local sandbox seed ONLY.**
-> The obfuscation script has never touched real data. It must not be run
-> against any copy of production until a human has reviewed the PII inventory
-> below, reviewed the script, and supervises the run. See
-> [Hard human gate](#hard-human-gate).
+> **Status:** run by hand against real data on 2026-09-22/23 and 2026-10-07.
+> Those runs are now one Cloud Run job, `f3-staging-refresh`, rehearsed end to
+> end (including its rollback) against local stand-ins for prod and staging.
+> Its first run in Cloud Run should be watched by someone who can read the
+> logs and has staging DB access.
 
 This document describes the staging-refresh pipeline: taking a copy of the
 production database (`f3data`), obfuscating all PII and stripping all secrets,
 and loading the result into staging (`f3data-nonprod`).
+
+## How to refresh staging
+
+```bash
+gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1 --wait
+```
+
+That's all. It takes about an hour (loading ~6M attendance rows into staging
+took 18 minutes on 2026-10-07), and `--wait` returns when it's done: exit 0
+means staging has fresh data, anything else means it stopped (see
+[If it fails](#if-it-fails)).
+
+**When:** right after a prod release, never right before a staging test cycle
+(logins change and App Pioneers gets relinked, so leave time to work through
+oddities before the next release is tested). Only when needed: prod has had
+structural changes since the last refresh (new sectors or territories, a new
+column prod has since populated), or someone needs fresh data. The job
+refuses unless prod and staging are at the same migration level, which is
+true right after a release.
+
+**Dry run first if you're unsure.** It does everything except touch staging
+(dump, obfuscate, verify, check the load), so it shows whether the real run
+would go through:
+
+```bash
+gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1 --wait --args=--dry-run
+```
+
+### What it does
+
+1. Checks prod and staging are at the same migration level, and that prod
+   isn't ahead of the code in the job's image.
+2. Dumps prod's `public`, `auth`, `drizzle` (and `slackbot`) schemas with a
+   read-only login. Never `codex`, `regionpages` or `temp`: they hold PII
+   nothing here classifies.
+3. Restores the dump into a throwaway Postgres inside the job's container and
+   deletes the dump. Raw prod data never leaves that container.
+4. Obfuscates the copy (`obfuscate-db`), then runs the verification suite
+   against it (`obfuscate-db:verify-target`); every check must pass. The
+   obfuscator refuses a table **or column** nobody has reviewed (see
+   [Review gate](#review-gate)).
+5. Works out what to load: every table staging and the copy both have, except
+   `auth.oauth_clients` / `auth.oauth_client` (staging keeps its own OAuth
+   client registrations; loading the copy's broke admin login on 2026-09-24).
+   Each table must have identical columns on both sides. Up to here, staging
+   is untouched.
+6. Backs up staging's data, stashes staging's own API keys and Slack rows,
+   empties the loaded tables and loads the obfuscated copy.
+7. Puts back the API keys in the keep list
+   (`tooling/scripts/src/staging-refresh.config.ts`; every other key is
+   dropped) and staging's Slack data, resets sequences, validates every
+   foreign key one at a time, and restarts the staging slackbot.
+8. Prints a summary: row counts, kept and dropped keys, the Slack restore,
+   the OAuth clients still on staging, foreign keys validated, timings.
+
+### Reading the logs
+
+`gcloud run jobs execute` prints a console link to the execution. From a
+terminal:
+
+```bash
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="f3-staging-refresh"' \
+  --project f3data --bucket _Default --location global --view f3-staging-refresh \
+  --freshness 1d --order asc --format 'value(textPayload)'
+```
+
+Each step starts with `== N/12`. The last line says how it ended:
+
+| Last line                                            | Meaning                                                                                        |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `STAGING REFRESH: OK`                                | Done.                                                                                          |
+| `STAGING REFRESH DRY RUN: OK`                        | The dry run found nothing that would stop a real run.                                          |
+| `STAGING REFRESH FAILED — staging was not changed.`  | It stopped before touching staging. The reason is just above (`!! STOPPED: …`).                |
+| `STAGING REFRESH FAILED — staging was rolled back …` | The load failed and staging was put back exactly as it was, keys and Slack included.           |
+| `STAGING REFRESH FINISHED WITH PROBLEMS`             | Staging has the new data, but something listed needs a look (e.g. an FK that didn't validate). |
+| `ROLLBACK FAILED`                                    | The rare bad case: see below.                                                                  |
+
+The logs never contain row data: counts, table and key names only.
+
+### If it fails
+
+You don't need to clean anything up: either staging wasn't touched, or the
+job rolled it back. Common reasons it stops:
+
+| `!! STOPPED:` says                                                         | Do this                                                                                                                                          |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `migration gate: prod is at … but staging is at …`                         | Wait until prod and staging run the same release, then run it again.                                                                             |
+| `… migration(s) this build's … _journal.json doesn't know`                 | The job's image is older than prod. Ask whoever maintains it to run `tooling/scripts/staging-refresh/setup.sh --image-only` from current `main`. |
+| `obfuscate-db failed` with `column(s) nobody has reviewed for PII`         | A migration added a column without classifying it. That needs a code change (see [Review gate](#review-gate)), then a new image.                 |
+| `copy and staging tables differ`                                           | Prod and staging have different columns on a table. Usually the same fix as the migration gate: wait for both to run the same release.           |
+| `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                          |
+| `another staging refresh is running`                                       | Someone else started one. Wait for it.                                                                                                           |
+| `staging already has schema refresh_keep`                                  | An earlier run's rollback didn't finish. See below.                                                                                              |
+
+**`ROLLBACK FAILED`** means the load failed and putting staging back failed
+too (e.g. staging was unreachable), three times. Staging's loaded tables may
+be empty, but its own API keys, Slack rows and foreign-key definitions are
+safe in the `refresh_keep` / `refresh_keep_slack` / `refresh_keep_fks`
+schemas on staging. Load a fresh copy and put them back with:
+
+```bash
+gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1 --wait --args=--reuse-existing-stash
+```
+
+The staging slackbot restart is best-effort: if the job may not restart it,
+the summary prints the `gcloud run services update …` command for someone
+with access to `f3-slackbot-staging`.
+
+### Setting it up (once)
+
+`tooling/scripts/staging-refresh/setup.sh`, run by an Owner of `f3data` with
+the `spuds` DB logins, creates everything and is safe to re-run:
+
+- service account `staging-refresh@f3data.iam.gserviceaccount.com`;
+- DB login `staging_refresh`: on prod a plain read-only role
+  (`prod-login.sql`: SELECT on `public`/`auth`/`drizzle`/`slackbot`, member of
+  nothing, `default_transaction_read_only`), on staging a member of the roles
+  that own staging's tables (`staging-login.sql`); passwords in Secret Manager
+  (`staging-refresh-prod-db-password`, `staging-refresh-staging-db-password`);
+- the job (`tooling/scripts/Dockerfile.staging-refresh`, built with Cloud
+  Build into `cloud-run-builds`): 32Gi / 8 CPU (the copy lives in the
+  container's in-memory filesystem), 3h timeout, no retries, Cloud SQL
+  sockets for both instances;
+- execute rights on the job (with `--args`, for `--dry-run`) and a log view
+  for Crash and Declan.
+
+Re-run it with `--image-only` after any release that adds a migration, so
+the image knows prod's migrations and columns. It prints the one permission
+it can't grant: restarting the slackbot in `f3-slackbot-staging`.
+
+The job's command is `pnpm -F @acme/scripts staging-refresh`
+(`tooling/scripts/src/staging-refresh.ts`), which also runs outside Cloud Run
+given `PROD_DATABASE_URL`, `STAGING_DATABASE_URL`, an empty
+`INTERMEDIATE_DATABASE_URL`, `OBFUSCATION_SALT` and pg_dump/pg_restore 18:
+
+```bash
+pnpm -F @acme/scripts staging-refresh -- --allow-staging-db f3_staging --dry-run
+pnpm -F @acme/scripts staging-refresh -- --allow-staging-db f3_staging --yes
+```
 
 ## Pipeline design
 
@@ -21,25 +160,21 @@ and loading the result into staging (`f3data-nonprod`).
                           └──────────────────────────┘
 ```
 
+The job automates exactly this; the notes below are why each step is the way
+it is, learned on the hand-run refreshes.
+
 1. **Export**: `pg_dump` the prod database (`f3data`). The dump itself is
-   prod-classified data — treat it like production (no laptops without
-   disk encryption, delete after the run).
+   prod-classified data — treat it like production. The job keeps it inside
+   its container and deletes it as soon as it is restored.
 2. **Obfuscate on an intermediate instance** — never in place on prod, and
    never directly on staging (a failed half-run must not leave un-obfuscated
-   PII in a lower environment). Recommended concretely:
-   - **Preferred: a throwaway dockerized Postgres on the operator's machine or
-     a locked-down ephemeral Cloud SQL instance in the prod project** (no
-     public IP, IAM-only access, deleted the same day). Restore the dump
-     there, run `obfuscate-db.ts` against it, `pg_dump` the result.
-   - The local-docker option keeps the un-obfuscated copy off shared
-     infrastructure entirely and matches how the script was verified.
-     Before obfuscating, check that the dump is not _ahead_ of the branch
-     you are running from: compare the applied migrations in the restored copy
-     (`drizzle.__drizzle_migrations`) with `packages/db/drizzle/`. A dump that
-     is behind is fine (absent tables are skipped); one that is ahead has
-     tables this script has never classified, and the coverage gate refuses
-     the run before it writes anything. Better to know before booking the window.
+   PII in a lower environment). The job uses a throwaway Postgres 18 inside
+   its own container (citext and the `auth`/`drizzle` schemas created first;
+   `already exists` errors from the restore are expected). The copy must not
+   be _ahead_ of the code that classifies it: the job compares prod's applied
+   migrations with the image's `packages/db/drizzle/meta/_journal.json`.
 3. **Load** the _obfuscated_ copy into `f3data-nonprod`. Learned on the
+   first real run (2026-09-22):
    first real run (2026-09-22):
    - **Match staging's migration level**, not the repo's. Staging's
      `drizzle.__drizzle_migrations_<db>` says where it is; obfuscate the copy
@@ -51,6 +186,12 @@ and loading the result into staging (`f3data-nonprod`).
      to several roles (`dev_generic`, `tackle`, `app_auth`) whose grants the
      other apps need; a drop-and-restore loses them. Skip any prod table
      staging doesn't have.
+   - **Leave `auth.oauth_clients` and `auth.oauth_client` alone.** Staging
+     registers its own clients (`f3-admin-staging`, `f3-me-staging`);
+     loading the copy's revoked rows broke admin login on 2026-09-24.
+   - **Back up staging's data first** (`pg_dump -Fc -a` of the tables about
+     to be loaded): the job restores it automatically if anything fails
+     after the truncate.
    - **Stash staging's own API keys and Slack data first**, or every service
      key (the map's `F3_MAP_API_KEY`, the slackbot's, the auth app's) is gone
      and the map serves 401s, and the staging slackbot's workspace (App
@@ -71,7 +212,11 @@ and loading the result into staging (`f3data-nonprod`).
      with `PGOPTIONS='-c app.disable_ao_count_trigger=true'`, then re-add
      them `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
      them validated in one transaction took over an hour and lost its
-     connection.
+     connection. (A shell loop around `docker run -i` once validated 1 of 74:
+     the container ate the loop's input. The job checks validated == total.)
+   - **Reset every serial/identity sequence** to `max(id)` and `ANALYZE`
+     only the loaded tables (a bare `ANALYZE` spews permission warnings on
+     the system catalogs).
    - After the load, put back **only the service keys**, named with one
      `--keep` each. Every other stashed key (ad-hoc test keys, anything with
      nation admin that nobody owns up to) is dropped, so it doesn't outlive
@@ -123,19 +268,7 @@ Once this pipeline is approved and running, the preview seed switches from
 synthetic data to this pipeline's obfuscated output, giving previews
 production-shaped data with zero PII.
 
-## When to refresh
-
-Not on a schedule. A refresh disrupts staging (logins change, App Pioneers
-gets relinked), so:
-
-- Run it **right after a prod release**, never right before a staging test
-  cycle, so there is time to work through oddities before the next release
-  is tested.
-- Run it only when it's needed: prod has had **structural changes** since
-  the last refresh (new sectors or territories, a new column prod has since
-  populated), or someone needs fresh data for a specific reason.
-
-## Running the script
+## Running the obfuscator by hand
 
 ```bash
 # Dry run — reports what would change, writes nothing
@@ -375,8 +508,11 @@ legacy. Two things are specific to them:
 5. Tears the container down and restores `packages/env/.env`.
 
 CI runs it on every PR (`obfuscate-db-verify` in `.github/workflows/ci.yml`),
-so a migration that adds an unclassified table fails on its own PR rather than
-at the next refresh.
+so a migration that adds an unclassified table or column fails on its own PR
+rather than at the next refresh. The harness also checks, before anything
+else, that every column at head is in `obfuscate-db.columns.txt`, and proves
+both gates fire (an unclassified table and an unreviewed column each abort the
+run with `users` unchanged).
 
 ### Verifying an obfuscated copy
 
@@ -390,31 +526,38 @@ checks the deterministic cross-table mapping, confirms OAuth client secrets
 are invalidated, and checks attendance FK integrity. It refuses any database
 whose name is (or looks like) production.
 
-## Hard human gate
+## Review gate
 
-**No run against real data without a human in the loop. Ever.**
+No refresh runs on PII nobody has classified. That used to mean a human
+reviewing the inventory before every run; it is now enforced by code, and the
+human review happens on the pull request that changes the schema:
 
-Before the first (and every) staging refresh:
+1. **Tables.** `assertFullCoverage` refuses any table (in any non-system
+   schema) that isn't in `TOUCHED_TABLES` or `KEPT_TABLES`.
+2. **Columns.** `tooling/scripts/src/obfuscate-db.columns.txt` lists every
+   `schema.table.column:data_type` the script has been reviewed against
+   (seeded 2026-10-07 from prod's real columns plus everything the migrations
+   create at head). The obfuscator refuses, before it writes anything, when
+   the target has a column, or a column type, that isn't listed. Before this,
+   a new column on a known table was copied to staging as-is.
+3. **CI.** `obfuscate-db-verify` migrates a sandbox to head on every PR and
+   fails if a column is missing from the snapshot, so a migration that adds a
+   column fails on its own PR. To fix it, classify the column in
+   `obfuscate-db.ts` and the [PII inventory](#pii-inventory), then add its
+   line (`DATABASE_URL=<db migrated to head> pnpm -F @acme/scripts
+obfuscate-db -- --update-column-snapshot`). **Reviewers:** a new line in
+   the snapshot is a PII decision; check the column's handling, not just the
+   line.
+4. **The run** refuses unless prod's migrations are all in the image's
+   journal (the image is rebuilt from `main` with `setup.sh --image-only`),
+   then refuses unless the verify-target suite passes 100% on the copy.
 
-1. A human reviews the [PII inventory](#pii-inventory) above against the
-   current `packages/db/drizzle/schema.ts` — any new table or column added
-   since the last review must be classified before proceeding. The script is
-   deny-by-default only for the tables it knows; **new columns default to
-   "leaks"**, so this review is the real safety net.
-2. A human reviews `tooling/scripts/src/obfuscate-db.ts` and the latest
-   verification run output. Specifically for the legacy `auth.user` /
-   `auth.user_profiles` tables (see the [PII inventory](#pii-inventory) note
-   above) — since they're outside this repo's own migrations, check the
-   actual prod constraints before the first real run: does `auth.user.email`
-   have a (case-sensitive) unique constraint that the deterministic-fake
-   write could violate for the known case-variant duplicate rows, and does
-   `auth.user_profiles.user_id`'s FK to `auth.user.id` have `ON UPDATE
-CASCADE` (needed since the script rewrites `auth.user.id`)?
-3. A human supervises the run itself: dry-run first, inspect the summary
-   table, then the real run, then spot-check the output before it is loaded
-   into `f3data-nonprod`.
-4. Only after this gate does the preview-environment seed switch from the
-   synthetic local seed to this obfuscated output.
+What this does not cover: the gate checks that a column was _reviewed_, not
+that the review was right, and SCRUB is regex-based (real names in free
+text survive; see the SCRUB limit above). Legacy `auth.user` /
+`auth.user_profiles` exist only on prod, outside the repo's migrations; the
+2026-07-10 and 2026-09-22 runs checked their constraints by hand, and their
+columns are in the snapshot as they were on 2026-10-07.
 
-Phase 1 (this document + script + verification harness) is scoped to the
-sandbox seed. Wiring the pipeline to real exports is a separate, gated phase.
+The preview-environment seed still uses the synthetic local seed; switching
+it to this pipeline's output is a separate change.
