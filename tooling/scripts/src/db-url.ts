@@ -93,3 +93,18 @@ export function libpqEnv(url: string): Record<string, string> {
   if (sslmode) env.PGSSLMODE = sslmode;
   return env;
 }
+
+/** A SQL identifier, double-quoted with embedded `"` doubled. */
+export function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+/**
+ * `schema.table` as a quoted SQL identifier pair. Splits on the first dot
+ * only, so a table name that contains one stays whole.
+ */
+export function quoteQualified(qualified: string): string {
+  const dot = qualified.indexOf(".");
+  if (dot === -1) return quoteIdent(qualified);
+  return `${quoteIdent(qualified.slice(0, dot))}.${quoteIdent(qualified.slice(dot + 1))}`;
+}

@@ -4,6 +4,8 @@
  */
 import type postgres from "postgres";
 
+import { quoteQualified } from "./db-url";
+
 /** A row of drizzle.__drizzle_migrations_<db>. */
 export interface AppliedMigration {
   createdAt: number;
@@ -180,9 +182,7 @@ export function planKeptKeys(
 
 /** `"schema"."table"` for SQL and for pg_dump's -t (quoted = literal). */
 export function quoteTable(qualified: string): string {
-  const dot = qualified.indexOf(".");
-  const ident = (s: string) => `"${s.replace(/"/g, '""')}"`;
-  return `${ident(qualified.slice(0, dot))}.${ident(qualified.slice(dot + 1))}`;
+  return quoteQualified(qualified);
 }
 
 /**

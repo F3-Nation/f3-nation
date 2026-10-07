@@ -68,6 +68,7 @@ import {
   libpqEnv,
   looksLikeProdDbName,
   openPostgres,
+  quoteIdent,
 } from "./db-url";
 import {
   fkEdges,
@@ -399,8 +400,6 @@ async function tableHash(
   );
   return `${row?.n ?? "0"} rows, ${row?.h ?? "empty"}`;
 }
-
-const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
 /** A kept table's primary-key columns (a fix-up needs them to be undone). */
 async function primaryKey(sql: Sql, table: string): Promise<string[]> {
@@ -792,6 +791,10 @@ async function main(): Promise<number> {
   const stashedHere: string[] = [];
   // Dump of the stash schemas a --reuse-existing-stash run found, if any.
   let reusedStash: string | undefined;
+  let reusedSchemas: string[] = [];
+  // Set when a rollback fails: the work dir then holds the only copies of
+  // staging's pre-run data (the backup, the reused-stash snapshot).
+  let keepWork = false;
   let plan: LoadPlan | undefined;
   let savedFks: ForeignKey[] = [];
 
@@ -893,7 +896,7 @@ async function main(): Promise<number> {
           "--no-privileges",
           "--no-publications",
           "--no-subscriptions",
-          ...preflight.dumpSchemas.flatMap((s) => ["-n", `"${s}"`]),
+          ...preflight.dumpSchemas.flatMap((s) => ["-n", quoteIdent(s)]),
           "-f",
           files.prodDump,
         ],
@@ -909,14 +912,14 @@ async function main(): Promise<number> {
       for (const { extname } of exts) {
         try {
           await copy.unsafe(
-            `CREATE EXTENSION IF NOT EXISTS "${extname.replace(/"/g, '""')}"`,
+            `CREATE EXTENSION IF NOT EXISTS ${quoteIdent(extname)}`,
           );
         } catch {
           log(`   (extension ${extname} not available on the copy; skipped)`);
         }
       }
       for (const s of preflight.dumpSchemas) {
-        await copy.unsafe(`CREATE SCHEMA IF NOT EXISTS "${s}"`);
+        await copy.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent(s)}`);
       }
       try {
         await pgTool(
@@ -1162,13 +1165,14 @@ async function main(): Promise<number> {
               "-Fc",
               "--no-owner",
               "--no-privileges",
-              ...reused.flatMap((sc) => ["-n", `"${sc}"`]),
+              ...reused.flatMap((sc) => ["-n", quoteIdent(sc)]),
               "-f",
               files.reusedStash,
             ],
             ctx.stagingUrl,
           );
           reusedStash = files.reusedStash;
+          reusedSchemas = reused;
           log(`   snapshot of the reused ${reused.join(", ")} taken`);
         }
 
@@ -1346,9 +1350,12 @@ async function main(): Promise<number> {
         backupTables,
         savedFks,
         stashedHere,
-        reusedStash,
+        reusedStash ? { dump: reusedStash, schemas: reusedSchemas } : undefined,
       );
-      if (!restored) return 2;
+      if (!restored) {
+        keepWork = true;
+        return 2;
+      }
       log(
         "\nSTAGING REFRESH FAILED — staging was rolled back to its data from before the run.",
       );
@@ -1441,8 +1448,18 @@ async function main(): Promise<number> {
     await Promise.all(
       [prod.end(), copy.end(), stg.end()].map((p) => p.catch(() => undefined)),
     );
-    rmSync(ctx.work, { recursive: true, force: true });
-    log(`\n(temp files removed; total ${minutes(Date.now() - startedAt)})`);
+    if (keepWork) {
+      log(
+        `\n!!! Kept ${ctx.work} (staging-backup.dump${reusedStash ? ", reused-stash.dump" : ""}): ` +
+          `the only copy of staging's data from before the run. In Cloud Run it ` +
+          `disappears with the container; run outside it (see the runbook) to keep it.`,
+      );
+    } else {
+      rmSync(ctx.work, { recursive: true, force: true });
+    }
+    log(
+      `\n(${keepWork ? "temp files kept" : "temp files removed"}; total ${minutes(Date.now() - startedAt)})`,
+    );
   }
 }
 
@@ -1473,7 +1490,7 @@ async function rollback(
   load: string[],
   savedFks: ForeignKey[],
   stashedHere: string[],
-  reusedStash: string | undefined,
+  reused: { dump: string; schemas: string[] } | undefined,
 ): Promise<boolean> {
   log(
     "\n== ROLLBACK: restoring staging's load set from the backup taken before the load",
@@ -1543,7 +1560,9 @@ async function rollback(
       // the stash, so it holds those rows), and a reused one comes back
       // exactly from its snapshot. The FKs are all back, so the FK stash
       // goes either way.
+      const reusedNames = reused?.schemas ?? [];
       for (const schema of [...Object.values(STASH_SCHEMAS), FK_STASH]) {
+        if (reusedNames.includes(schema)) continue; // replaced atomically below
         if (await hasSchema(sql, schema)) {
           await sql.unsafe(`DROP SCHEMA ${schema} CASCADE`);
           log(
@@ -1551,17 +1570,44 @@ async function rollback(
           );
         }
       }
-      if (reusedStash) {
+      if (reused) {
+        // A reused schema may hold a re-stash now. Tables the snapshot
+        // doesn't have would stop --clean's DROP SCHEMA, so they go first
+        // (they are re-stash leftovers, not the original). Then drop and
+        // recreate in one transaction: the original comes back, or the
+        // schema stays as it is.
+        await pgTool(
+          "pg_restore",
+          ["-l", "-f", `${tocFile}.stash`, reused.dump],
+          ctx.stagingUrl,
+        );
+        const inDump = new Set(
+          readFileSync(`${tocFile}.stash`, "utf8")
+            .split("\n")
+            .map((l) => / TABLE (\S+) (\S+) /.exec(l))
+            .filter((m): m is RegExpExecArray => m !== null)
+            .map((m) => `${m[1]}.${m[2]}`),
+        );
+        const present = await sql<{ t: string }[]>`
+          SELECT n.nspname || '.' || c.relname AS t FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND n.nspname = ANY(${reused.schemas})`;
+        for (const { t } of present) {
+          if (!inDump.has(t))
+            await sql.unsafe(`DROP TABLE ${quoteTable(t)} CASCADE`);
+        }
         await pgTool(
           "pg_restore",
           [
+            "--clean",
+            "--if-exists",
             "--no-owner",
             "--no-privileges",
             "--single-transaction",
             "--exit-on-error",
             "-d",
             ctx.stagingDb,
-            reusedStash,
+            reused.dump,
           ],
           ctx.stagingUrl,
         );
@@ -1590,11 +1636,30 @@ async function rollback(
       await sql.end().catch(() => undefined);
     }
   }
+  // Say what is actually on staging now, not what should be.
+  let stashes: string;
+  const probe = connect(ctx.stagingUrl);
+  try {
+    const found: string[] = [];
+    for (const schema of [...Object.values(STASH_SCHEMAS), FK_STASH]) {
+      if (await hasSchema(probe, schema)) found.push(schema);
+    }
+    const missing = [...Object.values(STASH_SCHEMAS), FK_STASH].filter(
+      (sc) => !found.includes(sc),
+    );
+    stashes =
+      `!!! On staging now: ${found.length > 0 ? found.join(", ") : "no stash schema"}` +
+      (missing.length > 0 ? ` (missing: ${missing.join(", ")})` : "") +
+      ". Those hold staging's own API keys, Slack rows and FK definitions.\n";
+  } catch (error) {
+    stashes = `!!! Couldn't check which stash schemas are on staging (${errMsg(error)}).\n`;
+  } finally {
+    await probe.end().catch(() => undefined);
+  }
   log(
     "\n!!! ROLLBACK FAILED. Staging's loaded tables may be empty or half-loaded.\n" +
-      "!!! Staging's own API keys, Slack rows and FK definitions are still in the refresh_keep,\n" +
-      "!!! refresh_keep_slack and refresh_keep_fks schemas on staging. Re-run the job with\n" +
-      "!!! --reuse-existing-stash to load a fresh copy and put them back:\n" +
+      stashes +
+      "!!! Re-run the job with --reuse-existing-stash to load a fresh copy and put them back:\n" +
       "!!!   gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1 --wait --args=--reuse-existing-stash",
   );
   log("\nSTAGING REFRESH FAILED — and the rollback failed (see above).");

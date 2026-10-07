@@ -1469,6 +1469,66 @@ async function main(): Promise<void> {
       `exit ${slackRestore.status}${slackRestore.status === 0 ? "" : ` (${slackRestore.stderr.toString().trim().split("\n")[0]})`}, ${slackAfter?.spaces ?? "?"} workspace, ${slackAfter?.members ?? "?"} member(s), ${slackAfter?.links ?? "?"} link, ${slackAfter?.nulled ?? "?"} unlinked + placeholder member(s), ${slackAfter?.real ?? "?"} real email(s), ${slackAfter?.runs ?? "?"} F3versary run(s) (${slackAfter?.pending ?? "?"} still planned) / ${slackAfter?.pages ?? "?"} page(s), stash ${slackAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
     );
 
+    // --- 5e. --preserve-local-seed keeps *-local OAuth clients, all three kinds --
+    // Legacy singular auth.oauth_client exists only on prod; create it as prod
+    // has it (its columns are in the reviewed snapshot). Run last: it re-runs
+    // the obfuscator over this already-obfuscated sandbox.
+    await sql`
+      CREATE TABLE auth.oauth_client (id text PRIMARY KEY, name text,
+        client_secret text, redirect_uris text, allowed_origin text,
+        scopes text, is_active boolean, created_at timestamp)`;
+    await sql`
+      INSERT INTO auth.oauth_client (id, name, client_secret) VALUES
+        ('legacy-local', 'Legacy (local dev)', 'legacy-local-secret'),
+        ('legacy-prod', 'Legacy (prod)', 'legacy-prod-secret')`;
+    await sql`
+      INSERT INTO auth.oauth_clients (id, name, client_secret_hash,
+        redirect_uris, allowed_origin, scopes, is_active)
+      VALUES ('plural-local', 'Plural (local dev)', 'plural-local-hash', '[]',
+          '', 'openid', true),
+        ('plural-prod', 'Plural (prod)', 'plural-prod-hash', '[]', '',
+          'openid', true)`;
+    await sql`
+      INSERT INTO auth.better_auth_oauth_client (id, client_id, client_secret,
+        redirect_uris)
+      VALUES ('ba-row-1', 'ba-local', 'ba-local-secret', ARRAY['http://localhost:3002/cb']),
+             ('ba-row-2', 'ba-prod', 'ba-prod-secret', ARRAY['https://example.com/cb'])`;
+    const preserveRun = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.ts",
+        "--allow-db",
+        DB_NAME,
+        "--i-understand-this-rewrites-data",
+        "--preserve-local-seed",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const secrets = new Map(
+      (
+        await sql<{ k: string; s: string | null }[]>`
+          SELECT 'legacy:' || id AS k, client_secret AS s FROM auth.oauth_client
+          UNION ALL SELECT 'plural:' || id, client_secret_hash FROM auth.oauth_clients
+          UNION ALL SELECT 'ba:' || client_id, client_secret FROM auth.better_auth_oauth_client
+            WHERE client_id IN ('ba-local', 'ba-prod')`
+      ).map((r) => [r.k, r.s]),
+    );
+    check(
+      "--preserve-local-seed keeps *-local OAuth clients in all three client tables",
+      preserveRun.status === 0 &&
+        secrets.get("legacy:legacy-local") === "legacy-local-secret" &&
+        secretRevoked(secrets.get("legacy:legacy-prod") ?? null) &&
+        secrets.get("ba:ba-local") === "ba-local-secret" &&
+        secretRevoked(secrets.get("ba:ba-prod") ?? null) &&
+        secrets.get("plural:plural-local") === "plural-local-hash" &&
+        secretRevoked(secrets.get("plural:plural-prod") ?? null),
+      `exit ${preserveRun.status}; local kept: legacy ${secrets.get("legacy:legacy-local") === "legacy-local-secret"}, plural ${secrets.get("plural:plural-local") === "plural-local-hash"}, better-auth ${secrets.get("ba:ba-local") === "ba-local-secret"}; others revoked: legacy ${secretRevoked(secrets.get("legacy:legacy-prod") ?? null)}, plural ${secretRevoked(secrets.get("plural:plural-prod") ?? null)}, better-auth ${secretRevoked(secrets.get("ba:ba-prod") ?? null)}`,
+    );
+
     // --- 6. Verdict -----------------------------------------------------------
     const failed = results.filter((r) => !r.pass);
     console.log("\n=== VERIFICATION SUMMARY ===");

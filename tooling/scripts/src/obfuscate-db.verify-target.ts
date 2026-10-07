@@ -36,6 +36,8 @@ import {
   databaseNameFromUrl,
   looksLikeProdDbName,
   openPostgres,
+  quoteIdent,
+  quoteQualified,
 } from "./db-url";
 
 // Must match the --email-sink the obfuscator ran with (same default).
@@ -115,13 +117,6 @@ function check(name: string, pass: boolean, detail: string): void {
   console.log(`  ${pass ? "PASS" : "FAIL"}  ${name} — ${detail}`);
 }
 
-function quoteQualified(table: string): string {
-  return table
-    .split(".")
-    .map((part) => `"${part}"`)
-    .join(".");
-}
-
 /**
  * Whether a (schema-qualified) table exists. The EMPTY_TABLES list carries both
  * the repo's own NextAuth adapter's plural names and the legacy singular
@@ -189,10 +184,10 @@ async function sweepForEmails(sql: Sql): Promise<void> {
       (isArray && (col.udt_name === "_json" || col.udt_name === "_jsonb"));
     const query = isArray
       ? `SELECT element::text AS v FROM ${qualified}
-         CROSS JOIN LATERAL unnest("${col.column_name}") AS a(element)
+         CROSS JOIN LATERAL unnest(${quoteIdent(col.column_name)}) AS a(element)
          WHERE element::text LIKE '%@%'`
-      : `SELECT "${col.column_name}"::text AS v FROM ${qualified}
-         WHERE "${col.column_name}"::text LIKE '%@%'`;
+      : `SELECT ${quoteIdent(col.column_name)}::text AS v FROM ${qualified}
+         WHERE ${quoteIdent(col.column_name)}::text LIKE '%@%'`;
     const cursor = sql.unsafe(query).cursor(5000);
     scan: for await (const rows of cursor) {
       for (const row of rows as unknown as { v: string }[]) {

@@ -60,6 +60,8 @@ import {
   databaseNameFromUrl,
   looksLikeProdDbName,
   openPostgres,
+  quoteIdent,
+  quoteQualified,
 } from "./db-url";
 import {
   addToColumnSnapshot,
@@ -480,14 +482,6 @@ async function columnTypes(
   return types;
 }
 
-function quoteIdent(name: string): string {
-  return `"${name.replace(/"/g, '""')}"`;
-}
-
-function quoteQualified(table: string): string {
-  return table.split(".").map(quoteIdent).join(".");
-}
-
 /**
  * One UPDATE for a group of rows changing the same columns, typed through
  * jsonb_to_recordset so arrays, citext and json columns convert exactly as
@@ -571,10 +565,7 @@ async function runSetBased(
  * the run with an undefined-table error.
  */
 async function tableExists(sql: Sql, table: string): Promise<boolean> {
-  const quoted = table
-    .split(".")
-    .map((part) => `"${part}"`)
-    .join(".");
+  const quoted = quoteQualified(table);
   const [row] = await sql<{ present: boolean }[]>`
     SELECT to_regclass(${quoted}) IS NOT NULL AS present`;
   return row?.present ?? false;
@@ -610,14 +601,7 @@ async function truncateTables(sql: Sql, tables: string[]): Promise<void> {
   }
   if (!DRY_RUN && present.length > 0) {
     await sql.unsafe(
-      `TRUNCATE TABLE ${present
-        .map((t) =>
-          t
-            .split(".")
-            .map((part) => `"${part}"`)
-            .join("."),
-        )
-        .join(", ")}`,
+      `TRUNCATE TABLE ${present.map((t) => quoteQualified(t)).join(", ")}`,
     );
   }
 }
@@ -918,13 +902,19 @@ async function obfuscate(sql: Sql): Promise<void> {
   }
 
   // ---- auth.oauth_client (singular, legacy): plaintext secret ---------------
+  // *-local dev clients (by id, as in oauth_clients) survive only with
+  // --preserve-local-seed.
   await runSetBased(sql, {
     table: "auth.oauth_client",
     column: "client_secret",
-    action: "invalidate",
-    countWhere: sql`true`,
-    update: sql`UPDATE auth.oauth_client
-        SET client_secret = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')`,
+    action: PRESERVE_LOCAL_SEED ? "invalidate (except *-local)" : "invalidate",
+    countWhere: PRESERVE_LOCAL_SEED ? sql`id NOT LIKE '%-local'` : sql`true`,
+    update: PRESERVE_LOCAL_SEED
+      ? sql`UPDATE auth.oauth_client
+          SET client_secret = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')
+          WHERE id NOT LIKE '%-local'`
+      : sql`UPDATE auth.oauth_client
+          SET client_secret = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')`,
   });
 
   // ---- users ----------------------------------------------------------------
@@ -1528,14 +1518,22 @@ async function obfuscate(sql: Sql): Promise<void> {
     },
   });
 
+  // A Better Auth client's OAuth identifier is client_id (id is a row key),
+  // so that's where a *-local dev client is recognised.
   await runSetBased(sql, {
     table: "auth.better_auth_oauth_client",
     column: "client_secret",
-    action: "invalidate",
-    countWhere: sql`client_secret IS NOT NULL`,
-    update: sql`UPDATE auth.better_auth_oauth_client
-        SET client_secret = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')
-        WHERE client_secret IS NOT NULL`,
+    action: PRESERVE_LOCAL_SEED ? "invalidate (except *-local)" : "invalidate",
+    countWhere: PRESERVE_LOCAL_SEED
+      ? sql`client_secret IS NOT NULL AND client_id NOT LIKE '%-local'`
+      : sql`client_secret IS NOT NULL`,
+    update: PRESERVE_LOCAL_SEED
+      ? sql`UPDATE auth.better_auth_oauth_client
+          SET client_secret = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')
+          WHERE client_secret IS NOT NULL AND client_id NOT LIKE '%-local'`
+      : sql`UPDATE auth.better_auth_oauth_client
+          SET client_secret = 'revoked:' || encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text)::bytea), 'hex')
+          WHERE client_secret IS NOT NULL`,
   });
 
   // ---- auth.better_auth_oauth_resource / _client_resource --------------------
