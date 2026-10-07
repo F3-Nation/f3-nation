@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.7.0...pkg-db@0.8.0) (2026-10-06)
+
+
+### Features
+
+* **auth:** resolve [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3's OAuth client-secret-issuance gap ([#1046](https://github.com/F3-Nation/f3-nation/issues/1046)) ([0bf5b66](https://github.com/F3-Nation/f3-nation/commit/0bf5b66daf882e7199643eb9d43ab28c2795087f))
+* **db:** connect over a Cloud SQL Unix socket named in DATABASE_URL ([#1118](https://github.com/F3-Nation/f3-nation/issues/1118)) ([d32a88d](https://github.com/F3-Nation/f3-nation/commit/d32a88d79ee19981c9bc901becdaf9cbab292d14))
+* **slackbot:** add F3versary announcements ([#943](https://github.com/F3-Nation/f3-nation/issues/943)) ([65c080e](https://github.com/F3-Nation/f3-nation/commit/65c080e3f50114aaea520fca95c7a945938aa3a7))
+
+
+### Bug Fixes
+
+* **auth,db,api:** let Better Auth start and sign in against the Drizzle schema ([#1143](https://github.com/F3-Nation/f3-nation/issues/1143)) ([2a9026f](https://github.com/F3-Nation/f3-nation/commit/2a9026fe8f9124f68331bb024a160a27f1e26949))
+* **db:** clarify local and test database env usage ([#1148](https://github.com/F3-Nation/f3-nation/issues/1148)) ([b11dfe7](https://github.com/F3-Nation/f3-nation/commit/b11dfe79c1a28a90432fd343e3956c6c596425ad))
+* **db:** exit non-zero when a migration fails ([#1117](https://github.com/F3-Nation/f3-nation/issues/1117)) ([e636c7f](https://github.com/F3-Nation/f3-nation/commit/e636c7f6fe672510f315b9bad79c2c764c5f6cde))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/env bumped to 0.1.4
+    * @acme/shared bumped to 0.4.1
+
 ## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.2...pkg-db@0.7.0) (2026-09-23)
 
 
