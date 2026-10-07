@@ -22,7 +22,7 @@
  *                relink by hand (or, for a run, dropped with its pages);
  *              - every Slack member comes back unlinked (user_id NULL) and
  *                with the profile shape the staging slackbot writes (sink
- *                email, placeholder name, no avatar). Staging's users can't be
+ *                email, placeholder name, no avatar, no Strava link or meta). Staging's users can't be
  *                told apart from the loaded copy's (both are sink+<id>), and
  *                a real profile synced before the bot's non-prod privacy
  *                change must not survive. The staging slackbot creates a
@@ -166,7 +166,14 @@ async function main(): Promise<void> {
           email = ${`${SINK_LOCAL}+slack-`}::text || id::text
             || ${`@${SINK_DOMAIN}`}::text,
           user_name = 'F3 pending',
-          avatar_url = NULL`;
+          avatar_url = NULL,
+          -- Staging members may have linked a real Strava account, and meta is
+          -- free-form profile JSON: neither may outlive the refresh.
+          strava_access_token = NULL,
+          strava_refresh_token = NULL,
+          strava_expires_at = NULL,
+          strava_athlete_id = NULL,
+          meta = NULL`;
       const users = await tx`
         INSERT INTO public.slack_users SELECT * FROM refresh_keep_slack.slack_users
         RETURNING id`;

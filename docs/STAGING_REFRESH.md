@@ -238,7 +238,7 @@ it is, learned on the hand-run refreshes.
      that id still has the same name and type; anything else is listed to
      relink by hand. Every Slack member comes back unlinked (`user_id` NULL)
      with the profile the staging slackbot writes (sink email, placeholder
-     name, no avatar): staging's users can't be told apart from the loaded
+     name, no avatar, no Strava link or metadata): staging's users can't be told apart from the loaded
      copy's, and a real profile synced before the slackbot's non-prod privacy
      change must not survive. The slackbot creates a fresh synthetic user for
      each member on their next action. **Restart the staging slackbot

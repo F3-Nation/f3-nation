@@ -1198,12 +1198,15 @@ async function main(): Promise<void> {
       VALUES (${movedOrg.id}, ${stagingSpace.id})`;
     await sql`
       INSERT INTO slack_users (slack_id, user_name, email, is_admin, is_owner,
-        is_bot, slack_team_id, user_id)
+        is_bot, slack_team_id, user_id, strava_access_token,
+        strava_refresh_token, strava_expires_at, strava_athlete_id, meta)
       VALUES
         ('U0SINKED', 'F3 1', ${`${SINK_PREFIX}1${SINK_SUFFIX}`}, false, false,
-          false, 'T0STAGING', 1),
+          false, 'T0STAGING', 1, NULL, NULL, NULL, NULL, NULL),
         ('U0SYNCED', 'Real Person', 'real.person@example.com', false, false,
-          false, 'T0STAGING', 1)`;
+          false, 'T0STAGING', 1, 'staging-strava-access',
+          'staging-strava-refresh', now(), 4242,
+          '{"phone": "+1 828 555 0100"}'::jsonb)`;
     const [stagingRun] = await sql<{ id: number }[]>`
       INSERT INTO slackbot.f3versary_delivery_runs (slack_space_id, org_id,
         processing_date, target_date, channel, lead_days, status, page_count)
@@ -1268,6 +1271,7 @@ async function main(): Promise<void> {
         links: number;
         nulled: number;
         real: number;
+        secrets: number;
         runs: number;
         pages: number;
         stash: boolean;
@@ -1286,6 +1290,10 @@ async function main(): Promise<void> {
             AND user_name = 'F3 pending') AS nulled,
         (SELECT count(*)::int FROM slack_users
           WHERE email NOT LIKE ${`${SINK_PREFIX}slack-%`}) AS real,
+        (SELECT count(*)::int FROM slack_users
+          WHERE strava_access_token IS NOT NULL OR strava_refresh_token IS NOT NULL
+            OR strava_expires_at IS NOT NULL OR strava_athlete_id IS NOT NULL
+            OR meta IS NOT NULL) AS secrets,
         (SELECT count(*)::int FROM slackbot.f3versary_delivery_runs
           WHERE slack_space_id = ${stagingSpace.id}) AS runs,
         (SELECT count(*)::int FROM slackbot.f3versary_delivery_pages) AS pages,
@@ -1298,6 +1306,7 @@ async function main(): Promise<void> {
         slackAfter.links === 1 &&
         slackAfter.nulled === 2 &&
         slackAfter.real === 0 &&
+        slackAfter.secrets === 0 &&
         slackAfter.runs === 1 &&
         slackAfter.pages === 1 &&
         !slackAfter.stash &&
