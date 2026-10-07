@@ -28,9 +28,13 @@
  * Databases whose name contains "prod" are refused: pointing this at an
  * un-obfuscated database would print raw PII into the console.
  */
-import postgres from "postgres";
+import type postgres from "postgres";
 
-import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
+import {
+  databaseNameFromUrl,
+  looksLikeProdDbName,
+  openPostgres,
+} from "./db-url";
 
 // Must match the --email-sink the obfuscator ran with (same default).
 const EMAIL_SINK = (
@@ -247,7 +251,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const sql = postgres(databaseUrl, { max: 2, onnotice: () => undefined });
+  const sql = openPostgres(databaseUrl, { max: 2, onnotice: () => undefined });
   try {
     // Re-check against the server-reported name, not just the URL-parsed
     // one: a misconfigured or aliased DATABASE_URL (e.g. a connection pooler

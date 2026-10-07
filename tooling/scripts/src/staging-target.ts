@@ -5,9 +5,13 @@
  * Refuses unless --allow-db names the exact database, DATABASE_URL and the
  * server both agree on that name, and the name doesn't look like production.
  */
-import postgres from "postgres";
+import type postgres from "postgres";
 
-import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
+import {
+  databaseNameFromUrl,
+  looksLikeProdDbName,
+  openPostgres,
+} from "./db-url";
 
 export function flagValue(argv: string[], name: string): string | undefined {
   const eq = argv.find((a) => a.startsWith(`${name}=`));
@@ -58,7 +62,7 @@ export async function connectToStaging(argv: string[]): Promise<postgres.Sql> {
     );
   }
 
-  const sql = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
+  const sql = openPostgres(databaseUrl, { max: 1, onnotice: () => undefined });
   const [current] = await sql<{ db: string }[]>`
     SELECT current_database() AS db`;
   if (current?.db !== allowDb) {
