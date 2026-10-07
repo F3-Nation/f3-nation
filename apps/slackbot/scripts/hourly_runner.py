@@ -13,6 +13,7 @@ from scripts import (
     award_achievements,
     backblast_reminders,
     calendar_images,
+    f3versary_announcements,
     home_region_nudge,
     kotter_reports,
     monthly_reporting,
@@ -74,6 +75,12 @@ def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, repo
         home_region_nudge.send_home_region_nudges()
     except Exception as e:
         print(f"Error running home region nudge: {e}")
+
+    print("Running F3versary announcements")
+    try:
+        f3versary_announcements.send_f3versary_announcements(force=force)
+    except Exception as e:
+        print(f"Error running F3versary announcements: {e}")
 
     if run_reporting:
         print("Running monthly reporting")

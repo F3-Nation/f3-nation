@@ -9,6 +9,10 @@ guidance, put it in `AGENTS.md` (or `docs/` for deep topics and link it) and
 keep those pointer files thin. Per-app specifics belong in that app's
 `AGENTS.md`.
 
+Claude Code (v2.1.281+) reads `AGENTS.md` files directly, so there is no
+`CLAUDE.md`. Don't add one: a `CLAUDE.md` or `CLAUDE.local.md` in the
+working directory or above it makes Claude Code skip `AGENTS.md` entirely.
+
 Deeper guidance lives in [`docs/`](docs/) — scan the directory and read a doc's
 intro to judge relevance. Two are not optional: read
 [`docs/AI_GUARDRAILS.md`](docs/AI_GUARDRAILS.md) and
@@ -21,7 +25,11 @@ security-, auth-, or reliability-sensitive work. Read the relevant
 
 Reusable agent skills (procedural runbooks in the
 [Agent Skills](https://agentskills.io) `SKILL.md` format) live in
-[`.agents/skills/`](.agents/skills/).
+[`.agents/skills/`](.agents/skills/). Add or edit skills there only. Claude
+Code doesn't read `.agents/`, so a `SessionStart` hook in
+`.claude/settings.json` runs `.claude/scripts/sync-agent-skills.mjs` to copy
+them into `.claude/skills/`, which is generated and gitignored — never commit
+anything under it.
 
 When asked for a **release plan** or a **Staging test plan** for a
 release-please PR, follow
@@ -45,7 +53,7 @@ or
 
 - **First-time setup:** `pnpm local:setup` — copies per-directory `.env` files, starts Docker services, runs migrations, and seeds the database. See [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for the full guide.
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
-- Each app and `packages/env` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
+- Each app, `packages/env`, and `packages/db` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
 - Code quality: always run `pnpm lint:fix` and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - `pnpm lint` does **not** cover dead-code detection: CI's `lint` job runs `pnpm lint` and `pnpm lint:unused` (knip) as two separate steps, so run `pnpm lint:unused` as well before pushing.
 - `pnpm ci:local` chains the whole CI sequence (`format` → `lint` → `lint:unused` → `typecheck` → `build` → `test`) and is the closest local predictor of the CI gate.
@@ -86,7 +94,7 @@ or
 - Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
 - **Set the Docker target platform at build time, not in the `Dockerfile`.** Cloud Run only runs `linux/amd64`. The app `Dockerfile` `FROM` lines must **not** pin `--platform` (BuildKit's `FromPlatformFlagConstDisallowed` lint, and it forces emulation on arm64 dev machines). Instead pass the platform at the build invocation: `platforms: linux/amd64` on `docker/build-push-action` (CI) and `--platform=linux/amd64` on `docker build` (deploy). Building a **deployable** image locally on Apple Silicon therefore requires an explicit `docker build --platform=linux/amd64 …`. Do **not** switch to `$BUILDPLATFORM` cross-builds — `sharp`'s native binaries are platform-specific and would break in the amd64 runtime.
 - Share toolchain setup through the composite action [`.github/actions/setup`](.github/actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
-- The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. The ruleset currently requires 9 checks (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`, `test-coverage-hono`, `security-audit`, `lint-title`, `db-schema-sync`). Each deploy workflow's `check-regexp` lists only 8 of those — `lint-title` is deliberately excluded from the deploy gate because it only runs on `pull_request` (`pr-title.yml` has no `push` trigger), so it never produces a check-run on a commit reached via tag push, and waiting on one that will never exist would hang the gate rather than deploy.
+- The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. The ruleset currently requires 8 checks (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`, `security-audit`, `lint-title`, `db-schema-sync`). Each deploy workflow's `check-regexp` lists only 7 of those — `lint-title` is deliberately excluded from the deploy gate because it only runs on `pull_request` (`pr-title.yml` has no `push` trigger), so it never produces a check-run on a commit reached via tag push, and waiting on one that will never exist would hang the gate rather than deploy.
 
 ## Testing Guidelines
 
@@ -103,7 +111,7 @@ or
 
 Apps that require sign-in (e.g. `apps/map`, `apps/me`) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved** — outbound mail is caught by Mailpit (`http://localhost:8025`, started by `pnpm docker:up`), and agents drive the full sign-in flow headlessly by reading the 6-digit code from its REST API.
 
-The full recipe lives in [`apps/auth/AGENTS.md`](apps/auth/AGENTS.md). Assistants that scan nested `AGENTS.md` files pick it up on their own; Claude Code reaches it through the `@AGENTS.md` import in [`apps/auth/CLAUDE.md`](apps/auth/CLAUDE.md).
+The full recipe lives in [`apps/auth/AGENTS.md`](apps/auth/AGENTS.md). Assistants that scan nested `AGENTS.md` files, Claude Code included, pick it up when they work under `apps/auth`.
 
 ## Commit Message Convention
 
@@ -155,5 +163,16 @@ changed, not by its scope** — is documented in
 
 ## Security & Environment
 
-- Store all secrets in per-directory `.env` files (one per app and `packages/env`). Always use `with-env` helpers to load environment variables and never commit `.env` files to the repo.
+- Store all secrets in per-directory `.env` files (one per app, `packages/env`, and `packages/db`). Always use `with-env` helpers to load environment variables and never commit `.env` files to the repo.
 - Scope PostHog/analytics keys per environment and rotate if leaked. Run production DB changes only through scripts in `packages/db`.
+
+<!-- BEGIN:turborepo-agent-rules -->
+
+# This is NOT the Turborepo you know
+
+Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+
+Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+
+This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
+<!-- END:turborepo-agent-rules -->

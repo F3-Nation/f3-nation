@@ -83,3 +83,5 @@ export const authSchema = {
 };
 
 export * from "drizzle-orm";
+export { getUserRoles } from "./queries/roles";
+export type { UserRoleRow } from "./queries/roles";

@@ -9,6 +9,7 @@ from __future__ import annotations
 from application.location import LocationData
 from infrastructure.api_client.client import F3ApiClient, get_f3_api_client
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
+from infrastructure.api_client.pagination import fetch_all_pages
 
 
 def _parse_location(raw: dict) -> LocationData:
@@ -37,8 +38,12 @@ class ApiLocationRepository:
 
     def get_by_org(self, org_id: int) -> list[LocationData]:
         """Return active locations for *org_id*."""
-        result = self._client.get("/v1/location", params={"regionIds": [org_id]})
-        locations_raw: list[dict] = result.get("locations") or result.get("results") or []
+        locations_raw = fetch_all_pages(
+            self._client,
+            "/v1/location",
+            params={"regionIds": [org_id]},
+            items_key="locations",
+        )
         return [_parse_location(loc) for loc in locations_raw]
 
     def get_by_id(self, location_id: int) -> LocationData | None:

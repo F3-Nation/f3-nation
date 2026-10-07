@@ -37,7 +37,7 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
   - `apps/admin/src/app/{users,event-types}/org-filter.tsx`
   - `packages/shared/src/app/org-hierarchy.ts`
   - `packages/api/src/assert-valid-parent-type.ts`
-  - `packages/db/drizzle/` (depth-agnostic AO-count migration), `packages/db/src/seed.ts`
+  - `packages/db/drizzle/` (depth-agnostic AO-count migration)
   - `packages/db/scripts/{territory-migration.md,rollback-territory-org-type.sql}`
 
 ### Definitions

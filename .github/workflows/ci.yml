@@ -409,66 +409,22 @@ jobs:
       - name: Set mock GCS credentials
         run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
       - run: pnpm test ${TURBO_RUN_ARGS:+"$TURBO_RUN_ARGS"}
-      # The apps/api characterization matrix — the parity gate for the Hono
-      # port. Runs in this job, sequentially after pnpm test and never
+      # The apps/api characterization matrix, dispatched in-process through the
+      # Hono app. Runs in this job, sequentially after pnpm test and never
       # concurrent with it, because both suites mutate f3_test. Needs no extra
       # env: global-setup.ts stands up its own JWKS server and signing key, and
       # SUPER_ADMIN_API_KEY is already in the workflow env above.
       - run: pnpm turbo run test:characterization --filter=f3-api
 
-  # Same characterization suite as test-coverage above, but dispatched through
-  # the Hono app.fetch entry instead of the Next in-process target. A
-  # separate job (own Postgres service) so it runs in parallel with
-  # test-coverage rather than lengthening that job's critical path — its own
-  # DB never touches the other job's f3_test. Identical frozen goldens either
-  # way: any diff here is a Hono-port parity bug, not a suite difference.
-  # `test:characterization` depends on `reset-test-db` and `test` in turbo.json,
-  # so `pnpm turbo run test:characterization` alone drives the same DB-reset +
-  # test chain the "next" leg relies on. `CHAR_TEST_TARGET` is in turbo.json's
-  # globalEnv, so setting it to "hono" here changes every task's cache key —
-  # this job always re-runs the full suite from scratch, it can't share a
-  # cache hit on `test` with test-coverage's run.
-  test-coverage-hono:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: f3_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-        with:
-          enable-turbo-cache: "true"
-      # GCS_CREDENTIALS must exist with client_email/private_key fields, but
-      # nothing real is needed. Built here from plainly fake JSON — a committed
-      # base64 blob trips generic high-entropy secret scanners.
-      - name: Set mock GCS credentials
-        run: echo "GCS_CREDENTIALS=$(printf '{\"client_email\":\"fake-not-a-real-credential@ci.invalid\",\"private_key\":\"THIS-IS-A-FAKE-PLACEHOLDER-FOR-CI\"}' | base64 -w0)" >> "$GITHUB_ENV"
-      - run: pnpm turbo run test:characterization
-        env:
-          CHAR_TEST_TARGET: hono
-
       # The same frozen goldens once more, but against the *built artifact*
       # rather than the source: esbuild bundle -> real `pnpm install` of the
       # generated runtime manifest -> booted process -> HTTP over a socket.
-      # The hono leg above proves app.ts is correct; this proves the thing we
+      # The in-process leg above proves app.ts is correct; this proves the thing we
       # actually ship is. It catches what only appears after bundling —
       # externals missing from the runtime package.json, CJS interop that dies
       # at module evaluation, a dynamic import esbuild could not follow.
       - name: Build the server bundle
-        run: pnpm turbo run build:server --filter=f3-api
+        run: pnpm turbo run build --filter=f3-api
       # Copied outside the workspace tree so Node's module resolution for
       # server.js can't fall through past this directory's own node_modules
       # into apps/api/node_modules (or beyond) — the real deployed container
@@ -484,17 +440,17 @@ jobs:
       - name: Install the bundle's runtime dependencies
         working-directory: ${{ runner.temp }}/bundle
         run: pnpm install --prod --ignore-workspace --no-frozen-lockfile
-      # The hono leg above already ran test:characterization through turbo,
-      # whose task graph resets f3_test as a dependency. This leg calls
+      # The in-process leg above ran test:characterization through turbo, whose
+      # task graph resets f3_test as a dependency. This leg calls
       # test:characterization directly (see below), bypassing that graph, so
       # the DB must be reset explicitly or these goldens run against whatever
-      # state the hono leg left behind.
+      # state the in-process leg left behind.
       - name: Reset the test database before the live characterization run
         run: pnpm -C packages/db reset-test-db
-      # NODE_ENV=test, not production: `production` would initialize Sentry with
-      # the real DSN (src/instrument.ts) and ship CI errors to the live project.
-      # `development` is equally wrong — it turns on getSession's dev mock
-      # session, which makes the 401 goldens vacuous.
+      # NODE_ENV=test, not production: `production` would register error
+      # tracking with the real PostHog key (src/instrument.ts) and ship CI
+      # errors to the live project. `development` is equally wrong — it turns
+      # on getSession's dev mock session, which makes the 401 goldens vacuous.
       - name: Boot the bundle and run the characterization suite against it
         working-directory: ${{ runner.temp }}/bundle
         env:
@@ -525,7 +481,11 @@ jobs:
           fi
           # -C escapes back to the checkout: this step's own working-directory
           # is the relocated bundle, outside the workspace pnpm needs to see.
-          CHAR_TEST_TARGET=live CHAR_TEST_BASE_URL="http://127.0.0.1:${PORT}" \
+          # CHAR_TEST_SHARED_DB: the booted bundle and the test process share
+          # f3_test, so DB-backed fixtures are visible to it. That enables the
+          # cascade-service dynamic-import check, which Staging skips.
+          CHAR_TEST_TARGET=live CHAR_TEST_SHARED_DB=1 \
+            CHAR_TEST_BASE_URL="http://127.0.0.1:${PORT}" \
             pnpm -C "${GITHUB_WORKSPACE}" --filter f3-api test:characterization
       # The two `cat`s above only cover a crash during startup or a timeout;
       # a crash mid-characterization-run would otherwise vanish with the
@@ -556,7 +516,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Set GHCR cache reference
         id: cache
         env:
@@ -580,7 +540,7 @@ jobs:
       - id: build
         if: steps.login.outcome == 'success'
         continue-on-error: true
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
@@ -596,7 +556,7 @@ jobs:
       # requirement. Login failure skips the cache attempt entirely.
       - name: Validate image without registry cache
         if: steps.login.outcome == 'failure'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
@@ -605,7 +565,7 @@ jobs:
       # A cache import failure must not prevent an otherwise valid image build.
       - name: Retry without registry cache
         if: steps.login.outcome == 'success' && steps.build.outcome == 'failure'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
@@ -630,7 +590,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Set GHCR cache reference
         id: cache
         env:
@@ -654,7 +614,7 @@ jobs:
       - id: build
         if: steps.login.outcome == 'success'
         continue-on-error: true
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
@@ -666,7 +626,7 @@ jobs:
       # image validation performed by this job.
       - name: Validate image without registry cache
         if: steps.login.outcome == 'failure'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
@@ -680,7 +640,7 @@ jobs:
         id: repair
         if: steps.login.outcome == 'success' && steps.build.outcome == 'failure'
         continue-on-error: true
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
@@ -692,7 +652,7 @@ jobs:
         run: echo "::warning::GHCR cache export failed; validating the image without cache before continuing."
       - name: Validate image after cache refresh failure
         if: steps.login.outcome == 'success' && steps.build.outcome == 'failure' && steps.repair.outcome == 'failure'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile

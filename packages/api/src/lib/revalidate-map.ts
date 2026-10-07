@@ -4,7 +4,7 @@ import { logError, logInfo } from "../logger";
 
 /**
  * Triggers the Map app's cache revalidation via HTTP.
- * API and Map are separate Next.js instances, so the Map app must be notified explicitly.
+ * API and Map are separate services, so the Map app must be notified explicitly.
  *
  * Returns a Promise that resolves when the request completes (success or failure).
  * Callers can await it or fire-and-forget with `void triggerMapAppRevalidation()`.
