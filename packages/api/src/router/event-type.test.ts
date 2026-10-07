@@ -530,6 +530,113 @@ describe("Event Type Router", () => {
     });
   });
 
+  describe("crupdate destination org", () => {
+    const localOrgIds: number[] = [];
+    const localTypeIds: number[] = [];
+
+    afterAll(async () => {
+      for (const id of localTypeIds) {
+        await cleanup.eventType(id).catch(() => undefined);
+      }
+      for (const id of localOrgIds) {
+        await cleanup.org(id).catch(() => undefined);
+      }
+    });
+
+    const setup = async (specificOrg: "regionA" | "regionB" | "nation") => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const regions = await db
+        .insert(schema.orgs)
+        .values(
+          [1, 2].map((n) => ({
+            name: `Rescope Region ${n} ${uniqueId()}`,
+            orgType: "region" as const,
+            parentId: f3Nation.id,
+            isActive: true,
+          })),
+        )
+        .returning();
+      const [regionA, regionB] = regions;
+      if (!regionA || !regionB) throw new Error("Failed to create regions");
+      localOrgIds.push(regionA.id, regionB.id);
+
+      const [eventType] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `Rescope Type ${uniqueId()}`,
+          eventCategory: "first_f",
+          specificOrgId:
+            specificOrg === "nation"
+              ? null
+              : specificOrg === "regionA"
+                ? regionA.id
+                : regionB.id,
+          isActive: true,
+        })
+        .returning();
+      if (!eventType) throw new Error("Failed to create event type");
+      localTypeIds.push(eventType.id);
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+      const update = (specificOrgId: number | null) =>
+        createTestClient().eventType.crupdate({
+          id: eventType.id,
+          name: eventType.name,
+          eventCategory: "first_f",
+          specificOrgId,
+          isActive: true,
+        });
+      const storedOrgId = async () =>
+        (
+          await db
+            .select({ specificOrgId: schema.eventTypes.specificOrgId })
+            .from(schema.eventTypes)
+            .where(eq(schema.eventTypes.id, eventType.id))
+        )[0]?.specificOrgId;
+      return { regionA, regionB, update, storedOrgId };
+    };
+
+    it("lets a region editor update their region's event type", async () => {
+      const { regionA, update } = await setup("regionA");
+      const result = await update(regionA.id);
+      expect(result.eventType?.[0]?.specificOrgId).toBe(regionA.id);
+    });
+
+    it("rejects moving a region's event type to another region", async () => {
+      const { regionA, regionB, update, storedOrgId } = await setup("regionA");
+      await expect(update(regionB.id)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+      expect(await storedOrgId()).toBe(regionA.id);
+    });
+
+    it("rejects making a region's event type nation-wide", async () => {
+      const { regionA, update, storedOrgId } = await setup("regionA");
+      await expect(update(null)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+      expect(await storedOrgId()).toBe(regionA.id);
+    });
+
+    it("rejects pulling another region's event type into the caller's region", async () => {
+      const { regionA, regionB, update, storedOrgId } = await setup("regionB");
+      await expect(update(regionA.id)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+      expect(await storedOrgId()).toBe(regionB.id);
+    });
+
+    it("rejects pulling a nation-wide event type into a region", async () => {
+      const { regionA, update, storedOrgId } = await setup("nation");
+      await expect(update(regionA.id)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+      expect(await storedOrgId()).toBeNull();
+    });
+  });
+
   describe("delete", () => {
     it("should soft delete an event type (mark as inactive)", async () => {
       const session = await createAdminSession();

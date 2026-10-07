@@ -18,10 +18,11 @@ _ENVIRONMENT = re.compile(r"^(?:nonprod|production|local|test)$")
 _PG_DATABASE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$")
 _PG_SOCKET = re.compile(r"^/cloudsql/f3data:us-central1:f3data(?:-nonprod)?$")
 _PG_PORT = re.compile(r"^[0-9]+$")
+_PRODUCER_REVISION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 APPROVED_DATABASES = {"nonprod": "f3_staging", "production": "f3_prod"}
 _ENVIRONMENT_ALIASES = {"local": "nonprod", "test": "nonprod"}
-CATALOG_BUCKETS = {"nonprod": "f3-analytics-nonprod", "production": "f3-analytics"}
+PRODUCT_BUCKETS = {"nonprod": "f3-analytics-nonprod", "production": "f3-analytics"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +36,7 @@ class Settings:
     postgres_user: str
     postgres_password: str
     postgres_database: str
+    producer_revision: str = "unknown"
 
     def target(self, materialization: Materialization) -> tuple[str, str]:
         if MATERIALIZATIONS_BY_NAME.get(materialization.name) is not materialization:
@@ -53,8 +55,14 @@ class Settings:
         postgres_user = values.get("ANALYTICS_POSTGRES_USER", "").strip()
         postgres_password = values.get("ANALYTICS_POSTGRES_PASSWORD", "")
         postgres_database = values.get("ANALYTICS_POSTGRES_DATABASE", "").strip()
+        producer_revision = values.get("ANALYTICS_PRODUCER_REVISION", "").strip()
         if not _ENVIRONMENT.fullmatch(environment):
             raise SettingsError("ANALYTICS_ENVIRONMENT must be a safe token")
+        if environment == "production" and not producer_revision:
+            raise SettingsError("ANALYTICS_PRODUCER_REVISION is required in production")
+        if producer_revision and not _PRODUCER_REVISION.fullmatch(producer_revision):
+            raise SettingsError("ANALYTICS_PRODUCER_REVISION must be a safe slug")
+        producer_revision = producer_revision or "unknown"
         if not extension_directory:
             raise SettingsError("DUCKDB_EXTENSION_DIR is required")
         if not extension_path:
@@ -126,30 +134,39 @@ class Settings:
             postgres_user,
             postgres_password,
             postgres_database,
+            producer_revision,
         )
 
 
 @dataclass(frozen=True, slots=True)
-class CatalogSettings:
-    """The deliberately database-free configuration needed by catalog operators."""
+class PointerSettings:
+    """Database-free, product-bucket configuration for pointer operators."""
 
     environment: str
     bucket_name: str
-    catalog_object: str = "parquets/catalog.json"
+    producer_revision: str = "unknown"
+
+    def target(self, materialization: Materialization) -> tuple[str, str]:
+        if MATERIALIZATIONS_BY_NAME.get(materialization.name) is not materialization:
+            raise SettingsError("materialization is not in the approved registry")
+        return f"gs://{self.bucket_name}/{materialization.product}/{materialization.name}", ""
 
     @classmethod
-    def from_env(cls, environ: dict[str, str] | None = None) -> "CatalogSettings":
+    def from_env(cls, environ: dict[str, str] | None = None) -> "PointerSettings":
         values = os.environ if environ is None else environ
         environment = values.get("ANALYTICS_ENVIRONMENT", "").strip()
+        producer_revision = values.get("ANALYTICS_PRODUCER_REVISION", "").strip()
         if not _ENVIRONMENT.fullmatch(environment):
             raise SettingsError("ANALYTICS_ENVIRONMENT must be a safe token")
+        if environment == "production" and not producer_revision:
+            raise SettingsError("ANALYTICS_PRODUCER_REVISION is required in production")
+        if producer_revision and not _PRODUCER_REVISION.fullmatch(producer_revision):
+            raise SettingsError("ANALYTICS_PRODUCER_REVISION must be a safe slug")
+        producer_revision = producer_revision or "unknown"
         target_environment = _ENVIRONMENT_ALIASES.get(environment, environment)
         bucket_name = values.get("ANALYTICS_CATALOG_BUCKET", "").strip()
         if not bucket_name:
-            raise SettingsError("ANALYTICS_CATALOG_BUCKET is required for catalog operations")
-        if bucket_name != CATALOG_BUCKETS[target_environment]:
+            raise SettingsError("ANALYTICS_CATALOG_BUCKET is required for pointer operations")
+        if bucket_name != PRODUCT_BUCKETS[target_environment]:
             raise SettingsError(f"ANALYTICS_CATALOG_BUCKET does not match {target_environment}")
-        catalog_object = values.get("ANALYTICS_CATALOG_OBJECT", "parquets/catalog.json").strip()
-        if catalog_object != "parquets/catalog.json":
-            raise SettingsError("ANALYTICS_CATALOG_OBJECT must be parquets/catalog.json")
-        return cls(environment, bucket_name, catalog_object)
+        return cls(environment, bucket_name, producer_revision)

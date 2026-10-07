@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.4.0...analytics@1.0.0) (2026-10-06)
+
+
+### Bug Fixes
+
+* **analytics:** disabling duckdb filter pushdown and adding duckdb logging ([#1033](https://github.com/F3-Nation/f3-nation/issues/1033)) ([732690d](https://github.com/F3-Nation/f3-nation/commit/732690d18064bcdf352940f8739c780950877589))
+
 ## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.3.1...analytics@0.4.0) (2026-09-16)
 
 

@@ -51,6 +51,8 @@ describe("transport seam", () => {
 
 // `/v1/api-key` is an adminProcedure, so a 200 proves the admin role actually
 // reached the handler — a fixture that silently produced zero roles would 401.
+// It rejects every API-key session, so API-key fixtures probe the editorProcedure
+// `/v1/position/assignments` instead, where an authorized key 400s on input.
 describe.runIf(target.inProcess)("fixtures round-trip", () => {
   it("authenticates an admin endpoint with a fixture cookie", async () => {
     const cookie = await sessionCookie({
@@ -100,19 +102,22 @@ describe.runIf(target.inProcess)("fixtures round-trip", () => {
     expect(res.status).toBe(401);
   });
 
-  it("authenticates an admin endpoint with a fixture API key", async () => {
+  it("authenticates an editor endpoint with a fixture API key", async () => {
     const apiKey = await createApiKey({ roles: [{ roleName: "admin" }] });
     onTestFinished(() => apiKey.cleanup());
     const res = await target.invoke(
-      req("/v1/api-key", {
+      req("/v1/position/assignments", {
+        method: "POST",
         headers: {
           "x-forwarded-for": "10.60.0.2",
           authorization: `Bearer ${apiKey.key}`,
           client: "characterization",
+          "content-type": "application/json",
         },
+        body: "{}",
       }),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
   });
 
   it("rejects a revoked fixture API key", async () => {
@@ -122,12 +127,15 @@ describe.runIf(target.inProcess)("fixtures round-trip", () => {
     });
     onTestFinished(() => apiKey.cleanup());
     const res = await target.invoke(
-      req("/v1/api-key", {
+      req("/v1/position/assignments", {
+        method: "POST",
         headers: {
           "x-forwarded-for": "10.60.0.7",
           authorization: `Bearer ${apiKey.key}`,
           client: "characterization",
+          "content-type": "application/json",
         },
+        body: "{}",
       }),
     );
     expect(res.status).toBe(401);
@@ -140,12 +148,15 @@ describe.runIf(target.inProcess)("fixtures round-trip", () => {
     });
     onTestFinished(() => apiKey.cleanup());
     const res = await target.invoke(
-      req("/v1/api-key", {
+      req("/v1/position/assignments", {
+        method: "POST",
         headers: {
           "x-forwarded-for": "10.60.0.9",
           authorization: `Bearer ${apiKey.key}`,
           client: "characterization",
+          "content-type": "application/json",
         },
+        body: "{}",
       }),
     );
     expect(res.status).toBe(401);

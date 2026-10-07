@@ -91,6 +91,46 @@ describe("assertSelfOrEditorOnEventOrg", () => {
       }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
+
+  it("does not treat an API key as its owner acting on themselves", async () => {
+    mockCheckHasRoleOnOrg.mockResolvedValue({
+      success: false,
+      orgId: null,
+      roleName: null,
+      mode: "no-permission",
+    });
+
+    await expect(
+      assertSelfOrEditorOnEventOrg({
+        ctx: {
+          ...baseCtx,
+          session: {
+            id: 42,
+            email: "owner@example.com",
+            roles: [],
+            user: {
+              id: "42",
+              email: "owner@example.com",
+              name: "Key Owner",
+              roles: [],
+            },
+            apiKey: {
+              id: 7,
+              key: "test...key",
+              ownerId: 42,
+              revokedAt: null,
+              expiresAt: null,
+              orgIds: [],
+            },
+            expires: new Date().toISOString(),
+          },
+        },
+        eventInstanceId: 1,
+        targetUserId: 42,
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(mockCheckHasRoleOnOrg).toHaveBeenCalled();
+  });
 });
 
 describe("assertEditorOnEventOrg", () => {
