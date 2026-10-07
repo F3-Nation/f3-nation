@@ -36,13 +36,19 @@ SECRET_STAGING=staging-refresh-staging-db-password
 SALT_SECRET=OBFUSCATION_SALT
 IMAGE_BASE="${REGION}-docker.pkg.dev/${PROJECT}/cloud-run-builds/${JOB}"
 LOG_VIEW=f3-staging-refresh
-# Who may run the refresh: Crash and Declan.
-RUNNERS=(user:andy.pickler@gmail.com user:declan@mountaindev.com)
+# Who may run the refresh: space-separated IAM members, e.g.
+#   STAGING_REFRESH_RUNNERS="user:a@example.com user:b@example.com"
+# Read from the environment, not committed: the repo is public. Not needed
+# with --image-only.
+RUNNERS=()
 SLACKBOT_PROJECT=f3-slackbot-staging
 SLACKBOT_SERVICE=f3-slackbot
 
 IMAGE_ONLY=0
 [ "${1:-}" = "--image-only" ] && IMAGE_ONLY=1
+if [ "$IMAGE_ONLY" = 0 ]; then
+  read -r -a RUNNERS <<<"${STAGING_REFRESH_RUNNERS:?set STAGING_REFRESH_RUNNERS to the IAM members who may run the refresh}"
+fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(git -C "$HERE" rev-parse --show-toplevel)"

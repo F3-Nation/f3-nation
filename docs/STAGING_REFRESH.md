@@ -121,7 +121,15 @@ with access to `f3-slackbot-staging`.
 ### Setting it up (once)
 
 `tooling/scripts/staging-refresh/setup.sh`, run by an Owner of `f3data` with
-the `spuds` DB logins, creates everything and is safe to re-run:
+the `spuds` DB logins, creates everything and is safe to re-run. Name who may
+run the refresh in the environment (kept out of this public repo):
+
+```bash
+STAGING_REFRESH_RUNNERS="user:<operator>@<domain> user:<other>@<domain>" \
+  bash tooling/scripts/staging-refresh/setup.sh
+```
+
+It creates:
 
 - service account `staging-refresh@f3data.iam.gserviceaccount.com`;
 - DB login `staging_refresh`: on prod a plain read-only role
@@ -175,7 +183,6 @@ it is, learned on the hand-run refreshes.
    be _ahead_ of the code that classifies it: the job compares prod's applied
    migrations with the image's `packages/db/drizzle/meta/_journal.json`.
 3. **Load** the _obfuscated_ copy into `f3data-nonprod`. Learned on the
-   first real run (2026-09-22):
    first real run (2026-09-22):
    - **Match staging's migration level**, not the repo's. Staging's
      `drizzle.__drizzle_migrations_<db>` says where it is; obfuscate the copy
@@ -313,12 +320,12 @@ emails/phones/names and reverse a "fake" value back to the real input.
 
 The script refuses to write anything unless **both** flags are present:
 
-| Guard                                                                                                                       | What it protects against                                                                                                                                             |
-| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--allow-db <name>` must exactly match the database name in `DATABASE_URL` **and** the server-reported `current_database()` | Pointing the script at the wrong database (e.g. a stale `DATABASE_URL` in a shell or `.env` aimed at prod). The operator has to name the intended target explicitly. |
-| `--i-understand-this-rewrites-data`                                                                                         | Muscle-memory / copy-paste runs. There is no way to run destructively without typing an explicit acknowledgement.                                                    |
-| The exact production database name (`f3data`) or any name containing `prod` is **always refused**                           | Even a fully-flagged run cannot execute against anything named like production. Obfuscate a copy, never the source.                                                  |
-| `--dry-run`                                                                                                                 | Full report of tables/columns/row counts with zero writes — run this first, always.                                                                                  |
+| Guard                                                                                                                                                                                     | What it protects against                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--allow-db <name>` must exactly match the database name in `DATABASE_URL` **and** the server-reported `current_database()`                                                               | Pointing the script at the wrong database (e.g. a stale `DATABASE_URL` in a shell or `.env` aimed at prod). The operator has to name the intended target explicitly. |
+| `--i-understand-this-rewrites-data`                                                                                                                                                       | Muscle-memory / copy-paste runs. There is no way to run destructively without typing an explicit acknowledgement.                                                    |
+| The exact production database name (`f3data`) or any name with `prod`/`production` as a `-`/`_`-delimited token (e.g. `f3_prod`, `prod-copy`; not `f3data-nonprod`) is **always refused** | Even a fully-flagged run cannot execute against anything named like production. Obfuscate a copy, never the source.                                                  |
+| `--dry-run`                                                                                                                                                                               | Full report of tables/columns/row counts with zero writes — run this first, always.                                                                                  |
 
 `--preserve-local-seed` additionally keeps the committed local dev fixtures
 (`*@f3local.dev` users, `local-*` API keys, `*-local` OAuth clients) intact so

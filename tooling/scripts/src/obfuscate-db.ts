@@ -48,8 +48,9 @@
  * rainbow table over candidate emails/phones/names and reverse the "fake"
  * values back to real ones.
  *
- * The exact production database name ("f3data") and any name containing
- * "prod" are always refused.
+ * The exact production database name ("f3data") and any name with "prod" or
+ * "production" as a -/_-delimited token ("f3_prod", "prod-copy"; not
+ * "f3data-nonprod") are always refused.
  */
 import { createHash } from "node:crypto";
 

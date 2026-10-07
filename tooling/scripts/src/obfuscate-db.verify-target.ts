@@ -25,8 +25,10 @@
  *   DATABASE_URL=postgresql://… pnpm -F @acme/scripts obfuscate-db:verify-target \
  *     [--email-sink=<group@domain>]
  *
- * Databases whose name contains "prod" are refused: pointing this at an
- * un-obfuscated database would print raw PII into the console.
+ * Databases named like production ("f3data", or "prod"/"production" as a
+ * -/_-delimited token such as "f3_prod"; not "f3data-nonprod") are refused:
+ * pointing this at an un-obfuscated database would print raw PII into the
+ * console.
  */
 import type postgres from "postgres";
 

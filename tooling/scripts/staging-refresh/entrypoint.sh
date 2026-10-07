@@ -48,5 +48,14 @@ export TMPDIR=/tmp
 
 cd /app/tooling/scripts
 status=0
-node --import tsx src/staging-refresh.ts --allow-staging-db "$STAGING_DB_NAME" --yes "$@" || status=$?
+# bash is PID 1 here: Cloud Run's SIGTERM (task timeout, cancel) reaches only
+# PID 1, and bash neither acts on it nor forwards it to a foreground child. Run
+# the orchestrator in the background and forward the signal, so its SIGTERM
+# handler can print the half-loaded-staging recovery instructions.
+node --import tsx src/staging-refresh.ts --allow-staging-db "$STAGING_DB_NAME" --yes "$@" &
+child=$!
+trap 'kill -TERM "$child" 2>/dev/null || true' TERM INT
+wait "$child" || status=$?
+# A trapped signal interrupts the first wait; collect the real exit code.
+if kill -0 "$child" 2>/dev/null; then wait "$child" || status=$?; fi
 exit "$status"
