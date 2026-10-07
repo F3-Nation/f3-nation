@@ -10494,7 +10494,9 @@
                                 "enum": [
                                   "user",
                                   "editor",
-                                  "admin"
+                                  "admin",
+                                  "password_manager",
+                                  "password_reader"
                                 ],
                                 "type": "string"
                               }
@@ -10876,7 +10878,9 @@
                                 "enum": [
                                   "user",
                                   "editor",
-                                  "admin"
+                                  "admin",
+                                  "password_manager",
+                                  "password_reader"
                                 ],
                                 "type": "string"
                               }
@@ -19697,7 +19701,9 @@
                 "enum": [
                   "user",
                   "editor",
-                  "admin"
+                  "admin",
+                  "password_manager",
+                  "password_reader"
                 ],
                 "type": "string"
               },
@@ -20023,7 +20029,9 @@
                                   "enum": [
                                     "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
@@ -20250,7 +20258,9 @@
                           "enum": [
                             "user",
                             "editor",
-                            "admin"
+                            "admin",
+                            "password_manager",
+                            "password_reader"
                           ],
                           "type": "string"
                         }
@@ -20789,7 +20799,9 @@
                                     "enum": [
                                       "user",
                                       "editor",
-                                      "admin"
+                                      "admin",
+                                      "password_manager",
+                                      "password_reader"
                                     ],
                                     "type": "string"
                                   }
@@ -21084,7 +21096,9 @@
                                   "enum": [
                                     "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
@@ -21395,7 +21409,9 @@
                                     "enum": [
                                       "user",
                                       "editor",
-                                      "admin"
+                                      "admin",
+                                      "password_manager",
+                                      "password_reader"
                                     ],
                                     "type": "string"
                                   }
@@ -21470,7 +21486,9 @@
                 "enum": [
                   "user",
                   "editor",
-                  "admin"
+                  "admin",
+                  "password_manager",
+                  "password_reader"
                 ],
                 "type": "string"
               },
@@ -21796,7 +21814,9 @@
                                   "enum": [
                                     "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
