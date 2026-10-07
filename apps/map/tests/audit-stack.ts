@@ -11,7 +11,7 @@ import { test as base } from "@playwright/test";
 import { cleanupAuditStack } from "./audit-cleanup";
 
 // This fixture owns every target. It never connects to E2E_BASE_URL or a supplied
-// database URL. Docker allocates an isolated database; fresh Next processes get
+// database URL. Docker allocates an isolated database; fresh app processes get
 // that exact URL. No reuseExistingServer or fallback to an occupied port.
 const image =
   "postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280";
@@ -114,11 +114,16 @@ export const test = base.extend<
           NEXT_PUBLIC_POSTHOG_SESSION_RECORDING: "false",
           SKIP_ENV_VALIDATION: "1",
         };
-        async function start(name: string, args: string[], wait: boolean) {
+        async function start(
+          name: string,
+          args: string[],
+          wait: boolean,
+          overrides: Partial<NodeJS.ProcessEnv> = {},
+        ) {
           const fd = openSync(join(logs, `${name}.log`), "w", 0o600);
           const child = spawn("pnpm", args, {
             cwd: root,
-            env,
+            env: { ...env, ...overrides },
             detached: true,
             stdio: ["ignore", fd, fd],
           });
@@ -144,14 +149,13 @@ export const test = base.extend<
             "--filter",
             "f3-api",
             "with-env",
-            "next",
-            "dev",
-            "--hostname",
-            "127.0.0.1",
-            "--port",
-            String(apiPort),
+            "tsx",
+            "--import",
+            "./src/instrument.ts",
+            "src/server.ts",
           ],
           false,
+          { PORT: String(apiPort), F3_API_HOST: "127.0.0.1", TZ: "UTC" },
         );
         const map = await start(
           "map",

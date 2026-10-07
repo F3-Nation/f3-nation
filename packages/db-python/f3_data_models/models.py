@@ -11,8 +11,8 @@ from sqlalchemy import (
     TIME,
     UUID,
     VARCHAR,
-    BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     Float,
@@ -382,6 +382,64 @@ class SlackSpace(Base):
     settings: Mapped[Optional[Dict[str, Any]]]
     created: Mapped[dt_create]
     updated: Mapped[dt_update]
+
+
+class F3versaryDeliveryRun(Base):
+    """A saved daily F3versary delivery plan for one region and Slack workspace."""
+
+    __tablename__ = "f3versary_delivery_runs"
+
+    id: Mapped[intpk]
+    slack_space_id: Mapped[int] = mapped_column(ForeignKey("slack_spaces.id"))
+    org_id: Mapped[int] = mapped_column(ForeignKey("orgs.id"))
+    processing_date: Mapped[date]
+    target_date: Mapped[date]
+    channel: Mapped[text]
+    lead_days: Mapped[int]
+    status: Mapped[str] = mapped_column(VARCHAR(16), server_default="planned")
+    page_count: Mapped[int] = mapped_column(Integer, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "slack_space_id", "org_id", "processing_date", name="f3versary_delivery_runs_space_org_date_key"
+        ),
+        Index("idx_f3versary_delivery_runs_space_org_status", "slack_space_id", "org_id", "status", "processing_date"),
+        CheckConstraint("status IN ('planned', 'complete', 'abandoned')", name="f3versary_delivery_runs_status_check"),
+        CheckConstraint("lead_days BETWEEN 0 AND 30", name="f3versary_delivery_runs_lead_days_check"),
+        CheckConstraint("page_count >= 0", name="f3versary_delivery_runs_page_count_check"),
+        {"schema": "slackbot"},
+    )
+
+
+class F3versaryDeliveryPage(Base):
+    """An immutable Slack message snapshot with durable per-page retry state."""
+
+    __tablename__ = "f3versary_delivery_pages"
+
+    id: Mapped[intpk]
+    run_id: Mapped[int] = mapped_column(ForeignKey("slackbot.f3versary_delivery_runs.id"))
+    page_number: Mapped[int]
+    text: Mapped[text]
+    blocks: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB)
+    client_msg_id: Mapped[str] = mapped_column(UUID(as_uuid=False))
+    status: Mapped[str] = mapped_column(VARCHAR(16), server_default="pending")
+    claim_token: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
+    claim_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    slack_ts: Mapped[Optional[str]] = mapped_column(VARCHAR(32))
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "page_number", name="f3versary_delivery_pages_run_page_key"),
+        UniqueConstraint("client_msg_id", name="f3versary_delivery_pages_client_msg_id_key"),
+        Index("idx_f3versary_delivery_pages_run_status_page", "run_id", "status", "page_number"),
+        CheckConstraint("page_number >= 1", name="f3versary_delivery_pages_page_number_check"),
+        CheckConstraint("status IN ('pending', 'claimed', 'sent')", name="f3versary_delivery_pages_status_check"),
+        {"schema": "slackbot"},
+    )
 
 
 class Role(Base):
@@ -948,88 +1006,6 @@ class EventInstance(Base):
     )
 
 
-class EventInstanceExpanded(Base):
-    """
-    Read-only ORM mapping for the materialized view `event_instance_expanded`.
-
-    This view expands each event instance with series, org hierarchy, location,
-    aggregated type/tag indicators, and arrays of names. It is intended for
-    querying only and should not be used for inserts/updates.
-    """
-
-    __tablename__ = "event_instance_expanded"
-
-    # Base event-instance level fields
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id: Mapped[int] = mapped_column(Integer)
-    location_id: Mapped[Optional[int]] = mapped_column(Integer)
-    series_id: Mapped[Optional[int]] = mapped_column(Integer)
-    highlight: Mapped[bool] = mapped_column(Boolean)
-    start_date: Mapped[date]
-    end_date: Mapped[Optional[date]]
-    start_time: Mapped[Optional[str]]
-    end_time: Mapped[Optional[str]]
-    name: Mapped[str]
-    description: Mapped[Optional[str]]
-    pax_count: Mapped[Optional[int]]
-    fng_count: Mapped[Optional[int]]
-    preblast: Mapped[Optional[str]]
-    backblast: Mapped[Optional[str]]
-    meta: Mapped[Optional[Dict[str, Any]]]
-    created: Mapped[datetime] = mapped_column(DateTime)
-    updated: Mapped[datetime] = mapped_column(DateTime)
-
-    # Series fields
-    series_name: Mapped[Optional[str]]
-    series_description: Mapped[Optional[str]]
-
-    # AO fields (org_type = 'ao')
-    ao_org_id: Mapped[Optional[int]] = mapped_column(Integer)
-    ao_name: Mapped[Optional[str]]
-    ao_description: Mapped[Optional[str]]
-    ao_logo_url: Mapped[Optional[str]]
-    ao_website: Mapped[Optional[str]]
-    ao_meta: Mapped[Optional[Dict[str, Any]]]
-
-    # Region fields (coalesce of direct region or parent of AO)
-    region_org_id: Mapped[Optional[int]] = mapped_column(Integer)
-    region_name: Mapped[Optional[str]]
-    region_description: Mapped[Optional[str]]
-    region_logo_url: Mapped[Optional[str]]
-    region_website: Mapped[Optional[str]]
-    region_meta: Mapped[Optional[Dict[str, Any]]]
-
-    # Area and sector fields
-    area_org_id: Mapped[Optional[int]] = mapped_column(Integer)
-    area_name: Mapped[Optional[str]]
-    sector_org_id: Mapped[Optional[int]] = mapped_column(Integer)
-    sector_name: Mapped[Optional[str]]
-
-    # Location fields
-    location_name: Mapped[Optional[str]]
-    location_description: Mapped[Optional[str]]
-    location_latitude: Mapped[Optional[float]] = mapped_column(Float)
-    location_longitude: Mapped[Optional[float]] = mapped_column(Float)
-
-    # Aggregated indicators from event types (int8 in PG -> BigInteger)
-    bootcamp_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-    run_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-    ruck_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-    first_f_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-    second_f_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-    third_f_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-
-    # Aggregated indicators from event tags (int8 in PG -> BigInteger)
-    pre_workout_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-    off_the_books_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-    vq_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-    convergence_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-
-    # Arrays of type/tag names
-    all_types: Mapped[Optional[List[str]]] = mapped_column(ARRAY(VARCHAR))
-    all_tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(VARCHAR))
-
-
 class AttendanceType(Base):
     """
     Model representing an attendance type. Basic types are 1='PAX', 2='Q', 3='Co-Q'
@@ -1206,39 +1182,6 @@ class Attendance(Base):
         cascade="expunge",
         viewonly=True,
     )
-
-
-class AttendanceExpanded(Base):
-    """
-    Read-only ORM mapping for the materialized view `attendance_expanded`.
-
-    Includes base attendance fields, aggregated attendance-type indicators,
-    and selected user and home-region details. Query-only.
-    """
-
-    __tablename__ = "attendance_expanded"
-
-    # Base attendance fields
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer)
-    event_instance_id: Mapped[int] = mapped_column(Integer)
-    attendance_meta: Mapped[Optional[Dict[str, Any]]]
-    created: Mapped[datetime] = mapped_column(DateTime)
-    updated: Mapped[datetime] = mapped_column(DateTime)
-
-    # Aggregated indicators (int8 -> BigInteger)
-    q_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-    coq_ind: Mapped[Optional[int]] = mapped_column(BigInteger)
-
-    # Joined user and region info
-    f3_name: Mapped[Optional[str]]
-    first_name: Mapped[Optional[str]]
-    last_name: Mapped[Optional[str]]
-    email: Mapped[Optional[str]] = mapped_column(CIText)
-    home_region_id: Mapped[Optional[int]] = mapped_column(Integer)
-    home_region_name: Mapped[Optional[str]]
-    avatar_url: Mapped[Optional[str]]
-    user_status: Mapped[Optional[User_Status]] = mapped_column(Enum(User_Status))
 
 
 class Achievement(Base):

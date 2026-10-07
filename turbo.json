@@ -31,6 +31,7 @@
     "E2E_AUDIT_LOCAL",
     "CHAR_TEST_TARGET",
     "CHAR_TEST_BASE_URL",
+    "CHAR_TEST_SHARED_DB",
     "CHAR_TEST_SIGNING_JWK",
     "SUPER_ADMIN_API_KEY",
     "EMAIL_ADMIN_DESTINATIONS",
@@ -48,6 +49,7 @@
     "OAUTH_REDIRECT_URI",
     "F3_ADMIN_BASE_URL",
     "F3_API_BASE_URL",
+    "F3_API_HOST",
     "F3_ADMIN_URL",
     "F3_MAP_API_KEY",
     "F3_API_TIMEOUT_MS",
@@ -78,18 +80,7 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [
-        ".next/**",
-        "!.next/cache/**",
-        "next-env.d.ts",
-        ".expo/**",
-        ".output/**",
-        "dist/**"
-      ]
-    },
-    "build:server": {
-      "dependsOn": ["^topo", "^build"],
-      "outputs": ["dist/**"]
+      "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts", "dist/**"]
     },
     "dev": {
       "persistent": true,

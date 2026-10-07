@@ -348,7 +348,7 @@ removes its container and data, including history, on success or failure.
 The ordinary advisory suite skips this case unless `E2E_AUDIT_LOCAL=1` selects
 the owned local fixture. No history endpoint is added. Logs remain in a private
 `f3-audit-e2e-*` temporary directory for diagnosis. Do not run this alongside
-other Next dev processes in the same checkout (Next holds a per-app dev lock).
+other map dev processes in the same checkout (Next holds a per-app dev lock).
 Playwright reports and failure artifacts live under
 `apps/map/node_modules/.cache/audit-e2e/`, outside the source lint scope.
 
@@ -378,7 +378,7 @@ the integration test feeds a real trigger failure through the logging sink.
 
 ## 9. Deployment and rollback
 
-Migration `0027_public_audit_history.sql` creates `audit` helpers and same-named
+Migration `0029_public_audit_history.sql` creates `audit` helpers and same-named
 `public_history` tables for the approved allowlist and column options above.
 
 ### Deployment preflight (human review required)

@@ -20,6 +20,8 @@ import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
 import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { paginationFields, resolvePagination } from "../lib/pagination";
+import { requireEditorOnRescope } from "../require-editor-on-rescope";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
 
@@ -43,14 +45,7 @@ export const eventTypeRouter = {
             .describe(
               "Filter event types by status. Matches event types with ANY of the given statuses (active, inactive).",
             ),
-          pageIndex: z.coerce
-            .number()
-            .optional()
-            .describe("Zero-based page index for pagination. Defaults to 0."),
-          pageSize: z.coerce
-            .number()
-            .optional()
-            .describe("Number of event types per page. Defaults to 10."),
+          ...paginationFields("event types"),
           searchTerm: z
             .string()
             .optional()
@@ -122,30 +117,40 @@ export const eventTypeRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const limit = input?.pageSize ?? 10;
-      const offset = (input?.pageIndex ?? 0) * limit;
-      const usePagination =
-        input?.pageIndex !== undefined && input?.pageSize !== undefined;
+      const { limit, offset, usePagination } = resolvePagination({
+        pageSize: input?.pageSize,
+        pageIndex: input?.pageIndex,
+        defaultPageSize: 10,
+      });
 
-      const sortedColumns = input?.sorting?.map((sorting) => {
-        const direction = sorting.desc ? desc : asc;
-        switch (sorting.id) {
-          case "name":
-            return direction(schema.eventTypes.name);
-          case "description":
-            return direction(sql`NULLIF(${schema.eventTypes.description}, '')`);
-          case "eventCategory":
-            return direction(schema.eventTypes.eventCategory);
-          case "specificOrgName":
-            return direction(schema.orgs.name);
-          case "count":
-            return direction(count(schema.eventsXEventTypes.eventTypeId));
-          case "created":
-            return direction(schema.eventTypes.created);
-          default:
-            return direction(schema.eventTypes.id);
-        }
-      }) ?? [desc(schema.eventTypes.id)];
+      // asc(id) is appended as a final tiebreaker so event types sharing the
+      // same sort value (e.g. two regions' event types with the same name)
+      // still get a total order -- without one, offset pagination across
+      // separate requests (e.g. useFetchAllPages) can return the same row on
+      // two pages or skip one entirely.
+      const sortedColumns = (
+        input?.sorting?.map((sorting) => {
+          const direction = sorting.desc ? desc : asc;
+          switch (sorting.id) {
+            case "name":
+              return direction(schema.eventTypes.name);
+            case "description":
+              return direction(
+                sql`NULLIF(${schema.eventTypes.description}, '')`,
+              );
+            case "eventCategory":
+              return direction(schema.eventTypes.eventCategory);
+            case "specificOrgName":
+              return direction(schema.orgs.name);
+            case "count":
+              return direction(count(schema.eventsXEventTypes.eventTypeId));
+            case "created":
+              return direction(schema.eventTypes.created);
+            default:
+              return direction(schema.eventTypes.id);
+          }
+        }) ?? [desc(schema.eventTypes.id)]
+      ).concat(asc(schema.eventTypes.id));
 
       const select = {
         id: schema.eventTypes.id,
@@ -214,7 +219,7 @@ export const eventTypeRouter = {
 
       const eventTypes = usePagination
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
-        : await query.orderBy(...sortedColumns);
+        : await query.orderBy(...sortedColumns).limit(limit);
 
       return { eventTypes, totalCount };
     }),
@@ -390,31 +395,30 @@ export const eventTypeRouter = {
         });
       }
 
-      // Determine which org to check permissions against
-      // If setting specificOrgId to null (nation-wide), always require nation permission
-      const isSettingToNationWide = !input.specificOrgId;
-      const orgIdForPermissionCheck = isSettingToNationWide
-        ? nationOrg.id
-        : existingEventType
-          ? // Updating existing: need permission on the existing org (or nation if already nation-wide)
-            (existingEventType.specificOrgId ?? nationOrg.id)
-          : // Creating new: need permission on the target org (fallback to nation for type safety)
-            (input.specificOrgId ?? nationOrg.id);
-
-      const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: orgIdForPermissionCheck,
-        session: ctx.session,
-        db: ctx.db,
-        roleName: "editor",
-      });
-
-      if (!roleCheckResult.success) {
-        // Provide a more helpful error message when trying to create/update to nation-wide without permission
-        const message = isSettingToNationWide
-          ? "You must select a Specific Org. Only nation admins can create event types for all of F3 Nation."
-          : `You are not authorized to ${input.id ? "update" : "add"} this Event Type`;
-
-        throw new ORPCError("UNAUTHORIZED", { message });
+      // Nation-wide (null specificOrgId) types are scoped to the nation org.
+      if (!input.specificOrgId) {
+        // Nation editors pass every source check, so this covers moves too.
+        const roleCheckResult = await checkHasRoleOnOrg({
+          orgId: nationOrg.id,
+          session: ctx.session,
+          db: ctx.db,
+          roleName: "editor",
+        });
+        if (!roleCheckResult.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message:
+              "You must select a Specific Org. Only nation admins can create event types for all of F3 Nation.",
+          });
+        }
+      } else {
+        await requireEditorOnRescope({
+          ctx,
+          currentOrgId: existingEventType
+            ? (existingEventType.specificOrgId ?? nationOrg.id)
+            : undefined,
+          targetOrgId: input.specificOrgId,
+          entity: "Event Type",
+        });
       }
       const eventTypeData: InferInsertModel<typeof schema.eventTypes> = {
         ...input,

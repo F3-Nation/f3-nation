@@ -94,6 +94,7 @@ export const reset = async (db?: AppDb) => {
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS public CASCADE`);
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS drizzle CASCADE`);
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS auth CASCADE`);
+  await dbToUse.execute(sql`DROP SCHEMA IF EXISTS slackbot CASCADE`);
   // Reset intentionally destroys the local/test dataset, including its history.
   // Operational disablement uses audit.disable_tracking and preserves history.
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS public_history CASCADE`);

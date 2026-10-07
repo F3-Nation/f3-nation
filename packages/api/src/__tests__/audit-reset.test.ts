@@ -83,6 +83,9 @@ describe("audit reset safety", () => {
     });
     await reset(db);
     expect(
+      statements.some((s) => s.includes("DROP SCHEMA IF EXISTS slackbot")),
+    ).toBe(true);
+    expect(
       statements.some((s) =>
         s.includes("DROP SCHEMA IF EXISTS public_history"),
       ),

@@ -101,11 +101,13 @@ async function main() {
   // Load individual DB env vars from appropriate env file
   const { config } = await import("dotenv");
   if (targetEnv === "local") {
-    config({ path: "../../.env" });
+    config({ path: ".env" });
   } else {
     config({ path: `.env.${targetEnv}` });
   }
 
+  // postgres-js parses an inline port in DATABASE_HOST (e.g. localhost:5433)
+  // and keeps Unix-socket paths intact, so the host is passed through as-is.
   const databaseHost = process.env.DATABASE_HOST;
   const databasePort = parseInt(process.env.DATABASE_PORT ?? "5432", 10);
   const databaseUser = process.env.DATABASE_USER;
