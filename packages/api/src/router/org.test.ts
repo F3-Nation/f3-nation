@@ -715,7 +715,25 @@ describe("Org Router", () => {
           isPrivate: false,
         })
         .returning();
-      if (!series || !otherSeries) throw new Error("Failed to create series");
+      const [weeklySeriesWithoutPattern] = await db
+        .insert(schema.events)
+        .values({
+          name: `Status Cascade Weekly Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "wednesday",
+          startTime: "0530",
+          recurrencePattern: null,
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series || !otherSeries || !weeklySeriesWithoutPattern) {
+        throw new Error("Failed to create series");
+      }
 
       const [pastInstance] = await db
         .insert(schema.eventInstances)
@@ -753,7 +771,24 @@ describe("Org Router", () => {
           isPrivate: false,
         })
         .returning();
-      if (!pastInstance || !futureInstance || !otherFutureInstance) {
+      const [weeklyFutureInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: weeklySeriesWithoutPattern.name,
+          orgId: ao.id,
+          seriesId: weeklySeriesWithoutPattern.id,
+          startDate: nextFutureMonday(2),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (
+        !pastInstance ||
+        !futureInstance ||
+        !otherFutureInstance ||
+        !weeklyFutureInstance
+      ) {
         throw new Error("Failed to create test instances");
       }
 
@@ -773,6 +808,10 @@ describe("Org Router", () => {
         .select({ isActive: schema.events.isActive })
         .from(schema.events)
         .where(eq(schema.events.id, series.id));
+      const [updatedWeeklySeriesWithoutPattern] = await db
+        .select({ isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.id, weeklySeriesWithoutPattern.id));
       const [updatedPast] = await db
         .select({ isActive: schema.eventInstances.isActive })
         .from(schema.eventInstances)
@@ -789,11 +828,17 @@ describe("Org Router", () => {
         .select({ isActive: schema.eventInstances.isActive })
         .from(schema.eventInstances)
         .where(eq(schema.eventInstances.id, otherFutureInstance.id));
+      const [updatedWeeklyFuture] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, weeklyFutureInstance.id));
 
       expect(updatedAo?.isActive).toBe(false);
       expect(updatedSeries?.isActive).toBe(false);
+      expect(updatedWeeklySeriesWithoutPattern?.isActive).toBe(false);
       expect(updatedPast?.isActive).toBe(true);
       expect(updatedFuture?.isActive).toBe(false);
+      expect(updatedWeeklyFuture?.isActive).toBe(false);
       expect(untouchedSeries?.isActive).toBe(true);
       expect(untouchedFuture?.isActive).toBe(true);
 
@@ -804,11 +849,18 @@ describe("Org Router", () => {
             pastInstance.id,
             futureInstance.id,
             otherFutureInstance.id,
+            weeklyFutureInstance.id,
           ]),
         );
       await db
         .delete(schema.events)
-        .where(inArray(schema.events.id, [series.id, otherSeries.id]));
+        .where(
+          inArray(schema.events.id, [
+            series.id,
+            otherSeries.id,
+            weeklySeriesWithoutPattern.id,
+          ]),
+        );
     });
 
     it("does not cascade for an unchanged or reactivated AO status", async () => {

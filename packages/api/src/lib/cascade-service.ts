@@ -6,7 +6,7 @@
  * and soft-deleting them when series or orgs are deleted.
  */
 
-import { and, eq, gte, inArray, isNotNull, schema } from "@acme/db";
+import { and, eq, gte, inArray, isNotNull, or, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import type { DayOfWeek, EventCadence } from "@acme/shared/app/enums";
 
@@ -84,7 +84,10 @@ export async function softDeleteSeriesForOrg(
       and(
         eq(schema.events.orgId, orgId),
         eq(schema.events.isActive, true),
-        isNotNull(schema.events.recurrencePattern),
+        or(
+          isNotNull(schema.events.recurrencePattern),
+          isNotNull(schema.events.dayOfWeek),
+        ),
       ),
     )
     .returning({ id: schema.events.id });
@@ -399,12 +402,28 @@ export async function updateFutureInstances(
   db: AppDb,
   series: SeriesData,
   startDate?: string,
+  options?: {
+    fields: (
+      | "locationId"
+      | "startTime"
+      | "endTime"
+      | "isPrivate"
+      | "meta"
+      | "description"
+      | "highlight"
+      | "name"
+      | "orgId"
+      | "eventTypeIds"
+      | "eventTagIds"
+    )[];
+  },
 ): Promise<number> {
   return db.transaction((tx) =>
     updateFutureInstancesInTransaction(
       tx as unknown as AppDb,
       series,
       startDate,
+      options,
     ),
   );
 }
@@ -413,12 +432,16 @@ async function updateFutureInstancesInTransaction(
   db: AppDb,
   series: SeriesData,
   startDate?: string,
+  options?: Parameters<typeof updateFutureInstances>[3],
 ): Promise<number> {
   const fromDate = startDate ?? getCurrentDate();
 
   // Get IDs of future instances
   const futureInstances = await db
-    .select({ id: schema.eventInstances.id })
+    .select({
+      id: schema.eventInstances.id,
+      seriesException: schema.eventInstances.seriesException,
+    })
     .from(schema.eventInstances)
     .where(
       and(
@@ -432,36 +455,57 @@ async function updateFutureInstancesInTransaction(
   }
 
   const instanceIds = futureInstances.map((i) => i.id);
+  const associationInstanceIds = options
+    ? futureInstances
+        .filter(({ seriesException }) => seriesException !== "closed")
+        .map(({ id }) => id)
+    : instanceIds;
+
+  // Status-transition detail synchronization only writes fields that actually
+  // changed on the series, preserving per-instance overrides for everything else.
+  const fields = options?.fields;
+  const shouldUpdate = (field: NonNullable<typeof fields>[number]) =>
+    fields === undefined || fields.includes(field);
 
   // Update the instances
-  await db
-    .update(schema.eventInstances)
-    .set({
-      locationId: series.locationId,
-      startTime: series.startTime,
-      endTime: series.endTime,
-      isPrivate: series.isPrivate,
-      meta: series.meta,
-      description: series.description,
-      highlight: series.highlight,
-      name: series.name,
-      orgId: series.orgId,
-    })
-    .where(inArray(schema.eventInstances.id, instanceIds));
+  const instanceUpdate = {
+    ...(shouldUpdate("locationId") ? { locationId: series.locationId } : {}),
+    ...(shouldUpdate("startTime") ? { startTime: series.startTime } : {}),
+    ...(shouldUpdate("endTime") ? { endTime: series.endTime } : {}),
+    ...(shouldUpdate("isPrivate") ? { isPrivate: series.isPrivate } : {}),
+    ...(shouldUpdate("meta") ? { meta: series.meta } : {}),
+    ...(shouldUpdate("description") ? { description: series.description } : {}),
+    ...(shouldUpdate("highlight") ? { highlight: series.highlight } : {}),
+    ...(shouldUpdate("name") ? { name: series.name } : {}),
+    ...(shouldUpdate("orgId") ? { orgId: series.orgId } : {}),
+  };
+  if (Object.keys(instanceUpdate).length > 0) {
+    await db
+      .update(schema.eventInstances)
+      .set(instanceUpdate)
+      .where(inArray(schema.eventInstances.id, instanceIds));
+  }
 
   // Update event types if provided
-  if (series.eventTypeIds !== undefined) {
+  if (
+    series.eventTypeIds !== undefined &&
+    shouldUpdate("eventTypeIds") &&
+    associationInstanceIds.length > 0
+  ) {
     // Delete existing event type associations
     await db
       .delete(schema.eventInstancesXEventTypes)
       .where(
-        inArray(schema.eventInstancesXEventTypes.eventInstanceId, instanceIds),
+        inArray(
+          schema.eventInstancesXEventTypes.eventInstanceId,
+          associationInstanceIds,
+        ),
       );
 
     // Add new associations
     if (series.eventTypeIds.length > 0) {
       await db.insert(schema.eventInstancesXEventTypes).values(
-        instanceIds.flatMap((id) =>
+        associationInstanceIds.flatMap((id) =>
           series.eventTypeIds!.map((eventTypeId) => ({
             eventInstanceId: id,
             eventTypeId,
@@ -472,16 +516,23 @@ async function updateFutureInstancesInTransaction(
   }
 
   // Update event tags if provided (an empty array intentionally clears them).
-  if (series.eventTagIds !== undefined) {
+  if (
+    series.eventTagIds !== undefined &&
+    shouldUpdate("eventTagIds") &&
+    associationInstanceIds.length > 0
+  ) {
     await db
       .delete(schema.eventTagsXEventInstances)
       .where(
-        inArray(schema.eventTagsXEventInstances.eventInstanceId, instanceIds),
+        inArray(
+          schema.eventTagsXEventInstances.eventInstanceId,
+          associationInstanceIds,
+        ),
       );
 
     if (series.eventTagIds.length > 0) {
       await db.insert(schema.eventTagsXEventInstances).values(
-        instanceIds.flatMap((id) =>
+        associationInstanceIds.flatMap((id) =>
           series.eventTagIds!.map((eventTagId) => ({
             eventInstanceId: id,
             eventTagId,

@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { ORPCError } from "@orpc/server";
 import type { SQL } from "drizzle-orm";
 import { z } from "zod";
@@ -793,7 +795,7 @@ export const eventRouter = {
       tags: ["event"],
       summary: "Create or update event",
       description:
-        "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
+        "Create a new event or update an existing one. Requires editor role for the event's organization; deactivating an active event requires admin role. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
     })
     .output(
       z.object({
@@ -968,6 +970,36 @@ export const eventRouter = {
               ).map(({ eventTagId }) => eventTagId)
             : normalizedEventTagIds;
 
+        let eventTypesChanged = false;
+        if (eventTypeIds !== undefined && transactionExistingEvent) {
+          const existingEventTypes = await transactionDb
+            .select({ eventTypeId: schema.eventsXEventTypes.eventTypeId })
+            .from(schema.eventsXEventTypes)
+            .where(eq(schema.eventsXEventTypes.eventId, result.id));
+          const existingIds = existingEventTypes
+            .map(({ eventTypeId }) => eventTypeId)
+            .sort((a, b) => a - b);
+          const updatedIds = [...eventTypeIds].sort((a, b) => a - b);
+          eventTypesChanged =
+            existingIds.length !== updatedIds.length ||
+            existingIds.some((id, index) => id !== updatedIds[index]);
+        }
+
+        let eventTagsChanged = false;
+        if (normalizedEventTagIds !== undefined && transactionExistingEvent) {
+          const existingEventTags = await transactionDb
+            .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
+            .from(schema.eventTagsXEvents)
+            .where(eq(schema.eventTagsXEvents.eventId, result.id));
+          const existingIds = existingEventTags
+            .map(({ eventTagId }) => eventTagId)
+            .sort((a, b) => a - b);
+          const updatedIds = [...normalizedEventTagIds].sort((a, b) => a - b);
+          eventTagsChanged =
+            existingIds.length !== updatedIds.length ||
+            existingIds.some((id, index) => id !== updatedIds[index]);
+        }
+
         // Handle event type in join table
         if (eventTypeIds) {
           await transactionDb
@@ -1035,18 +1067,95 @@ export const eventRouter = {
           };
 
           if (isStatusTransition) {
-            // Status transitions take precedence over schedule edits so they
-            // never delete/recreate history or generate missing instances.
-            if (isDeactivationTransition) {
+            // Existing-series status transitions never recreate the schedule;
+            // converting a one-off to a series creates its first schedule.
+            // Deactivation still closes the old schedule if the event becomes
+            // a one-off. Reactivation must not revive an obsolete schedule.
+            if (
+              isDeactivationTransition &&
+              (transactionExistingEvent?.dayOfWeek || result.dayOfWeek)
+            ) {
               await softDeleteFutureInstancesForSeries(
                 transactionDb,
                 result.id,
               );
-            } else {
-              await reactivateFutureInstancesForSeries(
-                transactionDb,
-                result.id,
-              );
+            } else if (!isDeactivationTransition && result.dayOfWeek) {
+              if (
+                transactionExistingEvent &&
+                !transactionExistingEvent.dayOfWeek
+              ) {
+                // An existing one-off becoming a series is a new schedule,
+                // unlike reactivating an existing series.
+                await createEventInstancesForSeries(
+                  transactionDb,
+                  seriesData,
+                  4,
+                  seriesData.startDate,
+                );
+              } else {
+                await reactivateFutureInstancesForSeries(
+                  transactionDb,
+                  result.id,
+                );
+              }
+            }
+
+            if (result.dayOfWeek && transactionExistingEvent?.dayOfWeek) {
+              if (transactionExistingEvent) {
+                const instanceUpdateFields = (
+                  [
+                    "locationId",
+                    "startTime",
+                    "endTime",
+                    "isPrivate",
+                    "meta",
+                    "description",
+                    "highlight",
+                    "name",
+                    "orgId",
+                  ] as (
+                    | "locationId"
+                    | "startTime"
+                    | "endTime"
+                    | "isPrivate"
+                    | "meta"
+                    | "description"
+                    | "highlight"
+                    | "name"
+                    | "orgId"
+                    | "eventTypeIds"
+                    | "eventTagIds"
+                  )[]
+                ).filter((field) => {
+                  const key = field as keyof typeof result;
+                  return field === "meta"
+                    ? !isDeepStrictEqual(
+                        result.meta,
+                        transactionExistingEvent.meta,
+                      )
+                    : result[key] !== transactionExistingEvent[key];
+                });
+                if (eventTypesChanged) {
+                  instanceUpdateFields.push("eventTypeIds");
+                }
+                if (eventTagsChanged) {
+                  instanceUpdateFields.push("eventTagIds");
+                }
+                if (instanceUpdateFields.length > 0) {
+                  await updateFutureInstances(
+                    transactionDb,
+                    {
+                      ...seriesData,
+                      eventTagIds:
+                        normalizedEventTagIds === undefined
+                          ? undefined
+                          : effectiveEventTagIds,
+                    },
+                    undefined,
+                    { fields: instanceUpdateFields },
+                  );
+                }
+              }
             }
           } else if (!transactionExistingEvent) {
             // New series: create event instances from series start date

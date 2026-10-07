@@ -960,8 +960,11 @@ describe("Event Router", () => {
       if (!region) return;
       const ao = await createTestAO(region.id);
       if (!ao) return;
+      const location = await createTestLocation(region.id);
+      if (!location) return;
       const eventType = await createTestEventType();
-      if (!eventType) return;
+      const updatedEventType = await createTestEventType();
+      if (!eventType || !updatedEventType) return;
 
       const adminSession = await createAdminSession();
       if (adminSession.roles && adminSession.user?.roles) {
@@ -1055,13 +1058,13 @@ describe("Event Router", () => {
       const client = createTestClient();
       await client.event.crupdate({
         id: series.id,
-        name: series.name,
+        name: `${series.name} updated`,
         aoId: ao.id,
         regionId: region.id,
-        locationId: null,
+        locationId: location.id,
         dayOfWeek: "monday",
-        startTime: "0530",
-        endTime: "0615",
+        startTime: "0545",
+        endTime: "0630",
         // A simultaneous structural change must not route deactivation through
         // the hard-delete/recreate cascade.
         startDate: "2020-01-13",
@@ -1071,7 +1074,7 @@ describe("Event Router", () => {
         indexWithinInterval: null,
         highlight: false,
         isActive: false,
-        eventTypeIds: [eventType.id],
+        eventTypeIds: [updatedEventType.id],
         email: null,
       });
 
@@ -1097,6 +1100,21 @@ describe("Event Router", () => {
         id: futureInstance.id,
         isActive: false,
       });
+      const [updatedFutureDetails] = await db
+        .select({
+          name: schema.eventInstances.name,
+          locationId: schema.eventInstances.locationId,
+          startTime: schema.eventInstances.startTime,
+          endTime: schema.eventInstances.endTime,
+        })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, futureInstance.id));
+      expect(updatedFutureDetails).toEqual({
+        name: `${series.name} updated`,
+        locationId: location.id,
+        startTime: "0545",
+        endTime: "0630",
+      });
       expect(persistedInstances).toContainEqual({
         id: unrelatedInstance.id,
         isActive: true,
@@ -1110,7 +1128,9 @@ describe("Event Router", () => {
             futureInstance.id,
           ),
         );
-      expect(futureInstanceTypes).toEqual([{ eventTypeId: eventType.id }]);
+      expect(futureInstanceTypes).toEqual([
+        { eventTypeId: updatedEventType.id },
+      ]);
     });
 
     it("does not cascade on inactive no-op or active-to-active status saves", async () => {
@@ -1208,9 +1228,12 @@ describe("Event Router", () => {
       if (!region) return;
       const ao = await createTestAO(region.id);
       if (!ao) return;
+      const location = await createTestLocation(region.id);
+      if (!location) return;
       const eventType = await createTestEventType();
+      const updatedEventType = await createTestEventType();
       const eventTag = await createTestEventTag();
-      if (!eventType || !eventTag) return;
+      if (!eventType || !eventTag || !updatedEventType) return;
       await mockAuthWithSession(
         createEditorSession({ orgId: ao.id, orgName: ao.name }),
       );
@@ -1302,6 +1325,10 @@ describe("Event Router", () => {
         eventInstanceId: futureInactive.id,
         eventTypeId: eventType.id,
       });
+      await db.insert(schema.eventInstancesXEventTypes).values({
+        eventInstanceId: futureActive.id,
+        eventTypeId: eventType.id,
+      });
       await db.insert(schema.eventTagsXEventInstances).values({
         eventInstanceId: futureInactive.id,
         eventTagId: eventTag.id,
@@ -1339,13 +1366,13 @@ describe("Event Router", () => {
       const client = createTestClient();
       await client.event.crupdate({
         id: series.id,
-        name: series.name,
+        name: `${series.name} updated`,
         aoId: ao.id,
         regionId: region.id,
-        locationId: null,
+        locationId: location.id,
         dayOfWeek: "monday",
-        startTime: "0530",
-        endTime: "0615",
+        startTime: "0545",
+        endTime: "0630",
         // Structural schedule edit exercises status-transition precedence.
         startDate: "2020-01-13",
         endDate: null,
@@ -1354,7 +1381,7 @@ describe("Event Router", () => {
         indexWithinInterval: null,
         highlight: false,
         isActive: true,
-        eventTypeIds: [eventType.id],
+        eventTypeIds: [updatedEventType.id],
         email: null,
       });
 
@@ -1362,6 +1389,10 @@ describe("Event Router", () => {
         .select({
           id: schema.eventInstances.id,
           isActive: schema.eventInstances.isActive,
+          name: schema.eventInstances.name,
+          locationId: schema.eventInstances.locationId,
+          startTime: schema.eventInstances.startTime,
+          endTime: schema.eventInstances.endTime,
           seriesException: schema.eventInstances.seriesException,
           paxCount: schema.eventInstances.paxCount,
           preblast: schema.eventInstances.preblast,
@@ -1400,6 +1431,10 @@ describe("Event Router", () => {
       expect(byId.get(futureInactive.id)).toMatchObject({
         id: futureInactive.id,
         isActive: true,
+        name: `${series.name} updated`,
+        locationId: location.id,
+        startTime: "0545",
+        endTime: "0630",
         seriesException: "closed",
         paxCount: 7,
         preblast: "Existing preblast",
@@ -1432,12 +1467,111 @@ describe("Event Router", () => {
           ),
         );
       expect(retainedEventTypes).toEqual([{ eventTypeId: eventType.id }]);
+      const updatedOpenInstanceTypes = await db
+        .select({ eventTypeId: schema.eventInstancesXEventTypes.eventTypeId })
+        .from(schema.eventInstancesXEventTypes)
+        .where(
+          eq(schema.eventInstancesXEventTypes.eventInstanceId, futureActive.id),
+        );
+      expect(updatedOpenInstanceTypes).toEqual([
+        { eventTypeId: updatedEventType.id },
+      ]);
       expect(retainedTags).toEqual([{ eventTagId: eventTag.id }]);
       const retainedAttendance = await db
         .select({ userId: schema.attendance.userId })
         .from(schema.attendance)
         .where(eq(schema.attendance.eventInstanceId, futureInactive.id));
       expect(retainedAttendance).toEqual([{ userId: attendanceUser.id }]);
+    });
+
+    it("preserves per-instance metadata on a status-only reactivation", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const eventType = await createTestEventType();
+      if (!eventType) return;
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+
+      const seriesMeta = { seriesKey: "series-value" };
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `Metadata reactivation ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2020-01-06",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+          meta: seriesMeta,
+        })
+        .returning();
+      if (!series) return;
+      createdEventIds.push(series.id);
+      await db.insert(schema.eventsXEventTypes).values({
+        eventId: series.id,
+        eventTypeId: eventType.id,
+      });
+      const instanceMeta = { instanceOverride: "keep-me" };
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: series.name,
+          orgId: ao.id,
+          locationId: null,
+          startTime: series.startTime,
+          endTime: series.endTime,
+          startDate: nextFutureMonday(2),
+          isActive: false,
+          highlight: false,
+          seriesId: series.id,
+          isPrivate: false,
+          meta: instanceMeta,
+        })
+        .returning();
+      if (!instance) return;
+      await db.insert(schema.eventInstancesXEventTypes).values({
+        eventInstanceId: instance.id,
+        eventTypeId: eventType.id,
+      });
+
+      await createTestClient().event.crupdate({
+        id: series.id,
+        name: series.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate: series.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        meta: seriesMeta,
+        email: null,
+      });
+
+      const [persisted] = await db
+        .select({
+          isActive: schema.eventInstances.isActive,
+          meta: schema.eventInstances.meta,
+        })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, instance.id));
+      expect(persisted).toEqual({ isActive: true, meta: instanceMeta });
     });
 
     it("requires admin permission to deactivate an existing event", async () => {
@@ -1533,6 +1667,228 @@ describe("Event Router", () => {
         isActive: true,
       });
       expect(unchangedInstance).toEqual({ id: instance.id, isActive: true });
+    });
+
+    it("does not reactivate an obsolete schedule when a series becomes a one-off", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const eventType = await createTestEventType();
+      if (!eventType) return;
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `One-off conversion ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2020-01-06",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series) return;
+      createdEventIds.push(series.id);
+      const [obsoleteInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Obsolete schedule instance ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          startTime: "0530",
+          endTime: "0615",
+          startDate: nextFutureMonday(2),
+          isActive: false,
+          highlight: false,
+          seriesId: series.id,
+          isPrivate: false,
+        })
+        .returning();
+      if (!obsoleteInstance) return;
+
+      await createTestClient().event.crupdate({
+        id: series.id,
+        name: series.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: null,
+        startTime: "0530",
+        endTime: "0615",
+        startDate: series.startDate,
+        endDate: null,
+        recurrencePattern: null,
+        recurrenceInterval: null,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      const instances = await db
+        .select({
+          id: schema.eventInstances.id,
+          isActive: schema.eventInstances.isActive,
+        })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      expect(instances).toEqual([{ id: obsoleteInstance.id, isActive: false }]);
+    });
+
+    it("deactivates existing future instances when an active series becomes a one-off", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const eventType = await createTestEventType();
+      if (!eventType) return;
+      const adminSession = await createAdminSession();
+      if (adminSession.roles && adminSession.user?.roles) {
+        adminSession.roles.push({
+          orgId: ao.id,
+          orgName: ao.name,
+          roleName: "admin",
+        });
+        adminSession.user.roles.push({
+          orgId: ao.id,
+          orgName: ao.name,
+          roleName: "admin",
+        });
+      }
+      await mockAuthWithSession(adminSession);
+
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `Active series conversion ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2020-01-06",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series) return;
+      createdEventIds.push(series.id);
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Active future instance ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          startTime: "0530",
+          endTime: "0615",
+          startDate: nextFutureMonday(2),
+          isActive: true,
+          highlight: false,
+          seriesId: series.id,
+          isPrivate: false,
+        })
+        .returning();
+      if (!instance) return;
+
+      await createTestClient().event.crupdate({
+        id: series.id,
+        name: series.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: null,
+        startTime: "0530",
+        endTime: "0615",
+        startDate: series.startDate,
+        endDate: null,
+        recurrencePattern: null,
+        recurrenceInterval: null,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: false,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      const [persisted] = await db
+        .select({
+          id: schema.eventInstances.id,
+          isActive: schema.eventInstances.isActive,
+        })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, instance.id));
+      expect(persisted).toEqual({ id: instance.id, isActive: false });
+    });
+
+    it("creates instances when an inactive one-off becomes an active series", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const eventType = await createTestEventType();
+      if (!eventType) return;
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Inactive one-off conversion ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: null,
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2020-01-06",
+          recurrencePattern: null,
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+
+      await createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      const instances = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, event.id));
+      expect(instances.length).toBeGreaterThan(0);
     });
 
     it("should create a new event", async () => {
