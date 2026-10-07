@@ -38,13 +38,10 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
-import {
-  invalidateQueries,
-  orpc,
-  ORPCError,
-  useMutation,
-  useQuery,
-} from "~/orpc/react";
+import { client } from "~/orpc/client";
+import { invalidateQueries, orpc, ORPCError, useMutation } from "~/orpc/react";
+import { useAuth } from "~/utils/hooks/use-auth";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { closeModal } from "~/utils/store/modal";
 
 const ApiKeyFormSchema = z.object({
@@ -61,9 +58,18 @@ const ApiKeyFormSchema = z.object({
 
 export default function AdminApiKeysModal() {
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
-  const { data: allOrgs, isLoading: isLoadingOrgs } = useQuery(
-    orpc.org.mine.queryOptions(),
-  );
+  const { isNationAdmin } = useAuth();
+  const { data: accessibleOrgs, isLoading: isLoadingOrgs } = useFetchAllPages({
+    path: ["org", "accessible"],
+    queryKey: ["org.accessible.adminApiKeysModal"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.accessible({
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const form = useForm({
     schema: ApiKeyFormSchema,
     defaultValues: {
@@ -74,12 +80,24 @@ export default function AdminApiKeysModal() {
     },
   });
 
-  // apiKey.create only accepts orgs the caller administers; org.mine also
-  // returns orgs where they are just an editor.
-  const adminOrgs = useMemo(
-    () => allOrgs?.orgs.filter((org) => org.roles.includes("admin")) ?? [],
-    [allOrgs?.orgs],
-  );
+  // apiKey.create only accepts orgs the caller administers directly or through
+  // an ancestor. org.accessible also returns orgs under editor-only roots, and
+  // descendant rows carry no roles, so walk up to a direct admin role.
+  const adminOrgs = useMemo(() => {
+    if (!accessibleOrgs) return [];
+    if (isNationAdmin) return accessibleOrgs;
+    const byId = new Map(accessibleOrgs.map((org) => [org.id, org]));
+    const isAdministered = (orgId: number | null): boolean => {
+      for (let id = orgId; id != null;) {
+        const org = byId.get(id);
+        if (!org) return false;
+        if (org.roles.includes("admin")) return true;
+        id = org.parentId;
+      }
+      return false;
+    };
+    return accessibleOrgs.filter((org) => isAdministered(org.id));
+  }, [accessibleOrgs, isNationAdmin]);
 
   const orgOptions = useMemo(() => {
     return adminOrgs.map((org) => ({
@@ -319,7 +337,7 @@ export default function AdminApiKeysModal() {
                             variant="outline"
                             size="sm"
                             className="mt-2"
-                            // Disabled until org.mine loads, and once every
+                            // Disabled until the orgs load, and once every
                             // administered org already has a row, so a new row
                             // never starts on an org the user can't grant or on
                             // a duplicate.
