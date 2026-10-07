@@ -67,14 +67,21 @@ gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1
 
 ### Reading the logs
 
-`gcloud run jobs execute` prints a console link to the execution. From a
-terminal:
+The job's logs are routed to their own log bucket, `f3-staging-refresh`
+(kept 30 days), which is all a runner can read: no other job's or app's
+logs. From a terminal:
 
 ```bash
-gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="f3-staging-refresh"' \
-  --project f3data --bucket _Default --location global --view f3-staging-refresh \
+gcloud logging read 'resource.labels.job_name="f3-staging-refresh"' \
+  --project f3data --bucket f3-staging-refresh --location global --view _AllLogs \
   --freshness 1d --order asc --format 'value(textPayload)'
 ```
+
+In the Console: Logs Explorer in project `f3data`, **Refine scope** →
+**Log view** → `f3-staging-refresh` / `_AllLogs`. The console link that
+`gcloud run jobs execute` prints opens the project's default scope, which a
+runner may not be able to read. Only runs after the bucket's sink was
+created (by `setup.sh`) are in the bucket.
 
 Each step starts with `== N/12`. The last line says how it ended:
 
@@ -114,6 +121,11 @@ schemas on staging. Load a fresh copy and put them back with:
 gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1 --wait --args=--reuse-existing-stash
 ```
 
+If that load fails too, its rollback puts staging back as the run found it,
+with the `refresh_keep` / `refresh_keep_slack` stash restored exactly (it
+may be the only copy of staging's keys), so the same command can be run
+again. A normal run keeps refusing until a recovery succeeds.
+
 The staging slackbot restart is best-effort: if the job may not restart it,
 the summary prints the `gcloud run services update …` command for someone
 with access to `f3-slackbot-staging`.
@@ -141,8 +153,14 @@ It creates:
   Build into `cloud-run-builds`): 32Gi / 8 CPU (the copy lives in the
   container's in-memory filesystem), 3h timeout, no retries, Cloud SQL
   sockets for both instances;
-- execute rights on the job (with `--args`, for `--dry-run`) and a log view
-  for Crash and Declan.
+- execute rights on the job (with `--args`, for `--dry-run`) for the
+  members in `STAGING_REFRESH_RUNNERS`, and read access to the job's logs
+  only: log bucket `f3-staging-refresh` (30 days), filled by log sink
+  `f3-staging-refresh` with
+  `resource.type="cloud_run_job" AND resource.labels.job_name="f3-staging-refresh"`,
+  and `roles/logging.viewAccessor` conditioned on that bucket's `_AllLogs`
+  view. It also removes what its first version made instead: a view on
+  `_Default` that showed every Cloud Run job's logs, and its bindings.
 
 Re-run it with `--image-only` after any release that adds a migration, so
 the image knows prod's migrations and columns. It prints the one permission

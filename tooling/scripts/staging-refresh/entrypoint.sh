@@ -16,6 +16,7 @@ STAGING_DB_NAME="${STAGING_DB_NAME:-f3_staging}"
 COPY_PORT="${COPY_PORT:-5499}"
 PGDATA_DIR="$(mktemp -d /tmp/refresh-pg.XXXXXX)"
 
+# shellcheck disable=SC2317  # called from the EXIT trap
 cleanup() {
   pg_ctl -D "$PGDATA_DIR" -m immediate stop >/dev/null 2>&1 || true
   rm -rf "$PGDATA_DIR" /tmp/refresh-pg.log

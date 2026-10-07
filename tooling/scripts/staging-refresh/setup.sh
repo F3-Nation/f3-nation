@@ -18,7 +18,10 @@
 #   3. the SA may read those two secrets + OBFUSCATION_SALT and connect to Cloud SQL
 #   4. builds + pushes the image (Cloud Build -> Artifact Registry cloud-run-builds)
 #   5. deploys the job (32Gi / 8 CPU, 3h timeout, no retries)
-#   6. lets RUNNERS execute it (also with --args, e.g. --dry-run) and read its logs
+#   6. lets RUNNERS execute it (also with --args, e.g. --dry-run) and read its logs:
+#      log bucket f3-staging-refresh (30 days) fed by sink f3-staging-refresh with
+#      only this job's logs, logging.viewAccessor on its _AllLogs view; removes the
+#      first version's view on _Default and its bindings
 #   7. prints what it can't do itself (the slackbot restart permission)
 set -euo pipefail
 
@@ -35,7 +38,17 @@ SECRET_PROD=staging-refresh-prod-db-password
 SECRET_STAGING=staging-refresh-staging-db-password
 SALT_SECRET=OBFUSCATION_SALT
 IMAGE_BASE="${REGION}-docker.pkg.dev/${PROJECT}/cloud-run-builds/${JOB}"
-LOG_VIEW=f3-staging-refresh
+# The job's logs: a bucket that only this job's logs are routed to (by LOG_SINK),
+# read through the bucket's built-in _AllLogs view.
+LOG_BUCKET=f3-staging-refresh
+LOG_SINK=f3-staging-refresh
+LOG_RETENTION_DAYS=30
+LOG_VIEW_RESOURCE="projects/${PROJECT}/locations/global/buckets/${LOG_BUCKET}/views/_AllLogs"
+# What the first version of this script made instead (a view on _Default whose filter
+# could only say resource.type, so it showed every Cloud Run job in the project);
+# removed below if present.
+OLD_LOG_VIEW=f3-staging-refresh
+OLD_LOG_TITLE=f3-staging-refresh-logs
 # Who may run the refresh: space-separated IAM members, e.g.
 #   STAGING_REFRESH_RUNNERS="user:a@example.com user:b@example.com"
 # Read from the environment, not committed: the repo is public. Not needed
@@ -55,7 +68,7 @@ REPO="$(git -C "$HERE" rev-parse --show-toplevel)"
 PROXY_PID=""
 TMP="$(mktemp -d)"
 cleanup() {
-  [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2>/dev/null || true
+  if [ -n "$PROXY_PID" ]; then kill "$PROXY_PID" 2>/dev/null || true; fi
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -172,21 +185,64 @@ if [ "$IMAGE_ONLY" = 0 ]; then
       --member "$m" --role roles/run.jobsExecutorWithOverrides >/dev/null
     echo "run.jobsExecutorWithOverrides on $JOB for $m"
   done
-  # A log view (filters may only use resource.type / LOG_ID / SOURCE, so it shows every
-  # Cloud Run job in f3data, not just this one) instead of project-wide logging.viewer,
-  # which would also show the prod apps' logs.
-  if ! gcloud logging views describe "$LOG_VIEW" --bucket _Default --location global \
-    --project "$PROJECT" >/dev/null 2>&1; then
-    gcloud logging views create "$LOG_VIEW" --bucket _Default --location global --project "$PROJECT" \
-      --description "Cloud Run job logs (f3-staging-refresh readers)" \
-      --log-filter 'resource.type="cloud_run_job"'
+  # Logs. Not project-wide logging.viewer (that shows the prod apps' logs) and not a view
+  # on _Default (a view filter can't name a job). The sink copies this job's entries into
+  # its own bucket; _Default keeps its copy as before. Entries reach the bucket only from
+  # the time the sink exists: earlier runs stay in _Default only.
+  if gcloud logging buckets describe "$LOG_BUCKET" --location global --project "$PROJECT" \
+    >/dev/null 2>&1; then
+    gcloud logging buckets update "$LOG_BUCKET" --location global --project "$PROJECT" \
+      --retention-days "$LOG_RETENTION_DAYS" >/dev/null
+  else
+    gcloud logging buckets create "$LOG_BUCKET" --location global --project "$PROJECT" \
+      --retention-days "$LOG_RETENTION_DAYS" \
+      --description "Logs of Cloud Run job $JOB only (routed by sink $LOG_SINK)"
   fi
+  echo "log bucket $LOG_BUCKET (${LOG_RETENTION_DAYS}d)"
+  LOG_DEST="logging.googleapis.com/projects/$PROJECT/locations/global/buckets/$LOG_BUCKET"
+  LOG_FILTER="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$JOB\""
+  if gcloud logging sinks describe "$LOG_SINK" --project "$PROJECT" >/dev/null 2>&1; then
+    gcloud logging sinks update "$LOG_SINK" "$LOG_DEST" --project "$PROJECT" \
+      --log-filter "$LOG_FILTER" >/dev/null
+  else
+    gcloud logging sinks create "$LOG_SINK" "$LOG_DEST" --project "$PROJECT" \
+      --log-filter "$LOG_FILTER" --description "Cloud Run job $JOB's logs -> bucket $LOG_BUCKET"
+  fi
+  echo "log sink $LOG_SINK: $LOG_FILTER"
   for m in "${RUNNERS[@]}"; do
     gcloud projects add-iam-policy-binding "$PROJECT" --member "$m" --role roles/logging.viewAccessor \
-      --condition "expression=resource.name == \"projects/$PROJECT/locations/global/buckets/_Default/views/$LOG_VIEW\",title=$LOG_VIEW-logs" \
+      --condition "expression=resource.name == \"$LOG_VIEW_RESOURCE\",title=$JOB-log-bucket" \
       >/dev/null
-    echo "logging.viewAccessor on view $LOG_VIEW for $m"
+    echo "logging.viewAccessor on $LOG_VIEW_RESOURCE for $m"
   done
+
+  # Remove the first version's too-wide access: its bindings (exact condition, read back
+  # from the policy, for whoever holds one) and the view on _Default.
+  gcloud projects get-iam-policy "$PROJECT" --format json >"$TMP/policy.json"
+  python3 - "$TMP/policy.json" "$OLD_LOG_TITLE" "$TMP" >"$TMP/old-bindings.tsv" <<'PY'
+import json, sys
+policy, title, tmp = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
+for i, b in enumerate(policy.get("bindings", [])):
+    c = b.get("condition") or {}
+    if b.get("role") != "roles/logging.viewAccessor" or c.get("title") != title:
+        continue
+    path = f"{tmp}/old-condition-{i}.json"
+    json.dump(c, open(path, "w"))
+    for m in b.get("members", []):
+        print(f"{m}\t{path}")
+PY
+  # fd 3, so gcloud can't read the list from stdin.
+  while IFS=$'\t' read -r -u 3 m cond; do
+    gcloud projects remove-iam-policy-binding "$PROJECT" --member "$m" \
+      --role roles/logging.viewAccessor --condition-from-file "$cond" >/dev/null </dev/null
+    echo "removed the old _Default log-view binding for $m"
+  done 3<"$TMP/old-bindings.tsv"
+  if gcloud logging views describe "$OLD_LOG_VIEW" --bucket _Default --location global \
+    --project "$PROJECT" >/dev/null 2>&1; then
+    gcloud logging views delete "$OLD_LOG_VIEW" --bucket _Default --location global \
+      --project "$PROJECT" --quiet
+    echo "deleted the old view $OLD_LOG_VIEW on _Default"
+  fi
 fi
 
 say "7. not done here"
@@ -207,4 +263,10 @@ Until then each refresh prints the restart command at the end instead of running
 Done. Image $IMAGE. Refresh staging with:
 
   gcloud run jobs execute $JOB --project $PROJECT --region $REGION --wait
+
+and read its logs (from the first run after the sink was created) with:
+
+  gcloud logging read 'resource.labels.job_name="$JOB"' --project $PROJECT \\
+    --bucket $LOG_BUCKET --location global --view _AllLogs --freshness 1d --order asc \\
+    --format 'value(textPayload)'
 EOF
