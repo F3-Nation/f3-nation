@@ -71,6 +71,8 @@ const EMPTY_TABLES = [
   "orgs_x_slack_spaces",
   "slack_spaces",
   "slack_users",
+  "slackbot.f3versary_delivery_runs",
+  "slackbot.f3versary_delivery_pages",
   "auth.oauth_authorization_codes",
   "auth.oauth_access_tokens",
   "auth.oauth_refresh_tokens",
@@ -243,9 +245,15 @@ function check(name: string, pass: boolean, detail: string) {
   console.log(`  ${pass ? "PASS" : "FAIL"}  ${name} — ${detail}`);
 }
 
-async function plantSyntheticPii(
-  sql: postgres.Sql,
-): Promise<{ userId: number }> {
+interface PlantedIds {
+  userId: number;
+  privateLocationId: number;
+  mixedLocationId: number;
+  unusedLocationId: number;
+  privateEventId: number;
+}
+
+async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
   console.log("\nPlanting synthetic PII fixtures...");
   const [region] = await sql<{ id: number }[]>`
     SELECT id FROM orgs WHERE org_type = 'region' ORDER BY id LIMIT 1`;
@@ -345,6 +353,63 @@ async function plantSyntheticPii(
     INSERT INTO orgs_x_slack_spaces (org_id, slack_space_id)
     VALUES (${region.id}, ${space.id})`;
 
+  // F3versary's delivery state references the workspace, and its pages carry
+  // the announcement text, which names members: emptied with the Slack tables.
+  const [run] = await sql<{ id: number }[]>`
+    INSERT INTO slackbot.f3versary_delivery_runs (slack_space_id, org_id,
+      processing_date, target_date, channel, lead_days)
+    VALUES (${space.id}, ${region.id}, current_date, current_date,
+      'C0ANNOUNCE', 0)
+    RETURNING id`;
+  if (!run) throw new Error("Failed to insert synthetic F3versary run");
+  await sql`
+    INSERT INTO slackbot.f3versary_delivery_pages (run_id, page_number, text,
+      blocks, client_msg_id)
+    VALUES (${run.id}, 1, 'Happy F3versary, Jane Doe (jane@example.com)!',
+      '[]', gen_random_uuid())`;
+
+  // Locations by who uses them. One only private events use (likely a
+  // private residence: dropped), one a public and a private event share
+  // (kept), and one no event uses (kept, useful for testing).
+  const location = async (name: string): Promise<number> => {
+    const [row] = await sql<{ id: number }[]>`
+      INSERT INTO locations (org_id, name, is_active, address_street,
+        address_city, address_state)
+      VALUES (${ao.id}, ${name}, true, '12 Home Lane', 'Boone', 'NC')
+      RETURNING id`;
+    if (!row) throw new Error(`Failed to insert location ${name}`);
+    return row.id;
+  };
+  const privateLocationId = await location("Synthetic Backyard");
+  const mixedLocationId = await location("Synthetic Park");
+  const unusedLocationId = await location("Synthetic Unused Field");
+  const event = async (
+    name: string,
+    locationId: number,
+    isPrivate: boolean,
+  ): Promise<number> => {
+    const [row] = await sql<{ id: number }[]>`
+      INSERT INTO events (org_id, is_active, highlight, start_date, name,
+        location_id, is_private)
+      VALUES (${ao.id}, true, false, current_date, ${name}, ${locationId},
+        ${isPrivate})
+      RETURNING id`;
+    if (!row) throw new Error(`Failed to insert event ${name}`);
+    return row.id;
+  };
+  const privateEventId = await event(
+    "Synthetic Private Q",
+    privateLocationId,
+    true,
+  );
+  await event("Synthetic Public Beatdown", mixedLocationId, false);
+  await event("Synthetic Private Ruck", mixedLocationId, true);
+  await sql`
+    INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+      name, location_id, is_private)
+    VALUES (${ao.id}, true, false, current_date, 'Synthetic Private Q',
+      ${privateLocationId}, true)`;
+
   // Better Auth shadow row, 1:1 with the users row above. f3_user_id is a
   // GENERATED ALWAYS column ((id)::integer) with an FK to users.id and a
   // CHECK that id is a canonical positive integer, so it cannot be inserted
@@ -394,8 +459,16 @@ async function plantSyntheticPii(
     UPDATE orgs SET logo_url = 'https://cdn.f3nation.com/logo@2x.png'
     WHERE id = ${region.id}`;
 
-  console.log("  Planted user, session, tokens, api key, request, backblast.");
-  return { userId: user.id };
+  console.log(
+    "  Planted user, session, tokens, api key, request, backblast, locations.",
+  );
+  return {
+    userId: user.id,
+    privateLocationId,
+    mixedLocationId,
+    unusedLocationId,
+    privateEventId,
+  };
 }
 
 /** Collect every string in a JSON value: leaves and object keys. */
@@ -427,7 +500,7 @@ async function sweepForEmails(
     FROM information_schema.columns c
     JOIN information_schema.tables t
       ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-    WHERE c.table_schema IN ('public', 'auth')
+    WHERE c.table_schema IN ('public', 'auth', 'slackbot')
       AND t.table_type = 'BASE TABLE'
       AND (c.data_type IN ('text', 'character varying', 'json', 'jsonb')
         OR c.udt_name = 'citext')`;
@@ -524,7 +597,23 @@ async function main(): Promise<void> {
     run("pnpm", ["db:seed:local"], childEnv);
 
     // --- 3. Synthetic PII + pre-counts --------------------------------------
-    const { userId } = await plantSyntheticPii(sql);
+    const planted = await plantSyntheticPii(sql);
+    const { userId } = planted;
+
+    // Every location only private events use (the planted one plus any the
+    // seed has) is dropped; the counts check below expects exactly that many.
+    const [privateOnlyBefore] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM (
+        SELECT location_id FROM (
+          SELECT location_id, is_private FROM events
+          WHERE location_id IS NOT NULL
+          UNION ALL
+          SELECT location_id, is_private FROM event_instances
+          WHERE location_id IS NOT NULL
+        ) refs
+        GROUP BY location_id
+        HAVING bool_and(is_private)
+      ) private_only`;
 
     const preCounts = new Map<string, number>();
     for (const table of KEPT_TABLES) {
@@ -585,7 +674,7 @@ async function main(): Promise<void> {
       "email sweep",
       violations.length === 0,
       violations.length === 0
-        ? `0 non-obfuscated emails across ${columnsScanned} text/json columns (public + auth)`
+        ? `0 non-obfuscated emails across ${columnsScanned} text/json columns (public + auth + slackbot)`
         : `${violations.length} leaked: ${violations.slice(0, 5).join("; ")}`,
     );
 
@@ -600,7 +689,9 @@ async function main(): Promise<void> {
     for (const table of KEPT_TABLES) {
       const [row] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM ${sql(table)}`;
-      const before = preCounts.get(table) ?? -1;
+      const before =
+        (preCounts.get(table) ?? -1) -
+        (table === "locations" ? (privateOnlyBefore?.n ?? 0) : 0);
       if (row?.n !== before) {
         countsOk = false;
         countDetails.push(`${table}: ${before} -> ${row?.n ?? "?"}`);
@@ -610,8 +701,48 @@ async function main(): Promise<void> {
       "kept-table row counts unchanged",
       countsOk,
       countsOk
-        ? `${KEPT_TABLES.length} tables identical`
+        ? `${KEPT_TABLES.length} tables identical (less ${privateOnlyBefore?.n ?? "?"} private-only location(s))`
         : countDetails.join("; "),
+    );
+
+    const [locs] = await sql<
+      {
+        private_gone: boolean;
+        mixed_kept: boolean;
+        unused_kept: boolean;
+        private_event_unlinked: boolean;
+        private_only_left: number;
+      }[]
+    >`
+      SELECT
+        NOT EXISTS (SELECT 1 FROM locations
+          WHERE id = ${planted.privateLocationId}) AS private_gone,
+        EXISTS (SELECT 1 FROM locations
+          WHERE id = ${planted.mixedLocationId}) AS mixed_kept,
+        EXISTS (SELECT 1 FROM locations
+          WHERE id = ${planted.unusedLocationId}) AS unused_kept,
+        EXISTS (SELECT 1 FROM events WHERE id = ${planted.privateEventId}
+          AND location_id IS NULL) AS private_event_unlinked,
+        (SELECT count(*)::int FROM (
+          SELECT location_id FROM (
+            SELECT location_id, is_private FROM events
+            WHERE location_id IS NOT NULL
+            UNION ALL
+            SELECT location_id, is_private FROM event_instances
+            WHERE location_id IS NOT NULL
+          ) refs
+          GROUP BY location_id
+          HAVING bool_and(is_private)
+        ) private_only) AS private_only_left`;
+    check(
+      "locations only private events use are dropped",
+      (privateOnlyBefore?.n ?? 0) > 0 &&
+        locs?.private_gone === true &&
+        locs.mixed_kept &&
+        locs.unused_kept &&
+        locs.private_event_unlinked &&
+        locs.private_only_left === 0,
+      `${privateOnlyBefore?.n ?? "?"} dropped; private-only ${locs?.private_gone ? "gone" : "KEPT"}, shared ${locs?.mixed_kept ? "kept" : "DROPPED"}, unused ${locs?.unused_kept ? "kept" : "DROPPED"}, private event ${locs?.private_event_unlinked ? "kept without a location" : "NOT unlinked"}, ${locs?.private_only_left ?? "?"} left`,
     );
 
     const [named] = await sql<
@@ -802,6 +933,34 @@ async function main(): Promise<void> {
       `${orphans?.n ?? "?"} orphaned rows`,
     );
 
+    // --- 4b. The real-copy suite agrees ----------------------------------------
+    // obfuscate-db.verify-target.ts is what a human runs on the real copy
+    // before the load; run it here too so its checks can't drift from the
+    // obfuscator unnoticed.
+    const targetSuite = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.verify-target.ts",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const targetOut = targetSuite.stdout.toString();
+    check(
+      "verify-target passes on the obfuscated copy",
+      targetSuite.status === 0 && /ALL \d+ CHECKS PASSED/.test(targetOut),
+      targetSuite.status === 0
+        ? (/ALL \d+ CHECKS PASSED/.exec(targetOut)?.[0] ?? "no summary line")
+        : `exit ${targetSuite.status}: ${targetOut
+            .split("\n")
+            .filter((l) => l.includes("FAIL"))
+            .slice(0, 3)
+            .join("; ")}`,
+    );
+
     // --- 5a. Unclassified-table gate ------------------------------------------
     // The gate has fired for real (Better Auth schema drift), but only its
     // pass path ran here. Add an unclassified table, plant a real-looking
@@ -874,6 +1033,34 @@ async function main(): Promise<void> {
     );
 
     const keepNames = ["Map App (local dev)", "Slackbot (local dev)"];
+    // An unwanted key sharing a service key's name: --keep by that name must
+    // refuse (it would keep both), and --keep-id picks the right one.
+    const [slackbotKey] = await sql<{ id: number }[]>`
+      SELECT id FROM refresh_keep.api_keys WHERE name = 'Slackbot (local dev)'`;
+    if (!slackbotKey) throw new Error("Seed data missing the slackbot key");
+    await sql`
+      INSERT INTO refresh_keep.api_keys
+      SELECT * FROM refresh_keep.api_keys WHERE id = ${slackbotKey.id}`;
+    await sql`
+      UPDATE refresh_keep.api_keys SET id = 999999, key = 'unwanted-dup-key'
+      WHERE ctid = (SELECT max(ctid) FROM refresh_keep.api_keys
+        WHERE id = ${slackbotKey.id})`;
+    await sql`
+      INSERT INTO refresh_keep.roles_x_api_keys_x_org (role_id, api_key_id, org_id)
+      SELECT role_id, 999999, org_id FROM refresh_keep.roles_x_api_keys_x_org
+      WHERE api_key_id = ${slackbotKey.id}`;
+    const ambiguous = scripts("staging-api-keys.ts", [
+      "--allow-db",
+      DB_NAME,
+      "--restore",
+      ...keepNames.flatMap((name) => ["--keep", name]),
+    ]);
+    check(
+      "a --keep name shared by two keys is refused",
+      ambiguous.status !== 0 &&
+        ambiguous.stderr.toString().includes("More than one stashed key"),
+      `exit ${ambiguous.status}`,
+    );
     run(
       "pnpm",
       [
@@ -885,12 +1072,17 @@ async function main(): Promise<void> {
         "--allow-db",
         DB_NAME,
         "--restore",
-        ...keepNames.flatMap((name) => ["--keep", name]),
+        "--keep",
+        "Map App (local dev)",
+        "--keep-id",
+        String(slackbotKey.id),
       ],
       childEnv,
     );
     const keysAfter = await sql<{ name: string }[]>`
       SELECT name FROM api_keys ORDER BY name`;
+    const [dupGone] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM api_keys WHERE id = 999999`;
     const [stashAfter] = await sql<{ stash: boolean; grants: number }[]>`
       SELECT to_regnamespace('refresh_keep') IS NOT NULL AS stash,
         (SELECT count(*)::int FROM roles_x_api_keys_x_org) AS grants`;
@@ -905,6 +1097,7 @@ async function main(): Promise<void> {
         JSON.stringify(restoredNames) === JSON.stringify(keepNames) &&
         stashAfter?.grants === slackbotGrants?.n &&
         (slackbotGrants?.n ?? 0) > 0 &&
+        dupGone?.n === 0 &&
         stashAfter?.stash === false,
       `${keysBefore?.n ?? "?"} stashed, restored [${restoredNames.join(", ")}], ${stashAfter?.grants ?? "?"} grant(s), stash ${stashAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
     );
@@ -923,6 +1116,14 @@ async function main(): Promise<void> {
     await sql`
       INSERT INTO orgs_x_slack_spaces (org_id, slack_space_id)
       VALUES (${linkOrg.id}, ${stagingSpace.id})`;
+    // A second link, to an org whose id the next copy gives to a different
+    // org: it must not be relinked on the id alone.
+    const [movedOrg] = await sql<{ id: number; name: string }[]>`
+      SELECT id, name FROM orgs WHERE org_type = 'ao' ORDER BY id LIMIT 1`;
+    if (!movedOrg) throw new Error("Seed data missing an ao org");
+    await sql`
+      INSERT INTO orgs_x_slack_spaces (org_id, slack_space_id)
+      VALUES (${movedOrg.id}, ${stagingSpace.id})`;
     await sql`
       INSERT INTO slack_users (slack_id, user_name, email, is_admin, is_owner,
         is_bot, slack_team_id, user_id)
@@ -931,6 +1132,18 @@ async function main(): Promise<void> {
           false, 'T0STAGING', 1),
         ('U0SYNCED', 'Real Person', 'real.person@example.com', false, false,
           false, 'T0STAGING', 1)`;
+    const [stagingRun] = await sql<{ id: number }[]>`
+      INSERT INTO slackbot.f3versary_delivery_runs (slack_space_id, org_id,
+        processing_date, target_date, channel, lead_days, status, page_count)
+      VALUES (${stagingSpace.id}, ${linkOrg.id}, current_date, current_date,
+        'C0STAGING', 0, 'complete', 1)
+      RETURNING id`;
+    if (!stagingRun) throw new Error("Failed to insert staging F3versary run");
+    await sql`
+      INSERT INTO slackbot.f3versary_delivery_pages (run_id, page_number,
+        text, blocks, client_msg_id, status)
+      VALUES (${stagingRun.id}, 1, 'Happy F3versary, F3 1!', '[]',
+        gen_random_uuid(), 'sent')`;
     run(
       "pnpm",
       [
@@ -945,6 +1158,8 @@ async function main(): Promise<void> {
       ],
       childEnv,
     );
+    // The "loaded copy" now has a different org under movedOrg's id.
+    await sql`UPDATE orgs SET name = 'Some Other AO' WHERE id = ${movedOrg.id}`;
     // A member whose user and a link whose org the next copy won't have.
     await sql`
       UPDATE refresh_keep_slack.slack_users SET user_id = 999999
@@ -952,7 +1167,22 @@ async function main(): Promise<void> {
     await sql`
       INSERT INTO refresh_keep_slack.orgs_x_slack_spaces (org_id, slack_space_id)
       VALUES (999999, ${stagingSpace.id})`;
-    await sql`TRUNCATE orgs_x_slack_spaces, slack_spaces, slack_users`;
+    // ...and an F3versary run (with a page) for that missing org.
+    await sql`
+      INSERT INTO refresh_keep_slack.f3versary_delivery_runs (id,
+        slack_space_id, org_id, processing_date, target_date, channel,
+        lead_days, status, page_count, created_at, updated_at)
+      VALUES (999999, ${stagingSpace.id}, 999999, current_date, current_date,
+        'C0GONE', 0, 'complete', 1, now(), now())`;
+    await sql`
+      INSERT INTO refresh_keep_slack.f3versary_delivery_pages (id, run_id,
+        page_number, text, blocks, client_msg_id, status, created_at,
+        updated_at)
+      VALUES (999999, 999999, 1, 'gone', '[]', gen_random_uuid(), 'sent',
+        now(), now())`;
+    await sql`TRUNCATE slackbot.f3versary_delivery_pages,
+      slackbot.f3versary_delivery_runs, orgs_x_slack_spaces, slack_spaces,
+      slack_users`;
     const slackRestore = scripts("staging-slack.ts", [
       "--allow-db",
       DB_NAME,
@@ -965,6 +1195,9 @@ async function main(): Promise<void> {
         members: number;
         links: number;
         nulled: number;
+        real: number;
+        runs: number;
+        pages: number;
         stash: boolean;
       }[]
     >`
@@ -972,9 +1205,18 @@ async function main(): Promise<void> {
         (SELECT count(*)::int FROM slack_spaces WHERE team_id = 'T0STAGING') AS spaces,
         (SELECT count(*)::int FROM slack_users) AS members,
         (SELECT count(*)::int FROM orgs_x_slack_spaces
-          WHERE org_id = ${linkOrg.id} AND slack_space_id = ${stagingSpace.id}) AS links,
+          WHERE org_id = ${linkOrg.id} AND slack_space_id = ${stagingSpace.id})
+          - (SELECT count(*)::int FROM orgs_x_slack_spaces
+            WHERE org_id <> ${linkOrg.id} AND slack_space_id = ${stagingSpace.id})
+          AS links,
         (SELECT count(*)::int FROM slack_users
-          WHERE slack_id = 'U0SINKED' AND user_id IS NULL) AS nulled,
+          WHERE user_id IS NULL AND avatar_url IS NULL
+            AND user_name = 'F3 pending') AS nulled,
+        (SELECT count(*)::int FROM slack_users
+          WHERE email NOT LIKE ${`${SINK_PREFIX}slack-%`}) AS real,
+        (SELECT count(*)::int FROM slackbot.f3versary_delivery_runs
+          WHERE slack_space_id = ${stagingSpace.id}) AS runs,
+        (SELECT count(*)::int FROM slackbot.f3versary_delivery_pages) AS pages,
         to_regnamespace('refresh_keep_slack') IS NOT NULL AS stash`;
     check(
       "staging's own Slack data survives the refresh",
@@ -982,12 +1224,20 @@ async function main(): Promise<void> {
         slackAfter?.spaces === 1 &&
         slackAfter.members === 2 &&
         slackAfter.links === 1 &&
-        slackAfter.nulled === 1 &&
+        slackAfter.nulled === 2 &&
+        slackAfter.real === 0 &&
+        slackAfter.runs === 1 &&
+        slackAfter.pages === 1 &&
         !slackAfter.stash &&
+        slackOut.includes("Restored 1 F3versary run(s) and 1 page(s).") &&
+        slackOut.includes("Dropped 1 run(s)") &&
         slackOut.includes("workspace T0STAGING -> org 999999") &&
-        slackOut.includes("Warning: 1 restored Slack member(s)") &&
+        slackOut.includes(
+          `workspace T0STAGING -> org ${movedOrg.id} (was "${movedOrg.name}", now "Some Other AO")`,
+        ) &&
+        slackOut.includes("Scrubbed 1 member profile(s)") &&
         !slackOut.includes("real.person@example.com"),
-      `exit ${slackRestore.status}, ${slackAfter?.spaces ?? "?"} workspace, ${slackAfter?.members ?? "?"} member(s), ${slackAfter?.links ?? "?"} link, ${slackAfter?.nulled ?? "?"} unlinked member, stash ${slackAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
+      `exit ${slackRestore.status}${slackRestore.status === 0 ? "" : ` (${slackRestore.stderr.toString().trim().split("\n")[0]})`}, ${slackAfter?.spaces ?? "?"} workspace, ${slackAfter?.members ?? "?"} member(s), ${slackAfter?.links ?? "?"} link, ${slackAfter?.nulled ?? "?"} unlinked + placeholder member(s), ${slackAfter?.real ?? "?"} real email(s), ${slackAfter?.runs ?? "?"} F3versary run / ${slackAfter?.pages ?? "?"} page, stash ${slackAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
     );
 
     // --- 6. Verdict -----------------------------------------------------------

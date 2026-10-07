@@ -7,9 +7,10 @@
  * real-data path. It is read-only.
  *
  * Checks:
- *   1. Email sweep — no email-shaped string anywhere in public+auth outside
- *      the shared email sink (sink+<tag>@) (json columns are walked structurally; the
- *      serialized form false-positives on escape-adjacent Slack handles).
+ *   1. Email sweep — no email-shaped string anywhere in public, auth or
+ *      slackbot outside the shared email sink (sink+<tag>@) (json columns are
+ *      walked structurally; the serialized form false-positives on
+ *      escape-adjacent Slack handles).
  *   2. Secret/session/token tables and prod's Slack tables are empty — both
  *      the repo's own NextAuth adapter's plural names and the legacy singular
  *      ones (2026-07-10 schema-drift catch).
@@ -18,6 +19,7 @@
  *   5. auth.oauth_client(s) secrets invalidated.
  *   6. No kept OAuth client URI points at a production F3 host.
  *   7. attendance FK integrity.
+ *   8. No location that only private events use (likely a private residence).
  *
  * Usage:
  *   DATABASE_URL=postgresql://… pnpm -F @acme/scripts obfuscate-db:verify-target \
@@ -68,6 +70,8 @@ const EMPTY_TABLES = [
   "public.orgs_x_slack_spaces",
   "public.slack_spaces",
   "public.slack_users",
+  "slackbot.f3versary_delivery_runs",
+  "slackbot.f3versary_delivery_pages",
   "auth.oauth_authorization_codes",
   "auth.oauth_authorization_code",
   "auth.oauth_access_tokens",
@@ -151,7 +155,7 @@ async function sweepForEmails(sql: Sql): Promise<void> {
     FROM information_schema.columns c
     JOIN information_schema.tables t
       ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-    WHERE c.table_schema IN ('public', 'auth')
+    WHERE c.table_schema IN ('public', 'auth', 'slackbot')
       AND t.table_type = 'BASE TABLE'
       AND (c.data_type IN ('text', 'character varying', 'json', 'jsonb')
         OR c.udt_name = 'citext')`;
@@ -434,6 +438,24 @@ async function main(): Promise<void> {
       "attendance FKs intact",
       orphans?.n === 0,
       `${orphans?.n} orphaned rows`,
+    );
+
+    const [privateOnly] = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM (
+        SELECT location_id FROM (
+          SELECT location_id, is_private FROM events
+          WHERE location_id IS NOT NULL
+          UNION ALL
+          SELECT location_id, is_private FROM event_instances
+          WHERE location_id IS NOT NULL
+        ) refs
+        GROUP BY location_id
+        HAVING bool_and(is_private)
+      ) private_only`;
+    check(
+      "no location that only private events use",
+      privateOnly?.n === 0,
+      `${privateOnly?.n} left`,
     );
 
     const failed = results.filter((r) => !r.pass);

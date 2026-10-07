@@ -10,13 +10,23 @@
  * them back afterwards. Kept apart from staging-api-keys.ts so the Slack step
  * can be deleted outright once F3 moves off Slack.
  *
- *   --stash    copy the three tables into refresh_keep_slack.*
+ *   --stash    copy the three tables, plus F3versary's delivery runs and
+ *              pages (slackbot schema, when present), into
+ *              refresh_keep_slack.*
  *   --restore  put them back after the load and drop refresh_keep_slack.
- *              org ids and user ids carry over from prod, so staging's links
- *              usually still resolve. A workspace linked to an org the loaded
- *              copy doesn't have is restored unlinked (relink it by hand), and
- *              a Slack member whose user_id is gone is restored with
- *              user_id NULL (the slackbot re-links it).
+ *              An id only means the same thing across a refresh if the row
+ *              behind it is the same, so:
+ *              - a workspace's org link (and an F3versary run) comes back only
+ *                if the loaded copy's org with that id has the same name and
+ *                type as when it was stashed; anything else is listed to
+ *                relink by hand (or, for a run, dropped with its pages);
+ *              - every Slack member comes back unlinked (user_id NULL) and
+ *                with the profile shape the staging slackbot writes (sink
+ *                email, placeholder name, no avatar). Staging's users can't be
+ *                told apart from the loaded copy's (both are sink+<id>), and
+ *                a real profile synced before the bot's non-prod privacy
+ *                change must not survive. The staging slackbot creates a
+ *                fresh synthetic user for each member on their next action.
  *
  * Usage (staging, around the load):
  *   DATABASE_URL=... pnpm -F @acme/scripts staging-slack -- \
@@ -25,6 +35,8 @@
  *   DATABASE_URL=... pnpm -F @acme/scripts staging-slack -- \
  *     --allow-db <staging-db-name> --restore [--email-sink <group@domain>]
  */
+import type postgres from "postgres";
+
 import { connectToStaging, flagValue, stashOrRestore } from "./staging-target";
 
 const argv = process.argv.slice(2);
@@ -36,6 +48,25 @@ const EMAIL_SINK = (
 const [SINK_LOCAL, SINK_DOMAIN] = EMAIL_SINK.split("@") as [string, string];
 
 const TABLES = ["slack_spaces", "slack_users", "orgs_x_slack_spaces"] as const;
+
+// F3versary's delivery state (migration 0028). Its runs reference
+// slack_spaces and orgs, so staging's rows have to come out with the Slack
+// tables and go back after them; carrying them across keeps the staging
+// slackbot from re-announcing a day it already posted.
+const F3VERSARY_TABLES = [
+  "f3versary_delivery_runs",
+  "f3versary_delivery_pages",
+] as const;
+
+/** Whether F3versary's slackbot-schema tables exist (migration 0028+). */
+async function hasF3versary(
+  tx: postgres.Sql | postgres.TransactionSql,
+): Promise<boolean> {
+  const [row] = await tx<{ present: boolean }[]>`
+    SELECT to_regclass('slackbot.f3versary_delivery_runs') IS NOT NULL
+      AS present`;
+  return row?.present === true;
+}
 
 async function main(): Promise<void> {
   const mode = stashOrRestore(argv);
@@ -56,6 +87,21 @@ async function main(): Promise<void> {
             `CREATE TABLE refresh_keep_slack.${table} AS TABLE public.${table}`,
           );
         }
+        const f3versary = await hasF3versary(tx);
+        if (f3versary) {
+          for (const table of F3VERSARY_TABLES) {
+            await tx.unsafe(
+              `CREATE TABLE refresh_keep_slack.${table} AS TABLE slackbot.${table}`,
+            );
+          }
+        }
+        // What each linked org IS, so the restore can tell whether the
+        // loaded copy's org with the same id is still the same org.
+        await tx.unsafe(`
+          CREATE TABLE refresh_keep_slack.orgs AS
+          SELECT id, name, org_type::text AS org_type FROM public.orgs
+          WHERE id IN (SELECT org_id FROM public.orgs_x_slack_spaces)
+          ${f3versary ? "OR id IN (SELECT org_id FROM slackbot.f3versary_delivery_runs)" : ""}`);
       });
       const [n] = await sql<{ spaces: number; users: number; links: number }[]>`
         SELECT (SELECT count(*)::int FROM refresh_keep_slack.slack_spaces) AS spaces,
@@ -73,69 +119,135 @@ async function main(): Promise<void> {
       if (!stashed?.present) {
         throw new Error("Nothing to restore: refresh_keep_slack is missing.");
       }
+      const f3versary =
+        (await hasF3versary(tx)) &&
+        (
+          await tx<{ present: boolean }[]>`
+          SELECT to_regclass('refresh_keep_slack.f3versary_delivery_runs')
+            IS NOT NULL AS present`
+        )[0]?.present === true;
       const [loaded] = await tx<{ n: number }[]>`
         SELECT (SELECT count(*) FROM public.slack_spaces)
           + (SELECT count(*) FROM public.slack_users)
           + (SELECT count(*) FROM public.orgs_x_slack_spaces) AS n`;
+      const [loadedF3versary] = f3versary
+        ? await tx<{ n: number }[]>`
+            SELECT (SELECT count(*) FROM slackbot.f3versary_delivery_runs)
+              + (SELECT count(*) FROM slackbot.f3versary_delivery_pages) AS n`
+        : [{ n: 0 }];
+      if (Number(loadedF3versary?.n) > 0) {
+        throw new Error(
+          "The slackbot F3versary tables aren't empty: empty them with the Slack tables during the load, or this restore already ran.",
+        );
+      }
       if (Number(loaded?.n) > 0) {
         throw new Error(
           "The Slack tables aren't empty: the load carried Slack rows (an obfuscated copy from before this change?) or this restore already ran. Empty them first.",
         );
       }
 
-      const unlinkedUsers = await tx<{ id: number }[]>`
-        UPDATE refresh_keep_slack.slack_users s SET user_id = NULL
-        WHERE s.user_id IS NOT NULL
-          AND NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = s.user_id)
-        RETURNING s.id`;
+      // An org id is trusted only if the loaded org behind it is the one
+      // that was stashed.
+      const sameOrg = (alias: string) => `EXISTS (
+        SELECT 1 FROM public.orgs o
+        JOIN refresh_keep_slack.orgs k ON k.id = o.id
+        WHERE o.id = ${alias}.org_id AND o.name = k.name
+          AND o.org_type::text = k.org_type)`;
       const spaces = await tx`
         INSERT INTO public.slack_spaces SELECT * FROM refresh_keep_slack.slack_spaces
         RETURNING id`;
+      // Count only; never print the values.
+      const [unsunk] = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM refresh_keep_slack.slack_users
+        WHERE NOT (lower(email) LIKE ${`${SINK_LOCAL}+%@${SINK_DOMAIN}`})`;
+      await tx`
+        UPDATE refresh_keep_slack.slack_users
+        SET user_id = NULL,
+          email = ${`${SINK_LOCAL}+slack-`}::text || id::text
+            || ${`@${SINK_DOMAIN}`}::text,
+          user_name = 'F3 pending',
+          avatar_url = NULL`;
       const users = await tx`
         INSERT INTO public.slack_users SELECT * FROM refresh_keep_slack.slack_users
         RETURNING id`;
-      const links = await tx`
+      const links = await tx.unsafe(`
         INSERT INTO public.orgs_x_slack_spaces (org_id, slack_space_id)
         SELECT l.org_id, l.slack_space_id FROM refresh_keep_slack.orgs_x_slack_spaces l
-        WHERE EXISTS (SELECT 1 FROM public.orgs o WHERE o.id = l.org_id)
-        RETURNING org_id`;
-      const missingOrgs = await tx<{ org_id: number; team_id: string }[]>`
-        SELECT l.org_id, s.team_id
+        WHERE ${sameOrg("l")}
+        RETURNING org_id`);
+      const missingOrgs = await tx.unsafe<
+        { org_id: number; team_id: string; was: string; now: string | null }[]
+      >(`
+        SELECT l.org_id, s.team_id, k.name AS was, o.name AS now
         FROM refresh_keep_slack.orgs_x_slack_spaces l
         JOIN refresh_keep_slack.slack_spaces s ON s.id = l.slack_space_id
-        WHERE NOT EXISTS (SELECT 1 FROM public.orgs o WHERE o.id = l.org_id)`;
+        LEFT JOIN refresh_keep_slack.orgs k ON k.id = l.org_id
+        LEFT JOIN public.orgs o ON o.id = l.org_id
+        WHERE NOT ${sameOrg("l")}`);
       for (const table of ["slack_spaces", "slack_users"]) {
         await tx`
           SELECT setval(pg_get_serial_sequence(${`public.${table}`}, 'id'),
             GREATEST((SELECT max(id) FROM ${tx(`public.${table}`)}), 1))`;
       }
-      // The staging slackbot syncs member profiles as Slack reports them,
-      // so what comes back is whatever it wrote since the last refresh.
-      // Count only; never print the values.
-      const [unsunk] = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM public.slack_users
-        WHERE NOT (lower(email) LIKE ${`${SINK_LOCAL}+%@${SINK_DOMAIN}`})`;
+
+      let runs = 0;
+      let pages = 0;
+      let droppedRuns = 0;
+      if (f3versary) {
+        const restoredRuns = await tx.unsafe(`
+          INSERT INTO slackbot.f3versary_delivery_runs
+          SELECT * FROM refresh_keep_slack.f3versary_delivery_runs r
+          WHERE ${sameOrg("r")}
+          RETURNING id`);
+        const restoredPages = await tx`
+          INSERT INTO slackbot.f3versary_delivery_pages
+          SELECT * FROM refresh_keep_slack.f3versary_delivery_pages p
+          WHERE EXISTS (
+            SELECT 1 FROM slackbot.f3versary_delivery_runs r
+            WHERE r.id = p.run_id)
+          RETURNING id`;
+        const [stashedRuns] = await tx<{ n: number }[]>`
+          SELECT count(*)::int AS n
+          FROM refresh_keep_slack.f3versary_delivery_runs`;
+        runs = restoredRuns.length;
+        pages = restoredPages.length;
+        droppedRuns = (stashedRuns?.n ?? 0) - runs;
+        for (const table of F3VERSARY_TABLES) {
+          await tx`
+            SELECT setval(pg_get_serial_sequence(${`slackbot.${table}`}, 'id'),
+              GREATEST((SELECT max(id) FROM ${tx(`slackbot.${table}`)}), 1))`;
+        }
+      }
       await tx`DROP SCHEMA refresh_keep_slack CASCADE`;
 
       console.log(
         `Restored ${spaces.length} workspace(s), ${users.length} Slack member(s) and ${links.length} org link(s).`,
       );
-      if (unlinkedUsers.length > 0) {
+      if (f3versary) {
         console.log(
-          `${unlinkedUsers.length} Slack member(s) pointed at a user the loaded copy doesn't have; restored with user_id NULL.`,
+          `Restored ${runs} F3versary run(s) and ${pages} page(s).` +
+            (droppedRuns > 0
+              ? ` Dropped ${droppedRuns} run(s) whose org isn't the same org in the loaded copy.`
+              : ""),
+        );
+      }
+      console.log(
+        `All ${users.length} member(s) restored unlinked with placeholder profiles; the staging slackbot re-creates each one's synthetic user on their next action. Restart it so it drops its cached links.`,
+      );
+      if ((unsunk?.n ?? 0) > 0) {
+        console.log(
+          `Scrubbed ${unsunk?.n} member profile(s) that had an email outside ${EMAIL_SINK} (real profiles synced before the slackbot's non-prod privacy change).`,
         );
       }
       if (missingOrgs.length > 0) {
         console.log(
-          `Not relinked (org missing from the loaded copy), relink by hand:\n` +
+          `Not relinked (the loaded copy's org with that id is missing or a different org), relink by hand:\n` +
             missingOrgs
-              .map((m) => `  workspace ${m.team_id} -> org ${m.org_id}`)
+              .map(
+                (m) =>
+                  `  workspace ${m.team_id} -> org ${m.org_id} (was "${m.was ?? "?"}", now ${m.now === null ? "missing" : `"${m.now}"`})`,
+              )
               .join("\n"),
-        );
-      }
-      if ((unsunk?.n ?? 0) > 0) {
-        console.log(
-          `Warning: ${unsunk?.n} restored Slack member(s) have an email outside ${EMAIL_SINK}, likely real profiles the staging slackbot synced.`,
         );
       }
     });

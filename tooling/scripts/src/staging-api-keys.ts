@@ -12,9 +12,12 @@
  *
  *   --stash    copy api_keys + roles_x_api_keys_x_org into refresh_keep.*
  *   --restore  put back only the keys named with --keep (one flag per key
- *              name) and drop refresh_keep. Every other stashed key is
- *              dropped: ad-hoc keys don't outlive a refresh. Without --keep
- *              it lists the stashed keys (no values) and changes nothing.
+ *              name) or --keep-id (one flag per stashed key id) and drop
+ *              refresh_keep. Every other stashed key is dropped: ad-hoc keys
+ *              don't outlive a refresh. Names aren't unique, so a --keep name
+ *              that matches more than one stashed key is refused: pick the
+ *              one to keep with --keep-id. Without either flag it lists the
+ *              stashed keys (no values) and changes nothing.
  *              Each kept key keeps its owner id (ids carry over from prod);
  *              pass --owner-email to re-own them all instead
  *
@@ -25,6 +28,7 @@
  *   DATABASE_URL=... pnpm -F @acme/scripts staging-api-keys -- \
  *     --allow-db <staging-db-name> --restore \
  *     --keep "<map key name>" --keep "<slackbot key name>" ... \
+ *     [--keep-id <stashed key id> ...] \
  *     [--owner-email <user email>]
  */
 import type postgres from "postgres";
@@ -66,6 +70,11 @@ async function main(): Promise<void> {
   const mode = stashOrRestore(argv);
   const ownerEmail = flagValue(argv, "--owner-email")?.toLowerCase();
   const keep = new Set(flagValues(argv, "--keep"));
+  const keepIdArgs = flagValues(argv, "--keep-id");
+  const keepIds = new Set(keepIdArgs.map(Number));
+  if (keepIdArgs.some((v) => !/^\d+$/.test(v))) {
+    throw new Error("--keep-id takes a stashed key's numeric id.");
+  }
 
   const sql = await connectToStaging(argv);
   try {
@@ -93,11 +102,12 @@ async function main(): Promise<void> {
       return;
     }
 
-    if (keep.size === 0) {
+    if (keep.size === 0 && keepIds.size === 0) {
       const stashed = await listStashed(sql);
       throw new Error(
         `Refusing to restore without --keep: name each key staging's apps ` +
-          `use (one --keep per name). Every other key is dropped. Stashed:\n` +
+          `use (one --keep per name, or --keep-id per id). Every other key ` +
+          `is dropped. Stashed:\n` +
           stashed.map(describe).join("\n"),
       );
     }
@@ -113,7 +123,33 @@ async function main(): Promise<void> {
             stashed.map(describe).join("\n"),
         );
       }
-      const dropped = stashed.filter((k) => !keep.has(k.name));
+      const unknownIds = [...keepIds].filter(
+        (id) => !stashed.some((k) => k.id === id),
+      );
+      if (unknownIds.length > 0) {
+        throw new Error(
+          `No stashed key with id ${unknownIds.map((id) => `#${id}`).join(", ")}. Stashed:\n` +
+            stashed.map(describe).join("\n"),
+        );
+      }
+      // A name shared by several keys would keep all of them, including any
+      // that was meant to be dropped.
+      const ambiguous = [...keep].filter(
+        (name) => stashed.filter((k) => k.name === name).length > 1,
+      );
+      if (ambiguous.length > 0) {
+        throw new Error(
+          `More than one stashed key is named ${ambiguous.map((n) => `"${n}"`).join(", ")}; ` +
+            `keep the right one with --keep-id instead. Stashed:\n` +
+            stashed
+              .filter((k) => ambiguous.includes(k.name))
+              .map(describe)
+              .join("\n"),
+        );
+      }
+      const dropped = stashed.filter(
+        (k) => !keep.has(k.name) && !keepIds.has(k.id),
+      );
       const droppedIds = dropped.map((k) => k.id);
       if (droppedIds.length > 0) {
         await tx`
@@ -161,7 +197,7 @@ async function main(): Promise<void> {
       );
       if (dropped.length > 0) {
         console.log(
-          `Dropped ${dropped.length} key(s) not named with --keep:\n` +
+          `Dropped ${dropped.length} key(s) not named with --keep or --keep-id:\n` +
             dropped.map(describe).join("\n"),
         );
       }

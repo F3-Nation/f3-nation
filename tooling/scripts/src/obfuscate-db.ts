@@ -6,7 +6,8 @@
  * input always maps to the same fake, so relational consistency holds across
  * tables), secrets/sessions are truncated, and JSON/free-text columns are
  * scrubbed of email-shaped strings. Prod's Slack tables (slack_spaces,
- * slack_users, orgs_x_slack_spaces) are emptied, not scrubbed: staging keeps
+ * slack_users, orgs_x_slack_spaces, and the slackbot schema's F3versary
+ * delivery tables) are emptied, not scrubbed: staging keeps
  * its own Slack data across a refresh (staging-slack.ts).
  *
  * !! This script has only been proven against the local sandbox seed. It must
@@ -598,10 +599,10 @@ const str = (v: unknown): string | null =>
 // ---------------------------------------------------------------------------
 
 /**
- * Every base table in public+auth must be listed here (touched below) or in
- * KEPT_TABLES (reviewed as non-PII). Any table the script doesn't know is a
- * hard error BEFORE any writes: on 2026-07-10 the first real-data run found
- * prod carries singular-named legacy auth tables (auth.user,
+ * Every table assertFullCoverage finds must be listed here (touched below)
+ * or in KEPT_TABLES (reviewed as non-PII). Any table the script doesn't
+ * know is a hard error BEFORE any writes: on 2026-07-10 the first real-data
+ * run found prod carries singular-named legacy auth tables (auth.user,
  * auth.oauth_access_token, …) — leftovers from an earlier auth setup that
  * pre-dates the repo's current NextAuth adapter (packages/auth's
  * MDPGDrizzleAdapter, which reads/writes the repo's own plural
@@ -637,6 +638,8 @@ const TOUCHED_TABLES = new Set([
   "public.slack_users",
   "public.slack_spaces",
   "public.orgs_x_slack_spaces",
+  "slackbot.f3versary_delivery_runs",
+  "slackbot.f3versary_delivery_pages",
   "public.orgs",
   "public.locations",
   "public.events",
@@ -683,19 +686,29 @@ const TOUCHED_TABLES = new Set([
   "auth.user_profiles",
 ]);
 
-// Known, human-reviewed scope limit (same shape as "new columns default to
-// leaks" in docs/STAGING_REFRESH.md): this only enumerates BASE TABLEs in the
-// `public` and `auth` schemas. A future schema (e.g. a proposed `audit`
-// schema for pre-obfuscation row snapshots) or a materialized view over PII
-// columns would not be caught here or by either verify harness's leak sweep,
-// which use the same filter. Not an active gap today — no matviews or extra
-// schemas exist — but broaden this enumeration (pg_class/pg_namespace across
-// all non-system schemas, including matviews) before either is introduced.
+// Every table, partitioned table and materialized view in every non-system
+// schema, so a new schema (the slackbot schema arrived with F3versary in
+// migration 0028) is caught here rather than leaking. Excluded: drizzle's
+// migration bookkeeping and the refresh_keep* holding schemas that
+// staging-api-keys.ts / staging-slack.ts create on staging (the verify
+// harness plays staging too, so they exist there during the run).
+const COVERAGE_EXCLUDED_SCHEMAS = [
+  "pg_catalog",
+  "information_schema",
+  "drizzle",
+  "refresh_keep",
+  "refresh_keep_slack",
+];
+
 async function assertFullCoverage(sql: Sql): Promise<void> {
   const rows = await sql<{ qualified: string }[]>`
-    SELECT table_schema || '.' || table_name AS qualified
-    FROM information_schema.tables
-    WHERE table_schema IN ('public', 'auth') AND table_type = 'BASE TABLE'`;
+    SELECT n.nspname || '.' || c.relname AS qualified
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind IN ('r', 'p', 'm')
+      AND NOT c.relispartition
+      AND n.nspname <> ALL(${COVERAGE_EXCLUDED_SCHEMAS})
+      AND left(n.nspname, 3) <> 'pg_'`;
   const unknown = rows
     .map((r) => r.qualified)
     .filter((t) => !KEPT_TABLES.has(t) && !TOUCHED_TABLES.has(t));
@@ -800,8 +813,13 @@ async function obfuscate(sql: Sql): Promise<void> {
   // no prod Slack workspace to talk to) and the staging slackbot acts on them:
   // the 2026-09-23 refresh had it regenerating prod regions' calendar images.
   // The load carries staging's own rows across instead (staging-slack.ts).
-  // One statement: orgs_x_slack_spaces references slack_spaces.
+  // F3versary's delivery runs and pages (slackbot schema) go with them: the
+  // runs reference slack_spaces, and the pages hold the announcement text,
+  // which names members.
+  // One statement: they reference each other.
   await truncateTables(sql, [
+    "slackbot.f3versary_delivery_pages",
+    "slackbot.f3versary_delivery_runs",
     "orgs_x_slack_spaces",
     "slack_spaces",
     "slack_users",
@@ -984,6 +1002,49 @@ async function obfuscate(sql: Sql): Promise<void> {
       }
       return changes;
     },
+  });
+
+  // ---- locations used only by private events -----------------------------------
+  // A location whose every event (series and instances alike) is private is
+  // likely a private residence, so it isn't carried into staging. Locations
+  // with no events (useful for testing) and any location a public event uses
+  // are kept. Every reference to a location is nullable, so the private
+  // events are kept and just lose their location; nothing else is deleted.
+  const privateOnlyLocations = (
+    await sql<{ id: number }[]>`
+      SELECT location_id AS id FROM (
+        SELECT location_id, is_private FROM events
+        WHERE location_id IS NOT NULL
+        UNION ALL
+        SELECT location_id, is_private FROM event_instances
+        WHERE location_id IS NOT NULL
+      ) refs
+      GROUP BY location_id
+      HAVING bool_and(is_private)`
+  ).map((r) => r.id);
+  const privateOnly = sql`ANY(${sql.array(privateOnlyLocations)}::int[])`;
+  for (const [table, column] of [
+    ["events", "location_id"],
+    ["event_instances", "location_id"],
+    ["update_requests", "location_id"],
+    ["orgs", "default_location_id"],
+  ] as const) {
+    await runSetBased(sql, {
+      table,
+      column,
+      action: "unlink (private-only location)",
+      countWhere: sql`${sql(column)} = ${privateOnly}`,
+      update: sql`
+        UPDATE ${sql(table)} SET ${sql(column)} = NULL
+        WHERE ${sql(column)} = ${privateOnly}`,
+    });
+  }
+  await runSetBased(sql, {
+    table: "locations",
+    column: "*",
+    action: "delete (only private events use it)",
+    countWhere: sql`id = ${privateOnly}`,
+    update: sql`DELETE FROM locations WHERE id = ${privateOnly}`,
   });
 
   // ---- locations ---------------------------------------------------------------
