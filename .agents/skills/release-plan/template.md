@@ -43,8 +43,8 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 - [ ] **Merge release PR #{{PR}}.** The deploys start automatically. Owner: Release lead
-  - **Expected:** immediately before merging, `gh pr view {{PR}} --json state,headRefOid --jq '[.state, .headRefOid] | join(" ")'` prints `OPEN {{RELEASE_SHA}}`.
-  - **Stop if:** the state or SHA differs, or the check fails. Update and review this plan before continuing.
+  - **Expected:** immediately before merging, `gh pr view {{PR}} --json state,headRefOid,baseRefOid --jq '[.state, .headRefOid, .baseRefOid] | join(" ")'` prints `OPEN {{RELEASE_SHA}} {{RELEASE_BASE_SHA}}`.
+  - **Stop if:** the state, head SHA, or base SHA differs, or the check fails. Update and review the migration list and rollout order before continuing.
 
 <!-- OPTIONAL (only if this plan merges before a pending migration; omit when already merged or when the migration precedes merge): -->
 
@@ -67,8 +67,8 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 - [ ] **Confirm the migration target** from the repository root: `pnpm -F db with-env node -e 'const u=new URL(process.env.DATABASE_URL);console.log(u.host+u.pathname)'` prints the host and database name, never the password. Owner: Release lead
   - **Expected:** it ends in `/{{DATABASE_NAME: f3_staging or f3_prod}}`.
   - **Stop if:** it names any other database. Fix `packages/db/.env` before going on.
-- [ ] **Confirm the release snapshot** immediately before running the migration: `gh pr view {{PR}} --json state,headRefOid,mergeCommit --jq 'if .state == "OPEN" then .headRefOid elif .state == "MERGED" then .mergeCommit.oid else "STOP" end'`. Owner: Release lead
-  - **Expected:** it prints `{{RELEASE_SHA}}`: the current PR head while open, or the actual merge commit after merging.
+- [ ] **Confirm the release snapshot** immediately before running the migration: `gh pr view {{PR}} --json state,headRefOid,baseRefOid,mergeCommit --jq 'if .state == "OPEN" then [.state, .headRefOid, .baseRefOid] | join(" ") elif .state == "MERGED" then [.state, .mergeCommit.oid] | join(" ") else "STOP" end'`. Owner: Release lead
+  - **Expected:** it prints `OPEN {{RELEASE_SHA}} {{RELEASE_BASE_SHA}}` before merging, or `MERGED {{RELEASE_SHA}}` using the actual merge commit after merging.
   - **Stop if:** it prints anything else, or the check fails. Update and review the migration list, rollout order, and checkout steps before continuing; do not repeat a migration already run.
 - [ ] **Run the migration** from the repository root, pointed at the {{ENVIRONMENT}} database: `env -u CI pnpm db:migrate`. Owner: Release lead
 - [ ] **Run [the check query](#check-query-after-the-migration).** Every result must match. Owner: Monitor

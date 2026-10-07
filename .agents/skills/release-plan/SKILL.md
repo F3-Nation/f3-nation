@@ -28,7 +28,7 @@ Ask for anything missing before starting:
 1. **Read the release PR.**
 
    ```bash
-   gh pr view <PR> --json title,body,state,mergedAt,headRefOid,mergeCommit --jq '{title,state,mergedAt,headRefOid,mergeCommit,body}'
+   gh pr view <PR> --json title,body,state,mergedAt,headRefOid,baseRefOid,mergeCommit --jq '{title,state,mergedAt,headRefOid,baseRefOid,mergeCommit,body}'
    ```
 
    The body is the changelog: one `<details>` block per app, listing the
@@ -44,24 +44,41 @@ Ask for anything missing before starting:
 
    For both migration discovery and checkout, set `{{RELEASE_FETCH_REF}}` to
    `refs/pull/<PR>/head` and `{{RELEASE_SHA}}` to `headRefOid` while the PR is
-   open. After merging, use `main` and `mergeCommit.oid`. This keeps both
-   steps on the same release snapshot, even if `main` has advanced.
+   open, and record `{{RELEASE_BASE_SHA}}` as `baseRefOid`. After merging,
+   use `main` and `mergeCommit.oid`. Fetch `main` before setting
+   `{{RELEASE_BASE_SHA}}` to that merge commit's first parent
+   (`git rev-parse "{{RELEASE_SHA}}^"`). This keeps discovery and checkout
+   on the same snapshot even if `main` has advanced.
+
+   The open PR's head must contain its pinned base before discovering
+   migrations. If the ancestry check below fails, stop and have the Release
+   lead refresh the PR branch, then reread the PR and rebuild the plan. Pinning
+   the base alone would still omit migrations already missing from a stale head.
+   Stop if any command fails or no previous release is found.
 
    ```bash
-   git fetch origin main
-   git fetch origin {{RELEASE_FETCH_REF}}
-   END={{RELEASE_SHA}}
-   # Both states: find the previous release, excluding this release's own commit.
-   PREV=$(git log "$(git merge-base origin/main "$END^")" --grep '^chore: release main' --format=%H -n 1)
-   git diff --name-only --diff-filter=A "$PREV" "$END" -- packages/db/drizzle/'*.sql'
+   (
+     set -e
+     git fetch origin main
+     git fetch origin {{RELEASE_FETCH_REF}}
+     END={{RELEASE_SHA}}
+     BASE={{RELEASE_BASE_SHA}}
+     git merge-base --is-ancestor "$BASE" "$END"
+     # Both states: exclude this release's own commit from the baseline.
+     PREV=$(git log "$BASE" --grep '^chore: release main' --format=%H -n 1)
+     test -n "$PREV"
+     git diff --name-only --diff-filter=A "$PREV" "$END" -- packages/db/drizzle/'*.sql'
+   )
    ```
 
-   Re-read the PR state and SHA immediately before merging or migrating.
-   Stop if they no longer match the plan. If the plan merges before a pending
-   migration, include a checkpoint after merging to refresh discovery and
-   checkout to the actual merge commit, then review the updated migration
-   list and rollout order before continuing. Do not migrate from the saved
-   open-PR head after merging or blindly repeat a migration already run.
+   Re-read the PR state, head SHA, and base SHA immediately before merging
+   or migrating while open; after merging, check the state and actual merge
+   SHA instead. Stop if any value no longer matches the plan. Refresh discovery,
+   the migration list, rollout order, and checkout steps before continuing.
+   If the plan merges before a pending migration, include a checkpoint after
+   merging to refresh discovery and checkout to the actual merge commit, then
+   review the updated migration list and rollout order. Do not migrate from
+   the saved open-PR head after merging or blindly repeat a migration already run.
 
    Read any new migration SQL and its linked rollout notes or feature spec
    before choosing the order. A migration required by the new app or scheduled
