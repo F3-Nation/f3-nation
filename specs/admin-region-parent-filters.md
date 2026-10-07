@@ -9,10 +9,11 @@ so a Territory does not need an unnecessary Area. The Regions table offers optio
 Sector, Territory, and Area filters that follow actual ancestry, including a
 Territory containing both direct Regions and Areas with their own Regions.
 
-## 2. Context & links
+## 2. Context
 
-- [Issue #1172](https://github.com/F3-Nation/f3-nation/issues/1172); related
-  [Territory epic #855](https://github.com/F3-Nation/f3-nation/issues/855).
+- During Territory rollout, some Territories need direct Region children rather
+  than an intermediate Area. The Region editor supports both parent types, and
+  ancestry filters must include both branch shapes.
 - App affected: admin. Existing API authorization and database AO-count behavior
   are verified by regression tests without changing their contracts.
 - Builds on [Territory administration](admin-territory-management.md) and
@@ -30,17 +31,20 @@ Territory containing both direct Regions and Areas with their own Regions.
   - `packages/api/src/{router/org,check-has-role-on-org}.ts`
   - `packages/shared/src/app/org-hierarchy.ts`
   - Existing depth-agnostic AO-count functions in `packages/db/drizzle/`.
-- [Issue #1040](https://github.com/F3-Nation/f3-nation/issues/1040) tracks the
-  broader tier-agnostic filter refactor; it is not a prerequisite for this feature.
+- A broader tier-agnostic filter refactor is independent of this feature.
 
 ## 3. User stories
 
-- As a Region editor, I want to select an Area or Territory parent so that my
-  Region follows the hierarchy chosen by its leadership.
+- As an administrator or editor with access to the Region and its destination
+  parent, I want to select an Area or Territory parent so that the Region follows
+  the hierarchy chosen by its leadership. Editor access only to the Region does
+  not authorize moving it.
+- As a Region editor without parent-level access, I want to edit Region details
+  while retaining its current parent, without being offered unauthorized moves.
 - As an administrator, I want a Territory filter to show both direct Regions and
   Regions beneath Areas so that an optional Area never hides part of a Territory.
-- As an administrator, I want independent hierarchy filters with predictable
-  intersections so that I can find Regions during a gradual Territory rollout.
+- As an administrator, I want selecting a Territory to narrow Area choices to
+  its Areas so that I can refine Region results within that Territory.
 
 ## 4. Acceptance criteria (testable, non-contradictory)
 
@@ -53,11 +57,24 @@ Territory containing both direct Regions and Areas with their own Regions.
   editor loads THEN that parent remains selected, including an inactive current
   parent, and saving without changing it submits the same parent. Other selectable
   parents are active; inactive organizations do not become new parent choices.
-- **AC-3** — GIVEN an authorized editor WHEN a Region is created under either
-  parent type or moved between Area and Territory in either direction THEN the
-  saved parent persists and remains selected on reopening. Existing Region fields,
-  logo, metadata, validation, success/error handling, and create/save flow remain
-  unchanged.
+- **AC-3** — GIVEN an editor or administrator with editor access to the parent
+  for creation, or to both the Region and destination parent for a move, WHEN a
+  Region is created under either parent type or moved between Area and Territory
+  in either direction THEN the saved parent persists and remains selected on
+  reopening. New parent choices are limited to active parents the caller can edit;
+  the current parent remains displayed for unchanged saves. A caller whose only
+  access is editor on the Region can edit its details but cannot change its parent.
+  The parent selector is disabled until required permission data is available or
+  when no authorized alternative exists, with an explanation of that state.
+  Once the existing Region record is loaded, an unchanged-parent save remains
+  available while the advisory permission lookup is loading or has failed; the
+  API still checks access to the Region. Confirmed source-access denial or an
+  unavailable Region record blocks saving. A move requires verified source access
+  and a successfully loaded, active, authorized destination. Record and permission
+  lookup failures are described as loading failures, separately from access denial;
+  a failed parent-list refetch prevents a changed-parent save and explains the
+  loading failure. Existing Region fields, logo, metadata, validation, and API
+  success/error handling remain unchanged.
 - **AC-4** — GIVEN a Region directly beneath a Territory WHEN its row is shown
   THEN its Area is blank and its Sector is resolved through the Territory. The
   Region table retains its Area and Sector columns and existing sorting behavior.
@@ -79,9 +96,9 @@ Territory containing both direct Regions and Areas with their own Regions.
   selections within a tier use OR and all nonempty selected tiers combine with
   AND. With no hierarchy selections, otherwise eligible Regions are unfiltered
   by parent.
-- **AC-10** — GIVEN retained Territory and Area selections with no intersecting
-  ancestry WHEN querying Regions THEN zero rows and a zero matching total are
-  returned, without falling back to an unfiltered query.
+- **AC-10** — GIVEN selected ancestry with no matching Regions WHEN querying
+  Regions THEN zero rows and a zero matching total are returned, without falling
+  back to an unfiltered query.
 - **AC-11** — GIVEN an inactive intermediate Area or Territory WHEN matching a
   selected Sector or Territory THEN that ancestor remains in the traversal and
   eligible descendant Regions are included. Filter choices remain active-only;
@@ -90,12 +107,17 @@ Territory containing both direct Regions and Areas with their own Regions.
   THEN only lower-tier selections beneath the remaining selected Sectors are
   retained, following the existing Sector pruning behavior. Clearing the last
   Sector preserves otherwise available lower-tier selections.
-- **AC-13** — GIVEN Territory and Area selections WHEN either changes THEN they
-  do not narrow or prune each other's choices or selections. Incompatible retained
-  selections produce the empty intersection in AC-10.
+- **AC-13** — GIVEN one or more selected Territories WHEN Area choices are shown
+  THEN only active Areas beneath any selected Territory and within the selected
+  Sector scope are offered. Changing Territories clears selected Areas outside
+  that scope. Clearing the last Territory restores all active Areas within the
+  Sector scope, without restoring cleared selections. Area selections do not
+  narrow Territory choices. A Territory with no Areas offers no Area choices but
+  still includes its direct Regions when no Area is selected.
 - **AC-14** — GIVEN a hierarchy refetch WHEN a selected organization becomes
-  inactive or moves outside the selected Sector scope THEN existing reconciliation
-  removes that selection, and clearing a Sector later does not restore it.
+  inactive or moves outside the selected Sector or Territory scope THEN existing
+  reconciliation removes that selection. Clearing an ancestor filter later does
+  not restore it.
 - **AC-15** — GIVEN a hierarchy spanning multiple API pages WHEN filtering Regions
   THEN all hierarchy pages and inactive ancestors participate in matching, rather
   than only the loaded Region page or first hierarchy page. Parent filtering occurs
@@ -134,23 +156,29 @@ The current API procedures and resource checks remain authoritative. An offered
 parent or filter option does not grant access, and filtering does not change the
 meaning of Only Mine or inherited roles.
 
-| Action                                     | Allowed                                                                             | Explicitly denied                                                        |
-| ------------------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| List/read Regions and hierarchy            | Existing `protectedProcedure` callers under current query scoping                   | Unauthenticated callers                                                  |
-| Create a Region under an Area or Territory | `editorProcedure` caller passing the existing editor check on the parent            | Callers lacking the procedure role or scoped parent access               |
-| Edit an existing Region                    | `editorProcedure` caller passing the editor check on the Region                     | Callers without target Region access, even if they have a role elsewhere |
-| Change a Region's parent                   | Editor access to the source Region and destination parent, with a valid parent type | Callers lacking either resource check or choosing an invalid parent      |
-| Deactivate through the dedicated action    | Existing `adminProcedure` and target-org admin check                                | Editor-only callers and administrators without target-org access         |
+| Action                                     | Allowed                                                                                                                   | Explicitly denied                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| List/read Regions and hierarchy            | Existing `protectedProcedure` callers under current query scoping                                                         | Unauthenticated callers                                                                  |
+| Create a Region under an Area or Territory | `editorProcedure` caller passing the existing editor check on the parent                                                  | Callers lacking the procedure role or scoped parent access                               |
+| Edit an existing Region                    | `editorProcedure` caller passing the editor check on the Region                                                           | Callers without target Region access, even if they have a role elsewhere                 |
+| Change a Region's parent                   | Editor or admin access, directly or inherited, to both the source Region and destination parent, with a valid parent type | Region-only editors; callers lacking either resource check or choosing an invalid parent |
+| Deactivate through the dedicated action    | Existing `adminProcedure` and target-org admin check                                                                      | Editor-only callers and administrators without target-org access                         |
 
 Territory roles inherit through either branch shape using the existing recursive
 role checks. This feature adds no role, changes no procedure tier, and does not
 alter authorization inheritance or API-key behavior.
 
+The existing parent-change rule accepts scoped editor or admin access; it does
+not require the admin role specifically. A role on the Region does not inherit
+upward to its Area or Territory. The Admin parent control reflects these resource
+checks, while the API remains authoritative. An unchanged-parent save requires
+access to the Region, without requiring access to its current parent.
+
 ## 6. Out of scope / non-goals
 
 - A Territory column on the Regions table, new sorting behavior, or additional
   Region editor parent types beyond Area and Territory.
-- The broader generic filter refactor in #1040, bulk reparenting, or rollout tooling.
+- The broader generic filter refactor, bulk reparenting, or rollout tooling.
 - New API endpoints, schema migrations, AO-count function changes, RBAC changes,
   production/staging data changes, or automatic deployment.
 - Changes to other organization types' inactive-parent or filter behavior.
@@ -160,13 +188,26 @@ alter authorization inheritance or API-key behavior.
 - Region create/edit with grouped Area/Territory choices, unchanged saves,
   inactive current parent, both move directions, and preserved Region fields.
 - Mixed branches with standalone and combined Sector/Territory/Area selections,
-  OR within a tier, AND across tiers, and retained incompatible selections.
-- Active-only choices with inactive matching ancestors; Sector pruning, refetch
-  reconciliation, loading/empty matches, cycles, and missing ancestors.
+  OR within a tier, AND across tiers, and explicit empty results.
+- Territory-scoped Area choices, multiple selected Territories, pruning of
+  incompatible Area selections, restoring choices when Territories clear, and
+  direct Regions in Territories with no Areas; desktop and mobile controls.
+- Active-only choices with inactive matching ancestors; Sector and Territory
+  pruning, refetch reconciliation, loading/empty matches, cycles, and missing
+  ancestors.
 - Off-first-page hierarchy matching, server pagination/totals, page resets, and
   desktop/mobile filter controls.
 - Real local API persistence, mixed AO counts, both moved ancestor chains,
   inherited permissions, and denied moves with no persisted change.
+- A Region-only editor can save ordinary details with an unchanged parent;
+  Area and Territory moves are rejected without changing the parent or AO counts.
+- Parent-control permission loading/failure, authorized destination choices,
+  Region-only disabled state, and active/inactive current-parent preservation.
+- Loaded Region details remain saveable during an advisory permission lookup or
+  failure, while parent moves stay blocked. Confirmed denial and a missing, loading,
+  or failed Region record block saving. A failed parent-list refetch reports its
+  loading failure without submitting a move or creation; an only-current-parent
+  selector explains the lack of alternatives and permits an unchanged save.
 
 Run focused regressions, browser verification for the changed flows, and
 `pnpm ci:local` before declaring the change ready. Use synthetic fixtures and

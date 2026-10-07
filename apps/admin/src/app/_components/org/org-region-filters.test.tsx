@@ -293,6 +293,12 @@ describe("Region filters with real hierarchy paging", () => {
         controls.queryByRole("button", { name: "Area: Inactive Area" }),
       ).toBeNull();
       expect(
+        controls.queryByRole("button", { name: "Area: Other Area" }),
+      ).toBeNull();
+      expect(
+        controls.queryByRole("button", { name: "Area: Direct Sector Area" }),
+      ).toBeNull();
+      expect(
         controls.queryByRole("button", {
           name: "Territory: Inactive Territory",
         }),
@@ -319,35 +325,83 @@ describe("Region filters with real hierarchy paging", () => {
     },
   );
 
-  it("returns zero rows and total for retained mismatched Territory and Area selections", async () => {
+  it("prunes incompatible Areas when a Territory is selected and restores their choices when it clears", async () => {
     mount();
     await screen.findByRole("button", { name: "Territory: Paged Territory" });
+    fireEvent.click(screen.getByRole("button", { name: "Area: Other Area" }));
+    await waitFor(() => expect(rowIds()).toEqual([19]));
     fireEvent.click(
       screen.getByRole("button", { name: "Territory: Paged Territory" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Area: Other Area" }));
 
     await waitFor(() =>
-      expect(screen.getByTestId("region-total").textContent).toBe("0"),
+      expect(screen.getByTestId("region-total").textContent).toBe("3"),
     );
-    expect(rowIds()).toEqual([]);
-    expect(latestRegionInput()?.parentOrgIds).toEqual([-1]);
+    expect(rowIds()).toEqual([12, 16]);
+    expect(latestRegionInput()?.parentOrgIds).toEqual(
+      expect.arrayContaining([8, 13, 14]),
+    );
     expect(
       screen
         .getByRole("button", { name: "Territory: Paged Territory" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
-      screen
-        .getByRole("button", { name: "Area: Other Area" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+      screen.queryByRole("button", { name: "Area: Other Area" }),
+    ).toBeNull();
     expect(
       screen.getByRole("button", { name: "Area: Paged Area" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Territory: Other Territory" }),
     ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Territory: Paged Territory" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("region-total").textContent).toBe("6"),
+    );
+    expect(latestRegionInput()?.parentOrgIds).toBeUndefined();
+    expect(
+      screen
+        .getByRole("button", { name: "Area: Other Area" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("offers Areas from any selected Territory and prunes only the deselected Territory's Areas", async () => {
+    mount();
+    await screen.findByRole("button", { name: "Territory: Paged Territory" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Territory: Paged Territory" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Territory: Other Territory" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Area: Paged Area" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Area: Other Area" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Area: Direct Sector Area" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Area: Paged Area" }));
+    fireEvent.click(screen.getByRole("button", { name: "Area: Other Area" }));
+    await waitFor(() => expect(rowIds()).toEqual([17, 19]));
+    expect(screen.getByTestId("region-total").textContent).toBe("2");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Territory: Paged Territory" }),
+    );
+    await waitFor(() => expect(rowIds()).toEqual([19]));
+    expect(screen.getByTestId("region-total").textContent).toBe("1");
+    expect(
+      screen.queryByRole("button", { name: "Area: Paged Area" }),
+    ).toBeNull();
+    expect(latestRegionInput()?.parentOrgIds).toEqual([7]);
   });
 
   it("matches all three Sector branch shapes through inactive and off-first-page ancestors", async () => {

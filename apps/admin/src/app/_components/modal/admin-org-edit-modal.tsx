@@ -75,6 +75,7 @@ export default function AdminOrgEditModal({
   const { parentTypes } = config;
   const hasParent = parentTypes.length > 0;
   const includeInactiveCurrentParent = orgType === "region";
+  const isEditingRegion = includeInactiveCurrentParent && id != null && id >= 0;
   const parentLabel = parentTypes
     .map((parentType) => orgTypeDisplay[parentType].label)
     .join(" or ");
@@ -82,14 +83,47 @@ export default function AdminOrgEditModal({
   const fieldClass = config.compactLayout
     ? "mb-4 w-1/2 px-2"
     : "mb-4 w-full px-2 sm:w-1/2";
-  const { data: orgResponse } = useQuery(
+  const {
+    data: orgResponse,
+    isPending: orgPending,
+    isError: orgError,
+  } = useQuery(
     orpc.org.byId.queryOptions({
       input: { id: id ?? -1, orgType },
       enabled: gte(id, 0),
     }),
   );
   const org = orgResponse?.org;
-  const { data: parents } = useFetchAllPages({
+  const {
+    data: sourceAccess,
+    isPending: sourceAccessPending,
+    isError: sourceAccessError,
+  } = useQuery(
+    orpc.request.canEditRegions.queryOptions({
+      input: { orgIds: id != null ? [id] : [] },
+      enabled: isEditingRegion,
+    }),
+  );
+  const regionRecordUnavailable = isEditingRegion && (!org || orgError);
+  const sourceAccessDenied =
+    isEditingRegion && sourceAccess?.results[0]?.success === false;
+  const canChangeRegionParent =
+    !isEditingRegion ||
+    (!regionRecordUnavailable &&
+      !sourceAccessPending &&
+      !sourceAccessError &&
+      sourceAccess?.results[0]?.success === true);
+  const { data: currentParentResponse } = useQuery(
+    orpc.org.byId.queryOptions({
+      input: { id: org?.parentId ?? -1 },
+      enabled: includeInactiveCurrentParent && org?.parentId != null,
+    }),
+  );
+  const {
+    data: parents,
+    isPending: parentsPending,
+    isError: parentsError,
+  } = useFetchAllPages({
     path: ["org", "all"],
     queryKey: [
       "org.all.everyParent",
@@ -99,7 +133,9 @@ export default function AdminOrgEditModal({
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
         orgTypes: parentTypes,
-        ...(includeInactiveCurrentParent ? { statuses: IsActiveStatus } : {}),
+        ...(includeInactiveCurrentParent
+          ? { statuses: IsActiveStatus, onlyMine: true }
+          : {}),
         pageIndex,
         pageSize,
       });
@@ -108,6 +144,7 @@ export default function AdminOrgEditModal({
     enabled: hasParent,
   });
   const router = useRouter();
+  const currentParent = currentParentResponse?.org;
   const parentOptions = (parents ?? [])
     .filter(
       (parent) =>
@@ -115,8 +152,64 @@ export default function AdminOrgEditModal({
         parent.isActive ||
         parent.id === org?.parentId,
     )
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .map(({ id, name, orgType, isActive }) => ({
+      id,
+      name,
+      orgType,
+      isActive,
+    }));
+  if (
+    includeInactiveCurrentParent &&
+    currentParent &&
+    parentTypes.includes(currentParent.orgType) &&
+    !parentOptions.some((parent) => parent.id === currentParent.id)
+  ) {
+    // Keeping the existing parent requires source access only, even when that
+    // parent is inactive or outside the caller's editable destination scope.
+    parentOptions.push(currentParent);
+  }
+  parentOptions.sort((a, b) => a.name.localeCompare(b.name));
+  const hasAlternativeParent = parents?.some(
+    (parent) => parent.isActive && parent.id !== org?.parentId,
+  );
+  const parentChangeDisabled =
+    includeInactiveCurrentParent &&
+    (!canChangeRegionParent ||
+      parentsPending ||
+      parentsError ||
+      !hasAlternativeParent);
+  const regionRecordMessage = orgError
+    ? "Unable to load this Region. Try again before saving."
+    : orgPending
+      ? "Loading Region details. Wait before saving."
+      : "This Region could not be found. Reload before saving.";
+  let parentHelp: string | undefined;
+  if (includeInactiveCurrentParent) {
+    if (regionRecordUnavailable) {
+      parentHelp = regionRecordMessage;
+    } else if (sourceAccessDenied) {
+      parentHelp =
+        "You need editor or admin access to this Region to change its parent.";
+    } else if (isEditingRegion && sourceAccessError) {
+      parentHelp =
+        "Unable to verify Region access. You can save other changes with the current parent; parent changes are unavailable.";
+    } else if (isEditingRegion && sourceAccessPending) {
+      parentHelp =
+        "Checking Region access. You can save other changes with the current parent; parent changes are unavailable.";
+    } else if (parentsError) {
+      parentHelp =
+        "Unable to load editable parent choices. Try again before changing the parent.";
+    } else if (parentsPending) {
+      parentHelp = "Loading editable parent choices...";
+    } else if (!hasAlternativeParent) {
+      parentHelp = isEditingRegion
+        ? "No other editable Area or Territory is available. The current parent is retained, and you can save other Region details."
+        : "No active editable Area or Territory is available.";
+    } else {
+      parentHelp =
+        "You can change the parent to an Area or Territory where you have editor or admin access.";
+    }
+  }
   const renderParentItem = (parent: (typeof parentOptions)[number]) => (
     <SelectItem
       key={`${parent.orgType}-${parent.id}`}
@@ -282,7 +375,7 @@ export default function AdminOrgEditModal({
       >
         <DialogHeader>
           <DialogTitle className="text-center">
-            {org?.id ? "Edit" : "Add"} {label}
+            {org?.id || isEditingRegion ? "Edit" : "Add"} {label}
           </DialogTitle>
         </DialogHeader>
 
@@ -290,6 +383,49 @@ export default function AdminOrgEditModal({
           <form
             onSubmit={form.handleSubmit(
               async (data) => {
+                if (includeInactiveCurrentParent) {
+                  if (regionRecordUnavailable) {
+                    toast.error(regionRecordMessage);
+                    return;
+                  }
+                  if (isEditingRegion && data.id !== org?.id) {
+                    toast.error(
+                      "Region details are not ready. Reload before saving.",
+                    );
+                    return;
+                  }
+                  if (sourceAccessDenied) {
+                    toast.error("You are not authorized to update this region");
+                    return;
+                  }
+                  // Let the API check unchanged-parent updates if the advisory
+                  // source lookup is unavailable. Moves need verified access.
+                  if (!isEditingRegion || data.parentId !== org?.parentId) {
+                    if (!canChangeRegionParent) {
+                      toast.error(
+                        "Region access must be verified before changing the parent",
+                      );
+                      return;
+                    }
+                    if (parentsError || parentsPending) {
+                      toast.error(
+                        "Unable to load editable parent choices. Try again before changing the parent.",
+                      );
+                      return;
+                    }
+                    if (
+                      !parents?.some(
+                        (parent) =>
+                          parent.id === data.parentId && parent.isActive,
+                      )
+                    ) {
+                      toast.error(
+                        "You need editor or admin access to the selected Area or Territory",
+                      );
+                      return;
+                    }
+                  }
+                }
                 setIsSubmitting(true);
                 try {
                   const payload = {
@@ -415,6 +551,7 @@ export default function AdminOrgEditModal({
                             }
                             defaultValue={field.value?.toString()}
                             data-testid={config.parentTestId}
+                            disabled={parentChangeDisabled}
                           >
                             <SelectTrigger>
                               <SelectValue
@@ -443,6 +580,11 @@ export default function AdminOrgEditModal({
                                 : parentOptions.map(renderParentItem)}
                             </SelectContent>
                           </Select>
+                        )}
+                        {includeInactiveCurrentParent && (
+                          <p className="text-sm text-muted-foreground">
+                            {parentHelp}
+                          </p>
                         )}
                         <FormMessage />
                       </FormItem>
@@ -678,7 +820,14 @@ export default function AdminOrgEditModal({
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" className="w-full">
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={
+                      includeInactiveCurrentParent &&
+                      (regionRecordUnavailable || sourceAccessDenied)
+                    }
+                  >
                     {isSubmitting ? (
                       <div className="flex items-center gap-2">
                         Saving... <Spinner className="size-4" />

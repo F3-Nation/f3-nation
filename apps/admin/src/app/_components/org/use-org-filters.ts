@@ -180,15 +180,6 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
     () => new Set(selectedSectors.map((sector) => sector.id)),
     [selectedSectors],
   );
-  const availableAreas = useMemo(
-    () =>
-      selectedSectorIds.size === 0
-        ? areas
-        : areas?.filter((area) =>
-            isDescendantOfAny(area, selectedSectorIds, orgById),
-          ),
-    [areas, orgById, selectedSectorIds],
-  );
   const availableTerritories = useMemo(
     () =>
       selectedSectorIds.size === 0
@@ -198,16 +189,32 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
           ),
     [territories, orgById, selectedSectorIds],
   );
-  const selectedAreas = useMemo(
-    () => keepOffered(pickedFilters.selectedAreas, availableAreas),
-    [pickedFilters.selectedAreas, availableAreas],
-  );
   const selectedTerritories = useMemo(
     () => keepOffered(pickedFilters.selectedTerritories, availableTerritories),
     [pickedFilters.selectedTerritories, availableTerritories],
   );
-  // Store the drops too, so a dropped selection cannot return when the sector
-  // selection later changes. Each pass strictly shrinks the stored picks.
+  const selectedTerritoryIds = useMemo(
+    () => new Set(selectedTerritories.map((territory) => territory.id)),
+    [selectedTerritories],
+  );
+  const availableAreas = useMemo(
+    () =>
+      areas?.filter(
+        (area) =>
+          (selectedSectorIds.size === 0 ||
+            isDescendantOfAny(area, selectedSectorIds, orgById)) &&
+          (config.filters !== "sectorTerritoryArea" ||
+            selectedTerritoryIds.size === 0 ||
+            isDescendantOfAny(area, selectedTerritoryIds, orgById)),
+      ),
+    [areas, orgById, selectedSectorIds, selectedTerritoryIds, config.filters],
+  );
+  const selectedAreas = useMemo(
+    () => keepOffered(pickedFilters.selectedAreas, availableAreas),
+    [pickedFilters.selectedAreas, availableAreas],
+  );
+  // Store the drops too, so a dropped selection cannot return when Sector or
+  // Territory selections later clear. Each pass strictly shrinks the picks.
   if (
     selectedSectors.length !== pickedFilters.selectedSectors.length ||
     selectedAreas.length !== pickedFilters.selectedAreas.length ||

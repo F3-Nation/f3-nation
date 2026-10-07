@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -28,6 +29,8 @@ import type * as ModalStore from "~/utils/store/modal";
 
 const mocks = vi.hoisted(() => ({
   byId: vi.fn<(input: unknown) => Promise<unknown>>(),
+  parentById: vi.fn<(input: unknown) => Promise<unknown>>(),
+  canEditRegions: vi.fn<(input: unknown) => Promise<unknown>>(),
   all: vi.fn<(input: unknown) => Promise<unknown>>(),
   save: vi.fn<(input: Record<string, unknown>) => Promise<unknown>>(),
   invalidate: vi.fn(),
@@ -114,7 +117,10 @@ vi.mock("~/orpc/react", async () => ({
           enabled: boolean;
         }) => ({
           queryKey: ["org", "byId", input],
-          queryFn: () => mocks.byId(input),
+          queryFn: () =>
+            input && typeof input === "object" && "orgType" in input
+              ? mocks.byId(input)
+              : mocks.parentById(input),
           enabled,
         }),
       },
@@ -138,6 +144,21 @@ vi.mock("~/orpc/react", async () => ({
         }),
       },
     },
+    request: {
+      canEditRegions: {
+        queryOptions: ({
+          input,
+          enabled,
+        }: {
+          input: unknown;
+          enabled: boolean;
+        }) => ({
+          queryKey: ["request", "canEditRegions", input],
+          queryFn: () => mocks.canEditRegions(input),
+          enabled,
+        }),
+      },
+    },
   },
 }));
 // useFetchAllPages (used for the parent-options dropdown) calls the
@@ -155,13 +176,16 @@ vi.mock("@acme/ui/select", () => ({
     value,
     onValueChange,
     children,
+    disabled,
   }: {
     value?: string;
     onValueChange: (value: string) => void;
     children: ReactNode;
+    disabled?: boolean;
   }) => (
     <select
       value={value}
+      disabled={disabled}
       onChange={(event) => onValueChange(event.target.value)}
     >
       {children}
@@ -239,6 +263,8 @@ const parentOptions = () =>
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.byId.mockResolvedValue({ org: record });
+  mocks.parentById.mockResolvedValue({ org: null });
+  mocks.canEditRegions.mockResolvedValue({ results: [{ success: true }] });
   mocks.all.mockResolvedValue({ orgs: parents });
   mocks.save.mockResolvedValue({ org: record });
 });
@@ -551,6 +577,7 @@ describe("Region Area or Territory parent selection", () => {
     expect(mocks.all).toHaveBeenCalledWith({
       orgTypes: ["area", "territory"],
       statuses: ["active", "inactive"],
+      onlyMine: true,
       pageIndex: 0,
       pageSize: 100,
     });
@@ -710,6 +737,262 @@ describe("Region Area or Territory parent selection", () => {
       await waitFor(() => expect(parentSelect().value).toBe(String(newParent)));
     },
   );
+
+  it("allows a non-nation-admin with source and destination access to move to an editable parent", async () => {
+    mocks.all.mockResolvedValue({ orgs: [regionParents[2]], total: 1 });
+    mocks.parentById.mockResolvedValue({ org: regionParents[0] });
+    mount("region", record.id);
+    await waitFor(() => expect(parentSelect().value).toBe("2"));
+    await waitFor(() => expect(parentSelect().disabled).toBe(false));
+    expect(mocks.canEditRegions).toHaveBeenCalledWith({ orgIds: [record.id] });
+    expect(mocks.parentById).toHaveBeenCalledWith({ id: 2 });
+    expect(parentOptions().map((option) => option.value)).toEqual(["2", "12"]);
+
+    fireEvent.change(parentSelect(), { target: { value: "12" } });
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]![0].parentId).toBe(12);
+  });
+
+  it.each(["area", "territory"])(
+    "preserves an inaccessible inactive current %s for an ordinary unchanged-parent save",
+    async (orgType) => {
+      const current = {
+        id: 20,
+        name: "Inactive Current Parent",
+        orgType,
+        isActive: false,
+      };
+      mocks.byId.mockResolvedValue({
+        org: { ...record, parentId: current.id },
+      });
+      mocks.parentById.mockResolvedValue({ org: current });
+      mocks.all.mockResolvedValue({ orgs: [], total: 0 });
+      mount("region", record.id);
+      await waitFor(() => expect(parentSelect().value).toBe("20"));
+      expect(parentSelect().disabled).toBe(true);
+      expect(parentOptions().map((option) => option.value)).toEqual(["20"]);
+      await waitFor(() =>
+        expect(
+          screen.getByRole<HTMLButtonElement>("button", {
+            name: "Save Changes",
+          }).disabled,
+        ).toBe(false),
+      );
+      fireEvent.change(field("Name"), { target: { value: "Renamed Region" } });
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+        name: "Renamed Region",
+        parentId: current.id,
+      });
+    },
+  );
+
+  it("does not permit a move with destination access alone", async () => {
+    mocks.canEditRegions.mockResolvedValue({ results: [{ success: false }] });
+    mount("region", record.id);
+    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    expect(parentSelect().disabled).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+        .disabled,
+    ).toBe(true);
+    fireEvent.change(parentSelect(), { target: { value: "12" } });
+    fireEvent.submit(field("Name").closest("form")!);
+
+    await waitFor(() =>
+      expect(mocks.error).toHaveBeenCalledWith(
+        "You are not authorized to update this region",
+      ),
+    );
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it.each(["pending", "failed"])(
+    "permits an ordinary unchanged-parent save while source access is %s",
+    async (state) => {
+      if (state === "pending") {
+        mocks.canEditRegions.mockImplementation(
+          () => new Promise(() => undefined),
+        );
+      } else {
+        mocks.canEditRegions.mockRejectedValue(
+          new Error("Permission unavailable"),
+        );
+      }
+      mount("region", record.id);
+      await waitFor(() => expect(field("Name").value).toBe(record.name));
+      if (state === "failed") {
+        await screen.findByText(
+          "Unable to verify Region access. You can save other changes with the current parent; parent changes are unavailable.",
+        );
+      }
+      expect(parentSelect().disabled).toBe(true);
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+          .disabled,
+      ).toBe(false);
+      fireEvent.change(field("Name"), { target: { value: "Renamed Region" } });
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+        id: record.id,
+        name: "Renamed Region",
+        parentId: record.parentId,
+      });
+    },
+  );
+
+  it.each(["pending", "failed"])(
+    "rejects an injected parent change while source access is %s",
+    async (state) => {
+      if (state === "pending") {
+        mocks.canEditRegions.mockImplementation(
+          () => new Promise(() => undefined),
+        );
+      } else {
+        mocks.canEditRegions.mockRejectedValue(
+          new Error("Permission unavailable"),
+        );
+      }
+      mount("region", record.id);
+      await waitFor(() => expect(parentSelect().value).toBe("2"));
+      expect(parentSelect().disabled).toBe(true);
+      fireEvent.change(parentSelect(), { target: { value: "12" } });
+      fireEvent.submit(field("Name").closest("form")!);
+
+      await waitFor(() =>
+        expect(mocks.error).toHaveBeenCalledWith(
+          "Region access must be verified before changing the parent",
+        ),
+      );
+      expect(mocks.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["pending", "failed", "missing"])(
+    "does not submit an edit as creation when the Region record is %s",
+    async (state) => {
+      if (state === "pending") {
+        mocks.byId.mockImplementation(() => new Promise(() => undefined));
+      } else if (state === "failed") {
+        mocks.byId.mockRejectedValue(new Error("Region unavailable"));
+      } else {
+        mocks.byId.mockResolvedValue({ org: null });
+      }
+      mount("region", record.id);
+      const message =
+        state === "pending"
+          ? "Loading Region details. Wait before saving."
+          : state === "failed"
+            ? "Unable to load this Region. Try again before saving."
+            : "This Region could not be found. Reload before saving.";
+      await screen.findByText(message);
+      await waitFor(() => expect(parentOptions()).toHaveLength(4));
+      expect(screen.getByRole("heading").textContent).toBe("Edit Region");
+      expect(parentSelect().disabled).toBe(true);
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+          .disabled,
+      ).toBe(true);
+      fireEvent.change(field("Name"), {
+        target: { value: "Attempted create" },
+      });
+      fireEvent.change(parentSelect(), { target: { value: "12" } });
+      fireEvent.submit(field("Name").closest("form")!);
+
+      await waitFor(() => expect(mocks.error).toHaveBeenCalledWith(message));
+      expect(mocks.save).not.toHaveBeenCalled();
+      expect(mocks.upload).not.toHaveBeenCalled();
+    },
+  );
+
+  it("locks the parent picker when only the current active editable parent is available and still saves ordinary changes", async () => {
+    mocks.all.mockResolvedValue({ orgs: [regionParents[0]], total: 1 });
+    mount("region", record.id);
+    await screen.findByText(
+      "No other editable Area or Territory is available. The current parent is retained, and you can save other Region details.",
+    );
+    expect(parentSelect().disabled).toBe(true);
+    expect(parentSelect().value).toBe("2");
+    fireEvent.change(field("Name"), { target: { value: "Renamed Region" } });
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+      id: record.id,
+      name: "Renamed Region",
+      parentId: record.parentId,
+    });
+  });
+
+  it("keeps an unchanged-parent save available when destination access cannot be loaded", async () => {
+    mocks.parentById.mockResolvedValue({ org: regionParents[0] });
+    mocks.all.mockRejectedValue(new Error("Parent options unavailable"));
+    mount("region", record.id);
+    await screen.findByText(
+      "Unable to load editable parent choices. Try again before changing the parent.",
+    );
+    expect(parentSelect().disabled).toBe(true);
+    expect(parentSelect().value).toBe("2");
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]![0].parentId).toBe(2);
+  });
+
+  it.each(["edit", "create"])(
+    "rejects a stale chosen destination after a failed parent-choice refetch (%s)",
+    async (mode) => {
+      mount("region", mode === "edit" ? record.id : undefined);
+      await waitFor(() => expect(parentSelect().disabled).toBe(false));
+      if (mode === "create") {
+        fireEvent.change(field("Name"), { target: { value: "New Region" } });
+      }
+      fireEvent.change(parentSelect(), { target: { value: "12" } });
+      mocks.all.mockRejectedValue(new Error("Parent options unavailable"));
+      await act(async () => {
+        await clients.at(-1)!.invalidateQueries({ queryKey: [["org", "all"]] });
+      });
+      await screen.findByText(
+        "Unable to load editable parent choices. Try again before changing the parent.",
+      );
+      expect(parentSelect().value).toBe("12");
+      expect(parentSelect().disabled).toBe(true);
+      save();
+
+      await waitFor(() =>
+        expect(mocks.error).toHaveBeenCalledWith(
+          "Unable to load editable parent choices. Try again before changing the parent.",
+        ),
+      );
+      expect(mocks.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a parent outside the editable destination choices before submitting", async () => {
+    mocks.all.mockResolvedValue({ orgs: [regionParents[2]], total: 1 });
+    mocks.parentById.mockResolvedValue({ org: regionParents[0] });
+    mount("region", record.id);
+    await waitFor(() => expect(parentSelect().disabled).toBe(false));
+    // Simulate a value injected past the disabled/filtered select boundary.
+    const unavailable = document.createElement("option");
+    unavailable.value = "99";
+    parentSelect().append(unavailable);
+    fireEvent.change(parentSelect(), { target: { value: "99" } });
+    save();
+
+    await waitFor(() =>
+      expect(mocks.error).toHaveBeenCalledWith(
+        "You need editor or admin access to the selected Area or Territory",
+      ),
+    );
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
 });
 
 describe("Nation exceptions", () => {

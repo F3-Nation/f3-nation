@@ -1296,6 +1296,82 @@ describe("Org Router", () => {
         expect(await listedCounts(client, named)).toEqual(before);
       });
 
+      it("allows a Region-only editor to change ordinary fields but denies moves to an Area or Territory", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const client = createTestClient();
+        const source = await createSectorAndTerritory(client);
+        const destination = await createSectorAndTerritory(client);
+        const sourceArea = await createOrg(client, "area", source.territory.id);
+        const destinationArea = await createOrg(
+          client,
+          "area",
+          destination.territory.id,
+        );
+        const region = await createOrg(client, "region", sourceArea.id);
+        await createOrg(client, "ao", region.id);
+        const editedRegion = {
+          ...region,
+          name: `Region-only edit ${uniqueId()}`,
+        };
+        const named = {
+          sourceSector: source.sector,
+          sourceTerritory: source.territory,
+          sourceArea,
+          destinationSector: destination.sector,
+          destinationTerritory: destination.territory,
+          destinationArea,
+          region: editedRegion,
+        };
+
+        await mockAuthWithSession(
+          createEditorSession({ orgId: region.id, orgName: region.name }),
+        );
+        const saved = await saveRegion(client, editedRegion, sourceArea.id);
+        expect(saved.org).toMatchObject({
+          id: region.id,
+          name: editedRegion.name,
+          parentId: sourceArea.id,
+        });
+
+        const snapshot = async () => {
+          const persisted = (await client.org.byId({ id: region.id })).org;
+          return {
+            name: persisted?.name,
+            parentId: persisted?.parentId,
+            counts: await listedCounts(client, named),
+          };
+        };
+        const unchanged = {
+          name: editedRegion.name,
+          parentId: sourceArea.id,
+          counts: {
+            sourceSector: 1,
+            sourceTerritory: 1,
+            sourceArea: 1,
+            destinationSector: 0,
+            destinationTerritory: 0,
+            destinationArea: 0,
+            region: 1,
+          },
+        };
+        expect(await snapshot()).toEqual(unchanged);
+
+        for (const parent of [destinationArea, destination.territory]) {
+          await expect(
+            saveRegion(
+              client,
+              { ...editedRegion, name: `Rejected Region edit ${uniqueId()}` },
+              parent.id,
+            ),
+          ).rejects.toMatchObject({
+            code: "UNAUTHORIZED",
+            message:
+              "You are not authorized to move this org to the destination parent organization",
+          });
+          expect(await snapshot()).toEqual(unchanged);
+        }
+      });
+
       it.each([
         { sourceType: "area", destinationType: "territory" },
         { sourceType: "territory", destinationType: "area" },
