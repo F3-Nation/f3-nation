@@ -46,7 +46,7 @@ the final index definition. Keep the Drizzle journal and snapshot consistent.
 The deployment migration must execute transactionally so an error cannot leave
 the columns as text or the index absent.
 Bound lock acquisition with a transaction-local timeout and refresh the existing
-AO-count trigger function after replacing the enum in both migration directions.
+AO-count trigger function after replacing the enum.
 Verify writes from a backend warmed before each enum replacement.
 
 Territory display metadata uses `Territory`, `Territories`, the public URL

@@ -30,7 +30,21 @@ later recreates every dependent view with the same definition, options, owner,
 grants and comment.
 
 List what depends on the enum, and on any column that uses it, in the target
-database through `pg_depend` and `pg_rewrite` before writing the migration.
+database before writing the migration. Replace the placeholders with the enum,
+the tables that have a column of that type, and the column name:
+
+```sql
+SELECT DISTINCT r.ev_class::regclass AS view
+FROM pg_depend d JOIN pg_rewrite r ON r.oid = d.objid
+WHERE d.classid = 'pg_rewrite'::regclass
+  AND ((d.refclassid = 'pg_type'::regclass
+      AND d.refobjid = 'public.<enum_type>'::regtype)
+    OR (d.refclassid = 'pg_class'::regclass
+      AND d.refobjid IN ('public.<table>'::regclass)
+      AND d.refobjsubid = (SELECT attnum FROM pg_attribute
+        WHERE attrelid = d.refobjid AND attname = '<column>')));
+```
+
 Views stacked on those views are not listed; follow the dependencies.
 
 ### If you do recreate an enum
@@ -87,7 +101,8 @@ WHERE o.ao_count IS DISTINCT FROM e.expected;
 ```
 
 `SELECT recount_org_ao_counts();` repairs every count and returns how many rows
-it changed. Run it after any direct SQL edit that changes an organization's
-parent, active status, or type while the trigger is disabled or bypassed. An
+it changed. Run it after any direct SQL edit that inserts or deletes an
+organization, or changes its parent, active status, or type, while the trigger
+is disabled or bypassed. An
 `app.disable_ao_count_trigger` setting of `true` skips the trigger; an empty or
 `false` value does not.
