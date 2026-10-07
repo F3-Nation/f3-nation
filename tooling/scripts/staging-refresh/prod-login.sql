@@ -7,10 +7,18 @@
 -- password policy (setup.sh appends Aa9-_ to a hex token).
 \set ON_ERROR_STOP on
 \getenv pw STAGING_REFRESH_PW
+\getenv pwset STAGING_REFRESH_PW_SET
 
-SELECT 'CREATE ROLE staging_refresh LOGIN'
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'staging_refresh') \gexec
+-- Set the password only when the login is new or setup.sh just generated a new one
+-- (its secret was missing). Re-setting the same password on a re-run is refused by
+-- Cloud SQL's password policy ("should not reuse recent passwords").
+SELECT NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'staging_refresh') AS role_is_new,
+  :'pwset' = '1' AS pw_is_new \gset
+\if :role_is_new
+SELECT format('CREATE ROLE staging_refresh LOGIN PASSWORD %L', :'pw') \gexec
+\elif :pw_is_new
 SELECT format('ALTER ROLE staging_refresh WITH LOGIN PASSWORD %L', :'pw') \gexec
+\endif
 -- An admin login that isn't a superuser can't even say NOSUPERUSER, so check the
 -- attributes instead of setting them.
 DO $$ BEGIN

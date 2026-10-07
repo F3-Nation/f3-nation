@@ -95,24 +95,27 @@ store_secret() { # name value
   echo "stored $1"
 }
 
-# psql as spuds through a local proxy; the SQL file reads STAGING_REFRESH_PW from the env.
-run_sql() { # instance port database spuds-secret sql-file password
+# psql as spuds through a local proxy; the SQL file reads STAGING_REFRESH_PW and
+# STAGING_REFRESH_PW_SET (1 = a newly generated password that must be applied) from the env.
+run_sql() { # instance port database spuds-secret sql-file password password-is-new
   cloud-sql-proxy "$PROJECT:$REGION:$1" --port "$2" --address 127.0.0.1 >"$TMP/proxy-$1.log" 2>&1 &
   PROXY_PID=$!
   for _ in $(seq 1 30); do pg_isready -h 127.0.0.1 -p "$2" -q 2>/dev/null && break; sleep 1; done
-  PGPASSWORD="$(secret_value "$4")" STAGING_REFRESH_PW="$6" \
+  PGPASSWORD="$(secret_value "$4")" STAGING_REFRESH_PW="$6" STAGING_REFRESH_PW_SET="$7" \
     psql "host=127.0.0.1 port=$2 dbname=$3 user=spuds" -X -q -v ON_ERROR_STOP=1 -P pager=off -f "$5"
   kill "$PROXY_PID"; wait "$PROXY_PID" 2>/dev/null || true; PROXY_PID=""
 }
 
-login_password() { # secret-name -> existing password, or a new one stored in the secret
-  local pw
-  if pw="$(secret_value "$1")" && [ -n "$pw" ]; then
-    printf '%s' "$pw"
+# Sets LOGIN_PW to the login's password from its secret, or to a new one it stores there;
+# LOGIN_PW_SET=1 only for a new one (the SQL then applies it). Runs in this shell, not a
+# subshell, so both globals survive.
+prepare_login() { # secret-name
+  if LOGIN_PW="$(secret_value "$1")" && [ -n "$LOGIN_PW" ]; then
+    LOGIN_PW_SET=0
   else
-    pw="$(new_pw)"
-    store_secret "$1" "$pw" >&2
-    printf '%s' "$pw"
+    LOGIN_PW="$(new_pw)"
+    store_secret "$1" "$LOGIN_PW" >&2
+    LOGIN_PW_SET=1
   fi
 }
 
@@ -130,11 +133,13 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   fi
 
   say "2. DB login $DB_USER on prod ($PROD_INSTANCE/$PROD_DB, read-only)"
+  prepare_login "$SECRET_PROD"
   run_sql "$PROD_INSTANCE" 5481 "$PROD_DB" DB_SPUDS_PASSWORD_PROD "$HERE/prod-login.sql" \
-    "$(login_password "$SECRET_PROD")"
+    "$LOGIN_PW" "$LOGIN_PW_SET"
   say "2. DB login $DB_USER on staging ($STAGING_INSTANCE/$STAGING_DB, table owners)"
+  prepare_login "$SECRET_STAGING"
   run_sql "$STAGING_INSTANCE" 5482 "$STAGING_DB" DB_SPUDS_PASSWORD_STAGING "$HERE/staging-login.sql" \
-    "$(login_password "$SECRET_STAGING")"
+    "$LOGIN_PW" "$LOGIN_PW_SET"
 
   say "3. secrets + Cloud SQL access for the service account"
   for s in "$SECRET_PROD" "$SECRET_STAGING" "$SALT_SECRET"; do
