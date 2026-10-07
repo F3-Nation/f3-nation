@@ -49,6 +49,7 @@ export const isDescendantOfAny = <T extends OrgHierarchyNode>(
 // The deepest tier with a selection decides the filter; see OrgHierarchyFilter
 // for the policy this applies.
 export const getHierarchyParentOrgIds = <
+  K extends string,
   T extends OrgHierarchyNode & { isActive: boolean },
 >({
   tiers,
@@ -57,12 +58,13 @@ export const getHierarchyParentOrgIds = <
   hierarchyOrgs,
   orgById,
 }: {
-  tiers: readonly string[];
-  match: { tiers: readonly string[]; includeInactive: boolean };
-  selected: Readonly<Record<string, readonly T[] | undefined>>;
+  tiers: readonly K[];
+  match: { tiers: readonly K[]; includeInactive: boolean };
+  selected: Readonly<Partial<Record<K, readonly T[]>>>;
   hierarchyOrgs: readonly T[] | undefined;
   orgById: ReadonlyMap<number, T>;
-}) => {
+}): number[] | undefined => {
+  const matchTiers: readonly string[] = match.tiers;
   for (const tier of [...tiers].reverse()) {
     const selectedOrgs = selected[tier];
     if (!selectedOrgs?.length) continue;
@@ -77,7 +79,7 @@ export const getHierarchyParentOrgIds = <
           ? ancestorIds.has(org.id) ||
             isDescendantOfAny(org, ancestorIds, orgById)
           : org.isActive &&
-            match.tiers.includes(org.orgType) &&
+            matchTiers.includes(org.orgType) &&
             isDescendantOfAny(org, ancestorIds, orgById),
       )
       .map((org) => org.id);

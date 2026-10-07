@@ -1,8 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import { IsActiveStatus } from "@acme/shared/app/enums";
 import type { OrgType } from "@acme/shared/app/enums";
 import type * as OrgHierarchy from "@acme/shared/app/org-hierarchy";
+
 import type { OrgAdminConfig } from "./org-admin-config";
 
 interface TestOrg {
@@ -212,7 +214,7 @@ describe("a tier added by configuration only", () => {
     expect(result.current.parentOrgIds).toBeUndefined();
   });
 
-  it("requests nothing while the hierarchy is unavailable", () => {
+  it("matches no orgs while the hierarchy is unavailable", () => {
     const { result, rerender, toggle } = setup();
 
     toggle(0, sectorOne.id);
@@ -220,6 +222,16 @@ describe("a tier added by configuration only", () => {
     rerender();
 
     expect(result.current.parentOrgIds).toEqual([-1]);
+  });
+
+  it("sends a selection in a match tier as-is while the hierarchy is unavailable", () => {
+    const { result, rerender, toggle } = setup();
+
+    toggle(2, territoryOne.id);
+    mocks.hierarchyOrgs = undefined;
+    rerender();
+
+    expect(result.current.parentOrgIds).toEqual([territoryOne.id]);
   });
 
   it("clears its selections on reset", () => {

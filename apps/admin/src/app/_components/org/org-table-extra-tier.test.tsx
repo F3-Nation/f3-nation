@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OrgType } from "@acme/shared/app/enums";
+
 import type * as OrgHierarchy from "@acme/shared/app/org-hierarchy";
+
 import type * as OrgAdminConfigModule from "./org-admin-config";
 
 interface TestOrg {
@@ -37,7 +38,7 @@ vi.mock("~/orpc/react", () => ({
 }));
 
 // A tier the OrgType enum does not have, added through configuration only: a
-// display entry, and one table config. Nothing in the hook or the table knows it.
+// display entry, and a filter config on the Area table. Nothing in the hook or the table knows it.
 vi.mock("@acme/shared/app/org-hierarchy", async (importOriginal) => {
   const actual = await importOriginal<typeof OrgHierarchy>();
   return {
@@ -58,7 +59,8 @@ vi.mock("./org-admin-config", async (importOriginal) => {
     ...actual,
     orgAdminConfig: {
       ...actual.orgAdminConfig,
-      zone: {
+      area: {
+        ...actual.orgAdminConfig.area,
         add: false,
         serverPagination: true,
         serverSorting: false,
@@ -133,8 +135,6 @@ const org = (
   isActive = true,
 ): TestOrg => ({ id, parentId, name: `${orgType} ${id}`, orgType, isActive });
 
-const zone = "zone" as OrgType;
-
 const latestResultQuery = () =>
   [...mocks.queryInputs]
     .reverse()
@@ -153,7 +153,7 @@ describe("OrgTable with a tier added by configuration only", () => {
   });
 
   it("renders a picker for every tier in both the desktop strip and the mobile sheet", () => {
-    render(<OrgTable orgType={zone} />);
+    render(<OrgTable orgType="area" />);
 
     for (const testId of ["sector-2", "zone-3", "territory-4"]) {
       expect(screen.getAllByTestId(testId)).toHaveLength(2);
@@ -166,7 +166,7 @@ describe("OrgTable with a tier added by configuration only", () => {
   });
 
   it("sends the filter that tier's configuration declares", () => {
-    render(<OrgTable orgType={zone} />);
+    render(<OrgTable orgType="area" />);
     expect(latestResultQuery()?.parentOrgIds).toBeUndefined();
 
     fireEvent.click(screen.getAllByTestId("sector-2")[0]!);

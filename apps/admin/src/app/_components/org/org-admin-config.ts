@@ -13,10 +13,11 @@ import {
  * `match` turns selections into the query's `parentOrgIds`. The deepest tier
  * with a selection decides:
  * - In `match.tiers`: its selected IDs are sent as-is.
- * - Otherwise it expands to the loaded orgs beneath it, and the table's
+ * - Otherwise it expands to the loaded orgs beneath it (those whose type is in
+ *   the table's `ancestorTypes`), and the table's
  *   active/inactive policy applies:
- *   - `includeInactive: true` keeps the selection plus every descendant of any
- *     loaded type, active or not, so rows under an inactive parent stay
+ *   - `includeInactive: true` keeps the selection plus every descendant whose
+ *     type is in `ancestorTypes`, active or not, so rows under an inactive parent stay
  *     reachable (Territory and Area tables).
  *   - `includeInactive: false` keeps only active descendants whose type is in
  *     `match.tiers` (Region table: its Area filter is active-only, so a sector
@@ -25,8 +26,8 @@ import {
  * empty rather than unfiltered.
  */
 interface OrgHierarchyFilter {
-  tiers: OrgType[];
-  match: { tiers: OrgType[]; includeInactive: boolean };
+  tiers: readonly OrgType[];
+  match: { tiers: readonly OrgType[]; includeInactive: boolean };
 }
 
 interface OrgAdminConfigBase {
