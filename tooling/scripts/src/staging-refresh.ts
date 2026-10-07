@@ -785,10 +785,13 @@ async function main(): Promise<number> {
     loadDump: path.join(ctx.work, "load.dump"),
     backup: path.join(ctx.work, "staging-backup.dump"),
     toc: path.join(ctx.work, "list.toc"),
+    reusedStash: path.join(ctx.work, "reused-stash.dump"),
   };
   // Staging state, for the rollback decision.
   let wiped = false;
   const stashedHere: string[] = [];
+  // Dump of the stash schemas a --reuse-existing-stash run found, if any.
+  let reusedStash: string | undefined;
   let plan: LoadPlan | undefined;
   let savedFks: ForeignKey[] = [];
 
@@ -1142,6 +1145,33 @@ async function main(): Promise<number> {
         }
         log(`   backup: ${backedUp} tables`);
 
+        // --reuse-existing-stash: the restore below consumes the stash it
+        // reuses, and a rollback re-stashes from whatever staging holds then.
+        // Snapshot the reused stash exactly, so a successful rollback can put
+        // staging back as it was, stash included: it may be the only copy of
+        // staging's own keys (a backup taken after a failed rollback lacks
+        // them).
+        const reused: string[] = [];
+        for (const schema of Object.values(STASH_SCHEMAS)) {
+          if (await hasSchema(stg, schema)) reused.push(schema);
+        }
+        if (reused.length > 0) {
+          await pgTool(
+            "pg_dump",
+            [
+              "-Fc",
+              "--no-owner",
+              "--no-privileges",
+              ...reused.flatMap((sc) => ["-n", `"${sc}"`]),
+              "-f",
+              files.reusedStash,
+            ],
+            ctx.stagingUrl,
+          );
+          reusedStash = files.reusedStash;
+          log(`   snapshot of the reused ${reused.join(", ")} taken`);
+        }
+
         for (const [kind, script] of [
           ["keys", "staging-api-keys"],
           ["slack", "staging-slack"],
@@ -1316,6 +1346,7 @@ async function main(): Promise<number> {
         backupTables,
         savedFks,
         stashedHere,
+        reusedStash,
       );
       if (!restored) return 2;
       log(
@@ -1442,6 +1473,7 @@ async function rollback(
   load: string[],
   savedFks: ForeignKey[],
   stashedHere: string[],
+  reusedStash: string | undefined,
 ): Promise<boolean> {
   log(
     "\n== ROLLBACK: restoring staging's load set from the backup taken before the load",
@@ -1506,14 +1538,37 @@ async function rollback(
       if (reverted > 0) log(`   ${reverted} kept row(s) re-pointed back`);
       const readded = await addMissingFks(sql, savedFks);
       log(`   ${readded} FKs re-added (NOT VALID), ${savedFks.length} in all`);
-      // The backup was taken before the stash, so it already holds staging's
-      // own API keys and Slack rows.
-      for (const schema of stashedHere) {
-        await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
-        log(`   dropped ${schema} (the backup has those rows)`);
+      // Put the stash schemas back as they were before the run: every one
+      // this run created or re-created goes (the backup was taken before
+      // the stash, so it holds those rows), and a reused one comes back
+      // exactly from its snapshot. The FKs are all back, so the FK stash
+      // goes either way.
+      for (const schema of [...Object.values(STASH_SCHEMAS), FK_STASH]) {
+        if (await hasSchema(sql, schema)) {
+          await sql.unsafe(`DROP SCHEMA ${schema} CASCADE`);
+          log(
+            `   dropped ${schema}${stashedHere.includes(schema) ? " (the backup has those rows)" : ""}`,
+          );
+        }
       }
-      await sql.unsafe(`DROP SCHEMA IF EXISTS ${FK_STASH} CASCADE`);
-      log(`   ${await resetSequences(sql)} sequences reset`);
+      if (reusedStash) {
+        await pgTool(
+          "pg_restore",
+          [
+            "--no-owner",
+            "--no-privileges",
+            "--single-transaction",
+            "--exit-on-error",
+            "-d",
+            ctx.stagingDb,
+            reusedStash,
+          ],
+          ctx.stagingUrl,
+        );
+        log("   put the reused stash back exactly as the run found it");
+      }
+      // No sequence reset: the backup's SEQUENCE SET entries put back the exact
+      // values staging had (resetting to max(id) would change an empty table's).
       for (const t of load) await sql.unsafe(`ANALYZE ${quoteTable(t)}`);
       const toValidate = savedFks.filter((fk) => fk.validated);
       const v = await validateFks(sql, toValidate);
