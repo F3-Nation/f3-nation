@@ -73,7 +73,10 @@ Territory containing both direct Regions and Areas with their own Regions.
   and a successfully loaded, active, authorized destination. Record and permission
   lookup failures are described as loading failures, separately from access denial;
   a failed parent-list refetch prevents a changed-parent save and explains the
-  loading failure. Existing Region fields, logo, metadata, validation, and API
+  loading failure. If a parent change is already selected, a "Keep current parent"
+  action restores the saved parent while preserving other unsaved details, even
+  when advisory source-access or parent-choice queries fail. Existing Region
+  fields, logo, metadata, validation, and API
   success/error handling remain unchanged.
 - **AC-4** — GIVEN a Region directly beneath a Territory WHEN its row is shown
   THEN its Area is blank and its Sector is resolved through the Territory. The
@@ -117,7 +120,8 @@ Territory containing both direct Regions and Areas with their own Regions.
 - **AC-14** — GIVEN a hierarchy refetch WHEN a selected organization becomes
   inactive or moves outside the selected Sector or Territory scope THEN existing
   reconciliation removes that selection. Clearing an ancestor filter later does
-  not restore it.
+  not restore it. Removing a selection resets pagination to the first page;
+  a refetch that leaves selections unchanged preserves the current page.
 - **AC-15** — GIVEN a hierarchy spanning multiple API pages WHEN filtering Regions
   THEN all hierarchy pages and inactive ancestors participate in matching, rather
   than only the loaded Region page or first hierarchy page. Parent filtering occurs
@@ -208,6 +212,11 @@ access to the Region, without requiring access to its current parent.
   or failed Region record block saving. A failed parent-list refetch reports its
   loading failure without submitting a move or creation; an only-current-parent
   selector explains the lack of alternatives and permits an unchanged save.
+- After a parent choice or advisory source-access refetch fails, "Keep current
+  parent" restores only the saved parent and permits saving other edited details.
+- A hierarchy refetch that reparents a selected Area resets a later Region page
+  to the first page and shows remaining matching Regions; an unchanged hierarchy
+  refetch preserves the current page.
 
 Run focused regressions, browser verification for the changed flows, and
 `pnpm ci:local` before declaring the change ready. Use synthetic fixtures and

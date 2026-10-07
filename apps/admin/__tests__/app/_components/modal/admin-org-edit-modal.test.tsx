@@ -801,6 +801,9 @@ describe("Region Area or Territory parent selection", () => {
         .disabled,
     ).toBe(true);
     fireEvent.change(parentSelect(), { target: { value: "12" } });
+    expect(
+      screen.queryByRole("button", { name: "Keep current parent" }),
+    ).toBeNull();
     fireEvent.submit(field("Name").closest("form")!);
 
     await waitFor(() =>
@@ -903,6 +906,9 @@ describe("Region Area or Territory parent selection", () => {
         target: { value: "Attempted create" },
       });
       fireEvent.change(parentSelect(), { target: { value: "12" } });
+      expect(
+        screen.queryByRole("button", { name: "Keep current parent" }),
+      ).toBeNull();
       fireEvent.submit(field("Name").closest("form")!);
 
       await waitFor(() => expect(mocks.error).toHaveBeenCalledWith(message));
@@ -963,6 +969,11 @@ describe("Region Area or Territory parent selection", () => {
       );
       expect(parentSelect().value).toBe("12");
       expect(parentSelect().disabled).toBe(true);
+      if (mode === "create") {
+        expect(
+          screen.queryByRole("button", { name: "Keep current parent" }),
+        ).toBeNull();
+      }
       save();
 
       await waitFor(() =>
@@ -971,6 +982,75 @@ describe("Region Area or Territory parent selection", () => {
         ),
       );
       expect(mocks.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["parent choices", "source access"])(
+    "restores the current parent without losing detail edits after a failed %s refetch",
+    async (lookup) => {
+      mount("region", record.id);
+      await waitFor(() => expect(parentSelect().disabled).toBe(false));
+      expect(
+        screen.queryByRole("button", { name: "Keep current parent" }),
+      ).toBeNull();
+      fireEvent.change(field("Name"), { target: { value: "Renamed Region" } });
+      fireEvent.change(field("Website"), {
+        target: { value: "https://renamed.example.com" },
+      });
+      fireEvent.change(parentSelect(), { target: { value: "12" } });
+
+      if (lookup === "parent choices") {
+        mocks.all.mockRejectedValue(new Error("Parent options unavailable"));
+      } else {
+        mocks.canEditRegions.mockRejectedValue(
+          new Error("Permission unavailable"),
+        );
+      }
+      await act(async () => {
+        await clients.at(-1)!.invalidateQueries({
+          queryKey:
+            lookup === "parent choices"
+              ? [["org", "all"]]
+              : ["request", "canEditRegions"],
+        });
+      });
+      const message =
+        lookup === "parent choices"
+          ? "Unable to load editable parent choices. Try again before changing the parent."
+          : "Unable to verify Region access. You can save other changes with the current parent; parent changes are unavailable.";
+      await screen.findByText(message);
+      expect(parentSelect().value).toBe("12");
+      expect(parentSelect().disabled).toBe(true);
+      save();
+      await waitFor(() =>
+        expect(mocks.error).toHaveBeenCalledWith(
+          lookup === "parent choices"
+            ? message
+            : "Region access must be verified before changing the parent",
+        ),
+      );
+      expect(mocks.save).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Keep current parent" }),
+      );
+      expect(parentSelect().value).toBe(String(record.parentId));
+      expect(parentSelect().disabled).toBe(true);
+      expect(field("Name").value).toBe("Renamed Region");
+      expect(field("Website").value).toBe("https://renamed.example.com");
+      expect(
+        screen.queryByRole("button", { name: "Keep current parent" }),
+      ).toBeNull();
+      expect(mocks.save).not.toHaveBeenCalled();
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+        ...record,
+        orgType: "region",
+        name: "Renamed Region",
+        website: "https://renamed.example.com",
+      });
     },
   );
 

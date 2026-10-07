@@ -586,6 +586,21 @@ export default function AdminOrgEditModal({
                             {parentHelp}
                           </p>
                         )}
+                        {isEditingRegion &&
+                          !regionRecordUnavailable &&
+                          !sourceAccessDenied &&
+                          org?.parentId != null &&
+                          field.value !== org.parentId && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={isSubmitting}
+                              onClick={() => field.onChange(org.parentId)}
+                            >
+                              Keep current parent
+                            </Button>
+                          )}
                         <FormMessage />
                       </FormItem>
                     )}

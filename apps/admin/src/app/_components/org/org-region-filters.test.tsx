@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -204,16 +205,20 @@ const regions = [
   node(19, 7, "region", "Other Region"),
 ];
 let queryClient: QueryClient;
+let hierarchyOrgs: TestOrg[];
+let regionOrgs: TestOrg[];
 
 beforeEach(() => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  hierarchyOrgs = hierarchy;
+  regionOrgs = regions;
   mocks.all.mockReset();
   mocks.all.mockImplementation(async (input) => {
     const isRegionQuery =
       input.orgTypes.length === 1 && input.orgTypes[0] === "region";
-    const eligible = (isRegionQuery ? regions : hierarchy).filter(
+    const eligible = (isRegionQuery ? regionOrgs : hierarchyOrgs).filter(
       (org) =>
         input.orgTypes.includes(org.orgType) &&
         (input.statuses ?? ["active"]).includes(
@@ -402,6 +407,85 @@ describe("Region filters with real hierarchy paging", () => {
       screen.queryByRole("button", { name: "Area: Paged Area" }),
     ).toBeNull();
     expect(latestRegionInput()?.parentOrgIds).toEqual([7]);
+  });
+
+  it.each([
+    {
+      name: "resets a later page when a hierarchy refetch reparents the selected Area outside its Territory",
+      parentId: 15,
+      expectedPage: 0,
+      expectedRows: [12, 16],
+      expectedParents: [8, 13],
+      expectedTotal: "2",
+      expectedAreaPressed: null,
+    },
+    {
+      name: "preserves a later page and Area selection when a hierarchy refetch leaves ancestry unchanged",
+      parentId: 13,
+      expectedPage: 1,
+      expectedRows: [21],
+      expectedParents: [14],
+      expectedTotal: "3",
+      expectedAreaPressed: "true",
+    },
+  ])("$name", async (expected) => {
+    regionOrgs = [
+      ...regions,
+      node(20, 14, "region", "Second Area Region"),
+      node(21, 14, "region", "Third Area Region"),
+    ];
+    mount();
+    await screen.findByRole("button", { name: "Territory: Paged Territory" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Territory: Paged Territory" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Area: Paged Area" }));
+    await waitFor(() => expect(rowIds()).toEqual([17, 20]));
+    fireEvent.click(screen.getByRole("button", { name: "Next Region page" }));
+    await waitFor(() => expect(rowIds()).toEqual([21]));
+    expect(latestRegionInput()?.pageIndex).toBe(1);
+
+    const hierarchyCalls = () =>
+      mocks.all.mock.calls.filter(([input]) => input.orgTypes[0] !== "region")
+        .length;
+    const previousHierarchyCalls = hierarchyCalls();
+    hierarchyOrgs = hierarchy.map((org) =>
+      org.id === 14
+        ? { ...org, parentId: expected.parentId }
+        : org.id === 15
+          ? { ...org, name: "Renamed Other Territory" }
+          : org,
+    );
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: [["org", "all"]] });
+    });
+
+    expect(hierarchyCalls()).toBe(previousHierarchyCalls + 2);
+    await screen.findByRole("button", {
+      name: "Territory: Renamed Other Territory",
+    });
+    await waitFor(() => expect(rowIds()).toEqual(expected.expectedRows));
+    expect(screen.getByTestId("region-page").textContent).toBe(
+      String(expected.expectedPage),
+    );
+    expect(screen.getByTestId("region-total").textContent).toBe(
+      expected.expectedTotal,
+    );
+    expect(latestRegionInput()).toMatchObject({
+      pageIndex: expected.expectedPage,
+      pageSize: 2,
+      parentOrgIds: expected.expectedParents,
+    });
+    expect(
+      screen
+        .queryByRole("button", { name: "Area: Paged Area" })
+        ?.getAttribute("aria-pressed") ?? null,
+    ).toBe(expected.expectedAreaPressed);
+    expect(
+      screen
+        .getByRole("button", { name: "Territory: Paged Territory" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("matches all three Sector branch shapes through inactive and off-first-page ancestors", async () => {

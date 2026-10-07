@@ -220,6 +220,7 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
     selectedAreas.length !== pickedFilters.selectedAreas.length ||
     selectedTerritories.length !== pickedFilters.selectedTerritories.length
   ) {
+    if (config.filters === "sectorTerritoryArea") resetPage();
     dispatch({
       type: "reconcile",
       selected: { selectedSectors, selectedAreas, selectedTerritories },
