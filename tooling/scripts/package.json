@@ -16,6 +16,7 @@
     "obfuscate-db:verify": "tsx ./src/obfuscate-db.verify.ts",
     "obfuscate-db:verify-target": "tsx ./src/obfuscate-db.verify-target.ts",
     "staging-api-keys": "tsx ./src/staging-api-keys.ts",
+    "staging-refresh": "tsx ./src/staging-refresh.ts",
     "staging-slack": "tsx ./src/staging-slack.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -23,6 +24,7 @@
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
     "eslint": "catalog:",
     "postgres": "catalog:",
     "prettier": "catalog:",

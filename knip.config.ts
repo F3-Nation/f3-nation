@@ -26,6 +26,9 @@ const config: KnipConfig = {
     "pg_ctl",
     "pg_isready",
     "createdb",
+    // The staging refresh restarts the staging slackbot with gcloud when it
+    // runs outside Cloud Run (best effort; never a dependency).
+    "gcloud",
   ],
   workspaces: {
     ".": {
