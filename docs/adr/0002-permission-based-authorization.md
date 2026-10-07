@@ -106,11 +106,15 @@ Concretely:
 
    export type Permission = (typeof PERMISSIONS)[number];
 
-   export const ROLE_PERMISSIONS: Record<RegionRole, readonly Permission[]> = {
+   export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
      admin: ["entities.manage", "security.manage", "messages.send", "pii.read"],
      editor: ["entities.manage", "messages.send", "pii.read"],
-     comz: ["messages.send"],
      user: [],
+     // Dormant today (no permissions wired); present so the map stays
+     // exhaustive over UserRole.
+     password_manager: [],
+     password_reader: [],
+     // comz: ["messages.send"],  // planned addition — see step 5 below
    };
    ```
 

@@ -7,6 +7,14 @@ export const UserRole = [
 ] as const;
 export type UserRole = (typeof UserRole)[number];
 
+// The subset of UserRole that is currently active: offered in the UI and
+// grantable through the user-management API. password_manager and
+// password_reader exist in the enum (DB + types) but are intentionally
+// dormant — not yet wired to any permission — so they are not assignable
+// yet. Widen this set (and seed matching `roles` rows) when they go live.
+export const GrantableUserRole = ["user", "editor", "admin"] as const;
+export type GrantableUserRole = (typeof GrantableUserRole)[number];
+
 export const UserStatus = ["active", "inactive"] as const;
 export type UserStatus = (typeof UserStatus)[number];
 

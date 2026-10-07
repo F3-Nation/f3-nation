@@ -49,7 +49,7 @@ import {
 } from "~/orpc/react";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
-import { isAdminRoleName } from "~/lib/auth/session";
+import { isAdminRoleName, toGrantableRoleEntries } from "~/lib/auth/session";
 import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
@@ -153,7 +153,7 @@ export default function UserModal({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: user?.roles ?? [],
+      roles: toGrantableRoleEntries(user?.roles),
       homeRegionId: user?.homeRegionId ?? null,
       status: user?.status ?? "active",
     },
@@ -168,7 +168,7 @@ export default function UserModal({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: user?.roles,
+      roles: toGrantableRoleEntries(user?.roles),
       homeRegionId: user?.homeRegionId ?? null,
       status: user?.status ?? "active",
       phone: user?.phone ?? "",
@@ -189,7 +189,11 @@ export default function UserModal({
             },
           ];
         });
-        if (session?.id === data.id && roles.length > 0) {
+        // Update the live session for self-edits even when the filtered
+        // visible-role list is now empty: if an admin edits themselves down to
+        // only dormant/hidden roles, the client must drop the stale visible
+        // grants it still holds rather than wait for a refetch.
+        if (session?.id === data.id) {
           await update({ ...session, roles });
         }
         closeModal();

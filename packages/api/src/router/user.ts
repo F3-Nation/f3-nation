@@ -2,6 +2,7 @@ import { and, eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
+import { GrantableUserRole } from "@acme/shared/app/enums";
 import type { UserRole } from "@acme/shared/app/enums";
 import { normalizeEmail } from "@acme/shared/common/functions";
 import { CrupdateUserSchema, UserSelectSchema } from "@acme/validators";
@@ -505,6 +506,7 @@ export const userRouter = {
         },
         {} as Record<string, number>,
       );
+      const idToRoleName = new Map(dbRoles.map((role) => [role.id, role.name]));
 
       const newRolesToInsert = roles.filter(
         (role) =>
@@ -516,14 +518,24 @@ export const userRouter = {
       );
       logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
 
-      const rolesToDelete = existingRoles.filter(
-        (existingRole) =>
-          !roles.some(
-            (role) =>
-              roleNameToId[role.roleName] === existingRole.roleId &&
-              role.orgId === existingRole.orgId,
-          ),
-      );
+      const rolesToDelete = existingRoles.filter((existingRole) => {
+        // Never delete assignments for dormant/non-grantable roles (e.g.
+        // password_*). The admin UI hides them and callers only ever submit
+        // grantable roles, so their absence from the payload means "not
+        // shown", not "remove it" — deleting them would silently revoke a
+        // grant the editor could not even see.
+        const existingName = idToRoleName.get(existingRole.roleId);
+        if (
+          existingName &&
+          !(GrantableUserRole as readonly string[]).includes(existingName)
+        )
+          return false;
+        return !roles.some(
+          (role) =>
+            roleNameToId[role.roleName] === existingRole.roleId &&
+            role.orgId === existingRole.orgId,
+        );
+      });
       logDebug("api.user.roles_to_delete", { rolesToDelete });
 
       const requireAdminOn = async (orgIds: number[], message: string) => {

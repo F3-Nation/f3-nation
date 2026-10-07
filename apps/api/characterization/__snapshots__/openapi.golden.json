@@ -19696,7 +19696,7 @@
             "in": "query",
             "name": "roles",
             "schema": {
-              "description": "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+              "description": "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
               "items": {
                 "enum": [
                   "user",
@@ -20258,9 +20258,7 @@
                           "enum": [
                             "user",
                             "editor",
-                            "admin",
-                            "password_manager",
-                            "password_reader"
+                            "admin"
                           ],
                           "type": "string"
                         }
@@ -21481,7 +21479,7 @@
             "in": "query",
             "name": "roles",
             "schema": {
-              "description": "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+              "description": "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
               "items": {
                 "enum": [
                   "user",
