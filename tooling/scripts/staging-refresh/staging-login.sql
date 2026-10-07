@@ -17,7 +17,15 @@
 
 SELECT 'CREATE ROLE staging_refresh LOGIN'
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'staging_refresh') \gexec
-SELECT format('ALTER ROLE staging_refresh WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'pw') \gexec
+SELECT format('ALTER ROLE staging_refresh WITH LOGIN PASSWORD %L', :'pw') \gexec
+-- An admin login that isn't a superuser can't even say NOSUPERUSER, so check the
+-- attributes instead of setting them.
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'staging_refresh'
+             AND (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls)) THEN
+    RAISE EXCEPTION 'staging_refresh has superuser-level attributes; it must be a plain login';
+  END IF;
+END $$;
 
 DO $$
 DECLARE r text; skipped text[] := '{}'; granted text[] := '{}';

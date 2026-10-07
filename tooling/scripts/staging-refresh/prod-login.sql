@@ -10,7 +10,15 @@
 
 SELECT 'CREATE ROLE staging_refresh LOGIN'
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'staging_refresh') \gexec
-SELECT format('ALTER ROLE staging_refresh WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'pw') \gexec
+SELECT format('ALTER ROLE staging_refresh WITH LOGIN PASSWORD %L', :'pw') \gexec
+-- An admin login that isn't a superuser can't even say NOSUPERUSER, so check the
+-- attributes instead of setting them.
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'staging_refresh'
+             AND (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls)) THEN
+    RAISE EXCEPTION 'staging_refresh has superuser-level attributes; it must be a plain login';
+  END IF;
+END $$;
 ALTER ROLE staging_refresh SET default_transaction_read_only = on;
 
 -- Read access to the schemas the refresh dumps. Granting needs the owners' rights:
@@ -46,8 +54,14 @@ BEGIN
     EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO staging_refresh', s);
     EXECUTE format('GRANT SELECT ON ALL SEQUENCES IN SCHEMA %I TO staging_refresh', s);
     FOREACH r IN ARRAY owners LOOP
-      EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I GRANT SELECT ON TABLES TO staging_refresh', r, s);
-      EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I GRANT SELECT ON SEQUENCES TO staging_refresh', r, s);
+      -- Nice to have, not required: without it a table created later needs a re-run of
+      -- setup.sh (the refresh then stops with "permission denied" in pg_dump).
+      BEGIN
+        EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I GRANT SELECT ON TABLES TO staging_refresh', r, s);
+        EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I GRANT SELECT ON SEQUENCES TO staging_refresh', r, s);
+      EXCEPTION WHEN insufficient_privilege THEN
+        RAISE WARNING 'no default privileges for role % in schema %: %', r, s, SQLERRM;
+      END;
     END LOOP;
   END LOOP;
   FOREACH r IN ARRAY borrowed LOOP
