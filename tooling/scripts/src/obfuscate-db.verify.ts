@@ -1256,11 +1256,29 @@ async function main(): Promise<void> {
         'C0STAGING', 0, 'complete', 1)
       RETURNING id`;
     if (!stagingRun) throw new Error("Failed to insert staging F3versary run");
+    // Pages carry the announcement as posted, which named members (with real
+    // names before the bot's non-prod privacy change): none may survive.
     await sql`
       INSERT INTO slackbot.f3versary_delivery_pages (run_id, page_number,
         text, blocks, client_msg_id, status)
-      VALUES (${stagingRun.id}, 1, 'Happy F3versary, F3 1!', '[]',
+      VALUES (${stagingRun.id}, 1,
+        'Happy F3versary, Jane Realname <@U0JANEREAL>!',
+        ${sql.json([{ type: "section", text: { type: "mrkdwn", text: "Jane Realname <@U0JANEREAL>" } }])},
         gen_random_uuid(), 'sent')`;
+    // A run still delivering (yesterday's, planned, a page pending) must not
+    // resume and post after the refresh.
+    const [pendingRun] = await sql<{ id: number }[]>`
+      INSERT INTO slackbot.f3versary_delivery_runs (slack_space_id, org_id,
+        processing_date, target_date, channel, lead_days, status, page_count)
+      VALUES (${stagingSpace.id}, ${linkOrg.id}, current_date - 1,
+        current_date - 1, 'C0STAGING', 0, 'planned', 1)
+      RETURNING id`;
+    if (!pendingRun) throw new Error("Failed to insert pending F3versary run");
+    await sql`
+      INSERT INTO slackbot.f3versary_delivery_pages (run_id, page_number,
+        text, blocks, client_msg_id, status)
+      VALUES (${pendingRun.id}, 1, 'Happy F3versary, Bob Realperson <@U0BOBREAL>!',
+        '[]', gen_random_uuid(), 'pending')`;
     run(
       "pnpm",
       [
@@ -1284,19 +1302,13 @@ async function main(): Promise<void> {
     await sql`
       INSERT INTO refresh_keep_slack.orgs_x_slack_spaces (org_id, slack_space_id)
       VALUES (999999, ${stagingSpace.id})`;
-    // ...and an F3versary run (with a page) for that missing org.
+    // ...and an F3versary run for that missing org.
     await sql`
       INSERT INTO refresh_keep_slack.f3versary_delivery_runs (id,
         slack_space_id, org_id, processing_date, target_date, channel,
         lead_days, status, page_count, created_at, updated_at)
       VALUES (999999, ${stagingSpace.id}, 999999, current_date, current_date,
         'C0GONE', 0, 'complete', 1, now(), now())`;
-    await sql`
-      INSERT INTO refresh_keep_slack.f3versary_delivery_pages (id, run_id,
-        page_number, text, blocks, client_msg_id, status, created_at,
-        updated_at)
-      VALUES (999999, 999999, 1, 'gone', '[]', gen_random_uuid(), 'sent',
-        now(), now())`;
     await sql`TRUNCATE slackbot.f3versary_delivery_pages,
       slackbot.f3versary_delivery_runs, orgs_x_slack_spaces, slack_spaces,
       slack_users`;
@@ -1315,6 +1327,7 @@ async function main(): Promise<void> {
         real: number;
         secrets: number;
         runs: number;
+        pending: number;
         pages: number;
         stash: boolean;
       }[]
@@ -1338,6 +1351,8 @@ async function main(): Promise<void> {
             OR meta IS NOT NULL) AS secrets,
         (SELECT count(*)::int FROM slackbot.f3versary_delivery_runs
           WHERE slack_space_id = ${stagingSpace.id}) AS runs,
+        (SELECT count(*)::int FROM slackbot.f3versary_delivery_runs
+          WHERE status = 'planned') AS pending,
         (SELECT count(*)::int FROM slackbot.f3versary_delivery_pages) AS pages,
         to_regnamespace('refresh_keep_slack') IS NOT NULL AS stash`;
     check(
@@ -1349,10 +1364,14 @@ async function main(): Promise<void> {
         slackAfter.nulled === 2 &&
         slackAfter.real === 0 &&
         slackAfter.secrets === 0 &&
-        slackAfter.runs === 1 &&
-        slackAfter.pages === 1 &&
+        slackAfter.runs === 2 &&
+        slackAfter.pending === 0 &&
+        slackAfter.pages === 0 &&
         !slackAfter.stash &&
-        slackOut.includes("Restored 1 F3versary run(s) and 1 page(s).") &&
+        slackOut.includes("Restored 2 F3versary run(s) without their pages") &&
+        slackOut.includes("Marked 1 unfinished run(s) abandoned") &&
+        !slackOut.includes("Realname") &&
+        !slackOut.includes("Realperson") &&
         slackOut.includes("Dropped 1 run(s)") &&
         slackOut.includes("workspace T0STAGING -> org 999999") &&
         slackOut.includes(
@@ -1360,7 +1379,7 @@ async function main(): Promise<void> {
         ) &&
         slackOut.includes("Scrubbed 1 member profile(s)") &&
         !slackOut.includes("real.person@example.com"),
-      `exit ${slackRestore.status}${slackRestore.status === 0 ? "" : ` (${slackRestore.stderr.toString().trim().split("\n")[0]})`}, ${slackAfter?.spaces ?? "?"} workspace, ${slackAfter?.members ?? "?"} member(s), ${slackAfter?.links ?? "?"} link, ${slackAfter?.nulled ?? "?"} unlinked + placeholder member(s), ${slackAfter?.real ?? "?"} real email(s), ${slackAfter?.runs ?? "?"} F3versary run / ${slackAfter?.pages ?? "?"} page, stash ${slackAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
+      `exit ${slackRestore.status}${slackRestore.status === 0 ? "" : ` (${slackRestore.stderr.toString().trim().split("\n")[0]})`}, ${slackAfter?.spaces ?? "?"} workspace, ${slackAfter?.members ?? "?"} member(s), ${slackAfter?.links ?? "?"} link, ${slackAfter?.nulled ?? "?"} unlinked + placeholder member(s), ${slackAfter?.real ?? "?"} real email(s), ${slackAfter?.runs ?? "?"} F3versary run(s) (${slackAfter?.pending ?? "?"} still planned) / ${slackAfter?.pages ?? "?"} page(s), stash ${slackAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
     );
 
     // --- 6. Verdict -----------------------------------------------------------

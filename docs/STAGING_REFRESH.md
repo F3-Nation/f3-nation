@@ -215,9 +215,9 @@ SET NULL` would do; the summary gives the count) and keeps the old
      and the map serves 401s, and the staging slackbot's workspace (App
      Pioneers) loses its install. Prod's Slack tables are never loaded: the
      obfuscator empties them. `staging-slack` also stashes staging's
-     F3versary delivery runs and pages (`slackbot` schema); empty those with
-     the Slack tables during the load, since their FKs reference
-     `slack_spaces` and `orgs`. The values never leave the database:
+     F3versary delivery runs (`slackbot` schema, not their pages); empty the
+     runs and pages with the Slack tables during the load, since their FKs
+     reference `slack_spaces` and `orgs`. The values never leave the database:
 
      ```bash
      pnpm -F @acme/scripts staging-api-keys -- --allow-db <staging-db-name> --stash
@@ -259,8 +259,14 @@ SET NULL` would do; the summary gives the count) and keeps the old
      name, no avatar, no Strava link or metadata): staging's users can't be told apart from the loaded
      copy's, and a real profile synced before the slackbot's non-prod privacy
      change must not survive. The slackbot creates a fresh synthetic user for
-     each member on their next action. **Restart the staging slackbot
-     afterwards** so it drops its cached links:
+     each member on their next action. F3versary runs come back without
+     their pages, which hold the announcement text and name members (real
+     names, if posted before the privacy change); a run that was still
+     delivering comes back `abandoned`. The bot only reads a run's pages
+     while it is `planned` and skips a day that already has any other run,
+     so the restored runs stop it re-announcing those days and nothing
+     stashed can be posted. **Restart the staging slackbot afterwards** so
+     it drops its cached links:
 
      ```bash
      pnpm -F @acme/scripts staging-slack -- --allow-db <staging-db-name> --restore
@@ -417,9 +423,9 @@ URL repointed at its staging equivalent; **KEEP**: non-PII, left untouched.
 
 ### `slackbot` schema
 
-| Table                                                                   | Column(s) | Classification | Notes                                                                                                                                                                                                                                     |
-| ----------------------------------------------------------------------- | --------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `slackbot.f3versary_delivery_runs`, `slackbot.f3versary_delivery_pages` | all       | TRUNCATE       | F3versary's delivery state (migration `0028`). Runs reference `slack_spaces`, and pages hold the announcement text, which names members. Emptied with the Slack tables; staging's own rows are carried across by `staging-slack` (step 3) |
+| Table                                                                   | Column(s) | Classification | Notes                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------- | --------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `slackbot.f3versary_delivery_runs`, `slackbot.f3versary_delivery_pages` | all       | TRUNCATE       | F3versary's delivery state (migration `0028`). Runs reference `slack_spaces`, and pages hold the announcement text, which names members. Emptied with the Slack tables; staging's own runs are carried across by `staging-slack` (step 3), its pages never are |
 
 The coverage gate covers every table, partitioned table and materialized view
 in every non-system schema (not just `public` and `auth`), so a new schema

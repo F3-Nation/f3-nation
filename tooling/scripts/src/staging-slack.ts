@@ -10,9 +10,8 @@
  * them back afterwards. Kept apart from staging-api-keys.ts so the Slack step
  * can be deleted outright once F3 moves off Slack.
  *
- *   --stash    copy the three tables, plus F3versary's delivery runs and
- *              pages (slackbot schema, when present), into
- *              refresh_keep_slack.*
+ *   --stash    copy the three tables, plus F3versary's delivery runs
+ *              (slackbot schema, when present), into refresh_keep_slack.*
  *   --restore  put them back after the load and drop refresh_keep_slack.
  *              An id only means the same thing across a refresh if the row
  *              behind it is the same, so:
@@ -26,7 +25,15 @@
  *                told apart from the loaded copy's (both are sink+<id>), and
  *                a real profile synced before the bot's non-prod privacy
  *                change must not survive. The staging slackbot creates a
- *                fresh synthetic user for each member on their next action.
+ *                fresh synthetic user for each member on their next action;
+ *              - F3versary runs come back without their pages, and a run that
+ *                was still delivering (`planned`) comes back `abandoned`. The
+ *                pages hold the announcement text and blocks, which name
+ *                members (real names, if posted before the bot's non-prod
+ *                privacy change). The bot only reads a run's pages while it
+ *                is `planned`, and skips any day that already has a run that
+ *                isn't, so a restored run stops it re-announcing that day and
+ *                nothing stashed can be posted afterwards.
  *
  * Usage (staging, around the load):
  *   DATABASE_URL=... pnpm -F @acme/scripts staging-slack -- \
@@ -51,8 +58,11 @@ const TABLES = ["slack_spaces", "slack_users", "orgs_x_slack_spaces"] as const;
 
 // F3versary's delivery state (migration 0028). Its runs reference
 // slack_spaces and orgs, so staging's rows have to come out with the Slack
-// tables and go back after them; carrying them across keeps the staging
-// slackbot from re-announcing a day it already posted.
+// tables and go back after them; carrying the runs across keeps the staging
+// slackbot from re-announcing a day it already handled
+// (apps/slackbot/scripts/f3versary_announcements.py: a day with a run that
+// isn't `planned` is skipped). Only the runs are carried: pages are never
+// stashed or restored (see the header).
 const F3VERSARY_TABLES = [
   "f3versary_delivery_runs",
   "f3versary_delivery_pages",
@@ -89,11 +99,9 @@ async function main(): Promise<void> {
         }
         const f3versary = await hasF3versary(tx);
         if (f3versary) {
-          for (const table of F3VERSARY_TABLES) {
-            await tx.unsafe(
-              `CREATE TABLE refresh_keep_slack.${table} AS TABLE slackbot.${table}`,
-            );
-          }
+          await tx.unsafe(
+            `CREATE TABLE refresh_keep_slack.f3versary_delivery_runs AS TABLE slackbot.f3versary_delivery_runs`,
+          );
         }
         // What each linked org IS, so the restore can tell whether the
         // loaded copy's org with the same id is still the same org.
@@ -198,7 +206,7 @@ async function main(): Promise<void> {
       }
 
       let runs = 0;
-      let pages = 0;
+      let abandoned = 0;
       let droppedRuns = 0;
       if (f3versary) {
         const restoredRuns = await tx.unsafe(`
@@ -206,18 +214,18 @@ async function main(): Promise<void> {
           SELECT * FROM refresh_keep_slack.f3versary_delivery_runs r
           WHERE ${sameOrg("r")}
           RETURNING id`);
-        const restoredPages = await tx`
-          INSERT INTO slackbot.f3versary_delivery_pages
-          SELECT * FROM refresh_keep_slack.f3versary_delivery_pages p
-          WHERE EXISTS (
-            SELECT 1 FROM slackbot.f3versary_delivery_runs r
-            WHERE r.id = p.run_id)
+        // A run still delivering would resume posting its pages; it has none
+        // now, and `abandoned` is what the bot itself does with an unfinished
+        // run once its day has passed (_abandon_old_runs).
+        const abandonedRuns = await tx`
+          UPDATE slackbot.f3versary_delivery_runs SET status = 'abandoned'
+          WHERE status = 'planned'
           RETURNING id`;
         const [stashedRuns] = await tx<{ n: number }[]>`
           SELECT count(*)::int AS n
           FROM refresh_keep_slack.f3versary_delivery_runs`;
         runs = restoredRuns.length;
-        pages = restoredPages.length;
+        abandoned = abandonedRuns.length;
         droppedRuns = (stashedRuns?.n ?? 0) - runs;
         for (const table of F3VERSARY_TABLES) {
           await tx`
@@ -232,7 +240,10 @@ async function main(): Promise<void> {
       );
       if (f3versary) {
         console.log(
-          `Restored ${runs} F3versary run(s) and ${pages} page(s).` +
+          `Restored ${runs} F3versary run(s) without their pages (announcement text is never restored).` +
+            (abandoned > 0
+              ? ` Marked ${abandoned} unfinished run(s) abandoned, so none resumes posting.`
+              : "") +
             (droppedRuns > 0
               ? ` Dropped ${droppedRuns} run(s) whose org isn't the same org in the loaded copy.`
               : ""),
