@@ -373,7 +373,9 @@ Formats (sink = `dev.staging-email-sink@f3nation.com`):
 | other names (hospital names)                                                     | `F3 User <hash6>`                                                       |
 
 Phones → `555-<hash3>-<hash4>`, Slack IDs in free text →
-`U<HASH8>` (lengthened on collision). Free-text contact/emergency fields are
+`Uf3<hash8>` in lowercase hex (lengthened on collision). Real Slack IDs are
+uppercase only, so a fake can never be mistaken for one: the verify suite
+counts every uppercase-form mention as a leak. Free-text contact/emergency fields are
 nulled. JSON/meta and free-text columns are scrubbed of email-shaped strings
 by regex, replaced with the same deterministic fakes.
 

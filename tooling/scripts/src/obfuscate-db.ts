@@ -201,6 +201,14 @@ function fakePhone(original: string): string {
 // Memoized like fakeEmail, and lengthened on collision the same way, so one
 // real Slack id maps to one fake in every mention (a birthday-bound collision
 // is expected around ~100k distinct ids at 8 hex chars).
+//
+// The fake is `Uf3` + LOWERCASE hex. Real Slack ids are U/W + uppercase
+// letters and digits, so nothing real ever has this shape: the verifier can
+// treat every uppercase-form id as a leak. (Uppercase hex fakes were
+// indistinguishable from real ids that happen to be all-hex, e.g. UABC12345.)
+// SLACK_MENTION_REGEX only matches the uppercase form, so a re-run leaves
+// fakes alone.
+const FAKE_SLACK_ID_PREFIX = "Uf3";
 const slackIdFakes = new Map<string, string>();
 const slackIdFakesInUse = new Set<string>();
 
@@ -208,7 +216,7 @@ function fakeSlackId(original: string): string {
   const existing = slackIdFakes.get(original);
   if (existing) return existing;
   let length = 8;
-  let fake = `U${hashHex(original, length).toUpperCase()}`;
+  let fake = `${FAKE_SLACK_ID_PREFIX}${hashHex(original, length)}`;
   while (slackIdFakesInUse.has(fake)) {
     length += 4;
     if (length > MAX_HASH_HEX_LENGTH) {
@@ -216,7 +224,7 @@ function fakeSlackId(original: string): string {
         `fakeSlackId: exhausted hash length disambiguating "${original}"`,
       );
     }
-    fake = `U${hashHex(original, length).toUpperCase()}`;
+    fake = `${FAKE_SLACK_ID_PREFIX}${hashHex(original, length)}`;
   }
   slackIdFakes.set(original, fake);
   slackIdFakesInUse.add(fake);
@@ -241,6 +249,7 @@ const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // readable name is inlined. Enterprise-grid member ids use a `W` prefix.
 // The display name after the pipe is itself real PII, so it is dropped
 // rather than rewritten — the replacement always emits the bare form.
+// Uppercase only, as real ids are: it never matches a `<@Uf3…>` fake.
 const SLACK_MENTION_REGEX = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
 
 function isAllowlistedEmail(email: string): boolean {

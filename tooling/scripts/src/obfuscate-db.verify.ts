@@ -350,6 +350,14 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
     VALUES (${ao.id}, true, false, current_date, 'Pipe-Mention Beatdown',
       'Q was <@U0PIPEFORM|bob.smith>, co-Q <@W0GRIDUSER|Grid Person>.')`;
 
+  // A real id can be all hex (any id is ~(16/36)^n likely to be): it must be
+  // rewritten, and must not pass for a fake.
+  await sql`
+    INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+      name, backblast)
+    VALUES (${ao.id}, true, false, current_date, 'Hex-Mention Beatdown',
+      'Thanks <@UABC12345> for the coffee.')`;
+
   await sql`
     INSERT INTO slack_users (slack_id, user_name, email, is_admin, is_owner,
       is_bot, slack_team_id, strava_access_token, strava_refresh_token,
@@ -834,7 +842,7 @@ async function main(): Promise<void> {
     const mentionOk =
       !!mentionRow?.backblast_rich &&
       !mentionRow.backblast_rich.includes("U0REALSLACK") &&
-      mentionRow.backblast_rich.includes("<@U");
+      /<@Uf3[0-9a-f]{8,}>/.test(mentionRow.backblast_rich);
     check(
       "Slack mention in JSON scrubbed with no email present",
       mentionOk,
@@ -855,8 +863,19 @@ async function main(): Promise<void> {
       !pipeText.includes("Grid Person") &&
       // ...and the replacement emits the bare form, so no pipe remains.
       !pipeText.includes("|") &&
-      (pipeText.match(/<@U[A-Z0-9]+>/g) ?? []).length === 2;
+      (pipeText.match(/<@Uf3[0-9a-f]{8,}>/g) ?? []).length === 2;
     check("piped/enterprise Slack mentions scrubbed", pipeOk, pipeText);
+
+    const [hexRow] = await sql<{ backblast: string | null }[]>`
+      SELECT backblast FROM event_instances
+      WHERE name = 'Hex-Mention Beatdown' LIMIT 1`;
+    const hexText = hexRow?.backblast ?? "";
+    check(
+      "all-hex real Slack id rewritten to the lowercase fake form",
+      !hexText.includes("UABC12345") &&
+        /^Thanks <@Uf3[0-9a-f]{8,}> for the coffee\.$/.test(hexText),
+      hexText,
+    );
 
     const [shadow] = await sql<
       { id: string; name: string; email: string; image: string | null }[]
@@ -1031,6 +1050,41 @@ async function main(): Promise<void> {
       arraySuite.status !== 0
         ? "FAIL names auth.better_auth_oauth_client.contacts, value withheld"
         : "verify-target passed with a real address in contacts[]",
+    );
+
+    // Same for a Slack id: put a real-looking all-hex one (the shape the old
+    // uppercase-hex fakes had) back into a backblast and expect a FAIL that
+    // names the column, value withheld; then undo it.
+    const [hexBefore] = await sql<{ backblast: string | null }[]>`
+      SELECT backblast FROM event_instances
+      WHERE name = 'Hex-Mention Beatdown' LIMIT 1`;
+    await sql`
+      UPDATE event_instances SET backblast = 'Thanks <@UABC12345> for the coffee.'
+      WHERE name = 'Hex-Mention Beatdown'`;
+    const hexSuite = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.verify-target.ts",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const hexOut = `${hexSuite.stdout.toString()}${hexSuite.stderr.toString()}`;
+    await sql`
+      UPDATE event_instances SET backblast = ${hexBefore?.backblast ?? null}
+      WHERE name = 'Hex-Mention Beatdown'`;
+    check(
+      "verify-target catches an all-hex Slack id left in place",
+      hexSuite.status !== 0 &&
+        /FAIL\s+Slack id sweep/.test(hexOut) &&
+        hexOut.includes("public.event_instances.backblast") &&
+        !hexOut.includes("UABC12345"),
+      hexSuite.status !== 0
+        ? "FAIL names public.event_instances.backblast, value withheld"
+        : "verify-target passed with <@UABC12345> in a backblast",
     );
 
     // --- 4b. Preserved staging tables stay consistent with a load ----------------

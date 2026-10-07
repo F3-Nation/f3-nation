@@ -60,13 +60,13 @@ const IMAGE_DENSITY_SUFFIX = /@\dx\.(?:png|jpe?g|gif|webp|svg)$/i;
 const NON_EMAIL_TLD_GUARD = /\.[A-Za-z]{2,}$/;
 
 // Slack mention syntax, both documented forms, including enterprise-grid `W`
-// ids. Keep in sync with SLACK_MENTION_REGEX in obfuscate-db.ts.
-const SLACK_MENTION_REGEX = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
-// A mention the obfuscator rewrote looks like `<@U` + uppercase hex from
-// fakeSlackId. A real Slack id almost always carries a letter outside A-F
-// (U024BE7LH) or the enterprise `W` prefix, so anything not matching this
-// shape is a mention that survived un-rewritten.
-const OBFUSCATED_SLACK_ID = /^U[0-9A-F]{8,}$/;
+// ids. Wider than obfuscate-db.ts's SLACK_MENTION_REGEX (any case), so it
+// sees the fakes as well as anything real.
+const SLACK_MENTION_REGEX = /<@([UW][A-Za-z0-9]+)(?:\|[^>]*)?>/g;
+// What fakeSlackId writes: `Uf3` + lowercase hex. Real Slack ids are
+// uppercase only (U024BE7LH, W0GRIDUSER, and all-hex ones like UABC12345),
+// so every mention that isn't exactly this shape survived un-rewritten.
+const OBFUSCATED_SLACK_ID = /^Uf3[0-9a-f]{8,}$/;
 
 const EMPTY_TABLES = [
   "public.auth_sessions",
