@@ -10,9 +10,10 @@
  * delivery tables) are emptied, not scrubbed: staging keeps
  * its own Slack data across a refresh (staging-slack.ts).
  *
- * !! This script has only been proven against the local sandbox seed. It must
- * !! never be pointed at real data without human review of the PII inventory
- * !! (docs/STAGING_REFRESH.md) and a supervised run.
+ * It refuses, before writing anything, a table it has never classified or a
+ * column missing from the reviewed-column snapshot (obfuscate-db.columns.txt):
+ * schema changes are reviewed on the PR that makes them (docs/STAGING_REFRESH.md,
+ * "Review gate"). Normally run by the staging-refresh job (staging-refresh.ts).
  *
  * Usage:
  *   OBFUSCATION_SALT=<secret> DATABASE_URL=... pnpm -F @acme/scripts obfuscate-db -- \
@@ -33,6 +34,13 @@
  *   --preserve-local-seed                Keep the committed local dev fixtures
  *                                        intact: users @f3local.dev, api_keys
  *                                        local-*, oauth clients *-local.
+ *   --print-columns                      Read-only: print the target's columns
+ *                                        in the reviewed-column snapshot's
+ *                                        format and exit (no other flags).
+ *   --update-column-snapshot             Read-only on the database: add the
+ *                                        target's columns to
+ *                                        obfuscate-db.columns.txt and exit.
+ *                                        Only after classifying each new one.
  *
  * OBFUSCATION_SALT (required env var) must be a long random secret stored
  * outside source control (prod secret manager) — never a compile-time
@@ -45,9 +53,21 @@
  */
 import { createHash } from "node:crypto";
 
-import postgres from "postgres";
+import type postgres from "postgres";
 
-import { databaseNameFromUrl, looksLikeProdDbName } from "./db-url";
+import {
+  databaseNameFromUrl,
+  looksLikeProdDbName,
+  openPostgres,
+} from "./db-url";
+import {
+  addToColumnSnapshot,
+  COLUMN_SNAPSHOT_PATH,
+  COVERAGE_EXCLUDED_SCHEMAS,
+  readColumnSnapshot,
+  readTargetColumns,
+  unreviewedColumns,
+} from "./obfuscate-db.columns";
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -67,6 +87,8 @@ const ALLOW_DB = flagValue("--allow-db");
 const ACKNOWLEDGED = argv.includes("--i-understand-this-rewrites-data");
 const DRY_RUN = argv.includes("--dry-run");
 const PRESERVE_LOCAL_SEED = argv.includes("--preserve-local-seed");
+const PRINT_COLUMNS = argv.includes("--print-columns");
+const UPDATE_COLUMN_SNAPSHOT = argv.includes("--update-column-snapshot");
 
 // ---------------------------------------------------------------------------
 // Deterministic fakes (seeded hash — same input, same output, every run)
@@ -686,20 +708,6 @@ const TOUCHED_TABLES = new Set([
   "auth.user_profiles",
 ]);
 
-// Every table, partitioned table and materialized view in every non-system
-// schema, so a new schema (the slackbot schema arrived with F3versary in
-// migration 0028) is caught here rather than leaking. Excluded: drizzle's
-// migration bookkeeping and the refresh_keep* holding schemas that
-// staging-api-keys.ts / staging-slack.ts create on staging (the verify
-// harness plays staging too, so they exist there during the run).
-const COVERAGE_EXCLUDED_SCHEMAS = [
-  "pg_catalog",
-  "information_schema",
-  "drizzle",
-  "refresh_keep",
-  "refresh_keep_slack",
-];
-
 async function assertFullCoverage(sql: Sql): Promise<void> {
   const rows = await sql<{ qualified: string }[]>`
     SELECT n.nspname || '.' || c.relname AS qualified
@@ -718,6 +726,24 @@ async function assertFullCoverage(sql: Sql): Promise<void> {
         `classified: ${unknown.join(", ")}. Schema drift — review each for ` +
         `PII and add it to TOUCHED_TABLES (with handling below) or ` +
         `KEPT_TABLES before re-running.`,
+    );
+  }
+
+  // A known table can still grow a column nobody reviewed, and the per-table
+  // jobs below only touch the columns they name: refuse rather than copy it
+  // to staging as-is (obfuscate-db.columns.ts).
+  const unreviewed = unreviewedColumns(
+    await readTargetColumns(sql),
+    readColumnSnapshot(),
+  );
+  if (unreviewed.length > 0) {
+    throw new Error(
+      `Refusing to run: ${unreviewed.length} column(s) nobody has reviewed ` +
+        `for PII: ${unreviewed.join(", ")}. Classify each in this script ` +
+        `(and docs/STAGING_REFRESH.md), then add it to ` +
+        `tooling/scripts/src/obfuscate-db.columns.txt ` +
+        `(--update-column-snapshot against a database migrated to head). ` +
+        `A column type that changed counts as new.`,
     );
   }
 }
@@ -1639,7 +1665,34 @@ function printSummary(): void {
 // of entropy, comfortably out of reach.
 const MIN_SALT_LENGTH = 32;
 
+/** --print-columns / --update-column-snapshot: schema only, no writes. */
+async function columnSnapshotMode(): Promise<void> {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
+  const sql = openPostgres(databaseUrl, { max: 1, onnotice: () => undefined });
+  try {
+    const columns = await readTargetColumns(sql);
+    if (PRINT_COLUMNS) {
+      for (const entry of columns) console.log(entry);
+      return;
+    }
+    const added = addToColumnSnapshot(columns);
+    console.log(
+      added.length === 0
+        ? `${COLUMN_SNAPSHOT_PATH}: already lists all ${columns.length} column(s).`
+        : `${COLUMN_SNAPSHOT_PATH}: added ${added.length} column(s). Each must be classified in obfuscate-db.ts first:\n` +
+            added.map((e) => `  ${e}`).join("\n"),
+    );
+  } finally {
+    await sql.end();
+  }
+}
+
 async function main(): Promise<void> {
+  if (PRINT_COLUMNS || UPDATE_COLUMN_SNAPSHOT) {
+    await columnSnapshotMode();
+    return;
+  }
   const salt = process.env.OBFUSCATION_SALT;
   if (!salt) {
     throw new Error(
@@ -1696,7 +1749,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const sql = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
+  const sql = openPostgres(databaseUrl, { max: 1, onnotice: () => undefined });
   try {
     const [current] = await sql`SELECT current_database() AS db`;
     const serverDbName = (current as Row).db as string;

@@ -38,6 +38,12 @@ import { fileURLToPath } from "node:url";
 
 import postgres from "postgres";
 
+import {
+  readColumnSnapshot,
+  readTargetColumns,
+  unreviewedColumns,
+} from "./obfuscate-db.columns";
+
 const CONTAINER = "f3-obfuscate-verify-pg";
 const PORT = 5434;
 const DB_NAME = "f3nation";
@@ -605,6 +611,30 @@ async function main(): Promise<void> {
     run("pnpm", ["db:migrate"], childEnv);
     run("pnpm", ["db:seed:local"], childEnv);
 
+    // --- 2b. Every column the migrations create has been reviewed -------------
+    // obfuscate-db refuses a column missing from obfuscate-db.columns.txt. Say
+    // which up front, so a migration PR that adds one fails here with the fix
+    // in the message rather than halfway through the harness.
+    const unreviewedAtHead = unreviewedColumns(
+      await readTargetColumns(sql),
+      readColumnSnapshot(),
+    );
+    check(
+      "every column at head is in obfuscate-db.columns.txt",
+      unreviewedAtHead.length === 0,
+      unreviewedAtHead.length === 0
+        ? "all reviewed"
+        : `not reviewed: ${unreviewedAtHead.join(", ")}`,
+    );
+    if (unreviewedAtHead.length > 0) {
+      throw new Error(
+        `${unreviewedAtHead.length} column(s) at head are missing from ` +
+          `tooling/scripts/src/obfuscate-db.columns.txt: ${unreviewedAtHead.join(", ")}. ` +
+          `Classify each in obfuscate-db.ts (and docs/STAGING_REFRESH.md), then add ` +
+          `it with: pnpm -F @acme/scripts obfuscate-db -- --update-column-snapshot`,
+      );
+    }
+
     // --- 3. Synthetic PII + pre-counts --------------------------------------
     const planted = await plantSyntheticPii(sql);
     const { userId } = planted;
@@ -1014,6 +1044,41 @@ async function main(): Promise<void> {
     await sql`DROP TABLE public._unclassified_gate_test`;
     await sql`UPDATE users SET email = ${prior?.email ?? ""} WHERE id = ${userId}`;
 
+    // --- 5b. Unreviewed-column gate --------------------------------------------
+    // Same proof for a new column on a classified table: the coverage gate
+    // passes it, the column snapshot must not.
+    await sql`ALTER TABLE users ADD COLUMN _unreviewed_gate_test text`;
+    await sql`
+      UPDATE users SET email = 'gate-sentinel@example.com'
+      WHERE id = ${userId}`;
+    const beforeColumn = await usersHash();
+    const columnRun = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.ts",
+        "--allow-db",
+        DB_NAME,
+        "--i-understand-this-rewrites-data",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const afterColumn = await usersHash();
+    const columnGateFired =
+      `${columnRun.stdout.toString()}${columnRun.stderr.toString()}`.includes(
+        "public.users._unreviewed_gate_test:text",
+      );
+    check(
+      "unreviewed column aborts the run before any write",
+      columnRun.status !== 0 && columnGateFired && beforeColumn === afterColumn,
+      `exit ${columnRun.status}, gate ${columnGateFired ? "fired" : "DID NOT FIRE"}, users ${beforeColumn === afterColumn ? "unchanged" : "REWRITTEN"}`,
+    );
+    await sql`ALTER TABLE users DROP COLUMN _unreviewed_gate_test`;
+    await sql`UPDATE users SET email = ${prior?.email ?? ""} WHERE id = ${userId}`;
+
     // --- 5c. Restore only the named API keys -----------------------------------
     // Without --keep the restore refuses and changes nothing.
     const scripts = (script: string, args: string[]) =>
@@ -1255,7 +1320,7 @@ async function main(): Promise<void> {
     }
     console.log(
       failed.length === 0
-        ? `\nALL ${results.length} CHECKS PASSED — sandbox seed only; human review required before any real-data run.`
+        ? `\nALL ${results.length} CHECKS PASSED — sandbox seed only.`
         : `\n${failed.length}/${results.length} CHECKS FAILED`,
     );
     if (failed.length > 0) process.exitCode = 1;
