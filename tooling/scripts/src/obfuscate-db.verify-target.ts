@@ -155,9 +155,10 @@ async function sweepForEmails(sql: Sql): Promise<void> {
       table_name: string;
       column_name: string;
       data_type: string;
+      udt_name: string;
     }[]
   >`
-    SELECT c.table_schema, c.table_name, c.column_name, c.data_type
+    SELECT c.table_schema, c.table_name, c.column_name, c.data_type, c.udt_name
     FROM information_schema.columns c
     JOIN information_schema.tables t
       ON t.table_schema = c.table_schema AND t.table_name = c.table_name
@@ -178,13 +179,21 @@ async function sweepForEmails(sql: Sql): Promise<void> {
   for (const col of columns) {
     if (violations.length >= LIMIT) break;
     const qualified = quoteQualified(`${col.table_schema}.${col.table_name}`);
-    const isJson = col.data_type === "json" || col.data_type === "jsonb";
-    const cursor = sql
-      .unsafe(
-        `SELECT "${col.column_name}"::text AS v FROM ${qualified}
-         WHERE "${col.column_name}"::text LIKE '%@%'`,
-      )
-      .cursor(5000);
+    const isArray = col.data_type === "ARRAY";
+    // JSON leaves are parsed out either way; for arrays, each element is
+    // scanned on its own rather than the serialized array literal, whose
+    // escaping (a newline before "@x.com" becomes "\n@x.com") can fake a match.
+    const isJson =
+      col.data_type === "json" ||
+      col.data_type === "jsonb" ||
+      (isArray && (col.udt_name === "_json" || col.udt_name === "_jsonb"));
+    const query = isArray
+      ? `SELECT element::text AS v FROM ${qualified}
+         CROSS JOIN LATERAL unnest("${col.column_name}") AS a(element)
+         WHERE element::text LIKE '%@%'`
+      : `SELECT "${col.column_name}"::text AS v FROM ${qualified}
+         WHERE "${col.column_name}"::text LIKE '%@%'`;
+    const cursor = sql.unsafe(query).cursor(5000);
     scan: for await (const rows of cursor) {
       for (const row of rows as unknown as { v: string }[]) {
         const texts = isJson ? stringLeaves(JSON.parse(row.v), []) : [row.v];
