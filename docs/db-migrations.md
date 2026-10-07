@@ -1,9 +1,13 @@
-# Changing Postgres enums in migrations
+# Postgres migrations
 
-Guidance for migrations that touch an enum such as `org_type`. Read it before
-writing one, and before deploying a batch of pending migrations.
+Guidance for writing and deploying database migrations, and for operating on
+the data they leave behind. Read the enum section before writing a migration
+that touches an enum such as `org_type`, and the deployment section before
+deploying a batch of pending migrations.
 
-## Prefer in-place changes
+## Changing enums
+
+### Prefer in-place changes
 
 - Add a value with `ALTER TYPE ... ADD VALUE ... BEFORE|AFTER`.
 - Rename one with `ALTER TYPE ... RENAME VALUE`.
@@ -12,12 +16,11 @@ Both keep the type's OID, so dependent views, indexes, functions and cached
 plans are untouched, and neither rewrites tables or takes table locks. Removing
 or reordering values is the only case that needs the type recreated; avoid it.
 
-## Views created outside the migrations
+### Views created outside the migrations
 
-Staging and Production can carry views that no repository migration creates
-(for example `event_instance_expanded`, which joins on `org_type`). Local and CI
-databases are built only from migrations, so they don't have these views and
-won't catch a failure they cause.
+Staging and Production can carry views that no repository migration creates.
+Local and CI databases are built only from migrations, so they don't have these
+views and won't catch a failure they cause.
 
 Postgres refuses to change a column's type, or drop a type, while a view depends
 on it (`cannot alter type of a column used by a view or rule`). A migration that
@@ -26,22 +29,11 @@ back) therefore fails against those environments unless it first drops and
 later recreates every dependent view with the same definition, options, owner,
 grants and comment.
 
-To list what depends on an enum in a target database (shown for `org_type`):
-
-```sql
-SELECT DISTINCT r.ev_class::regclass AS view
-FROM pg_depend d JOIN pg_rewrite r ON r.oid = d.objid
-WHERE d.classid = 'pg_rewrite'::regclass
-  AND ((d.refclassid = 'pg_type'::regclass AND d.refobjid = 'public.org_type'::regtype)
-    OR (d.refclassid = 'pg_class'::regclass
-      AND d.refobjid IN ('public.orgs'::regclass, 'public.positions'::regclass)
-      AND d.refobjsubid = (SELECT attnum FROM pg_attribute
-        WHERE attrelid = d.refobjid AND attname = 'org_type')));
-```
-
+List what depends on the enum, and on any column that uses it, in the target
+database through `pg_depend` and `pg_rewrite` before writing the migration.
 Views stacked on those views are not listed; follow the dependencies.
 
-## If you do recreate an enum
+### If you do recreate an enum
 
 - Re-issue with `CREATE OR REPLACE` every function that references the type
   (for `org_type`: `update_org_ao_counts`, `recount_org_ao_counts`,
@@ -70,6 +62,32 @@ type`.
   migration's journal row does not make the runner apply it again, and a
   migration with an older `when` than the newest applied row is never run. Keep
   `when` values increasing.
-- **Journal table name.** The table lives in the `drizzle` schema and its suffix
-  comes from the final segment of the database URL (including any query string),
-  so inspect the actual name before writing SQL against it.
+- **Journal table name.** The table lives in the `drizzle` schema and is named
+  `__drizzle_migrations_<name>`. The runner takes `<name>` from the final
+  `/`-separated segment of the database URL, after removing a Cloud SQL socket
+  `host=` parameter. Any other query parameters stay in the name:
+  `…@/f3_prod?host=/cloudsql/…` gives `f3_prod`, while
+  `…@/f3_prod?host=/cloudsql/…&sslmode=disable` gives
+  `f3_prod?sslmode=disable`. Inspect the actual table name before writing SQL
+  against it.
+
+## AO counts
+
+`orgs.ao_count` is maintained by a trigger and can drift when rows change
+without it (see
+[`admin-territory-management.md`](../specs/admin-territory-management.md) for
+the intended behavior). To list organizations whose stored count differs from
+the expected one, run this read-only query:
+
+```sql
+SELECT o.id, o.name, o.ao_count, e.expected
+FROM orgs o
+JOIN org_ao_count_expected() e ON e.org_id = o.id
+WHERE o.ao_count IS DISTINCT FROM e.expected;
+```
+
+`SELECT recount_org_ao_counts();` repairs every count and returns how many rows
+it changed. Run it after any direct SQL edit that changes an organization's
+parent, active status, or type while the trigger is disabled or bypassed. An
+`app.disable_ao_count_trigger` setting of `true` skips the trigger; an empty or
+`false` value does not.

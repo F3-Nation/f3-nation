@@ -83,22 +83,19 @@ inserts no Territory records and reparents no existing organizations.
   a production-shaped dump, with preservation evidence captured before and
   after. A fresh seed alone does not satisfy this criterion. Record the
   dump's provenance and limitations without recording sensitive row data.
-- **AC-4** — Retired. This required a rehearsed rollback of the enum migration.
-  Territory is live in Production, so the rollback tooling was removed and this
-  criterion no longer applies.
-- **AC-5** — All exhaustive shared/admin configuration records include the
-  new type; workspace typechecking passes. Python persistence tests establish
+- **AC-4** — All exhaustive shared/admin configuration records include
+  Territory; workspace typechecking passes. Python persistence tests establish
   member-name storage despite changed numeric ordinals.
-- **AC-6** — The sidebar shows Territories with `LandPlot`; selecting it loads
+- **AC-5** — The sidebar shows Territories with `LandPlot`; selecting it loads
   `/territories` through `[orgSegment]`, with the correct heading and list
   query. Add visibility follows `orgAdminConfig.territory.add` and opens the
   shared Territory editor. No per-type page, table, or modal is introduced.
-- **AC-7** — Existing organization routes and unrelated admin routes retain
+- **AC-6** — Existing organization routes and unrelated admin routes retain
   their resolution. Existing five-type regression assertions remain valid;
-  new assertions cover Territory ordering, route/icon configuration, and the
+  Territory assertions cover Territory ordering, route/icon configuration, and the
   basic page/editor behavior. Homepage enum-driven behavior is checked for
   exhaustive configuration gaps.
-- **AC-8** — Verification results distinguish automated tests, browser checks,
+- **AC-7** — Verification results distinguish automated tests, browser checks,
   dump rehearsal, and any unavailable checks. Required local lint,
   formatting, typecheck, and CI gates pass before declaring the change ready.
 
