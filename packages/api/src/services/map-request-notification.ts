@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 
 import type { AppDb } from "@acme/db/client";
-import type { RegionRole } from "@acme/shared/app/enums";
+import type { UserRole } from "@acme/shared/app/enums";
 import { schema } from "@acme/db";
 import { requestTypeToTitle } from "@acme/shared/app/functions";
 
@@ -30,7 +30,7 @@ export const getUsersWithRoles = async ({
 }: {
   db: AppDb;
   orgId: number;
-  roleNames?: RegionRole[];
+  roleNames?: UserRole[];
 }) => {
   const roleIds = await db
     .select({ id: schema.roles.id })

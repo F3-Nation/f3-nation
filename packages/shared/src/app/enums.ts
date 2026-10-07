@@ -1,4 +1,10 @@
-export const UserRole = ["user", "editor", "admin"] as const;
+export const UserRole = [
+  "user",
+  "editor",
+  "admin",
+  "password_manager",
+  "password_reader",
+] as const;
 export type UserRole = (typeof UserRole)[number];
 
 export const UserStatus = ["active", "inactive"] as const;
@@ -6,9 +12,6 @@ export type UserStatus = (typeof UserStatus)[number];
 
 export const IsActiveStatus = ["active", "inactive"] as const;
 export type IsActiveStatus = (typeof IsActiveStatus)[number];
-
-export const RegionRole = ["user", "editor", "admin"] as const;
-export type RegionRole = (typeof RegionRole)[number];
 
 export const UpdateRequestStatus = ["pending", "approved", "rejected"] as const;
 export type UpdateRequestStatus = (typeof UpdateRequestStatus)[number];

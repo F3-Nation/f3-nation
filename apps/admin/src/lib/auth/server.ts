@@ -7,6 +7,7 @@ import { routes } from "@acme/shared/app/constants";
 
 import { ACCESS_TOKEN_COOKIE_NAME } from "./constants";
 import type { AdminSession } from "./session";
+import { isAdminRoleName } from "./session";
 import { env } from "~/env";
 import { logDebug, logWarn } from "~/lib/logging";
 import { getMyProfile } from "~/lib/api/client";
@@ -78,12 +79,20 @@ export async function getSessionUser(): Promise<AdminSession | null> {
 
     return {
       ...session,
-      roles: profile.roles.map((role) => ({
-        roleId: role.roleId,
-        orgId: role.orgId,
-        orgName: role.orgName,
-        roleName: role.roleName,
-      })),
+      // Drop roles the portal does not surface (e.g. password_manager) so they
+      // never appear in the user menu, no-access page, or any session consumer.
+      roles: profile.roles.flatMap((role) =>
+        isAdminRoleName(role.roleName)
+          ? [
+              {
+                roleId: role.roleId,
+                orgId: role.orgId,
+                orgName: role.orgName,
+                roleName: role.roleName,
+              },
+            ]
+          : [],
+      ),
     };
   } catch (error) {
     logWarn("admin.auth.roles_hydrate_failed", { err: error });

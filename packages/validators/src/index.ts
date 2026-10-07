@@ -12,7 +12,7 @@ import {
   updateRequests,
   users,
 } from "@acme/db/schema/schema";
-import { DayOfWeek } from "@acme/shared/app/enums";
+import { DayOfWeek, UserRole } from "@acme/shared/app/enums";
 
 // USER SCHEMA
 export const UserSelectSchema = createSelectSchema(users);
@@ -27,7 +27,7 @@ export const CrupdateUserSchema = UserInsertSchema.extend({
   roles: z
     .object({
       orgId: z.number(),
-      roleName: z.enum(["user", "editor", "admin"]),
+      roleName: z.enum(UserRole),
     })
     .array()
     .refine(

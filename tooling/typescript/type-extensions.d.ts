@@ -2,7 +2,8 @@ import type { CellData, RowData, TableFeatures } from "@tanstack/table-core";
 import type { DefaultSession } from "next-auth";
 import type { DefaultJWT } from "next-auth/jwt";
 
-type UserRole = "user" | "editor" | "admin";
+type UserRole =
+  "user" | "editor" | "admin" | "password_manager" | "password_reader";
 
 type OrgRole = {
   orgId: number;

@@ -200,7 +200,7 @@ export const userListUserOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),
@@ -232,7 +232,7 @@ export const userDetailOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),

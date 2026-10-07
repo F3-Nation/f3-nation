@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { and, asc, eq, ilike, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { UserRole } from "@acme/shared/app/enums";
 
 import { personalUserProcedure, protectedProcedure } from "../../shared";
 
@@ -83,7 +84,7 @@ const meRoleSchema = z.object({
   roleId: z.number().int().min(1),
   orgId: z.number().int().min(1),
   orgName: z.string(),
-  roleName: z.enum(["user", "editor", "admin"]),
+  roleName: z.enum(UserRole),
 });
 
 const mePositionSchema = z.object({

@@ -2,6 +2,7 @@ import { and, eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
+import type { UserRole } from "@acme/shared/app/enums";
 import { normalizeEmail } from "@acme/shared/common/functions";
 import { CrupdateUserSchema, UserSelectSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
@@ -9,7 +10,7 @@ import { z } from "zod";
 
 interface RoleInput {
   orgId: number;
-  roleName: "user" | "editor" | "admin";
+  roleName: UserRole;
 }
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
