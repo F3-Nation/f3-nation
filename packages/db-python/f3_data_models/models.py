@@ -79,21 +79,6 @@ class User_Status(enum.Enum):
     inactive = 2
 
 
-class Region_Role(enum.Enum):
-    """
-    Enum representing the roles within a region.
-
-    Attributes:
-        user
-        editor
-        admin
-    """
-
-    user = 1
-    editor = 2
-    admin = 3
-
-
 class User_Role(enum.Enum):
     """
     Enum representing the roles of a user.
@@ -102,11 +87,15 @@ class User_Role(enum.Enum):
         user
         editor
         admin
+        password_manager
+        password_reader
     """
 
     user = 1
     editor = 2
     admin = 3
+    password_manager = 4
+    password_reader = 5
 
 
 class Update_Request_Status(enum.Enum):
