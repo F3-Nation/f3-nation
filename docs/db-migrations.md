@@ -212,7 +212,10 @@ A `NOLOGIN` role `db_owner` owns every schema and object; `db_migrator`
 inherits it (`GRANT db_owner TO db_migrator`) and stops needing the app
 roles. Migrations then run as `db_owner` (`ALTER ROLE db_migrator SET role =
 'db_owner'`), so what they create is owned by `db_owner` and gets
-`db_owner`'s default privileges (step 2). The apps then use only granted
+`db_owner`'s default privileges (step 2). Grant `db_owner` CREATE on the
+database first (`GRANT CREATE ON DATABASE f3_staging TO db_owner`): after the
+role switch, `db_migrator`'s own grant no longer applies, and the migrate
+command refuses without it. The apps then use only granted
 privileges. Before moving ownership:
 
 1. **Grant each app login what it now gets from owning objects.** The
