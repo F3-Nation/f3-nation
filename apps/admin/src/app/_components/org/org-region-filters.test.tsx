@@ -330,6 +330,39 @@ describe("Region filters with real hierarchy paging", () => {
     },
   );
 
+  it.each([
+    { name: "Area alone", selectSector: false },
+    { name: "Sector and Area", selectSector: true },
+  ])(
+    "$name excludes direct Territory and sibling Area Regions without selecting a Territory",
+    async ({ selectSector }) => {
+      hierarchyOrgs = [...hierarchy, node(22, 13, "area", "Sibling Area")];
+      regionOrgs = [...regions, node(23, 22, "region", "Sibling Area Region")];
+      mount();
+      await screen.findByRole("button", { name: "Area: Paged Area" });
+      if (selectSector) {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Sector: Selected Sector" }),
+        );
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Area: Paged Area" }));
+
+      await waitFor(() => expect(rowIds()).toEqual([17]));
+      expect(latestRegionInput()?.parentOrgIds).toEqual([14]);
+      expect(screen.getByTestId("region-total").textContent).toBe("1");
+      expect(
+        screen
+          .getByRole("button", { name: "Sector: Selected Sector" })
+          .getAttribute("aria-pressed"),
+      ).toBe(String(selectSector));
+      for (const territory of screen.getAllByRole("button", {
+        name: /^Territory:/,
+      })) {
+        expect(territory.getAttribute("aria-pressed")).toBe("false");
+      }
+    },
+  );
+
   it("prunes incompatible Areas when a Territory is selected and restores their choices when it clears", async () => {
     mount();
     await screen.findByRole("button", { name: "Territory: Paged Territory" });

@@ -74,8 +74,8 @@ export default function AdminOrgEditModal({
   const label = orgTypeDisplay[orgType].label;
   const { parentTypes } = config;
   const hasParent = parentTypes.length > 0;
-  const includeInactiveCurrentParent = orgType === "region";
-  const isEditingRegion = includeInactiveCurrentParent && id != null && id >= 0;
+  const isRegionEditor = orgType === "region";
+  const isEditingRegion = isRegionEditor && id != null && id >= 0;
   const parentLabel = parentTypes
     .map((parentType) => orgTypeDisplay[parentType].label)
     .join(" or ");
@@ -116,7 +116,7 @@ export default function AdminOrgEditModal({
   const { data: currentParentResponse } = useQuery(
     orpc.org.byId.queryOptions({
       input: { id: org?.parentId ?? -1 },
-      enabled: includeInactiveCurrentParent && org?.parentId != null,
+      enabled: isRegionEditor && org?.parentId != null,
     }),
   );
   const {
@@ -125,17 +125,11 @@ export default function AdminOrgEditModal({
     isError: parentsError,
   } = useFetchAllPages({
     path: ["org", "all"],
-    queryKey: [
-      "org.all.everyParent",
-      parentTypes,
-      includeInactiveCurrentParent,
-    ],
+    queryKey: ["org.all.everyParent", parentTypes, isRegionEditor],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
         orgTypes: parentTypes,
-        ...(includeInactiveCurrentParent
-          ? { statuses: IsActiveStatus, onlyMine: true }
-          : {}),
+        ...(isRegionEditor ? { statuses: IsActiveStatus, onlyMine: true } : {}),
         pageIndex,
         pageSize,
       });
@@ -148,9 +142,7 @@ export default function AdminOrgEditModal({
   const parentOptions = (parents ?? [])
     .filter(
       (parent) =>
-        !includeInactiveCurrentParent ||
-        parent.isActive ||
-        parent.id === org?.parentId,
+        !isRegionEditor || parent.isActive || parent.id === org?.parentId,
     )
     .map(({ id, name, orgType, isActive }) => ({
       id,
@@ -159,7 +151,7 @@ export default function AdminOrgEditModal({
       isActive,
     }));
   if (
-    includeInactiveCurrentParent &&
+    isRegionEditor &&
     currentParent &&
     parentTypes.includes(currentParent.orgType) &&
     !parentOptions.some((parent) => parent.id === currentParent.id)
@@ -173,7 +165,7 @@ export default function AdminOrgEditModal({
     (parent) => parent.isActive && parent.id !== org?.parentId,
   );
   const parentChangeDisabled =
-    includeInactiveCurrentParent &&
+    isRegionEditor &&
     (!canChangeRegionParent ||
       parentsPending ||
       parentsError ||
@@ -184,7 +176,7 @@ export default function AdminOrgEditModal({
       ? "Loading Region details. Wait before saving."
       : "This Region could not be found. Reload before saving.";
   let parentHelp: string | undefined;
-  if (includeInactiveCurrentParent) {
+  if (isRegionEditor) {
     if (regionRecordUnavailable) {
       parentHelp = regionRecordMessage;
     } else if (sourceAccessDenied) {
@@ -383,7 +375,7 @@ export default function AdminOrgEditModal({
           <form
             onSubmit={form.handleSubmit(
               async (data) => {
-                if (includeInactiveCurrentParent) {
+                if (isRegionEditor) {
                   if (regionRecordUnavailable) {
                     toast.error(regionRecordMessage);
                     return;
@@ -581,7 +573,7 @@ export default function AdminOrgEditModal({
                             </SelectContent>
                           </Select>
                         )}
-                        {includeInactiveCurrentParent && (
+                        {isRegionEditor && (
                           <p className="text-sm text-muted-foreground">
                             {parentHelp}
                           </p>
@@ -839,7 +831,7 @@ export default function AdminOrgEditModal({
                     type="submit"
                     className="w-full"
                     disabled={
-                      includeInactiveCurrentParent &&
+                      isRegionEditor &&
                       (regionRecordUnavailable || sourceAccessDenied)
                     }
                   >
