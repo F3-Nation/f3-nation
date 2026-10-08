@@ -313,6 +313,9 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
     },
   });
   let plan;
+  // The newest applied migration when the checks ran; re-checked under the
+  // lock right before migrating.
+  let newestApplied = 0;
   try {
     let current: { db: string; user: string } | undefined;
     try {
@@ -389,6 +392,7 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
         m.hash,
       ]),
     );
+    newestApplied = rows.reduce((max, r) => Math.max(max, r.createdAt), 0);
     plan = planMigrations(readJournal(), rows, fileHashes, env.knownSkipped);
   } finally {
     await ro.end();
@@ -441,6 +445,25 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
     connection: { application_name: "f3-db-migrate" },
   });
   try {
+    // One migration run at a time: Drizzle reads the newest applied row
+    // before its transaction starts, so two runs confirmed together would
+    // both apply the same migrations. The lock is held by this session (the
+    // pool has one connection) until rw.end() below; then make sure nothing
+    // was applied since the checks.
+    const [lock] = await rw<{ ok: boolean }[]>`
+      SELECT pg_try_advisory_lock(hashtext(${`f3-db-migrate:${database}`})) AS ok`;
+    if (!lock?.ok) {
+      throw new Refusal(
+        `Someone else is migrating ${database} right now. Wait for them to finish, then run this again.`,
+      );
+    }
+    const [now] = await rw<{ newest: string | null }[]>`
+      SELECT max(created_at)::text AS newest FROM ${rw(`drizzle.${migrationsTable}`)}`;
+    if (Number(now?.newest ?? 0) !== newestApplied) {
+      throw new Refusal(
+        `${database} was migrated by someone else while you were confirming. Run this again to see what is still pending.`,
+      );
+    }
     console.log(`Migrating ${database} ...`);
     await migrator(drizzle(rw), {
       migrationsTable,
