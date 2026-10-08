@@ -185,11 +185,35 @@ Its URL (ending exactly in `/f3_staging` or `/f3_prod`) goes into
 later creates objects owned by a new role, the command names the role it is
 missing.
 
+**New objects.** Whatever a migration creates is owned by the role it runs
+as, here `db_migrator`, and the apps reach new objects only through that
+role's default privileges: the migrations themselves grant nothing. Today
+those defaults belong to the roles that have been running migrations (on
+prod mostly `tackle` and `f3slackbot`; on staging `tackle` and
+`dev_generic`). So before the first migration as `db_migrator`, give it the
+same defaults, or new tables are invisible to the apps. List them:
+
+```sql
+SELECT pg_get_userbyid(defaclrole) AS creator,
+  defaclnamespace::regnamespace AS schema, defaclobjtype AS kind, defaclacl
+FROM pg_default_acl ORDER BY 1, 2, 3;
+```
+
+and repeat each one for `db_migrator`, e.g. for the auth app's tables:
+
+```sql
+ALTER DEFAULT PRIVILEGES FOR ROLE db_migrator IN SCHEMA auth
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_auth;
+```
+
 ### Phase 2: one owner role (target state; its own PR/issue, staging first)
 
 A `NOLOGIN` role `db_owner` owns every schema and object; `db_migrator`
 inherits it (`GRANT db_owner TO db_migrator`) and stops needing the app
-roles. The apps then use only granted privileges. Before moving ownership:
+roles. Migrations then run as `db_owner` (`ALTER ROLE db_migrator SET role =
+'db_owner'`), so what they create is owned by `db_owner` and gets
+`db_owner`'s default privileges (step 2). The apps then use only granted
+privileges. Before moving ownership:
 
 1. **Grant each app login what it now gets from owning objects.** The
    slackbot connects as `f3slackbot`, which on prod owns about 35 tables,
