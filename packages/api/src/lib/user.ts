@@ -280,15 +280,18 @@ export const buildUserListQuery = async ({
     defaultPageSize: 10,
   });
   const selectedRoles = input?.roles ?? [];
-  // "user" is the absence of a role row (LEFT JOIN -> NULL name); every other
-  // selected value maps to a concrete roles.name. Compose them with OR so a
-  // mixed selection (e.g. all visible roles) matches role-less AND named-role
-  // users instead of collapsing to one branch. An empty selection is
-  // unrestricted. This intentionally no longer keys off UserRole.length, which
-  // broke once the enum grew past the set any caller actually offers.
+  // "user" selects two kinds of user: those with no role row at all
+  // (LEFT JOIN -> NULL name) and those with an explicit "user" roles.name.
+  // Every selected value maps to a concrete roles.name via the IN (...)
+  // branch; "user" additionally pulls in the NULL (role-less) branch.
+  // Compose them with OR so a mixed selection (e.g. all visible roles)
+  // matches role-less AND named-role users instead of collapsing to one
+  // branch. An empty selection is unrestricted. This intentionally no longer
+  // keys off UserRole.length, which broke once the enum grew past the set any
+  // caller actually offers.
   const roleFilter = (() => {
     if (selectedRoles.length === 0) return undefined;
-    const namedRoles = selectedRoles.filter((role) => role !== "user");
+    const namedRoles = selectedRoles;
     const conditions: SQL[] = [];
     if (selectedRoles.includes("user"))
       conditions.push(isNull(schema.roles.name));

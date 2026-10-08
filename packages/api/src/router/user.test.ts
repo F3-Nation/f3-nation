@@ -1666,8 +1666,8 @@ describe("User Router", () => {
         });
         expect(editorOnly.users.some((u) => u.id === user.id)).toBe(true);
 
-        // "user" means the absence of a role row, so a role-bearing user is
-        // excluded from that filter.
+        // This user holds an "editor" role, which is neither role-less nor
+        // "user", so the "user" filter excludes them.
         const roleLessOnly = await client.user.all({
           roles: ["user"],
           searchTerm: marker,
@@ -1675,6 +1675,50 @@ describe("User Router", () => {
           pageSize: 50,
         });
         expect(roleLessOnly.users.some((u) => u.id === user.id)).toBe(false);
+      } finally {
+        await cleanup.user(user.id);
+      }
+    });
+
+    it("includes users with an explicit 'user' role row when filtering by 'user'", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      // "user" is usually the absence of a role row, but a stored "user"
+      // roles.name is valid too and must still match the "user" filter.
+      let [userRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "user"));
+      if (!userRole) {
+        [userRole] = await db
+          .insert(schema.roles)
+          .values({ name: "user" })
+          .returning({ id: schema.roles.id });
+      }
+      if (!userRole) throw new Error("Failed to create user role");
+
+      const marker = `FilterUserRole${uniqueId()}`;
+      const [user] = await db
+        .insert(schema.users)
+        .values({ email: `filter-${uniqueId()}@example.com`, f3Name: marker })
+        .returning({ id: schema.users.id });
+      if (!user) throw new Error("Failed to create user");
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: user.id,
+        orgId: nation.id,
+        roleId: userRole.id,
+      });
+
+      try {
+        await mockAuthWithSession(adminSession(nation));
+        const client = createTestClient();
+
+        const userFiltered = await client.user.all({
+          roles: ["user"],
+          searchTerm: marker,
+          pageIndex: 0,
+          pageSize: 50,
+        });
+        expect(userFiltered.users.some((u) => u.id === user.id)).toBe(true);
       } finally {
         await cleanup.user(user.id);
       }
