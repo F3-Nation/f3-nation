@@ -204,6 +204,20 @@
       "when": 1791113464715,
       "tag": "0028_silly_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791338775788,
+      "tag": "0029_repoint_roles_to_user_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791338804109,
+      "tag": "0030_add_password_user_roles",
+      "breakpoints": true
     }
   ]
 }
