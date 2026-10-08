@@ -874,13 +874,17 @@ export const eventRouter = {
       const eventToUpdate: typeof schema.events.$inferInsert = {
         ...eventData,
         orgId: input.aoId,
-        meta: meta
-          ? {
-              ...meta,
-              mapSeed,
-              eventTypeId: undefined, // Remove eventTypeId from meta since we handle it in join table
-            }
-          : null,
+        ...(meta === undefined
+          ? {}
+          : {
+              meta: meta
+                ? {
+                    ...meta,
+                    mapSeed,
+                    eventTypeId: undefined, // Remove eventTypeId from meta since we handle it in join table
+                  }
+                : null,
+            }),
       };
 
       let shouldNotifyFirstEventForRegion = false;

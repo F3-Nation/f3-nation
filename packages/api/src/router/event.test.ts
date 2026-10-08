@@ -1484,7 +1484,7 @@ describe("Event Router", () => {
       expect(retainedAttendance).toEqual([{ userId: attendanceUser.id }]);
     });
 
-    it("preserves per-instance metadata on a status-only reactivation", async () => {
+    it("preserves omitted metadata on reactivation and allows explicit metadata clearing", async () => {
       const region = await createTestRegion();
       if (!region) return;
       const ao = await createTestAO(region.id);
@@ -1560,18 +1560,54 @@ describe("Event Router", () => {
         highlight: false,
         isActive: true,
         eventTypeIds: [eventType.id],
-        meta: seriesMeta,
         email: null,
       });
 
-      const [persisted] = await db
+      const [persistedSeries] = await db
+        .select({ meta: schema.events.meta })
+        .from(schema.events)
+        .where(eq(schema.events.id, series.id));
+      const [persistedInstance] = await db
         .select({
           isActive: schema.eventInstances.isActive,
           meta: schema.eventInstances.meta,
         })
         .from(schema.eventInstances)
         .where(eq(schema.eventInstances.id, instance.id));
-      expect(persisted).toEqual({ isActive: true, meta: instanceMeta });
+      expect(persistedSeries?.meta).toEqual(seriesMeta);
+      expect(persistedInstance).toEqual({ isActive: true, meta: instanceMeta });
+
+      await createTestClient().event.crupdate({
+        id: series.id,
+        name: series.name,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: "0615",
+        startDate: series.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        meta: null,
+        email: null,
+      });
+
+      const [clearedSeries] = await db
+        .select({ meta: schema.events.meta })
+        .from(schema.events)
+        .where(eq(schema.events.id, series.id));
+      const [clearedInstance] = await db
+        .select({ meta: schema.eventInstances.meta })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, instance.id));
+      expect(clearedSeries?.meta).toBeNull();
+      expect(clearedInstance?.meta).toBeNull();
     });
 
     it("requires admin permission to deactivate an existing event", async () => {
