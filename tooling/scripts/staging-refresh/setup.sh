@@ -101,8 +101,25 @@ run_sql() { # instance port database spuds-secret sql-file password password-is-
   cloud-sql-proxy "$PROJECT:$REGION:$1" --port "$2" --address 127.0.0.1 >"$TMP/proxy-$1.log" 2>&1 &
   PROXY_PID=$!
   for _ in $(seq 1 30); do pg_isready -h 127.0.0.1 -p "$2" -q 2>/dev/null && break; sleep 1; done
-  PGPASSWORD="$(secret_value "$4")" STAGING_REFRESH_PW="$6" STAGING_REFRESH_PW_SET="$7" \
+  local admin_pw
+  admin_pw="$(secret_value "$4")"
+  PGPASSWORD="$admin_pw" STAGING_REFRESH_PW="$6" STAGING_REFRESH_PW_SET="$7" \
     psql "host=127.0.0.1 port=$2 dbname=$3 user=spuds" -X -q -v ON_ERROR_STOP=1 -P pager=off -f "$5"
+  # A stored password is only trusted once it logs in: an earlier run may have stored a
+  # new one and then failed before applying it, and that run's re-run must apply it.
+  if ! PGPASSWORD="$6" psql "host=127.0.0.1 port=$2 dbname=$3 user=staging_refresh" \
+    -X -q -t -c 'SELECT 1' >/dev/null 2>&1; then
+    if [ "$7" = 1 ]; then
+      echo "staging_refresh can't log in on $1 with the password just applied" >&2
+      exit 1
+    fi
+    echo "the stored staging_refresh password doesn't log in on $1 (stored by an earlier run but never applied); applying it"
+    PGPASSWORD="$admin_pw" STAGING_REFRESH_PW="$6" STAGING_REFRESH_PW_SET=1 \
+      psql "host=127.0.0.1 port=$2 dbname=$3 user=spuds" -X -q -v ON_ERROR_STOP=1 -P pager=off -f "$5"
+    PGPASSWORD="$6" psql "host=127.0.0.1 port=$2 dbname=$3 user=staging_refresh" \
+      -X -q -t -c 'SELECT 1' >/dev/null 2>&1 \
+      || { echo "staging_refresh still can't log in on $1" >&2; exit 1; }
+  fi
   kill "$PROXY_PID"; wait "$PROXY_PID" 2>/dev/null || true; PROXY_PID=""
 }
 
