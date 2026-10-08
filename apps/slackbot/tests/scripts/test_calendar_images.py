@@ -625,6 +625,11 @@ def test_last_event_removal_refreshes_post_and_defers_deletion(calendar_generati
         assert remove_mock.call_count == (4 if schema == "f3_prod" else 1)
 
 
+def test_slack_api_error_without_response_is_ambiguous():
+    error = SlackApiError("No response received", response=None)
+    assert calendar_images._slack_attempt_was_rejected(error) is False
+
+
 @pytest.mark.parametrize("outcome", ["update", "fallback", "both_fail", "initial_fail"])
 @pytest.mark.parametrize("failure_mode", ["exception", "not_ok"])
 @pytest.mark.parametrize("change", ["empty", "replacement"])

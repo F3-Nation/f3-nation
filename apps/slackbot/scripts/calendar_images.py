@@ -273,6 +273,7 @@ def _slack_attempt_was_rejected(error: Exception) -> bool:
         and error.safe_to_discard
         # The SDK raises even when Slack returned an explicit rejection response.
         or isinstance(error, SlackApiError)
+        and error.response is not None
         and error.response.get("ok") is False
     )
 
