@@ -19,11 +19,15 @@
     "generate": "pnpm with-env drizzle-kit generate",
     "generate:empty": "pnpm with-env drizzle-kit generate --custom",
     "migrate": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/migrate.ts",
+    "migrate:local": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/migrate.ts",
+    "migrate:staging": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 node -r esbuild-register src/migrate-remote.ts staging",
+    "migrate:prod": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 node -r esbuild-register src/migrate-remote.ts prod",
     "reset": "QUERY_TIMEOUT_MS=0 pnpm with-env tsx ./src/reset.ts",
     "studio": "pnpm with-env drizzle-kit studio",
     "drop": "pnpm with-env drizzle-kit drop",
     "reset-test-db": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
     "seed:local": "QUERY_TIMEOUT_MS=0 pnpm with-env tsx src/local-seed.ts",
+    "test": "SKIP_ENV_VALIDATION=1 vitest --run",
     "typecheck": "tsc --noEmit",
     "with-env": "dotenv -e .env --"
   },
@@ -41,11 +45,14 @@
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
+    "@acme/vitest-config": "workspace:*",
+    "@types/node": "catalog:",
     "drizzle-kit": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
     "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "prettier": "@acme/prettier-config"
 }

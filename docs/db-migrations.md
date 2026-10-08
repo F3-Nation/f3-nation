@@ -63,6 +63,68 @@ type`.
   rewrites the tables and takes `ACCESS EXCLUSIVE` locks, so schedule a
   maintenance window.
 
+## Deploying migrations
+
+**Staging and prod are migrated only from main, after the pull request is
+merged**, with one of three commands, run from the repository root:
+
+| Command                   | Migrates                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm db:migrate:local`   | The local database in `packages/db/.env`. `pnpm db:migrate` is the same command.                                                     |
+| `pnpm db:migrate:staging` | `f3_staging`, with the login in Secret Manager secret `MIGRATE_DATABASE_URL_STAGING` (project `f3data`). Ignores `packages/db/.env`. |
+| `pnpm db:migrate:prod`    | `f3_prod`, with the login in secret `MIGRATE_DATABASE_URL_PROD`. Ignores `packages/db/.env`.                                         |
+
+On 2026-10-08 `pnpm db:migrate` was run from an unmerged branch with a prod URL
+in `packages/db/.env`, and applied that branch's migrations to prod. These
+commands make that refuse. Each check prints what to do when it refuses, and
+nothing is changed until every check passes:
+
+- **Local only** (`db:migrate`, `db:migrate:local`): the URL must point at
+  `localhost`, `127.0.0.1`, `::1` or a local socket (not `/cloudsql/…`), the
+  database must not be named like staging or prod, and the server must not be
+  Cloud SQL (which also catches a cloud-sql-proxy on localhost).
+- **Staging and prod** (`db:migrate:staging`, `db:migrate:prod`):
+  1. Run by a person in a terminal: they ask you to type the database name.
+     There is no `--yes`.
+  2. After `git fetch` of F3-Nation/f3-nation's `main`, `packages/db/drizzle`
+     must be exactly main's, or the checkout must be a commit on main (a
+     release commit behind main is fine), with no uncommitted or untracked
+     files under `packages/db/drizzle`.
+  3. The URL must name the database exactly (`f3_staging` / `f3_prod`) with no
+     other URL parameters, since they would rename the migrations table (see
+     "Journal table name" below) and Drizzle would re-run every migration.
+  4. Read-only first: the server's `current_database()` must be that database;
+     the login must own every table in `public`, `auth`, `slackbot` and
+     `drizzle` (on prod that is `f3slackbot`, not the apps' logins); and the
+     database's migration rows must agree with the checkout's journal:
+     - a row the journal has no entry for refuses ("migrations this checkout
+       doesn't know about"): unmerged migrations were applied, or the
+       checkout is older than what is deployed;
+     - a journal entry the database lacks, older than its newest row, refuses:
+       Drizzle would skip it silently forever (see the newest-timestamp rule
+       below). Known exceptions are listed per environment in
+       `packages/db/src/migrate-guards.ts` (prod: `0008_nice_leech`, applied
+       to staging but never to prod);
+     - a row whose hash differs from the file is only noted: the file was
+       edited after it ran (prod's `0011` and `0015`), and Drizzle ignores it.
+  5. It lists the pending migrations and asks you to type the database name.
+     Then it applies them (in one transaction) and checks the database is at
+     the newest one.
+
+**Connecting.** The secret holds a full `postgresql://` URL, used as is. If
+it points at `127.0.0.1:<port>`, start the Cloud SQL proxy on that port first
+(`cloud-sql-proxy f3data:us-central1:f3data --port <port>` for prod,
+`…:f3data-nonprod` for staging); a Cloud SQL socket (`?host=/cloudsql/…`)
+works where one is mounted. Your own `gcloud` login reads the secret.
+
+**What an admin sets up once.** In project `f3data`, secrets
+`MIGRATE_DATABASE_URL_STAGING` and `MIGRATE_DATABASE_URL_PROD`, each a URL for
+a login that owns the schema objects of that database (on prod `f3slackbot`
+owns them), and `roles/secretmanager.secretAccessor` on them for whoever runs
+migrations. For unusual cases: `MIGRATE_SECRET` / `MIGRATE_SECRET_PROJECT`
+read a different secret, and `MIGRATE_DATABASE_URL` supplies a URL directly;
+every check still applies.
+
 ## Deploying a batch of migrations
 
 - **One transaction.** Drizzle applies all pending migrations, and their journal
@@ -70,9 +132,10 @@ type`.
   `ADD VALUE` before that transaction commits, so no migration in the same batch
   may reference the new value. Compare against `org_type::text` instead, or
   ship the use in a later release.
-- **The runner can silently skip.** It skips migration entirely when `CI` is
-  set, still logs `Migration done`, and exits zero. Run it with `env -u CI`, and
-  verify the schema and journal afterwards rather than trusting its output.
+- **The local runner can silently skip.** `pnpm db:migrate` skips migration
+  entirely when `CI` is set, still logs `Migration done`, and exits zero. Run
+  it with `env -u CI`. (`db:migrate:staging` / `db:migrate:prod` don't read
+  `CI`, and check the database is at the newest migration afterwards.)
 - **Newest-timestamp rule.** The runner compares each migration's journal `when`
   with the newest `created_at` in the journal table and runs only newer ones; it
   never checks whether an individual migration has a row. Deleting an older

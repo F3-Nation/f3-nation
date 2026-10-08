@@ -107,6 +107,22 @@
     },
     "clean": {
       "cache": false
+    },
+    "migrate:staging": {
+      "cache": false,
+      "env": [
+        "MIGRATE_DATABASE_URL",
+        "MIGRATE_SECRET",
+        "MIGRATE_SECRET_PROJECT"
+      ]
+    },
+    "migrate:prod": {
+      "cache": false,
+      "env": [
+        "MIGRATE_DATABASE_URL",
+        "MIGRATE_SECRET",
+        "MIGRATE_SECRET_PROJECT"
+      ]
     }
   }
 }
