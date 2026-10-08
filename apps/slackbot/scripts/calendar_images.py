@@ -473,6 +473,7 @@ def generate_calendar_images(force: bool = False):
                 if region_org_record:
                     slack_app_settings: dict = deepcopy(region_org_record[2].settings)
                     pending_deletions = []
+                    generated_backing_files = []
                     region_name = region_org_record[0].name
                     print(f"Running for {region_name}")
 
@@ -711,8 +712,10 @@ def generate_calendar_images(force: bool = False):
                             filename_static = f"{region_id}-{week}.png"
                             if LOCAL_DEVELOPMENT:
                                 dfi.export(df_styled, filename, table_conversion="playwright")
+                                generated_backing_files.append((week, filename))
                             else:
                                 dfi.export(df_styled, f"/mnt/calendar-images/{filename}", table_conversion="playwright")
+                                generated_backing_files.append((week, filename))
                                 if DB_SCHEMA == "f3_prod":
                                     shutil.copyfile(
                                         f"/mnt/calendar-images/{filename}", f"/mnt/calendar-images/{filename_static}"
@@ -728,7 +731,26 @@ def generate_calendar_images(force: bool = False):
 
                     if calendar_updated:
                         if slack_posting_enabled(slack_app_settings):
-                            post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run)
+                            try:
+                                post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run)
+                            except Exception:
+                                # Only failed Slack posting permits discarding new exports.
+                                # A later DB failure may leave Slack referencing these files.
+                                for generated_week, new_file in generated_backing_files:
+                                    if parse_calendar_image_filename(
+                                        new_file, region_id, generated_week, generation_started_at
+                                    ) is None or new_file in [
+                                        region_org_record[2].settings.get(f"calendar_image_{label}")
+                                        for label in WEEK_LABELS
+                                    ]:
+                                        continue
+                                    try:
+                                        os.remove(new_file if LOCAL_DEVELOPMENT else f"/mnt/calendar-images/{new_file}")
+                                    except FileNotFoundError:
+                                        pass
+                                    except Exception as cleanup_error:
+                                        print(f"Error deleting unposted calendar image: {cleanup_error}")
+                                raise
 
                         print(f"Updating Slack app settings for region {region_name} with {slack_app_settings}")
                         session.query(SlackSpace).filter(SlackSpace.team_id == slack_app_settings["team_id"]).update(

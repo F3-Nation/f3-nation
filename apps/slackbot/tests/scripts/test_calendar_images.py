@@ -660,8 +660,13 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
     monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings: [])
 
     def remove(path):
-        assert session.commit.call_count == 2
-        assert settings != before
+        if session.commit.call_count == 1:
+            assert failed
+            assert settings == before
+            assert path != f"/mnt/calendar-images/{old_backing}"
+        else:
+            assert session.commit.call_count == 2
+            assert settings != before
 
     remove_mock = MagicMock(side_effect=remove)
     monkeypatch.setattr(calendar_images.os, "remove", remove_mock)
@@ -676,7 +681,8 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
         assert session.query.return_value.update.call_count == 1
         assert session.commit.call_count == 1
         session.rollback.assert_called_once()
-        remove_mock.assert_not_called()
+        assert [call.args[0] for call in remove_mock.call_args_list] == [path for path, _ in exports]
+        remove_mock.reset_mock()
         # The persisted old snapshot makes the next scheduled run retry naturally.
         client.chat_update.side_effect = None
         client.chat_update.return_value = {"ok": True}
@@ -700,6 +706,116 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
     else:
         assert settings["calendar_image_current"] == (retry_exports if failed else exports)[0][0].split("/")[-1]
         assert all(call.args[0] != "/mnt/calendar-images/1-current.png" for call in remove_mock.call_args_list)
+
+
+@pytest.mark.parametrize("schema", ["f3_staging", "f3_prod"])
+@pytest.mark.parametrize("num_weeks", [1, 3])
+@pytest.mark.parametrize("failure", ["slack", "commit"])
+def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, monkeypatch, schema, num_weeks, failure):
+    run, row, settings, session = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    settings["calendar_weeks_shown"] = num_weeks
+    monkeypatch.setattr(calendar_images, "DB_SCHEMA", schema)
+    files = set()
+    export = sys.modules["dataframe_image"].export
+
+    def write_export(style, filename, **kwargs):
+        export(style, filename, **kwargs)
+        files.add(filename)
+
+    monkeypatch.setattr(sys.modules["dataframe_image"], "export", write_export)
+    copy = MagicMock(side_effect=lambda source, destination: files.add(destination))
+    monkeypatch.setattr(calendar_images.shutil, "copyfile", copy)
+
+    def remove(path):
+        if path not in files:
+            raise FileNotFoundError(path)
+        files.remove(path)
+
+    remove_mock = MagicMock(side_effect=remove)
+    monkeypatch.setattr(calendar_images.os, "remove", remove_mock)
+    rows = [
+        row(f"AO {i}", now - timedelta(days=1), start_date=date(2026, 10, 1) + timedelta(weeks=i))
+        for i in range(num_weeks)
+    ]
+    old_paths = {path for path, _ in run(rows, now)}
+    settings.update(
+        q_image_posting_enabled=True,
+        q_image_posting_channel="TEST_CHANNEL",
+        bot_token="test-token",
+        q_image_posting_ts="old-ts",
+    )
+    before = deepcopy(settings)
+    prior_files = files.copy()
+    remove_mock.reset_mock()
+    copy.reset_mock()
+    client = MagicMock()
+    client.chat_update.return_value = {"ok": True}
+    client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
+    monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
+    monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings: [])
+    if failure == "slack":
+        client.chat_update.side_effect = RuntimeError("Slack update failed")
+        client.chat_postMessage.side_effect = RuntimeError("Slack post failed")
+    else:
+        session.commit.side_effect = RuntimeError("DB commit failed")
+    changed_rows = [
+        row(f"Changed AO {i}", now - timedelta(days=1), start_date=date(2026, 10, 1) + timedelta(weeks=i))
+        for i in range(num_weeks)
+    ]
+    new_paths = {path for path, _ in run(changed_rows, now + timedelta(hours=1))}
+    assert len(new_paths) == num_weeks
+    assert new_paths.isdisjoint(old_paths)
+    assert settings == before
+    assert old_paths <= files
+    assert copy.call_count == (num_weeks if schema == "f3_prod" else 0)
+    session.rollback.assert_called_once()
+    client.chat_update.assert_called_once()
+    if failure == "slack":
+        client.chat_postMessage.assert_called_once()
+        assert {call.args[0] for call in remove_mock.call_args_list} == new_paths
+        assert remove_mock.call_count == num_weeks
+        assert files == prior_files
+        assert session.query.return_value.update.call_count == 1
+        assert session.commit.call_count == 1
+        client.chat_update.side_effect = None
+        client.chat_postMessage.side_effect = None
+        retry_paths = {path for path, _ in run(changed_rows, now + timedelta(hours=2))}
+        assert len(retry_paths) == num_weeks
+        assert retry_paths <= files
+        assert not files & (old_paths | new_paths)
+        assert session.commit.call_count == 2
+    else:
+        client.chat_postMessage.assert_not_called()
+        urls = [
+            block.image_url for block in client.chat_update.call_args.kwargs["blocks"] if hasattr(block, "image_url")
+        ]
+        assert {url.rsplit("/", 1)[-1] for url in urls} == {path.rsplit("/", 1)[-1] for path in new_paths}
+        assert files == prior_files | new_paths
+        remove_mock.assert_not_called()
+        assert session.query.return_value.update.call_count == 2
+        assert session.commit.call_count == 2
+
+
+def test_failed_slack_post_does_not_delete_export_matching_a_persisted_filename(calendar_generation, monkeypatch):
+    run, row, settings, session = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    rows = [row("AO", now - timedelta(days=1))]
+    run(rows, now)
+    existing = settings["calendar_image_current"]
+    settings.update(q_image_posting_enabled=True, q_image_posting_channel="TEST_CHANNEL", bot_token="test-token")
+    before = deepcopy(settings)
+    nonce = existing.rsplit("-", 1)[-1].removesuffix(".png")
+    monkeypatch.setattr(calendar_images.random, "choices", lambda alphabet, k: list(nonce))
+    monkeypatch.setattr(calendar_images, "post_calendar_to_slack", MagicMock(side_effect=RuntimeError("Slack failed")))
+    remove = MagicMock()
+    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    exports = run(rows, now, force=True)
+    assert exports[0][0] == f"/mnt/calendar-images/{existing}"
+    assert settings == before
+    remove.assert_not_called()
+    assert session.commit.call_count == 1
+    session.rollback.assert_called_once()
 
 
 @pytest.mark.parametrize("week_index", [0, 1, 2])
