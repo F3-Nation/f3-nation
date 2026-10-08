@@ -13,10 +13,15 @@ import { env } from "@acme/env";
 
 import { sql } from ".";
 import { db } from "./client";
-import { classifyHost, isProtectedDatabaseName } from "./migrate-guards";
+import {
+  classifyHost,
+  isProtectedDatabaseName,
+  maintenanceUrl,
+} from "./migrate-guards";
 import { alembicVersionValue, reset } from "./reset";
 import {
   createDatabaseIfNotExists,
+  getDbUrl,
   migrationsDatabaseName,
   postgresArgs,
 } from "./utils/functions";
@@ -47,10 +52,8 @@ const assertLocalTarget = async (url: string) => {
   }
   // The server-wide catalog answers this from the maintenance database, so
   // it works before the target database exists.
-  const { url: maintenanceUrl, hostOptions } = postgresArgs(
-    url.replace(`/${name}`, "/postgres"),
-  );
-  const client = postgres(maintenanceUrl, {
+  const { url: serverUrl, hostOptions } = postgresArgs(maintenanceUrl(url));
+  const client = postgres(serverUrl, {
     ...hostOptions,
     max: 1,
     onnotice: () => undefined,
@@ -74,7 +77,11 @@ const migrate = async () => {
   if (!databaseUrl) return;
   if (process.env.CI) return;
 
+  // The migrator's client connects to getDbUrl()'s URL, which is
+  // TEST_DATABASE_URL under NODE_ENV=test: check that one too.
   await assertLocalTarget(databaseUrl);
+  const clientUrl = getDbUrl().databaseUrl;
+  if (clientUrl !== databaseUrl) await assertLocalTarget(clientUrl);
 
   try {
     await createDatabaseIfNotExists(databaseUrl);

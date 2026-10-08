@@ -5,7 +5,11 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { checkGitState } from "./migrate-guards";
-import { findMainRemote, readGitState } from "./migrate-remote";
+import {
+  findMainRemote,
+  migrationsFingerprint,
+  readGitState,
+} from "./migrate-remote";
 
 // A throwaway "origin" plus a clone, so the git checks run against real git.
 let dir: string;
@@ -114,5 +118,39 @@ describe("findMainRemote", () => {
 
   it("finds none in an unrelated clone", () => {
     expect(findMainRemote(clone)).toBeUndefined();
+  });
+
+  it("ignores a lookalike host and a matching push URL", () => {
+    git(
+      clone,
+      "remote",
+      "add",
+      "evil",
+      "https://evil.example/F3-Nation/f3-nation.git",
+    );
+    git(clone, "remote", "add", "pushonly", "https://evil.example/x.git");
+    git(
+      clone,
+      "remote",
+      "set-url",
+      "--push",
+      "pushonly",
+      "https://github.com/F3-Nation/f3-nation.git",
+    );
+    expect(findMainRemote(clone)).toBeUndefined();
+  });
+});
+
+describe("migrationsFingerprint", () => {
+  it("changes when a migration or the journal changes", () => {
+    const folder = path.join(clone, "packages/db/drizzle");
+    write(clone, "packages/db/drizzle/meta/_journal.json", "{}");
+    const before = migrationsFingerprint(folder);
+    expect(migrationsFingerprint(folder)).toBe(before);
+    write(clone, "packages/db/drizzle/0000_a.sql", "create table b();");
+    const edited = migrationsFingerprint(folder);
+    expect(edited).not.toBe(before);
+    write(clone, "packages/db/drizzle/meta/_journal.json", '{"x":1}');
+    expect(migrationsFingerprint(folder)).not.toBe(edited);
   });
 });

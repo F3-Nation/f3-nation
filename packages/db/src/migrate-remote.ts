@@ -20,7 +20,8 @@
  * Then it runs Drizzle's migrator, which applies them in one transaction.
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -40,6 +41,7 @@ import {
   confirmationMatches,
   DEFAULT_SECRET_PROJECT,
   ENVIRONMENTS,
+  isMainRepoUrl,
   planMigrations,
 } from "./migrate-guards";
 import { migrationsDatabaseName, postgresArgs } from "./utils/functions";
@@ -65,16 +67,40 @@ function git(
   };
 }
 
-/** The remote that is F3-Nation/f3-nation (origin, or upstream in a fork). */
+/**
+ * The remote whose FETCH URL is github.com/F3-Nation/f3-nation (origin, or
+ * upstream in a fork). Push URLs don't count: main is what is fetched.
+ */
 export function findMainRemote(repoRoot: string): string | undefined {
   const remotes = git(repoRoot, ["remote", "-v"]).stdout.split("\n");
   for (const line of remotes) {
-    const [name, url] = line.split(/\s+/);
-    if (name && url && /[/:]F3-Nation\/f3-nation(?:\.git)?$/i.test(url)) {
-      return name;
-    }
+    const [name, url, kind] = line.split(/\s+/);
+    if (name && url && kind === "(fetch)" && isMainRepoUrl(url)) return name;
   }
   return undefined;
+}
+
+/**
+ * A fingerprint of everything the migrator reads (the journal and every .sql
+ * file), so the folder can be re-checked right before migrating: the files
+ * mustn't change between the checks and the confirmation and the run.
+ */
+export function migrationsFingerprint(folder: string): string {
+  const hash = createHash("sha256");
+  const files = [
+    "meta/_journal.json",
+    ...readdirSync(folder)
+      .filter((f) => f.endsWith(".sql"))
+      .sort(),
+  ];
+  for (const f of files) {
+    hash
+      .update(f)
+      .update("\0")
+      .update(readFileSync(path.join(folder, f)))
+      .update("\0");
+  }
+  return hash.digest("hex");
 }
 
 /**
@@ -237,8 +263,21 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
       `git fetch ${remote} main failed, so this can't check your migrations against main: ${fetched.stderr.trim()}`,
     );
   }
-  const gitRefusal = checkGitState(readGitState(repoRoot, `${remote}/main`));
+  // Exactly the commit just fetched, not <remote>/main, which a custom fetch
+  // refspec could leave stale.
+  const mainSha = git(repoRoot, [
+    "rev-parse",
+    "--verify",
+    "FETCH_HEAD^{commit}",
+  ]).stdout.trim();
+  if (!/^[0-9a-f]{40,64}$/.test(mainSha)) {
+    throw new Refusal(
+      `Couldn't read the main commit git fetch just got (FETCH_HEAD).`,
+    );
+  }
+  const gitRefusal = checkGitState(readGitState(repoRoot, mainSha));
   if (gitRefusal) throw new Refusal(gitRefusal);
+  const fingerprint = migrationsFingerprint(MIGRATIONS_DIR);
 
   // 3. The URL names exactly this database (also the migrations table name).
   const url = migrationUrl(target);
@@ -265,6 +304,8 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
     ...hostOptions,
     max: 1,
     connect_timeout: 15,
+    // Safe through a transaction-pooling PgBouncer too (see createDbClient).
+    prepare: false,
     onnotice: () => undefined,
     connection: {
       application_name: "f3-db-migrate (read-only checks)",
@@ -292,18 +333,46 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
         `${database} has no drizzle.${migrationsTable}: this isn't the database it should be. Stop and ask in #dev.`,
       );
     }
-    const [owner] = await ro<{ n: number; owners: string | null }[]>`
+    // Migrations alter tables, types and functions, create objects in the
+    // schemas and sometimes create schemas: the login must own every such
+    // object (extension members aside, e.g. citext's) and may create in them.
+    const [owner] = await ro<
+      { n: number; owners: string | null; missing: string | null }[]
+    >`
+      WITH schemas AS (
+        SELECT oid, nspname FROM pg_namespace
+        WHERE nspname IN ('public', 'auth', 'slackbot', 'drizzle')
+      ), objects AS (
+        SELECT c.relowner AS owner, 'pg_class'::regclass AS cls, c.oid
+        FROM pg_class c JOIN schemas s ON s.oid = c.relnamespace
+        WHERE c.relkind IN ('r', 'p', 'v', 'm', 'S')
+        UNION ALL
+        SELECT t.typowner, 'pg_type'::regclass, t.oid
+        FROM pg_type t JOIN schemas s ON s.oid = t.typnamespace
+        WHERE t.typtype IN ('e', 'd', 'c', 'r', 'm') AND t.typrelid = 0
+        UNION ALL
+        SELECT p.proowner, 'pg_proc'::regclass, p.oid
+        FROM pg_proc p JOIN schemas s ON s.oid = p.pronamespace
+      )
       SELECT count(*)::int AS n,
-        string_agg(DISTINCT pg_get_userbyid(c.relowner), ', ') AS owners
-      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname IN ('public', 'auth', 'slackbot', 'drizzle')
-        AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
-        AND NOT pg_has_role(current_user, c.relowner, 'USAGE')`;
-    if ((owner?.n ?? 0) > 0) {
+        string_agg(DISTINCT pg_get_userbyid(o.owner), ', ') AS owners,
+        concat_ws(', ',
+          (SELECT string_agg(nspname, ', ') FROM schemas
+            WHERE NOT (has_schema_privilege(current_user, oid, 'CREATE')
+              AND has_schema_privilege(current_user, oid, 'USAGE'))),
+          CASE WHEN NOT has_database_privilege(current_database(), 'CREATE')
+            THEN 'the database (new schemas)' END) AS missing
+      FROM objects o
+      WHERE NOT pg_has_role(current_user, o.owner, 'USAGE')
+        AND NOT EXISTS (SELECT 1 FROM pg_depend d
+          WHERE d.classid = o.cls AND d.objid = o.oid AND d.deptype = 'e')`;
+    if ((owner?.n ?? 0) > 0 || owner?.missing) {
       throw new Refusal(
-        `The migration login (${current.user}) doesn't own ${owner?.n} table(s) or other objects ` +
-          `(owned by ${owner?.owners}), so migrations altering them would fail. The migration ` +
-          `secret must use a login that owns the schema. Ask an admin.`,
+        `The migration login (${current.user}) can't run every migration: ` +
+          ((owner?.n ?? 0) > 0
+            ? `it doesn't own ${owner?.n} table(s), type(s) or function(s) (owned by ${owner?.owners})`
+            : `it can't create objects in ${owner?.missing}`) +
+          `. The migration secret must use a login that owns the schema. Ask an admin.`,
       );
     }
     const rows = (
@@ -355,11 +424,19 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
     console.log("Stopped. Nothing was changed.");
     return;
   }
+  // Exactly the files that were checked and shown: nothing may have changed
+  // while the prompt was open.
+  if (migrationsFingerprint(MIGRATIONS_DIR) !== fingerprint) {
+    throw new Refusal(
+      "packages/db/drizzle changed while you were confirming. Run the command again.",
+    );
+  }
 
   const rw = postgres(pgUrl, {
     ...hostOptions,
     max: 1,
     connect_timeout: 15,
+    prepare: false,
     onnotice: () => undefined,
     connection: { application_name: "f3-db-migrate" },
   });

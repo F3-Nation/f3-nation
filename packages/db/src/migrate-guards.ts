@@ -62,22 +62,78 @@ const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
  * (see isCloudSql).
  */
 export function classifyHost(databaseUrl: string): "local" | "remote" {
-  let url: URL;
-  try {
-    url = new URL(databaseUrl);
-  } catch {
-    // Unparseable (e.g. an empty host, `user:pass@/db?host=/cloudsql/...`):
-    // never assume local.
-    return "remote";
-  }
-  const socketHosts = url.searchParams.getAll("host");
+  const socketHosts = queryHosts(databaseUrl);
   // The last socket host= wins, as in splitSocketHost.
   const socket = [...socketHosts].reverse().find((h) => h.startsWith("/"));
   if (socket !== undefined) {
     return socket.toLowerCase().includes("/cloudsql") ? "remote" : "local";
   }
   if (socketHosts.length > 0) return "remote"; // a TCP host= overrides the URL's
+  let url: URL;
+  try {
+    url = new URL(databaseUrl);
+  } catch {
+    // Unparseable with no socket (e.g. an empty host): never assume local.
+    return "remote";
+  }
   return LOCAL_HOSTNAMES.has(url.hostname.toLowerCase()) ? "local" : "remote";
+}
+
+/**
+ * Every `host=` query value, decoded. Read from the raw query so URLs the URL
+ * parser rejects (`user:pass@/db?host=/var/run/postgresql`, which libpq and
+ * postgresArgs accept) are classified too.
+ */
+function queryHosts(databaseUrl: string): string[] {
+  const q = databaseUrl.indexOf("?");
+  if (q < 0) return [];
+  return databaseUrl
+    .slice(q + 1)
+    .split("&")
+    .map((pair) => pair.split("="))
+    .filter(([k]) => safeDecode(k ?? "") === "host")
+    .map(([, v]) => safeDecode(v ?? ""));
+}
+
+function safeDecode(part: string): string {
+  try {
+    return decodeURIComponent(part.replace(/\+/g, " "));
+  } catch {
+    return part;
+  }
+}
+
+/**
+ * The same URL pointed at the maintenance database `postgres`: only the last
+ * path segment before the query changes (a user name equal to the database
+ * name, or an empty host, are left alone).
+ */
+export function maintenanceUrl(databaseUrl: string): string {
+  return databaseUrl.replace(/^([^?]*\/)[^/?]*(\?|$)/, "$1postgres$2");
+}
+
+/**
+ * Whether a git remote URL is github.com/F3-Nation/f3-nation, over HTTPS or
+ * SSH. Nothing else (another host, a local path, a lookalike) counts as main.
+ */
+export function isMainRepoUrl(remoteUrl: string): boolean {
+  const scp = /^git@github\.com:(.+)$/i.exec(remoteUrl);
+  let repoPath: string;
+  if (scp?.[1]) {
+    repoPath = scp[1];
+  } else {
+    let url: URL;
+    try {
+      url = new URL(remoteUrl);
+    } catch {
+      return false;
+    }
+    if (!["https:", "ssh:"].includes(url.protocol)) return false;
+    if (url.hostname.toLowerCase() !== "github.com") return false;
+    if (url.port !== "") return false;
+    repoPath = url.pathname.replace(/^\//, "");
+  }
+  return /^f3-nation\/f3-nation(?:\.git)?\/?$/i.test(repoPath);
 }
 
 /** Databases the local command never touches, whatever the host. */

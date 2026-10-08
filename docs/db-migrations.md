@@ -94,9 +94,11 @@ nothing is changed until every check passes:
      other URL parameters, since they would rename the migrations table (see
      "Journal table name" below) and Drizzle would re-run every migration.
   4. Read-only first: the server's `current_database()` must be that database;
-     the login must own every table in `public`, `auth`, `slackbot` and
-     `drizzle` (on prod that is `f3slackbot`, not the apps' logins); and the
-     database's migration rows must agree with the checkout's journal:
+     the login must own (directly or through role membership) every table,
+     type and function in `public`, `auth`, `slackbot` and `drizzle`
+     (extension members aside), and may create objects in them and new
+     schemas; and the database's migration rows must agree with the
+     checkout's journal:
      - a row the journal has no entry for refuses ("migrations this checkout
        doesn't know about"): unmerged migrations were applied, or the
        checkout is older than what is deployed;
@@ -119,8 +121,10 @@ works where one is mounted. Your own `gcloud` login reads the secret.
 
 **What an admin sets up once.** In project `f3data`, secrets
 `MIGRATE_DATABASE_URL_STAGING` and `MIGRATE_DATABASE_URL_PROD`, each a URL for
-a login that owns the schema objects of that database (on prod `f3slackbot`
-owns them), and `roles/secretmanager.secretAccessor` on them for whoever runs
+a login that is a member of every role owning that database's schema objects
+(on prod, read-only check 2026-10-08: `app_auth`, `app_codex`,
+`app_materializedviewrefresher`, `f3slackbot`, `tackle`; the command names
+any it is missing), with CREATE on the database, and `roles/secretmanager.secretAccessor` on them for whoever runs
 migrations. For unusual cases: `MIGRATE_SECRET` / `MIGRATE_SECRET_PROJECT`
 read a different secret, and `MIGRATE_DATABASE_URL` supplies a URL directly;
 every check still applies.

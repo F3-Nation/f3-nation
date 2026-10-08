@@ -7,7 +7,9 @@ import {
   classifyHost,
   confirmationMatches,
   ENVIRONMENTS,
+  isMainRepoUrl,
   isProtectedDatabaseName,
+  maintenanceUrl,
   planMigrations,
 } from "./migrate-guards";
 
@@ -19,6 +21,8 @@ describe("classifyHost", () => {
     "postgresql://u:p@LOCALHOST/f3nation",
     "postgresql://u:p@localhost/f3nation?host=/var/run/postgresql",
     "postgresql://u:p@localhost/f3nation?host=%2Ftmp",
+    // An empty host with a local socket: postgresArgs and libpq accept it.
+    "postgresql://u:p@/f3nation?host=/var/run/postgresql",
   ])("local: %s", (url) => {
     expect(classifyHost(url)).toBe("local");
   });
@@ -35,6 +39,55 @@ describe("classifyHost", () => {
     "not a url",
   ])("remote: %s", (url) => {
     expect(classifyHost(url)).toBe("remote");
+  });
+});
+
+describe("maintenanceUrl", () => {
+  it.each([
+    [
+      "postgresql://f3local:f3local@localhost:5433/f3nation",
+      "postgresql://f3local:f3local@localhost:5433/postgres",
+    ],
+    // A user named like the database keeps its name.
+    [
+      "postgresql://f3nation:pw@localhost/f3nation",
+      "postgresql://f3nation:pw@localhost/postgres",
+    ],
+    [
+      "postgresql://u:p@/f3nation?host=/var/run/postgresql",
+      "postgresql://u:p@/postgres?host=/var/run/postgresql",
+    ],
+    [
+      "postgresql://u:p@localhost/f3nation?sslmode=disable",
+      "postgresql://u:p@localhost/postgres?sslmode=disable",
+    ],
+  ])("%s", (url, expected) => {
+    expect(maintenanceUrl(url)).toBe(expected);
+  });
+});
+
+describe("isMainRepoUrl", () => {
+  it.each([
+    "https://github.com/F3-Nation/f3-nation.git",
+    "https://github.com/F3-Nation/f3-nation",
+    "https://github.com/f3-nation/f3-nation/",
+    "git@github.com:F3-Nation/f3-nation.git",
+    "ssh://git@github.com/F3-Nation/f3-nation.git",
+  ])("main: %s", (url) => {
+    expect(isMainRepoUrl(url)).toBe(true);
+  });
+  it.each([
+    "https://gitlab.com/F3-Nation/f3-nation.git",
+    "https://github.com.evil.example/F3-Nation/f3-nation.git",
+    "https://evil.example/github.com/F3-Nation/f3-nation.git",
+    "file:///tmp/F3-Nation/f3-nation",
+    "/tmp/F3-Nation/f3-nation",
+    "git@evil.example:F3-Nation/f3-nation.git",
+    "https://github.com/someone/F3-Nation/f3-nation.git",
+    "https://github.com/F3-Nation/f3-nation-fork.git",
+    "http://github.com/F3-Nation/f3-nation.git",
+  ])("not main: %s", (url) => {
+    expect(isMainRepoUrl(url)).toBe(false);
   });
 });
 
