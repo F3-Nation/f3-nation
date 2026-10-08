@@ -538,6 +538,23 @@ export const userRouter = {
       });
       logDebug("api.user.roles_to_delete", { rolesToDelete });
 
+      // The submitted list is validated for one-role-per-org, but dormant
+      // roles (password_*) are hidden from the form and preserved above
+      // rather than deleted. Inserting a grantable role on an org where such
+      // a hidden role is retained would leave the user with two roles on that
+      // org, silently bypassing the one-role-per-org rule. Reject it instead.
+      const retainedRoles = existingRoles.filter(
+        (existingRole) => !rolesToDelete.includes(existingRole),
+      );
+      const conflictingInsert = newRolesToInsert.find((role) =>
+        retainedRoles.some((retained) => retained.orgId === role.orgId),
+      );
+      if (conflictingInsert) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: ERRORS.ROLE_CONFLICTS_WITH_HIDDEN_ROLE,
+        });
+      }
+
       const requireAdminOn = async (orgIds: number[], message: string) => {
         for (const orgId of orgIds) {
           if (!(await hasRoleOnAny(ctx, [orgId], "admin"))) {

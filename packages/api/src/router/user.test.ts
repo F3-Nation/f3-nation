@@ -25,6 +25,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 import type { Session } from "@acme/auth";
 import { and, eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
+import { ERRORS } from "@acme/shared/app/errors";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -1765,6 +1766,59 @@ describe("User Router", () => {
           .from(schema.rolesXUsersXOrg)
           .where(eq(schema.rolesXUsersXOrg.userId, user.id));
         expect(remaining.some((r) => r.roleId === pmRole.id)).toBe(true);
+      } finally {
+        await cleanup.user(user.id);
+      }
+    });
+
+    it("rejects granting a role on an org where a hidden role is retained", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      // Give the user a dormant password_manager assignment on the org.
+      let [pmRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "password_manager"));
+      if (!pmRole) {
+        [pmRole] = await db
+          .insert(schema.roles)
+          .values({ name: "password_manager" })
+          .returning({ id: schema.roles.id });
+      }
+      if (!pmRole) throw new Error("Failed to create password_manager role");
+
+      const email = `conflict-${uniqueId()}@example.com`;
+      const [user] = await db
+        .insert(schema.users)
+        .values({ email, f3Name: "ConflictMe" })
+        .returning({ id: schema.users.id });
+      if (!user) throw new Error("Failed to create user");
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: user.id,
+        orgId: nation.id,
+        roleId: pmRole.id,
+      });
+
+      try {
+        await mockAuthWithSession(adminSession(nation));
+        const client = createTestClient();
+
+        // The form hides password_manager, so the admin submits only editor
+        // on the same org. Saving it would leave the user with two roles on
+        // that org, so it must be rejected rather than silently created.
+        await expect(
+          client.user.crupdate({
+            id: user.id,
+            email,
+            roles: [{ orgId: nation.id, roleName: "editor" }],
+          }),
+        ).rejects.toThrow(ERRORS.ROLE_CONFLICTS_WITH_HIDDEN_ROLE);
+
+        // The hidden role survives and no editor assignment was added.
+        const remaining = await db
+          .select({ roleId: schema.rolesXUsersXOrg.roleId })
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, user.id));
+        expect(remaining.map((r) => r.roleId)).toEqual([pmRole.id]);
       } finally {
         await cleanup.user(user.id);
       }
