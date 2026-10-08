@@ -184,10 +184,16 @@ export function loremRich(value: unknown, rng: Rng): unknown {
 
 /** Whether every word in `value` is lorem ipsum. */
 export function isLoremText(value: string): boolean {
+  // loremText never emits digits, and a value with no words at all (a bare
+  // phone number, street number or date) is not lorem: both must be replaced,
+  // and the verifier must not wave them through.
+  if (/\d/.test(value)) return false;
+  let words = 0;
   for (const m of value.matchAll(/[A-Za-z]+/g)) {
     if (!VOCABULARY.has(m[0].toLowerCase())) return false;
+    words += 1;
   }
-  return true;
+  return words > 0 || value.trim().length === 0;
 }
 
 /** Whether a Block Kit value has only lorem prose and no mention or link. */

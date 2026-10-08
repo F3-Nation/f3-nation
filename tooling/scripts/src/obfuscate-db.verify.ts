@@ -361,6 +361,14 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
     VALUES (${ao.id}, true, false, current_date, 'Hex-Mention Beatdown',
       '{"note": "Thanks <@UABC12345> for the coffee."}')`;
 
+  // Prose holding no words at all (just a contact number) must still be
+  // replaced: an "already lorem" test that only looks at words would skip it.
+  await sql`
+    INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+      name, description)
+    VALUES (${ao.id}, true, false, current_date, 'Phone-Only Beatdown',
+      '704-555-1234')`;
+
   // Real names in prose, which SCRUB never touched: plain text with line
   // breaks, and Block Kit with a mrkdwn section, a user mention, an emoji
   // and a link.
@@ -963,6 +971,16 @@ async function main(): Promise<void> {
         richElements.map((e) => e.type).join(",") === "text,text,emoji,text" &&
         richElements[2]?.name === "muscle",
       prose?.rich ?? "missing",
+    );
+    const [phoneOnly] = await sql<{ description: string | null }[]>`
+      SELECT description FROM event_instances
+      WHERE name = 'Phone-Only Beatdown' LIMIT 1`;
+    check(
+      "prose holding only a phone number is replaced too",
+      !!phoneOnly?.description &&
+        !/\d/.test(phoneOnly.description) &&
+        isLoremText(phoneOnly.description),
+      phoneOnly?.description ?? "missing",
     );
 
     const [shadow] = await sql<
