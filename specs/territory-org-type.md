@@ -13,13 +13,13 @@ through the existing shared components.
 ## 2. Context & links
 
 - Issue: [#923](https://github.com/F3-Nation/f3-nation/issues/923); epic #855.
-- Prerequisite: #999, merged in #1019. Deployment readiness of the separately
-  released homepage must be checked before production rollout.
+- Prerequisite: #999, merged in #1019. The separately released homepage must
+  handle the Territory value before it reaches production.
 - Follow-up: [`admin-territory-management.md`](admin-territory-management.md)
   owns full Territory management, mixed Sector/Territory Area parents, hierarchy
   filters, ancestor displays, and depth-agnostic AO counts in the trigger and
   the seed recount.
-- External mirror: F3-Nation/f3-region-pages#96; coordinate after merge.
+- External mirror: F3-Nation/f3-region-pages#96, kept in sync separately.
 - Affected workspaces: db, db-python, shared, admin; other enum consumers
   require regression verification, including homepage.
 - Key files:
@@ -31,10 +31,10 @@ through the existing shared components.
   - `apps/admin/src/app/_components/admin-nav-links.tsx`
   - `apps/admin/src/app/[orgSegment]/page.tsx`
 
-### Proposed configuration and migration
+### Configuration and migration
 
 The ordered values are `ao`, `region`, `area`, `territory`, `sector`, `nation`.
-Update the TypeScript order assertion deliberately. Python ordinals become
+Update the TypeScript order assertion deliberately. Python ordinals are
 1 through 6 in that order; SQLAlchemy must continue persisting member names.
 
 Recreate the PostgreSQL enum following migration `0017_even_thing.sql`:
@@ -46,7 +46,7 @@ the final index definition. Keep the Drizzle journal and snapshot consistent.
 The deployment migration must execute transactionally so an error cannot leave
 the columns as text or the index absent.
 Bound lock acquisition with a transaction-local timeout and refresh the existing
-AO-count trigger function after replacing the enum in both migration directions.
+AO-count trigger function after replacing the enum.
 Verify writes from a backend warmed before each enum replacement.
 
 Territory display metadata uses `Territory`, `Territories`, the public URL
@@ -57,10 +57,10 @@ Use a minimal Sector-like table configuration: Add enabled, server pagination
 and sorting, status/Only Mine filters, AO count, and no ancestry columns.
 The exhaustive editor configuration also needs a Territory entry: Sector
 parent selector, blank initial name, no logo control, and the existing shared
-validation/deactivation behavior. Existing Area parent choices remain Sector
-until the mixed-parent work in the follow-up spec, which also allows the API to
-accept an Area beneath a Territory once AO counts are depth-agnostic. This change
-inserts no Territory records and reparents no existing organizations.
+validation/deactivation behavior. Area parent choices are Sector only here;
+the follow-up spec adds Territory parents and the API acceptance of an Area
+beneath a Territory. This spec inserts no Territory records and reparents no
+existing organizations.
 
 ## 3. User stories
 
@@ -68,8 +68,8 @@ inserts no Territory records and reparents no existing organizations.
   organization or position types.
 - As an authorized admin-app user, I can reach the basic Territories page
   from the sidebar through the shared organization route.
-- As a release operator, I have verified forward and reverse migration
-  procedures before any real Territory records are introduced.
+- As a release operator, I have verified the forward migration on a populated
+  database.
 
 ## 4. Acceptance criteria
 
@@ -83,26 +83,20 @@ inserts no Territory records and reparents no existing organizations.
   a production-shaped dump, with preservation evidence captured before and
   after. A fresh seed alone does not satisfy this criterion. Record the
   dump's provenance and limitations without recording sensitive row data.
-- **AC-4** — On the migrated isolated database with no Territory values in
-  either dependent column, exercise a transactional rollback to the original
-  five-member enum and verify data, index, and column properties again. Also
-  verify rollback refuses safely if either column contains Territory, without
-  deleting or coercing those rows. Document migration-journal reconciliation
-  and application-version coordination for an operator-led rollback.
-- **AC-5** — All exhaustive shared/admin configuration records include the
-  new type; workspace typechecking passes. Python persistence tests establish
+- **AC-4** — All exhaustive shared/admin configuration records include
+  Territory; workspace typechecking passes. Python persistence tests establish
   member-name storage despite changed numeric ordinals.
-- **AC-6** — The sidebar shows Territories with `LandPlot`; selecting it loads
+- **AC-5** — The sidebar shows Territories with `LandPlot`; selecting it loads
   `/territories` through `[orgSegment]`, with the correct heading and list
   query. Add visibility follows `orgAdminConfig.territory.add` and opens the
   shared Territory editor. No per-type page, table, or modal is introduced.
-- **AC-7** — Existing organization routes and unrelated admin routes retain
+- **AC-6** — Existing organization routes and unrelated admin routes retain
   their resolution. Existing five-type regression assertions remain valid;
-  new assertions cover Territory ordering, route/icon configuration, and the
-  basic page/editor behavior. Homepage enum-driven behavior is checked for
+  assertions cover Territory ordering, route/icon configuration, and the basic
+  page/editor behavior. Homepage enum-driven behavior is checked for
   exhaustive configuration gaps.
-- **AC-8** — Verification results distinguish automated tests, browser checks,
-  dump/rollback rehearsal, and any unavailable checks. Required local lint,
+- **AC-7** — Verification results distinguish automated tests, browser checks,
+  dump rehearsal, and any unavailable checks. Required local lint,
   formatting, typecheck, and CI gates pass before declaring the change ready.
 
 ## 5. Roles & authorization
@@ -110,12 +104,12 @@ inserts no Territory records and reparents no existing organizations.
 Preserve current endpoint tiers and resource checks; this adds no permission
 rule. Add-button visibility is configuration, not authorization.
 
-| Action                                     | Allowed                                                              | Explicitly denied                                     |
-| ------------------------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------- |
-| Read organizations                         | Existing `protectedProcedure` callers under current list scoping     | Unauthenticated callers                               |
-| Create/edit via shared editor              | Existing `editorProcedure` and `org.crupdate` resource/parent checks | Callers failing the current role or resource checks   |
-| Deactivate                                 | Existing `adminProcedure` and target-org role check                  | Callers failing the current admin or target-org check |
-| Execute a production migration or rollback | Human-approved release operation                                     | Automatic execution from this development task        |
+| Action                         | Allowed                                                              | Explicitly denied                                     |
+| ------------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------- |
+| Read organizations             | Existing `protectedProcedure` callers under current list scoping     | Unauthenticated callers                               |
+| Create/edit via shared editor  | Existing `editorProcedure` and `org.crupdate` resource/parent checks | Callers failing the current role or resource checks   |
+| Deactivate                     | Existing `adminProcedure` and target-org role check                  | Callers failing the current admin or target-org check |
+| Execute a production migration | Human-approved release operation                                     | Automatic execution by development tooling            |
 
 ## 6. Out of scope / non-goals
 
@@ -130,9 +124,8 @@ rule. Add-button visibility is configuration, not authorization.
 
 ## 7. Critical-path test cases
 
-- Forward/reverse migration on a restored, populated isolated database;
-  compare row data internally and report only aggregate preservation results.
-- Rollback refusal for Territory in `orgs` and separately in `positions`.
+- Forward migration on a restored, populated isolated database; compare row
+  data internally and report only aggregate preservation results.
 - TypeScript/Python/PostgreSQL enum order and Python storage-name assertions.
 - Territory sidebar navigation, page loading, Add gating, and editor parent
   configuration; existing route and enum-consumer regression suites.
@@ -142,12 +135,11 @@ rule. Add-button visibility is configuration, not authorization.
 The production-shaped dump source and isolated restore target must be resolved
 before AC-3 can be marked complete. Any production export requires separate,
 human-approved review of the exact operation; this spec does not authorize it.
-Local synthetic testing can proceed independently once the
-implementation criteria are approved.
+Local synthetic testing can proceed independently.
 
 ## 8. Observability
 
-No new application events are needed. Retain migration/test evidence with
+No application events are added. Retain migration/test evidence with
 schema versions, enum order, index validity, and aggregate preservation results.
-Do not include secrets or production row contents. Migration lock behavior and
-rollback readiness are release-review items; report timings only when measured.
+Do not include secrets or production row contents. Migration lock behavior is a
+release-review item; report timings only when measured.
