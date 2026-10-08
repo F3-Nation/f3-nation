@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 import pytz
+from slack_sdk.errors import SlackApiError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -681,7 +682,8 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
         assert session.query.return_value.update.call_count == 1
         assert session.commit.call_count == 1
         session.rollback.assert_called_once()
-        assert [call.args[0] for call in remove_mock.call_args_list] == [path for path, _ in exports]
+        expected_cleanup = [path for path, _ in exports] if failure_mode == "not_ok" else []
+        assert [call.args[0] for call in remove_mock.call_args_list] == expected_cleanup
         remove_mock.reset_mock()
         # The persisted old snapshot makes the next scheduled run retry naturally.
         client.chat_update.side_effect = None
@@ -710,7 +712,20 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
 
 @pytest.mark.parametrize("schema", ["f3_staging", "f3_prod"])
 @pytest.mark.parametrize("num_weeks", [1, 3])
-@pytest.mark.parametrize("failure", ["slack", "commit"])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "initial_rejected",
+        "initial_timeout",
+        "both_rejected",
+        "update_timeout_post_rejected",
+        "update_rejected_post_timeout",
+        "update_timeout_post_success",
+        "sdk_rejected",
+        "sdk_unknown",
+        "commit",
+    ],
+)
 def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, monkeypatch, schema, num_weeks, failure):
     run, row, settings, session = calendar_generation
     now = datetime(2026, 9, 30, 10)
@@ -745,6 +760,9 @@ def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, mon
         bot_token="test-token",
         q_image_posting_ts="old-ts",
     )
+    initial_post = failure in {"initial_rejected", "initial_timeout", "sdk_unknown"}
+    if initial_post:
+        settings.pop("q_image_posting_ts")
     before = deepcopy(settings)
     prior_files = files.copy()
     remove_mock.reset_mock()
@@ -754,10 +772,20 @@ def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, mon
     client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
     monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
     monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings: [])
-    if failure == "slack":
-        client.chat_update.side_effect = RuntimeError("Slack update failed")
-        client.chat_postMessage.side_effect = RuntimeError("Slack post failed")
-    else:
+    if failure in {"both_rejected", "update_rejected_post_timeout"}:
+        client.chat_update.return_value = {"ok": False}
+    elif failure in {"update_timeout_post_rejected", "update_timeout_post_success"}:
+        client.chat_update.side_effect = TimeoutError("Slack update timed out")
+    if failure in {"initial_rejected", "both_rejected", "update_timeout_post_rejected"}:
+        client.chat_postMessage.return_value = {"ok": False}
+    elif failure in {"initial_timeout", "update_rejected_post_timeout"}:
+        client.chat_postMessage.side_effect = TimeoutError("Slack post timed out")
+    if failure == "sdk_rejected":
+        client.chat_update.side_effect = SlackApiError("Slack rejected update", {"ok": False})
+        client.chat_postMessage.side_effect = SlackApiError("Slack rejected post", {"ok": False})
+    elif failure == "sdk_unknown":
+        client.chat_postMessage.side_effect = SlackApiError("Unknown response", {"error": "unknown"})
+    elif failure == "commit":
         session.commit.side_effect = RuntimeError("DB commit failed")
     changed_rows = [
         row(f"Changed AO {i}", now - timedelta(days=1), start_date=date(2026, 10, 1) + timedelta(weeks=i))
@@ -766,24 +794,37 @@ def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, mon
     new_paths = {path for path, _ in run(changed_rows, now + timedelta(hours=1))}
     assert len(new_paths) == num_weeks
     assert new_paths.isdisjoint(old_paths)
+    assert copy.call_count == (num_weeks if schema == "f3_prod" else 0)
+    if failure == "update_timeout_post_success":
+        client.chat_update.assert_called_once()
+        client.chat_postMessage.assert_called_once()
+        assert session.commit.call_count == 2
+        assert settings["q_image_posting_ts"] == "new-ts"
+        assert new_paths <= files
+        assert not old_paths & files
+        session.rollback.assert_not_called()
+        return
     assert settings == before
     assert old_paths <= files
-    assert copy.call_count == (num_weeks if schema == "f3_prod" else 0)
     session.rollback.assert_called_once()
-    client.chat_update.assert_called_once()
-    if failure == "slack":
+    assert client.chat_update.call_count == (0 if initial_post else 1)
+    if failure != "commit":
         client.chat_postMessage.assert_called_once()
-        assert {call.args[0] for call in remove_mock.call_args_list} == new_paths
-        assert remove_mock.call_count == num_weeks
-        assert files == prior_files
+        cleanup_allowed = failure in {"initial_rejected", "both_rejected", "sdk_rejected"}
+        assert {call.args[0] for call in remove_mock.call_args_list} == (new_paths if cleanup_allowed else set())
+        assert remove_mock.call_count == (num_weeks if cleanup_allowed else 0)
+        assert files == (prior_files if cleanup_allowed else prior_files | new_paths)
         assert session.query.return_value.update.call_count == 1
         assert session.commit.call_count == 1
         client.chat_update.side_effect = None
+        client.chat_update.return_value = {"ok": True}
         client.chat_postMessage.side_effect = None
+        client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
         retry_paths = {path for path, _ in run(changed_rows, now + timedelta(hours=2))}
         assert len(retry_paths) == num_weeks
         assert retry_paths <= files
-        assert not files & (old_paths | new_paths)
+        assert not files & old_paths
+        assert (new_paths <= files) == (not cleanup_allowed)
         assert session.commit.call_count == 2
     else:
         client.chat_postMessage.assert_not_called()
@@ -807,7 +848,11 @@ def test_failed_slack_post_does_not_delete_export_matching_a_persisted_filename(
     before = deepcopy(settings)
     nonce = existing.rsplit("-", 1)[-1].removesuffix(".png")
     monkeypatch.setattr(calendar_images.random, "choices", lambda alphabet, k: list(nonce))
-    monkeypatch.setattr(calendar_images, "post_calendar_to_slack", MagicMock(side_effect=RuntimeError("Slack failed")))
+    monkeypatch.setattr(
+        calendar_images,
+        "post_calendar_to_slack",
+        MagicMock(side_effect=calendar_images.CalendarSlackPostError(safe_to_discard=True)),
+    )
     remove = MagicMock()
     monkeypatch.setattr(calendar_images.os, "remove", remove)
     exports = run(rows, now, force=True)

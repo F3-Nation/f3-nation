@@ -35,6 +35,7 @@ from f3_data_models.models import (
 # import dataframe_image as dfi
 from f3_data_models.utils import DbManager, get_session
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from slack_sdk.models import blocks
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import aliased
@@ -258,6 +259,24 @@ def remove_stale_week_images(
     return removed
 
 
+class CalendarSlackPostError(RuntimeError):
+    """Failed posting; exports are discardable only after every attempt was rejected."""
+
+    def __init__(self, safe_to_discard: bool):
+        super().__init__("Slack calendar posting failed")
+        self.safe_to_discard = safe_to_discard
+
+
+def _slack_attempt_was_rejected(error: Exception) -> bool:
+    return (
+        isinstance(error, CalendarSlackPostError)
+        and error.safe_to_discard
+        # The SDK raises even when Slack returned an explicit rejection response.
+        or isinstance(error, SlackApiError)
+        and error.response.get("ok") is False
+    )
+
+
 def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunday_run: bool) -> None:
     print("Posting to Slack channel")
     client = WebClient(token=slack_app_settings["bot_token"])
@@ -293,6 +312,7 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
         )
     )
     block_list.extend(create_special_events_blocks(slack_app_settings))
+    all_attempts_rejected = True
     try:
         if slack_app_settings.get("q_image_posting_ts") and (not first_sunday_run):
             try:
@@ -302,17 +322,18 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
                     blocks=block_list,
                     text="Q Sheet",
                 )
-                if not response["ok"]:
-                    raise RuntimeError("Slack calendar update failed")
+                if response["ok"] is not True:
+                    raise CalendarSlackPostError(safe_to_discard=response["ok"] is False)
             except Exception as e:
+                all_attempts_rejected = _slack_attempt_was_rejected(e)
                 print(f"Error updating Slack message, posting new message: {e}")
                 response = client.chat_postMessage(
                     channel=slack_app_settings["q_image_posting_channel"],
                     text="Q Sheet",
                     blocks=block_list,
                 )
-                if not response["ok"]:
-                    raise RuntimeError("Slack calendar post failed") from e
+                if response["ok"] is not True:
+                    raise CalendarSlackPostError(safe_to_discard=response["ok"] is False) from e
                 slack_app_settings["q_image_posting_ts"] = response["ts"]
         else:
             response = client.chat_postMessage(
@@ -320,12 +341,12 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
                 text="Q Sheet",
                 blocks=block_list,
             )
-            if not response["ok"]:
-                raise RuntimeError("Slack calendar post failed")
+            if response["ok"] is not True:
+                raise CalendarSlackPostError(safe_to_discard=response["ok"] is False)
             slack_app_settings["q_image_posting_ts"] = response["ts"]
     except Exception as e:
         print(f"Error posting to Slack channel: {e}")
-        raise
+        raise CalendarSlackPostError(safe_to_discard=all_attempts_rejected and _slack_attempt_was_rejected(e)) from e
 
 
 def slack_posting_enabled(slack_app_settings: dict) -> bool:
@@ -733,8 +754,10 @@ def generate_calendar_images(force: bool = False):
                         if slack_posting_enabled(slack_app_settings):
                             try:
                                 post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run)
-                            except Exception:
-                                # Only failed Slack posting permits discarding new exports.
+                            except CalendarSlackPostError as posting_error:
+                                if not posting_error.safe_to_discard:
+                                    raise
+                                # Only definite rejection of every attempt permits cleanup.
                                 # A later DB failure may leave Slack referencing these files.
                                 for generated_week, new_file in generated_backing_files:
                                     if parse_calendar_image_filename(
