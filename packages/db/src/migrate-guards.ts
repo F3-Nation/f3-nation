@@ -1,14 +1,13 @@
 /**
  * Guards for running migrations (decision logic only, no I/O, so each
- * refusal is unit-tested). Used by migrate.ts (`pnpm db:migrate:local`, and
- * `pnpm db:migrate`, which is the same thing) and by migrate-remote.ts
- * (`pnpm db:migrate:staging` / `pnpm db:migrate:prod`).
+ * refusal is unit-tested). Used by migrate.ts (`pnpm db:migrate:local`) and
+ * by migrate-remote.ts (`pnpm db:migrate:staging` / `pnpm db:migrate:prod`).
  *
- * Why: on 2026-10-08 `pnpm db:migrate` was run from an unmerged branch with a
+ * Why: on 2026-10-08 `pnpm db:migrate` (since removed) was run from an unmerged branch with a
  * production DATABASE_URL in packages/db/.env, and applied that branch's
  * migrations to prod. Staging and prod now migrate only through the remote
  * commands, only from migrations that are on main, and only after these
- * checks; the plain command refuses anything that isn't a local database.
+ * checks; the local command refuses anything that isn't a local database.
  */
 
 // ---------------------------------------------------------------------------
@@ -63,6 +62,9 @@ const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
  */
 export function classifyHost(databaseUrl: string): "local" | "remote" {
   const socketHosts = queryHosts(databaseUrl);
+  // Several host= values (e.g. a socket and a TCP host): clients disagree on
+  // which wins, so never call that local.
+  if (socketHosts.length > 1) return "remote";
   // The last socket host= wins, as in splitSocketHost.
   const socket = [...socketHosts].reverse().find((h) => h.startsWith("/"));
   if (socket !== undefined) {

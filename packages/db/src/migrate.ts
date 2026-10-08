@@ -1,5 +1,5 @@
 /**
- * `pnpm db:migrate:local` (and `pnpm db:migrate`, the same command): apply
+ * `pnpm db:migrate:local`: apply
  * pending migrations to the LOCAL database in packages/db/.env. Refuses
  * anything that isn't local, including a Cloud SQL database reached through
  * a proxy on localhost: staging and prod are migrated only with
@@ -29,7 +29,7 @@ import {
 const databaseUrl = env.DATABASE_URL;
 
 const REMOTE_HELP =
-  "pnpm db:migrate only migrates a local database. Staging and prod are " +
+  "pnpm db:migrate:local only migrates a local database. Staging and prod are " +
   "migrated from main, after merge, with `pnpm db:migrate:staging` or " +
   "`pnpm db:migrate:prod` (docs/db-migrations.md).";
 
@@ -75,7 +75,14 @@ const assertLocalTarget = async (url: string) => {
 
 const migrate = async () => {
   if (!databaseUrl) return;
-  if (process.env.CI) return;
+  // CI must opt in explicitly (preview-env.yml runs it with CI= against its
+  // own throwaway Postgres). This used to return silently and still print
+  // "Migration done"; now it says so and fails.
+  if (process.env.CI) {
+    throw new Error(
+      "Not migrating: CI is set. To migrate a local database from a CI job, run it with CI= (empty).",
+    );
+  }
 
   // The migrator's client connects to getDbUrl()'s URL, which is
   // TEST_DATABASE_URL under NODE_ENV=test: check that one too.

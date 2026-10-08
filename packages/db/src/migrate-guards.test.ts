@@ -32,6 +32,9 @@ describe("classifyHost", () => {
     "postgresql://u:p@db.example.com/f3nation",
     "postgresql://u:p@localhost/f3_prod?host=/cloudsql/f3data:us-central1:f3data",
     "postgresql://u:p@localhost/f3_prod?host=%2Fcloudsql%2Ff3data%3Aus-central1%3Af3data",
+    // A socket and a TCP host together: clients disagree on which wins.
+    "postgresql://u:p@localhost/f3nation?host=/var/run/postgresql&host=10.0.0.5",
+    "postgresql://u:p@/f3nation?host=10.0.0.5&host=/var/run/postgresql",
     // libpq lets a TCP host= override the URL's host.
     "postgresql://u:p@localhost/f3nation?host=10.0.0.5",
     // Unparseable: never assumed local.

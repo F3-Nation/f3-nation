@@ -55,7 +55,7 @@ fi
 # Safety: refuse to migrate/seed against a non-local database
 if ! grep -q '^DATABASE_URL=postgresql://f3local:f3local@localhost:5433/' packages/db/.env; then
   echo "     ERROR: packages/db/.env DATABASE_URL is not the local Docker Postgres target."
-  echo "     Refusing to run db:migrate and db:seed:local."
+  echo "     Refusing to run db:migrate:local and db:seed:local."
   exit 1
 fi
 
@@ -102,7 +102,7 @@ done
 
 # ── Step 5: Run migrations ────────────────────────────────────────────────────
 echo "  → Running database migrations..."
-pnpm db:migrate
+pnpm db:migrate:local
 
 # ── Step 6: Seed the database ─────────────────────────────────────────────────
 echo "  → Seeding database with local dev data..."

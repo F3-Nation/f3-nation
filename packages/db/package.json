@@ -18,7 +18,6 @@
     "pull": "pnpm with-env drizzle-kit pull",
     "generate": "pnpm with-env drizzle-kit generate",
     "generate:empty": "pnpm with-env drizzle-kit generate --custom",
-    "migrate": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/migrate.ts",
     "migrate:local": "QUERY_TIMEOUT_MS=0 pnpm with-env node -r esbuild-register src/migrate.ts",
     "migrate:staging": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 node -r esbuild-register src/migrate-remote.ts staging",
     "migrate:prod": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 node -r esbuild-register src/migrate-remote.ts prod",
