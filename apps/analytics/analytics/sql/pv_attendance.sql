@@ -61,7 +61,8 @@ event_tags AS (
 ),
 valid_attendance AS (
     SELECT a.id, a.user_id, a.event_instance_id, a.meta, a.created, a.updated,
-           u.f3_name, u.home_region_id, hr.name AS home_region_name,
+            COALESCE(NULLIF(u.f3_name, ''), CAST(u.id AS VARCHAR)) AS f3_name,
+            u.home_region_id, hr.name AS home_region_name,
            u.avatar_url, u.status AS user_status, e.start_date, e.ao_org_id, e.ao_name
     FROM pg.public.attendance a
     JOIN pg.public.users u ON u.id = a.user_id

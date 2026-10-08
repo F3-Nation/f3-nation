@@ -37,6 +37,22 @@ for local diagnostics, but only the exact ten-dataset set can be published.
 Analytics uses its separate `analytics/releases/` root and
 `analytics/current.json` pointer.
 
+The ten-dataset set and current schema versions below are the only schemas for
+new publication. A narrowly scoped rollback may select the exact retained
+pre-upgrade nine-dataset release whose version vector is
+`pv_regions.v1`, `pv_pax.v2`, `pv_kotter.v1`, `pv_upcoming.v1`,
+`pv_sectors.v2`, `pv_territories.v1`, `pv_areas.v2`, `pv_aos.v1`, and
+`pv_events.v2`. The historical `pv_pax.v2` projection has fourteen columns and
+ends in `roles`; it does not include the `lifetime_posts` or `lifetime_qs`
+columns in current `pv_pax.v3`. Rollback eligibility requires the exact release
+identity, generation, URI, and manifest hash recorded as `retainedPrevious` by
+the current pointer, followed by full release and Parquet validation. That hash
+binds the retained manifest bytes but is not a signature or independent proof
+of publisher identity. Rollback continues to use pointer generation
+compare-and-swap and preserves the source-order high-water mark. No hybrid
+version vector or arbitrary old release is eligible. Consumer compatibility
+for serving this historical shape remains a human release gate.
+
 The batch reads datasets in the order above, sequentially. Each dataset has its
 own source read boundary. Sequential reads do not constitute a shared
 PostgreSQL transaction snapshot; release metadata must not claim snapshot

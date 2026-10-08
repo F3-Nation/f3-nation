@@ -13,7 +13,11 @@ import google_crc32c
 import pytest
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
-from analytics.materializations import MATERIALIZATIONS_BY_PRODUCT
+from analytics.materializations import (
+    MATERIALIZATIONS_BY_PRODUCT,
+    PAX_VAULT_LEGACY_NAMES,
+    PAX_VAULT_LEGACY_SCHEMA_VERSIONS,
+)
 from analytics.publication import (
     GcsPublisher,
     ObjectMetadata,
@@ -25,7 +29,7 @@ from analytics.publication import (
     canonical_json_bytes,
     publish,
 )
-from analytics.schema_registry import SCHEMAS_BY_NAME, schema_fingerprint
+from analytics.schema_registry import SCHEMAS_BY_NAME, SCHEMAS_BY_VERSION, schema_fingerprint
 from analytics.settings import Settings
 from analytics.source import MaterializationArtifacts, SchemaColumnEvidence, SchemaEvidence
 
@@ -201,8 +205,8 @@ def artifacts(tmp_path: Path, name: str, evidence=True) -> MaterializationArtifa
     return MaterializationArtifacts(root, (path,), 1, schema if evidence else None)
 
 
-def parquet_bytes(name: str) -> bytes:
-    expected = SCHEMAS_BY_NAME[name]
+def parquet_bytes(name: str, schema_version: str | None = None) -> bytes:
+    expected = SCHEMAS_BY_VERSION[(name, schema_version)] if schema_version else SCHEMAS_BY_NAME[name]
     columns = ", ".join(
         f'CAST({"0" if column.duckdb_type == "HUGEINT" else "NULL"} AS {column.duckdb_type}) AS "{column.name}"'
         for column in expected.columns
@@ -382,12 +386,16 @@ def test_release_manifest_exact_product_datasets(tmp_path):
         build_release_manifest("r1", {definition.name: status}, "2026-09-01T00:01:00Z")
 
 
-def _release(publisher, run_id):
+def _release(publisher, run_id, *, legacy=False):
     datasets = {}
-    for item in MATERIALIZATIONS_BY_PRODUCT[publisher.product]:
+    items = MATERIALIZATIONS_BY_PRODUCT[publisher.product]
+    if legacy:
+        items = tuple(item for item in items if item.name in PAX_VAULT_LEGACY_NAMES)
+    for item in items:
         prefix = f"{publisher.prefix}/releases/{run_id}/{item.name}"
         data_blob = publisher.bucket.blob(f"{prefix}/partitions/{item.name}-0.parquet")
-        parquet_content = parquet_bytes(item.name)
+        schema_version = PAX_VAULT_LEGACY_SCHEMA_VERSIONS[item.name] if legacy else item.schema_version
+        parquet_content = parquet_bytes(item.name, schema_version)
         data_blob.upload_from_string(parquet_content, if_generation_match=0, checksum="crc32c")
         data_meta = ObjectMetadata(
             f"gs://{publisher.bucket_name}/{prefix}/partitions/{item.name}-0.parquet",
@@ -397,12 +405,12 @@ def _release(publisher, run_id):
         )
         golden_bytes = b'[[{"$bigint":"1"}]]'
         golden_meta = publisher.upload_golden(run_id, item.name, "check", golden_bytes)
-        schema = SCHEMAS_BY_NAME[item.name]
+        schema = SCHEMAS_BY_VERSION[(item.name, schema_version)]
         fingerprint = schema_fingerprint(schema.columns)
         dataset_manifest = {
             "dataset": item.name,
             "contractVersion": "pv-release.v2" if publisher.product == "pax-vault" else "analytics-release.v1",
-            "schemaVersion": item.schema_version,
+            "schemaVersion": schema_version,
             "schemaFingerprintSha256": fingerprint,
             "columns": [
                 {"name": column.name, "logicalType": column.duckdb_type, "nullable": column.nullable}
@@ -439,7 +447,7 @@ def _release(publisher, run_id):
         datasets[item.name] = {
             "manifestUri": manifest_meta.uri,
             "manifestGeneration": manifest_meta.generation,
-            "schemaVersion": item.schema_version,
+            "schemaVersion": schema_version,
             "sourceReadTimestampUtc": "2026-09-01T00:00:00Z",
             "sourceReadPolicy": "ordered-sequential-per-dataset",
             "sourceOrder": run_id,
@@ -533,7 +541,7 @@ def test_release_validation_rejects_actual_parquet_schema_drift(tmp_path):
     manifest["totalSizeBytes"] = len(content)
     encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
     Blob.objects[manifest_key] = Stored(encoded, stored_manifest.generation)
-    with pytest.raises(ValueError, match="columns or types"):
+    with pytest.raises(ValueError, match="schema mismatch"):
         publisher.commit_pointer("schema-drift", release, digest, "schema-drift", "revision", "2026-09-01T00:02:00Z")
 
 
@@ -749,6 +757,29 @@ def test_rollback_requires_retained_release_and_preserves_high_water(tmp_path):
     assert restored["publicationOutcome"] == "committed"
 
 
+def seed_legacy_pointer(publisher, release):
+    release_id = release.uri.split("/")[-2]
+    release_bytes = Blob.objects[f"pax-vault/releases/{release_id}/release.json"].content
+    old_pointer = {
+        "contractVersion": "pv-release.v2",
+        "releaseId": release_id,
+        "prefix": f"gs://{publisher.bucket_name}/pax-vault/releases/{release_id}/",
+        "manifestUri": release.uri,
+        "manifestGeneration": release.generation,
+        "manifestSha256": hashlib.sha256(release_bytes).hexdigest(),
+        "schemaVersion": "pv-release.v2",
+        "createdAtUtc": "2026-09-01T00:02:00Z",
+        "producerRevision": "pipeline-abc",
+        "releaseSequence": 1,
+        "sourceOrder": release_id,
+        "sourceHighWaterOrder": release_id,
+        "retainedPrevious": None,
+    }
+    publisher._pointer_blob().upload_from_string(
+        canonical_json_bytes(old_pointer), if_generation_match=0, checksum="crc32c"
+    )
+
+
 def test_rollback_rejects_malformed_retained_hash(tmp_path):
     reset()
     publisher = GcsPublisher(Storage(), settings(tmp_path))
@@ -763,3 +794,169 @@ def test_rollback_rejects_malformed_retained_hash(tmp_path):
     Blob.objects[key] = Stored(canonical_json_bytes(pointer), stored.generation)
     with pytest.raises(ValueError, match="retained pointer hash"):
         publisher.rollback_pointer("retain-1", expected_generation=str(stored.generation), source_order="ignored")
+
+
+def test_retained_legacy_nine_dataset_release_can_be_rolled_back(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    old_release, old_digest = _release(publisher, "run-1", legacy=True)
+    assert hashlib.sha256(Blob.objects["pax-vault/releases/run-1/release.json"].content).hexdigest() == old_digest
+    seed_legacy_pointer(publisher, old_release)
+    old_contents = {
+        key: (value.content, value.generation)
+        for key, value in Blob.objects.items()
+        if key.startswith("pax-vault/releases/run-1/")
+    }
+
+    with pytest.raises(ValueError, match="product validation"):
+        publisher._validate_release("run-1", old_release.generation)
+
+    current_release, current_digest = _release(publisher, "run-2")
+    current = publisher.commit_pointer(
+        "run-2",
+        current_release,
+        current_digest,
+        "run-2",
+        "pipeline-abc",
+        "2026-09-01T00:03:00Z",
+    )
+    assert current["releaseSequence"] == 2
+    assert current["sourceHighWaterOrder"] == "run-2"
+    rolled = publisher.rollback_pointer(
+        "run-1", expected_generation=str(Blob.objects["pax-vault/current.json"].generation)
+    )
+    assert rolled["releaseId"] == "run-1"
+    assert rolled["releaseSequence"] == 3
+    assert rolled["sourceOrder"] == "run-1"
+    assert rolled["sourceHighWaterOrder"] == "run-2"
+    assert rolled["retainedPrevious"]["releaseId"] == "run-2"
+    _, selected, _ = publisher._read_pointer()
+    selected_rollback_pointer = {
+        key: value for key, value in rolled.items() if key not in {"pointerGeneration", "publicationOutcome"}
+    }
+    assert selected == selected_rollback_pointer
+    forward = publisher.rollback_pointer(
+        "run-2", expected_generation=str(Blob.objects["pax-vault/current.json"].generation)
+    )
+    assert forward["releaseSequence"] == 4
+    assert forward["sourceHighWaterOrder"] == "run-2"
+    assert {
+        key: (value.content, value.generation)
+        for key, value in Blob.objects.items()
+        if key.startswith("pax-vault/releases/run-1/")
+    } == old_contents
+
+
+def test_legacy_validation_rejects_hybrid_version_vector(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    release, digest = _release(publisher, "legacy-hybrid", legacy=True)
+    release_key = "pax-vault/releases/legacy-hybrid/release.json"
+    stored = Blob.objects[release_key]
+    value = json.loads(stored.content)
+    value["datasets"]["pv_pax"]["schemaVersion"] = "pv_pax.v3"
+    Blob.objects[release_key] = Stored(canonical_json_bytes(value), stored.generation)
+    with pytest.raises(ValueError, match="product validation"):
+        publisher._validate_release("legacy-hybrid", release.generation, allow_legacy=True)
+
+
+def test_forward_publication_rejects_legacy_release_without_changing_pointer(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    current_release, current_digest = _release(publisher, "run-2")
+    publisher.commit_pointer("run-2", current_release, current_digest, "run-2", "revision", "2026-09-01T00:03:00Z")
+    old_release, old_digest = _release(publisher, "run-1", legacy=True)
+    assert publisher._validate_release("run-1", old_release.generation, allow_legacy=True)
+    pointer_before = Blob.objects["pax-vault/current.json"]
+    pointer_snapshot = (pointer_before.content, pointer_before.generation)
+    with pytest.raises(ValueError, match="product validation"):
+        publisher.commit_pointer("run-1", old_release, old_digest, "run-1", "revision", "2026-09-01T00:02:00Z")
+    assert (Blob.objects["pax-vault/current.json"].content, Blob.objects["pax-vault/current.json"].generation) == (
+        *pointer_snapshot,
+    )
+
+
+def test_rollback_rejects_mutated_retained_manifest_hash_without_pointer_change(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    legacy_release, _ = _release(publisher, "run-1", legacy=True)
+    assert publisher._validate_release("run-1", legacy_release.generation, allow_legacy=True)
+    seed_legacy_pointer(publisher, legacy_release)
+    current_release, current_digest = _release(publisher, "run-2")
+    publisher.commit_pointer("run-2", current_release, current_digest, "run-2", "revision", "2026-09-01T00:03:00Z")
+
+    key = "pax-vault/releases/run-1/release.json"
+    stored = Blob.objects[key]
+    mutated = json.loads(stored.content)
+    mutated["producerRevision"] = "mutated-revision"
+    Blob.objects[key] = Stored(canonical_json_bytes(mutated), stored.generation)
+    pointer_before = Blob.objects["pax-vault/current.json"]
+    pointer_snapshot = (pointer_before.content, pointer_before.generation)
+    with pytest.raises(ValueError, match="hash does not match"):
+        publisher.rollback_pointer("run-1", expected_generation=str(pointer_before.generation))
+    assert (Blob.objects["pax-vault/current.json"].content, Blob.objects["pax-vault/current.json"].generation) == (
+        *pointer_snapshot,
+    )
+
+
+def test_rollback_rejects_v2_manifest_with_v3_parquet(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    legacy_release, _ = _release(publisher, "run-1", legacy=True)
+    seed_legacy_pointer(publisher, legacy_release)
+    current_release, current_digest = _release(publisher, "run-2")
+    publisher.commit_pointer("run-2", current_release, current_digest, "run-2", "revision", "2026-09-01T00:03:00Z")
+
+    object_key = "pax-vault/releases/run-1/pv_pax/partitions/pv_pax-0.parquet"
+    v3_content = parquet_bytes("pv_pax", "pv_pax.v3")
+    data_stored = Blob.objects[object_key]
+    Blob.objects[object_key] = Stored(v3_content, data_stored.generation)
+    manifest_key = "pax-vault/releases/run-1/pv_pax/manifest.json"
+    manifest_stored = Blob.objects[manifest_key]
+    dataset_manifest = json.loads(manifest_stored.content)
+    dataset_manifest["objects"][0]["sizeBytes"] = len(v3_content)
+    dataset_manifest["objects"][0]["crc32c"] = Blob.objects[object_key].crc32c
+    dataset_manifest["totalSizeBytes"] = len(v3_content)
+    Blob.objects[manifest_key] = Stored(canonical_json_bytes(dataset_manifest), manifest_stored.generation)
+
+    pointer_before = Blob.objects["pax-vault/current.json"]
+    pointer_snapshot = (pointer_before.content, pointer_before.generation)
+    with pytest.raises(ValueError, match="schema mismatch"):
+        publisher.rollback_pointer("run-1", expected_generation=str(pointer_before.generation))
+    assert (Blob.objects["pax-vault/current.json"].content, Blob.objects["pax-vault/current.json"].generation) == (
+        *pointer_snapshot,
+    )
+
+
+def test_ten_dataset_v2_hybrid_is_rejected(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    release, _ = _release(publisher, "run-2")
+    key = "pax-vault/releases/run-2/release.json"
+    stored = Blob.objects[key]
+    value = json.loads(stored.content)
+    value["datasets"]["pv_pax"]["schemaVersion"] = "pv_pax.v2"
+    Blob.objects[key] = Stored(canonical_json_bytes(value), stored.generation)
+    with pytest.raises(ValueError, match="product validation"):
+        publisher._validate_release("run-2", release.generation, allow_legacy=True)
+
+
+def test_otherwise_valid_unretained_legacy_release_is_rejected(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    legacy_release, _ = _release(publisher, "run-1", legacy=True)
+    current1, digest1 = _release(publisher, "run-2")
+    publisher.commit_pointer("run-2", current1, digest1, "run-2", "revision", "2026-09-01T00:03:00Z")
+    current2, digest2 = _release(publisher, "run-3")
+    publisher.commit_pointer("run-3", current2, digest2, "run-3", "revision", "2026-09-01T00:04:00Z")
+    pointer_before = Blob.objects["pax-vault/current.json"]
+    pointer_snapshot = (pointer_before.content, pointer_before.generation)
+    with pytest.raises(ValueError, match="not the retained previous release"):
+        publisher.rollback_pointer("run-1", expected_generation=str(pointer_before.generation))
+    assert (Blob.objects["pax-vault/current.json"].content, Blob.objects["pax-vault/current.json"].generation) == (
+        *pointer_snapshot,
+    )
+    with pytest.raises(ValueError, match="not the retained previous release"):
+        publisher.rollback_pointer(
+            "legacy-hybrid", expected_generation=str(Blob.objects["pax-vault/current.json"].generation)
+        )

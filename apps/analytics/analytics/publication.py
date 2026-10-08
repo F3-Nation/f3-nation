@@ -23,12 +23,14 @@ from google.cloud.storage import Client as StorageClient  # type: ignore[import-
 from .materializations import (
     MATERIALIZATIONS_BY_NAME,
     MATERIALIZATIONS_BY_PRODUCT,
+    PAX_VAULT_LEGACY_NAMES,
+    PAX_VAULT_LEGACY_SCHEMA_VERSIONS,
     PRODUCT_NAMES,
     Materialization,
 )
-from .schema_registry import SCHEMAS_BY_NAME, manifest_columns, schema_fingerprint
+from .schema_registry import SCHEMAS_BY_NAME, SCHEMAS_BY_VERSION, manifest_columns, schema_fingerprint
 from .settings import Settings
-from .source import MaterializationArtifacts, validate_artifacts
+from .source import MaterializationArtifacts, validate_artifacts_for_schema
 
 _SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _POLICY = "ordered-sequential-per-dataset"
@@ -386,7 +388,14 @@ class GcsPublisher:
                 raise ValueError("retained pointer URI is malformed")
         return blob, pointer, generation
 
-    def _validate_release(self, run_id: str, generation: str, expected_sha256: str | None = None) -> bytes:
+    def _validate_release(
+        self,
+        run_id: str,
+        generation: str,
+        expected_sha256: str | None = None,
+        *,
+        allow_legacy: bool = False,
+    ) -> bytes:
         release_name = f"{self.prefix}/releases/{run_id}/release.json"
         release_blob = self.bucket.blob(release_name)
         release_blob.reload()
@@ -407,13 +416,32 @@ class GcsPublisher:
         if _canonical(release) != raw:
             raise ValueError("release manifest is not canonical JSON")
         contract = "pv-release.v2" if self.product == "pax-vault" else "analytics-release.v1"
+        datasets = release.get("datasets")
+        if not isinstance(datasets, dict):
+            raise ValueError("release manifest failed product validation")
+        current_versions = {
+            name: definition.schema_version
+            for name, definition in MATERIALIZATIONS_BY_NAME.items()
+            if definition.product == self.product
+        }
+        legacy = (
+            self.product == "pax-vault"
+            and allow_legacy
+            and set(datasets) == set(PAX_VAULT_LEGACY_NAMES)
+            and {name: entry.get("schemaVersion") for name, entry in datasets.items() if isinstance(entry, dict)}
+            == dict(PAX_VAULT_LEGACY_SCHEMA_VERSIONS)
+        )
+        version_vector = {
+            name: entry.get("schemaVersion") for name, entry in datasets.items() if isinstance(entry, dict)
+        }
         if (
             release.get("releaseId") != run_id
             or release.get("contractVersion") != contract
             or release.get("sourceReadPolicy") != _POLICY
             or not isinstance(release.get("sourceOrder"), str)
             or not release.get("sourceOrder")
-            or set(release.get("datasets", {})) != set(PRODUCT_NAMES[self.product])
+            or (set(datasets) != set(current_versions) and not legacy)
+            or (not legacy and version_vector != current_versions)
         ):
             raise ValueError("release manifest failed product validation")
         _safe(release["sourceOrder"], "release source order")
@@ -424,10 +452,13 @@ class GcsPublisher:
             raise ValueError("release producer revision is invalid")
         manifests: list[tuple[str, Materialization, dict[str, Any], str]] = []
         total_release_bytes = len(raw)
-        for dataset, entry in release["datasets"].items():
+        for dataset, entry in datasets.items():
             definition = self._definition(dataset)
-            expected_schema = SCHEMAS_BY_NAME.get(dataset)
-            if expected_schema is None or expected_schema.schema_version != definition.schema_version:
+            schema_version = entry.get("schemaVersion") if isinstance(entry, dict) else None
+            if not isinstance(schema_version, str):
+                raise ValueError("dataset has no matching registered schema")
+            expected_schema = SCHEMAS_BY_VERSION.get((dataset, schema_version))
+            if expected_schema is None or (not legacy and expected_schema.schema_version != definition.schema_version):
                 raise ValueError("dataset has no matching registered schema")
             dataset_uri = f"gs://{self.bucket_name}/{self.prefix}/releases/{run_id}/{dataset}/manifest.json"
             _positive_generation(entry.get("manifestGeneration"), "dataset manifest")
@@ -454,8 +485,8 @@ class GcsPublisher:
             if (
                 manifest.get("dataset") != dataset
                 or manifest.get("contractVersion") != contract
-                or manifest.get("schemaVersion") != definition.schema_version
-                or entry.get("schemaVersion") != definition.schema_version
+                or manifest.get("schemaVersion") != schema_version
+                or entry.get("schemaVersion") != schema_version
                 or manifest.get("schemaFingerprintSha256") != schema_fingerprint(expected_schema.columns)
                 or manifest.get("columns") != manifest_columns(expected_schema.columns)
                 or manifest.get("sourceReadPolicy") != _POLICY
@@ -493,13 +524,13 @@ class GcsPublisher:
                 raise ValueError("release exceeds configured aggregate byte budget")
             manifests.append((dataset, definition, manifest, str(entry["manifestGeneration"])))
 
-        for dataset, _definition, manifest, _manifest_generation in manifests:
+        for dataset, definition, manifest, _manifest_generation in manifests:
             objects = manifest["objects"]
             expected_prefix = f"gs://{self.bucket_name}/{self.prefix}/releases/{run_id}/{dataset}/partitions/"
             total_size = total_rows = 0
             seen: set[str] = set()
             seen_names: set[str] = set()
-            expected_schema = SCHEMAS_BY_NAME[dataset]
+            expected_schema = SCHEMAS_BY_VERSION[(dataset, manifest["schemaVersion"])]
             for item in objects:
                 uri = item.get("uri", "")
                 if not uri.startswith(expected_prefix) or uri in seen:
@@ -523,20 +554,6 @@ class GcsPublisher:
                         raise ValueError("Parquet object size or CRC32C does not match manifest")
                     connection = duckdb.connect(":memory:")
                     try:
-                        description = connection.execute(
-                            "DESCRIBE SELECT * FROM read_parquet(?)", [str(local_path)]
-                        ).fetchall()
-                        actual_columns = tuple(
-                            (str(column[0]), str(column[1]), str(column[2]).upper() == "YES") for column in description
-                        )
-                        expected_columns = tuple(
-                            (column.name, column.duckdb_type, column.nullable) for column in expected_schema.columns
-                        )
-                        if actual_columns != expected_columns:
-                            raise ValueError(
-                                f"Parquet file columns or types do not match registered schema: "
-                                f"expected={expected_columns!r}, actual={actual_columns!r}"
-                            )
                         row_result = connection.execute(
                             "SELECT count(*) FROM read_parquet(?)", [str(local_path)]
                         ).fetchone()
@@ -564,7 +581,9 @@ class GcsPublisher:
                 connection = duckdb.connect(":memory:")
                 try:
                     staged_artifacts = MaterializationArtifacts(staging_root, tuple(staged_paths), total_rows)
-                    physical_evidence = validate_artifacts(connection, staged_artifacts, definition)
+                    physical_evidence = validate_artifacts_for_schema(
+                        connection, staged_artifacts, definition, expected_schema
+                    )
                     if physical_evidence.file_row_counts != tuple(int(item["rowCount"]) for item in objects):
                         raise ValueError("physical Parquet validation row counts differ from manifest")
                     connection.read_parquet([str(path) for path in staged_paths]).create_view(dataset)
@@ -815,12 +834,17 @@ class GcsPublisher:
         if not isinstance(retained_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", retained_hash):
             raise ValueError("retained release hash is missing or malformed")
         _positive_generation(release_generation, "retained release")
-        actual = self._validate_release(release_id, str(release_generation), retained.get("manifestSha256"))
+        expected_uri = f"gs://{self.bucket_name}/{self.prefix}/releases/{release_id}/release.json"
+        if release_uri != expected_uri:
+            raise ValueError("retained release URI is malformed")
+        actual = self._validate_release(
+            release_id,
+            str(release_generation),
+            retained.get("manifestSha256"),
+            allow_legacy=True,
+        )
         parsed = json.loads(actual)
-        if (
-            parsed.get("releaseId") != release_id
-            or f"gs://{self.bucket_name}/{self.prefix}/releases/{release_id}/release.json" != release_uri
-        ):
+        if parsed.get("releaseId") != release_id or expected_uri != release_uri:
             raise ValueError("retained release validation failed")
         # Rollbacks advance sequence but deliberately keep source high-water.
         previous = dict(current)

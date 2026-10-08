@@ -49,6 +49,20 @@ PAX_VAULT_NAMES = (
     "pv_events",
     "pv_attendance",
 )
+PAX_VAULT_LEGACY_SCHEMA_VERSIONS = MappingProxyType(
+    {
+        "pv_regions": "pv_regions.v1",
+        "pv_pax": "pv_pax.v2",
+        "pv_kotter": "pv_kotter.v1",
+        "pv_upcoming": "pv_upcoming.v1",
+        "pv_sectors": "pv_sectors.v2",
+        "pv_territories": "pv_territories.v1",
+        "pv_areas": "pv_areas.v2",
+        "pv_aos": "pv_aos.v1",
+        "pv_events": "pv_events.v2",
+    }
+)
+PAX_VAULT_LEGACY_NAMES = tuple(PAX_VAULT_LEGACY_SCHEMA_VERSIONS)
 ANALYTICS_NAMES = (
     "event_info",
     "future_event_info",

@@ -35,25 +35,28 @@ eligible_events AS (
         ELSE COALESCE(json_extract(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault')::BOOLEAN, false)
       END = false
 ),
-observed AS (
-    SELECT DISTINCT a.user_id, e.event_id, e.region_id, e.ao_id, e.ao_name
+eligible_actual_attendance AS (
+    SELECT a.id AS attendance_id, a.user_id, e.event_id, e.region_id, e.ao_id, e.ao_name
     FROM pg.public.attendance a
     JOIN eligible_events e ON e.event_id = a.event_instance_id
-    WHERE a.user_id IS NOT NULL AND a.is_planned = false AND e.region_id IS NOT NULL
+    WHERE a.user_id IS NOT NULL AND a.is_planned = false
+),
+observed AS (
+    SELECT DISTINCT user_id, event_id, region_id, ao_id, ao_name
+    FROM eligible_actual_attendance
+    WHERE region_id IS NOT NULL
 ),
 lifetime_counts AS (
-    SELECT a.user_id,
-           COUNT(DISTINCT a.event_instance_id)::INTEGER AS lifetime_posts,
+    SELECT aa.user_id,
+           COUNT(DISTINCT aa.event_id)::INTEGER AS lifetime_posts,
            COUNT(DISTINCT CASE WHEN EXISTS (
                SELECT 1
                FROM pg.public.attendance_x_attendance_types ax
                JOIN pg.public.attendance_types att_type ON att_type.id = ax.attendance_type_id
-               WHERE ax.attendance_id = a.id AND att_type.type = 'Q'
-           ) THEN a.event_instance_id END)::INTEGER AS lifetime_qs
-    FROM pg.public.attendance a
-    JOIN eligible_events e ON e.event_id = a.event_instance_id
-    WHERE a.user_id IS NOT NULL AND a.is_planned = false
-    GROUP BY a.user_id
+               WHERE ax.attendance_id = aa.attendance_id AND att_type.type = 'Q'
+           ) THEN aa.event_id END)::INTEGER AS lifetime_qs
+    FROM eligible_actual_attendance aa
+    GROUP BY aa.user_id
 ),
 region_values AS (
     SELECT u.*, hr.name AS home_region_name,

@@ -8,7 +8,13 @@ import pytest
 from test_events_materialization import source as events_source
 
 from analytics.materializations import MATERIALIZATIONS_BY_NAME
-from analytics.schema_registry import SCHEMAS_BY_NAME, ExpectedColumn, manifest_columns, schema_fingerprint
+from analytics.schema_registry import (
+    SCHEMAS_BY_NAME,
+    SCHEMAS_BY_VERSION,
+    ExpectedColumn,
+    manifest_columns,
+    schema_fingerprint,
+)
 from analytics.source import (
     MaterializationArtifacts,
     SchemaValidationError,
@@ -56,6 +62,27 @@ def test_schema_registry_is_complete_and_ordered_for_all_registered_datasets():
     assert tuple(column.name for column in SCHEMAS_BY_NAME["pv_pax"].columns[-2:]) == (
         "lifetime_posts",
         "lifetime_qs",
+    )
+    legacy_pax = SCHEMAS_BY_VERSION[("pv_pax", "pv_pax.v2")]
+    assert tuple((column.name, column.duckdb_type, column.nullable) for column in legacy_pax.columns) == (
+        ("refreshed_at", "TIMESTAMP WITH TIME ZONE", True),
+        ("user_id", "INTEGER", True),
+        ("f3_name", "VARCHAR", True),
+        ("home_region_id", "INTEGER", True),
+        ("home_region_name", "VARCHAR", True),
+        ("avatar_url", "VARCHAR", True),
+        ("email", "VARCHAR", True),
+        ("status", "VARCHAR", True),
+        ("start_date_override", "VARCHAR", True),
+        ("regions", "STRUCT(region_org_id INTEGER, region_name VARCHAR)[]", True),
+        ("aos", "STRUCT(ao_org_id INTEGER, ao_name VARCHAR)[]", True),
+        ("types", "STRUCT(type_id INTEGER, type_name VARCHAR)[]", True),
+        ("tags", "STRUCT(tag_id INTEGER, tag_name VARCHAR)[]", True),
+        (
+            "roles",
+            "STRUCT(role_id INTEGER, role_name VARCHAR, org_id INTEGER, org_name VARCHAR, org_type VARCHAR)[]",
+            True,
+        ),
     )
     attendance = SCHEMAS_BY_NAME["pv_attendance"]
     assert attendance.schema_version == "pv_attendance.v1"

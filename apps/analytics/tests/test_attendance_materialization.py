@@ -57,6 +57,8 @@ def source():
             (1, "alpha@example.test", "Alpha", 1, "alpha.png", "active"),
             (2, "invalid", "Invalid", 1, None, "inactive"),
             (3, None, "No email", None, None, "active"),
+            (4, "null-name@example.test", None, 1, None, "active"),
+            (5, "blank-name@example.test", "", 1, None, "active"),
         ],
     )
     db.executemany(
@@ -72,6 +74,8 @@ def source():
             (107, 1, 14, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
             (108, 1, 15, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
             (109, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (110, 4, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (111, 5, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
         ],
     )
     db.executemany(
@@ -123,7 +127,7 @@ def test_attendance_rows_filter_and_aggregate_without_fanout():
         "types",
         "categories",
     ]
-    assert len(rows) == 3
+    assert len(rows) == 5
     row = rows[0]
     assert row[1:17] == (
         100,
@@ -152,7 +156,11 @@ def test_attendance_rows_filter_and_aggregate_without_fanout():
     assert row[19] == ["first_f", "second_f"]
     assert rows[1][1:4] == (109, 1, 10)
     assert rows[1][7:9] == (0, 0)
-    assert rows[2][1] == 104
+    assert rows[2][1:4] == (110, 4, 10)
+    assert rows[2][9] == "4"
+    assert rows[3][1:4] == (111, 5, 10)
+    assert rows[3][9] == "5"
+    assert rows[4][1] == 104
 
 
 def test_attendance_without_tags_or_types_has_typed_empty_arrays_and_null_meta(tmp_path: Path):
