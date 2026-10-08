@@ -10,21 +10,28 @@
  * not a failure; a name that matches more than one stashed key stops the
  * refresh before staging is touched.
  *
- * REVIEWERS: prune this. It was copied from the keys kept by hand on the
- * 2026-10-07 refresh, so some entries may be duplicates or no longer used
- * ("F3 API Staging" vs "F3 Api Staging", "Slackbot (STAGING)" vs "Slackbot
- * staging key"). A key that should die with the refresh must not be here.
+ * Pruned 2026-10-08 to the keys staging's apps use. last_used_at can't
+ * tell (the API never writes it), but staging's API logs since the
+ * 2026-10-07 refresh show ~1k requests, from node, python-requests and
+ * okhttp clients, and not one api_key_not_found: these seven cover them.
+ * Dropped: "F3 API Staging" and "F3 Api Staging" (both expired June 2026,
+ * one-off tag-deploy tests) and "App Pioneer Poster" (an ad-hoc key for
+ * trying new Slack API endpoints).
  */
 export const STAGING_API_KEYS_TO_KEEP = [
+  // Both owned by admin@F3 Nation. Successful key auth isn't logged, so which
+  // one the staging slackbot uses can't be told: keep both.
   "Slackbot (STAGING)",
-  "F3 Map Service Account",
-  "org.f3nation.com",
-  "F3 Me",
-  "F3 Auth Service (STAGING)",
   "Slackbot staging key",
-  "F3 API Staging",
-  "F3 Api Staging",
-  "App Pioneer Poster",
+  // The map's F3_MAP_API_KEY.
+  "F3 Map Service Account",
+  // The website.
+  "org.f3nation.com",
+  // The F3 Me app.
+  "F3 Me",
+  // The auth app.
+  "F3 Auth Service (STAGING)",
+  // The mobile app.
   "Digital Wienke",
 ];
 
