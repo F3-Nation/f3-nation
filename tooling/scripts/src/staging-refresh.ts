@@ -182,9 +182,9 @@ function baseEnv(): Record<string, string> {
 }
 
 // Server messages that quote row values (a failing row, a duplicate key, the
-// COPY line). The data is obfuscated by then, but free text can still name
-// people (see the SCRUB limit in docs/STAGING_REFRESH.md): keep it out of the
-// job's logs.
+// COPY line). The data is obfuscated by then, but free text outside the
+// prose columns is only scrubbed (docs/STAGING_REFRESH.md): keep it out of
+// the job's logs.
 const ROW_DATA =
   /Failing row contains|^\s*CONTEXT:\s+COPY .* line \d+|^\s*DETAIL:\s+Key \(/;
 

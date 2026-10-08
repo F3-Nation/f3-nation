@@ -43,6 +43,7 @@ import {
   readTargetColumns,
   unreviewedColumns,
 } from "./obfuscate-db.columns";
+import { isLoremRich, isLoremText } from "./obfuscate-db.lorem";
 import { fkEdges, planKeptFks } from "./staging-refresh.checks";
 import { PRESERVED_TABLES } from "./staging-refresh.config";
 
@@ -332,12 +333,14 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
       'Great morning. FNG welcomed — reach bob.smith@yahoo.com to connect.',
       '{"mumblechatter": "email carl@aol.com"}')`;
 
-  // No email anywhere in this row — proves the row-selection WHERE clause
-  // (keyed on a bare "%@%" LIKE) still catches Slack mention syntax on its
-  // own, since "<@U...>" itself contains "@".
+  // Prose (backblast, preblast, description, Block Kit) becomes lorem ipsum,
+  // so the Slack-mention scrub is proven on a column that is still scrubbed:
+  // meta. No email anywhere in this row — proves the row-selection WHERE
+  // clause (keyed on a bare "%@%" LIKE) still catches Slack mention syntax on
+  // its own, since "<@U...>" itself contains "@".
   await sql`
     INSERT INTO event_instances (org_id, is_active, highlight, start_date,
-      name, backblast_rich)
+      name, meta)
     VALUES (${ao.id}, true, false, current_date, 'Mention-Only Beatdown',
       '{"type": "mrkdwn", "text": "<@U0REALSLACK> led 20 burpees"}')`;
 
@@ -346,17 +349,55 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
   // the pipe are real PII and must not survive.
   await sql`
     INSERT INTO event_instances (org_id, is_active, highlight, start_date,
-      name, backblast)
+      name, meta)
     VALUES (${ao.id}, true, false, current_date, 'Pipe-Mention Beatdown',
-      'Q was <@U0PIPEFORM|bob.smith>, co-Q <@W0GRIDUSER|Grid Person>.')`;
+      '{"note": "Q was <@U0PIPEFORM|bob.smith>, co-Q <@W0GRIDUSER|Grid Person>."}')`;
 
   // A real id can be all hex (any id is ~(16/36)^n likely to be): it must be
   // rewritten, and must not pass for a fake.
   await sql`
     INSERT INTO event_instances (org_id, is_active, highlight, start_date,
-      name, backblast)
+      name, meta)
     VALUES (${ao.id}, true, false, current_date, 'Hex-Mention Beatdown',
-      'Thanks <@UABC12345> for the coffee.')`;
+      '{"note": "Thanks <@UABC12345> for the coffee."}')`;
+
+  // Real names in prose, which SCRUB never touched: plain text with line
+  // breaks, and Block Kit with a mrkdwn section, a user mention, an emoji
+  // and a link.
+  await sql`
+    INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+      name, description, preblast, backblast, backblast_rich)
+    VALUES (${ao.id}, true, false, current_date, 'Real-Name Beatdown',
+      'Jane Realname runs this one.',
+      'Jane Realname is Q tomorrow, bring a coupon.',
+      ${"Jane Realname led the beatdown.\nPAX: Bob Realperson, Carl Truename\n\nGreat work, everyone!"},
+      ${sql.json([
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "*Backblast! Real-Name Beatdown*\n*Q*: <@U0RICHQ> Jane Realname",
+          },
+        },
+        {
+          type: "rich_text",
+          elements: [
+            {
+              type: "rich_text_section",
+              elements: [
+                { type: "text", text: "Jane Realname led the beatdown with " },
+                { type: "user", user_id: "U0RICHUSER" },
+                { type: "emoji", name: "muscle" },
+                {
+                  type: "link",
+                  url: "https://www.strava.com/athletes/jane-realname",
+                  text: "Jane's run",
+                },
+              ],
+            },
+          ],
+        },
+      ])})`;
 
   await sql`
     INSERT INTO slack_users (slack_id, user_name, email, is_admin, is_owner,
@@ -829,32 +870,32 @@ async function main(): Promise<void> {
     const backblastOk =
       !!instance?.backblast &&
       !instance.backblast.includes("bob.smith@yahoo.com") &&
-      instance.backblast.includes(SINK_PREFIX);
+      isLoremText(instance.backblast);
     check(
-      "free-text backblast scrubbed",
+      "free-text backblast replaced with lorem ipsum",
       backblastOk,
       instance?.backblast ?? "missing",
     );
 
-    const [mentionRow] = await sql<{ backblast_rich: string | null }[]>`
-      SELECT backblast_rich::text AS backblast_rich FROM event_instances
+    const [mentionRow] = await sql<{ meta: string | null }[]>`
+      SELECT meta::text AS meta FROM event_instances
       WHERE name = 'Mention-Only Beatdown' LIMIT 1`;
     const mentionOk =
-      !!mentionRow?.backblast_rich &&
-      !mentionRow.backblast_rich.includes("U0REALSLACK") &&
-      /<@Uf3[0-9a-f]{8,}>/.test(mentionRow.backblast_rich);
+      !!mentionRow?.meta &&
+      !mentionRow.meta.includes("U0REALSLACK") &&
+      /<@Uf3[0-9a-f]{8,}>/.test(mentionRow.meta);
     check(
       "Slack mention in JSON scrubbed with no email present",
       mentionOk,
-      mentionRow?.backblast_rich ?? "missing",
+      mentionRow?.meta ?? "missing",
     );
 
-    const [pipeRow] = await sql<{ backblast: string | null }[]>`
-      SELECT backblast FROM event_instances
+    const [pipeRow] = await sql<{ note: string | null }[]>`
+      SELECT meta->>'note' AS note FROM event_instances
       WHERE name = 'Pipe-Mention Beatdown' LIMIT 1`;
-    const pipeText = pipeRow?.backblast ?? "";
+    const pipeText = pipeRow?.note ?? "";
     const pipeOk =
-      !!pipeRow?.backblast &&
+      !!pipeRow?.note &&
       // Neither member id survives...
       !pipeText.includes("U0PIPEFORM") &&
       !pipeText.includes("W0GRIDUSER") &&
@@ -866,15 +907,62 @@ async function main(): Promise<void> {
       (pipeText.match(/<@Uf3[0-9a-f]{8,}>/g) ?? []).length === 2;
     check("piped/enterprise Slack mentions scrubbed", pipeOk, pipeText);
 
-    const [hexRow] = await sql<{ backblast: string | null }[]>`
-      SELECT backblast FROM event_instances
+    const [hexRow] = await sql<{ note: string | null }[]>`
+      SELECT meta->>'note' AS note FROM event_instances
       WHERE name = 'Hex-Mention Beatdown' LIMIT 1`;
-    const hexText = hexRow?.backblast ?? "";
+    const hexText = hexRow?.note ?? "";
     check(
       "all-hex real Slack id rewritten to the lowercase fake form",
       !hexText.includes("UABC12345") &&
         /^Thanks <@Uf3[0-9a-f]{8,}> for the coffee\.$/.test(hexText),
       hexText,
+    );
+
+    // Prose: names gone, lorem only, about the same length, same line
+    // breaks; Block Kit keeps its blocks, types and emoji.
+    const [prose] = await sql<
+      {
+        description: string | null;
+        preblast: string | null;
+        backblast: string | null;
+        rich: string | null;
+      }[]
+    >`
+      SELECT description, preblast, backblast, backblast_rich::text AS rich
+      FROM event_instances WHERE name = 'Real-Name Beatdown' LIMIT 1`;
+    const plantedBackblast =
+      "Jane Realname led the beatdown.\nPAX: Bob Realperson, Carl Truename\n\nGreat work, everyone!";
+    const proseText = [prose?.description, prose?.preblast, prose?.backblast]
+      .map((v) => v ?? "")
+      .join("\n");
+    const lengthRatio =
+      (prose?.backblast?.length ?? 0) / plantedBackblast.length;
+    const rich = JSON.parse(prose?.rich ?? "null") as
+      | {
+          type: string;
+          elements?: { elements?: { type: string; name?: string }[] }[];
+        }[]
+      | null;
+    const richElements = rich?.[1]?.elements?.[0]?.elements ?? [];
+    check(
+      "prose replaced with lorem ipsum: names gone, length and line breaks kept",
+      !/Realname|Realperson|Truename/.test(proseText) &&
+        isLoremText(proseText) &&
+        prose?.backblast?.split("\n").length === 4 &&
+        prose.backblast.split("\n")[2] === "" &&
+        lengthRatio > 0.7 &&
+        lengthRatio < 1.5,
+      `backblast ${prose?.backblast?.length ?? 0} chars vs ${plantedBackblast.length} planted, ${prose?.backblast?.split("\n").length ?? 0} lines: ${prose?.backblast ?? "missing"}`,
+    );
+    check(
+      "Block Kit prose replaced, mentions and links gone, structure kept",
+      !!rich &&
+        !/Realname|U0RICH|strava/.test(prose?.rich ?? "") &&
+        isLoremRich(rich) &&
+        rich.map((b) => b.type).join(",") === "section,rich_text" &&
+        richElements.map((e) => e.type).join(",") === "text,text,emoji,text" &&
+        richElements[2]?.name === "muscle",
+      prose?.rich ?? "missing",
     );
 
     const [shadow] = await sql<
@@ -1055,11 +1143,12 @@ async function main(): Promise<void> {
     // Same for a Slack id: put a real-looking all-hex one (the shape the old
     // uppercase-hex fakes had) back into a backblast and expect a FAIL that
     // names the column, value withheld; then undo it.
-    const [hexBefore] = await sql<{ backblast: string | null }[]>`
-      SELECT backblast FROM event_instances
+    const [hexBefore] = await sql<{ meta: string | null }[]>`
+      SELECT meta::text AS meta FROM event_instances
       WHERE name = 'Hex-Mention Beatdown' LIMIT 1`;
     await sql`
-      UPDATE event_instances SET backblast = 'Thanks <@UABC12345> for the coffee.'
+      UPDATE event_instances
+      SET meta = '{"note": "Thanks <@UABC12345> for the coffee."}'
       WHERE name = 'Hex-Mention Beatdown'`;
     const hexSuite = spawnSync(
       "pnpm",
@@ -1074,17 +1163,51 @@ async function main(): Promise<void> {
     );
     const hexOut = `${hexSuite.stdout.toString()}${hexSuite.stderr.toString()}`;
     await sql`
-      UPDATE event_instances SET backblast = ${hexBefore?.backblast ?? null}
+      UPDATE event_instances SET meta = ${hexBefore?.meta ?? null}::jsonb
       WHERE name = 'Hex-Mention Beatdown'`;
     check(
       "verify-target catches an all-hex Slack id left in place",
       hexSuite.status !== 0 &&
         /FAIL\s+Slack id sweep/.test(hexOut) &&
-        hexOut.includes("public.event_instances.backblast") &&
+        hexOut.includes("public.event_instances.meta") &&
         !hexOut.includes("UABC12345"),
       hexSuite.status !== 0
+        ? "FAIL names public.event_instances.meta, value withheld"
+        : "verify-target passed with <@UABC12345> in meta",
+    );
+
+    // And a real name back in a backblast: the prose check must FAIL, naming
+    // the column, never the text.
+    const [nameBefore] = await sql<{ backblast: string | null }[]>`
+      SELECT backblast FROM event_instances
+      WHERE name = 'Real-Name Beatdown' LIMIT 1`;
+    await sql`
+      UPDATE event_instances SET backblast = 'Jane Realname led the beatdown.'
+      WHERE name = 'Real-Name Beatdown'`;
+    const nameSuite = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.verify-target.ts",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const nameOut = `${nameSuite.stdout.toString()}${nameSuite.stderr.toString()}`;
+    await sql`
+      UPDATE event_instances SET backblast = ${nameBefore?.backblast ?? null}
+      WHERE name = 'Real-Name Beatdown'`;
+    check(
+      "verify-target catches a real name left in a backblast",
+      nameSuite.status !== 0 &&
+        /FAIL\s+prose columns hold only lorem ipsum/.test(nameOut) &&
+        nameOut.includes("public.event_instances.backblast") &&
+        !nameOut.includes("Realname"),
+      nameSuite.status !== 0
         ? "FAIL names public.event_instances.backblast, value withheld"
-        : "verify-target passed with <@UABC12345> in a backblast",
+        : "verify-target passed with a real name in a backblast",
     );
 
     // --- 4b. Preserved staging tables stay consistent with a load ----------------

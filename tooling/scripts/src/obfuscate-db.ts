@@ -71,6 +71,13 @@ import {
   readTargetColumns,
   unreviewedColumns,
 } from "./obfuscate-db.columns";
+import {
+  isLoremRich,
+  isLoremText,
+  loremRich,
+  loremText,
+  makeRng,
+} from "./obfuscate-db.lorem";
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -243,8 +250,8 @@ const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // survive. Route through the memoized fakeSlackId so one member is the same
 // fake in every mention. NOTE: this does
 // NOT cover real names (pax_names/q_name) appearing in free text with no
-// accompanying "@" — that's a separate, unresolved gap (see backblast_rich
-// scrub call sites) that needs a name-substitution pass, not a regex.
+// accompanying "@": that is why the prose columns (backblasts, preblasts,
+// descriptions) are replaced with lorem ipsum instead (obfuscate-db.lorem.ts).
 //
 // Both documented mention forms are matched: `<@U0REALSLACK>` and the
 // pipe form `<@U0REALSLACK|display name>`, which Slack emits whenever the
@@ -273,6 +280,48 @@ function scrubText(value: string): string {
   return withoutMentions.replace(EMAIL_REGEX, (match) =>
     isAllowlistedEmail(match) ? match : fakeEmail(match),
   );
+}
+
+/**
+ * Prose (backblasts, descriptions) becomes lorem ipsum: SCRUB leaves the real
+ * names people write there (obfuscate-db.lorem.ts). Seeded from the salted
+ * hash of table, row and column, so a refresh from the same prod row gives
+ * the same text. A value that is already lorem is left alone (re-runs).
+ */
+function proseRng(table: string, id: unknown, column: string) {
+  return makeRng(hashHex(`lorem:${table}:${String(id)}:${column}`, 8));
+}
+
+function replaceProse(
+  row: Row,
+  table: string,
+  columns: string[],
+  changes: Row,
+): void {
+  for (const col of columns) {
+    const v = str(row[col]);
+    if (!v || isLoremText(v)) continue;
+    const next = loremText(v, proseRng(table, row.id, col));
+    if (next !== v) changes[col] = next;
+  }
+}
+
+/** Block Kit prose to lorem, then the usual scrub of every other string. */
+function replaceRichProse(
+  row: Row,
+  table: string,
+  columns: string[],
+  changes: Row,
+): void {
+  for (const col of columns) {
+    const v = row[col];
+    if (v === null || v === undefined) continue;
+    const replaced = isLoremRich(v)
+      ? v
+      : loremRich(v, proseRng(table, row.id, col));
+    const scrubbed = scrubJson(replaced);
+    if (scrubbed !== v) changes[col] = JSON.stringify(scrubbed);
+  }
 }
 
 /**
@@ -1002,12 +1051,12 @@ async function obfuscate(sql: Sql): Promise<void> {
     actions: {
       email: "obfuscate (email)",
       phone: "obfuscate (phone)",
-      description: "scrub emails (text)",
+      description: "replace (lorem)",
       website: "scrub emails (text)",
       meta: "scrub emails (json)",
     },
     where: sql`email IS NOT NULL OR phone IS NOT NULL
-      OR description LIKE ${likeEmail} OR website LIKE ${likeEmail}
+      OR description IS NOT NULL OR website LIKE ${likeEmail}
       OR meta::text LIKE ${likeEmail}`,
     transform: (row) => {
       const changes: Row = {};
@@ -1017,14 +1066,13 @@ async function obfuscate(sql: Sql): Promise<void> {
       }
       const phone = str(row.phone);
       if (phone) changes.phone = fakePhone(phone);
+      replaceProse(row, "orgs", ["description"], changes);
       // Real-data finding (2026-07-10): "website" fields carry typed-in email
       // addresses — treat every free-form URL field as scrub-worthy text.
-      for (const col of ["description", "website"]) {
-        const v = str(row[col]);
-        if (v) {
-          const scrubbed = scrubText(v);
-          if (scrubbed !== v) changes[col] = scrubbed;
-        }
+      const website = str(row.website);
+      if (website) {
+        const scrubbed = scrubText(website);
+        if (scrubbed !== website) changes.website = scrubbed;
       }
       if (row.meta !== null) {
         const scrubbed = scrubJson(row.meta);
@@ -1084,22 +1132,18 @@ async function obfuscate(sql: Sql): Promise<void> {
     columns: ["email", "description", "meta"],
     actions: {
       email: "obfuscate (email)",
-      description: "scrub emails (text)",
+      description: "replace (lorem)",
       meta: "scrub emails (json)",
     },
     where: sql`email IS NOT NULL
-      OR description LIKE ${likeEmail} OR meta::text LIKE ${likeEmail}`,
+      OR description IS NOT NULL OR meta::text LIKE ${likeEmail}`,
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
       if (email && !isAllowlistedEmail(email)) {
         changes.email = fakeEmail(email, `location-${String(row.id)}`);
       }
-      const description = str(row.description);
-      if (description) {
-        const scrubbed = scrubText(description);
-        if (scrubbed !== description) changes.description = scrubbed;
-      }
+      replaceProse(row, "locations", ["description"], changes);
       if (row.meta !== null) {
         const scrubbed = scrubJson(row.meta);
         if (scrubbed !== row.meta) changes.meta = JSON.stringify(scrubbed);
@@ -1115,22 +1159,18 @@ async function obfuscate(sql: Sql): Promise<void> {
     columns: ["email", "description", "meta"],
     actions: {
       email: "obfuscate (email)",
-      description: "scrub emails (text)",
+      description: "replace (lorem)",
       meta: "scrub emails (json)",
     },
     where: sql`email IS NOT NULL
-      OR description LIKE ${likeEmail} OR meta::text LIKE ${likeEmail}`,
+      OR description IS NOT NULL OR meta::text LIKE ${likeEmail}`,
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
       if (email && !isAllowlistedEmail(email)) {
         changes.email = fakeEmail(email, `event-${String(row.id)}`);
       }
-      const description = str(row.description);
-      if (description) {
-        const scrubbed = scrubText(description);
-        if (scrubbed !== description) changes.description = scrubbed;
-      }
+      replaceProse(row, "events", ["description"], changes);
       if (row.meta !== null) {
         const scrubbed = scrubJson(row.meta);
         if (scrubbed !== row.meta) changes.meta = JSON.stringify(scrubbed);
@@ -1158,20 +1198,20 @@ async function obfuscate(sql: Sql): Promise<void> {
       // Real-data finding 2026-09-22: the slackbot titles some instances
       // after a Slack mention ("Q: <@U…>"), so name carries real Slack ids.
       name: "scrub emails (text)",
-      description: "scrub emails (text)",
-      preblast: "scrub emails (text)",
-      backblast: "scrub emails (text)",
-      preblast_rich: "scrub emails (json)",
-      backblast_rich: "scrub emails (json)",
+      description: "replace (lorem)",
+      preblast: "replace (lorem)",
+      backblast: "replace (lorem)",
+      preblast_rich: "replace (lorem, Block Kit)",
+      backblast_rich: "replace (lorem, Block Kit)",
       meta: "scrub emails (json)",
     },
     where: sql`email IS NOT NULL
       OR name LIKE ${likeEmail}
-      OR description LIKE ${likeEmail}
-      OR preblast LIKE ${likeEmail}
-      OR backblast LIKE ${likeEmail}
-      OR preblast_rich::text LIKE ${likeEmail}
-      OR backblast_rich::text LIKE ${likeEmail}
+      OR description IS NOT NULL
+      OR preblast IS NOT NULL
+      OR backblast IS NOT NULL
+      OR preblast_rich IS NOT NULL
+      OR backblast_rich IS NOT NULL
       OR meta::text LIKE ${likeEmail}`,
     transform: (row) => {
       const changes: Row = {};
@@ -1179,18 +1219,26 @@ async function obfuscate(sql: Sql): Promise<void> {
       if (email && !isAllowlistedEmail(email)) {
         changes.email = fakeEmail(email, `event-instance-${String(row.id)}`);
       }
-      for (const col of ["name", "description", "preblast", "backblast"]) {
-        const v = str(row[col]);
-        if (v) {
-          const scrubbed = scrubText(v);
-          if (scrubbed !== v) changes[col] = scrubbed;
-        }
+      const name = str(row.name);
+      if (name) {
+        const scrubbed = scrubText(name);
+        if (scrubbed !== name) changes.name = scrubbed;
       }
-      for (const col of ["preblast_rich", "backblast_rich", "meta"]) {
-        if (row[col] !== null) {
-          const scrubbed = scrubJson(row[col]);
-          if (scrubbed !== row[col]) changes[col] = JSON.stringify(scrubbed);
-        }
+      replaceProse(
+        row,
+        "event_instances",
+        ["description", "preblast", "backblast"],
+        changes,
+      );
+      replaceRichProse(
+        row,
+        "event_instances",
+        ["preblast_rich", "backblast_rich"],
+        changes,
+      );
+      if (row.meta !== null) {
+        const scrubbed = scrubJson(row.meta);
+        if (scrubbed !== row.meta) changes.meta = JSON.stringify(scrubbed);
       }
       return changes;
     },
@@ -1216,8 +1264,8 @@ async function obfuscate(sql: Sql): Promise<void> {
       reviewed_by: "obfuscate (email)",
       event_contact_email: "obfuscate (email)",
       location_contact_email: "obfuscate (email)",
-      event_description: "scrub emails (text)",
-      location_description: "scrub emails (text)",
+      event_description: "replace (lorem)",
+      location_description: "replace (lorem)",
       ao_website: "scrub emails (text)",
       event_meta: "scrub emails (json)",
       meta: "scrub emails (json)",
@@ -1238,18 +1286,18 @@ async function obfuscate(sql: Sql): Promise<void> {
           ? fakeEmail(v, `request-${String(row.id)}`)
           : fakeName(v);
       }
-      for (const col of [
-        "event_description",
-        "location_description",
-        // Real-data finding (2026-07-10): users type email addresses into the
-        // AO-website field.
-        "ao_website",
-      ]) {
-        const v = str(row[col]);
-        if (v) {
-          const scrubbed = scrubText(v);
-          if (scrubbed !== v) changes[col] = scrubbed;
-        }
+      replaceProse(
+        row,
+        "update_requests",
+        ["event_description", "location_description"],
+        changes,
+      );
+      // Real-data finding (2026-07-10): users type email addresses into the
+      // AO-website field.
+      const aoWebsite = str(row.ao_website);
+      if (aoWebsite) {
+        const scrubbed = scrubText(aoWebsite);
+        if (scrubbed !== aoWebsite) changes.ao_website = scrubbed;
       }
       for (const col of ["event_meta", "meta"]) {
         if (row[col] !== null) {

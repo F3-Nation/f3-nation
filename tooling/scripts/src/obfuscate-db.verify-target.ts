@@ -39,6 +39,7 @@ import {
   quoteIdent,
   quoteQualified,
 } from "./db-url";
+import { isLoremRich, isLoremText, PROSE_COLUMNS } from "./obfuscate-db.lorem";
 
 // Must match the --email-sink the obfuscator ran with (same default).
 const EMAIL_SINK = (
@@ -241,6 +242,47 @@ async function sweepForEmails(sql: Sql): Promise<void> {
   );
 }
 
+/**
+ * Prose columns (backblasts, descriptions) must hold nothing but lorem ipsum:
+ * a word outside its vocabulary is something the obfuscator didn't replace,
+ * possibly a person's name. Location and count only, never the value.
+ */
+async function checkProse(sql: Sql): Promise<void> {
+  const bad: string[] = [];
+  let scanned = 0;
+  for (const { table, column, kind } of PROSE_COLUMNS) {
+    const [present] = await sql<{ ok: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema || '.' || table_name = ${table}
+          AND column_name = ${column}) AS ok`;
+    if (!present?.ok) continue;
+    let n = 0;
+    const cursor = sql
+      .unsafe(
+        `SELECT ${quoteIdent(column)}::text AS v FROM ${quoteQualified(table)}
+         WHERE ${quoteIdent(column)} IS NOT NULL`,
+      )
+      .cursor(5000);
+    for await (const rows of cursor) {
+      for (const row of rows as unknown as { v: string }[]) {
+        scanned += 1;
+        const ok =
+          kind === "rich" ? isLoremRich(JSON.parse(row.v)) : isLoremText(row.v);
+        if (!ok) n += 1;
+      }
+    }
+    if (n > 0) bad.push(`${table}.${column} (${n} row(s))`);
+  }
+  check(
+    "prose columns hold only lorem ipsum",
+    bad.length === 0,
+    bad.length === 0
+      ? `${scanned} value(s) across ${PROSE_COLUMNS.length} columns`
+      : `not replaced: ${bad.join("; ")}`,
+  );
+}
+
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -282,6 +324,7 @@ async function main(): Promise<void> {
     console.log(`=== obfuscation target verification: "${dbName}" ===`);
 
     await sweepForEmails(sql);
+    await checkProse(sql);
 
     for (const table of EMPTY_TABLES) {
       if (!(await tableExists(sql, table))) {
