@@ -196,6 +196,21 @@ describe("buildOrgHierarchy", () => {
     expect(orgById.has(6)).toBe(false);
   });
 
+  it("detaches the top recognized ancestor when the root is unknown", () => {
+    const { orgById } = buildOrgHierarchy([
+      makeItem(5, "region", [
+        [4, "Area", "area"],
+        [2, "Sector", "sector"],
+        [1, "Planet", "planet" as OrgChartItem["orgType"]],
+      ]),
+    ]);
+
+    expect(orgById.has(1)).toBe(false);
+    expect(orgById.get(2)?.parentId).toBeNull();
+    expect(orgById.get(4)?.parentId).toBe(2);
+    expect(orgById.get(5)?.parentId).toBe(4);
+  });
+
   it("reduces an unknown six-tier tree to the existing five-tier hierarchy", () => {
     const fiveTierChain: OrgChartItem["hierarchy"] = [
       [5, "Region", "region"],

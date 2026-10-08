@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
 
-import { auth } from "~/lib/auth";
+import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
 import {
   createAuthorizationCode,
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Check if user is authenticated
-  const session = await auth();
+  const session = await getCurrentSession();
   if (!session?.user?.id) {
     // Redirect to login with callback to this authorize URL
     const callbackUrl = `${publicUrl}${reqUrl.pathname}${reqUrl.search}`;

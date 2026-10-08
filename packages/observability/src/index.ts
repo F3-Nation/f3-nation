@@ -22,6 +22,18 @@ import {
 
 import { setErrorReporter } from "@acme/logger";
 
+import {
+  ATTR_EXCEPTION_CAUSE_CODE,
+  ATTR_EXCEPTION_CAUSE_MESSAGE,
+  ATTR_EXCEPTION_CAUSE_STACKTRACE,
+  ATTR_EXCEPTION_CAUSE_STACKTRACE_DROPPED,
+  ATTR_EXCEPTION_CAUSE_TYPE,
+  ATTR_EXCEPTION_STACKTRACE_DROPPED,
+  redactCauseMessage,
+  redactQueryParams,
+  redactStack,
+  rootCause,
+} from "./error-details";
 import { ImmediateLogRecordProcessor } from "./immediate-processor";
 import { PostHogExceptionExporter } from "./posthog-exporter";
 import { sanitizeLogContext } from "./sanitize";
@@ -101,17 +113,28 @@ export async function captureException(
   try {
     if (!provider) return;
     const error = err instanceof Error ? err : new Error(safeStringify(err));
+    const message = redactQueryParams(error.message);
+    const stack = redactStack(error.stack, error.message);
+    // The innermost `.cause` — for a Drizzle-wrapped query failure, the only
+    // place the real reason lives (see error-details.ts).
+    const cause = rootCause(error);
     provider.getLogger("@acme/observability").emit({
       severityNumber: SeverityNumber.ERROR,
       severityText: "ERROR",
-      body: error.message,
+      body: message,
       // Exception attrs spread AFTER caller attributes: callers must not be
-      // able to spoof exception.type/message/stacktrace.
+      // able to spoof exception.type/message/stacktrace or the cause.
       attributes: {
-        ...toLogAttributes(attributes),
+        ...withoutCauseAttributes(toLogAttributes(attributes)),
         [ATTR_EXCEPTION_TYPE]: error.name,
-        [ATTR_EXCEPTION_MESSAGE]: error.message,
-        ...(error.stack ? { [ATTR_EXCEPTION_STACKTRACE]: error.stack } : {}),
+        [ATTR_EXCEPTION_MESSAGE]: message,
+        ...(stack ? { [ATTR_EXCEPTION_STACKTRACE]: stack } : {}),
+        // A stack withheld because its redaction couldn't be verified is
+        // marked, so it doesn't look like an error that never had one.
+        ...(error.stack && !stack
+          ? { [ATTR_EXCEPTION_STACKTRACE_DROPPED]: "redaction" }
+          : {}),
+        ...(cause ? causeAttributes(cause) : {}),
       },
     });
     await provider.forceFlush();
@@ -194,6 +217,47 @@ function toLogAttributes(
     }
   }
   return out;
+}
+
+/**
+ * The root cause as exception.cause.* attributes: message and stack header
+ * redacted (bound params and quoted input values), plus the driver's
+ * machine-readable `code` when it has one — a stable field to alert on.
+ */
+function causeAttributes(cause: Error): Record<string, string> {
+  const stack = redactStack(cause.stack, cause.message, redactCauseMessage);
+  const code = (cause as { code?: unknown }).code;
+  return {
+    [ATTR_EXCEPTION_CAUSE_TYPE]: cause.name,
+    [ATTR_EXCEPTION_CAUSE_MESSAGE]: redactCauseMessage(cause.message),
+    ...(typeof code === "string" || typeof code === "number"
+      ? { [ATTR_EXCEPTION_CAUSE_CODE]: String(code) }
+      : {}),
+    ...(stack ? { [ATTR_EXCEPTION_CAUSE_STACKTRACE]: stack } : {}),
+    ...(cause.stack && !stack
+      ? { [ATTR_EXCEPTION_CAUSE_STACKTRACE_DROPPED]: "redaction" }
+      : {}),
+  };
+}
+
+/**
+ * Drop caller-supplied cause attributes. Spreading the real ones after the
+ * caller's only protects errors that HAVE a cause; for one without, a
+ * caller key would otherwise pass through and read as the root cause.
+ */
+function withoutCauseAttributes(
+  attrs: Record<string, string | number | boolean>,
+): Record<string, string | number | boolean> {
+  const {
+    [ATTR_EXCEPTION_CAUSE_TYPE]: _type,
+    [ATTR_EXCEPTION_CAUSE_MESSAGE]: _message,
+    [ATTR_EXCEPTION_CAUSE_STACKTRACE]: _stack,
+    [ATTR_EXCEPTION_CAUSE_CODE]: _code,
+    [ATTR_EXCEPTION_CAUSE_STACKTRACE_DROPPED]: _causeDropped,
+    [ATTR_EXCEPTION_STACKTRACE_DROPPED]: _dropped,
+    ...rest
+  } = attrs;
+  return rest;
 }
 
 function safeStringify(value: unknown): string {

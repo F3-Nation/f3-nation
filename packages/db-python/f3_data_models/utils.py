@@ -64,7 +64,7 @@ def _create_postgresql_engine(echo: bool) -> Engine:
         )
         return sqlalchemy.create_engine(db_url, echo=echo)
 
-    # Connect via Cloud Run's built-in Cloud SQL Auth Proxy Unix socket
+    # Connect via Cloud Run's built-in Cloud SQL Unix socket
     unix_sock_dir = f"/cloudsql/{host}"
     db_url = sqlalchemy.engine.URL.create(
         drivername="postgresql",

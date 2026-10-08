@@ -1,5 +1,29 @@
 # Changelog
 
+## [6.10.0](https://github.com/F3-Nation/f3-nation/compare/api@6.9.0...api@6.10.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+
+
+### Bug Fixes
+
+* **api:** scope API-key reads, map-change requests and key management ([#1169](https://github.com/F3-Nation/f3-nation/issues/1169)) ([9a946e8](https://github.com/F3-Nation/f3-nation/commit/9a946e8fb493c5005f76ed94460625eb533614f1))
+* **db:** clarify local and test database env usage ([#1148](https://github.com/F3-Nation/f3-nation/issues/1148)) ([b11dfe7](https://github.com/F3-Nation/f3-nation/commit/b11dfe79c1a28a90432fd343e3956c6c596425ad))
+* **observability,api:** report root causes, redact query params, stop reporting 4xx as exceptions ([#1112](https://github.com/F3-Nation/f3-nation/issues/1112)) ([2ddcb83](https://github.com/F3-Nation/f3-nation/commit/2ddcb831dec8e4a808bd1791fdb7d8767b314e3f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.12.0
+    * @acme/shared bumped to 0.4.1
+  * devDependencies
+    * @acme/db bumped to 0.8.0
+
 ## [6.9.0](https://github.com/F3-Nation/f3-nation/compare/api@6.8.0...api@6.9.0) (2026-09-27)
 
 

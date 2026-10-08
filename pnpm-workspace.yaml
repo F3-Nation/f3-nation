@@ -12,12 +12,11 @@ catalog:
   "@commitlint/config-conventional": ^21.2.3
   "@commitlint/cz-commitlint": ^21.2.3
   "@commitlint/types": ^21.2.3
-  "@faker-js/faker": ^10.6.0
   "@google-cloud/storage": ^8.2.0
   "@hono/node-server": ^2.1.1
   "@hookform/resolvers": ^5.9.1
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
-  "@next/eslint-plugin-next": ^16.3.5
+  "@next/eslint-plugin-next": ^16.3.8
   "@opentelemetry/api": ^1.9.1
   "@opentelemetry/api-logs": ^0.222.0
   "@opentelemetry/core": ^2.11.0
@@ -53,7 +52,6 @@ catalog:
   "@radix-ui/react-tooltip": ^1.2.16
   "@react-hook/window-size": ^3.1.1
   "@scalar/hono-api-reference": ^0.12.3
-  "@scalar/nextjs-api-reference": ^0.12.1
   "@t3-oss/env-core": ^0.13.11
   "@t3-oss/env-nextjs": ^0.13.11
   "@tailwindcss/postcss": ^4.3.3
@@ -112,7 +110,7 @@ catalog:
   libphonenumber-js: ^1.13.13
   lodash: ^4.18.1
   lucide-react: ^1.47.0
-  next: ^16.3.5
+  next: ^16.3.8
   next-auth: 5.0.0-beta.32
   next-themes: ^0.4.6
   nodemailer: ^10.0.10
@@ -134,7 +132,7 @@ catalog:
   react-qr-code: ^2.2.0
   react-responsive: ^10.0.1
   server-only: ^0.0.1
-  sharp: ^0.35.4
+  sharp: ^0.35.5
   sonner: ^2.0.8
   supercluster: ^9.1.0
   tailwind-merge: ^3.7.0
@@ -178,12 +176,14 @@ overrides:
   "brace-expansion@<1.1.16": "2.1.7" # GHSA-3jxr-9vmj-r5cp (DoS)
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.12" # GHSA-rgw5-rvv9-x895 (DoS)
   "fast-uri@<3.1.5": "3.1.8" # host confusion via failed backslash authority introducer
-  "sharp@<0.35.4": "0.35.4" # GHSA-rgj7-g3m4-5g8c / GHSA-g89c-p67h-r497 / GHSA-2jg2-4ch7-h545 (libheif vulnerabilities); next's optional sharp dep resolved to 0.35.3, outside the old <0.35.0 range
-  "next@>=16.0.0 <16.3.0": "16.3.5" # GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
+  "sharp@<0.35.5": "0.35.5" # GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889) and earlier libheif advisories; next's optional sharp dep resolved to 0.35.3, outside the old <0.35.0 range
+  "next@>=16.0.0 <16.3.8": "16.3.8" # GHSA-vcvr-r3jv-pc5j (RCE in next/og ImageResponse) / GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
   "postcss@<8.5.12": "^8.5.28" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
   "nanoid@<3.3.17": "^6.0.1" # GHSA-2v37-7h3g-55p8
   "nanoid@>=4.0.0 <5.1.16": "^6.0.1" # GHSA-28wg-ghj8-5hjv
   "browserslist@<=4.28.6": "4.29.0" # GHSA-c83g-rgw3-j3cx (unbounded memory growth) / GHSA-73wf-gq98-2v4g (prototype write crash via browserslist-stats.json)
+  "seroval@<1.6.3": "1.6.8" # GHSA-p6vx-979v-rg4c (fromJSON thenable callable bypass) / GHSA-jp82-f5mq-hwhp (TypedArray memory exhaustion); via solid-js in @tanstack/query-devtools
+  "source-map-js@<1.2.2": "1.2.2" # GHSA-68fv-2mgg-jv7q (indexed source-map offset event-loop DoS); via next>postcss
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-react>eslint: "10"

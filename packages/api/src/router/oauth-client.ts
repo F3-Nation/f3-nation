@@ -65,8 +65,8 @@ function toOauthClient(
     scopes: row.scopes,
     isPublic: row.tokenEndpointAuthMethod === "none",
     disabled: row.disabled,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: row.createdAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt?.toISOString() ?? null,
   };
 }
 

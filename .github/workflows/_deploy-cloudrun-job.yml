@@ -93,6 +93,11 @@ on:
         required: false
         type: string
         default: ""
+      deploy_prod:
+        description: "Whether to promote and deploy the production Cloud Run Job"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   ci-gate:
@@ -132,7 +137,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|test-coverage-hono|security-audit|db-schema-sync)$"
+          check-regexp: "^(build|lint|typecheck|format-check|test-coverage|security-audit|db-schema-sync)$"
           wait-interval: 15
           allowed-conclusions: success
 
@@ -271,6 +276,7 @@ jobs:
 
   deploy-prod:
     needs: [build, deploy-staging]
+    if: inputs.deploy_prod
     runs-on: ubuntu-latest
     permissions:
       contents: read

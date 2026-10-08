@@ -27,6 +27,9 @@ export const env = createEnv({
    */
   server: {
     AUTH_SECRET: z.string().min(1),
+    // DB connection strings consumed by @acme/db. This schema only declares and
+    // validates them; the DATABASE_URL -> TEST_DATABASE_URL switch for
+    // NODE_ENV=test happens in getDbUrl() (packages/db), not here.
     DATABASE_URL: z.string().min(1).optional(),
     TEST_DATABASE_URL: z.string().min(1).optional(),
     NODE_ENV: z
@@ -43,7 +46,7 @@ export const env = createEnv({
   },
   /**
    * env-core has no bundler integration, so every var (client and server) must be
-   * listed explicitly here — unlike env-nextjs, server vars aren't auto-filled.
+   * listed explicitly here — server vars aren't auto-filled.
    */
   runtimeEnvStrict: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,

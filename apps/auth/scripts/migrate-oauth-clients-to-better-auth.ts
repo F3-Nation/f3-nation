@@ -38,7 +38,9 @@
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth --confirm
  *   (actually writes)
  */
+import path from "path";
 import readline from "readline";
+import { fileURLToPath } from "url";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq, inArray } from "drizzle-orm";
@@ -75,14 +77,28 @@ async function main() {
   }
 
   const { config } = await import("dotenv");
-  const envPath = targetEnv === "local" ? ".env" : `.env.${targetEnv}`;
+  // Resolved relative to this script's own location, not the current
+  // working directory: the documented invocation is `pnpm -C apps/auth
+  // migrate-oauth-clients-to-better-auth`, but if someone runs it from the
+  // repo root instead, a CWD-relative lookup would miss apps/auth/.env.
+  const authDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+  );
+  const envName = targetEnv === "local" ? ".env" : `.env.${targetEnv}`;
+  const envPath = path.join(authDir, envName);
   // override: true so --env's file always wins over whatever DATABASE_* the
   // calling shell already has set (e.g. a leftover prod export) — without
   // it, dotenv only fills in variables that aren't already present, so
   // --env local could silently connect using ambient prod credentials.
   const result = config({ path: envPath, override: true });
   if (result.error) {
-    console.error(`Could not load ${envPath}: ${result.error.message}`);
+    console.error(
+      `Could not load ${envName}: ${result.error.message}` +
+        (targetEnv === "local"
+          ? "\nRun 'pnpm local:setup' (writes apps/auth/.env) first."
+          : ""),
+    );
     process.exit(1);
   }
 
@@ -99,7 +115,7 @@ async function main() {
     process.exit(1);
   }
 
-  if (targetEnv === "prod" || targetEnv === "staging") {
+  if (confirmed && (targetEnv === "prod" || targetEnv === "staging")) {
     console.log(
       `\n⚠️  WARNING: You are about to write to ${targetEnv.toUpperCase()} data.\n`,
     );
@@ -136,7 +152,7 @@ async function main() {
 
   console.log(`Found ${clients.length} active client(s) in oauth_clients:\n`);
 
-  const now = new Date().toISOString();
+  const now = new Date();
   const rows = clients.map((client) => {
     let redirectUris: string[];
     try {
