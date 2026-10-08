@@ -378,13 +378,15 @@ uppercase only, so a fake can never be mistaken for one: the verify suite
 counts every uppercase-form mention as a leak. Free-text contact/emergency fields are
 nulled. Prose (backblasts, preblasts, descriptions) is replaced with
 deterministic lorem ipsum. Other JSON/meta and free-text columns are scrubbed
-of email-shaped strings by regex, replaced with the same deterministic fakes.
+of email-shaped strings and phone numbers by regex, replaced with the same
+deterministic fakes.
 
 ## PII inventory
 
 Classification legend — **OBFUSCATE**: deterministic fake; **SCRUB**: regex
-replacement of email-shaped strings **and Slack mention syntax** with
-deterministic fakes; **REPLACE (lorem)**: the whole value replaced with
+replacement of email-shaped strings, phone numbers (a 3-3-4 digit run with
+separators, e.g. `(704) 555-1234`; bare digit runs such as Slack timestamps are
+left alone) **and Slack mention syntax** with deterministic fakes; **REPLACE (lorem)**: the whole value replaced with
 deterministic lorem ipsum (below); **NULL OUT**: set to NULL; **TRUNCATE/DELETE**: rows
 removed (secrets don't belong in staging); **REWRITE**: not PII, but a prod
 URL repointed at its staging equivalent; **KEEP**: non-PII, left untouched.
@@ -404,7 +406,8 @@ URL repointed at its staging equivalent; **KEEP**: non-PII, left untouched.
 > vocabulary, or a mention or link element survives in the Block Kit ones.
 > SCRUB still covers the other free text (`meta`, websites, instance names,
 > position/achievement descriptions), where names aren't expected; read
-> those rows as "de-identified for emails and Slack ids".
+> those rows as "de-identified for emails, phone numbers and Slack ids".
+> verify-target sweeps every text/json column for all three.
 
 ### `public` schema
 

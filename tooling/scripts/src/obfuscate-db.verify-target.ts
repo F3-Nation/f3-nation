@@ -57,6 +57,13 @@ function isSinkAddress(email: string): boolean {
   );
 }
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+// A North American phone number written with separators: 704-555-1234,
+// (704) 555-1234, 704.555.1234, +1 704 555 1234. Separators are required so
+// bare digit runs (Slack timestamps like 1791314072.092799, ids) don't match.
+const PHONE_REGEX =
+  /(?<!\d)(?:\+?1[\s.-]?)?(?:\(\d{3}\)\s?|\d{3}[\s.-])\d{3}[\s.-]\d{4}(?!\d)/g;
+// What the obfuscator writes in place of a phone number.
+const FAKE_PHONE = /^555-[2-9]\d{2}-\d{4}$/;
 // Retina-image filenames (logo@2x.png) are email-shaped; not PII.
 const IMAGE_DENSITY_SUFFIX = /@\dx\.(?:png|jpe?g|gif|webp|svg)$/i;
 // Matches only when the last domain label is 2+ letters, i.e. a real TLD.
@@ -171,7 +178,12 @@ async function sweepForEmails(sql: Sql): Promise<void> {
 
   const violations: string[] = [];
   const mentionViolations: string[] = [];
+  const phoneViolations = new Set<string>();
   const LIMIT = 40;
+  // Rows worth parsing: anything with an @ (emails, mentions) or a 3-3-4 digit
+  // run with separators (phone numbers).
+  const candidate = (expr: string) =>
+    `(${expr} LIKE '%@%' OR ${expr} ~ '[0-9]{3}[^0-9]{1,2}[0-9]{3}[^0-9][0-9]{4}')`;
   for (const col of columns) {
     if (violations.length >= LIMIT) break;
     const qualified = quoteQualified(`${col.table_schema}.${col.table_name}`);
@@ -186,9 +198,9 @@ async function sweepForEmails(sql: Sql): Promise<void> {
     const query = isArray
       ? `SELECT element::text AS v FROM ${qualified}
          CROSS JOIN LATERAL unnest(${quoteIdent(col.column_name)}) AS a(element)
-         WHERE element::text LIKE '%@%'`
+         WHERE ${candidate("element::text")}`
       : `SELECT ${quoteIdent(col.column_name)}::text AS v FROM ${qualified}
-         WHERE ${quoteIdent(col.column_name)}::text LIKE '%@%'`;
+         WHERE ${candidate(`${quoteIdent(col.column_name)}::text`)}`;
     const cursor = sql.unsafe(query).cursor(5000);
     scan: for await (const rows of cursor) {
       for (const row of rows as unknown as { v: string }[]) {
@@ -200,6 +212,13 @@ async function sweepForEmails(sql: Sql): Promise<void> {
           for (const m of text.matchAll(SLACK_MENTION_REGEX)) {
             if (OBFUSCATED_SLACK_ID.test(m[1]!)) continue;
             mentionViolations.push(
+              `${col.table_schema}.${col.table_name}.${col.column_name}`,
+            );
+            break;
+          }
+          for (const m of text.match(PHONE_REGEX) ?? []) {
+            if (FAKE_PHONE.test(m)) continue;
+            phoneViolations.add(
               `${col.table_schema}.${col.table_name}.${col.column_name}`,
             );
             break;
@@ -231,6 +250,13 @@ async function sweepForEmails(sql: Sql): Promise<void> {
     violations.length === 0
       ? `0 non-obfuscated emails across ${columns.length} text/json columns (public + auth)`
       : `${violations.length}${violations.length >= LIMIT ? "+" : ""} leaked: ${violations.slice(0, 5).join("; ")}`,
+  );
+  check(
+    "phone sweep",
+    phoneViolations.size === 0,
+    phoneViolations.size === 0
+      ? `0 real-looking phone numbers across ${columns.length} text/json columns (public + auth)`
+      : `${phoneViolations.size} column(s) carry a real-looking phone number: ${[...phoneViolations].slice(0, 5).join("; ")}`,
   );
   const uniqueMentions = [...new Set(mentionViolations)];
   check(

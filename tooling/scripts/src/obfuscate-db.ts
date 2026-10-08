@@ -243,6 +243,11 @@ function fakeSlackId(original: string): string {
 // Emails hiding in free text / JSON get the same deterministic fake as the
 // dedicated email columns, so relational consistency holds there too.
 const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+// A North American phone number written with separators: 704-555-1234,
+// (704) 555-1234, 704.555.1234, +1 704 555 1234. Separators are required so
+// bare digit runs (Slack timestamps like 1791314072.092799, ids) don't match.
+const PHONE_REGEX =
+  /(?<!\d)(?:\+?1[\s.-]?)?(?:\(\d{3}\)\s?|\d{3}[\s.-])\d{3}[\s.-]\d{4}(?!\d)/g;
 
 // Slack mention syntax (`<@U0REALSLACK>`) embedded in free text/Block Kit
 // JSON (preblast/backblast bodies) — real-data finding 2026-08: this ID
@@ -277,8 +282,12 @@ function scrubText(value: string): string {
     SLACK_MENTION_REGEX,
     (_match, id: string) => `<@${fakeSlackId(id)}>`,
   );
-  return withoutMentions.replace(EMAIL_REGEX, (match) =>
+  const withoutEmails = withoutMentions.replace(EMAIL_REGEX, (match) =>
     isAllowlistedEmail(match) ? match : fakeEmail(match),
+  );
+  // fakePhone's own output (555-NXX-XXXX) is left as is, so a re-run is a no-op.
+  return withoutEmails.replace(PHONE_REGEX, (match) =>
+    match.startsWith("555-") ? match : fakePhone(match),
   );
 }
 
@@ -793,6 +802,9 @@ async function assertFullCoverage(sql: Sql): Promise<void> {
 
 async function obfuscate(sql: Sql): Promise<void> {
   const likeEmail = "%@%";
+  // Scrub candidates also include values holding a phone number (a 3-3-4 digit
+  // run with separators), which carry no "@" for the LIKE above to find.
+  const phoneLike = "[0-9]{3}[^0-9]{1,2}[0-9]{3}[^0-9][0-9]{4}";
 
   await assertFullCoverage(sql);
 
@@ -1056,8 +1068,8 @@ async function obfuscate(sql: Sql): Promise<void> {
       meta: "scrub emails (json)",
     },
     where: sql`email IS NOT NULL OR phone IS NOT NULL
-      OR description IS NOT NULL OR website LIKE ${likeEmail}
-      OR meta::text LIKE ${likeEmail}`,
+      OR description IS NOT NULL OR (website LIKE ${likeEmail} OR website ~ ${phoneLike})
+      OR (meta::text LIKE ${likeEmail} OR meta::text ~ ${phoneLike})`,
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
@@ -1136,7 +1148,7 @@ async function obfuscate(sql: Sql): Promise<void> {
       meta: "scrub emails (json)",
     },
     where: sql`email IS NOT NULL
-      OR description IS NOT NULL OR meta::text LIKE ${likeEmail}`,
+      OR description IS NOT NULL OR (meta::text LIKE ${likeEmail} OR meta::text ~ ${phoneLike})`,
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
@@ -1163,7 +1175,7 @@ async function obfuscate(sql: Sql): Promise<void> {
       meta: "scrub emails (json)",
     },
     where: sql`email IS NOT NULL
-      OR description IS NOT NULL OR meta::text LIKE ${likeEmail}`,
+      OR description IS NOT NULL OR (meta::text LIKE ${likeEmail} OR meta::text ~ ${phoneLike})`,
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
@@ -1206,13 +1218,13 @@ async function obfuscate(sql: Sql): Promise<void> {
       meta: "scrub emails (json)",
     },
     where: sql`email IS NOT NULL
-      OR name LIKE ${likeEmail}
+      OR (name LIKE ${likeEmail} OR name ~ ${phoneLike})
       OR description IS NOT NULL
       OR preblast IS NOT NULL
       OR backblast IS NOT NULL
       OR preblast_rich IS NOT NULL
       OR backblast_rich IS NOT NULL
-      OR meta::text LIKE ${likeEmail}`,
+      OR (meta::text LIKE ${likeEmail} OR meta::text ~ ${phoneLike})`,
     transform: (row) => {
       const changes: Row = {};
       const email = str(row.email);
@@ -1347,7 +1359,7 @@ async function obfuscate(sql: Sql): Promise<void> {
     pk: "id",
     columns: ["meta"],
     actions: { meta: "scrub emails (json)" },
-    where: sql`meta::text LIKE ${likeEmail}`,
+    where: sql`(meta::text LIKE ${likeEmail} OR meta::text ~ ${phoneLike})`,
     transform: (row) => {
       if (row.meta === null) return null;
       const scrubbed = scrubJson(row.meta);
@@ -1361,7 +1373,7 @@ async function obfuscate(sql: Sql): Promise<void> {
     pk: "id",
     columns: ["description"],
     actions: { description: "scrub emails (text)" },
-    where: sql`description LIKE ${likeEmail}`,
+    where: sql`(description LIKE ${likeEmail} OR description ~ ${phoneLike})`,
     transform: (row) => {
       const v = str(row.description);
       if (!v) return null;
@@ -1378,7 +1390,7 @@ async function obfuscate(sql: Sql): Promise<void> {
       description: "scrub emails (text)",
       meta: "scrub emails (json)",
     },
-    where: sql`description LIKE ${likeEmail} OR meta::text LIKE ${likeEmail}`,
+    where: sql`(description LIKE ${likeEmail} OR description ~ ${phoneLike}) OR (meta::text LIKE ${likeEmail} OR meta::text ~ ${phoneLike})`,
     transform: (row) => {
       const changes: Row = {};
       const v = str(row.description);
@@ -1404,7 +1416,7 @@ async function obfuscate(sql: Sql): Promise<void> {
       pk: "id",
       columns: ["description"],
       actions: { description: "scrub emails (text)" },
-      where: sql`description LIKE ${likeEmail}`,
+      where: sql`(description LIKE ${likeEmail} OR description ~ ${phoneLike})`,
       transform: (row) => {
         const v = str(row.description);
         if (!v) return null;

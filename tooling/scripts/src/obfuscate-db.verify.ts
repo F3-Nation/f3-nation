@@ -361,6 +361,14 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
     VALUES (${ao.id}, true, false, current_date, 'Hex-Mention Beatdown',
       '{"note": "Thanks <@UABC12345> for the coffee."}')`;
 
+  // Phone numbers in a JSON meta field (not a prose column): SCRUB must fake
+  // them, while a bare digit run (a Slack ts) stays as it is.
+  await sql`
+    INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+      name, meta)
+    VALUES (${ao.id}, true, false, current_date, 'Phone-Meta Beatdown',
+      '{"contact": "Call Jim at (704) 555-0199 or 828.555.0123", "ts": "1791314072.092799"}')`;
+
   // Prose holding no words at all (just a contact number) must still be
   // replaced: an "already lorem" test that only looks at words would skip it.
   await sql`
@@ -975,6 +983,18 @@ async function main(): Promise<void> {
     const [phoneOnly] = await sql<{ description: string | null }[]>`
       SELECT description FROM event_instances
       WHERE name = 'Phone-Only Beatdown' LIMIT 1`;
+    const [phoneMeta] = await sql<{ meta: string | null }[]>`
+      SELECT meta::text AS meta FROM event_instances
+      WHERE name = 'Phone-Meta Beatdown' LIMIT 1`;
+    const metaPhones = phoneMeta?.meta?.match(/555-[2-9]\d{2}-\d{4}/g) ?? [];
+    check(
+      "phone numbers in JSON meta are faked, digit runs kept",
+      !!phoneMeta?.meta &&
+        !/0199|0123|704|828/.test(phoneMeta.meta) &&
+        metaPhones.length === 2 &&
+        phoneMeta.meta.includes("1791314072.092799"),
+      phoneMeta?.meta ?? "missing",
+    );
     check(
       "prose holding only a phone number is replaced too",
       !!phoneOnly?.description &&
@@ -1192,6 +1212,41 @@ async function main(): Promise<void> {
       hexSuite.status !== 0
         ? "FAIL names public.event_instances.meta, value withheld"
         : "verify-target passed with <@UABC12345> in meta",
+    );
+
+    // And a real-looking phone number left in meta: FAIL naming the column,
+    // value withheld; then undo it.
+    const [phoneBefore] = await sql<{ meta: string | null }[]>`
+      SELECT meta::text AS meta FROM event_instances
+      WHERE name = 'Phone-Meta Beatdown' LIMIT 1`;
+    await sql`
+      UPDATE event_instances
+      SET meta = '{"contact": "Call Jim at (704) 867-5309"}'
+      WHERE name = 'Phone-Meta Beatdown'`;
+    const phoneSuite = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.verify-target.ts",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const phoneOut = `${phoneSuite.stdout.toString()}${phoneSuite.stderr.toString()}`;
+    await sql`
+      UPDATE event_instances SET meta = ${phoneBefore?.meta ?? null}::jsonb
+      WHERE name = 'Phone-Meta Beatdown'`;
+    check(
+      "verify-target catches a real phone number left in meta",
+      phoneSuite.status !== 0 &&
+        /FAIL\s+phone sweep/.test(phoneOut) &&
+        phoneOut.includes("public.event_instances.meta") &&
+        !phoneOut.includes("867-5309"),
+      phoneSuite.status !== 0
+        ? "FAIL names public.event_instances.meta, value withheld"
+        : "verify-target passed with a real phone number in meta",
     );
 
     // And a real name back in a backblast: the prose check must FAIL, naming
