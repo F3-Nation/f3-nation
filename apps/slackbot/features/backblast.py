@@ -15,6 +15,7 @@ from f3_data_models.models import (
     Attendance_x_AttendanceType,
     AttendanceType,
     EventInstance,
+    EventType,
     EventType_x_EventInstance,
     Location,
     Org,
@@ -32,6 +33,7 @@ from sqlmodel import func
 from features import connect
 from utilities import constants, sendmail
 from utilities.bot_logger import post_bot_log
+from utilities.builders import send_error_response
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import (
     MissingBackblastQuery,
@@ -668,16 +670,11 @@ def build_backblast_form(
         # De-duplicate in case a location appears in both sources.
         location_records = list({location.id: location for location in location_records}.values())
         location_records.sort(key=lambda location: (get_location_display_name(location) or "").lower())
-        region_org_record: Org = DbManager.get(Org, region_record.org_id, joinedloads=[Org.event_types])
         backblast_form.set_options(
             {
                 actions.BACKBLAST_AO: slack_orm.as_selector_options(
                     names=[ao.name for ao in aos],
                     values=[str(ao.id) for ao in aos],
-                ),
-                actions.BACKBLAST_EVENT_TYPE: slack_orm.as_selector_options(
-                    names=[event_type.name for event_type in region_org_record.event_types],
-                    values=[str(event_type.id) for event_type in region_org_record.event_types],
                 ),
                 actions.BACKBLAST_LOCATION: slack_orm.as_selector_options(
                     names=[get_location_display_name(location) for location in location_records],
@@ -694,9 +691,38 @@ def build_backblast_form(
         attendance_non_slack_users = []
 
     org_event_types: Org = DbManager.get(Org, region_record.org_id, joinedloads=[Org.event_types])
+    active_event_types = [event_type for event_type in org_event_types.event_types if event_type.is_active]
     event_type_options = slack_orm.as_selector_options(
-        [r.name for r in org_event_types.event_types], [str(r.id) for r in org_event_types.event_types]
+        [event_type.name for event_type in active_event_types],
+        [str(event_type.id) for event_type in active_event_types],
     )
+
+    if not event_instance_id and not active_event_types:
+        unavailable_form = slack_orm.BlockView(
+            blocks=[
+                slack_orm.SectionBlock(
+                    label="No active event types are available for this region. "
+                    "Ask a region admin to activate an event type, then try again."
+                )
+            ]
+        )
+        if update_view_id:
+            unavailable_form.update_modal(
+                client=client,
+                view_id=update_view_id,
+                callback_id=actions.BACKBLAST_CALLBACK_ID,
+                title_text="Backblast",
+                submit_button_text="None",
+            )
+        else:
+            unavailable_form.post_modal(
+                client=client,
+                trigger_id=trigger_id,
+                callback_id=actions.BACKBLAST_CALLBACK_ID,
+                title_text="Backblast",
+                submit_button_text="None",
+            )
+        return
 
     if (current_date_cst() < (safe_get(event_record, "start_date") or current_date_cst())) or is_paxminer_backblast:
         initial_backblast_data[actions.BACKBLAST_SEND_OPTIONS] = "Save and send later"
@@ -779,6 +805,24 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
         for block in forms.UNSCHEDULED_BACKBLAST_BLOCKS:
             backblast_form.blocks.append(block)
         backblast_data: dict = backblast_form.get_selected_values(body)
+        event_type = safe_convert(safe_get(backblast_data, actions.BACKBLAST_EVENT_TYPE), int)
+        selected_event_type = (
+            DbManager.find_first_record(EventType, [EventType.id == event_type])
+            if event_type is not None and event_type > 0
+            else None
+        )
+        if (
+            selected_event_type is None
+            or not selected_event_type.is_active
+            or selected_event_type.specific_org_id not in (None, region_record.org_id)
+        ):
+            send_error_response(
+                body=body,
+                client=client,
+                error="Select an active event type before submitting a new unscheduled backblast. "
+                "Reopen the form and try again.",
+            )
+            return
         event_org = DbManager.get(Org, safe_convert(safe_get(backblast_data, actions.BACKBLAST_AO), int))
 
     logger.debug(f"Backblast data: {backblast_data}")

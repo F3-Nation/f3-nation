@@ -1,5 +1,29 @@
 # Changelog
 
+## [7.6.0](https://github.com/F3-Nation/f3-nation/compare/map@7.5.0...map@7.6.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+
+
+### Bug Fixes
+
+* **auth,map:** never register dev-mode sign-in in Production ([#1123](https://github.com/F3-Nation/f3-nation/issues/1123)) ([6d7f712](https://github.com/F3-Nation/f3-nation/commit/6d7f712c142016af41dd08b9544062e791bd746f))
+* **map,repo:** show the Dev Mode sign-in button on branch previews ([#1111](https://github.com/F3-Nation/f3-nation/issues/1111)) ([dcbb924](https://github.com/F3-Nation/f3-nation/commit/dcbb924178e63e741610e26ab3ae46a183ab1ad1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.12.0
+    * @acme/auth bumped to 0.2.8
+    * @acme/shared bumped to 0.4.1
+    * @acme/ui bumped to 0.2.1
+    * @acme/validators bumped to 0.4.5
+
 ## [7.5.0](https://github.com/F3-Nation/f3-nation/compare/map@7.4.0...map@7.5.0) (2026-09-27)
 
 
