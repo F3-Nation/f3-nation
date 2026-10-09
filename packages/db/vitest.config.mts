@@ -10,6 +10,13 @@ export default defineConfig({
       provider: "v8",
       include: coverageInclude,
       exclude: coverageExclude,
+      thresholds: {
+        autoUpdate: true,
+        statements: 22.41,
+        branches: 22.77,
+        functions: 30.53,
+        lines: 22.03,
+      },
     },
   },
 });

@@ -1659,6 +1659,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.0
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 5.0.2(vitest@5.0.2)
       drizzle-kit:
         specifier: 'catalog:'
         version: 0.31.11

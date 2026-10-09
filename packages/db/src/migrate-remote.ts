@@ -51,6 +51,62 @@ const MIGRATIONS_PATH = "packages/db/drizzle";
 
 class Refusal extends Error {}
 
+/**
+ * How far a run got, so a failure can say whether anything was written:
+ * "checks" (nothing written), "migrating" (inside Drizzle's transaction),
+ * "applied" (migrations committed, the check afterwards failed).
+ */
+export type MigratePhase = "checks" | "migrating" | "applied";
+
+export class PhaseError extends Error {
+  constructor(
+    readonly phase: MigratePhase,
+    options: { cause: unknown },
+  ) {
+    super(`failed during ${phase}`, options);
+  }
+}
+
+const PHASE_MESSAGES: Record<MigratePhase, string> = {
+  checks: "Stopped before changing anything.",
+  migrating:
+    "The migration transaction failed and should have rolled back. Check the drizzle migrations table before retrying.",
+  applied:
+    "The migrations were applied, but the check afterwards failed. Check the database before doing anything else.",
+};
+
+/**
+ * The lines to print for a failed run: the phase line, then every message in
+ * the cause chain with any Postgres code/detail/hint. Drizzle wraps a failed
+ * statement in an error whose message is only the SQL; the Postgres error
+ * (e.g. `column "x" already exists`) is its cause.
+ */
+export function describeFailure(error: unknown): string[] {
+  const phase = error instanceof PhaseError ? error.phase : "checks";
+  const lines = [PHASE_MESSAGES[phase]];
+  let e: unknown = error instanceof PhaseError ? error.cause : error;
+  const seen = new Set<unknown>();
+  while (e !== undefined && e !== null && !seen.has(e)) {
+    seen.add(e);
+    if (!(e instanceof Error)) {
+      lines.push(`  ${typeof e === "string" ? e : JSON.stringify(e)}`);
+      break;
+    }
+    // Drizzle's "Failed query: <the whole migration>" would bury the cause.
+    const message = e.message.startsWith("Failed query:")
+      ? `${e.message.split("\n")[0]?.slice(0, 200)} ...`
+      : e.message;
+    lines.push(`  ${message}`);
+    const pg = e as { code?: unknown; detail?: unknown; hint?: unknown };
+    const extra = [pg.code, pg.detail, pg.hint]
+      .filter((v) => typeof v === "string" && v.length > 0)
+      .join(" ");
+    if (extra) lines.push(`    ${extra}`);
+    e = e.cause;
+  }
+  return lines;
+}
+
 function git(
   cwd: string,
   args: string[],
@@ -130,6 +186,13 @@ export function readGitState(repoRoot: string, mainRef: string): GitState {
     "HEAD",
     mainRef,
   ]);
+  // An empty `git status` must mean "no changes", not "git failed".
+  if (status.status !== 0)
+    throw new Refusal(`git status failed: ${status.stderr.trim()}`);
+  if (ancestor.status > 1)
+    throw new Refusal(
+      `git merge-base failed (a shallow clone? run git fetch --unshallow): ${ancestor.stderr.trim()}`,
+    );
   return {
     differsFromMain: diff.status === 1,
     localChanges: status.stdout
@@ -333,7 +396,7 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
       SELECT to_regclass(${`drizzle.${migrationsTable}`}) IS NOT NULL AS present`;
     if (!table?.present) {
       throw new Refusal(
-        `${database} has no drizzle.${migrationsTable}: this isn't the database it should be. Stop and ask in #dev.`,
+        `${database} has no drizzle.${migrationsTable}: this isn't the database it should be. Stop and ask in #monorepo.`,
       );
     }
     // Migrations alter tables, types and functions, create objects in the
@@ -465,19 +528,28 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
       );
     }
     console.log(`Migrating ${database} ...`);
-    await migrator(drizzle(rw), {
-      migrationsTable,
-      migrationsFolder: MIGRATIONS_DIR,
-    });
-    const [after] = await rw<{ newest: string | null }[]>`
-      SELECT max(created_at)::text AS newest FROM ${rw(`drizzle.${migrationsTable}`)}`;
-    const expected = plan.pending[plan.pending.length - 1];
-    if (Number(after?.newest) !== expected?.when) {
-      throw new Error(
-        `After migrating, ${database}'s newest migration is ${after?.newest}, expected ${expected?.when} (${expected?.tag}). Check it before doing anything else.`,
-      );
+    try {
+      await migrator(drizzle(rw), {
+        migrationsTable,
+        migrationsFolder: MIGRATIONS_DIR,
+      });
+    } catch (e) {
+      throw new PhaseError("migrating", { cause: e });
     }
-    console.log(`Done: ${database} is at ${expected.tag}.`);
+    // Committed from here on: a failure now must not read as "rolled back".
+    try {
+      const [after] = await rw<{ newest: string | null }[]>`
+        SELECT max(created_at)::text AS newest FROM ${rw(`drizzle.${migrationsTable}`)}`;
+      const expected = plan.pending[plan.pending.length - 1];
+      if (Number(after?.newest) !== expected?.when) {
+        throw new Error(
+          `After migrating, ${database}'s newest migration is ${after?.newest}, expected ${expected?.when} (${expected?.tag}).`,
+        );
+      }
+      console.log(`Done: ${database} is at ${expected.tag}.`);
+    } catch (e) {
+      throw new PhaseError("applied", { cause: e });
+    }
   } finally {
     await rw.end();
   }
@@ -496,10 +568,8 @@ if (require.main === module) {
         console.error(`\nREFUSED: ${error.message}`);
         console.error("Nothing was changed.");
       } else {
-        console.error(
-          "\nMigration failed:",
-          error instanceof Error ? error.message : error,
-        );
+        console.error("\nMigration failed.");
+        for (const line of describeFailure(error)) console.error(line);
       }
       process.exit(1);
     });

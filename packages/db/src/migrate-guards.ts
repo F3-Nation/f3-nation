@@ -58,7 +58,7 @@ const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
  * Where a database URL points, from the URL alone. A Unix socket counts as
  * local unless it is a Cloud SQL socket (`/cloudsql/...`). This can't see
  * through a cloud-sql-proxy on localhost, so migrate.ts also asks the server
- * (see isCloudSql).
+ * (see assertLocalTarget in migrate.ts).
  */
 export function classifyHost(databaseUrl: string): "local" | "remote" {
   const socketHosts = queryHosts(databaseUrl);
@@ -282,7 +282,7 @@ export function checkPlan(
           ", ",
         )}). Either someone applied migrations that aren't on main, ` +
       `or your checkout is older than what is deployed. Stop and ask in ` +
-      `#dev before migrating.`
+      `#monorepo before migrating.`
     );
   }
   if (plan.skipped.length > 0) {
@@ -291,7 +291,7 @@ export function checkPlan(
       `not applied to ${database}, but newer migrations are, so Drizzle would ` +
       `silently skip ${plan.skipped.length === 1 ? "it" : "them"} forever. A ` +
       `migration's journal "when" must be newer than every migration already ` +
-      `applied. Stop and ask in #dev.`
+      `applied. Stop and ask in #monorepo.`
     );
   }
   return null;
