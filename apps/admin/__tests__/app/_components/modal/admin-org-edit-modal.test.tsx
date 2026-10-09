@@ -1128,6 +1128,7 @@ describe.each(["nation", "region", "ao"] as const)(
 
 describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
   const label = type === "region" ? "Region" : "AO";
+  const createObjectURL = vi.fn<() => string>();
   const originalURL = URL;
   const originalCreateObjectURL = Object.getOwnPropertyDescriptor(
     URL,
@@ -1145,8 +1146,9 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
       })),
     });
     mocks.upload.mockResolvedValue("https://example.com/new-logo.png");
+    createObjectURL.mockReturnValue("blob:preview");
     class TestURL extends originalURL {
-      static createObjectURL = vi.fn(() => "blob:preview");
+      static createObjectURL = createObjectURL;
       static revokeObjectURL = vi.fn();
     }
     vi.stubGlobal("URL", TestURL);
@@ -1248,13 +1250,81 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
     expect(field("Name").value).toBe(record.name);
     expect(screen.getByRole("button", { name: "Save Changes" })).toBeTruthy();
   });
-  it("retains image preview feedback in the form payload", async () => {
+  it("clears failed image feedback when the same stored logo loads", async () => {
+    mocks.save.mockRejectedValueOnce(new Error("Synthetic save failure"));
     mount(type, 40);
     const image = await screen.findByAltText(`${label} Logo`);
     fireEvent.error(image);
     save();
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
-    expect(mocks.save.mock.calls[0]![0].badImage).toBe(true);
+    const failedPayload = mocks.save.mock.calls[0]![0];
+    expect(failedPayload).toMatchObject({
+      logoUrl: record.logoUrl,
+      badImage: true,
+    });
+    await screen.findByRole("button", { name: "Save Changes" });
+    expect(mocks.close).not.toHaveBeenCalled();
+
+    fireEvent.load(image);
+    save();
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2));
+    expect(mocks.save.mock.calls[1]![0]).toEqual({
+      ...failedPayload,
+      badImage: false,
+    });
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+  it("preserves edits and the picked logo through cancellation and a pending upload", async () => {
+    const stored = { ...record, logoUrl: null };
+    mocks.byId.mockResolvedValue({ org: stored });
+    let finishUpload: (url: string) => void = () => undefined;
+    const upload = new Promise<string>((resolve) => {
+      finishUpload = resolve;
+    });
+    mocks.upload.mockReturnValueOnce(upload);
+    const view = mount(type, 40);
+    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    const input =
+      view.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [] } });
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByAltText(`${label} Logo`)).toBeNull();
+
+    fireEvent.change(field("Name"), {
+      target: { value: "Renamed during upload" },
+    });
+    const file = new File(["synthetic"], "logo.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.change(input, { target: { files: [] } });
+    expect(screen.getByAltText(`${label} Logo`).getAttribute("src")).toBe(
+      "blob:preview",
+    );
+    try {
+      save();
+      await screen.findByText("Uploading...");
+      expect(input.disabled).toBe(true);
+      expect(
+        screen.getByRole("button", { name: /^Saving\.\.\./ }),
+      ).toBeTruthy();
+      expect(mocks.upload).toHaveBeenCalledExactlyOnceWith({ file, orgId: 40 });
+      expect(mocks.save).not.toHaveBeenCalled();
+      expect(mocks.close).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => {
+        finishUpload("https://example.com/new-logo.png");
+        await upload;
+      });
+    }
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
+    expect(mocks.save).toHaveBeenCalledExactlyOnceWith({
+      ...stored,
+      name: "Renamed during upload",
+      logoUrl: "https://example.com/new-logo.png",
+      badImage: false,
+      orgType: type,
+    });
+    expect(screen.queryByText("Uploading...")).toBeNull();
+    expect(input.disabled).toBe(false);
   });
 });
 

@@ -104,67 +104,25 @@ vi.mock("@acme/ui/md-table", async () => {
     ),
   };
 });
-vi.mock("./sector-filter", () => ({
-  SectorFilter: ({
-    sectors,
-    selectedSectors,
-    onSectorSelect,
+vi.mock("./org-picker-filter", () => ({
+  OrgPickerFilter: ({
+    orgType,
+    orgs,
+    selected,
+    onSelect,
   }: {
-    sectors?: TestOrg[];
-    selectedSectors: TestOrg[];
-    onSectorSelect: (org: TestOrg) => void;
+    orgType: string;
+    orgs?: TestOrg[];
+    selected: TestOrg[];
+    onSelect: (org: TestOrg) => void;
   }) =>
-    sectors?.map((org) => (
+    orgs?.map((org) => (
       <button
         key={org.id}
-        aria-pressed={selectedSectors.some(
-          (selected) => selected.id === org.id,
-        )}
-        onClick={() => onSectorSelect(org)}
+        aria-pressed={selected.some((selection) => selection.id === org.id)}
+        onClick={() => onSelect(org)}
       >
-        Sector: {org.name}
-      </button>
-    )),
-}));
-vi.mock("./territory-filter", () => ({
-  TerritoryFilter: ({
-    territories,
-    selectedTerritories,
-    onTerritorySelect,
-  }: {
-    territories?: TestOrg[];
-    selectedTerritories: TestOrg[];
-    onTerritorySelect: (org: TestOrg) => void;
-  }) =>
-    territories?.map((org) => (
-      <button
-        key={org.id}
-        aria-pressed={selectedTerritories.some(
-          (selected) => selected.id === org.id,
-        )}
-        onClick={() => onTerritorySelect(org)}
-      >
-        Territory: {org.name}
-      </button>
-    )),
-}));
-vi.mock("./area-filter", () => ({
-  AreaFilter: ({
-    areas,
-    selectedAreas,
-    onAreaSelect,
-  }: {
-    areas?: TestOrg[];
-    selectedAreas: TestOrg[];
-    onAreaSelect: (org: TestOrg) => void;
-  }) =>
-    areas?.map((org) => (
-      <button
-        key={org.id}
-        aria-pressed={selectedAreas.some((selected) => selected.id === org.id)}
-        onClick={() => onAreaSelect(org)}
-      >
-        Area: {org.name}
+        {orgType.charAt(0).toUpperCase() + orgType.slice(1)}: {org.name}
       </button>
     )),
 }));
