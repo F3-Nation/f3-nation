@@ -392,7 +392,9 @@ def test_generated_settings_refresh_region_cache(calendar_generation, monkeypatc
     cache = {}
     monkeypatch.setattr(helper_functions, "REGION_RECORDS", cache)
     monkeypatch.setattr(
-        helper_functions.DbManager, "find_records", lambda *args, **kwargs: [SimpleNamespace(settings=settings)]
+        helper_functions.DbManager,
+        "find_records",
+        lambda *args, **kwargs: [SimpleNamespace(settings=settings, team_id=settings["team_id"])],
     )
     monkeypatch.setattr(calendar_images, "update_local_region_records", helper_functions.update_local_region_records)
     rows = [row("AO", now, start_date=date(2026, 10, 1) + timedelta(weeks=i)) for i in range(3)]
