@@ -1,0 +1,65 @@
+name: Mirror Postgres Image to GHCR
+
+# Docker Hub rate-limits unauthenticated pulls per source IP, shared across
+# every ubuntu-latest runner in GitHub's pool. ci.yml's test-coverage service
+# container and tooling/scripts/src/obfuscate-db.verify.ts's `docker run`
+# both pull postgres straight from docker.io, so CI-wide load can (and did,
+# see #1187) exhaust that limit before any test even starts.
+#
+# This re-tags a pinned postgres image into this repo's own GHCR package,
+# the same registry docker-build/docker-cache-refresh already push to with
+# nothing beyond the built-in GITHUB_TOKEN -- no new secrets. Point the two
+# consumers above at ghcr.io/<owner>/<repo>-ci-postgres instead.
+#
+# workflow_dispatch only: this isn't on a schedule or push trigger. Run it by
+# hand whenever source_image's pinned digest changes (a Postgres version
+# bump), or to re-populate the GHCR package if it's ever lost.
+on:
+  workflow_dispatch:
+    inputs:
+      source_image:
+        description: "Docker Hub image to mirror, digest-pinned"
+        required: true
+        default: "postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Compute target reference
+        id: target
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repository_name="${GITHUB_REPOSITORY#*/}"
+          repository_name="${repository_name,,}"
+          echo "ref=ghcr.io/${owner}/${repository_name}-ci-postgres" >> "$GITHUB_OUTPUT"
+      - name: Pull, retag, and push
+        id: push
+        env:
+          SOURCE_IMAGE: ${{ inputs.source_image }}
+          TARGET_REF: ${{ steps.target.outputs.ref }}
+        run: |
+          docker pull "$SOURCE_IMAGE"
+          # Keep the source's own tag (e.g. 18.6-trixie) on the mirror so a
+          # consumer can pin the pushed digest the same way ci.yml already
+          # pins the Docker Hub one today.
+          tag="${SOURCE_IMAGE#*:}"
+          tag="${tag%@*}"
+          docker tag "$SOURCE_IMAGE" "${TARGET_REF}:${tag}"
+          docker push "${TARGET_REF}:${tag}"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "${TARGET_REF}:${tag}")"
+          echo "Mirrored to ${digest}"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: echo "### Mirrored image\n\n\`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
