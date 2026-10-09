@@ -6,7 +6,8 @@ import type { TableOptions } from "@tanstack/react-table";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useCallback, useState } from "react";
 
-import { UserRole, UserStatus } from "@acme/shared/app/enums";
+import type { UserRole } from "@acme/shared/app/enums";
+import { UserStatus } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Button } from "@acme/ui/button";
@@ -28,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
 import { orpc } from "~/orpc/react";
+import { ADMIN_VISIBLE_ROLES, isAdminRoleName } from "~/lib/auth/session";
 import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
@@ -65,7 +67,7 @@ const UserRoleFilter = ({
             <CommandInput placeholder="Search roles..." />
             <CommandEmpty>No roles found.</CommandEmpty>
             <CommandGroup>
-              {UserRole.map((role) => (
+              {ADMIN_VISIBLE_ROLES.map((role) => (
                 <CommandItem
                   key={role}
                   value={role}
@@ -286,16 +288,20 @@ const columns: TableOptions<
 
       return (
         <div className="flex flex-wrap items-center justify-start">
-          {row.original.roles.map((role) => (
-            <span
-              key={role.orgId}
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-                roleStyles[role.roleName]
-              }`}
-            >
-              {role.orgName} ({roleLabels[role.roleName]})
-            </span>
-          ))}
+          {row.original.roles.map((role) => {
+            // Roles not surfaced in admin (e.g. password_manager) are skipped.
+            if (!isAdminRoleName(role.roleName)) return null;
+            return (
+              <span
+                key={role.orgId}
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
+                  roleStyles[role.roleName]
+                }`}
+              >
+                {role.orgName} ({roleLabels[role.roleName]})
+              </span>
+            );
+          })}
         </div>
       );
     },

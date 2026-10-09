@@ -156,7 +156,7 @@ export const userListInputSchema = z.object({
   roles: arrayOrSingle(z.enum(UserRole))
     .optional()
     .describe(
-      "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+      "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
     ),
   searchTerm: z
     .string()
@@ -200,7 +200,7 @@ export const userListUserOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),
@@ -232,7 +232,7 @@ export const userDetailOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),
@@ -279,17 +279,34 @@ export const buildUserListQuery = async ({
     pageIndex: input?.pageIndex,
     defaultPageSize: 10,
   });
+  const selectedRoles = input?.roles ?? [];
+  // "user" selects two kinds of user: those with no role row at all
+  // (LEFT JOIN -> NULL name) and those with an explicit "user" roles.name.
+  // Every selected value maps to a concrete roles.name via the IN (...)
+  // branch; "user" additionally pulls in the NULL (role-less) branch.
+  // Compose them with OR so a mixed selection (e.g. all visible roles)
+  // matches role-less AND named-role users instead of collapsing to one
+  // branch. An empty selection is unrestricted. This intentionally no longer
+  // keys off UserRole.length, which broke once the enum grew past the set any
+  // caller actually offers.
+  const roleFilter = (() => {
+    if (selectedRoles.length === 0) return undefined;
+    const namedRoles = selectedRoles;
+    const conditions: SQL[] = [];
+    if (selectedRoles.includes("user"))
+      conditions.push(isNull(schema.roles.name));
+    if (namedRoles.length)
+      conditions.push(inArray(schema.roles.name, namedRoles));
+    return conditions.length === 1 ? conditions[0] : or(...conditions);
+  })();
+
   const where = and(
     !input?.statuses?.length || input.statuses.length === UserStatus.length
       ? undefined
       : input.statuses.includes("active")
         ? eq(schema.users.status, "active")
         : eq(schema.users.status, "inactive"),
-    !input?.roles?.length || input.roles.length === UserRole.length
-      ? undefined
-      : input.roles.includes("user")
-        ? isNull(schema.roles.name)
-        : inArray(schema.roles.name, input.roles),
+    roleFilter,
     input?.searchTerm
       ? or(
           ilike(schema.users.f3Name, `%${input?.searchTerm}%`),

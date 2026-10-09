@@ -2,6 +2,8 @@ import { and, eq, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
+import { GrantableUserRole } from "@acme/shared/app/enums";
+import type { UserRole } from "@acme/shared/app/enums";
 import { normalizeEmail } from "@acme/shared/common/functions";
 import { CrupdateUserSchema, UserSelectSchema } from "@acme/validators";
 import { ORPCError } from "@orpc/server";
@@ -9,7 +11,7 @@ import { z } from "zod";
 
 interface RoleInput {
   orgId: number;
-  roleName: "user" | "editor" | "admin";
+  roleName: UserRole;
 }
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -504,6 +506,7 @@ export const userRouter = {
         },
         {} as Record<string, number>,
       );
+      const idToRoleName = new Map(dbRoles.map((role) => [role.id, role.name]));
 
       const newRolesToInsert = roles.filter(
         (role) =>
@@ -515,15 +518,42 @@ export const userRouter = {
       );
       logDebug("api.user.new_roles_to_insert", { newRolesToInsert });
 
-      const rolesToDelete = existingRoles.filter(
-        (existingRole) =>
-          !roles.some(
-            (role) =>
-              roleNameToId[role.roleName] === existingRole.roleId &&
-              role.orgId === existingRole.orgId,
-          ),
-      );
+      const rolesToDelete = existingRoles.filter((existingRole) => {
+        // Never delete assignments for dormant/non-grantable roles (e.g.
+        // password_*). The admin UI hides them and callers only ever submit
+        // grantable roles, so their absence from the payload means "not
+        // shown", not "remove it" — deleting them would silently revoke a
+        // grant the editor could not even see.
+        const existingName = idToRoleName.get(existingRole.roleId);
+        if (
+          existingName &&
+          !(GrantableUserRole as readonly string[]).includes(existingName)
+        )
+          return false;
+        return !roles.some(
+          (role) =>
+            roleNameToId[role.roleName] === existingRole.roleId &&
+            role.orgId === existingRole.orgId,
+        );
+      });
       logDebug("api.user.roles_to_delete", { rolesToDelete });
+
+      // The submitted list is validated for one-role-per-org, but dormant
+      // roles (password_*) are hidden from the form and preserved above
+      // rather than deleted. Inserting a grantable role on an org where such
+      // a hidden role is retained would leave the user with two roles on that
+      // org, silently bypassing the one-role-per-org rule. Reject it instead.
+      const retainedRoles = existingRoles.filter(
+        (existingRole) => !rolesToDelete.includes(existingRole),
+      );
+      const conflictingInsert = newRolesToInsert.find((role) =>
+        retainedRoles.some((retained) => retained.orgId === role.orgId),
+      );
+      if (conflictingInsert) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: ERRORS.ROLE_CONFLICTS_WITH_HIDDEN_ROLE,
+        });
+      }
 
       const requireAdminOn = async (orgIds: number[], message: string) => {
         for (const orgId of orgIds) {

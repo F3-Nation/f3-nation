@@ -72,9 +72,8 @@ vestigial `Permissions` enums (`packages/shared/src/app/constants.ts`,
   (`packages/auth/src/lib/md-pg-drizzzle-adapter.ts`). Grant changes do not
   reach live sessions until re-login or session update — the ComzQ grant
   above needed a re-login to take effect.
-- `roles.name` is a Postgres enum (`region_role` = `user`/`editor`/`admin`).
-  Adding any new role (e.g. `comz`) requires an `ALTER TYPE` migration, not
-  just an insert.
+- `roles.name` is a Postgres enum (`user_role`). Adding any new role (e.g. `comz`)
+  requires an `ALTER TYPE` migration, not just an insert.
 - API keys authenticate through the same role tables
   (`roles_x_api_keys_x_org`, resolved in `packages/api/src/shared.ts`), so a
   permission layer must cover both principal types.
@@ -107,11 +106,15 @@ Concretely:
 
    export type Permission = (typeof PERMISSIONS)[number];
 
-   export const ROLE_PERMISSIONS: Record<RegionRole, readonly Permission[]> = {
+   export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
      admin: ["entities.manage", "security.manage", "messages.send", "pii.read"],
      editor: ["entities.manage", "messages.send", "pii.read"],
-     comz: ["messages.send"],
      user: [],
+     // Dormant today (no permissions wired); present so the map stays
+     // exhaustive over UserRole.
+     password_manager: [],
+     password_reader: [],
+     // comz: ["messages.send"],  // planned addition — see step 5 below
    };
    ```
 
@@ -137,7 +140,7 @@ Concretely:
    distinction). Every permission is permanent API surface: splitting
    `entities.manage` later is cheap, merging is painful.
 
-5. **Unblock new roles:** migrate the `region_role` Postgres enum (add
+5. **Unblock new roles:** migrate the `user_role` Postgres enum (add
    `comz`).
 
 6. **Fold `isNationAdminFromSession` into the framework** — it becomes

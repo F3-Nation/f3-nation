@@ -49,6 +49,7 @@ import {
 } from "~/orpc/react";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
+import { isAdminRoleName, toGrantableRoleEntries } from "~/lib/auth/session";
 import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
@@ -57,12 +58,6 @@ import {
   canEditUserProfile,
   roleOrgIdsNeedingParent,
 } from "./user-editor-config";
-
-function isAdminSessionRoleName(
-  roleName: string | null,
-): roleName is AdminSessionRole["roleName"] {
-  return roleName === "admin" || roleName === "editor" || roleName === "user";
-}
 
 export default function UserModal({
   data,
@@ -158,7 +153,7 @@ export default function UserModal({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: user?.roles ?? [],
+      roles: toGrantableRoleEntries(user?.roles),
       homeRegionId: user?.homeRegionId ?? null,
       status: user?.status ?? "active",
     },
@@ -173,7 +168,7 @@ export default function UserModal({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: user?.roles,
+      roles: toGrantableRoleEntries(user?.roles),
       homeRegionId: user?.homeRegionId ?? null,
       status: user?.status ?? "active",
       phone: user?.phone ?? "",
@@ -185,8 +180,7 @@ export default function UserModal({
       onSuccess: async (data) => {
         await invalidateQueries("user");
         const roles: AdminSessionRole[] = data.roles.flatMap((role) => {
-          if (!role.orgName || !isAdminSessionRoleName(role.roleName))
-            return [];
+          if (!role.orgName || !isAdminRoleName(role.roleName)) return [];
           return [
             {
               orgId: role.orgId,
@@ -195,7 +189,11 @@ export default function UserModal({
             },
           ];
         });
-        if (session?.id === data.id && roles.length > 0) {
+        // Update the live session for self-edits even when the filtered
+        // visible-role list is now empty: if an admin edits themselves down to
+        // only dormant/hidden roles, the client must drop the stale visible
+        // grants it still holds rather than wait for a refetch.
+        if (session?.id === data.id) {
           await update({ ...session, roles });
         }
         closeModal();
@@ -515,6 +513,11 @@ export default function UserModal({
                                   editor: "Editor",
                                   user: "User",
                                 } as const;
+
+                                // Roles not surfaced in admin (e.g.
+                                // password_manager) are skipped.
+                                if (!isAdminRoleName(role.roleName))
+                                  return null;
 
                                 return (
                                   <span

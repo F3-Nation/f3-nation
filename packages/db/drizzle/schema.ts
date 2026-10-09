@@ -28,7 +28,6 @@ import {
   EventCadence,
   EventCategory,
   OrgType,
-  RegionRole,
   RequestType,
   SeriesException,
   UpdateRequestStatus,
@@ -53,7 +52,6 @@ export const eventCadence = pgEnum("event_cadence", EventCadence);
 export const eventCategory = pgEnum("event_category", EventCategory);
 export const seriesException = pgEnum("series_exception", SeriesException);
 export const orgType = pgEnum("org_type", OrgType);
-export const regionRole = pgEnum("region_role", RegionRole);
 export const updateRequestStatus = pgEnum(
   "update_request_status",
   UpdateRequestStatus,
@@ -471,7 +469,7 @@ export const eventTags = pgTable(
 
 export const roles = pgTable("roles", {
   id: serial().primaryKey().notNull(),
-  name: regionRole().notNull(),
+  name: userRole().notNull(),
   description: varchar(),
   created: timestamp({ mode: "string" })
     .default(sql`timezone('utc'::text, now())`)

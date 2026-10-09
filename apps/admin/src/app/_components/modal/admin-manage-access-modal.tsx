@@ -50,6 +50,7 @@ import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
+import { toGrantableRoleEntries } from "~/lib/auth/session";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 export default function AdminManageAccessModal({
@@ -315,13 +316,12 @@ export default function AdminManageAccessModal({
       form.setValue("f3Name", user.f3Name ?? "");
       form.setValue("phone", user.phone ?? "");
 
-      // Always set existing roles from the API (source of truth)
+      // Load only grantable roles into the editable form. Dormant/hidden roles
+      // (e.g. password_*) are intentionally omitted so an editor can't
+      // mislabel or overwrite them; the API preserves those assignments on
+      // save (see user.crupdate's rolesToDelete guard).
       if (user.roles && Array.isArray(user.roles)) {
-        const existingRoles: RoleEntry[] = user.roles.map((role) => ({
-          orgId: role.orgId,
-          roleName: role.roleName as "editor" | "admin",
-        }));
-        form.setValue("roles", existingRoles);
+        form.setValue("roles", toGrantableRoleEntries(user.roles));
       } else {
         // If no roles found, clear the roles field
         form.setValue("roles", []);

@@ -10494,7 +10494,9 @@
                                 "enum": [
                                   "user",
                                   "editor",
-                                  "admin"
+                                  "admin",
+                                  "password_manager",
+                                  "password_reader"
                                 ],
                                 "type": "string"
                               }
@@ -10876,7 +10878,9 @@
                                 "enum": [
                                   "user",
                                   "editor",
-                                  "admin"
+                                  "admin",
+                                  "password_manager",
+                                  "password_reader"
                                 ],
                                 "type": "string"
                               }
@@ -19692,12 +19696,14 @@
             "in": "query",
             "name": "roles",
             "schema": {
-              "description": "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+              "description": "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
               "items": {
                 "enum": [
                   "user",
                   "editor",
-                  "admin"
+                  "admin",
+                  "password_manager",
+                  "password_reader"
                 ],
                 "type": "string"
               },
@@ -20023,7 +20029,9 @@
                                   "enum": [
                                     "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
@@ -20789,7 +20797,9 @@
                                     "enum": [
                                       "user",
                                       "editor",
-                                      "admin"
+                                      "admin",
+                                      "password_manager",
+                                      "password_reader"
                                     ],
                                     "type": "string"
                                   }
@@ -21084,7 +21094,9 @@
                                   "enum": [
                                     "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
@@ -21395,7 +21407,9 @@
                                     "enum": [
                                       "user",
                                       "editor",
-                                      "admin"
+                                      "admin",
+                                      "password_manager",
+                                      "password_reader"
                                     ],
                                     "type": "string"
                                   }
@@ -21465,12 +21479,14 @@
             "in": "query",
             "name": "roles",
             "schema": {
-              "description": "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+              "description": "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
               "items": {
                 "enum": [
                   "user",
                   "editor",
-                  "admin"
+                  "admin",
+                  "password_manager",
+                  "password_reader"
                 ],
                 "type": "string"
               },
@@ -21796,7 +21812,9 @@
                                   "enum": [
                                     "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
