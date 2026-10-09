@@ -12,7 +12,7 @@ ENV PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     PATH="/app/.venv/bin:$PATH" \
     DUCKDB_EXTENSION_DIR=/opt/duckdb/extensions \
-    DUCKDB_POSTGRES_EXTENSION_PATH=/opt/duckdb/extensions/v1.5.5/linux_amd64/postgres_scanner.duckdb_extension
+    DUCKDB_POSTGRES_EXTENSION_PATH=/opt/duckdb/extensions/v1.5.6/linux_amd64/postgres_scanner.duckdb_extension
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
@@ -24,15 +24,15 @@ COPY apps/analytics ./apps/analytics
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --package f3-nation-analytics --no-dev --no-editable
 
-# DuckDB 1.5.5's platform-matched postgres_scanner artifact is installed at
+# DuckDB 1.5.6's platform-matched postgres_scanner artifact is installed at
 # image build time using DuckDB's signed extension repository. This is more
 # reliable than guessing a release artifact's platform identifier. Signature
 # verification remains enabled: runtime LOAD validates the installed file.
-# linux_amd64 artifact SHA-256: b1ced4cfc6311313e117c2afb3eac76508718778dde0716421503c7dbfb5605c
+# linux_amd64 artifact SHA-256: 6706047a549bbb4b73afe6c81c87df2f6daf863545bf38b8af2fc2d60e501fc3
 RUN mkdir -p "$DUCKDB_EXTENSION_DIR" && \
     python -c "import duckdb; c=duckdb.connect(':memory:'); c.execute(\"SET extension_directory = '/opt/duckdb/extensions'\"); c.execute('INSTALL postgres'); c.close()" && \
     test -f "$DUCKDB_POSTGRES_EXTENSION_PATH" && \
-    echo "b1ced4cfc6311313e117c2afb3eac76508718778dde0716421503c7dbfb5605c  $DUCKDB_POSTGRES_EXTENSION_PATH" | sha256sum --check --status && \
+    echo "6706047a549bbb4b73afe6c81c87df2f6daf863545bf38b8af2fc2d60e501fc3  $DUCKDB_POSTGRES_EXTENSION_PATH" | sha256sum --check --status && \
     chmod 0555 "$DUCKDB_POSTGRES_EXTENSION_PATH"
 
 RUN groupadd --gid 1000 analytics && \

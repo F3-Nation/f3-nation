@@ -43,6 +43,29 @@ interface HomeRegionSummary {
   homeRegionName: string | null;
 }
 
+/** User columns only returned to callers with PII access. */
+const userPiiColumns = {
+  email: schema.users.email,
+  emailVerified: schema.users.emailVerified,
+  phone: schema.users.phone,
+  emergencyContact: schema.users.emergencyContact,
+  emergencyPhone: schema.users.emergencyPhone,
+  emergencyNotes: schema.users.emergencyNotes,
+};
+
+/** Strips PII columns from a full user row unless the caller may see them. */
+export const shapeUserPii = <T extends Partial<UserSelectType>>(
+  user: T,
+  includePii: boolean,
+): T | Omit<T, keyof typeof userPiiColumns> => {
+  if (includePii) return user;
+  const publicUser = { ...user };
+  for (const column of Object.keys(userPiiColumns)) {
+    delete publicUser[column as keyof typeof userPiiColumns];
+  }
+  return publicUser;
+};
+
 // Shared function to build user select fields
 const buildUserSelect = ({
   includePii,
@@ -102,15 +125,7 @@ const buildUserSelect = ({
 
   // Add PII fields if requested
   if (includePii) {
-    select = {
-      ...select,
-      email: schema.users.email,
-      emailVerified: schema.users.emailVerified,
-      phone: schema.users.phone,
-      emergencyContact: schema.users.emergencyContact,
-      emergencyPhone: schema.users.emergencyPhone,
-      emergencyNotes: schema.users.emergencyNotes,
-    };
+    select = { ...select, ...userPiiColumns };
   } else if (includeEmail) {
     // Add only email if requested (without full PII)
     select = {
@@ -464,11 +479,46 @@ export const buildSingleUserQuery = async (
   };
 };
 
-// Helper to check PII access for a user: editors and admins of the user's home
-// region or any org above it (checkHasRoleOnOrg walks up the org tree), or
-// admins of an org the user has a role on. A user with no home region is
-// treated as sitting at the top of the tree, so F3 Nation editors and admins
-// can still reach them.
+export const hasRoleOnAny = async (
+  ctx: Context,
+  orgIds: number[],
+  roleName: "editor" | "admin",
+): Promise<boolean> => {
+  for (const orgId of new Set(orgIds)) {
+    const { success } = await checkHasRoleOnOrg({
+      orgId,
+      session: ctx.session,
+      db: ctx.db,
+      roleName,
+    });
+    if (success) return true;
+  }
+  return false;
+};
+
+/**
+ * Orgs whose editors may edit a user's profile: the home region, else any org
+ * the user holds a role on, else the nation.
+ */
+export const getProfileScopeOrgIds = async (
+  ctx: Context,
+  homeRegionId: number | null,
+  roleOrgIds: number[],
+): Promise<number[]> => {
+  if (homeRegionId) return [homeRegionId];
+  if (roleOrgIds.length > 0) return roleOrgIds;
+  const nations = await ctx.db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.orgType, "nation"));
+  return nations.map(({ id }) => id);
+};
+
+/**
+ * PII access for an existing user: editors and admins of the orgs that scope
+ * their profile (checkHasRoleOnOrg walks up the org tree), or admins of an org
+ * the user has a role on. user.crupdate applies the same rule.
+ */
 export const checkUserPiiAccess = async ({
   ctx,
   userId,
@@ -480,48 +530,20 @@ export const checkUserPiiAccess = async ({
     .select({ homeRegionId: schema.users.homeRegionId })
     .from(schema.users)
     .where(eq(schema.users.id, userId));
+  if (!user) return false;
 
-  let homeOrgId = user?.homeRegionId ?? null;
-  if (user && homeOrgId === null) {
-    const [nation] = await ctx.db
-      .select({ id: schema.orgs.id })
-      .from(schema.orgs)
-      .where(eq(schema.orgs.orgType, "nation"));
-    homeOrgId = nation?.id ?? null;
-  }
+  const roleOrgIds = (
+    await ctx.db
+      .selectDistinct({ orgId: schema.rolesXUsersXOrg.orgId })
+      .from(schema.rolesXUsersXOrg)
+      .where(eq(schema.rolesXUsersXOrg.userId, userId))
+  ).map(({ orgId }) => orgId);
 
-  if (homeOrgId !== null) {
-    const { success } = await checkHasRoleOnOrg({
-      orgId: homeOrgId,
-      session: ctx.session,
-      db: ctx.db,
-      roleName: "editor",
-    });
-    if (success) {
-      return true;
-    }
-  }
-
-  // Get the user's orgs to check if requester is admin of any
-  const userOrgs = await ctx.db
-    .selectDistinct({
-      orgId: schema.rolesXUsersXOrg.orgId,
-    })
-    .from(schema.rolesXUsersXOrg)
-    .where(eq(schema.rolesXUsersXOrg.userId, userId));
-
-  // Check if requester is an admin for any of the user's orgs
-  for (const userOrg of userOrgs) {
-    const { success } = await checkHasRoleOnOrg({
-      orgId: userOrg.orgId,
-      session: ctx.session,
-      db: ctx.db,
-      roleName: "admin",
-    });
-    if (success) {
-      return true;
-    }
-  }
-
-  return false;
+  return (
+    (await hasRoleOnAny(
+      ctx,
+      await getProfileScopeOrgIds(ctx, user.homeRegionId, roleOrgIds),
+      "editor",
+    )) || (await hasRoleOnAny(ctx, roleOrgIds, "admin"))
+  );
 };

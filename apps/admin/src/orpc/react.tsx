@@ -40,5 +40,5 @@ export function OrpcReactProvider(props: { children: React.ReactNode }) {
 
 export const orpc = createTanstackQueryUtils(client);
 export { ORPCError } from "@orpc/client";
-export { useMutation, useQuery } from "@tanstack/react-query";
+export { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 export { invalidateQueries } from "~/orpc/invalidate-queries";

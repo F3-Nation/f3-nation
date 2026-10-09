@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/F3-Nation/f3-nation/compare/pkg-env@0.1.3...pkg-env@0.1.4) (2026-10-06)
+
+
+### Bug Fixes
+
+* **db:** clarify local and test database env usage ([#1148](https://github.com/F3-Nation/f3-nation/issues/1148)) ([b11dfe7](https://github.com/F3-Nation/f3-nation/commit/b11dfe79c1a28a90432fd343e3956c6c596425ad))
+
 ## [0.1.3](https://github.com/F3-Nation/f3-nation/compare/pkg-env@0.1.2...pkg-env@0.1.3) (2026-09-23)
 
 

@@ -598,6 +598,70 @@ describe("User Router", () => {
         await cleanup.org(otherRegion.id);
       }
     });
+
+    it("should include PII when requester is an admin of an org the user has a role on outside their home region", async () => {
+      const f3Nation = await getOrCreateF3NationOrg();
+      const [homeRegion, roleRegion] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `ByIdRoleOrgHome-${uniqueId()}`,
+            orgType: "region",
+            isActive: true,
+            parentId: f3Nation.id,
+          },
+          {
+            name: `ByIdRoleOrgRole-${uniqueId()}`,
+            orgType: "region",
+            isActive: true,
+            parentId: f3Nation.id,
+          },
+        ])
+        .returning();
+      if (!homeRegion || !roleRegion)
+        throw new Error("Failed to create test regions");
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({
+          email: `byid-role-org-${uniqueId()}@example.com`,
+          f3Name: "RoleOrgTarget",
+          homeRegionId: homeRegion.id,
+        })
+        .returning();
+      if (!testUser) throw new Error("Failed to create test user");
+      const [userRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"));
+      if (!userRole) throw new Error("editor role not seeded");
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: testUser.id,
+        roleId: userRole.id,
+        orgId: roleRegion.id,
+      });
+
+      try {
+        await mockAuthWithSession(
+          createRegionAdminSession({
+            orgId: roleRegion.id,
+            orgName: roleRegion.name,
+          }),
+        );
+        const client = createTestClient();
+
+        const result = await client.user.byId({
+          id: testUser.id,
+          includePii: true,
+        });
+
+        expect(result.includePii).toBe(true);
+        expect(result.user?.email).toBe(testUser.email);
+      } finally {
+        await cleanup.user(testUser.id);
+        await cleanup.org(homeRegion.id);
+        await cleanup.org(roleRegion.id);
+      }
+    });
   });
 
   describe("byEmail", () => {
@@ -1128,7 +1192,7 @@ describe("User Router", () => {
       ).rejects.toThrow("already exists");
     });
 
-    it("should skip profile update but allow role changes when admin does not manage user's home region", async () => {
+    it("should allow role changes that resend the unchanged profile when admin does not manage user's home region", async () => {
       const dbInstance = db;
 
       // Create two region orgs
@@ -1185,10 +1249,10 @@ describe("User Router", () => {
 
       const client = createTestClient();
 
-      // Should succeed — profile data is skipped, roles are processed
+      // Should succeed — the profile is resent unchanged, roles are processed
       const result = await client.user.crupdate({
         id: testUser.id,
-        f3Name: "Updated",
+        f3Name: "HomeRegionTest",
         roles: [{ orgId: regionA.id, roleName: "admin" }],
       });
 
@@ -1218,7 +1282,7 @@ describe("User Router", () => {
         .where(eq(schema.orgs.id, regionB.id));
     });
 
-    it("should not modify profile fields when admin does not manage user's home region", async () => {
+    it("should reject profile changes and grant nothing when admin does not manage user's home region", async () => {
       const dbInstance = db;
 
       const [regionA] = await dbInstance
@@ -1276,16 +1340,14 @@ describe("User Router", () => {
       const client = createTestClient();
 
       // Attempt to modify profile fields and add a role on regionA
-      const result = await client.user.crupdate({
-        id: testUser.id,
-        f3Name: "AttemptedChange",
-        firstName: "AttemptedFirst",
-        roles: [{ orgId: regionA.id, roleName: "editor" }],
-      });
-
-      // Profile fields must be unchanged
-      expect(result.f3Name).toBe(originalF3Name);
-      expect(result.firstName).toBe(originalFirstName);
+      await expect(
+        client.user.crupdate({
+          id: testUser.id,
+          f3Name: "AttemptedChange",
+          firstName: "AttemptedFirst",
+          roles: [{ orgId: regionA.id, roleName: "editor" }],
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
       // Verify directly in DB that profile wasn't modified
       const [dbUser] = await dbInstance
@@ -1295,17 +1357,14 @@ describe("User Router", () => {
       expect(dbUser?.f3Name).toBe(originalF3Name);
       expect(dbUser?.firstName).toBe(originalFirstName);
 
-      // Role on regionA should have been granted
+      // The rejected request must not grant the role either
       const grantedRoles = await dbInstance
         .select()
         .from(schema.rolesXUsersXOrg)
         .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
-      expect(grantedRoles.some((r) => r.orgId === regionA.id)).toBe(true);
+      expect(grantedRoles).toEqual([]);
 
       // Clean up
-      await dbInstance
-        .delete(schema.rolesXUsersXOrg)
-        .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
       await dbInstance
         .delete(schema.users)
         .where(eq(schema.users.id, testUser.id));
@@ -1317,7 +1376,7 @@ describe("User Router", () => {
         .where(eq(schema.orgs.id, regionB.id));
     });
 
-    it("should allow update when user has null home region", async () => {
+    it("should allow update when user has null home region but a role in the caller's region", async () => {
       const dbInstance = db;
 
       let [f3Nation] = await dbInstance
@@ -1365,6 +1424,17 @@ describe("User Router", () => {
         .returning();
 
       if (!testUser) throw new Error("Failed to create test user");
+
+      const [editorRole] = await dbInstance
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"));
+      if (!editorRole) throw new Error("Editor role not seeded");
+      await dbInstance.insert(schema.rolesXUsersXOrg).values({
+        userId: testUser.id,
+        orgId: region.id,
+        roleId: editorRole.id,
+      });
 
       // Mock session as admin of the region (not nation)
       const mockSession: Session = {
@@ -1564,50 +1634,72 @@ describe("User Router", () => {
       }
     });
 
-    it("should reject personal-data changes when requester lacks PII access", async () => {
-      const f3Nation = await getOrCreateF3NationOrg();
-      const [region] = await db
-        .insert(schema.orgs)
-        .values({
-          name: `CrupdatePiiRegion-${uniqueId()}`,
-          orgType: "region",
-          isActive: true,
-          parentId: f3Nation.id,
-        })
-        .returning();
-      if (!region) throw new Error("Failed to create test region");
-      const originalEmail = `crupdate-denied-${uniqueId()}@example.com`;
-      const [testUser] = await db
-        .insert(schema.users)
-        .values({ email: originalEmail, f3Name: "PiiDenied" })
-        .returning();
-      if (!testUser) throw new Error("Failed to create test user");
+    it.each([
+      ["email", `crupdate-denied-new-${uniqueId()}@example.com`],
+      ["phone", "555-0100"],
+      ["phone", null],
+      ["emergencyContact", "New Contact"],
+      ["emergencyPhone", "555-0101"],
+      ["emergencyNotes", "New notes"],
+    ] as const)(
+      "should reject a %s change to %s from a user editing themselves without PII access",
+      async (field, value) => {
+        const f3Nation = await getOrCreateF3NationOrg();
+        const [region] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `CrupdatePiiRegion-${uniqueId()}`,
+            orgType: "region",
+            isActive: true,
+            parentId: f3Nation.id,
+          })
+          .returning();
+        if (!region) throw new Error("Failed to create test region");
+        const stored = {
+          email: `crupdate-denied-${uniqueId()}@example.com`,
+          phone: "555-0199",
+          emergencyContact: "Old Contact",
+          emergencyPhone: "555-0198",
+          emergencyNotes: "Old notes",
+        };
+        const [testUser] = await db
+          .insert(schema.users)
+          .values({ ...stored, f3Name: "PiiDenied" })
+          .returning();
+        if (!testUser) throw new Error("Failed to create test user");
 
-      try {
-        await mockAuthWithSession(
-          createRegionAdminSession({ orgId: region.id, orgName: region.name }),
-        );
-        const client = createTestClient();
-
-        await expect(
-          client.user.crupdate({
+        try {
+          // Self-edits may change the profile, so only the PII check can
+          // reject this. The editor role is on an unrelated region.
+          await mockAuthWithSession({
+            ...createEditorSession({ orgId: region.id, orgName: region.name }),
             id: testUser.id,
-            f3Name: "PiiUnchanged",
-            email: `crupdate-denied-new-${uniqueId()}@example.com`,
-            roles: [],
-          }),
-        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+          });
+          const client = createTestClient();
 
-        const [dbUser] = await db
-          .select({ email: schema.users.email })
-          .from(schema.users)
-          .where(eq(schema.users.id, testUser.id));
-        expect(dbUser?.email).toBe(originalEmail);
-      } finally {
-        await cleanup.user(testUser.id);
-        await cleanup.org(region.id);
-      }
-    });
+          await expect(
+            client.user.crupdate({
+              id: testUser.id,
+              f3Name: "PiiDenied",
+              roles: [],
+              [field]: value,
+            }),
+          ).rejects.toMatchObject({
+            code: "UNAUTHORIZED",
+            message: "You are not authorized to change this user's PII",
+          });
+
+          const [dbUser] = await db
+            .select()
+            .from(schema.users)
+            .where(eq(schema.users.id, testUser.id));
+          expect(dbUser?.[field]).toBe(stored[field]);
+        } finally {
+          await cleanup.user(testUser.id);
+          await cleanup.org(region.id);
+        }
+      },
+    );
 
     it("should accept the user's current email when requester lacks PII access", async () => {
       const f3Nation = await getOrCreateF3NationOrg();
@@ -1670,9 +1762,11 @@ describe("User Router", () => {
       if (!testUser) throw new Error("Failed to create test user");
 
       try {
-        await mockAuthWithSession(
-          createRegionAdminSession({ orgId: region.id, orgName: region.name }),
-        );
+        // A self-edit may change the profile but has no PII access
+        await mockAuthWithSession({
+          ...createEditorSession({ orgId: region.id, orgName: region.name }),
+          id: testUser.id,
+        });
         const client = createTestClient();
 
         // The admin window sends email: "" when the PII fields are hidden
@@ -1868,6 +1962,167 @@ describe("User Router", () => {
         .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
 
       expect(roles).toHaveLength(0);
+    });
+  });
+
+  describe("crupdate response PII", () => {
+    const piiFields = [
+      "email",
+      "emailVerified",
+      "phone",
+      "emergencyContact",
+      "emergencyPhone",
+      "emergencyNotes",
+    ] as const;
+
+    const sessionWithRole = (
+      org: { id: number; name: string },
+      roleName: "editor" | "admin",
+    ): Session => ({
+      id: 1,
+      email: "requester@example.com",
+      user: {
+        id: "1",
+        email: "requester@example.com",
+        name: "Requester",
+        roles: [{ orgId: org.id, orgName: org.name, roleName }],
+      },
+      roles: [{ orgId: org.id, orgName: org.name, roleName }],
+      expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+    });
+
+    const setup = async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const [editorRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"));
+      if (!editorRole) throw new Error("editor role not seeded");
+
+      const regions = await db
+        .insert(schema.orgs)
+        .values(
+          ["Requester", "Target"].map((label) => ({
+            name: `${label} Region ${uniqueId()}`,
+            orgType: "region" as const,
+            isActive: true,
+            parentId: nation.id,
+          })),
+        )
+        .returning({ id: schema.orgs.id, name: schema.orgs.name });
+      const [requesterRegion, targetRegion] = regions;
+      if (!requesterRegion || !targetRegion) {
+        throw new Error("Failed to create regions");
+      }
+
+      const [target] = await db
+        .insert(schema.users)
+        .values({
+          email: `pii-${uniqueId()}@example.com`,
+          f3Name: "PiiTarget",
+          phone: "555-0100",
+          emergencyContact: "Contact",
+          emergencyPhone: "555-0101",
+          emergencyNotes: "Notes",
+          homeRegionId: targetRegion.id,
+        })
+        .returning({ id: schema.users.id });
+      if (!target) throw new Error("Failed to create target user");
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: target.id,
+        orgId: targetRegion.id,
+        roleId: editorRole.id,
+      });
+
+      return {
+        requesterRegion,
+        targetRegion,
+        targetId: target.id,
+        teardown: async () => {
+          await cleanup.user(target.id);
+          for (const region of regions) await cleanup.org(region.id);
+        },
+      };
+    };
+
+    it("omits PII for an editor outside the target's orgs", async () => {
+      const fixture = await setup();
+      try {
+        await mockAuthWithSession(
+          sessionWithRole(fixture.requesterRegion, "editor"),
+        );
+        const result = await createTestClient().user.crupdate({
+          id: fixture.targetId,
+          roles: [{ orgId: fixture.targetRegion.id, roleName: "editor" }],
+        });
+
+        expect(result.id).toBe(fixture.targetId);
+        for (const field of piiFields) {
+          expect(result).not.toHaveProperty(field);
+        }
+      } finally {
+        await fixture.teardown();
+      }
+    });
+
+    it("returns PII to an editor on the target's home region", async () => {
+      const fixture = await setup();
+      try {
+        await mockAuthWithSession(
+          sessionWithRole(fixture.targetRegion, "editor"),
+        );
+        const result = await createTestClient().user.crupdate({
+          id: fixture.targetId,
+          roles: [{ orgId: fixture.targetRegion.id, roleName: "editor" }],
+        });
+
+        expect(result.phone).toBe("555-0100");
+        expect(result.emergencyNotes).toBe("Notes");
+      } finally {
+        await fixture.teardown();
+      }
+    });
+
+    it("omits PII when an editor creates a user", async () => {
+      const fixture = await setup();
+      let createdId: number | undefined;
+      try {
+        await mockAuthWithSession(
+          sessionWithRole(fixture.requesterRegion, "editor"),
+        );
+        const result = await createTestClient().user.crupdate({
+          email: `pii-new-${uniqueId()}@example.com`,
+          f3Name: "PiiNew",
+          phone: "555-0102",
+          roles: [],
+        });
+        createdId = result.id;
+
+        for (const field of piiFields) {
+          expect(result).not.toHaveProperty(field);
+        }
+      } finally {
+        if (createdId) await cleanup.user(createdId);
+        await fixture.teardown();
+      }
+    });
+
+    it("returns PII to an admin of the target's org", async () => {
+      const fixture = await setup();
+      try {
+        await mockAuthWithSession(
+          sessionWithRole(fixture.targetRegion, "admin"),
+        );
+        const result = await createTestClient().user.crupdate({
+          id: fixture.targetId,
+          roles: [{ orgId: fixture.targetRegion.id, roleName: "editor" }],
+        });
+
+        expect(result.phone).toBe("555-0100");
+        expect(result.emergencyNotes).toBe("Notes");
+      } finally {
+        await fixture.teardown();
+      }
     });
   });
 });
