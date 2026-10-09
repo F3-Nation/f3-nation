@@ -148,6 +148,34 @@ describe("a tier added by configuration only", () => {
     expect(resetPage).toHaveBeenCalledTimes(1);
   });
 
+  it("narrows the last picker to a middle-tier selection", () => {
+    const { result, toggle } = setup();
+
+    toggle(0, sectorOne.id);
+    toggle(1, zoneOne.id);
+
+    expect(offeredIds(result, 2)).toEqual([territoryOne.id]);
+    expect(
+      result.current.filterControls[2]?.orgs?.some(
+        (candidate) => candidate.id === territoryTwo.id,
+      ),
+    ).toBe(false);
+  });
+
+  it("prunes later-tier selections when a middle tier changes", () => {
+    const { result, toggle } = setup();
+
+    toggle(1, zoneOne.id);
+    toggle(2, territoryOne.id);
+    toggle(1, zoneTwo.id);
+    toggle(1, zoneOne.id);
+
+    expect(
+      result.current.filterControls[2]?.selected.map(({ id }) => id),
+    ).toEqual([]);
+    expect(result.current.parentOrgIds).toEqual([zoneTwo.id, territoryTwo.id]);
+  });
+
   it("expands a first-tier selection through the new tier, inactive included", () => {
     const { result, toggle } = setup();
 

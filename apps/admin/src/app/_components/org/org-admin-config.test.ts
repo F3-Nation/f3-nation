@@ -71,7 +71,7 @@ describe("organization table ancestry configuration", () => {
       match: { tiers: ["territory"], includeInactive: true },
     });
     expect(orgAdminConfig.region.hierarchyFilter).toEqual({
-      tiers: ["sector", "area"],
+      tiers: ["sector", "territory", "area"],
       match: { tiers: ["area"], includeInactive: false },
     });
     expect(orgAdminConfig.area.displayAncestors).toEqual([

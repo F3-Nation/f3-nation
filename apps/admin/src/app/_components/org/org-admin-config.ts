@@ -7,7 +7,7 @@ import {
 
 /**
  * Ancestor filters for an org table. `tiers` are the pickers, top-down: the
- * first tier narrows the later pickers and prunes their selections. Pickers
+ * a selection narrows the later pickers and prunes their selections. Pickers
  * always offer active orgs only.
  *
  * `match` turns selections into the query's `parentOrgIds`. The deepest tier
@@ -20,8 +20,8 @@ import {
  *     type is in `ancestorTypes`, active or not, so rows under an inactive parent stay
  *     reachable (Territory and Area tables).
  *   - `includeInactive: false` keeps only active descendants whose type is in
- *     `match.tiers` (Region table: its Area filter is active-only, so a sector
- *     reaches only the active areas beneath it).
+ *     `match.tiers` (Region table: its Area filter is active-only, so a sector or
+ *     territory reaches only the active areas beneath it).
  * An expansion that matches nothing sends no valid parent, so the table is
  * empty rather than unfiltered.
  */
@@ -129,7 +129,7 @@ export const orgAdminConfig: Record<OrgType, OrgAdminConfig> = {
     serverSorting: false,
     filters: "hierarchy",
     hierarchyFilter: {
-      tiers: ["sector", "area"],
+      tiers: ["sector", "territory", "area"],
       match: { tiers: ["area"], includeInactive: false },
     },
     ancestorTypes: AdminHierarchyOrgTypes,

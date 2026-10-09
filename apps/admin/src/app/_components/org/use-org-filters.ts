@@ -57,7 +57,7 @@ const keepOffered = (selected: Org[], offered: Org[] | undefined) => {
   return selected.filter((org) => offeredIds.has(org.id));
 };
 
-// Toggling the first tier and pruning the later ones is one atomic step, so
+// Toggling a tier and pruning the later ones is one atomic step, so
 // back-to-back toggles before a render cannot drop each other (#920).
 const orgFilterReducer = (
   state: OrgFilterState,
@@ -143,18 +143,19 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
     [hierarchyDataOrgs],
   );
   const tierStates = useMemo(() => {
-    let firstTierIds = new Set<number>();
-    return tiers.map((orgType, index) => {
+    // The nearest earlier tier with a selection narrows each picker.
+    let ancestorIds = new Set<number>();
+    return tiers.map((orgType) => {
       let offered = hierarchyOrgs?.filter(
         (org) => org.orgType === orgType && org.isActive,
       );
-      if (index > 0 && firstTierIds.size > 0) {
+      if (ancestorIds.size > 0) {
         offered = offered?.filter((org) =>
-          isDescendantOfAny(org, firstTierIds, orgById),
+          isDescendantOfAny(org, ancestorIds, orgById),
         );
       }
       const kept = keepOffered(picked(pickedFilters, orgType), offered);
-      if (index === 0) firstTierIds = new Set(kept.map((org) => org.id));
+      if (kept.length > 0) ancestorIds = new Set(kept.map((org) => org.id));
       return { orgType, offered, kept };
     });
   }, [tiers, pickedFilters, hierarchyOrgs, orgById]);
@@ -193,8 +194,7 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
       type: "toggle",
       orgType,
       org,
-      prune:
-        orgType === tiers[0] ? { tiers: tiers.slice(1), orgById } : undefined,
+      prune: { tiers: tiers.slice(tiers.indexOf(orgType) + 1), orgById },
     });
     resetPage();
   };
