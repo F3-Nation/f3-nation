@@ -147,9 +147,21 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
       );
     });
 
-    it("authorizes an admin key", async () => {
-      await expectAuthorized(
+    it("rejects an admin key — API-key management needs a user session", async () => {
+      await expectUnauthorized(
         await target.invoke(guardReq(PATH, { ip: 8, bearer: adminKey.key })),
+        "Sign in with your user account to manage API keys.",
+      );
+    });
+
+    it("authorizes an admin JWT", async () => {
+      await expectAuthorized(
+        await target.invoke(
+          guardReq(PATH, {
+            ip: 15,
+            bearer: await signFixtureJwt({ sub: jwtUser.userId }),
+          }),
+        ),
       );
     });
   });

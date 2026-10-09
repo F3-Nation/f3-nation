@@ -28,6 +28,7 @@ import { assertValidParentType } from "../assert-valid-parent-type";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { getSessionRoles } from "../get-session-roles";
 import { getSortingColumns } from "../get-sorting-columns";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
 import { paginationFields, resolvePagination } from "../lib/pagination";
@@ -487,19 +488,10 @@ export const orgRouter = {
         defaultPageSize: 10,
       });
 
-      // Check if user has a role with orgId = 1 (F3 Nation)
-      const [nationRole] = await ctx.db
-        .select()
-        .from(schema.rolesXUsersXOrg)
-        .where(
-          and(
-            eq(schema.rolesXUsersXOrg.userId, ctx.session.id),
-            eq(schema.rolesXUsersXOrg.orgId, F3_NATION_ORG_ID),
-          ),
-        );
+      const sessionRoles = await getSessionRoles(ctx);
 
       // If user has F3 Nation role, return all orgs with pagination and sorting
-      if (nationRole) {
+      if (sessionRoles.some((role) => role.orgId === F3_NATION_ORG_ID)) {
         // asc(id) is appended as a final tiebreaker -- neither the default
         // sort (by name, not unique) nor a caller-supplied custom sort is
         // guaranteed unique, so without one, offset pagination across
@@ -563,30 +555,14 @@ export const orgRouter = {
         };
       }
 
-      // Get the user's direct role assignments
-      const directRolesQuery = await ctx.db
-        .select()
-        .from(schema.rolesXUsersXOrg)
-        .innerJoin(
-          schema.orgs,
-          eq(schema.rolesXUsersXOrg.orgId, schema.orgs.id),
-        )
-        .innerJoin(
-          schema.roles,
-          eq(schema.rolesXUsersXOrg.roleId, schema.roles.id),
-        )
-        .where(eq(schema.rolesXUsersXOrg.userId, ctx.session.id));
-
       // Build a map of orgId -> role names for the user's direct assignments
       const directRolesMap = new Map<string, string[]>();
-      for (const row of directRolesQuery) {
-        const orgId = row.orgs.id;
-        const key = String(orgId);
-        const existing = directRolesMap.get(key) ?? [];
-        if (row.roles?.name) {
-          existing.push(row.roles.name);
-        }
-        directRolesMap.set(key, existing);
+      for (const role of sessionRoles) {
+        const key = String(role.orgId);
+        directRolesMap.set(key, [
+          ...(directRolesMap.get(key) ?? []),
+          role.roleName,
+        ]);
       }
 
       // Get direct editable roots, then expand their descendants once.
@@ -1034,48 +1010,30 @@ export const orgRouter = {
         });
       }
 
-      const orgsQuery = await ctx.db
-        .select()
-        .from(schema.rolesXUsersXOrg)
-        .innerJoin(
-          schema.orgs,
-          eq(schema.rolesXUsersXOrg.orgId, schema.orgs.id),
-        )
-        .innerJoin(
-          schema.roles,
-          eq(schema.rolesXUsersXOrg.roleId, schema.roles.id),
-        )
-        .where(eq(schema.rolesXUsersXOrg.userId, ctx.session.id));
+      const sessionRoles = await getSessionRoles(ctx);
+      if (sessionRoles.length === 0) return { orgs: [] };
 
-      // Reduce multiple rows per org down to one row per org with possibly multiple roles
-      const orgMap: Record<
-        number,
-        {
-          orgs: (typeof orgsQuery)[number]["orgs"];
-          roles_x_users_x_org: (typeof orgsQuery)[number]["roles_x_users_x_org"];
-          roles: (typeof orgsQuery)[number]["roles"]["name"][];
-        }
-      > = {};
-
-      for (const row of orgsQuery) {
-        const orgId = row.orgs.id;
-        orgMap[orgId] ??= {
-          orgs: row.orgs,
-          roles_x_users_x_org: row.roles_x_users_x_org,
-          roles: [],
-        };
-        if (row.roles?.name) {
-          orgMap[orgId]?.roles.push(row.roles.name);
-        }
-      }
+      const orgs = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          name: schema.orgs.name,
+          orgType: schema.orgs.orgType,
+          parentId: schema.orgs.parentId,
+        })
+        .from(schema.orgs)
+        .where(
+          inArray(
+            schema.orgs.id,
+            sessionRoles.map((role) => role.orgId),
+          ),
+        );
 
       return {
-        orgs: Object.values(orgMap).map((org) => ({
-          id: org.orgs.id,
-          name: org.orgs.name,
-          orgType: org.orgs.orgType,
-          parentId: org.orgs.parentId,
-          roles: org.roles,
+        orgs: orgs.map((org) => ({
+          ...org,
+          roles: sessionRoles
+            .filter((role) => role.orgId === org.id)
+            .map((role) => role.roleName),
         })),
       };
     }),
