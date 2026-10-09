@@ -27,19 +27,6 @@ export const isOrgSelected = (
   org: { id: number },
 ) => selected.some((candidate) => candidate.id === org.id);
 
-export const getParentOrgIdsForFilter = (
-  directlySelectedIds: readonly number[],
-  hasAncestorSelection: boolean,
-  matchingParentIds: readonly number[] | undefined,
-) => {
-  if (directlySelectedIds.length > 0) return [...directlySelectedIds];
-  if (!hasAncestorSelection) return undefined;
-
-  return matchingParentIds?.length
-    ? [...matchingParentIds]
-    : [NO_MATCHING_PARENT_ORG_ID];
-};
-
 export const isDescendantOfAny = <T extends OrgHierarchyNode>(
   org: T,
   ancestorIds: ReadonlySet<number>,
@@ -57,6 +44,49 @@ export const isDescendantOfAny = <T extends OrgHierarchyNode>(
   }
 
   return false;
+};
+
+// The deepest tier with a selection decides the filter; see OrgHierarchyFilter
+// for the policy this applies.
+export const getHierarchyParentOrgIds = <
+  K extends string,
+  T extends OrgHierarchyNode & { isActive: boolean },
+>({
+  tiers,
+  match,
+  selected,
+  hierarchyOrgs,
+  orgById,
+}: {
+  tiers: readonly K[];
+  match: { tiers: readonly K[]; includeInactive: boolean };
+  selected: Readonly<Partial<Record<K, readonly T[]>>>;
+  hierarchyOrgs: readonly T[] | undefined;
+  orgById: ReadonlyMap<number, T>;
+}): number[] | undefined => {
+  const matchTiers: readonly string[] = match.tiers;
+  for (const tier of [...tiers].reverse()) {
+    const selectedOrgs = selected[tier];
+    if (!selectedOrgs?.length) continue;
+
+    const selectedIds = selectedOrgs.map((org) => org.id);
+    if (match.tiers.includes(tier)) return selectedIds;
+
+    const ancestorIds = new Set(selectedIds);
+    const expandedIds = hierarchyOrgs
+      ?.filter((org) =>
+        match.includeInactive
+          ? ancestorIds.has(org.id) ||
+            isDescendantOfAny(org, ancestorIds, orgById)
+          : org.isActive &&
+            matchTiers.includes(org.orgType) &&
+            isDescendantOfAny(org, ancestorIds, orgById),
+      )
+      .map((org) => org.id);
+
+    return expandedIds?.length ? expandedIds : [NO_MATCHING_PARENT_ORG_ID];
+  }
+  return undefined;
 };
 
 export const findAncestorByType = <T extends OrgHierarchyNode>(

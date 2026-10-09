@@ -6,8 +6,8 @@ import {
   AdminHierarchyOrgTypes,
   AdminScopeOrgTypes,
   findAncestorByType,
+  getHierarchyParentOrgIds,
   getOrgById,
-  getParentOrgIdsForFilter,
   isDescendantOfAny,
   isOrgSelected,
 } from "./org-ancestry";
@@ -55,21 +55,8 @@ describe("org ancestry", () => {
 
     expect(matchingAreas).toEqual([nestedArea, directArea]);
     expect(
-      getParentOrgIdsForFilter(
-        [],
-        true,
-        matchingAreas.map((area) => area.id),
-      ),
-    ).toEqual([nestedArea.id, directArea.id]);
-    expect(
       isDescendantOfAny(nestedArea, new Set([unrelatedSector.id]), orgById),
     ).toBe(false);
-  });
-
-  it("distinguishes no sector filter from a sector with no matching areas", () => {
-    expect(getParentOrgIdsForFilter([], false, [])).toBeUndefined();
-    expect(getParentOrgIdsForFilter([], true, [])).toEqual([-1]);
-    expect(getParentOrgIdsForFilter([], true, undefined)).toEqual([-1]);
   });
 
   it("finds a typed ancestor at any depth", () => {
@@ -116,6 +103,207 @@ describe("org ancestry", () => {
       inactiveArea,
     );
     expect(findAncestorByType(region, "sector", withInactive)).toEqual(sector);
+  });
+
+  describe("getHierarchyParentOrgIds", () => {
+    const inactiveTerritory = {
+      id: 40,
+      parentId: sector.id,
+      orgType: "territory",
+      isActive: false,
+    };
+    const inactiveArea = {
+      id: 41,
+      parentId: sector.id,
+      orgType: "area",
+      isActive: false,
+    };
+    const withStatus = (org: OrgHierarchyNode) => ({ ...org, isActive: true });
+    const hierarchy = [
+      withStatus(nation),
+      withStatus(sector),
+      withStatus(territory),
+      withStatus(nestedArea),
+      withStatus(directArea),
+      withStatus(unrelatedSector),
+      inactiveTerritory,
+      inactiveArea,
+    ];
+    const hierarchyById = getOrgById(hierarchy);
+    const base = { hierarchyOrgs: hierarchy, orgById: hierarchyById };
+    const tiers = ["sector", "territory"];
+
+    it("applies no filter while nothing is selected", () => {
+      expect(
+        getHierarchyParentOrgIds({
+          ...base,
+          tiers,
+          match: { tiers: ["territory"], includeInactive: true },
+          selected: {},
+        }),
+      ).toBeUndefined();
+    });
+
+    it("sends a selection in a match tier as-is", () => {
+      expect(
+        getHierarchyParentOrgIds({
+          ...base,
+          tiers,
+          match: { tiers: ["territory"], includeInactive: true },
+          selected: {
+            sector: [withStatus(sector)],
+            territory: [withStatus(territory)],
+          },
+        }),
+      ).toEqual([territory.id]);
+    });
+
+    it("expands a selection through inactive descendants when allowed", () => {
+      expect(
+        getHierarchyParentOrgIds({
+          ...base,
+          tiers,
+          match: { tiers: ["territory"], includeInactive: true },
+          selected: { sector: [withStatus(sector)] },
+        }),
+      ).toEqual([
+        sector.id,
+        territory.id,
+        nestedArea.id,
+        directArea.id,
+        inactiveTerritory.id,
+        inactiveArea.id,
+      ]);
+    });
+
+    it("expands only to active orgs of the match tiers otherwise", () => {
+      expect(
+        getHierarchyParentOrgIds({
+          ...base,
+          tiers: ["sector", "area"],
+          match: { tiers: ["area"], includeInactive: false },
+          selected: { sector: [withStatus(sector)] },
+        }),
+      ).toEqual([nestedArea.id, directArea.id]);
+    });
+
+    it("matches nothing rather than everything when the expansion is empty", () => {
+      expect(
+        getHierarchyParentOrgIds({
+          ...base,
+          tiers: ["sector", "area"],
+          match: { tiers: ["area"], includeInactive: false },
+          selected: { sector: [withStatus(unrelatedSector)] },
+        }),
+      ).toEqual([-1]);
+      expect(
+        getHierarchyParentOrgIds({
+          ...base,
+          hierarchyOrgs: undefined,
+          tiers,
+          match: { tiers: ["territory"], includeInactive: true },
+          selected: { sector: [withStatus(sector)] },
+        }),
+      ).toEqual([-1]);
+    });
+
+    describe("branch coverage", () => {
+      const includeInactive = { tiers: ["territory"], includeInactive: true };
+      const sectorOnly = { sector: [withStatus(sector)] };
+
+      it("lets the deepest tier with a selection win", () => {
+        expect(
+          getHierarchyParentOrgIds({
+            ...base,
+            tiers,
+            match: includeInactive,
+            selected: {
+              ...sectorOnly,
+              territory: [withStatus(territory)],
+            },
+          }),
+        ).toEqual([territory.id]);
+      });
+
+      it("skips an empty deepest tier and falls through to the expansion", () => {
+        expect(
+          getHierarchyParentOrgIds({
+            ...base,
+            tiers,
+            match: includeInactive,
+            selected: { ...sectorOnly, territory: [] },
+          }),
+        ).toEqual(
+          getHierarchyParentOrgIds({
+            ...base,
+            tiers,
+            match: includeInactive,
+            selected: sectorOnly,
+          }),
+        );
+      });
+
+      it("unions the subtrees of several selected orgs", () => {
+        const otherArea = {
+          id: 50,
+          parentId: unrelatedSector.id,
+          orgType: "area",
+          isActive: true,
+        };
+        expect(
+          getHierarchyParentOrgIds({
+            ...base,
+            hierarchyOrgs: [...hierarchy, otherArea],
+            tiers: ["sector", "area"],
+            match: { tiers: ["area"], includeInactive: false },
+            selected: {
+              sector: [withStatus(sector), withStatus(unrelatedSector)],
+            },
+          }),
+        ).toEqual([nestedArea.id, directArea.id, otherArea.id]);
+      });
+
+      it("keeps the selection plus all descendants when no tier matches directly", () => {
+        expect(
+          getHierarchyParentOrgIds({
+            ...base,
+            tiers: ["sector"],
+            match: { tiers: [], includeInactive: true },
+            selected: sectorOnly,
+          }),
+        ).toEqual([
+          sector.id,
+          territory.id,
+          nestedArea.id,
+          directArea.id,
+          inactiveTerritory.id,
+          inactiveArea.id,
+        ]);
+      });
+
+      it("sends a match-tier selection as-is without a hierarchy", () => {
+        expect(
+          getHierarchyParentOrgIds({
+            ...base,
+            hierarchyOrgs: undefined,
+            tiers,
+            match: includeInactive,
+            selected: { territory: [withStatus(territory)] },
+          }),
+        ).toEqual([territory.id]);
+      });
+
+      it("ignores a selected key that is not in tiers", () => {
+        expect(
+          getHierarchyParentOrgIds({
+            ...base,
+            tiers: ["sector"],
+            match: includeInactive,
+            selected: { territory: [withStatus(territory)] },
+          }),
+        ).toBeUndefined();
+      });
+    });
   });
 
   it("derives the admin hierarchy types from rank rather than a hand-written list", () => {
