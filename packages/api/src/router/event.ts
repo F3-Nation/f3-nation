@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { ORPCError } from "@orpc/server";
 import type { SQL } from "drizzle-orm";
 import { z } from "zod";
@@ -793,7 +795,7 @@ export const eventRouter = {
       tags: ["event"],
       summary: "Create or update event",
       description:
-        "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
+        "Create a new event or update an existing one. Requires editor role for the event's organization; deactivating an active event requires admin role. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
     })
     .output(
       z.object({
@@ -872,18 +874,49 @@ export const eventRouter = {
       const eventToUpdate: typeof schema.events.$inferInsert = {
         ...eventData,
         orgId: input.aoId,
-        meta: meta
-          ? {
-              ...meta,
-              mapSeed,
-              eventTypeId: undefined, // Remove eventTypeId from meta since we handle it in join table
-            }
-          : null,
+        ...(meta === undefined
+          ? {}
+          : {
+              meta: meta
+                ? {
+                    ...meta,
+                    mapSeed,
+                    eventTypeId: undefined, // Remove eventTypeId from meta since we handle it in join table
+                  }
+                : null,
+            }),
       };
 
       let shouldNotifyFirstEventForRegion = false;
       const result = await ctx.db.transaction(async (tx) => {
         const transactionDb = tx as unknown as AppDb;
+        const [transactionExistingEvent] = input.id
+          ? await transactionDb
+              .select()
+              .from(schema.events)
+              .where(eq(schema.events.id, input.id))
+              .for("update")
+          : [];
+        const isDeactivationTransition =
+          transactionExistingEvent?.isActive === true && !input.isActive;
+        const isStatusTransition =
+          transactionExistingEvent !== undefined &&
+          transactionExistingEvent.isActive !== input.isActive;
+
+        if (isDeactivationTransition && transactionExistingEvent) {
+          const adminRoleCheck = await checkHasRoleOnOrg({
+            orgId: transactionExistingEvent.orgId,
+            session: ctx.session,
+            db: transactionDb,
+            roleName: "admin",
+          });
+          if (!adminRoleCheck.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to deactivate this Event",
+            });
+          }
+        }
+
         const [result] = await transactionDb
           .insert(schema.events)
           .values(eventToUpdate)
@@ -932,7 +965,7 @@ export const eventRouter = {
         }
 
         const effectiveEventTagIds =
-          normalizedEventTagIds === undefined && existingEvent
+          normalizedEventTagIds === undefined && transactionExistingEvent
             ? (
                 await transactionDb
                   .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
@@ -940,6 +973,36 @@ export const eventRouter = {
                   .where(eq(schema.eventTagsXEvents.eventId, result.id))
               ).map(({ eventTagId }) => eventTagId)
             : normalizedEventTagIds;
+
+        let eventTypesChanged = false;
+        if (eventTypeIds !== undefined && transactionExistingEvent) {
+          const existingEventTypes = await transactionDb
+            .select({ eventTypeId: schema.eventsXEventTypes.eventTypeId })
+            .from(schema.eventsXEventTypes)
+            .where(eq(schema.eventsXEventTypes.eventId, result.id));
+          const existingIds = existingEventTypes
+            .map(({ eventTypeId }) => eventTypeId)
+            .sort((a, b) => a - b);
+          const updatedIds = [...eventTypeIds].sort((a, b) => a - b);
+          eventTypesChanged =
+            existingIds.length !== updatedIds.length ||
+            existingIds.some((id, index) => id !== updatedIds[index]);
+        }
+
+        let eventTagsChanged = false;
+        if (normalizedEventTagIds !== undefined && transactionExistingEvent) {
+          const existingEventTags = await transactionDb
+            .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
+            .from(schema.eventTagsXEvents)
+            .where(eq(schema.eventTagsXEvents.eventId, result.id));
+          const existingIds = existingEventTags
+            .map(({ eventTagId }) => eventTagId)
+            .sort((a, b) => a - b);
+          const updatedIds = [...normalizedEventTagIds].sort((a, b) => a - b);
+          eventTagsChanged =
+            existingIds.length !== updatedIds.length ||
+            existingIds.some((id, index) => id !== updatedIds[index]);
+        }
 
         // Handle event type in join table
         if (eventTypeIds) {
@@ -971,12 +1034,14 @@ export const eventRouter = {
 
         // Handle event instance cascade operations for series (events with recurrence patterns).
         // null recurrencePattern defaults to weekly in createEventInstancesForSeries.
-        if (result.dayOfWeek) {
+        if (result.dayOfWeek || transactionExistingEvent?.dayOfWeek) {
           const {
             isStructuralChange,
             createEventInstancesForSeries,
             updateFutureInstances,
             recreateFutureInstances,
+            softDeleteFutureInstancesForSeries,
+            reactivateFutureInstancesForSeries,
           } = await import("../lib/cascade-service");
 
           // Build series data for cascade operations
@@ -1005,7 +1070,98 @@ export const eventRouter = {
             eventTagIds: effectiveEventTagIds,
           };
 
-          if (!existingEvent) {
+          if (isStatusTransition) {
+            // Existing-series status transitions never recreate the schedule;
+            // converting a one-off to a series creates its first schedule.
+            // Deactivation still closes the old schedule if the event becomes
+            // a one-off. Reactivation must not revive an obsolete schedule.
+            if (
+              isDeactivationTransition &&
+              (transactionExistingEvent?.dayOfWeek || result.dayOfWeek)
+            ) {
+              await softDeleteFutureInstancesForSeries(
+                transactionDb,
+                result.id,
+              );
+            } else if (!isDeactivationTransition && result.dayOfWeek) {
+              if (
+                transactionExistingEvent &&
+                !transactionExistingEvent.dayOfWeek
+              ) {
+                // An existing one-off becoming a series is a new schedule,
+                // unlike reactivating an existing series.
+                await createEventInstancesForSeries(
+                  transactionDb,
+                  seriesData,
+                  4,
+                  seriesData.startDate,
+                );
+              } else {
+                await reactivateFutureInstancesForSeries(
+                  transactionDb,
+                  result.id,
+                );
+              }
+            }
+
+            if (result.dayOfWeek && transactionExistingEvent?.dayOfWeek) {
+              if (transactionExistingEvent) {
+                const instanceUpdateFields = (
+                  [
+                    "locationId",
+                    "startTime",
+                    "endTime",
+                    "isPrivate",
+                    "meta",
+                    "description",
+                    "highlight",
+                    "name",
+                    "orgId",
+                  ] as (
+                    | "locationId"
+                    | "startTime"
+                    | "endTime"
+                    | "isPrivate"
+                    | "meta"
+                    | "description"
+                    | "highlight"
+                    | "name"
+                    | "orgId"
+                    | "eventTypeIds"
+                    | "eventTagIds"
+                  )[]
+                ).filter((field) => {
+                  const key = field as keyof typeof result;
+                  return field === "meta"
+                    ? !isDeepStrictEqual(
+                        result.meta,
+                        transactionExistingEvent.meta,
+                      )
+                    : result[key] !== transactionExistingEvent[key];
+                });
+                if (eventTypesChanged) {
+                  instanceUpdateFields.push("eventTypeIds");
+                }
+                if (eventTagsChanged) {
+                  instanceUpdateFields.push("eventTagIds");
+                }
+                if (instanceUpdateFields.length > 0) {
+                  await updateFutureInstances(
+                    transactionDb,
+                    {
+                      ...seriesData,
+                      eventTagIds:
+                        normalizedEventTagIds === undefined
+                          ? undefined
+                          : effectiveEventTagIds,
+                    },
+                    undefined,
+                    { fields: instanceUpdateFields },
+                  );
+                }
+              }
+            }
+          } else if (!transactionExistingEvent) {
             // New series: create event instances from series start date
             await createEventInstancesForSeries(
               transactionDb,
@@ -1016,15 +1172,15 @@ export const eventRouter = {
 
             // Run this notification only after the transaction commits.
             shouldNotifyFirstEventForRegion = true;
-          } else if (existingEvent.dayOfWeek) {
+          } else if (transactionExistingEvent.dayOfWeek) {
             // Existing series: check for structural changes
             const existingSeriesData = {
-              dayOfWeek: existingEvent.dayOfWeek,
-              recurrencePattern: existingEvent.recurrencePattern,
-              recurrenceInterval: existingEvent.recurrenceInterval,
-              indexWithinInterval: existingEvent.indexWithinInterval,
-              startDate: existingEvent.startDate,
-              endDate: existingEvent.endDate,
+              dayOfWeek: transactionExistingEvent.dayOfWeek,
+              recurrencePattern: transactionExistingEvent.recurrencePattern,
+              recurrenceInterval: transactionExistingEvent.recurrenceInterval,
+              indexWithinInterval: transactionExistingEvent.indexWithinInterval,
+              startDate: transactionExistingEvent.startDate,
+              endDate: transactionExistingEvent.endDate,
             };
 
             const updatedSeriesData = {
