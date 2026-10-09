@@ -38,6 +38,21 @@ env:
   F3_CHANNEL: ci
 
 jobs:
+  # The staging-refresh obfuscator hard-fails on any unclassified table, so a
+  # migration that adds one breaks the refresh without anyone noticing until
+  # the next real run. The harness is self-contained (throwaway docker
+  # Postgres on :5434, local seed + synthetic PII fixtures only, never real
+  # data), so it runs on every PR and fails on the migration's own PR.
+  obfuscate-db-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Verify PII obfuscation against the sandbox seed
+        run: pnpm -F @acme/scripts obfuscate-db:verify
+
   format-check:
     runs-on: ubuntu-latest
     steps:
