@@ -60,7 +60,23 @@ describe("owned audit stack cleanup", () => {
     });
     const removeContainer = vi.fn();
     await cleanupAuditStack([{ pid: undefined }, { pid: 11 }], removeContainer);
-    expect(kill).toHaveBeenCalledTimes(2);
+    expect(kill.mock.calls).toEqual([[-11, "SIGTERM"]]);
+    expect(removeContainer).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry a vanished group ID that could have been reused", async () => {
+    const kill = vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
+      if (pid === -11 && signal === "SIGTERM")
+        throw Object.assign(new Error("Already exited"), { code: "ESRCH" });
+      return true;
+    });
+    const removeContainer = vi.fn();
+    await cleanupAuditStack([{ pid: 11 }, { pid: 22 }], removeContainer);
+    expect(kill.mock.calls).toEqual([
+      [-11, "SIGTERM"],
+      [-22, "SIGTERM"],
+      [-22, "SIGKILL"],
+    ]);
     expect(removeContainer).toHaveBeenCalledOnce();
   });
 });

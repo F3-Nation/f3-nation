@@ -42,7 +42,7 @@ export const test = base.extend<
       const root = resolve(import.meta.dirname, "../../..");
       const container = `f3-audit-${randomUUID()}`;
       const logs = mkdtempSync(join(tmpdir(), "f3-audit-e2e-"));
-      const children: ChildProcess[] = [];
+      const appGroups: ChildProcess[] = [];
       let containerCreated = false;
       let setupFailure: { error: unknown } | undefined;
       const docker = (...args: string[]) =>
@@ -128,7 +128,8 @@ export const test = base.extend<
             stdio: ["ignore", fd, fd],
           });
           closeSync(fd);
-          children.push(child);
+          // Completed migration/seed PIDs may be reused before teardown.
+          if (!wait) appGroups.push(child);
           await new Promise<void>((resolve, reject) => {
             child.once("error", reject);
             if (!wait) child.once("spawn", resolve);
@@ -205,7 +206,7 @@ export const test = base.extend<
         throw error;
       } finally {
         await cleanupAuditStack(
-          children,
+          appGroups,
           () => {
             if (containerCreated) docker("rm", "--force", container);
           },

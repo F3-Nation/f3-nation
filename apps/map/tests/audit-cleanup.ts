@@ -2,20 +2,23 @@ import type { ChildProcess } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 
 export async function cleanupAuditStack(
-  children: readonly Pick<ChildProcess, "pid">[],
+  appGroups: readonly Pick<ChildProcess, "pid">[],
   removeContainer: () => void,
   setupFailure?: { error: unknown; logs: string },
 ) {
   const errors: unknown[] = [];
+  const liveGroups = new Set(
+    appGroups.flatMap(({ pid }) => (pid ? [pid] : [])),
+  );
   // Attempt every owned process group, even if an earlier signal failed.
   for (const signal of ["SIGTERM", "SIGKILL"] as const) {
-    for (const child of children) {
-      if (!child.pid) continue;
+    for (const pid of liveGroups) {
       try {
-        process.kill(-child.pid, signal);
+        process.kill(-pid, signal);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH")
-          errors.push(error);
+        if ((error as NodeJS.ErrnoException).code === "ESRCH")
+          liveGroups.delete(pid);
+        else errors.push(error);
       }
     }
     if (signal === "SIGTERM") await delay(1000);
