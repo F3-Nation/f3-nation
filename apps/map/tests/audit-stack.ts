@@ -104,6 +104,7 @@ export const test = base.extend<
           DATABASE_URL: databaseUrl,
           TEST_DATABASE_URL: databaseUrl,
           NEXT_PUBLIC_CHANNEL: "local",
+          F3_CHANNEL: "local",
           NEXT_PUBLIC_MAP_URL: baseURL,
           NEXT_PUBLIC_API_URL: apiURL,
           F3_API_BASE_URL: apiURL,

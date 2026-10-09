@@ -94,6 +94,25 @@ function expectContainerRemoved() {
   );
 }
 
+describe("audit stack environment", () => {
+  it("uses local channels for owned processes when the runner is configured for production", async () => {
+    vi.stubEnv("F3_CHANNEL", "prod");
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "prod");
+    vi.spyOn(process, "kill").mockReturnValue(true);
+
+    await auditStack({}, vi.fn().mockResolvedValue(undefined));
+
+    expect(spawn).toHaveBeenCalledTimes(4);
+    for (const [, , options] of spawn.mock.calls) {
+      expect(options).toMatchObject({
+        env: { F3_CHANNEL: "local", NEXT_PUBLIC_CHANNEL: "local" },
+      });
+    }
+    expect(process.env.F3_CHANNEL).toBe("prod");
+    expectContainerRemoved();
+  });
+});
+
 describe("audit stack process ownership", () => {
   it("only tears down app groups, including descendants after their leader exits", async () => {
     const kill = vi.spyOn(process, "kill").mockReturnValue(true);
