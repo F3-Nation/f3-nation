@@ -19,7 +19,17 @@ const config: KnipConfig = {
     // vitest suite; follow-up to configure knip entries properly.
     "tooling/ci-factory/**",
   ],
-  ignoreBinaries: ["uv"],
+  ignoreBinaries: [
+    "uv",
+    // Postgres CLIs the obfuscator's verify harness shells out to.
+    "initdb",
+    "pg_ctl",
+    "pg_isready",
+    "createdb",
+    // The staging refresh restarts the staging slackbot with gcloud when it
+    // runs outside Cloud Run (best effort; never a dependency).
+    "gcloud",
+  ],
   workspaces: {
     ".": {
       // scripts/lint-staged.mjs spawns the eslint binary by path, so the root

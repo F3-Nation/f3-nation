@@ -152,6 +152,24 @@ export const adminProcedure = withSessionAndDb.use(({ context, next }) => {
 });
 
 /**
+ * Admin endpoints that must not be driven by an API key, e.g. minting or
+ * revoking keys: a key could otherwise create long-lived keys that outlive it.
+ */
+export const userSessionAdminProcedure = adminProcedure.use(
+  ({ context, next }) => {
+    if (context.session!.apiKey) {
+      logWarn("api.auth.api_key_management_denied", {
+        apiKeyId: context.session!.apiKey.id,
+      });
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "Sign in with your user account to manage API keys.",
+      });
+    }
+    return next({ context });
+  },
+);
+
+/**
  * Allows either SUPER_ADMIN_API_KEY (x-api-key header) OR authenticated session
  * with nation admin role. Used for the revalidate endpoint.
  */
