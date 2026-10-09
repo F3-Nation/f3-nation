@@ -38,7 +38,11 @@ def source():
     )
     db.executemany(
         "INSERT INTO pg.public.orgs VALUES (?, ?, ?, ?)",
-        [(1, None, "Region", "region"), (2, 1, "AO", "ao"), (3, None, "Orphan", "sector")],
+        [
+            (1, None, "Region", "region"),
+            (2, 1, "AO", "ao"),
+            (3, None, "Orphan", "sector"),
+        ],
     )
     db.executemany(
         "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?, ?)",
@@ -76,6 +80,10 @@ def source():
             (109, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
             (110, 4, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
             (111, 5, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (112, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (113, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (114, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (115, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
         ],
     )
     db.executemany(
@@ -91,8 +99,13 @@ def source():
     )
     db.execute("INSERT INTO pg.public.event_tags VALUES (7, 'Morning', 'Workout')")
     db.execute("INSERT INTO pg.public.event_tags_x_event_instances VALUES (10, 7), (10, 7)")
-    db.executemany("INSERT INTO pg.public.attendance_types VALUES (?, ?)", [(1, "Q"), (2, "CoQ")])
-    db.execute("INSERT INTO pg.public.attendance_x_attendance_types VALUES (100, 1), (100, 1), (100, 2)")
+    db.executemany(
+        "INSERT INTO pg.public.attendance_types VALUES (?, ?)", [(1, "Q"), (2, "CoQ"), (3, "Co-Q"), (4, "Pax")]
+    )
+    db.execute(
+        "INSERT INTO pg.public.attendance_x_attendance_types VALUES "
+        "(100, 1), (100, 1), (100, 2), (112, 1), (113, 2), (114, 3), (115, 4)"
+    )
     return db
 
 
@@ -127,7 +140,7 @@ def test_attendance_rows_filter_and_aggregate_without_fanout():
         "types",
         "categories",
     ]
-    assert len(rows) == 5
+    assert len(rows) == 9
     row = rows[0]
     assert row[1:17] == (
         100,
@@ -160,7 +173,30 @@ def test_attendance_rows_filter_and_aggregate_without_fanout():
     assert rows[2][9] == "4"
     assert rows[3][1:4] == (111, 5, 10)
     assert rows[3][9] == "5"
-    assert rows[4][1] == 104
+    assert rows[4][1:4] == (112, 1, 10)
+    assert rows[4][7:9] == (1, 0)  # Q only
+    assert rows[5][1:4] == (113, 1, 10)
+    assert rows[5][7:9] == (0, 1)  # CoQ only
+    assert rows[6][1:4] == (114, 1, 10)
+    assert rows[6][7:9] == (0, 1)  # Co-Q only
+    assert rows[7][1:4] == (115, 1, 10)
+    assert rows[7][7:9] == (0, 0)  # Pax only
+    assert rows[8][1] == 104
+
+
+def test_cyclic_org_ancestry_resolves_ao_and_terminates():
+    db = source()
+    db.execute("INSERT INTO pg.public.orgs VALUES (40, 41, 'Loop AO', 'ao'), (41, 40, 'Loop Region', 'region')")
+    db.execute("INSERT INTO pg.public.event_instances VALUES (40, 40, true, 1, '{}', '2026-01-03')")
+    db.execute("INSERT INTO pg.public.attendance VALUES (400, 1, 40, false, '{}', NULL, NULL)")
+
+    rows = query(db).fetchall()
+    cycle_row = next(row for row in rows if row[1] == 400)
+    assert cycle_row[15:17] == (40, "Loop AO")
+    # The depth cap would also terminate recursion if cycle detection regressed,
+    # and the final projection can hide duplicate ancestors. Assert the guard
+    # explicitly so removing it cannot silently pass this bounded fixture.
+    assert "NOT list_contains(a.visited, parent.id)" in SQL
 
 
 def test_attendance_without_tags_or_types_has_typed_empty_arrays_and_null_meta(tmp_path: Path):

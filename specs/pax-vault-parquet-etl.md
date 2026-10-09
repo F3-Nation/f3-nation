@@ -1,14 +1,14 @@
 # Pax Vault Parquet materializations
 
 > **Approval scope:** The 2026-08-26 approval applies to the inherited scope
-> and ordered set of nine `pv_*` materializations. The human-approved revised
-> acceptance criteria recorded in this conversation expand that scope to ten
-> datasets by appending `pv_attendance`; they also revise `pv_pax` as described
-> below. This records scope approval only, not human security, platform, scale,
-> consumer-compatibility, or production approval. This document is not evidence
-> that database, GCS, IAM, schema-registry, consumer-compatibility, or production
-> validation has passed. Security and operational gates remain explicit release
-> blockers.
+> and ordered set of nine `pv_*` materializations only. The separately
+> human-approved revised acceptance criteria defined below expand the scope to
+> ten datasets by appending `pv_attendance`; they also revise `pv_pax` as
+> described below. Neither scope approval satisfies human security, platform,
+> scale, consumer-compatibility, or production gates.
+> This document is not evidence that database, GCS, IAM,
+> schema-registry, consumer-compatibility, or production validation has passed.
+> Security and operational gates remain explicit release blockers.
 
 ## 1. Product and release boundary
 

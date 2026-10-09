@@ -114,9 +114,13 @@ def test_pax_materialization_contract(tmp_path: Path):
         ],
     )
     db.execute("INSERT INTO pg.public.attendance_types VALUES (1, 'Q'), (2, 'Co-Q')")
-    # The duplicate actual attendance rows represent one event; Q is attached to
-    # only one of them (twice), while the planned and regionless rows carry Q/Co-Q.
-    db.execute("INSERT INTO pg.public.attendance_x_attendance_types VALUES (2, 1), (2, 1), (3, 1), (8, 2)")
+    # Qs on ineligible events do not count. Duplicate Q type rows on attendance 2
+    # still represent one eligible event; attendance 8 adds a distinct, regionless
+    # eligible event with Q (and Co-Q).
+    db.execute(
+        "INSERT INTO pg.public.attendance_x_attendance_types VALUES "
+        "(2, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (8, 1), (8, 2)"
+    )
     db.execute("INSERT INTO pg.public.event_instances_x_event_types VALUES (1, 7)")
     db.execute("INSERT INTO pg.public.event_types VALUES (7, 'Run')")
     db.execute("INSERT INTO pg.public.event_tags_x_event_instances VALUES (1, 8)")
@@ -135,9 +139,9 @@ def test_pax_materialization_contract(tmp_path: Path):
         {"role_id": 3, "role_name": "Q", "org_id": 20, "org_name": "AO", "org_type": "ao"},
         {"role_id": 99, "role_name": "99", "org_id": 99, "org_name": "99", "org_type": None},
     ]
-    # Two distinct eligible events count (including regionless event 7), while
-    # only the attached Q on an actual attendance contributes to lifetime_qs.
-    assert rows[0][14:16] == (2, 1)
+    # Two distinct eligible events count, including regionless event 7. Both have
+    # an attached Q; duplicate Q rows on one attendance/event count only once.
+    assert rows[0][14:16] == (2, 2)
     assert rows[1][1] == 3 and rows[1][2:9] == ("3", 99, None, None, "solo@example.test", "active", None)
     assert rows[1][9:14] == ([], [], [], [], [])
     assert rows[1][14:16] == (0, 0)

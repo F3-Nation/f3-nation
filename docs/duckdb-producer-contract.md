@@ -29,8 +29,11 @@ already demonstrates:
   generations;
 - the nine legacy datasets represented by the sample: `pv_pax`, `pv_events`,
   `pv_regions`, `pv_areas`, `pv_sectors`, `pv_aos`, `pv_upcoming`, `pv_kotter`,
-  and `pv_territories`. A serving release must additionally contain
-  `pv_attendance`.
+  and `pv_territories`. A newly published serving release must contain all ten
+  datasets, including `pv_attendance`. The only nine-dataset serving exception
+  is rollback to the exact retained pre-upgrade release with `pv_pax.v2` and no
+  `pv_attendance`, as specified in
+  [the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
 
 It is **not yet a serving-contract release**. In particular, the sample has
 no fixed `pax-vault/current.json`, no contract metadata or monotonic
@@ -73,9 +76,12 @@ files, duplicate datasets, and duplicate object entries. Each product's
 
 The required Pax Vault dataset allowlist is exactly:
 `pv_pax`, `pv_events`, `pv_regions`, `pv_areas`, `pv_sectors`, `pv_aos`,
-`pv_upcoming`, `pv_kotter`, `pv_territories`, and `pv_attendance`. A release
-must contain exactly all ten, not merely a subset. Analytics independently
-requires exactly
+`pv_upcoming`, `pv_kotter`, `pv_territories`, and `pv_attendance`. A newly
+published release must contain exactly all ten, not merely a subset. The only
+rollback exception is the exact retained pre-upgrade nine-dataset release with
+`pv_pax.v2` and no `pv_attendance`, as defined in
+[the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
+Analytics independently requires exactly
 `event_info`, `future_event_info`, `attendance_info`, and
 `missing_backblasts` in its analytics release; these are not Pax Vault datasets.
 
@@ -372,9 +378,13 @@ Consumers must
 continue using their last-known-good release on refresh failure, subject to
 their configured maximum age; they must not fall back silently to BigQuery.
 
-Rollback is a normal validated pointer CAS to a retained, previously valid
-release. It uses the same generation/hash checks and ordering as forward
-publication. Never mutate the rolled-back prefix.
+Rollback is a normal validated pointer CAS to the exact retained pre-upgrade
+nine-dataset release with `pv_pax.v2` and no `pv_attendance`, and is permitted
+only when that release meets the identity and validation requirements in
+[the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
+No other nine-dataset release or arbitrary older release is eligible. Rollback
+uses the same generation/hash checks and ordering as forward publication. Never
+mutate the rolled-back prefix.
 
 Pub/Sub may emit a “release available” event to accelerate reconciliation, but
 it is optional and is not the source of truth. Events may be lost, duplicated,

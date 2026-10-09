@@ -796,6 +796,35 @@ def test_rollback_rejects_malformed_retained_hash(tmp_path):
         publisher.rollback_pointer("retain-1", expected_generation=str(stored.generation), source_order="ignored")
 
 
+@pytest.mark.parametrize(
+    "manifest_uri",
+    (
+        "gs://other-bucket/pax-vault/releases/run-1/release.json",
+        "gs://f3-analytics-nonprod/pax-vault/releases/run-2/release.json",
+    ),
+)
+def test_rollback_rejects_tampered_retained_manifest_uri_without_pointer_change(tmp_path, manifest_uri):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    release1, digest1 = _release(publisher, "run-1")
+    publisher.commit_pointer("run-1", release1, digest1, "run-1", "revision", "2026-09-01T00:02:00Z")
+    release2, digest2 = _release(publisher, "run-2")
+    publisher.commit_pointer("run-2", release2, digest2, "run-2", "revision", "2026-09-01T00:03:00Z")
+
+    key = "pax-vault/current.json"
+    stored = Blob.objects[key]
+    pointer = json.loads(stored.content)
+    pointer["retainedPrevious"]["manifestUri"] = manifest_uri
+    Blob.objects[key] = Stored(canonical_json_bytes(pointer), stored.generation)
+    pointer_before = Blob.objects[key]
+    pointer_snapshot = (pointer_before.content, pointer_before.generation)
+
+    with pytest.raises(ValueError, match="URI is malformed"):
+        publisher.rollback_pointer("run-1", expected_generation=str(pointer_before.generation))
+
+    assert (Blob.objects[key].content, Blob.objects[key].generation) == pointer_snapshot
+
+
 def test_retained_legacy_nine_dataset_release_can_be_rolled_back(tmp_path):
     reset()
     publisher = GcsPublisher(Storage(), settings(tmp_path))
