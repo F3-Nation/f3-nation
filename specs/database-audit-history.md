@@ -440,7 +440,11 @@ when ready; no writes during the disabled interval are backfilled.
 
 Do not roll back by dropping history schemas or deleting migration journal
 entries. History deletion, restoration, or sanitizing previously captured data
-requires a separate reviewed operation. Local/test reset is intentionally
+requires a separate reviewed operation. Disposable staging-refresh copies omit
+production history data, retain audit structures, and purge history captured
+during source obfuscation before verification. Production and staging's existing
+history are preserved; see [the refresh policy](../docs/STAGING_REFRESH.md#public_history-schema).
+Local/test reset is intentionally
 separate: it destroys the disposable dataset and its history before rerunning
 migrations. Before any schema drop, automated resets verify that the actual
 database matches the configured `_test` database. Interactive resets do not require
