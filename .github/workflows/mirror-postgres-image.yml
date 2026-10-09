@@ -56,7 +56,10 @@ jobs:
           tag="${tag%@*}"
           docker tag "$SOURCE_IMAGE" "${TARGET_REF}:${tag}"
           docker push "${TARGET_REF}:${tag}"
-          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "${TARGET_REF}:${tag}")"
+          # The local image now carries RepoDigests for both the original
+          # Docker Hub pull and this push, in no guaranteed order -- grep for
+          # the one under our own TARGET_REF rather than trusting index 0.
+          digest="$(docker inspect --format '{{json .RepoDigests}}' "${TARGET_REF}:${tag}" | grep -o "${TARGET_REF}@sha256:[a-f0-9]*")"
           echo "Mirrored to ${digest}"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
       - name: Summary
