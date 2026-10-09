@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import { OrgType } from "@acme/shared/app/enums";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Button } from "@acme/ui/button";
 import {
   Select,
@@ -24,10 +25,12 @@ import {
 import { MDTable, usePagination } from "@acme/ui/md-table";
 import { Cell, Header } from "@acme/ui/table";
 
+import { client } from "~/orpc/client";
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { useAuth } from "~/utils/hooks/use-auth";
 import { useDebounce } from "~/utils/hooks/use-debounce";
+import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { StatusFilter } from "../_components/status-filter";
 import { ResetFilter } from "../_components/reset-filter";
@@ -74,10 +77,20 @@ export const PositionsTable = () => {
       },
     }),
   );
-  const { data: accessibleOrgs } = useQuery(orpc.org.accessible.queryOptions());
+  const { data: accessibleOrgs } = useFetchAllPages({
+    path: ["org", "accessible"],
+    queryKey: ["org.accessible.positionsTable"],
+    fetchPage: async ({ pageIndex, pageSize }) => {
+      const { orgs, total } = await client.org.accessible({
+        pageIndex,
+        pageSize,
+      });
+      return { items: orgs, total };
+    },
+  });
   const editableOrgIds = useMemo(
-    () => new Set(accessibleOrgs?.orgs.map((org) => org.id) ?? []),
-    [accessibleOrgs?.orgs],
+    () => new Set(accessibleOrgs?.map((org) => org.id) ?? []),
+    [accessibleOrgs],
   );
 
   const handleResetFilters = () => {
@@ -90,7 +103,7 @@ export const PositionsTable = () => {
   const activeFilterCount =
     selectedStatuses.length + (selectedOrgLevel ? 1 : 0) + (onlyMine ? 1 : 0);
 
-  const getColumns = (): TableOptions<Position>["columns"] => [
+  const getColumns = (): TableOptions<MdTableFeatures, Position>["columns"] => [
     {
       accessorKey: "name",
       meta: { name: "Name" },

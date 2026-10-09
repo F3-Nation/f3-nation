@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## [2.8.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.7.0...slackbot@2.8.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+* **slackbot:** add F3versary announcements ([#943](https://github.com/F3-Nation/f3-nation/issues/943)) ([65c080e](https://github.com/F3-Nation/f3-nation/commit/65c080e3f50114aaea520fca95c7a945938aa3a7))
+* **slackbot:** added PII obfuscation for non-prod environments ([#1101](https://github.com/F3-Nation/f3-nation/issues/1101)) ([4a842b8](https://github.com/F3-Nation/f3-nation/commit/4a842b8f256cb812fed4437cae16ab00f490ce47))
+* **slackbot:** remove _expanded view dependencies ([#1069](https://github.com/F3-Nation/f3-nation/issues/1069)) ([56ccb26](https://github.com/F3-Nation/f3-nation/commit/56ccb260485ef4bddbef208682e8c9f3e863aab3))
+
+
+### Bug Fixes
+
+* **deps:** update dependency requests-oauthlib to v2 ([#1100](https://github.com/F3-Nation/f3-nation/issues/1100)) ([a439e69](https://github.com/F3-Nation/f3-nation/commit/a439e6955caa5b16635ebc99ddef4e4f5594d88b))
+* **deps:** update python dependencies (non-major) ([#1162](https://github.com/F3-Nation/f3-nation/issues/1162)) ([4c09c3b](https://github.com/F3-Nation/f3-nation/commit/4c09c3b040aa51b569599eb0a718578750cf18b8))
+* **slackbot:** exclude inactive event types from backblast picker ([#1164](https://github.com/F3-Nation/f3-nation/issues/1164)) ([4e8514a](https://github.com/F3-Nation/f3-nation/commit/4e8514a39f50bfa833fc6320abc802b75353bc93))
+* **slackbot:** fixing Kotter Report's remove-after default behavior ([#1116](https://github.com/F3-Nation/f3-nation/issues/1116)) ([d908f18](https://github.com/F3-Nation/f3-nation/commit/d908f18f50e0fe8675b18c2d40d09d3064f21219))
+
+## [2.7.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.6.0...slackbot@2.7.0) (2026-09-27)
+
+
+### Features
+
+* **slackbot:** add more snarky comments to hc's ([#1062](https://github.com/F3-Nation/f3-nation/issues/1062)) ([7558b29](https://github.com/F3-Nation/f3-nation/commit/7558b2903863f18f2f959561d45a5736c9ac5aff))
+
+## [2.6.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.5.1...slackbot@2.6.0) (2026-09-23)
+
+
+### Features
+
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
 ## [2.5.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.5.0...slackbot@2.5.1) (2026-09-16)
 
 

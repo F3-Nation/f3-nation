@@ -37,8 +37,7 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
   - `apps/admin/src/app/{users,event-types}/org-filter.tsx`
   - `packages/shared/src/app/org-hierarchy.ts`
   - `packages/api/src/assert-valid-parent-type.ts`
-  - `packages/db/drizzle/` (depth-agnostic AO-count migration), `packages/db/src/seed.ts`
-  - `packages/db/scripts/{territory-migration.md,rollback-territory-org-type.sql}`
+  - `packages/db/drizzle/` (depth-agnostic AO-count migration)
 
 ### Definitions
 
@@ -216,14 +215,6 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
 - **AC-26** — GIVEN the seed WHEN it finishes THEN it recounts through
   `recount_org_ao_counts()`, and the resulting counts equal those the trigger
   produces for the same data.
-
-### Rollout safety
-
-- **AC-27** — GIVEN the rollback script for the Territory enum migration WHEN it is
-  run after the depth-agnostic count migration THEN it restores the previous
-  fixed-depth trigger function and removes the new recount functions, and the
-  migration documentation describes both steps. This is exercised on an isolated
-  local database.
 
 ## 5. Roles & authorization (RBAC)
 

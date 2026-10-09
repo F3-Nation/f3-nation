@@ -7,7 +7,7 @@ description: Drive a changed API endpoint or app flow end-to-end in this monorep
 
 ## Local database
 
-- Tests and local dev both use the **`f3-postgres` Docker container on :5433** (user `f3local`; DBs `f3nation` for dev servers, `f3nation_test` for vitest). Do NOT start the Cloud SQL proxy (`pnpm db:proxy`) for this — it fights over :5433.
+- Tests and local dev both use the **`f3-postgres` Docker container on :5433** (user `f3local`; DBs `f3nation` for dev servers, `f3nation_test` for vitest).
 - Seed/inspect/clean directly: `docker exec f3-postgres psql -U f3local -d f3nation -c "..."`. Column names are snake_case (`f3_name`), not the Drizzle camelCase.
 
 ## Driving the oRPC API (packages/api changes)

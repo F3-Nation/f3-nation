@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
 ARG TURBO_VERSION=2
-FROM node:24.21.0-alpine@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS builder
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS builder
 ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -17,7 +17,7 @@ COPY . .
 RUN turbo prune f3-map --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:24.21.0-alpine@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS installer
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS installer
 ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -62,6 +62,11 @@ ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 # so this default is load-bearing, not cosmetic.
 ARG NEXT_PUBLIC_POSTHOG_SESSION_RECORDING=false
 ENV NEXT_PUBLIC_POSTHOG_SESSION_RECORDING=$NEXT_PUBLIC_POSTHOG_SESSION_RECORDING
+# Never set NEXT_PUBLIC_CHANNEL or F3_CHANNEL at build time. This image is built
+# once and promoted unchanged from Staging to Production, so a build-time
+# channel would be frozen into the bundle (NEXT_PUBLIC_*) or become a fallback
+# default (F3_CHANNEL). The channel must come from the Cloud Run runtime env;
+# the dev-mode sign-in gate depends on it.
 
 # `turbo prune` copies the full catalog into pnpm-workspace.yaml but only this
 # app's subset into the pruned lockfile. pnpm's verify-deps-before-run check (run
@@ -76,7 +81,7 @@ RUN pnpm turbo build --filter=f3-map
 RUN test -n "$(find apps/map/.next/standalone -name 'libvips-cpp*')"
 
 # ---------- Stage 3: Production runner ----------
-FROM node:24.21.0-alpine@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS runner
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app

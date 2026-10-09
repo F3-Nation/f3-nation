@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.12.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.11.0...pkg-api@0.12.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+* **auth:** resolve [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3's OAuth client-secret-issuance gap ([#1046](https://github.com/F3-Nation/f3-nation/issues/1046)) ([0bf5b66](https://github.com/F3-Nation/f3-nation/commit/0bf5b66daf882e7199643eb9d43ab28c2795087f))
+* **db:** connect over a Cloud SQL Unix socket named in DATABASE_URL ([#1118](https://github.com/F3-Nation/f3-nation/issues/1118)) ([d32a88d](https://github.com/F3-Nation/f3-nation/commit/d32a88d79ee19981c9bc901becdaf9cbab292d14))
+
+
+### Bug Fixes
+
+* **api,admin:** authorize destination orgs and scope user.crupdate profile writes ([#1168](https://github.com/F3-Nation/f3-nation/issues/1168)) ([cd21134](https://github.com/F3-Nation/f3-nation/commit/cd211340924669807c8d06620199ad635429e1c7))
+* **api:** scope API-key reads, map-change requests and key management ([#1169](https://github.com/F3-Nation/f3-nation/issues/1169)) ([9a946e8](https://github.com/F3-Nation/f3-nation/commit/9a946e8fb493c5005f76ed94460625eb533614f1))
+* **auth,db,api:** let Better Auth start and sign in against the Drizzle schema ([#1143](https://github.com/F3-Nation/f3-nation/issues/1143)) ([2a9026f](https://github.com/F3-Nation/f3-nation/commit/2a9026fe8f9124f68331bb024a160a27f1e26949))
+* **observability,api:** report root causes, redact query params, stop reporting 4xx as exceptions ([#1112](https://github.com/F3-Nation/f3-nation/issues/1112)) ([2ddcb83](https://github.com/F3-Nation/f3-nation/commit/2ddcb831dec8e4a808bd1791fdb7d8767b314e3f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.8
+    * @acme/db bumped to 0.8.0
+    * @acme/env bumped to 0.1.4
+    * @acme/mail bumped to 0.1.5
+    * @acme/shared bumped to 0.4.1
+    * @acme/validators bumped to 0.4.5
+
+## [0.11.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.10.0...pkg-api@0.11.0) (2026-09-23)
+
+
+### Features
+
+* **admin,api,db,shared:** surface territory in the admin UI and count AOs at any depth ([#1043](https://github.com/F3-Nation/f3-nation/issues/1043)) ([f9932d2](https://github.com/F3-Nation/f3-nation/commit/f9932d26700c733fb69ee02b703aedab63053f4f))
+* **api,admin:** sort areas by resolved sector and territory ([#1049](https://github.com/F3-Nation/f3-nation/issues/1049)) ([4e97ef7](https://github.com/F3-Nation/f3-nation/commit/4e97ef788e826c81d8b1975cf2b46b8d493393e8))
+* **api:** add territory to the map update-request escalation ladder ([#1055](https://github.com/F3-Nation/f3-nation/issues/1055)) ([d07c7d9](https://github.com/F3-Nation/f3-nation/commit/d07c7d9ca4450e68b8751a6f268577c8f5941e95))
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Bug Fixes
+
+* **auth,api:** pin better-auth packages to exact 1.7.4 ([#1023](https://github.com/F3-Nation/f3-nation/issues/1023)) ([7f2039d](https://github.com/F3-Nation/f3-nation/commit/7f2039d3ac6f5ad780c10b166e581759ad6ade74))
+* **map,api,scripts:** escape OTP email HTML and fix change-request email link ([#1037](https://github.com/F3-Nation/f3-nation/issues/1037)) ([cc93d06](https://github.com/F3-Nation/f3-nation/commit/cc93d06abada6052778a1da178a62d2a05eb7989))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.7
+    * @acme/db bumped to 0.7.0
+    * @acme/env bumped to 0.1.3
+    * @acme/logger bumped to 0.2.0
+    * @acme/mail bumped to 0.1.4
+    * @acme/shared bumped to 0.4.0
+    * @acme/validators bumped to 0.4.4
+
 ## [0.10.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.9.1...pkg-api@0.10.0) (2026-09-16)
 
 

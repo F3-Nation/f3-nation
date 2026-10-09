@@ -1,5 +1,62 @@
 # Changelog
 
+## [6.10.0](https://github.com/F3-Nation/f3-nation/compare/api@6.9.0...api@6.10.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+
+
+### Bug Fixes
+
+* **api:** scope API-key reads, map-change requests and key management ([#1169](https://github.com/F3-Nation/f3-nation/issues/1169)) ([9a946e8](https://github.com/F3-Nation/f3-nation/commit/9a946e8fb493c5005f76ed94460625eb533614f1))
+* **db:** clarify local and test database env usage ([#1148](https://github.com/F3-Nation/f3-nation/issues/1148)) ([b11dfe7](https://github.com/F3-Nation/f3-nation/commit/b11dfe79c1a28a90432fd343e3956c6c596425ad))
+* **observability,api:** report root causes, redact query params, stop reporting 4xx as exceptions ([#1112](https://github.com/F3-Nation/f3-nation/issues/1112)) ([2ddcb83](https://github.com/F3-Nation/f3-nation/commit/2ddcb831dec8e4a808bd1791fdb7d8767b314e3f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.12.0
+    * @acme/shared bumped to 0.4.1
+  * devDependencies
+    * @acme/db bumped to 0.8.0
+
+## [6.9.0](https://github.com/F3-Nation/f3-nation/compare/api@6.8.0...api@6.9.0) (2026-09-27)
+
+
+### Features
+
+* **api,map,ci,repo:** serve the API image from the Hono bundle ([#1082](https://github.com/F3-Nation/f3-nation/issues/1082)) ([a485dec](https://github.com/F3-Nation/f3-nation/commit/a485dec238bf7e1dd5edfd28b887a25857351304))
+
+## [6.8.0](https://github.com/F3-Nation/f3-nation/compare/api@6.7.0...api@6.8.0) (2026-09-23)
+
+
+### Features
+
+* **api,admin:** sort areas by resolved sector and territory ([#1049](https://github.com/F3-Nation/f3-nation/issues/1049)) ([4e97ef7](https://github.com/F3-Nation/f3-nation/commit/4e97ef788e826c81d8b1975cf2b46b8d493393e8))
+* **map,api:** route error tracking through OpenTelemetry with PostHog adapter ([#767](https://github.com/F3-Nation/f3-nation/issues/767)) ([b0da6ee](https://github.com/F3-Nation/f3-nation/commit/b0da6eed52fdb5ee6d12de4c9af7f4f111ad63d4))
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Bug Fixes
+
+* **map,api,scripts:** escape OTP email HTML and fix change-request email link ([#1037](https://github.com/F3-Nation/f3-nation/issues/1037)) ([cc93d06](https://github.com/F3-Nation/f3-nation/commit/cc93d06abada6052778a1da178a62d2a05eb7989))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.11.0
+    * @acme/logger bumped to 0.2.0
+    * @acme/shared bumped to 0.4.0
+  * devDependencies
+    * @acme/auth bumped to 0.2.7
+    * @acme/db bumped to 0.7.0
+
 ## [6.7.0](https://github.com/F3-Nation/f3-nation/compare/api@6.6.2...api@6.7.0) (2026-09-16)
 
 

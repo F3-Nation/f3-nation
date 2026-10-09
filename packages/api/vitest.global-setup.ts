@@ -23,7 +23,6 @@ export async function setup() {
       db,
       shouldReset: true,
       shouldSeed: true,
-      seedType: "test",
     });
   } finally {
     // `setup` is a named export, so Vitest's globalSetup contract does not

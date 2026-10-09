@@ -10,6 +10,7 @@ import { UpdateRequestStatus } from "@acme/shared/app/enums";
 import { getFullAddress, requestTypeToTitle } from "@acme/shared/app/functions";
 import { ZustandStore } from "@acme/shared/common/classes";
 import { cn } from "@acme/ui";
+import type { MdTableFeatures } from "@acme/ui/table-features";
 import { Badge } from "@acme/ui/badge";
 import {
   Command,
@@ -42,7 +43,6 @@ const EVENT_REQUEST_TYPES: RequestType[] = [
 
 const initialState = {
   searchTerm: "",
-  onlyMine: true,
   statuses: ["pending"] as UpdateRequestStatus[],
   sorting: [{ id: "created", desc: true }],
   pagination: {
@@ -65,7 +65,6 @@ const requestTableStore = new ZustandStore({
 
 export const RequestsTable = () => {
   const searchTerm = requestTableStore.use.searchTerm();
-  const onlyMine = requestTableStore.use.onlyMine();
   const sorting = requestTableStore.use.sorting();
   const pagination = requestTableStore.use.pagination();
   const statuses = requestTableStore.use.statuses();
@@ -77,7 +76,6 @@ export const RequestsTable = () => {
         pageSize: pagination.pageSize,
         searchTerm: searchTerm,
         sorting: sorting,
-        onlyMine,
         statuses,
       },
     }),
@@ -139,6 +137,7 @@ export const RequestsTable = () => {
 };
 
 const columns: TableOptions<
+  MdTableFeatures,
   RouterOutputs["request"]["all"]["requests"][number]
 >["columns"] = [
   {
@@ -373,15 +372,11 @@ const CircleBadge = () => {
 
 const FilterComponent = () => {
   const statuses = requestTableStore.use.statuses();
-  const onlyMine = requestTableStore.use.onlyMine();
 
-  const activeFilterCount = statuses.length + (onlyMine ? 1 : 0);
+  const activeFilterCount = statuses.length;
 
   const handleReset = () => {
-    requestTableStore.setState({
-      statuses: ["pending"],
-      onlyMine: true,
-    });
+    requestTableStore.setState({ statuses: ["pending"] });
   };
 
   return (
@@ -437,17 +432,6 @@ const FilterComponent = () => {
                 <X className="h-3.5 w-3.5 cursor-pointer" />
               </Badge>
             )}
-            {onlyMine && (
-              <Badge
-                className="flex items-center gap-1 rounded-full border-transparent bg-blue-100 px-2 py-1 text-blue-700 hover:bg-blue-200"
-                onClick={() => {
-                  requestTableStore.setState({ onlyMine: false });
-                }}
-              >
-                Only Mine
-                <X className="h-3.5 w-3.5 cursor-pointer" />
-              </Badge>
-            )}
             {activeFilterCount === 0 && (
               <span className="text-sm text-muted-foreground">
                 No active filters
@@ -466,7 +450,6 @@ const FilterComponent = () => {
 
 const StatusFilterOptions = () => {
   const statuses = requestTableStore.use.statuses();
-  const onlyMine = requestTableStore.use.onlyMine();
 
   return (
     <Command>
@@ -493,19 +476,6 @@ const StatusFilterOptions = () => {
             {status.charAt(0).toUpperCase() + status.slice(1)}
           </CommandItem>
         ))}
-        <CommandItem
-          onSelect={() => {
-            requestTableStore.setState({ onlyMine: !onlyMine });
-          }}
-        >
-          <Check
-            className={cn(
-              "mr-2 h-4 w-4",
-              onlyMine ? "opacity-100" : "opacity-0",
-            )}
-          />
-          Only Mine
-        </CommandItem>
       </CommandGroup>
     </Command>
   );
@@ -514,7 +484,6 @@ const StatusFilterOptions = () => {
 const StatusFilter = () => {
   const [open, setOpen] = useState(false);
   const statuses = requestTableStore.use.statuses();
-  const onlyMine = requestTableStore.use.onlyMine();
 
   return (
     <div className="flex flex-row gap-2">
@@ -562,17 +531,6 @@ const StatusFilter = () => {
             }}
           >
             Approved
-            <X className="h-3.5 w-3.5 cursor-pointer" />
-          </Badge>
-        )}
-        {onlyMine && (
-          <Badge
-            className="flex items-center gap-1 rounded-full border-transparent bg-blue-100 px-2 py-1 text-blue-700 hover:bg-blue-200"
-            onClick={() => {
-              requestTableStore.setState({ onlyMine: !onlyMine });
-            }}
-          >
-            Only Mine
             <X className="h-3.5 w-3.5 cursor-pointer" />
           </Badge>
         )}

@@ -1,5 +1,58 @@
 # Changelog
 
+## [2.7.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.6.1...admin@2.7.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+
+
+### Bug Fixes
+
+* **admin,repo:** load admin .env and remove unused dev-setup command ([#1108](https://github.com/F3-Nation/f3-nation/issues/1108)) ([1a2c394](https://github.com/F3-Nation/f3-nation/commit/1a2c3948d1ba8c6a3399deb0870dfb49ebe69b44))
+* **api,admin:** authorize destination orgs and scope user.crupdate profile writes ([#1168](https://github.com/F3-Nation/f3-nation/issues/1168)) ([cd21134](https://github.com/F3-Nation/f3-nation/commit/cd211340924669807c8d06620199ad635429e1c7))
+* **api:** scope API-key reads, map-change requests and key management ([#1169](https://github.com/F3-Nation/f3-nation/issues/1169)) ([9a946e8](https://github.com/F3-Nation/f3-nation/commit/9a946e8fb493c5005f76ed94460625eb533614f1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.12.0
+    * @acme/mail bumped to 0.1.5
+    * @acme/shared bumped to 0.4.1
+    * @acme/ui bumped to 0.2.1
+    * @acme/validators bumped to 0.4.5
+
+## [2.6.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.6.0...admin@2.6.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **admin:** stop logging user PII to the browser console ([#1047](https://github.com/F3-Nation/f3-nation/issues/1047)) ([d2f90f2](https://github.com/F3-Nation/f3-nation/commit/d2f90f280803dd3ac8e11cbfb431bd8fb4ab6366))
+
+## [2.6.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.3...admin@2.6.0) (2026-09-23)
+
+
+### Features
+
+* **admin,api,db,shared:** surface territory in the admin UI and count AOs at any depth ([#1043](https://github.com/F3-Nation/f3-nation/issues/1043)) ([f9932d2](https://github.com/F3-Nation/f3-nation/commit/f9932d26700c733fb69ee02b703aedab63053f4f))
+* **api,admin:** sort areas by resolved sector and territory ([#1049](https://github.com/F3-Nation/f3-nation/issues/1049)) ([4e97ef7](https://github.com/F3-Nation/f3-nation/commit/4e97ef788e826c81d8b1975cf2b46b8d493393e8))
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.11.0
+    * @acme/logger bumped to 0.2.0
+    * @acme/mail bumped to 0.1.4
+    * @acme/shared bumped to 0.4.0
+    * @acme/ui bumped to 0.2.0
+    * @acme/validators bumped to 0.4.4
+
 ## [2.5.3](https://github.com/F3-Nation/f3-nation/compare/admin@2.5.2...admin@2.5.3) (2026-09-16)
 
 

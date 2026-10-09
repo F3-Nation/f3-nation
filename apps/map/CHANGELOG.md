@@ -1,5 +1,66 @@
 # Changelog
 
+## [7.6.0](https://github.com/F3-Nation/f3-nation/compare/map@7.5.0...map@7.6.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+
+
+### Bug Fixes
+
+* **auth,map:** never register dev-mode sign-in in Production ([#1123](https://github.com/F3-Nation/f3-nation/issues/1123)) ([6d7f712](https://github.com/F3-Nation/f3-nation/commit/6d7f712c142016af41dd08b9544062e791bd746f))
+* **map,repo:** show the Dev Mode sign-in button on branch previews ([#1111](https://github.com/F3-Nation/f3-nation/issues/1111)) ([dcbb924](https://github.com/F3-Nation/f3-nation/commit/dcbb924178e63e741610e26ab3ae46a183ab1ad1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.12.0
+    * @acme/auth bumped to 0.2.8
+    * @acme/shared bumped to 0.4.1
+    * @acme/ui bumped to 0.2.1
+    * @acme/validators bumped to 0.4.5
+
+## [7.5.0](https://github.com/F3-Nation/f3-nation/compare/map@7.4.0...map@7.5.0) (2026-09-27)
+
+
+### Features
+
+* **api,map,ci,repo:** serve the API image from the Hono bundle ([#1082](https://github.com/F3-Nation/f3-nation/issues/1082)) ([a485dec](https://github.com/F3-Nation/f3-nation/commit/a485dec238bf7e1dd5edfd28b887a25857351304))
+
+
+### Bug Fixes
+
+* **auth,map:** disable SendGrid click and open tracking on sign-in code emails ([#1077](https://github.com/F3-Nation/f3-nation/issues/1077)) ([1dfeea6](https://github.com/F3-Nation/f3-nation/commit/1dfeea6f2294d78261f58e8c9116327bd02af231))
+
+## [7.4.0](https://github.com/F3-Nation/f3-nation/compare/map@7.3.4...map@7.4.0) (2026-09-23)
+
+
+### Features
+
+* **map,api:** route error tracking through OpenTelemetry with PostHog adapter ([#767](https://github.com/F3-Nation/f3-nation/issues/767)) ([b0da6ee](https://github.com/F3-Nation/f3-nation/commit/b0da6eed52fdb5ee6d12de4c9af7f4f111ad63d4))
+* **shared,db,db-python,admin:** add territory organization type ([#1025](https://github.com/F3-Nation/f3-nation/issues/1025)) ([75996ba](https://github.com/F3-Nation/f3-nation/commit/75996ba4e1020fc499bae19d21a7b9d5cc046f78))
+
+
+### Bug Fixes
+
+* **map,api,scripts:** escape OTP email HTML and fix change-request email link ([#1037](https://github.com/F3-Nation/f3-nation/issues/1037)) ([cc93d06](https://github.com/F3-Nation/f3-nation/commit/cc93d06abada6052778a1da178a62d2a05eb7989))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.11.0
+    * @acme/auth bumped to 0.2.7
+    * @acme/logger bumped to 0.2.0
+    * @acme/shared bumped to 0.4.0
+    * @acme/ui bumped to 0.2.0
+    * @acme/validators bumped to 0.4.4
+
 ## [7.3.4](https://github.com/F3-Nation/f3-nation/compare/map@7.3.3...map@7.3.4) (2026-09-16)
 
 

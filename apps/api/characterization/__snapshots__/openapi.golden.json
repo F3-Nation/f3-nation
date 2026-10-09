@@ -1716,7 +1716,7 @@
     },
     "/v1/api-key": {
       "get": {
-        "description": "Retrieve all API keys with their metadata, owner information, role assignments, and status. Requires admin role for any organization.",
+        "description": "Retrieve the API keys the caller can manage, with their metadata, owner information, role assignments, and status. Nation admins see every key; other admins see keys whose every organization they administer, plus keys they own. `canManage` is false on an owned key that holds roles beyond the caller's own; the owner may revoke it but not restore or purge it.",
         "operationId": "apiKey.list",
         "parameters": [
           {
@@ -1733,6 +1733,10 @@
                       "description": "List of API keys",
                       "items": {
                         "properties": {
+                          "canManage": {
+                            "description": "Whether the caller may restore or purge this key. False means the caller only owns it and may only revoke it.",
+                            "type": "boolean"
+                          },
                           "created": {
                             "description": "Date the API key was created",
                             "type": "string"
@@ -1891,7 +1895,8 @@
                           "keySignature",
                           "roles",
                           "orgIds",
-                          "orgNames"
+                          "orgNames",
+                          "canManage"
                         ],
                         "type": "object"
                       },
@@ -2097,7 +2102,7 @@
     },
     "/v1/api-key/{id}/purge": {
       "delete": {
-        "description": "Permanently delete an API key and all associated role assignments. This action cannot be undone.",
+        "description": "Permanently delete an API key and all associated role assignments. This action cannot be undone. Limited to keys the caller can manage.",
         "operationId": "apiKey.purge",
         "parameters": [
           {
@@ -2153,10 +2158,6 @@
                               "description": "API key ID",
                               "type": "number"
                             },
-                            "key": {
-                              "description": "API key value",
-                              "type": "string"
-                            },
                             "lastUsedAt": {
                               "anyOf": [
                                 {
@@ -2201,7 +2202,6 @@
                           },
                           "required": [
                             "id",
-                            "key",
                             "name",
                             "description",
                             "ownerId",
@@ -2238,7 +2238,7 @@
     },
     "/v1/api-key/{id}/revoke": {
       "post": {
-        "description": "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests.",
+        "description": "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests. Owners may revoke their own keys; restoring is limited to keys the caller can manage.",
         "operationId": "apiKey.revoke",
         "parameters": [
           {
@@ -2308,10 +2308,6 @@
                               "description": "API key ID",
                               "type": "number"
                             },
-                            "key": {
-                              "description": "API key value",
-                              "type": "string"
-                            },
                             "lastUsedAt": {
                               "anyOf": [
                                 {
@@ -2356,7 +2352,6 @@
                           },
                           "required": [
                             "id",
-                            "key",
                             "name",
                             "description",
                             "ownerId",
@@ -3050,8 +3045,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of events, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -3060,8 +3057,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of events per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of events per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of events, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -3954,7 +3953,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of event instances, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -3963,7 +3965,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "type": "number"
+              "description": "Number of event instances per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of event instances, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -4881,7 +4886,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of event tags, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -4890,7 +4898,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "type": "number"
+              "description": "Number of event tags per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of event tags, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -5532,8 +5543,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of event types, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -5542,8 +5555,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of event types per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of event types per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of event types, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -6745,8 +6760,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of locations, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -6755,8 +6772,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of locations per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of locations per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of locations, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -8343,7 +8362,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of events, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -8352,7 +8374,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "type": "number"
+              "description": "Number of events per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of events, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -11517,8 +11542,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of organizations, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -11527,8 +11554,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of organizations per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of organizations per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of organizations, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -13063,7 +13092,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of organizations, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -13072,7 +13104,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "type": "number"
+              "description": "Number of organizations per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of organizations, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -13871,8 +13906,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of positions, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -13881,8 +13918,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of positions per page. Defaults to 20.",
-              "type": "number"
+              "description": "Number of positions per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of positions, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           }
         ],
@@ -15101,7 +15140,7 @@
     },
     "/v1/request": {
       "get": {
-        "description": "Get a paginated list of map change requests with optional filtering and sorting",
+        "description": "Get a paginated list of map change requests with optional filtering and sorting. Limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
         "operationId": "request.all",
         "parameters": [
           {
@@ -15113,8 +15152,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of requests, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -15123,8 +15164,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of requests per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of requests per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of requests, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -15170,7 +15213,7 @@
             "in": "query",
             "name": "onlyMine",
             "schema": {
-              "description": "If true, only return requests from regions where the requester has editor or admin role.",
+              "description": "Deprecated and ignored. Results are always limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
               "type": "boolean"
             }
           },
@@ -16266,7 +16309,7 @@
     },
     "/v1/request/id/{id}": {
       "get": {
-        "description": "Retrieve detailed information about a specific map change request including the proposed changes and current status",
+        "description": "Retrieve detailed information about a specific map change request including the proposed changes and current status. Returns null for requests that do not affect a region or AO where the requester has editor or admin role.",
         "operationId": "request.byId",
         "parameters": [
           {
@@ -18753,7 +18796,7 @@
                   },
                   "icon_url": {
                     "description": "The URL of the icon to display as the sender of the Slack message. This is optional and must be a valid HTTPS URL.",
-                    "format": "uri",
+                    "pattern": "^https:\\/\\/.*",
                     "type": "string"
                   },
                   "metadata": {
@@ -19678,8 +19721,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of users, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -19688,8 +19733,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of users per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of users per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of users, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {
@@ -20031,7 +20078,7 @@
         ]
       },
       "post": {
-        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set if requester has admin access.",
+        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set, and are only returned, if requester has admin access.",
         "operationId": "user.crupdate",
         "parameters": [
           {
@@ -20424,15 +20471,10 @@
                     "f3Name",
                     "firstName",
                     "lastName",
-                    "phone",
                     "homeRegionId",
                     "avatarUrl",
                     "created",
                     "updated",
-                    "emergencyContact",
-                    "emergencyPhone",
-                    "emergencyNotes",
-                    "emailVerified",
                     "status",
                     "roles"
                   ],
@@ -21452,8 +21494,10 @@
             "in": "query",
             "name": "pageIndex",
             "schema": {
-              "description": "Zero-based page index for pagination. Defaults to 0.",
-              "type": "number"
+              "description": "Zero-based page index. Supplying this (or pageSize) opts into paginated results; omitting both still returns a single default-sized page of users, not every matching row.",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             }
           },
           {
@@ -21462,8 +21506,10 @@
             "in": "query",
             "name": "pageSize",
             "schema": {
-              "description": "Number of users per page. Defaults to 10.",
-              "type": "number"
+              "description": "Number of users per page (max 100). Supplying this (or pageIndex) opts into paginated results; omitting both still returns a single default-sized page of users, not every matching row.",
+              "maximum": 100,
+              "minimum": -9007199254740991,
+              "type": "integer"
             }
           },
           {

@@ -284,15 +284,16 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 Each app and shared package has its own `.env` file, copied from a `.env.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
 
-| Directory            | Purpose                                                            |
-| -------------------- | ------------------------------------------------------------------ |
-| `apps/api/.env`      | API app (Next.js on port 3001)                                     |
-| `apps/auth/.env`     | Auth app (Next.js on port 3004)                                    |
-| `apps/map/.env`      | Map app (Next.js on port 3000)                                     |
-| `apps/admin/.env`    | Admin app (Next.js on port 3002)                                   |
-| `apps/me/.env`       | Me app (Next.js on port 3003)                                      |
-| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                 |
-| `packages/env/.env`  | Shared backend env root (used by `packages/db` and `packages/api`) |
+| Directory            | Purpose                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api/.env`      | API app (Hono on port 3001)                                                                                                        |
+| `apps/auth/.env`     | Auth app (Next.js on port 3004)                                                                                                    |
+| `apps/map/.env`      | Map app (Next.js on port 3000)                                                                                                     |
+| `apps/admin/.env`    | Admin app (Next.js on port 3002)                                                                                                   |
+| `apps/me/.env`       | Me app (Next.js on port 3003)                                                                                                      |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                                                                                 |
+| `packages/db/.env`   | Credentials for the `@acme/db` CLI scripts (migrations, resets, seeds, drizzle-kit, reset-test-db)                                 |
+| `packages/env/.env`  | Shared backend env read by the `@acme/api` package's test/script commands (`packages/api`); app services read their own app `.env` |
 
 Here's what each variable means:
 
@@ -483,10 +484,21 @@ lsof -ti:5433
 
 # Kill it:
 lsof -ti:5433 | xargs kill
+```
 
-# Or, if Cloud SQL Auth Proxy is running as a service, stop it:
-launchctl unload ~/Library/LaunchAgents/com.google.cloud-sql-proxy.plist   # macOS
-systemctl --user stop cloud-sql-proxy                                        # Linux
+If the port is taken again right after you kill the process, you probably have the legacy Cloud SQL Auth Proxy installed as an auto-restarting service (from the removed `db:proxy:install`, or from the old guide's manual steps). Disable and remove it rather than killing it:
+
+```bash
+# macOS (removes both the scripted and the manually installed agent):
+launchctl bootout "gui/$(id -u)/com.f3nation.cloud-sql-proxy" 2>/dev/null || true
+launchctl bootout "gui/$(id -u)/com.google.cloud-sql-proxy" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.f3nation.cloud-sql-proxy.plist" \
+  "$HOME/Library/LaunchAgents/com.google.cloud-sql-proxy.plist"
+
+# Linux / WSL:
+systemctl --user disable --now cloud-sql-proxy 2>/dev/null || true
+rm -f "$HOME/.config/systemd/user/cloud-sql-proxy.service"
+systemctl --user daemon-reload
 ```
 
 The same pattern works for ports 8080 and 9023.

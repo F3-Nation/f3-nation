@@ -79,7 +79,7 @@ describe("error envelopes", () => {
 
 /**
  * `sessionCookie()` signs with the LOCAL `AUTH_SECRET`, so this case only
- * authorizes under `next`/`hono`: staging's secret differs, the cookie is
+ * authorizes in-process: staging's secret differs, the cookie is
  * rejected, and it 401s instead of 400 — a staging failure that would read
  * as an error-envelope regression rather than a fixture-only limitation.
  */

@@ -5,8 +5,10 @@ import { req, target } from "../transport";
 import { expectAuthorized, expectUnauthorized } from "./verdict";
 
 /**
- * API-key resolution edges. `/v1/api-key` is adminProcedure, so an admin key
- * that authorizes returns 200; `/v1/position/assignments` is editorProcedure.
+ * API-key resolution edges. `/v1/position/assignments` is editorProcedure, so a
+ * key that resolves with its roles is authorized there (then 400s on input).
+ * `/v1/api-key` rejects every API-key session, so it only probes the admin
+ * guard for a key with no roles.
  * Every request carries a Client header — a bearer without one is the separate
  * concern pinned in session.char.test.ts.
  */
@@ -65,14 +67,22 @@ describe.runIf(target.inProcess)("API key resolution", () => {
 
   it("rejects an expired key (compared against the DB clock)", async () => {
     await expectUnauthorized(
-      await target.invoke(keyReq("/v1/api-key", 1, expiredKey.key)),
+      await target.invoke(
+        keyReq("/v1/position/assignments", 1, expiredKey.key, {
+          method: "POST",
+        }),
+      ),
       "Unauthorized",
     );
   });
 
   it("rejects an unknown key on a protected endpoint", async () => {
     await expectUnauthorized(
-      await target.invoke(keyReq("/v1/api-key", 2, "char-key-does-not-exist")),
+      await target.invoke(
+        keyReq("/v1/position/assignments", 2, "char-key-does-not-exist", {
+          method: "POST",
+        }),
+      ),
       "Unauthorized",
     );
   });
@@ -102,13 +112,23 @@ describe.runIf(target.inProcess)("API key resolution", () => {
     );
   });
 
+  it("rejects API-key management for an admin key", async () => {
+    await expectUnauthorized(
+      await target.invoke(keyReq("/v1/api-key", 8, adminKey.key)),
+      "Sign in with your user account to manage API keys.",
+    );
+  });
+
   it("trims whitespace around the bearer value", async () => {
     // shared.ts slices past "Bearer " then .trim()s; a header-name casing case
     // is not expressible here — the WHATWG Headers constructor lowercases every
     // field name, so no casing survives to the Request layer.
     await expectAuthorized(
       await target.invoke(
-        keyReq("/v1/api-key", 6, adminKey.key, { pad: "  " }),
+        keyReq("/v1/position/assignments", 6, adminKey.key, {
+          pad: "  ",
+          method: "POST",
+        }),
       ),
     );
   });
@@ -116,7 +136,10 @@ describe.runIf(target.inProcess)("API key resolution", () => {
   it("accepts a lowercase `bearer` scheme prefix", async () => {
     await expectAuthorized(
       await target.invoke(
-        keyReq("/v1/api-key", 7, adminKey.key, { prefix: "bearer" }),
+        keyReq("/v1/position/assignments", 7, adminKey.key, {
+          prefix: "bearer",
+          method: "POST",
+        }),
       ),
     );
   });

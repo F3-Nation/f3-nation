@@ -1,5 +1,51 @@
 # Changelog
 
+## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.5...auth@2.4.0) (2026-10-06)
+
+
+### Features
+
+* **auth:** new-user registration hand-off for the Better Auth flow ([#1035](https://github.com/F3-Nation/f3-nation/issues/1035)) ([d888d2d](https://github.com/F3-Nation/f3-nation/commit/d888d2dd4e029885a17c4784df384f1c7dcd8e4f))
+* **auth:** resolve [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3's OAuth client-secret-issuance gap ([#1046](https://github.com/F3-Nation/f3-nation/issues/1046)) ([0bf5b66](https://github.com/F3-Nation/f3-nation/commit/0bf5b66daf882e7199643eb9d43ab28c2795087f))
+
+
+### Bug Fixes
+
+* **auth,db,api:** let Better Auth start and sign in against the Drizzle schema ([#1143](https://github.com/F3-Nation/f3-nation/issues/1143)) ([2a9026f](https://github.com/F3-Nation/f3-nation/commit/2a9026fe8f9124f68331bb024a160a27f1e26949))
+* **auth:** resolve apps/auth/.env relative to the script, not the cwd ([#1115](https://github.com/F3-Nation/f3-nation/issues/1115)) ([4996abd](https://github.com/F3-Nation/f3-nation/commit/4996abd65a70280381ce79af7e03f8a182dc1f71))
+* **auth:** stop greeting a user with no F3 name as "null" ([#1145](https://github.com/F3-Nation/f3-nation/issues/1145)) ([eb98b5d](https://github.com/F3-Nation/f3-nation/commit/eb98b5ddd6fb2595801d8b44a1023f466aa70da8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.8.0
+    * @acme/shared bumped to 0.4.1
+
+## [2.3.5](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.4...auth@2.3.5) (2026-09-27)
+
+
+### Bug Fixes
+
+* **auth,map:** disable SendGrid click and open tracking on sign-in code emails ([#1077](https://github.com/F3-Nation/f3-nation/issues/1077)) ([1dfeea6](https://github.com/F3-Nation/f3-nation/commit/1dfeea6f2294d78261f58e8c9116327bd02af231))
+
+## [2.3.4](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.3...auth@2.3.4) (2026-09-23)
+
+
+### Bug Fixes
+
+* **auth,api:** pin better-auth packages to exact 1.7.4 ([#1023](https://github.com/F3-Nation/f3-nation/issues/1023)) ([7f2039d](https://github.com/F3-Nation/f3-nation/commit/7f2039d3ac6f5ad780c10b166e581759ad6ade74))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.7.0
+    * @acme/logger bumped to 0.2.0
+    * @acme/shared bumped to 0.4.0
+
 ## [2.3.3](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.2...auth@2.3.3) (2026-09-16)
 
 

@@ -77,6 +77,7 @@ export const reset = async (db?: AppDb) => {
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS public CASCADE`);
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS drizzle CASCADE`);
   await dbToUse.execute(sql`DROP SCHEMA IF EXISTS auth CASCADE`);
+  await dbToUse.execute(sql`DROP SCHEMA IF EXISTS slackbot CASCADE`);
   await dbToUse.execute(sql`CREATE SCHEMA public`);
 
   for (const user of users) {
