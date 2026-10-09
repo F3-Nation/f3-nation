@@ -338,9 +338,12 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
       `Couldn't read the main commit git fetch just got (FETCH_HEAD).`,
     );
   }
+  // Taken before the git check and compared again after the plan is read and
+  // after the confirmation: the files git checked, the plan shown and the
+  // files applied must all be the same.
+  const fingerprint = migrationsFingerprint(MIGRATIONS_DIR);
   const gitRefusal = checkGitState(readGitState(repoRoot, mainSha));
   if (gitRefusal) throw new Refusal(gitRefusal);
-  const fingerprint = migrationsFingerprint(MIGRATIONS_DIR);
 
   // 3. The URL names exactly this database (also the migrations table name).
   const url = migrationUrl(target);
@@ -459,6 +462,11 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
     plan = planMigrations(readJournal(), rows, fileHashes, env.knownSkipped);
   } finally {
     await ro.end();
+  }
+  if (migrationsFingerprint(MIGRATIONS_DIR) !== fingerprint) {
+    throw new Refusal(
+      "packages/db/drizzle changed while the checks were running. Run the command again.",
+    );
   }
 
   for (const e of plan.hashMismatches) {
