@@ -58,7 +58,7 @@ const ApiKeyFormSchema = z.object({
 
 export default function AdminApiKeysModal() {
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
-  const { isNationAdmin } = useAuth();
+  const { session, isNationAdmin } = useAuth();
   const { data: accessibleOrgs, isLoading: isLoadingOrgs } = useFetchAllPages({
     path: ["org", "accessible"],
     queryKey: ["org.accessible.adminApiKeysModal"],
@@ -82,22 +82,27 @@ export default function AdminApiKeysModal() {
 
   // apiKey.create only accepts orgs the caller administers directly or through
   // an ancestor. org.accessible also returns orgs under editor-only roots, and
-  // descendant rows carry no roles, so walk up to a direct admin role.
+  // its rows don't reliably carry roles (descendants have none, and any Nation
+  // role returns every org with none), so walk up to a direct admin role from
+  // the session.
   const adminOrgs = useMemo(() => {
     if (!accessibleOrgs) return [];
     if (isNationAdmin) return accessibleOrgs;
+    const adminOrgIds = new Set(
+      session?.roles
+        ?.filter((role) => role.roleName === "admin")
+        .map((role) => role.orgId),
+    );
     const byId = new Map(accessibleOrgs.map((org) => [org.id, org]));
     const isAdministered = (orgId: number | null): boolean => {
       for (let id = orgId; id != null;) {
-        const org = byId.get(id);
-        if (!org) return false;
-        if (org.roles.includes("admin")) return true;
-        id = org.parentId;
+        if (adminOrgIds.has(id)) return true;
+        id = byId.get(id)?.parentId ?? null;
       }
       return false;
     };
     return accessibleOrgs.filter((org) => isAdministered(org.id));
-  }, [accessibleOrgs, isNationAdmin]);
+  }, [accessibleOrgs, isNationAdmin, session]);
 
   const orgOptions = useMemo(() => {
     return adminOrgs.map((org) => ({
