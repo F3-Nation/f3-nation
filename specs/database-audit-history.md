@@ -378,7 +378,7 @@ the integration test feeds a real trigger failure through the logging sink.
 
 ## 9. Deployment and rollback
 
-Migration `0029_public_audit_history.sql` creates `audit` helpers and same-named
+Migration `0030_public_audit_history.sql` creates `audit` helpers and same-named
 `public_history` tables for the approved allowlist and column options above.
 
 ### Deployment preflight (human review required)

@@ -468,7 +468,7 @@ URL repointed at its staging equivalent; **KEEP**: non-PII, left untouched.
 
 All eight columns (`id`, `row_id`, `op`, `changed_at`, `changed_by`,
 `changed_via`, `old_row`, `new_row`) in the 26 history tables enabled by
-[migration 0029](../packages/db/drizzle/0029_public_audit_history.sql) are
+[migration 0030](../packages/db/drizzle/0030_public_audit_history.sql) are
 classified **TRUNCATE** in disposable refresh copies. JSON snapshots can retain
 names, phones, emails and other PII that no longer exists in the source tables.
 The dump excludes history data but retains definitions and `audit` helpers.
@@ -482,7 +482,7 @@ does not delete production history or authorize sanitizing an existing deployed
 history dataset. New history tables and columns still require review through
 both coverage gates.
 
-After migration 0029, the refresh's production login needs reviewed read access
+After migration 0030, the refresh's production login needs reviewed read access
 to the history schema before the next refresh. Even a schema-only `pg_dump`
 locks history tables and requires SELECT. The provisioning SQL includes those
 read-only grants and no audit-helper EXECUTE grant; an operator must approve and
