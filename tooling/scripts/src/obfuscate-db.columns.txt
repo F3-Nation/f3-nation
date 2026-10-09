@@ -1,0 +1,596 @@
+# Columns obfuscate-db.ts has been reviewed against (F3-65): one
+# `schema.table.column:data_type` per line, data_type as information_schema.columns
+# reports it. obfuscate-db refuses to run, before it writes anything, when the target has
+# a column (or a column type) that is not listed here: a new column on a known table is
+# otherwise copied to staging as-is.
+#
+# Adding a column in a migration? Classify it in obfuscate-db.ts and the PII inventory in
+# docs/STAGING_REFRESH.md, then add its line here (DATABASE_URL = a database migrated to
+# head):  pnpm -F @acme/scripts obfuscate-db -- --update-column-snapshot
+# Reviewers: a new line here is a PII decision. Check the column's handling, not just
+# the line. CI (obfuscate-db-verify) fails while a column at head is missing.
+#
+# Seeded 2026-10-07 from prod's public+auth tables (including legacy tables no migration
+# creates, e.g. auth.user) plus everything the repo's migrations create at head.
+auth.better_auth_account.access_token:text
+auth.better_auth_account.access_token_expires_at:timestamp without time zone
+auth.better_auth_account.account_id:text
+auth.better_auth_account.created_at:timestamp without time zone
+auth.better_auth_account.id:text
+auth.better_auth_account.id_token:text
+auth.better_auth_account.issuer:text
+auth.better_auth_account.password:text
+auth.better_auth_account.provider_id:text
+auth.better_auth_account.refresh_token:text
+auth.better_auth_account.refresh_token_expires_at:timestamp without time zone
+auth.better_auth_account.scope:text
+auth.better_auth_account.updated_at:timestamp without time zone
+auth.better_auth_account.user_id:text
+auth.better_auth_jwks.alg:text
+auth.better_auth_jwks.created_at:timestamp without time zone
+auth.better_auth_jwks.crv:text
+auth.better_auth_jwks.expires_at:timestamp without time zone
+auth.better_auth_jwks.id:text
+auth.better_auth_jwks.private_key:text
+auth.better_auth_jwks.public_key:text
+auth.better_auth_oauth_access_token.authorization_code_id:text
+auth.better_auth_oauth_access_token.client_id:text
+auth.better_auth_oauth_access_token.confirmation:jsonb
+auth.better_auth_oauth_access_token.created_at:timestamp without time zone
+auth.better_auth_oauth_access_token.expires_at:timestamp without time zone
+auth.better_auth_oauth_access_token.id:text
+auth.better_auth_oauth_access_token.reference_id:text
+auth.better_auth_oauth_access_token.refresh_id:text
+auth.better_auth_oauth_access_token.requested_user_info_claims:ARRAY
+auth.better_auth_oauth_access_token.resources:ARRAY
+auth.better_auth_oauth_access_token.revoked:timestamp without time zone
+auth.better_auth_oauth_access_token.scopes:ARRAY
+auth.better_auth_oauth_access_token.session_id:text
+auth.better_auth_oauth_access_token.token:text
+auth.better_auth_oauth_access_token.user_id:text
+auth.better_auth_oauth_client.application_type:text
+auth.better_auth_oauth_client.backchannel_logout_session_required:boolean
+auth.better_auth_oauth_client.backchannel_logout_uri:text
+auth.better_auth_oauth_client.client_credentials_scopes:ARRAY
+auth.better_auth_oauth_client.client_discovery_id:text
+auth.better_auth_oauth_client.client_id:text
+auth.better_auth_oauth_client.client_secret:text
+auth.better_auth_oauth_client.contacts:ARRAY
+auth.better_auth_oauth_client.created_at:timestamp without time zone
+auth.better_auth_oauth_client.disabled:boolean
+auth.better_auth_oauth_client.dpop_bound_access_tokens:boolean
+auth.better_auth_oauth_client.enable_end_session:boolean
+auth.better_auth_oauth_client.grant_types:ARRAY
+auth.better_auth_oauth_client.icon:text
+auth.better_auth_oauth_client.id:text
+auth.better_auth_oauth_client.jwks:text
+auth.better_auth_oauth_client.jwks_uri:text
+auth.better_auth_oauth_client.metadata:jsonb
+auth.better_auth_oauth_client.name:text
+auth.better_auth_oauth_client.policy:text
+auth.better_auth_oauth_client.post_logout_redirect_uris:ARRAY
+auth.better_auth_oauth_client.redirect_uris:ARRAY
+auth.better_auth_oauth_client.reference_id:text
+auth.better_auth_oauth_client.require_pkce:boolean
+auth.better_auth_oauth_client.response_types:ARRAY
+auth.better_auth_oauth_client.scopes:ARRAY
+auth.better_auth_oauth_client.skip_consent:boolean
+auth.better_auth_oauth_client.software_id:text
+auth.better_auth_oauth_client.software_statement:text
+auth.better_auth_oauth_client.software_version:text
+auth.better_auth_oauth_client.subject_type:text
+auth.better_auth_oauth_client.token_endpoint_auth_method:text
+auth.better_auth_oauth_client.tos:text
+auth.better_auth_oauth_client.updated_at:timestamp without time zone
+auth.better_auth_oauth_client.uri:text
+auth.better_auth_oauth_client.user_id:text
+auth.better_auth_oauth_client_assertion.expires_at:timestamp without time zone
+auth.better_auth_oauth_client_assertion.id:text
+auth.better_auth_oauth_client_resource.client_id:text
+auth.better_auth_oauth_client_resource.created_at:timestamp without time zone
+auth.better_auth_oauth_client_resource.id:text
+auth.better_auth_oauth_client_resource.metadata:jsonb
+auth.better_auth_oauth_client_resource.resource_id:text
+auth.better_auth_oauth_consent.client_id:text
+auth.better_auth_oauth_consent.created_at:timestamp without time zone
+auth.better_auth_oauth_consent.id:text
+auth.better_auth_oauth_consent.reference_id:text
+auth.better_auth_oauth_consent.requested_user_info_claims:ARRAY
+auth.better_auth_oauth_consent.resources:ARRAY
+auth.better_auth_oauth_consent.scopes:ARRAY
+auth.better_auth_oauth_consent.updated_at:timestamp without time zone
+auth.better_auth_oauth_consent.user_id:text
+auth.better_auth_oauth_refresh_token.auth_time:timestamp without time zone
+auth.better_auth_oauth_refresh_token.authorization_code_id:text
+auth.better_auth_oauth_refresh_token.client_id:text
+auth.better_auth_oauth_refresh_token.confirmation:jsonb
+auth.better_auth_oauth_refresh_token.created_at:timestamp without time zone
+auth.better_auth_oauth_refresh_token.expires_at:timestamp without time zone
+auth.better_auth_oauth_refresh_token.id:text
+auth.better_auth_oauth_refresh_token.reference_id:text
+auth.better_auth_oauth_refresh_token.requested_user_info_claims:ARRAY
+auth.better_auth_oauth_refresh_token.resources:ARRAY
+auth.better_auth_oauth_refresh_token.revoked:timestamp without time zone
+auth.better_auth_oauth_refresh_token.rotated_at:timestamp without time zone
+auth.better_auth_oauth_refresh_token.rotation_replay_expires_at:timestamp without time zone
+auth.better_auth_oauth_refresh_token.rotation_replay_response:text
+auth.better_auth_oauth_refresh_token.scopes:ARRAY
+auth.better_auth_oauth_refresh_token.session_id:text
+auth.better_auth_oauth_refresh_token.token:text
+auth.better_auth_oauth_refresh_token.user_id:text
+auth.better_auth_oauth_resource.access_token_ttl:integer
+auth.better_auth_oauth_resource.allowed_scopes:ARRAY
+auth.better_auth_oauth_resource.created_at:timestamp without time zone
+auth.better_auth_oauth_resource.custom_claims:jsonb
+auth.better_auth_oauth_resource.disabled:boolean
+auth.better_auth_oauth_resource.dpop_bound_access_tokens_required:boolean
+auth.better_auth_oauth_resource.id:text
+auth.better_auth_oauth_resource.identifier:text
+auth.better_auth_oauth_resource.metadata:jsonb
+auth.better_auth_oauth_resource.name:text
+auth.better_auth_oauth_resource.policy_version:integer
+auth.better_auth_oauth_resource.refresh_token_ttl:integer
+auth.better_auth_oauth_resource.signing_algorithm:text
+auth.better_auth_oauth_resource.signing_key_id:text
+auth.better_auth_oauth_resource.updated_at:timestamp without time zone
+auth.better_auth_session.created_at:timestamp without time zone
+auth.better_auth_session.expires_at:timestamp without time zone
+auth.better_auth_session.id:text
+auth.better_auth_session.ip_address:text
+auth.better_auth_session.token:text
+auth.better_auth_session.updated_at:timestamp without time zone
+auth.better_auth_session.user_agent:text
+auth.better_auth_session.user_id:text
+auth.better_auth_user.created_at:timestamp without time zone
+auth.better_auth_user.email:text
+auth.better_auth_user.email_verified:boolean
+auth.better_auth_user.f3_user_id:integer
+auth.better_auth_user.id:text
+auth.better_auth_user.image:text
+auth.better_auth_user.name:text
+auth.better_auth_user.updated_at:timestamp without time zone
+auth.better_auth_verification.created_at:timestamp without time zone
+auth.better_auth_verification.expires_at:timestamp without time zone
+auth.better_auth_verification.id:text
+auth.better_auth_verification.identifier:text
+auth.better_auth_verification.updated_at:timestamp without time zone
+auth.better_auth_verification.value:text
+auth.drizzle_migrations.applied_at:timestamp with time zone
+auth.drizzle_migrations.id:integer
+auth.drizzle_migrations.name:text
+auth.email_mfa_code.attempt_count:integer
+auth.email_mfa_code.code_hash:text
+auth.email_mfa_code.consumed_at:timestamp without time zone
+auth.email_mfa_code.created_at:timestamp without time zone
+auth.email_mfa_code.email:text
+auth.email_mfa_code.expires_at:timestamp without time zone
+auth.email_mfa_code.id:text
+auth.email_mfa_codes.attempt_count:integer
+auth.email_mfa_codes.code_hash:text
+auth.email_mfa_codes.consumed_at:timestamp without time zone
+auth.email_mfa_codes.created_at:timestamp without time zone
+auth.email_mfa_codes.email:text
+auth.email_mfa_codes.expires_at:timestamp without time zone
+auth.email_mfa_codes.id:text
+auth.oauth_access_token.client_id:text
+auth.oauth_access_token.created_at:timestamp without time zone
+auth.oauth_access_token.expires:timestamp without time zone
+auth.oauth_access_token.scopes:text
+auth.oauth_access_token.token:text
+auth.oauth_access_token.user_id:text
+auth.oauth_access_tokens.client_id:text
+auth.oauth_access_tokens.created_at:timestamp without time zone
+auth.oauth_access_tokens.expires_at:timestamp without time zone
+auth.oauth_access_tokens.scopes:text
+auth.oauth_access_tokens.token:text
+auth.oauth_access_tokens.user_id:integer
+auth.oauth_authorization_code.client_id:text
+auth.oauth_authorization_code.code:text
+auth.oauth_authorization_code.code_challenge:text
+auth.oauth_authorization_code.code_challenge_method:text
+auth.oauth_authorization_code.created_at:timestamp without time zone
+auth.oauth_authorization_code.expires:timestamp without time zone
+auth.oauth_authorization_code.redirect_uri:text
+auth.oauth_authorization_code.scopes:text
+auth.oauth_authorization_code.user_id:text
+auth.oauth_authorization_codes.auth_time:timestamp without time zone
+auth.oauth_authorization_codes.client_id:text
+auth.oauth_authorization_codes.code:text
+auth.oauth_authorization_codes.code_challenge:text
+auth.oauth_authorization_codes.code_challenge_method:text
+auth.oauth_authorization_codes.created_at:timestamp without time zone
+auth.oauth_authorization_codes.expires_at:timestamp without time zone
+auth.oauth_authorization_codes.nonce:text
+auth.oauth_authorization_codes.redirect_uri:text
+auth.oauth_authorization_codes.scopes:text
+auth.oauth_authorization_codes.user_id:integer
+auth.oauth_client.allowed_origin:text
+auth.oauth_client.client_secret:text
+auth.oauth_client.created_at:timestamp without time zone
+auth.oauth_client.id:text
+auth.oauth_client.is_active:boolean
+auth.oauth_client.name:text
+auth.oauth_client.redirect_uris:text
+auth.oauth_client.scopes:text
+auth.oauth_clients.allowed_origin:text
+auth.oauth_clients.client_secret_hash:text
+auth.oauth_clients.created_at:timestamp without time zone
+auth.oauth_clients.id:text
+auth.oauth_clients.is_active:boolean
+auth.oauth_clients.is_public:boolean
+auth.oauth_clients.name:text
+auth.oauth_clients.redirect_uris:text
+auth.oauth_clients.scopes:text
+auth.oauth_refresh_token.access_token:text
+auth.oauth_refresh_token.client_id:text
+auth.oauth_refresh_token.created_at:timestamp without time zone
+auth.oauth_refresh_token.expires:timestamp without time zone
+auth.oauth_refresh_token.token:text
+auth.oauth_refresh_token.user_id:text
+auth.oauth_refresh_tokens.auth_time:timestamp without time zone
+auth.oauth_refresh_tokens.client_id:text
+auth.oauth_refresh_tokens.created_at:timestamp without time zone
+auth.oauth_refresh_tokens.expires_at:timestamp without time zone
+auth.oauth_refresh_tokens.rotated_at:timestamp without time zone
+auth.oauth_refresh_tokens.scopes:text
+auth.oauth_refresh_tokens.token:text
+auth.oauth_refresh_tokens.user_id:integer
+auth.session.expires:timestamp without time zone
+auth.session.sessionToken:text
+auth.session.userId:text
+auth.sessions.expires:timestamp with time zone
+auth.sessions.session_token:text
+auth.sessions.user_id:integer
+auth.user.email:text
+auth.user.emailVerified:timestamp without time zone
+auth.user.f3_name:text
+auth.user.hospital_name:text
+auth.user.id:text
+auth.user.image:text
+auth.user.name:text
+auth.user.onboarding_completed:boolean
+auth.user_profiles.created_at:timestamp with time zone
+auth.user_profiles.hospital_name:text
+auth.user_profiles.onboarding_completed:boolean
+auth.user_profiles.updated_at:timestamp with time zone
+auth.user_profiles.user_id:integer
+auth.verificationToken.expires:timestamp without time zone
+auth.verificationToken.identifier:text
+auth.verificationToken.token:text
+auth.verification_tokens.expires:timestamp with time zone
+auth.verification_tokens.identifier:text
+auth.verification_tokens.token:text
+public.achievements.auto_award:boolean
+public.achievements.auto_cadence:USER-DEFINED
+public.achievements.auto_filters:jsonb
+public.achievements.auto_threshold:integer
+public.achievements.auto_threshold_type:character varying
+public.achievements.created:timestamp without time zone
+public.achievements.description:character varying
+public.achievements.id:integer
+public.achievements.image_url:character varying
+public.achievements.is_active:boolean
+public.achievements.meta:jsonb
+public.achievements.name:character varying
+public.achievements.specific_org_id:integer
+public.achievements.updated:timestamp without time zone
+public.achievements_x_users.achievement_id:integer
+public.achievements_x_users.award_period:integer
+public.achievements_x_users.award_year:integer
+public.achievements_x_users.date_awarded:timestamp without time zone
+public.achievements_x_users.meta:jsonb
+public.achievements_x_users.user_id:integer
+public.alembic_version.version_num:character varying
+public.api_keys.created:timestamp without time zone
+public.api_keys.description:character varying
+public.api_keys.expires_at:timestamp without time zone
+public.api_keys.id:integer
+public.api_keys.key:character varying
+public.api_keys.last_used_at:timestamp without time zone
+public.api_keys.name:character varying
+public.api_keys.owner_id:integer
+public.api_keys.revoked_at:timestamp without time zone
+public.api_keys.updated:timestamp without time zone
+public.attendance.created:timestamp without time zone
+public.attendance.event_instance_id:integer
+public.attendance.id:integer
+public.attendance.is_planned:boolean
+public.attendance.meta:jsonb
+public.attendance.updated:timestamp without time zone
+public.attendance.user_id:integer
+public.attendance_types.created:timestamp without time zone
+public.attendance_types.description:character varying
+public.attendance_types.id:integer
+public.attendance_types.type:character varying
+public.attendance_types.updated:timestamp without time zone
+public.attendance_x_attendance_types.attendance_id:integer
+public.attendance_x_attendance_types.attendance_type_id:integer
+public.auth_accounts.access_token:character varying
+public.auth_accounts.created:timestamp without time zone
+public.auth_accounts.expires_at:timestamp without time zone
+public.auth_accounts.id_token:character varying
+public.auth_accounts.provider:character varying
+public.auth_accounts.provider_account_id:character varying
+public.auth_accounts.refresh_token:character varying
+public.auth_accounts.scope:character varying
+public.auth_accounts.session_state:character varying
+public.auth_accounts.token_type:character varying
+public.auth_accounts.type:character varying
+public.auth_accounts.updated:timestamp without time zone
+public.auth_accounts.user_id:integer
+public.auth_sessions.created:timestamp without time zone
+public.auth_sessions.expires:timestamp without time zone
+public.auth_sessions.session_token:text
+public.auth_sessions.updated:timestamp without time zone
+public.auth_sessions.user_id:integer
+public.auth_verification_tokens.created:timestamp without time zone
+public.auth_verification_tokens.expires:timestamp without time zone
+public.auth_verification_tokens.identifier:character varying
+public.auth_verification_tokens.token:character varying
+public.auth_verification_tokens.updated:timestamp without time zone
+public.event_instances.backblast:character varying
+public.event_instances.backblast_rich:jsonb
+public.event_instances.backblast_ts:double precision
+public.event_instances.created:timestamp without time zone
+public.event_instances.description:character varying
+public.event_instances.email:character varying
+public.event_instances.end_date:date
+public.event_instances.end_time:character varying
+public.event_instances.fng_count:integer
+public.event_instances.highlight:boolean
+public.event_instances.id:integer
+public.event_instances.is_active:boolean
+public.event_instances.is_private:boolean
+public.event_instances.location_id:integer
+public.event_instances.meta:jsonb
+public.event_instances.name:character varying
+public.event_instances.org_id:integer
+public.event_instances.pax_count:integer
+public.event_instances.preblast:character varying
+public.event_instances.preblast_rich:jsonb
+public.event_instances.preblast_ts:double precision
+public.event_instances.series_exception:USER-DEFINED
+public.event_instances.series_id:integer
+public.event_instances.start_date:date
+public.event_instances.start_time:character varying
+public.event_instances.updated:timestamp without time zone
+public.event_instances_x_event_types.event_instance_id:integer
+public.event_instances_x_event_types.event_type_id:integer
+public.event_tags.color:character varying
+public.event_tags.created:timestamp without time zone
+public.event_tags.description:character varying
+public.event_tags.id:integer
+public.event_tags.is_active:boolean
+public.event_tags.name:character varying
+public.event_tags.specific_org_id:integer
+public.event_tags.updated:timestamp without time zone
+public.event_tags_x_event_instances.event_instance_id:integer
+public.event_tags_x_event_instances.event_tag_id:integer
+public.event_tags_x_events.event_id:integer
+public.event_tags_x_events.event_tag_id:integer
+public.event_types.acronym:character varying
+public.event_types.created:timestamp without time zone
+public.event_types.description:character varying
+public.event_types.event_category:USER-DEFINED
+public.event_types.id:integer
+public.event_types.is_active:boolean
+public.event_types.name:character varying
+public.event_types.specific_org_id:integer
+public.event_types.updated:timestamp without time zone
+public.events.created:timestamp without time zone
+public.events.day_of_week:USER-DEFINED
+public.events.description:character varying
+public.events.email:character varying
+public.events.end_date:date
+public.events.end_time:character varying
+public.events.highlight:boolean
+public.events.id:integer
+public.events.index_within_interval:integer
+public.events.is_active:boolean
+public.events.is_private:boolean
+public.events.location_id:integer
+public.events.meta:jsonb
+public.events.name:character varying
+public.events.org_id:integer
+public.events.recurrence_interval:integer
+public.events.recurrence_pattern:USER-DEFINED
+public.events.series_id:integer
+public.events.start_date:date
+public.events.start_time:character varying
+public.events.updated:timestamp without time zone
+public.events_x_event_types.event_id:integer
+public.events_x_event_types.event_type_id:integer
+public.expansions.area:character varying
+public.expansions.created:timestamp without time zone
+public.expansions.id:integer
+public.expansions.interested_in_organizing:boolean
+public.expansions.pinned_lat:double precision
+public.expansions.pinned_lon:double precision
+public.expansions.updated:timestamp without time zone
+public.expansions.user_lat:double precision
+public.expansions.user_lon:double precision
+public.expansions_x_users.expansion_id:integer
+public.expansions_x_users.notes:character varying
+public.expansions_x_users.request_date:timestamp without time zone
+public.expansions_x_users.user_id:integer
+public.locations.address_city:character varying
+public.locations.address_country:character varying
+public.locations.address_state:character varying
+public.locations.address_street2:character varying
+public.locations.address_street:character varying
+public.locations.address_zip:character varying
+public.locations.created:timestamp without time zone
+public.locations.description:character varying
+public.locations.email:character varying
+public.locations.id:integer
+public.locations.is_active:boolean
+public.locations.latitude:double precision
+public.locations.longitude:double precision
+public.locations.meta:jsonb
+public.locations.name:character varying
+public.locations.org_id:integer
+public.locations.updated:timestamp without time zone
+public.materializedviews.hours:text
+public.materializedviews.name:text
+public.orgs.ao_count:integer
+public.orgs.created:timestamp without time zone
+public.orgs.default_location_id:integer
+public.orgs.description:character varying
+public.orgs.email:character varying
+public.orgs.facebook:character varying
+public.orgs.id:integer
+public.orgs.instagram:character varying
+public.orgs.is_active:boolean
+public.orgs.last_annual_review:date
+public.orgs.logo_url:character varying
+public.orgs.meta:jsonb
+public.orgs.name:character varying
+public.orgs.org_type:USER-DEFINED
+public.orgs.parent_id:integer
+public.orgs.phone:character varying
+public.orgs.twitter:character varying
+public.orgs.updated:timestamp without time zone
+public.orgs.website:character varying
+public.orgs_x_slack_spaces.org_id:integer
+public.orgs_x_slack_spaces.slack_space_id:integer
+public.permissions.created:timestamp without time zone
+public.permissions.description:character varying
+public.permissions.id:integer
+public.permissions.name:character varying
+public.permissions.updated:timestamp without time zone
+public.positions.created:timestamp without time zone
+public.positions.description:character varying
+public.positions.id:integer
+public.positions.is_active:boolean
+public.positions.name:character varying
+public.positions.org_id:integer
+public.positions.org_type:USER-DEFINED
+public.positions.updated:timestamp without time zone
+public.positions_x_orgs_x_users.org_id:integer
+public.positions_x_orgs_x_users.position_id:integer
+public.positions_x_orgs_x_users.user_id:integer
+public.roles.created:timestamp without time zone
+public.roles.description:character varying
+public.roles.id:integer
+public.roles.name:USER-DEFINED
+public.roles.updated:timestamp without time zone
+public.roles_x_api_keys_x_org.api_key_id:integer
+public.roles_x_api_keys_x_org.org_id:integer
+public.roles_x_api_keys_x_org.role_id:integer
+public.roles_x_permissions.permission_id:integer
+public.roles_x_permissions.role_id:integer
+public.roles_x_users_x_org.org_id:integer
+public.roles_x_users_x_org.role_id:integer
+public.roles_x_users_x_org.user_id:integer
+public.slack_spaces.bot_token:character varying
+public.slack_spaces.created:timestamp without time zone
+public.slack_spaces.id:integer
+public.slack_spaces.settings:jsonb
+public.slack_spaces.team_id:character varying
+public.slack_spaces.updated:timestamp without time zone
+public.slack_spaces.workspace_name:character varying
+public.slack_users.avatar_url:character varying
+public.slack_users.created:timestamp without time zone
+public.slack_users.email:character varying
+public.slack_users.id:integer
+public.slack_users.is_admin:boolean
+public.slack_users.is_bot:boolean
+public.slack_users.is_owner:boolean
+public.slack_users.meta:jsonb
+public.slack_users.slack_id:character varying
+public.slack_users.slack_team_id:character varying
+public.slack_users.slack_updated:integer
+public.slack_users.strava_access_token:character varying
+public.slack_users.strava_athlete_id:integer
+public.slack_users.strava_expires_at:timestamp without time zone
+public.slack_users.strava_refresh_token:character varying
+public.slack_users.updated:timestamp without time zone
+public.slack_users.user_id:integer
+public.slack_users.user_name:character varying
+public.update_requests.ao_id:integer
+public.update_requests.ao_logo:character varying
+public.update_requests.ao_name:character varying
+public.update_requests.ao_website:character varying
+public.update_requests.created:timestamp without time zone
+public.update_requests.event_contact_email:character varying
+public.update_requests.event_day_of_week:USER-DEFINED
+public.update_requests.event_description:character varying
+public.update_requests.event_end_date:date
+public.update_requests.event_end_time:character varying
+public.update_requests.event_highlight:boolean
+public.update_requests.event_id:integer
+public.update_requests.event_index_within_interval:integer
+public.update_requests.event_is_active:boolean
+public.update_requests.event_is_series:boolean
+public.update_requests.event_meta:jsonb
+public.update_requests.event_name:character varying
+public.update_requests.event_recurrence_interval:integer
+public.update_requests.event_recurrence_pattern:USER-DEFINED
+public.update_requests.event_series_id:integer
+public.update_requests.event_start_date:date
+public.update_requests.event_start_time:character varying
+public.update_requests.event_tag:character varying
+public.update_requests.event_type_ids:ARRAY
+public.update_requests.id:uuid
+public.update_requests.location_address2:character varying
+public.update_requests.location_address:character varying
+public.update_requests.location_city:character varying
+public.update_requests.location_contact_email:character varying
+public.update_requests.location_country:character varying
+public.update_requests.location_description:character varying
+public.update_requests.location_id:integer
+public.update_requests.location_lat:real
+public.update_requests.location_lng:real
+public.update_requests.location_name:character varying
+public.update_requests.location_state:character varying
+public.update_requests.location_zip:character varying
+public.update_requests.meta:jsonb
+public.update_requests.region_id:integer
+public.update_requests.request_type:USER-DEFINED
+public.update_requests.reviewed_at:timestamp without time zone
+public.update_requests.reviewed_by:character varying
+public.update_requests.status:USER-DEFINED
+public.update_requests.submitted_by:character varying
+public.update_requests.submitter_validated:boolean
+public.update_requests.token:uuid
+public.update_requests.updated:timestamp without time zone
+public.users.avatar_url:character varying
+public.users.created:timestamp without time zone
+public.users.email:USER-DEFINED
+public.users.email_verified:timestamp without time zone
+public.users.emergency_contact:character varying
+public.users.emergency_notes:character varying
+public.users.emergency_phone:character varying
+public.users.f3_name:character varying
+public.users.first_name:character varying
+public.users.home_region_id:integer
+public.users.id:integer
+public.users.last_name:character varying
+public.users.meta:jsonb
+public.users.phone:character varying
+public.users.status:USER-DEFINED
+public.users.updated:timestamp without time zone
+slackbot.f3versary_delivery_pages.blocks:jsonb
+slackbot.f3versary_delivery_pages.claim_expires_at:timestamp with time zone
+slackbot.f3versary_delivery_pages.claim_token:uuid
+slackbot.f3versary_delivery_pages.client_msg_id:uuid
+slackbot.f3versary_delivery_pages.created_at:timestamp with time zone
+slackbot.f3versary_delivery_pages.id:integer
+slackbot.f3versary_delivery_pages.page_number:integer
+slackbot.f3versary_delivery_pages.run_id:integer
+slackbot.f3versary_delivery_pages.sent_at:timestamp with time zone
+slackbot.f3versary_delivery_pages.slack_ts:character varying
+slackbot.f3versary_delivery_pages.status:character varying
+slackbot.f3versary_delivery_pages.text:text
+slackbot.f3versary_delivery_pages.updated_at:timestamp with time zone
+slackbot.f3versary_delivery_runs.channel:text
+slackbot.f3versary_delivery_runs.created_at:timestamp with time zone
+slackbot.f3versary_delivery_runs.id:integer
+slackbot.f3versary_delivery_runs.lead_days:integer
+slackbot.f3versary_delivery_runs.org_id:integer
+slackbot.f3versary_delivery_runs.page_count:integer
+slackbot.f3versary_delivery_runs.processing_date:date
+slackbot.f3versary_delivery_runs.slack_space_id:integer
+slackbot.f3versary_delivery_runs.status:character varying
+slackbot.f3versary_delivery_runs.target_date:date
+slackbot.f3versary_delivery_runs.updated_at:timestamp with time zone
