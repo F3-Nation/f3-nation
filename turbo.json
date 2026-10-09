@@ -107,6 +107,21 @@
     },
     "clean": {
       "cache": false
+    },
+    "obfuscate-db": {
+      "cache": false,
+      "env": ["OBFUSCATION_SALT"]
+    },
+    "staging-refresh": {
+      "cache": false,
+      "env": [
+        "OBFUSCATION_SALT",
+        "PROD_DATABASE_URL",
+        "STAGING_DATABASE_URL",
+        "INTERMEDIATE_DATABASE_URL",
+        "PG_BIN_DIR",
+        "CLOUD_RUN_JOB"
+      ]
     }
   }
 }
