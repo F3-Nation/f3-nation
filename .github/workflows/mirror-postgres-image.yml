@@ -42,27 +42,12 @@ jobs:
           repository_name="${GITHUB_REPOSITORY#*/}"
           repository_name="${repository_name,,}"
           echo "ref=ghcr.io/${owner}/${repository_name}-ci-postgres" >> "$GITHUB_OUTPUT"
+      # Keeps the source's own tag (e.g. 18.6-trixie) on the mirror so a
+      # consumer can pin the pushed digest the same way ci.yml already pins
+      # the Docker Hub one today. Logic lives in scripts/mirror-postgres-image.sh
+      # so it can be covered by scripts/mirror-postgres-image.test.sh.
       - name: Pull, retag, and push
-        id: push
         env:
           SOURCE_IMAGE: ${{ inputs.source_image }}
           TARGET_REF: ${{ steps.target.outputs.ref }}
-        run: |
-          docker pull "$SOURCE_IMAGE"
-          # Keep the source's own tag (e.g. 18.6-trixie) on the mirror so a
-          # consumer can pin the pushed digest the same way ci.yml already
-          # pins the Docker Hub one today.
-          tag="${SOURCE_IMAGE#*:}"
-          tag="${tag%@*}"
-          docker tag "$SOURCE_IMAGE" "${TARGET_REF}:${tag}"
-          docker push "${TARGET_REF}:${tag}"
-          # The local image now carries RepoDigests for both the original
-          # Docker Hub pull and this push, in no guaranteed order -- grep for
-          # the one under our own TARGET_REF rather than trusting index 0.
-          digest="$(docker inspect --format '{{json .RepoDigests}}' "${TARGET_REF}:${tag}" | grep -o "${TARGET_REF}@sha256:[a-f0-9]*")"
-          echo "Mirrored to ${digest}"
-          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
-      - name: Summary
-        env:
-          DIGEST: ${{ steps.push.outputs.digest }}
-        run: echo "### Mirrored image\n\n\`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+        run: scripts/mirror-postgres-image.sh
