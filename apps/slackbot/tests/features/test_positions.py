@@ -11,11 +11,13 @@ from features.positions import (
     PositionViews,
     _build_position_service,
     build_config_slt_form,
+    build_position_list_form,
     handle_config_slt_post,
     handle_edit_position_post,
     handle_new_position_post,
     handle_position_edit_delete,
 )
+from utilities.slack import actions
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -183,6 +185,55 @@ class PositionViewsBuildSltModalTest(unittest.TestCase):
 
 
 class PositionViewsBuildListModalTest(unittest.TestCase):
+    @patch("features.positions._build_position_service")
+    def test_position_list_emits_confirmation_on_open_and_update(self, mock_build_service):
+        mock_build_service.return_value.get_org_positions.return_value = [_make_position(id=5, name="President")]
+        for update_view_id in (None, "V_POSITIONS"):
+            with self.subTest(update_view_id=update_view_id):
+                client = MagicMock()
+                build_position_list_form(
+                    {"trigger_id": "T_TRIGGER"},
+                    client,
+                    MagicMock(),
+                    {},
+                    _make_region_record(),
+                    update_view_id=update_view_id,
+                )
+                if update_view_id:
+                    client.views_update.assert_called_once()
+                    client.views_push.assert_not_called()
+                    self.assertEqual(client.views_update.call_args.kwargs["view_id"], update_view_id)
+                    view = client.views_update.call_args.kwargs["view"]
+                else:
+                    client.views_push.assert_called_once()
+                    client.views_update.assert_not_called()
+                    self.assertEqual(client.views_push.call_args.kwargs["trigger_id"], "T_TRIGGER")
+                    view = client.views_push.call_args.kwargs["view"]
+
+                self.assertEqual(view["callback_id"], actions.EDIT_DELETE_POSITION_CALLBACK_ID)
+                action_id = f"{actions.POSITION_EDIT_DELETE}_5"
+                block = next(b for b in view["blocks"] if b.get("block_id") == action_id)
+                self.assertEqual(block["text"]["text"], "President")
+                selector = block["accessory"]
+                self.assertEqual(selector["action_id"], action_id)
+                self.assertEqual(selector["placeholder"]["text"], "Edit or Delete")
+                self.assertEqual(
+                    [(o["text"]["text"], o["value"]) for o in selector["options"]],
+                    [("Edit", "Edit"), ("Delete", "Delete")],
+                )
+                self.assertEqual(
+                    selector["confirm"],
+                    {
+                        "title": {"type": "plain_text", "text": "Are you sure?"},
+                        "text": {
+                            "type": "plain_text",
+                            "text": ("Are you sure you want to edit / delete this Position? This cannot be undone."),
+                        },
+                        "confirm": {"type": "plain_text", "text": "Yes, I am sure"},
+                        "deny": {"type": "plain_text", "text": "Whups, never mind"},
+                    },
+                )
+
     def test_build_position_list_modal_shows_empty_message(self):
         form = PositionViews.build_position_list_modal([])
         # first block is context, second is the "no positions" message
