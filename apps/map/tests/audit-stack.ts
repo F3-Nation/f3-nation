@@ -143,7 +143,7 @@ export const test = base.extend<
           });
           return child;
         }
-        await start("migrate", ["--filter", "@acme/db", "migrate"], true);
+        await start("migrate", ["--filter", "@acme/db", "migrate:local"], true);
         await start("seed", ["--filter", "@acme/db", "seed:local"], true);
         const api = await start(
           "api",
