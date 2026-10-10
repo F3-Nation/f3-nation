@@ -1,6 +1,7 @@
 import { env } from "@acme/env";
 
 import { logError, logInfo } from "../logger";
+import { clearMapDataCache } from "./map-data-cache";
 
 /**
  * Triggers the Map app's cache revalidation via HTTP.
@@ -14,6 +15,9 @@ import { logError, logInfo } from "../logger";
 export const triggerMapAppRevalidation = (context?: {
   event?: unknown;
 }): Promise<void> => {
+  // Map data changed: this instance's cached datasets are stale now (other
+  // instances catch up within MAP_DATA_TTL_MS).
+  clearMapDataCache();
   const mapUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
     ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
     : env.NEXT_PUBLIC_MAP_URL;
