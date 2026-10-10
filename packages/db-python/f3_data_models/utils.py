@@ -58,7 +58,7 @@ DEFAULT_MAX_OVERFLOW = 2
 DEFAULT_POOL_TIMEOUT_SECONDS = 10
 
 
-def _env_int(name: str, default: int) -> int:
+def _env_int(name: str, default: int, minimum: int = 0) -> int:
     raw = os.environ.get(name, "").strip()
     if not raw:
         return default
@@ -67,17 +67,19 @@ def _env_int(name: str, default: int) -> int:
     except ValueError:
         logging.warning("Ignoring non-integer %s=%r; using %d", name, raw, default)
         return default
-    if value < 0:
-        logging.warning("Ignoring negative %s=%r; using %d", name, raw, default)
+    if value < minimum:
+        logging.warning("Ignoring %s=%r below minimum %d; using %d", name, raw, minimum, default)
         return default
     return value
 
 
 def _pool_kwargs() -> dict[str, int]:
     return {
-        "pool_size": _env_int("DATABASE_POOL_SIZE", DEFAULT_POOL_SIZE),
+        # pool_size=0 means an unlimited QueuePool, and pool_timeout=0 fails every
+        # checkout once the pool is busy, so both need at least 1.
+        "pool_size": _env_int("DATABASE_POOL_SIZE", DEFAULT_POOL_SIZE, minimum=1),
         "max_overflow": _env_int("DATABASE_MAX_OVERFLOW", DEFAULT_MAX_OVERFLOW),
-        "pool_timeout": _env_int("DATABASE_POOL_TIMEOUT", DEFAULT_POOL_TIMEOUT_SECONDS),
+        "pool_timeout": _env_int("DATABASE_POOL_TIMEOUT", DEFAULT_POOL_TIMEOUT_SECONDS, minimum=1),
     }
 
 
