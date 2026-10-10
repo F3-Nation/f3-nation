@@ -41,7 +41,7 @@ jobs:
       # Set up uv to refresh uv.lock for the new release-please version
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          version: "0.12.20"
+          version: "0.12.22"
 
       - name: Refresh uv.lock
         run: uv lock
