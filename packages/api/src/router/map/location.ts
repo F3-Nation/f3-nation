@@ -29,7 +29,7 @@ import {
   logIfOrgTreeExceedsMaxDepth,
   ORG_TREE_MAX_DEPTH,
 } from "../../org-tree";
-import { cachedMapData } from "../../lib/map-data-cache";
+import { mapDataFor } from "../../lib/map-data-cache";
 import { protectedProcedure } from "../../shared";
 
 /**
@@ -133,7 +133,7 @@ export const mapLocationRouter = os.router({
         .describe("Low-bandwidth array of events and locations"),
     )
     .handler(({ context: ctx }) =>
-      cachedMapData("eventsAndLocations", async () => {
+      mapDataFor(ctx.reqHeaders, "eventsAndLocations", async () => {
         void logIfOrgTreeExceedsMaxDepth(ctx.db);
 
         const aoOrg = aliasedTable(schema.orgs, "ao_org");
@@ -862,7 +862,7 @@ export const mapLocationRouter = os.router({
       }),
     )
     .handler(({ context: ctx }) =>
-      cachedMapData("regionsWithLocation", async () => {
+      mapDataFor(ctx.reqHeaders, "regionsWithLocation", async () => {
         const region = aliasedTable(schema.orgs, "region");
         // One row per region, decided in SQL. Joining every AO and every
         // location of a region returned (AOs x locations) rows per region

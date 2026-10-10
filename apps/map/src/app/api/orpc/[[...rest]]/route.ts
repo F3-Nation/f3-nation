@@ -97,17 +97,24 @@ function getForwardedHeaders(
   return headers;
 }
 
-/** Whether the caller's Accept-Encoding allows gzip (an explicit q=0 refuses it). */
+/**
+ * Whether the caller's Accept-Encoding allows gzip. An explicit `gzip` entry
+ * decides (so `gzip;q=0, *;q=1` refuses it); otherwise `*` does.
+ */
 export function acceptsGzip(request: Pick<NextRequest, "headers">): boolean {
-  const header = request.headers.get("accept-encoding") ?? "";
-  return header.split(",").some((part) => {
+  const q: Record<string, number> = {};
+  for (const part of (request.headers.get("accept-encoding") ?? "").split(
+    ",",
+  )) {
     const [name, ...params] = part
       .split(";")
       .map((p) => p.trim().toLowerCase());
-    if (name !== "gzip" && name !== "*") return false;
-    const q = params.find((p) => p.startsWith("q="));
-    return q === undefined || Number(q.slice(2)) > 0;
-  });
+    if (!name) continue;
+    const qParam = params.find((p) => p.startsWith("q="));
+    q[name] = qParam === undefined ? 1 : Number(qParam.slice(2)) || 0;
+  }
+  const gzip = q.gzip ?? q["*"];
+  return gzip !== undefined && gzip > 0;
 }
 
 async function proxyRequest(request: NextRequest) {

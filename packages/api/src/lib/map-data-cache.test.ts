@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { Client, Header } from "@acme/shared/common/enums";
+
 import {
   cachedMapData,
   clearMapDataCache,
   MAP_DATA_TTL_MS,
+  mapDataFor,
 } from "./map-data-cache";
 
 describe("cachedMapData", () => {
@@ -65,5 +68,18 @@ describe("cachedMapData", () => {
     const load = vi.fn().mockResolvedValue("after-clear");
     expect(await cachedMapData("k", load)).toBe("after-clear");
     expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("never serves the map's SSG/ISR render from the cache", async () => {
+    const ssg = new Headers({ [Header.Client]: Client.ORPC_SSG });
+    const api = new Headers({ [Header.Client]: Client.ORPC });
+    await mapDataFor(api, "k", () => Promise.resolve("cached"));
+
+    expect(await mapDataFor(api, "k", () => Promise.resolve("fresh"))).toBe(
+      "cached",
+    );
+    expect(await mapDataFor(ssg, "k", () => Promise.resolve("fresh"))).toBe(
+      "fresh",
+    );
   });
 });

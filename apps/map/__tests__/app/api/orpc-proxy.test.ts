@@ -371,10 +371,19 @@ describe("oRPC proxy route", () => {
       expect(await res.text()).toBe(json);
     });
 
-    it("honors an explicit gzip;q=0", async () => {
+    it("honors an explicit gzip;q=0, even with a wildcard", async () => {
       upstream();
       const res = await call("gzip;q=0, br");
       expect(res.headers.get("content-encoding")).toBeNull();
+      upstream();
+      const wild = await call("gzip;q=0, *;q=1");
+      expect(wild.headers.get("content-encoding")).toBeNull();
+    });
+
+    it("accepts gzip through a wildcard when gzip isn't listed", async () => {
+      upstream();
+      const res = await call("br;q=1, *;q=0.5");
+      expect(res.headers.get("content-encoding")).toBe("gzip");
     });
 
     it("leaves non-JSON bodies (e.g. event streams) uncompressed", async () => {

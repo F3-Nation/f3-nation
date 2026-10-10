@@ -63,6 +63,8 @@ export const createQueryClient = () =>
  * regionsWithLocation). They are large (~1.5 MB / 70 KB), identical for every
  * visitor and change rarely; the 30s default refetched them on every window
  * focus. Edits made from the map still show at once: submitting one calls
- * invalidateQueries("map"), which refetches regardless of staleTime.
+ * invalidateQueries("map"), which refetches regardless of staleTime. An edit
+ * made elsewhere (admin) reaches an already-open tab within this window plus
+ * the API's MAP_DATA_TTL_MS; a fresh page load fetches once regardless.
  */
-export const MAP_DATASET_STALE_TIME_MS = 10 * 60 * 1000;
+export const MAP_DATASET_STALE_TIME_MS = 5 * 60 * 1000;

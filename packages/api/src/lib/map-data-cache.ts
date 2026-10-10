@@ -6,10 +6,18 @@
  * on staging). With a TTL, an instance builds each dataset at most once per
  * window, and concurrent misses share one load instead of stampeding the DB.
  *
- * Staleness: an edit reaches the map within TTL_MS (plus the client's own
- * staleTime). The cache is also cleared whenever this instance triggers a map
- * revalidation (see revalidate-map.ts), and by tests that write map data.
+ * Staleness: an edit reaches browsers within MAP_DATA_TTL_MS (plus the
+ * client's own staleTime). The cache is also cleared whenever this instance
+ * triggers a map revalidation (see revalidate-map.ts), and by tests that write
+ * map data.
+ *
+ * The map's SSG/ISR page render never uses it (mapDataFor): that render runs
+ * this router in-process inside the map service (apps/map/src/orpc/
+ * client.server.ts), and a revalidation after an edit must bake fresh data
+ * into a page the map then serves for up to an hour.
  */
+import { Client, Header } from "@acme/shared/common/enums";
+
 export const MAP_DATA_TTL_MS = 60_000;
 
 interface Entry {
@@ -53,4 +61,17 @@ export function clearMapDataCache(): void {
   generation += 1;
   entries.clear();
   inFlight.clear();
+}
+
+/**
+ * cachedMapData for API callers; a direct load for the map's own SSG/ISR
+ * render (Client.ORPC_SSG), which must never bake cached data into a page.
+ */
+export function mapDataFor<T>(
+  reqHeaders: Headers | undefined,
+  key: string,
+  load: () => Promise<T>,
+): Promise<T> {
+  if (reqHeaders?.get(Header.Client) === Client.ORPC_SSG) return load();
+  return cachedMapData(key, load);
 }
