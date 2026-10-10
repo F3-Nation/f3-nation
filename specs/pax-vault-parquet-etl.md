@@ -252,10 +252,11 @@ by name then user ID. Missing attendance, types, or tags produce empty lists.
 ### `pv_attendance` — one row per eligible actual attendance ID
 
 Columns, in exact order: `refreshed_at`, `id`, `user_id`,
-`event_instance_id`, `attendance_meta`, `created`, `updated`, `q_ind`,
-`coq_ind`, `f3_name`, `home_region_id`, `home_region_name`, `avatar_url`,
-`user_status`, `start_date`, `ao_org_id`, `ao_name`, `tags`, `types`,
-`categories`.
+`event_instance_id`, `q_ind`, `coq_ind`, `start_date`, `ao_org_id`,
+`region_org_id`, `tags`, `types`, `categories`. Do not include
+`attendance_meta`, `created`, `updated`, `ao_name`, or pax profile fields
+(`f3_name`, `home_region_id`, `home_region_name`, `avatar_url`,
+`user_status`).
 
 Each source attendance ID produces one row; do not aggregate or deduplicate
 attendance records by user or event. Include actual attendance only (exclude
@@ -264,15 +265,22 @@ practical email syntax specified for `pv_pax`. Events use exactly the
 `pv_events` eligibility rule: active event instances with non-null `pax_count`,
 and `exclude_from_pax_vault` false or null. A true exclusion flag excludes the
 event; malformed non-null/non-boolean values fail the dataset. `attendance_meta`
-preserves the attendance's metadata, and `q_ind`/`coq_ind` identify the attached
-Q and Co-Q attendance types. User identity/profile fields come from that
-attendance's user. `start_date` is the event date. AO ID/name are resolved
-through the same recursive event-organization ancestry used by `pv_events`;
-events without an AO have null AO fields. `tags` and `types` are distinct typed
-records using the `pv_events` shapes (`{id, name, description}` and
-`{id, name, description, event_category}` respectively), and `categories` is a
-distinct list of category strings. Lists are deterministically ordered; empty
-relationships are `[]`.
+is not projected. `q_ind` and `coq_ind` identify whether the attendance has the
+attached Q and Co-Q attendance types, respectively. `start_date` is the event
+date. `ao_org_id` and `region_org_id` come from the same recursive
+event-organization ancestry used by `pv_events`: retain the AO ID, and set
+`region_org_id` to the event organization's region ancestor, including when the
+event organization is itself a region; it is null when no region ancestor
+exists. `tags` and `types` are distinct lists of integer IDs (not records),
+sorted by ID ascending; `categories` is a distinct list of non-null enum
+identifier strings, sorted lexicographically. The source has no numeric
+category ID. Empty relationships are `[]`.
+
+`pv_attendance.v1` is currently unreleased and unconsumed, per the product
+owner. This projection may therefore be revised while it remains unreleased and
+unconsumed; it does not imply compatibility gates have passed. The general
+schema-version bump rule applies to released or consumed contracts, not to this
+still-unreleased `pv_attendance.v1` revision.
 
 ## 3. Security and operational release gates
 

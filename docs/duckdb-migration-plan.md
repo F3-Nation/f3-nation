@@ -94,8 +94,14 @@ list of role records), and the appended `lifetime_posts`/`lifetime_qs` fields.
 `pv_areas` and `pv_sectors` use schema v2 for revised hierarchy outputs. The
 declared v2 datasets are `pv_events.v2`, `pv_areas.v2`, and `pv_sectors.v2`;
 `pv_attendance` is `pv_attendance.v1`, and other currently declared Pax Vault
-datasets are v1. DuckDB types/nullability are determined by the approved registry and
-remain a compatibility verification gate; do not infer nullable properties
+datasets are v1. `pv_attendance.v1` remains unreleased and unconsumed, per the
+product owner; its projection can be revised while it remains unreleased and
+unconsumed. The general schema-version bump rule applies to released or
+consumed contracts, and this revision does not mean its compatibility gate has
+passed. Its normative columns, ordering, and row semantics are in the
+[Pax Vault ETL specification](../specs/pax-vault-parquet-etl.md#pv_attendance--one-row-per-eligible-actual-attendance-id).
+DuckDB types/nullability are determined by the approved registry and remain a
+compatibility verification gate; do not infer nullable properties
 from these summaries. The consumer verifies the
 manifest and every object's GCS generation and CRC32C before opening DuckDB,
 then verifies table names, columns, logical types, nullability, and row/golden
@@ -279,6 +285,8 @@ revisions remain rollback-eligible. Do not imply an executable registry check
 has run. Publishing is blocked unless the candidate schema is verified as
 supported by every serving and rollback-eligible revision during overlap. If
 that cannot hold, coordinate a revision rollout first, or perform a validated
-pointer rollback before rolling the application back. Additive fields require
-consumer tolerance; renames/removals require a new contract version and a
-coordinated rollout.
+pointer rollback before rolling the application back. For released or consumed
+contracts, additive fields require consumer tolerance; renames/removals require
+a new contract version and a coordinated rollout. `pv_attendance.v1` remains
+unreleased and unconsumed, per the product owner, and may be revised while it
+remains so; this does not imply its compatibility gate has passed.

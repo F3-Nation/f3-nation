@@ -338,8 +338,13 @@ machine-readable registry of supported pointer `contractVersion`, manifest
 application revisions remain rollback-eligible. Until then, use the explicit
 external consumer-compatibility gate and do not claim an executable check has
 run. Publishing is blocked if any serving or rollback-eligible revision cannot
-read the candidate. Additive fields require consumer tolerance;
-renames/removals require a new contract version and coordinated rollout.
+read the candidate. For released or consumed contracts, additive fields require
+consumer tolerance; renames/removals require a new contract version and
+coordinated rollout. The `pv_attendance.v1` projection is still unreleased and
+unconsumed, per the product owner, so it may be revised while remaining
+unreleased and unconsumed; this does not mean the compatibility gate has passed.
+Its normative columns and ordering are in the [Pax Vault ETL
+specification](../specs/pax-vault-parquet-etl.md#pv_attendance--one-row-per-eligible-actual-attendance-id).
 
 The ten Pax Vault datasets and four analytics datasets are read sequentially,
 with independent per-dataset read boundaries; they are not one PostgreSQL or

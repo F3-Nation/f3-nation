@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -53,6 +53,7 @@ def source():
             (13, 2, True, None, "{}", "2026-01-02"),
             (14, 2, True, 2, '{"exclude_from_pax_vault":true}', "2026-01-02"),
             (15, 999, True, 2, "{}", "2026-01-02"),
+            (16, 3, True, 2, "{}", "2026-01-02"),
         ],
     )
     db.executemany(
@@ -84,6 +85,7 @@ def source():
             (113, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
             (114, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
             (115, 1, 10, False, "{}", "2026-01-01 08:00:00", "2026-01-01 09:00:00"),
+            (116, 1, 16, False, "{}", "2026-01-02 08:00:00", "2026-01-02 09:00:00"),
         ],
     )
     db.executemany(
@@ -123,64 +125,42 @@ def test_attendance_rows_filter_and_aggregate_without_fanout():
         "id",
         "user_id",
         "event_instance_id",
-        "attendance_meta",
-        "created",
-        "updated",
         "q_ind",
         "coq_ind",
-        "f3_name",
-        "home_region_id",
-        "home_region_name",
-        "avatar_url",
-        "user_status",
         "start_date",
         "ao_org_id",
-        "ao_name",
+        "region_org_id",
         "tags",
         "types",
         "categories",
     ]
-    assert len(rows) == 9
+    assert len(rows) == 10
     row = rows[0]
-    assert row[1:17] == (
+    assert row[1:9] == (
         100,
         1,
         10,
-        None,
-        datetime(2026, 1, 1, 8),
-        datetime(2026, 1, 1, 9),
         1,
         1,
-        "Alpha",
-        1,
-        "Region",
-        "alpha.png",
-        "active",
         date(2026, 1, 1),
         2,
-        "AO",
+        1,
     )
-    assert row[17] == [{"id": 7, "name": "Morning", "description": "Workout"}]
-    assert row[18] == [
-        {"id": 2, "name": "Alpha", "description": "first", "event_category": "first_f"},
-        {"id": 1, "name": "Beta", "description": "second", "event_category": "second_f"},
-        {"id": 3, "name": "Null category", "description": "none", "event_category": None},
-    ]
-    assert row[19] == ["first_f", "second_f"]
+    assert row[9:] == ([7], [1, 2, 3], ["first_f", "second_f"])
     assert rows[1][1:4] == (109, 1, 10)
-    assert rows[1][7:9] == (0, 0)
+    assert rows[1][4:6] == (0, 0)
     assert rows[2][1:4] == (110, 4, 10)
-    assert rows[2][9] == "4"
+    assert rows[2][4:6] == (0, 0)
     assert rows[3][1:4] == (111, 5, 10)
-    assert rows[3][9] == "5"
+    assert rows[3][4:6] == (0, 0)
     assert rows[4][1:4] == (112, 1, 10)
-    assert rows[4][7:9] == (1, 0)  # Q only
+    assert rows[4][4:6] == (1, 0)  # Q only
     assert rows[5][1:4] == (113, 1, 10)
-    assert rows[5][7:9] == (0, 1)  # CoQ only
+    assert rows[5][4:6] == (0, 1)  # CoQ only
     assert rows[6][1:4] == (114, 1, 10)
-    assert rows[6][7:9] == (0, 1)  # Co-Q only
+    assert rows[6][4:6] == (0, 1)  # Co-Q only
     assert rows[7][1:4] == (115, 1, 10)
-    assert rows[7][7:9] == (0, 0)  # Pax only
+    assert rows[7][4:6] == (0, 0)  # Pax only
     assert rows[8][1] == 104
 
 
@@ -192,23 +172,27 @@ def test_cyclic_org_ancestry_resolves_ao_and_terminates():
 
     rows = query(db).fetchall()
     cycle_row = next(row for row in rows if row[1] == 400)
-    assert cycle_row[15:17] == (40, "Loop AO")
+    assert cycle_row[7:9] == (40, 41)
     # The depth cap would also terminate recursion if cycle detection regressed,
     # and the final projection can hide duplicate ancestors. Assert the guard
     # explicitly so removing it cannot silently pass this bounded fixture.
     assert "NOT list_contains(a.visited, parent.id)" in SQL
 
 
-def test_attendance_without_tags_or_types_has_typed_empty_arrays_and_null_meta(tmp_path: Path):
+def test_attendance_without_tags_or_types_has_typed_empty_arrays_and_region_hierarchy(tmp_path: Path):
     db = source()
-    # A direct region event has no AO; pv_events' ancestor lookup also returns NULL for AO.
+    # A direct region event has no AO but reports that region ancestor.
     db.execute("INSERT INTO pg.public.event_instances VALUES (20, 1, true, 1, '{}', '2026-01-03')")
     db.execute("INSERT INTO pg.public.attendance VALUES (200, 1, 20, false, NULL, NULL, NULL)")
+    db.execute("INSERT INTO pg.public.event_instances VALUES (21, 3, true, 1, '{}', '2026-01-03')")
+    db.execute("INSERT INTO pg.public.attendance VALUES (201, 1, 21, false, NULL, NULL, NULL)")
     row = next(r for r in query(db).fetchall() if r[1] == 200)
-    assert row[4] is None
-    assert row[7:9] == (0, 0)
-    assert row[15:17] == (None, None)
-    assert row[17:20] == ([], [], [])
+    assert row[4:6] == (0, 0)
+    assert row[7:9] == (None, 1)
+    assert row[9:12] == ([], [], [])
+    no_region = next(r for r in query(db).fetchall() if r[1] == 201)
+    assert no_region[7:9] == (None, None)
+    assert no_region[9:12] == ([], [], [])
     output = tmp_path / "pv_attendance.parquet"
     db.execute("COPY (" + SQL + ") TO ? (FORMAT PARQUET)", [str(output), "2026-01-03T00:00:00Z", "2026-01-03"])
     columns = db.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(output)]).fetchall()
@@ -217,7 +201,7 @@ def test_attendance_without_tags_or_types_has_typed_empty_arrays_and_null_meta(t
     ]
 
 
-def test_malformed_event_exclusion_and_attendance_metadata_fail():
+def test_malformed_event_exclusion_fails_but_attendance_metadata_is_not_parsed():
     db = source()
     db.execute('UPDATE pg.public.event_instances SET meta = \'{"exclude_from_pax_vault":"yes"}\' WHERE id = 10')
     with pytest.raises(Exception, match="exclude_from_pax_vault"):
@@ -225,5 +209,6 @@ def test_malformed_event_exclusion_and_attendance_metadata_fail():
 
     db = source()
     db.execute("UPDATE pg.public.attendance SET meta = 'not-json' WHERE id = 100")
-    with pytest.raises(duckdb.ConversionException, match="Malformed JSON"):
-        query(db)
+    rows = query(db).fetchall()
+    assert len(rows) == 10
+    assert next(row for row in rows if row[1] == 100)[1] == 100
