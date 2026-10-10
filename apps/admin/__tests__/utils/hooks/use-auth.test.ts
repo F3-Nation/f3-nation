@@ -65,6 +65,24 @@ describe("useAuth", () => {
     });
   });
 
+  it("reports no privileges for an authenticated ordinary user", () => {
+    useAdminSessionMock.mockReturnValue({
+      data: {
+        roles: [{ roleName: "user", orgId: 1, orgName: "F3 Nation" }],
+      },
+      status: "authenticated",
+    });
+
+    const { result } = renderHook(() => useAuth());
+
+    expect(result.current).toMatchObject({
+      isNationAdmin: false,
+      isEditorOrAdmin: false,
+      isAdmin: false,
+      status: "authenticated",
+    });
+  });
+
   it("treats a regional admin as admin but not nation admin", () => {
     useAdminSessionMock.mockReturnValue({
       data: {
