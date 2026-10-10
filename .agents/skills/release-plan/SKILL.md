@@ -53,6 +53,13 @@ Ask for anything missing before starting:
    queries section from the template. Otherwise fill
    `{{NEWEST_MIGRATION_FILE}}` with the last file name listed.
 
+   For a Production plan with a migration, keep Step 2's "Update the Staging
+   refresh" item as it is. It always runs the full setup: the refresh job
+   refuses to run once Production is ahead of the migrations in its image,
+   and a migration can also take away the refresh login's read access (a
+   migration that calls `audit.enable_tracking`, or a new table without
+   default grants). The full setup fixes both and is safe to re-run.
+
 3. **Skim the linked PRs only for risk.** For each changelog entry, read the
    PR title and, if needed, the first lines of its body. You are looking for
    exactly three things:

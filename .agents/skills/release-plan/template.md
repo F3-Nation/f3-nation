@@ -14,16 +14,17 @@
 
 ## Who's who
 
-| Role         | What they do                                                                                                                                               | Person                 |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Release lead | Merges the release PR, runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys or changes the database. | @taterhead247 (Tackle) |
-| Monitor      | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                                                    | @BigGillyStyle (Crash) |
+| Role          | What they do                                                                                                                                                         | Person                 |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Release lead  | Merges the release PR, runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys the apps or migrates the database. | @taterhead247 (Tackle) |
+| Monitor       | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                                                              | @BigGillyStyle (Crash) |
+| Refresh admin | After a Production migration, re-runs the Staging refresh setup (the refresh job and its read-only database login). An Owner of the `f3data` Google Cloud project    | @dnishiyama (Spuds)    |
 
 **Slack channel:** `#monorepo`. Announce the start there.
 
 ## Stop rule
 
-If anything under **Stop if** happens, post in `#monorepo` and pause. Don't approve any Production deployment. The Release lead and Monitor decide together what to do next, and only the Release lead changes the database.
+If anything under **Stop if** happens, post in `#monorepo` and pause. Don't approve any Production deployment. The Release lead and Monitor decide together what to do next, and only the Release lead deploys or migrates.
 
 ---
 
@@ -64,6 +65,12 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Expected:** {{WHAT_ERRORS_APPEAR_BETWEEN_DEPLOY_AND_MIGRATION_OR_"none"}}
   - **Stop if:** the migration shows an error, or the check query doesn't match. Retry **once**; if it fails again, stop.
 - [ ] **Return to your branch:** `git switch -`. Owner: Release lead
+
+<!-- OPTIONAL (Production only, when there is a migration): -->
+
+- [ ] **Update the Staging refresh** for the new database, before the next refresh. From a checkout of this release: `STAGING_REFRESH_RUNNERS="<same runners as last time>" bash tooling/scripts/staging-refresh/setup.sh` (the runner list isn't in the repo; the Refresh admin has it). Owner: Refresh admin
+  - **Expected:** it ends with the job deployed and no errors.
+  - **Stop if:** it fails. This doesn't affect the release; post it in `#monorepo` so the next Staging refresh waits.
 
 <!-- Production: drop Step 3 and renumber. -->
 
