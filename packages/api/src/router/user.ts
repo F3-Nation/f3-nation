@@ -22,6 +22,7 @@ import {
   getProfileScopeOrgIds,
   hasRoleOnAny,
   isDuplicateEmailError,
+  isForeignKeyViolationError,
   shapeUserPii,
   userDetailOutputSchema,
   userListInputSchema,
@@ -724,10 +725,26 @@ export const userRouter = {
         });
       }
 
-      await ctx.db
-        .delete(schema.rolesXUsersXOrg)
-        .where(eq(schema.rolesXUsersXOrg.userId, input.id));
+      try {
+        await ctx.db.transaction(async (tx) => {
+          await tx
+            .delete(schema.rolesXUsersXOrg)
+            .where(eq(schema.rolesXUsersXOrg.userId, input.id));
 
-      await ctx.db.delete(schema.users).where(eq(schema.users.id, input.id));
+          await tx.delete(schema.users).where(eq(schema.users.id, input.id));
+        });
+      } catch (error) {
+        // Attendance, achievements, Slack links, API keys and similar history
+        // reference users without ON DELETE CASCADE. The transaction has
+        // already rolled back the roles delete, so the user keeps their roles.
+        // No email or other PII in the message (docs/LOGGING.md).
+        if (isForeignKeyViolationError(error)) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This user has history (such as attendance or achievements) and can't be deleted.",
+          });
+        }
+        throw error;
+      }
     }),
 };

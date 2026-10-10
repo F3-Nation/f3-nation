@@ -1963,6 +1963,107 @@ describe("User Router", () => {
 
       expect(roles).toHaveLength(0);
     });
+
+    it("should return CONFLICT and keep roles when the user has history", async () => {
+      // The handler looks the nation up by name, and getOrCreateF3NationOrg
+      // returns whichever nation org comes first, so match the handler.
+      let [f3Nation] = await db
+        .select({ id: schema.orgs.id })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "nation"),
+            eq(schema.orgs.name, "F3 Nation"),
+          ),
+        )
+        .limit(1);
+      f3Nation ??= (
+        await db
+          .insert(schema.orgs)
+          .values({ name: "F3 Nation", orgType: "nation", isActive: true })
+          .returning({ id: schema.orgs.id })
+      )[0];
+      if (!f3Nation) throw new Error("F3 Nation org not found");
+
+      const adminRoles = [
+        {
+          orgId: f3Nation.id,
+          orgName: "F3 Nation",
+          roleName: "admin" as const,
+        },
+      ];
+      await mockAuthWithSession({
+        id: 1,
+        email: "admin@example.com",
+        user: {
+          id: "1",
+          email: "admin@example.com",
+          name: "Admin",
+          roles: adminRoles,
+        },
+        roles: adminRoles,
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      });
+      const client = createTestClient();
+
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({
+          email: `delete-history-${uniqueId()}@example.com`,
+          f3Name: "DeleteHistory",
+        })
+        .returning();
+      if (!testUser) throw new Error("test user not created");
+
+      const [adminRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"))
+        .limit(1);
+      if (!adminRole) throw new Error("admin role not seeded");
+
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: testUser.id,
+        orgId: f3Nation.id,
+        roleId: adminRole.id,
+      });
+
+      // An owned API key references users without ON DELETE CASCADE (like
+      // attendance and achievements), so the users delete fails with a
+      // foreign-key violation.
+      const [apiKey] = await db
+        .insert(schema.apiKeys)
+        .values({
+          key: `f3_${uniqueId()}`,
+          name: `Delete history ${uniqueId()}`,
+          ownerId: testUser.id,
+        })
+        .returning({ id: schema.apiKeys.id });
+      if (!apiKey) throw new Error("api key not created");
+
+      try {
+        await expect(
+          client.user.delete({ id: testUser.id }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+
+        const [stillThere] = await db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.id, testUser.id));
+        expect(stillThere).toBeDefined();
+
+        // The roles delete ran first in the same transaction; it must have
+        // rolled back.
+        const roles = await db
+          .select()
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
+        expect(roles).toHaveLength(1);
+      } finally {
+        await cleanup.apiKey(apiKey.id);
+        await cleanup.user(testUser.id);
+      }
+    });
   });
 
   describe("crupdate response PII", () => {
