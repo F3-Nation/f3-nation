@@ -121,77 +121,60 @@ vi.mock("@acme/ui/md-table", async () => {
   };
 });
 
-vi.mock("./sector-filter", () => ({
-  SectorFilter: ({
-    onSectorSelect,
-    sectors,
+vi.mock("./org-picker-filter", () => ({
+  OrgPickerFilter: ({
+    orgType,
+    orgs,
+    onSelect,
   }: {
-    onSectorSelect: (sector: TestOrg) => void;
-    sectors: TestOrg[] | undefined;
+    orgType: string;
+    orgs: TestOrg[] | undefined;
+    onSelect: (org: TestOrg) => void;
   }) => (
     <div>
-      {sectors?.map((sector) => (
+      {orgs?.map((org) => (
         <button
-          key={sector.id}
-          data-testid={`sector-${sector.id}`}
-          onClick={() => onSectorSelect(sector)}
+          key={org.id}
+          data-testid={`${orgType}-${org.id}`}
+          onClick={() => onSelect(org)}
         >
-          {sector.name}
+          {org.name}
         </button>
       ))}
-      <button
-        data-testid="select-first-two-sectors"
-        onClick={() => {
-          if (sectors?.[0]) onSectorSelect(sectors[0]);
-          if (sectors?.[1]) onSectorSelect(sectors[1]);
-        }}
-      >
-        Select first two sectors
-      </button>
+      {orgType === "sector" && (
+        <button
+          data-testid="select-first-two-sectors"
+          onClick={() => {
+            if (orgs?.[0]) onSelect(orgs[0]);
+            if (orgs?.[1]) onSelect(orgs[1]);
+          }}
+        >
+          Select first two sectors
+        </button>
+      )}
     </div>
   ),
 }));
-
-vi.mock("./area-filter", () => ({
-  AreaFilter: ({
-    areas,
-    onAreaSelect,
+vi.mock("../region-filter", () => ({
+  RegionFilter: ({
+    onRegionSelect,
   }: {
-    areas: TestOrg[] | undefined;
-    onAreaSelect: (area: TestOrg) => void;
+    onRegionSelect: (region: TestOrg) => void;
   }) => (
-    <div>
-      {areas?.map((area) => (
-        <button
-          key={area.id}
-          data-testid={`area-${area.id}`}
-          onClick={() => onAreaSelect(area)}
-        >
-          {area.name}
-        </button>
-      ))}
-    </div>
-  ),
-}));
-vi.mock("./territory-filter", () => ({
-  TerritoryFilter: ({
-    territories,
-    onTerritorySelect,
-  }: {
-    territories: TestOrg[] | undefined;
-    onTerritorySelect: (territory: TestOrg) => void;
-  }) => (
-    <div>
-      {territories?.map((territory) => (
-        <button
-          key={territory.id}
-          data-testid={`territory-${territory.id}`}
-          onClick={() => onTerritorySelect(territory)}
-        >
-          {territory.name}
-        </button>
-      ))}
-    </div>
+    <button
+      data-testid="region-20"
+      onClick={() =>
+        onRegionSelect({
+          id: 20,
+          parentId: 1,
+          name: "Region",
+          orgType: "region",
+          isActive: true,
+        })
+      }
+    >
+      Region
+    </button>
   ),
 }));
 vi.mock("../mobile-filter-sheet", () => ({
@@ -818,4 +801,24 @@ describe("Area display through persisted intermediate Areas", () => {
       ]);
     },
   );
+});
+
+describe("AO table region filter", () => {
+  beforeEach(() => {
+    mocks.hierarchyAvailable = true;
+    mocks.hierarchyOrgs = [];
+    mocks.queryInputs = [];
+    mocks.resultOrgs = [];
+  });
+
+  it("sends an empty parent list until a region is picked, then that region", () => {
+    render(<OrgTable orgType="ao" />);
+    expect(latestResultQuery()?.parentOrgIds).toEqual([]);
+
+    fireEvent.click(screen.getByTestId("region-20"));
+    expect(latestResultQuery()?.parentOrgIds).toEqual([20]);
+
+    fireEvent.click(screen.getByTestId("region-20"));
+    expect(latestResultQuery()?.parentOrgIds).toEqual([]);
+  });
 });

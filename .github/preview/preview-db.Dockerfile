@@ -8,7 +8,7 @@
 # identical database — that determinism is what the E2E blocking tier needs).
 # Pinned to an exact patch for reproducible preview databases; keep in sync
 # with the postgres image in .github/workflows/preview-env.yml.
-FROM postgres:18.6@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+FROM postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
 
 ENV POSTGRES_USER=f3local \
     POSTGRES_PASSWORD=f3local \

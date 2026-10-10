@@ -19,49 +19,15 @@ import {
   buildSingleUserQuery,
   buildUserListQuery,
   checkUserPiiAccess,
+  getProfileScopeOrgIds,
+  hasRoleOnAny,
   isDuplicateEmailError,
   shapeUserPii,
   userDetailOutputSchema,
   userListInputSchema,
   userListUserOutputSchema,
 } from "../lib/user";
-import type { Context } from "../shared";
 import { adminProcedure, editorProcedure } from "../shared";
-
-const hasRoleOnAny = async (
-  ctx: Context,
-  orgIds: number[],
-  roleName: "editor" | "admin",
-): Promise<boolean> => {
-  for (const orgId of new Set(orgIds)) {
-    const { success } = await checkHasRoleOnOrg({
-      orgId,
-      session: ctx.session,
-      db: ctx.db,
-      roleName,
-    });
-    if (success) return true;
-  }
-  return false;
-};
-
-/**
- * Orgs whose editors may edit a user's profile: the home region, else any org
- * the user holds a role on, else the nation.
- */
-const getProfileScopeOrgIds = async (
-  ctx: Context,
-  homeRegionId: number | null,
-  roleOrgIds: number[],
-): Promise<number[]> => {
-  if (homeRegionId) return [homeRegionId];
-  if (roleOrgIds.length > 0) return roleOrgIds;
-  const nations = await ctx.db
-    .select({ id: schema.orgs.id })
-    .from(schema.orgs)
-    .where(eq(schema.orgs.orgType, "nation"));
-  return nations.map(({ id }) => id);
-};
 
 const PII_FIELDS = new Set([
   "email",
@@ -221,7 +187,7 @@ export const userRouter = {
           .optional()
           .default(false)
           .describe(
-            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
           ),
       }),
     )
@@ -231,7 +197,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by ID",
       description:
-        "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester has admin role for any of the user's organizations.",
+        "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
     })
     .output(
       z.object({
@@ -240,30 +206,9 @@ export const userRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      let includePii = false;
-      if (input?.includePii) {
-        // First, get the user's orgs to check if requester is admin of any
-        const userOrgs = await ctx.db
-          .selectDistinct({
-            orgId: schema.rolesXUsersXOrg.orgId,
-          })
-          .from(schema.rolesXUsersXOrg)
-          .where(eq(schema.rolesXUsersXOrg.userId, input.id));
-
-        // Check if requester is an admin for any of the user's orgs
-        for (const userOrg of userOrgs) {
-          const { success } = await checkHasRoleOnOrg({
-            orgId: userOrg.orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "admin",
-          });
-          if (success) {
-            includePii = true;
-            break;
-          }
-        }
-      }
+      const includePii = input?.includePii
+        ? await checkUserPiiAccess({ ctx, userId: input.id })
+        : false;
 
       return buildSingleUserQuery({
         ctx,
@@ -281,7 +226,7 @@ export const userRouter = {
           .optional()
           .default(false)
           .describe(
-            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+            "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
           ),
       }),
     )
@@ -291,7 +236,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Get user by email",
       description:
-        "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
+        "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
     })
     .output(
       z.object({
@@ -386,7 +331,7 @@ export const userRouter = {
       tags: ["user"],
       summary: "Create or update user",
       description:
-        "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set, and are only returned, if requester has admin access.",
+        "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
     })
     .output(
       UserSelectSchema.partial({
@@ -440,41 +385,53 @@ export const userRouter = {
         input.id !== undefined &&
         ctx.session?.id === input.id;
 
-      const canEditProfile =
-        isSelf ||
-        !existingUser ||
+      const roleOrgIds = existingRoles.map((role) => role.orgId);
+      const isProfileEditor =
+        !!existingUser &&
         (await hasRoleOnAny(
           ctx,
           await getProfileScopeOrgIds(
             ctx,
             existingUser.homeRegionId,
-            existingRoles.map((role) => role.orgId),
+            roleOrgIds,
           ),
           "editor",
         ));
+      const canEditProfile = isSelf || !existingUser || isProfileEditor;
 
-      // PII access: admin on any of an existing user's orgs, or on any org
-      // being assigned to a new user.
-      const piiOrgIds = existingUser
-        ? existingRoles.map((role) => role.orgId)
-        : roles.map((role) => role.orgId);
-      const hasPiiAccess = await hasRoleOnAny(ctx, piiOrgIds, "admin");
+      // PII access: for an existing user, the checkUserPiiAccess rule (profile
+      // editor, or admin on one of their orgs); for a new user, admin on any
+      // org being assigned.
+      const hasPiiAccess = existingUser
+        ? isProfileEditor || (await hasRoleOnAny(ctx, roleOrgIds, "admin"))
+        : await hasRoleOnAny(
+            ctx,
+            roles.map((role) => role.orgId),
+            "admin",
+          );
 
-      // Clients resend the whole form, so only reject fields that change.
-      // PII without access, or sent as "", is never written, so skip it.
-      if (existingUser && !canEditProfile) {
-        const changesProfile = Object.entries(rest).some(([key, value]) => {
-          if (key === "id" || value === undefined) return false;
-          if (PII_FIELDS.has(key) && (!hasPiiAccess || value === "")) {
-            return false;
-          }
-          const stored = existingUser[key as keyof typeof existingUser];
-          if (key === "email" && typeof value === "string") {
-            return normalizeEmail(value) !== normalizeEmail(existingUser.email);
-          }
-          return !isSameProfileValue(value, stored);
-        });
-        if (changesProfile) {
+      // Clients resend the whole form, so only reject fields that change. A
+      // PII field sent as "" was hidden by the form and is never written.
+      if (existingUser) {
+        const changedKeys = Object.entries(rest)
+          .filter(([key, value]) => {
+            if (key === "id" || value === undefined) return false;
+            if (PII_FIELDS.has(key) && value === "") return false;
+            if (key === "email" && typeof value === "string") {
+              return (
+                normalizeEmail(value) !== normalizeEmail(existingUser.email)
+              );
+            }
+            const stored = existingUser[key as keyof typeof existingUser];
+            return !isSameProfileValue(value, stored);
+          })
+          .map(([key]) => key);
+        if (!hasPiiAccess && changedKeys.some((key) => PII_FIELDS.has(key))) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to change this user's PII",
+          });
+        }
+        if (!canEditProfile && changedKeys.length > 0) {
           throw new ORPCError("UNAUTHORIZED", {
             message: "You are not authorized to edit this user's profile",
           });
