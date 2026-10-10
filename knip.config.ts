@@ -19,13 +19,28 @@ const config: KnipConfig = {
     // vitest suite; follow-up to configure knip entries properly.
     "tooling/ci-factory/**",
   ],
-  ignoreBinaries: ["uv"],
+  ignoreBinaries: [
+    "uv",
+    // Postgres CLIs the obfuscator's verify harness shells out to.
+    "initdb",
+    "pg_ctl",
+    "pg_isready",
+    "createdb",
+    // The staging refresh restarts the staging slackbot with gcloud when it
+    // runs outside Cloud Run (best effort; never a dependency).
+    "gcloud",
+  ],
   workspaces: {
+    "packages/logger": {
+      // index.test.ts executes this fixture in a separate Node process so
+      // real pino output can be checked without Vitest's logger mocks.
+      entry: ["src/__tests__/fixtures/audit-log-output.ts"],
+    },
     ".": {
       // scripts/lint-staged.mjs spawns the eslint binary by path, so the root
       // devDependency is never a static import knip can follow.
       ignoreDependencies: ["eslint"],
-      // ci.yml's test-coverage-hono job boots the esbuild bundle from a
+      // ci.yml's test-coverage job boots the esbuild bundle from a
       // runner-temp directory copied there at CI time (outside the checkout,
       // deliberately — see build.mjs), so `./instrument.js` never exists as a
       // real repo file for knip's GitHub Actions plugin to resolve.
@@ -35,12 +50,10 @@ const config: KnipConfig = {
       // The characterization suite runs under its own vitest config,
       // which the vitest plugin does not discover from the default name.
       vitest: ["vitest.config.ts", "vitest.characterization.config.ts"],
-      // Wired in by resolve.alias rather than an import, so it is not
-      // reachable through the module graph. (src/server.ts needs no entry
-      // here — knip's package.json plugin already discovers it via the
-      // dev:hono/start:hono scripts.) scripts/smoke.mjs is run only by the
-      // Dockerfile's smoke stage, which knip does not parse.
-      entry: ["characterization/next-headers-shim.ts", "scripts/smoke.mjs"],
+      // src/server.ts needs no entry here — knip's package.json plugin
+      // already discovers it via the dev/start scripts. scripts/smoke.mjs is
+      // run only by the Dockerfile's smoke stage, which knip does not parse.
+      entry: ["scripts/smoke.mjs"],
     },
     "apps/auth": {
       // knip parses `dotenv run -q --` as a binary named `run`; `dotenv` is

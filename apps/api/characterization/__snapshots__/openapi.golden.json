@@ -1716,7 +1716,7 @@
     },
     "/v1/api-key": {
       "get": {
-        "description": "Retrieve all API keys with their metadata, owner information, role assignments, and status. Requires admin role for any organization.",
+        "description": "Retrieve the API keys the caller can manage, with their metadata, owner information, role assignments, and status. Nation admins see every key; other admins see keys whose every organization they administer, plus keys they own. `canManage` is false on an owned key that holds roles beyond the caller's own; the owner may revoke it but not restore or purge it.",
         "operationId": "apiKey.list",
         "parameters": [
           {
@@ -1733,6 +1733,10 @@
                       "description": "List of API keys",
                       "items": {
                         "properties": {
+                          "canManage": {
+                            "description": "Whether the caller may restore or purge this key. False means the caller only owns it and may only revoke it.",
+                            "type": "boolean"
+                          },
                           "created": {
                             "description": "Date the API key was created",
                             "type": "string"
@@ -1891,7 +1895,8 @@
                           "keySignature",
                           "roles",
                           "orgIds",
-                          "orgNames"
+                          "orgNames",
+                          "canManage"
                         ],
                         "type": "object"
                       },
@@ -2097,7 +2102,7 @@
     },
     "/v1/api-key/{id}/purge": {
       "delete": {
-        "description": "Permanently delete an API key and all associated role assignments. This action cannot be undone.",
+        "description": "Permanently delete an API key and all associated role assignments. This action cannot be undone. Limited to keys the caller can manage.",
         "operationId": "apiKey.purge",
         "parameters": [
           {
@@ -2153,10 +2158,6 @@
                               "description": "API key ID",
                               "type": "number"
                             },
-                            "key": {
-                              "description": "API key value",
-                              "type": "string"
-                            },
                             "lastUsedAt": {
                               "anyOf": [
                                 {
@@ -2201,7 +2202,6 @@
                           },
                           "required": [
                             "id",
-                            "key",
                             "name",
                             "description",
                             "ownerId",
@@ -2238,7 +2238,7 @@
     },
     "/v1/api-key/{id}/revoke": {
       "post": {
-        "description": "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests.",
+        "description": "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests. Owners may revoke their own keys; restoring is limited to keys the caller can manage.",
         "operationId": "apiKey.revoke",
         "parameters": [
           {
@@ -2308,10 +2308,6 @@
                               "description": "API key ID",
                               "type": "number"
                             },
-                            "key": {
-                              "description": "API key value",
-                              "type": "string"
-                            },
                             "lastUsedAt": {
                               "anyOf": [
                                 {
@@ -2356,7 +2352,6 @@
                           },
                           "required": [
                             "id",
-                            "key",
                             "name",
                             "description",
                             "ownerId",
@@ -15145,7 +15140,7 @@
     },
     "/v1/request": {
       "get": {
-        "description": "Get a paginated list of map change requests with optional filtering and sorting",
+        "description": "Get a paginated list of map change requests with optional filtering and sorting. Limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
         "operationId": "request.all",
         "parameters": [
           {
@@ -15218,7 +15213,7 @@
             "in": "query",
             "name": "onlyMine",
             "schema": {
-              "description": "If true, only return requests from regions where the requester has editor or admin role.",
+              "description": "Deprecated and ignored. Results are always limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
               "type": "boolean"
             }
           },
@@ -16314,7 +16309,7 @@
     },
     "/v1/request/id/{id}": {
       "get": {
-        "description": "Retrieve detailed information about a specific map change request including the proposed changes and current status",
+        "description": "Retrieve detailed information about a specific map change request including the proposed changes and current status. Returns null for requests that do not affect a region or AO where the requester has editor or admin role.",
         "operationId": "request.byId",
         "parameters": [
           {
@@ -20083,7 +20078,7 @@
         ]
       },
       "post": {
-        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set if requester has admin access.",
+        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.crupdate",
         "parameters": [
           {
@@ -20476,15 +20471,10 @@
                     "f3Name",
                     "firstName",
                     "lastName",
-                    "phone",
                     "homeRegionId",
                     "avatarUrl",
                     "created",
                     "updated",
-                    "emergencyContact",
-                    "emergencyPhone",
-                    "emergencyNotes",
-                    "emailVerified",
                     "status",
                     "roles"
                   ],
@@ -20544,7 +20534,7 @@
     },
     "/v1/user/email/{email}": {
       "get": {
-        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
+        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.byEmail",
         "parameters": [
           {
@@ -20567,7 +20557,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
               "type": "boolean"
             }
           }
@@ -21151,7 +21141,7 @@
     },
     "/v1/user/id/{id}": {
       "get": {
-        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester has admin role for any of the user's organizations.",
+        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.byId",
         "parameters": [
           {
@@ -21173,7 +21163,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
               "type": "boolean"
             }
           }

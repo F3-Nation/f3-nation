@@ -57,6 +57,7 @@ jobs:
         --add-volume-mount=volume=oauth_installations,mount-path=/mnt/oauth_installations
         --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
         --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+        --update-env-vars=SLACKBOT_ENV=staging
       prod_flags: >-
         --memory=4Gi
         --cpu=2
@@ -75,6 +76,7 @@ jobs:
         --add-volume-mount=volume=oauth_installations,mount-path=/mnt/oauth_installations
         --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
         --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
+        --update-env-vars=SLACKBOT_ENV=production
 
   deploy-scripts:
     uses: ./.github/workflows/_deploy-cloudrun-job.yml
@@ -98,6 +100,7 @@ jobs:
         --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
         --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
         --task-timeout=6h
+        --update-env-vars=SLACKBOT_ENV=staging
       prod_flags: >-
         --memory=4Gi
         --cpu=1
@@ -105,3 +108,4 @@ jobs:
         --add-volume=name=calendar-images,type=cloud-storage,bucket=f3nation-calendar-images
         --add-volume-mount=volume=calendar-images,mount-path=/mnt/calendar-images
         --task-timeout=6h
+        --update-env-vars=SLACKBOT_ENV=production

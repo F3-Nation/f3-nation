@@ -26,7 +26,7 @@ echo "  ────────────────────────
 # ── Step 1: Copy per-directory env files ─────────────────────────────────────
 echo "  → Copying .env.example files..."
 _env_ts=$(date +%Y%m%d%H%M%S)
-for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/slackbot packages/env; do
+for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/slackbot packages/env packages/db; do
   if [ -f "$dir/.env" ]; then
     mv "$dir/.env" "$dir/.env.bak.$_env_ts"
     echo "     $dir/.env backed up → $dir/.env.bak.$_env_ts"
@@ -53,9 +53,9 @@ if grep -q '\.\.\.' apps/auth/.env 2>/dev/null; then
 fi
 
 # Safety: refuse to migrate/seed against a non-local database
-if ! grep -q '^DATABASE_URL=postgresql://f3local:f3local@localhost:5433/' packages/env/.env; then
-  echo "     ERROR: packages/env/.env DATABASE_URL is not the local Docker Postgres target."
-  echo "     Refusing to run db:migrate and db:seed:local."
+if ! grep -q '^DATABASE_URL=postgresql://f3local:f3local@localhost:5433/' packages/db/.env; then
+  echo "     ERROR: packages/db/.env DATABASE_URL is not the local Docker Postgres target."
+  echo "     Refusing to run db:migrate:local and db:seed:local."
   exit 1
 fi
 
@@ -101,8 +101,12 @@ for BUCKET_NAME in "${BUCKETS[@]}"; do
 done
 
 # ── Step 5: Run migrations ────────────────────────────────────────────────────
+# Mark the compose-owned local database, including pre-existing Docker volumes.
+# Go through the container directly, never through a host port that may be a proxy.
+docker exec "$PG_CONTAINER" psql -U f3local -d f3nation -v ON_ERROR_STOP=1 \
+  -c "COMMENT ON DATABASE f3nation IS 'f3-disposable-local-v1'"
 echo "  → Running database migrations..."
-pnpm db:migrate
+pnpm db:migrate:local
 
 # ── Step 6: Seed the database ─────────────────────────────────────────────────
 echo "  → Seeding database with local dev data..."

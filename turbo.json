@@ -28,8 +28,10 @@
     "QUERY_TIMEOUT_MS",
     "E2E_BASE_URL",
     "E2E_API_URL",
+    "E2E_AUDIT_LOCAL",
     "CHAR_TEST_TARGET",
     "CHAR_TEST_BASE_URL",
+    "CHAR_TEST_SHARED_DB",
     "CHAR_TEST_SIGNING_JWK",
     "SUPER_ADMIN_API_KEY",
     "EMAIL_ADMIN_DESTINATIONS",
@@ -47,6 +49,7 @@
     "OAUTH_REDIRECT_URI",
     "F3_ADMIN_BASE_URL",
     "F3_API_BASE_URL",
+    "F3_API_HOST",
     "F3_ADMIN_URL",
     "F3_MAP_API_KEY",
     "F3_API_TIMEOUT_MS",
@@ -79,10 +82,6 @@
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts", "dist/**"]
     },
-    "build:server": {
-      "dependsOn": ["^topo", "^build"],
-      "outputs": ["dist/**"]
-    },
     "dev": {
       "persistent": true,
       "cache": false
@@ -110,6 +109,37 @@
     },
     "clean": {
       "cache": false
+    },
+    "obfuscate-db": {
+      "cache": false,
+      "env": ["OBFUSCATION_SALT"]
+    },
+    "staging-refresh": {
+      "cache": false,
+      "env": [
+        "OBFUSCATION_SALT",
+        "PROD_DATABASE_URL",
+        "STAGING_DATABASE_URL",
+        "INTERMEDIATE_DATABASE_URL",
+        "PG_BIN_DIR",
+        "CLOUD_RUN_JOB"
+      ]
+    },
+    "migrate:staging": {
+      "cache": false,
+      "env": [
+        "MIGRATE_DATABASE_URL",
+        "MIGRATE_SECRET",
+        "MIGRATE_SECRET_PROJECT"
+      ]
+    },
+    "migrate:prod": {
+      "cache": false,
+      "env": [
+        "MIGRATE_DATABASE_URL",
+        "MIGRATE_SECRET",
+        "MIGRATE_SECRET_PROJECT"
+      ]
     }
   }
 }

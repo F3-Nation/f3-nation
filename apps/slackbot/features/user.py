@@ -132,6 +132,7 @@ def build_user_form(body: dict, client: WebClient, logger: Logger, context: dict
 
 
 def handle_user_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
+
     form_data = FORM.get_selected_values(body)
     slack_user: SlackUser = get_user(
         safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger

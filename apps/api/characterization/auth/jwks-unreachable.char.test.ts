@@ -64,12 +64,15 @@ describe.runIf(target.inProcess)("JWKS outage isolation", () => {
     try {
       await expectAuthorized(
         await target.invoke(
-          req("/v1/api-key", {
+          req("/v1/position/assignments", {
+            method: "POST",
             headers: {
               "x-forwarded-for": IP(2),
               authorization: `Bearer ${key.key}`,
               client: "characterization",
+              "content-type": "application/json",
             },
+            body: "{}",
           }),
         ),
       );
