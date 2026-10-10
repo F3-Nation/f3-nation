@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApiKey } from "../fixtures/api-keys";
 import { sessionCookie } from "../fixtures/cookies";
-import { signFixtureJwt } from "../fixtures/jwt";
+import { generateForeignKey, signFixtureJwt } from "../fixtures/jwt";
 import { createFixtureUser } from "../fixtures/users";
 import { req, target } from "../transport";
 import { expectAuthorized, expectUnauthorized } from "./verdict";
@@ -202,5 +202,148 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
         await target.invoke(guardReq(PATH, { ip: 12, cookie })),
       );
     });
+  });
+
+  describe("rejects a forged signature even for a real user", () => {
+    // Unlike the live-safe forged-signature test below (sub: 999999, a user
+    // that can't exist), this signs for jwtUser — a real row. If signature
+    // verification were ever skipped or short-circuited, getSessionFromJWT
+    // would find this user and authorize the request, so this test actually
+    // fails closed on that regression instead of passing for the unrelated
+    // reason that the subject doesn't exist.
+    it("rejects a JWT for a real user signed with a key the JWKS never published", async () => {
+      const token = await signFixtureJwt({
+        sub: jwtUser.userId,
+        key: await generateForeignKey(),
+      });
+      await expectUnauthorized(
+        await target.invoke(guardReq("/v1/api-key", { ip: 25, bearer: token })),
+        "Unauthorized",
+      );
+    });
+  });
+
+  // publicReadProcedure — anonymous reaches the map's browse endpoints,
+  // but not the endpoints that stayed protectedProcedure/editorProcedure.
+  describe("publicReadProcedure GET /v1/map/location/events-and-locations", () => {
+    const PATH = "/v1/map/location/events-and-locations";
+
+    it("authorizes a fully anonymous caller (no cookie, no bearer)", async () => {
+      await expectAuthorized(await target.invoke(guardReq(PATH, { ip: 13 })));
+    });
+  });
+
+  describe("still-protected endpoints reject an anonymous caller", () => {
+    it("protected POST /v1/request/create-event-request", async () => {
+      await expectUnauthorized(
+        await target.invoke(
+          guardReq("/v1/request/create-event-request", {
+            ip: 14,
+            method: "POST",
+          }),
+        ),
+        "Unauthorized",
+      );
+    });
+
+    it("protected GET /v1/attendance/event-instance/{id}", async () => {
+      await expectUnauthorized(
+        await target.invoke(
+          guardReq("/v1/attendance/event-instance/1", { ip: 15 }),
+        ),
+        "Unauthorized",
+      );
+    });
+
+    it("editor GET /v1/user/id/{id}", async () => {
+      await expectUnauthorized(
+        await target.invoke(guardReq("/v1/user/id/1", { ip: 16 })),
+        "Unauthorized",
+      );
+    });
+
+    it("a signed-in user's cookie still authorizes /v1/request/create-event-request", async () => {
+      const cookie = await sessionCookie({ roles: [] });
+      await expectAuthorized(
+        await target.invoke(
+          guardReq("/v1/request/create-event-request", {
+            ip: 17,
+            method: "POST",
+            cookie,
+          }),
+        ),
+      );
+    });
+  });
+});
+// Fixture-free subset of the guards above: no DB fixtures (createApiKey,
+// createFixtureUser, sessionCookie all need the in-process DB/cookie-signing
+// machinery), so unlike everything in the describe.runIf(target.inProcess)
+// block above, this runs against ANY target including a live deployment
+// (apps/api/characterization/targets/live.ts) names this
+// live-mode auth coverage as a cutover prerequisite that didn't exist before
+// (every other auth characterization test is gated to in-process only).
+describe("role guards — live-safe (no fixtures, every target)", () => {
+  it("protected GET rejects with no auth", async () => {
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/position/assignments/all", { ip: 18 })),
+      "Unauthorized",
+    );
+  });
+
+  it("editor POST rejects with no auth", async () => {
+    await expectUnauthorized(
+      await target.invoke(
+        guardReq("/v1/position/assignments", { ip: 19, method: "POST" }),
+      ),
+      "Unauthorized",
+    );
+  });
+
+  it("admin GET rejects with no auth", async () => {
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/api-key", { ip: 20 })),
+      "Unauthorized",
+    );
+  });
+
+  it("nationAdmin GET rejects with no auth, with the exact message", async () => {
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/mail/templates", { ip: 21 })),
+      "This action requires F3 Nation admin privileges",
+    );
+  });
+
+  it("rejects a garbage bearer token (not a JWT, not a known API key)", async () => {
+    await expectUnauthorized(
+      await target.invoke(
+        guardReq("/v1/api-key", { ip: 22, bearer: "not-a-real-credential" }),
+      ),
+      "Unauthorized",
+    );
+  });
+
+  it("rejects a structurally-invalid JWT (garbage segments, not valid base64url JSON)", async () => {
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/api-key", { ip: 23, bearer: "a.b.c" })),
+      "Unauthorized",
+    );
+  });
+
+  // Signed with a key the real deployment's JWKS never published under this
+  // kid. Fixture-free, so `sub` can't be a real user — meaning this alone
+  // can't tell "signature correctly rejected" apart from "signature wrongly
+  // accepted, then correctly rejected for a nonexistent user." The
+  // real-user variant above (in-process only) closes that gap; this one's
+  // job is just to extend the same shape of coverage to a live deployment.
+  it("rejects a JWT signed by a key the real JWKS never published", async () => {
+    const token = await signFixtureJwt({
+      sub: 999999,
+      key: await generateForeignKey(),
+    });
+    await expectUnauthorized(
+      await target.invoke(guardReq("/v1/api-key", { ip: 24, bearer: token })),
+      "Unauthorized",
+    );
   });
 });

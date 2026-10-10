@@ -28,7 +28,7 @@ import {
   logIfOrgTreeExceedsMaxDepth,
   ORG_TREE_MAX_DEPTH,
 } from "../../org-tree";
-import { protectedProcedure } from "../../shared";
+import { protectedProcedure, publicReadProcedure } from "../../shared";
 
 /**
  * The date window that makes an event current for the map: it starts within the
@@ -116,7 +116,7 @@ const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
 };
 
 export const mapLocationRouter = os.router({
-  eventsAndLocations: protectedProcedure
+  eventsAndLocations: publicReadProcedure
     .route({
       method: "GET",
       path: "/events-and-locations",
@@ -301,7 +301,7 @@ export const mapLocationRouter = os.router({
 
       return lowBandwidthLocationEvents;
     }),
-  upcomingInstances: protectedProcedure
+  upcomingInstances: publicReadProcedure
     .route({
       method: "GET",
       path: "/upcoming-instances",
@@ -492,7 +492,7 @@ export const mapLocationRouter = os.router({
         fullAddress: getFullAddress(instance),
       }));
     }),
-  locationWorkout: protectedProcedure
+  locationWorkout: publicReadProcedure
     .input(
       z.object({
         locationId: z.coerce
@@ -834,7 +834,7 @@ export const mapLocationRouter = os.router({
         })),
       };
     }),
-  regionsWithLocation: protectedProcedure
+  regionsWithLocation: publicReadProcedure
     .route({
       method: "GET",
       path: "/regions-with-location",
@@ -894,7 +894,7 @@ export const mapLocationRouter = os.router({
         );
       return { regionsWithLocation: uniqueRegionsWithLocation };
     }),
-  workoutCount: protectedProcedure
+  workoutCount: publicReadProcedure
     .route({
       method: "GET",
       path: "/workout-count",
@@ -919,6 +919,10 @@ export const mapLocationRouter = os.router({
           and(
             isNotNull(schema.events.locationId),
             eq(schema.events.isActive, true),
+            // publicReadProcedure lets an anonymous caller reach this
+            // endpoint — keep the public total consistent with the
+            // map's own event listing, which excludes private events.
+            eq(schema.events.isPrivate, false),
           ),
         );
 
@@ -951,7 +955,7 @@ export const mapLocationRouter = os.router({
 
       return { count: result?.count };
     }),
-  locationIdToRegionNameLookup: protectedProcedure
+  locationIdToRegionNameLookup: publicReadProcedure
     .route({
       method: "GET",
       path: "/location-id-to-region-name-lookup",
@@ -997,7 +1001,7 @@ export const mapLocationRouter = os.router({
 
       return { lookup };
     }),
-  getAOsInRegion: protectedProcedure
+  getAOsInRegion: publicReadProcedure
     .input(z.object({ regionId: z.number() }))
     .output(
       z.object({
@@ -1034,6 +1038,10 @@ export const mapLocationRouter = os.router({
           and(
             eq(schema.events.orgId, schema.orgs.id),
             eq(schema.events.isActive, true),
+            // publicReadProcedure lets an anonymous caller reach this
+            // endpoint — a private event's name shouldn't surface in
+            // an AO's public workout list.
+            eq(schema.events.isPrivate, false),
           ),
         )
         .where(

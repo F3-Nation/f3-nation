@@ -8,31 +8,36 @@ import { logWarn } from "~/lib/logging";
 
 const PROXY_PREFIX = "/api/orpc";
 
-// Paths that don't require the caller's own session token — see
-// specs/map-browse-and-search.md AC-1. Some (like ping) are truly open;
-// others (like eventType.all) still need a token upstream, just not the
-// user's — so the map's own API key is attached to all of them. Every entry
-// here must be safe for a fully anonymous caller: no PII, and no data scoped
-// to "mine" without the caller's own session to define what "mine" means.
-export const MAP_KEY_PATHS = new Set([
+// Anonymous-reachable paths the map calls — see specs/map-browse-and-search.md
+// AC-1. These back onto `publicReadProcedure` (packages/api/src/shared.ts),
+// which requires no credential, so the proxy forwards them as-is. Cookies are
+// still forwarded because these handlers read `ctx.session` to decide what to
+// return: anonymous callers get active, non-private rows with contact fields
+// masked; signed-in callers get full rows and `onlyMine` scoping.
+// This is a defense-in-depth allowlist, not the auth boundary:
+// the API itself now enforces which procedures anonymous callers may reach.
+export const PUBLIC_PATHS = new Set([
   "/v1/ping",
   "/v1/map/location/eventsAndLocations",
+  "/v1/map/location/getAOsInRegion",
   "/v1/map/location/locationIdToRegionNameLookup",
   "/v1/map/location/locationWorkout",
   "/v1/map/location/regionsWithLocation",
   "/v1/map/location/upcomingInstances",
   "/v1/map/location/workoutCount",
   "/v1/map/submitFeedback",
+  "/v1/event/all",
+  "/v1/event/byId",
   "/v1/event/eventIdToRegionNameLookup",
   "/v1/eventType/all",
+  "/v1/location/all",
+  "/v1/org/all",
+  "/v1/org/byId",
 ]);
 
 // Signed-in-only paths the map calls — see specs/map-update-request-flow.md
-// AC-1. Forwarded with the caller's own cookie, never the map API key, so an
-// anonymous caller gets UNAUTHORIZED from the API itself. This also covers
-// edit-mode-only reads (org/location/event lookups used by the update forms)
-// that return PII (email, phone, address) and aren't scoped per-caller unless
-// the caller's own session says what they're allowed to see.
+// AC-1. Forwarded with the caller's own cookie; an anonymous caller gets
+// UNAUTHORIZED from the API itself, since these remain `protectedProcedure`.
 export const SIGNED_IN_ONLY_PATHS = new Set([
   "/v1/request/canEditRegions",
   "/v1/request/rejectSubmission",
@@ -48,12 +53,6 @@ export const SIGNED_IN_ONLY_PATHS = new Set([
   "/v1/request/submitMoveEventToDifferentAoRequest",
   "/v1/request/submitMoveEventToNewAoRequest",
   "/v1/request/submitMoveEventToNewLocationRequest",
-  "/v1/map/location/getAOsInRegion",
-  "/v1/event/all",
-  "/v1/event/byId",
-  "/v1/location/all",
-  "/v1/org/all",
-  "/v1/org/byId",
 ]);
 
 function getApiBaseUrl(): string {
@@ -78,21 +77,16 @@ function getTargetUrl(request: NextRequest, proxiedPath: string): URL {
   return targetUrl;
 }
 
-function getForwardedHeaders(
-  request: NextRequest,
-  attachMapApiKey: boolean,
-): Headers {
+function getForwardedHeaders(request: NextRequest): Headers {
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("content-length");
+  // Never let a caller supply their own bearer token or API key through this
+  // proxy — cookie-based session auth (for SIGNED_IN_ONLY_PATHS) is the only
+  // identity that reaches the API from here.
   headers.delete("authorization");
   headers.delete("x-api-key");
   headers.set(Header.Client, Client.ORPC);
-
-  const mapApiKey = process.env.F3_MAP_API_KEY;
-  if (attachMapApiKey && mapApiKey) {
-    headers.set(Header.Authorization, `Bearer ${mapApiKey}`);
-  }
 
   return headers;
 }
@@ -100,9 +94,9 @@ function getForwardedHeaders(
 async function proxyRequest(request: NextRequest) {
   const proxiedPath = getProxiedPath(request);
 
-  const usesMapKey = MAP_KEY_PATHS.has(proxiedPath);
+  const isPublic = PUBLIC_PATHS.has(proxiedPath);
   const isSignedInOnly = SIGNED_IN_ONLY_PATHS.has(proxiedPath);
-  if (!usesMapKey && !isSignedInOnly) {
+  if (!isPublic && !isSignedInOnly) {
     // proxiedPath is unvalidated caller input precisely because it didn't
     // match either allowlist — don't let it land in logs as if it were a
     // trusted server-defined value.
@@ -116,7 +110,7 @@ async function proxyRequest(request: NextRequest) {
 
   const upstreamResponse = await fetch(getTargetUrl(request, proxiedPath), {
     method,
-    headers: getForwardedHeaders(request, usesMapKey),
+    headers: getForwardedHeaders(request),
     body,
   });
 
@@ -124,10 +118,14 @@ async function proxyRequest(request: NextRequest) {
   // fetch() already decoded the body; these describe the encoded bytes.
   headers.delete("content-encoding");
   headers.delete("content-length");
-  // These responses can carry PII scoped to the caller's own session
-  // (see SIGNED_IN_ONLY_PATHS above) — never let a shared browser cache or
-  // intermediate proxy retain a copy for the next visitor on this device.
-  if (isSignedInOnly) headers.set("Cache-Control", "no-store");
+  // Every path here forwards the caller's own cookie (see
+  // getForwardedHeaders), including several PUBLIC_PATHS entries
+  // (event/all, location/all, org/all, getAOsInRegion) whose response
+  // still varies per caller via `onlyMine` for a signed-in editor. A
+  // shared cache keyed on URL alone can't tell that apart from the
+  // anonymous response for the same path/query, so every response here —
+  // not just SIGNED_IN_ONLY_PATHS — must stay uncached.
+  headers.set("Cache-Control", "no-store");
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,
