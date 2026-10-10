@@ -23,7 +23,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 import type { Session } from "@acme/auth";
-import { and, eq, schema } from "@acme/db";
+import { and, authSchema, eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
@@ -1942,6 +1942,13 @@ describe("User Router", () => {
         });
       }
 
+      // A linked better_auth_user row must go with the user (ON DELETE CASCADE)
+      await db.insert(authSchema.betterAuthUser).values({
+        id: String(testUser.id),
+        name: "DeleteTest",
+        email: testUser.email,
+      });
+
       // Delete the user
       await client.user.delete({
         id: testUser.id,
@@ -1962,6 +1969,124 @@ describe("User Router", () => {
         .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
 
       expect(roles).toHaveLength(0);
+
+      const authUsers = await db
+        .select()
+        .from(authSchema.betterAuthUser)
+        .where(eq(authSchema.betterAuthUser.id, String(testUser.id)));
+      expect(authUsers).toHaveLength(0);
+    });
+
+    it("should return CONFLICT and keep roles when the user has history", async () => {
+      // The handler looks the nation up by name, and getOrCreateF3NationOrg
+      // returns whichever nation org comes first, so match the handler.
+      let [f3Nation] = await db
+        .select({ id: schema.orgs.id })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "nation"),
+            eq(schema.orgs.name, "F3 Nation"),
+          ),
+        )
+        .limit(1);
+      f3Nation ??= (
+        await db
+          .insert(schema.orgs)
+          .values({ name: "F3 Nation", orgType: "nation", isActive: true })
+          .returning({ id: schema.orgs.id })
+      )[0];
+      if (!f3Nation) throw new Error("F3 Nation org not found");
+
+      const adminRoles = [
+        {
+          orgId: f3Nation.id,
+          orgName: "F3 Nation",
+          roleName: "admin" as const,
+        },
+      ];
+      await mockAuthWithSession({
+        id: 1,
+        email: "admin@example.com",
+        user: {
+          id: "1",
+          email: "admin@example.com",
+          name: "Admin",
+          roles: adminRoles,
+        },
+        roles: adminRoles,
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      });
+      const client = createTestClient();
+
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({
+          email: `delete-history-${uniqueId()}@example.com`,
+          f3Name: "DeleteHistory",
+        })
+        .returning();
+      if (!testUser) throw new Error("test user not created");
+
+      const [adminRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"))
+        .limit(1);
+      if (!adminRole) throw new Error("admin role not seeded");
+
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: testUser.id,
+        orgId: f3Nation.id,
+        roleId: adminRole.id,
+      });
+
+      // Attendance references users without ON DELETE CASCADE, so the users
+      // delete fails with a foreign-key violation.
+      const [eventInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Delete history ${uniqueId()}`,
+          orgId: f3Nation.id,
+          startDate: new Date().toISOString().split("T")[0]!,
+          isActive: true,
+          highlight: false,
+        })
+        .returning({ id: schema.eventInstances.id });
+      if (!eventInstance) throw new Error("event instance not created");
+      await db.insert(schema.attendance).values({
+        eventInstanceId: eventInstance.id,
+        userId: testUser.id,
+        isPlanned: false,
+      });
+
+      try {
+        await expect(
+          client.user.delete({ id: testUser.id }),
+        ).rejects.toMatchObject({ code: "CONFLICT" });
+
+        const [stillThere] = await db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.id, testUser.id));
+        expect(stillThere).toBeDefined();
+
+        // The roles delete ran first in the same transaction; it must have
+        // rolled back.
+        const roles = await db
+          .select()
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
+        expect(roles).toHaveLength(1);
+      } finally {
+        await db
+          .delete(schema.attendance)
+          .where(eq(schema.attendance.userId, testUser.id));
+        await db
+          .delete(schema.eventInstances)
+          .where(eq(schema.eventInstances.id, eventInstance.id));
+        await cleanup.user(testUser.id);
+      }
     });
   });
 

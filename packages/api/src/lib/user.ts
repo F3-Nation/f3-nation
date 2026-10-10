@@ -151,6 +151,18 @@ export const isDuplicateEmailError = (error: unknown): boolean => {
   );
 };
 
+// Helper to check if error is a foreign-key violation (Postgres 23503). The
+// postgres-js/drizzle driver can wrap the real PostgresError in `.cause`, so
+// check both levels.
+export const isForeignKeyViolationError = (error: unknown): boolean => {
+  const hasFkCode = (value: unknown) =>
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    (value as { code?: string }).code === "23503";
+  return hasFkCode(error) || (error instanceof Error && hasFkCode(error.cause));
+};
+
 // Base input schema object (before optional)
 export const userListInputSchema = z.object({
   roles: arrayOrSingle(z.enum(UserRole))
