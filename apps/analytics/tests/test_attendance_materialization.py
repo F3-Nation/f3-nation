@@ -173,10 +173,12 @@ def test_cyclic_org_ancestry_resolves_ao_and_terminates():
     rows = query(db).fetchall()
     cycle_row = next(row for row in rows if row[1] == 400)
     assert cycle_row[7:9] == (40, 41)
-    # The depth cap would also terminate recursion if cycle detection regressed,
-    # and the final projection can hide duplicate ancestors. Assert the guard
-    # explicitly so removing it cannot silently pass this bounded fixture.
-    assert "NOT list_contains(a.visited, parent.id)" in SQL
+    ancestors_sql = SQL.split("\nSELECT p.refreshed_at", maxsplit=1)[0]
+    ancestors = db.execute(
+        ancestors_sql + "\nSELECT ancestor_id FROM org_ancestors WHERE source_id = 40 ORDER BY ancestor_id",
+        ["2026-01-03T00:00:00Z", "2026-01-03"],
+    ).fetchall()
+    assert ancestors == [(40,), (41,)]
 
 
 def test_attendance_without_tags_or_types_has_typed_empty_arrays_and_region_hierarchy(tmp_path: Path):
