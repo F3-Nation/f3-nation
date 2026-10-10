@@ -121,7 +121,10 @@ nothing is changed until every check passes:
 it points at `127.0.0.1:<port>`, start the Cloud SQL proxy on that port first
 (`cloud-sql-proxy f3data:us-central1:f3data --port <port>` for prod,
 `…:f3data-nonprod` for staging); a Cloud SQL socket (`?host=/cloudsql/…`)
-works where one is mounted. Your own `gcloud` login reads the secret.
+works where one is mounted. It must be a direct connection, never the
+PgBouncer pooler: the runner's lock against two people migrating at once is a
+session lock, which transaction pooling doesn't keep. Your own `gcloud` login
+reads the secret.
 
 **What an admin sets up once.** In project `f3data`, secrets
 `MIGRATE_DATABASE_URL_STAGING` and `MIGRATE_DATABASE_URL_PROD`, each the URL

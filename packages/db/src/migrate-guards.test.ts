@@ -64,6 +64,16 @@ describe("maintenanceUrl", () => {
       "postgresql://u:p@localhost/f3nation?sslmode=disable",
       "postgresql://u:p@localhost/postgres?sslmode=disable",
     ],
+    ["postgresql:///f3nation", "postgresql:///postgres"],
+    // No database in the URL: add one rather than rewrite the host.
+    [
+      "postgresql://u:p@localhost:5432",
+      "postgresql://u:p@localhost:5432/postgres",
+    ],
+    [
+      "postgresql://u:p@localhost?sslmode=disable",
+      "postgresql://u:p@localhost/postgres?sslmode=disable",
+    ],
   ])("%s", (url, expected) => {
     expect(maintenanceUrl(url)).toBe(expected);
   });

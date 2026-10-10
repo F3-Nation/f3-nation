@@ -111,7 +111,14 @@ function safeDecode(part: string): string {
  * name, or an empty host, are left alone).
  */
 export function maintenanceUrl(databaseUrl: string): string {
-  return databaseUrl.replace(/^([^?]*\/)[^/?]*(\?|$)/, "$1postgres$2");
+  // scheme://authority, then an optional /database, then an optional ?query.
+  // Only the database is replaced (added when the URL has none), so a user
+  // named like the database and an empty-host socket URL both survive.
+  const m = /^([a-z][a-z0-9+.-]*:\/\/[^/?]*)(\/[^?]*)?(\?.*)?$/i.exec(
+    databaseUrl,
+  );
+  if (!m) return databaseUrl;
+  return `${m[1]}/postgres${m[3] ?? ""}`;
 }
 
 /**
