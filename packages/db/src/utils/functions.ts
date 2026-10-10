@@ -183,17 +183,17 @@ export const getDbUrl = () => {
 };
 
 /**
- * How long an idle pooled connection stays open, in seconds. Through
- * PgBouncer, reopening one is cheap (PgBouncer keeps its own server
- * connections warm), so 20s keeps idle instances from holding pooler slots.
- * Over the Cloud SQL socket every reopen is a new Cloud SQL connection and
- * login, and 20s made quiet periods reconnect constantly: on 2026-10-10 prod
- * api's socket connections averaged ~3 minutes old and p95 latency went from
- * 512ms to 1.2s (#1136). 10 minutes keeps them warm between bursts; the cost
- * is at most `max` idle connections per instance, which the per-service
- * budget (ADR 0004) already counts.
+ * Idle timeout (s) for TCP connections through the pooler, where reopening
+ * is cheap because the pooler keeps its own server connections warm.
  */
 export const IDLE_TIMEOUT_POOLER_S = 20;
+/**
+ * Idle timeout (s) over the Cloud SQL socket, where every reopen is a new
+ * Cloud SQL connection and login; a short timeout makes quiet periods
+ * reconnect constantly and raises tail latency. Costs at most `max` idle
+ * connections per instance, within ADR 0004's budget, which already assumes
+ * every pool slot is open.
+ */
 export const IDLE_TIMEOUT_SOCKET_S = 600;
 
 /** postgres() pool options for a URL's host options (see postgresArgs). */

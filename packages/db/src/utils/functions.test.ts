@@ -116,15 +116,15 @@ describe("poolOptions", () => {
     expect(poolOptions(hostOptions)).toMatchObject({
       host: SOCKET,
       max: 5,
-      // Literal on purpose: shortening this regressed prod latency (#1136).
+      // Literal on purpose: a short socket timeout raises tail latency.
       idle_timeout: 600,
       prepare: false,
     });
   });
 
-  it("keeps the short idle timeout through PgBouncer (TCP)", () => {
+  it("keeps the short idle timeout through the pooler (TCP)", () => {
     const { hostOptions } = postgresArgs(
-      "postgres://u:p@34.172.230.30:6432/f3_prod",
+      "postgres://u:p@pooler.internal:6432/f3_prod",
     );
     expect(poolOptions(hostOptions)).toMatchObject({
       max: 5,
