@@ -87,24 +87,26 @@ export default function AdminOrgEditModal({
     data: orgResponse,
     isPending: orgPending,
     isError: orgError,
-  } = useQuery(
-    orpc.org.byId.queryOptions({
+  } = useQuery({
+    ...orpc.org.byId.queryOptions({
       input: { id: id ?? -1, orgType },
       enabled: gte(id, 0),
     }),
-  );
+    ...(isRegionEditor ? { throwOnError: false } : {}),
+  });
   const org = orgResponse?.org;
   const {
     data: sourceAccess,
     isPending: sourceAccessPending,
     isError: sourceAccessError,
-  } = useQuery(
-    orpc.request.canEditRegions.queryOptions({
+  } = useQuery({
+    ...orpc.request.canEditRegions.queryOptions({
       input: { orgIds: id != null ? [id] : [] },
       enabled: isEditingRegion,
     }),
-  );
-  const regionRecordUnavailable = isEditingRegion && (!org || orgError);
+    throwOnError: false,
+  });
+  const regionRecordUnavailable = isEditingRegion && !org;
   const sourceAccessDenied =
     isEditingRegion && sourceAccess?.results[0]?.success === false;
   const canChangeRegionParent =
@@ -113,12 +115,14 @@ export default function AdminOrgEditModal({
       !sourceAccessPending &&
       !sourceAccessError &&
       sourceAccess?.results[0]?.success === true);
-  const { data: currentParentResponse } = useQuery(
-    orpc.org.byId.queryOptions({
-      input: { id: org?.parentId ?? -1 },
-      enabled: isRegionEditor && org?.parentId != null,
-    }),
-  );
+  const { data: currentParentResponse, isPending: currentParentPending } =
+    useQuery({
+      ...orpc.org.byId.queryOptions({
+        input: { id: org?.parentId ?? -1 },
+        enabled: isRegionEditor && org?.parentId != null,
+      }),
+      throwOnError: false,
+    });
   const {
     data: parents,
     isPending: parentsPending,
@@ -170,11 +174,12 @@ export default function AdminOrgEditModal({
       parentsPending ||
       parentsError ||
       !hasAlternativeParent);
-  const regionRecordMessage = orgError
-    ? "Unable to load this Region. Try again before saving."
-    : orgPending
-      ? "Loading Region details. Wait before saving."
-      : "This Region could not be found. Reload before saving.";
+  const regionRecordMessage =
+    !org && orgError
+      ? "Unable to load this Region. Try again before saving."
+      : orgPending
+        ? "Loading Region details. Wait before saving."
+        : "This Region could not be found. Reload before saving.";
   let parentHelp: string | undefined;
   if (isRegionEditor) {
     if (regionRecordUnavailable) {
@@ -551,6 +556,17 @@ export default function AdminOrgEditModal({
                               />
                             </SelectTrigger>
                             <SelectContent>
+                              {isEditingRegion &&
+                                org?.parentId != null &&
+                                !parentOptions.some(
+                                  (parent) => parent.id === org.parentId,
+                                ) && (
+                                  <SelectItem value={org.parentId.toString()}>
+                                    {currentParentPending
+                                      ? "Loading current parent…"
+                                      : "Current parent"}
+                                  </SelectItem>
+                                )}
                               {parentTypes.length > 1
                                 ? parentTypes.map((parentType) => {
                                     const group = parentOptions.filter(

@@ -1,4 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -26,6 +27,7 @@ import { AdminNavLinks } from "~/app/_components/admin-nav-links";
 import { useOpenModal } from "~/utils/store/modal";
 import { DeleteType, ModalType } from "~/utils/store/modal";
 import type * as ModalStore from "~/utils/store/modal";
+import { createQueryClient } from "~/orpc/query-client";
 
 const mocks = vi.hoisted(() => ({
   byId: vi.fn<(input: unknown) => Promise<unknown>>(),
@@ -237,15 +239,24 @@ const parents = [
 ];
 const clients: QueryClient[] = [];
 
+function createTestQueryClient() {
+  const client = createQueryClient();
+  const defaults = client.getDefaultOptions();
+  client.setDefaultOptions({
+    ...defaults,
+    queries: { ...defaults.queries, retry: false },
+    mutations: { ...defaults.mutations, retry: false },
+  });
+  clients.push(client);
+  return client;
+}
+
 function mount(
   type: "nation" | "sector" | "territory" | "area" | "region" | "ao",
   id?: number,
   isProd = true,
 ) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  clients.push(client);
+  const client = createTestQueryClient();
   return render(
     <QueryClientProvider client={client}>
       <AdminOrgEditModal orgType={type} id={id} isProd={isProd} />
@@ -877,6 +888,84 @@ describe("Region Area or Territory parent selection", () => {
     },
   );
 
+  it("displays and preserves the current parent while its lookup is pending or failed", async () => {
+    mocks.all.mockResolvedValue({ orgs: [], total: 0 });
+    let rejectParent: (error: Error) => void = () => undefined;
+    mocks.parentById.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectParent = reject;
+      }),
+    );
+    mount("region", record.id);
+    await waitFor(() =>
+      expect(mocks.parentById).toHaveBeenCalledWith({ id: 2 }),
+    );
+    await waitFor(() => expect(parentSelect().value).toBe("2"));
+    expect(parentSelect().selectedOptions[0]?.text).toBe(
+      "Loading current parent…",
+    );
+    expect(parentSelect().disabled).toBe(true);
+    fireEvent.change(field("Name"), { target: { value: "Renamed Region" } });
+
+    await act(async () => {
+      rejectParent(new Error("Current parent unavailable"));
+    });
+    await waitFor(() =>
+      expect(parentSelect().selectedOptions[0]?.text).toBe("Current parent"),
+    );
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(field("Name").value).toBe("Renamed Region");
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+      id: record.id,
+      name: "Renamed Region",
+      parentId: record.parentId,
+    });
+  });
+
+  it.each([false, true])(
+    "preserves loaded Region edits and an unchanged-parent save after a failed record refetch (parent changed=%s)",
+    async (changedParent) => {
+      mount("region", record.id);
+      await waitFor(() => expect(parentSelect().disabled).toBe(false));
+      fireEvent.change(field("Name"), { target: { value: "Renamed Region" } });
+      if (changedParent) {
+        fireEvent.change(parentSelect(), { target: { value: "12" } });
+      }
+      mocks.byId.mockRejectedValue(new Error("Region unavailable"));
+      const client = clients.at(-1)!;
+      const queryKey = ["org", "byId", { id: record.id, orgType: "region" }];
+      await act(async () => {
+        await client.invalidateQueries({ queryKey });
+      });
+      await waitFor(() =>
+        expect(client.getQueryState(queryKey)?.status).toBe("error"),
+      );
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      expect(field("Name").value).toBe("Renamed Region");
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+          .disabled,
+      ).toBe(false);
+      if (changedParent) {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Keep current parent" }),
+        );
+      }
+      expect(parentSelect().value).toBe(String(record.parentId));
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+        id: record.id,
+        name: "Renamed Region",
+        parentId: record.parentId,
+      });
+    },
+  );
+
   it.each(["pending", "failed", "missing"])(
     "does not submit an edit as creation when the Region record is %s",
     async (state) => {
@@ -1391,10 +1480,7 @@ describe("Territory organization integration", () => {
       const page = await OrgPage({
         params: Promise.resolve({ orgSegment: "territories" }),
       });
-      const client = new QueryClient({
-        defaultOptions: { queries: { retry: false } },
-      });
-      clients.push(client);
+      const client = createTestQueryClient();
       render(<QueryClientProvider client={client}>{page}</QueryClientProvider>);
       expect(screen.getByRole("heading", { name: "Territories" })).toBeTruthy();
       expect(
@@ -1445,10 +1531,7 @@ describe("Territory organization integration", () => {
     const page = await OrgPage({
       params: Promise.resolve({ orgSegment: "territories" }),
     });
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    clients.push(client);
+    const client = createTestQueryClient();
     render(
       <QueryClientProvider client={client}>
         <AdminNavLinks mapUrl="https://example.com/map" />

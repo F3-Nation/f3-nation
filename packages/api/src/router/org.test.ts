@@ -24,6 +24,7 @@ import {
   cleanup,
   createAdminSession,
   createEditorSession,
+  createOrgTree,
   createTestClient,
   db,
   getOrCreateF3NationOrg,
@@ -78,6 +79,84 @@ describe("Org Router", () => {
   });
 
   describe("all", () => {
+    describe("parent ID filtering", () => {
+      const tree = createOrgTree();
+
+      afterAll(async () => tree.cleanup());
+
+      it("accepts the no-match parent sentinel and returns no rows or matching total", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const prefix = `NoMatchParent-${uniqueId()}`;
+        const area = await tree.create({ orgType: "area" });
+        const region = await tree.create({
+          orgType: "region",
+          parentId: area.id,
+          name: `${prefix} Region`,
+        });
+        const client = createTestClient();
+        const input = { searchTerm: prefix, pageIndex: 0, pageSize: 1 };
+        const unfiltered = await client.org.all({
+          orgTypes: ["region"],
+          ...input,
+        });
+        expect(unfiltered.orgs.map((org) => org.id)).toEqual([region.id]);
+        expect(unfiltered.total).toBe(1);
+
+        const result = await client.org.all({
+          orgTypes: ["region"],
+          ...input,
+          parentOrgIds: [-1],
+        });
+        expect(result).toEqual({ orgs: [], total: 0 });
+      });
+
+      it("filters mixed Territory and Area parents before pagination and counting", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const prefix = `MixedParentPages-${uniqueId()}`;
+        const territory = await tree.create({ orgType: "territory" });
+        const area = await tree.create({
+          orgType: "area",
+          parentId: territory.id,
+        });
+        const siblingArea = await tree.create({
+          orgType: "area",
+          parentId: territory.id,
+        });
+        // The unrelated row sorts first, so filtering after LIMIT is observable.
+        await tree.create({
+          orgType: "region",
+          parentId: siblingArea.id,
+          name: `${prefix} Unrelated Region`,
+        });
+        const directRegion = await tree.create({
+          orgType: "region",
+          parentId: territory.id,
+          name: `${prefix} Direct Territory Region`,
+        });
+        const areaRegion = await tree.create({
+          orgType: "region",
+          parentId: area.id,
+          name: `${prefix} Area Region`,
+        });
+        const client = createTestClient();
+        const seenIds: number[] = [];
+        for (let pageIndex = 0; pageIndex < 2; pageIndex++) {
+          const page = await client.org.all({
+            orgTypes: ["region"],
+            searchTerm: prefix,
+            parentOrgIds: [territory.id, area.id],
+            sorting: [{ id: "id", desc: false }],
+            pageIndex,
+            pageSize: 1,
+          });
+          expect(page.orgs).toHaveLength(1);
+          expect(page.total).toBe(2);
+          seenIds.push(...page.orgs.map((org) => org.id));
+        }
+        expect(seenIds).toEqual([directRegion.id, areaRegion.id]);
+      });
+    });
+
     it("should return a list of orgs with required orgTypes", async () => {
       const client = createTestClient();
       const result = await client.org.all({
