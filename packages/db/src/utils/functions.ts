@@ -182,34 +182,52 @@ export const getDbUrl = () => {
   return { databaseUrl, useSsl, databaseName };
 };
 
+/**
+ * How long an idle pooled connection stays open, in seconds. Through
+ * PgBouncer, reopening one is cheap (PgBouncer keeps its own server
+ * connections warm), so 20s keeps idle instances from holding pooler slots.
+ * Over the Cloud SQL socket every reopen is a new Cloud SQL connection and
+ * login, and 20s made quiet periods reconnect constantly: on 2026-10-10 prod
+ * api's socket connections averaged ~3 minutes old and p95 latency went from
+ * 512ms to 1.2s (#1136). 10 minutes keeps them warm between bursts; the cost
+ * is at most `max` idle connections per instance, which the per-service
+ * budget (ADR 0004) already counts.
+ */
+export const IDLE_TIMEOUT_POOLER_S = 20;
+export const IDLE_TIMEOUT_SOCKET_S = 600;
+
+/** postgres() pool options for a URL's host options (see postgresArgs). */
+export const poolOptions = (hostOptions: { host?: string }) => ({
+  // Cloud SQL Unix socket (see splitSocketHost); empty for TCP URLs.
+  ...hostOptions,
+  // Cloud Run scales to many instances, each holding its own pool (see
+  // client.ts) — an untuned client defaults to `max: 10` per instance,
+  // which exhausts the pooler's client ceiling under autoscaling.
+  // connect_timeout tightens postgres-js's 30s default to 10s so a
+  // saturated pooler surfaces as a fast failure instead of a slow one.
+  // Sizing rationale: docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
+  // max_lifetime is deliberately left on its postgres-js default — a
+  // jittered 30–60min per connection; a fixed value would synchronize
+  // expiry across every connection of a deploy into periodic reconnect
+  // stampedes through the pooler.
+  max: 5,
+  idle_timeout: hostOptions.host
+    ? IDLE_TIMEOUT_SOCKET_S
+    : IDLE_TIMEOUT_POOLER_S,
+  connect_timeout: 10,
+  // PgBouncer fronts the database in transaction pooling mode, which does
+  // not support named prepared statements. Drizzle survives on the default
+  // only because it issues queries through `client.unsafe()` (unprepared);
+  // direct tagged-template usage (e.g. the seed/reset scripts) prepares by
+  // default and would fail intermittently through the pooler.
+  prepare: false,
+});
+
 export const createDbClient = () => {
   const { databaseUrl, useSsl } = getDbUrl();
   const { url, hostOptions } = postgresArgs(databaseUrl);
   const sslOptions = useSsl ? { ssl: "require" as const } : undefined;
-  const client = postgres(url, {
-    ...sslOptions,
-    // Cloud SQL Unix socket (see splitSocketHost); empty for TCP URLs.
-    ...hostOptions,
-    // Cloud Run scales to many instances, each holding its own pool (see
-    // client.ts) — an untuned client defaults to `max: 10` per instance,
-    // which exhausts the pooler's client ceiling under autoscaling.
-    // connect_timeout tightens postgres-js's 30s default to 10s so a
-    // saturated pooler surfaces as a fast failure instead of a slow one.
-    // Sizing rationale: docs/AI_DEVELOPMENT_GUIDE.md ("Data layer").
-    // max_lifetime is deliberately left on its postgres-js default — a
-    // jittered 30–60min per connection; a fixed value would synchronize
-    // expiry across every connection of a deploy into periodic reconnect
-    // stampedes through the pooler.
-    max: 5,
-    idle_timeout: 20,
-    connect_timeout: 10,
-    // PgBouncer fronts the database in transaction pooling mode, which does
-    // not support named prepared statements. Drizzle survives on the default
-    // only because it issues queries through `client.unsafe()` (unprepared);
-    // direct tagged-template usage (e.g. the seed/reset scripts) prepares by
-    // default and would fail intermittently through the pooler.
-    prepare: false,
-  });
+  const client = postgres(url, { ...sslOptions, ...poolOptions(hostOptions) });
   if (QUERY_TIMEOUT_MS > 0) withQueryTimeout(client, QUERY_TIMEOUT_MS);
   return { db: drizzle(client, { schema }), close: () => client.end() };
 };

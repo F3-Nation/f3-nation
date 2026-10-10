@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   getDatabaseNameFromUri,
   migrationsDatabaseName,
+  IDLE_TIMEOUT_POOLER_S,
+  IDLE_TIMEOUT_SOCKET_S,
+  poolOptions,
   postgresArgs,
   splitSocketHost,
 } from "./functions";
@@ -104,5 +107,30 @@ describe("getDatabaseNameFromUri", () => {
       "f3_prod",
     );
     expect(getDatabaseNameFromUri("not a url")).toBeUndefined();
+  });
+});
+
+describe("poolOptions", () => {
+  it("keeps socket connections open between bursts", () => {
+    const { hostOptions } = postgresArgs(
+      `postgres://u:p@/f3_prod?host=${SOCKET}`,
+    );
+    expect(poolOptions(hostOptions)).toMatchObject({
+      host: SOCKET,
+      max: 5,
+      idle_timeout: IDLE_TIMEOUT_SOCKET_S,
+      prepare: false,
+    });
+  });
+
+  it("keeps the short idle timeout through PgBouncer (TCP)", () => {
+    const { hostOptions } = postgresArgs(
+      "postgres://u:p@34.172.230.30:6432/f3_prod",
+    );
+    expect(poolOptions(hostOptions)).toMatchObject({
+      max: 5,
+      idle_timeout: IDLE_TIMEOUT_POOLER_S,
+    });
+    expect(poolOptions(hostOptions)).not.toHaveProperty("host");
   });
 });
