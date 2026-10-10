@@ -289,9 +289,19 @@ describe("oRPC proxy route", () => {
         }),
       );
 
-      expect(response.headers.get("content-encoding")).toBeNull();
+      // The upstream's encoding never leaks onto the decoded body: the only
+      // encoding the response may carry is the proxy's own gzip, and the
+      // body must decode to the original either way.
       expect(response.headers.get("content-length")).not.toBe("999");
-      expect(await response.json()).toEqual({ ok: true });
+      const encoding = response.headers.get("content-encoding");
+      expect([null, "gzip"]).toContain(encoding);
+      const text =
+        encoding === "gzip"
+          ? await new Response(
+              response.body!.pipeThrough(new DecompressionStream("gzip")),
+            ).text()
+          : await response.text();
+      expect(JSON.parse(text)).toEqual({ ok: true });
     },
   );
 
@@ -315,5 +325,62 @@ describe("oRPC proxy route", () => {
     // Restore so this test's env stub can't leak into whatever test runs
     // next if a test is appended after this one in the file.
     vi.stubEnv("F3_MAP_API_KEY", "test-map-key");
+  });
+
+  describe("compression", () => {
+    const json = JSON.stringify({
+      json: Array.from({ length: 500 }, (_, i) => [i, "AO name", null]),
+    });
+    const upstream = (contentType = "application/json") =>
+      fetchSpy.mockResolvedValueOnce(
+        new Response(json, { headers: { "content-type": contentType } }),
+      );
+    const call = async (acceptEncoding?: string) => {
+      const { POST } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+      return POST(
+        new NextRequest(
+          "http://localhost:3000/api/orpc/v1/map/location/eventsAndLocations",
+          {
+            method: "POST",
+            body: "{}",
+            headers: acceptEncoding
+              ? { "accept-encoding": acceptEncoding }
+              : {},
+          },
+        ),
+      );
+    };
+    const gunzip = async (res: Response) =>
+      new Response(
+        res.body!.pipeThrough(new DecompressionStream("gzip")),
+      ).text();
+
+    it("gzips a JSON response when the caller accepts gzip", async () => {
+      upstream();
+      const res = await call("gzip, deflate, br");
+      expect(res.headers.get("content-encoding")).toBe("gzip");
+      expect(res.headers.get("vary")).toMatch(/accept-encoding/i);
+      expect(await gunzip(res)).toBe(json);
+    });
+
+    it("passes the body through when the caller doesn't accept gzip", async () => {
+      upstream();
+      const res = await call();
+      expect(res.headers.get("content-encoding")).toBeNull();
+      expect(await res.text()).toBe(json);
+    });
+
+    it("honors an explicit gzip;q=0", async () => {
+      upstream();
+      const res = await call("gzip;q=0, br");
+      expect(res.headers.get("content-encoding")).toBeNull();
+    });
+
+    it("leaves non-JSON bodies (e.g. event streams) uncompressed", async () => {
+      upstream("text/event-stream");
+      const res = await call("gzip");
+      expect(res.headers.get("content-encoding")).toBeNull();
+    });
   });
 });

@@ -57,3 +57,12 @@ export const createQueryClient = () =>
       },
     },
   });
+
+/**
+ * staleTime for the map's two whole-map datasets (eventsAndLocations,
+ * regionsWithLocation). They are large (~1.5 MB / 70 KB), identical for every
+ * visitor and change rarely; the 30s default refetched them on every window
+ * focus. Edits made from the map still show at once: submitting one calls
+ * invalidateQueries("map"), which refetches regardless of staleTime.
+ */
+export const MAP_DATASET_STALE_TIME_MS = 10 * 60 * 1000;

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { MAP_DATASET_STALE_TIME_MS } from "~/orpc/query-client";
 import { orpc, useQuery } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 
@@ -22,13 +23,21 @@ export const ReactQueryHydrator = (params: {
   useQuery(
     orpc.map.location.eventsAndLocations.queryOptions({
       input: undefined,
-      ...(hasEvents ? { initialData: params.eventsAndLocations } : {}),
+      staleTime: MAP_DATASET_STALE_TIME_MS,
+      // The SSG/ISR copy can be up to an hour old: treat it as stale so the
+      // first mount still fetches once (as before); only repeat fetches stop.
+      ...(hasEvents
+        ? { initialData: params.eventsAndLocations, initialDataUpdatedAt: 0 }
+        : {}),
     }),
   );
   useQuery(
     orpc.map.location.regionsWithLocation.queryOptions({
       input: undefined,
-      ...(hasRegions ? { initialData: params.regionsWithLocation } : {}),
+      staleTime: MAP_DATASET_STALE_TIME_MS,
+      ...(hasRegions
+        ? { initialData: params.regionsWithLocation, initialDataUpdatedAt: 0 }
+        : {}),
     }),
   );
 

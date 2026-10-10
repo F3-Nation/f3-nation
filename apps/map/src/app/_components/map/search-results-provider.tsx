@@ -6,6 +6,7 @@ import { MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
 import { isTruthy } from "@acme/shared/common/functions";
 
+import { MAP_DATASET_STALE_TIME_MS } from "~/orpc/query-client";
 import { orpc, useQuery } from "~/orpc/react";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { debouncedPlacesAutocomplete } from "~/utils/place-autocomplete";
@@ -49,6 +50,7 @@ export const TextSearchResultsProvider = ({
     orpc.map.location.regionsWithLocation.queryOptions({
       input: undefined,
       enabled: searchEngaged,
+      staleTime: MAP_DATASET_STALE_TIME_MS,
     }),
   );
   const regions = regionsResponse?.regionsWithLocation;

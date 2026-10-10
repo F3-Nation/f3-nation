@@ -97,6 +97,19 @@ function getForwardedHeaders(
   return headers;
 }
 
+/** Whether the caller's Accept-Encoding allows gzip (an explicit q=0 refuses it). */
+export function acceptsGzip(request: Pick<NextRequest, "headers">): boolean {
+  const header = request.headers.get("accept-encoding") ?? "";
+  return header.split(",").some((part) => {
+    const [name, ...params] = part
+      .split(";")
+      .map((p) => p.trim().toLowerCase());
+    if (name !== "gzip" && name !== "*") return false;
+    const q = params.find((p) => p.startsWith("q="));
+    return q === undefined || Number(q.slice(2)) > 0;
+  });
+}
+
 async function proxyRequest(request: NextRequest) {
   const proxiedPath = getProxiedPath(request);
 
@@ -128,7 +141,25 @@ async function proxyRequest(request: NextRequest) {
   // (see SIGNED_IN_ONLY_PATHS above) — never let a shared browser cache or
   // intermediate proxy retain a copy for the next visitor on this device.
   if (isSignedInOnly) headers.set("Cache-Control", "no-store");
-  return new Response(upstreamResponse.body, {
+
+  // Compress JSON for the browser here, at the browser-facing hop. The API
+  // doesn't compress (see apps/api/src/app.ts), so eventsAndLocations went out
+  // as 1.5 MB on every map load. Doing it in the proxy can't break an older
+  // map revision the way enabling it in the API could. Streams (e.g.
+  // text/event-stream) and non-JSON bodies pass through untouched.
+  let responseBody = upstreamResponse.body;
+  headers.append("Vary", "Accept-Encoding");
+  if (
+    responseBody &&
+    method !== "HEAD" &&
+    acceptsGzip(request) &&
+    (headers.get("content-type") ?? "").includes("application/json")
+  ) {
+    responseBody = responseBody.pipeThrough(new CompressionStream("gzip"));
+    headers.set("content-encoding", "gzip");
+  }
+
+  return new Response(responseBody, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,
     headers,
