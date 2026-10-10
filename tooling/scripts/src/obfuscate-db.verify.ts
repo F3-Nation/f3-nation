@@ -684,7 +684,7 @@ async function main(): Promise<void> {
       // manager, never this one.
       OBFUSCATION_SALT: "sandbox-verify-harness-test-salt-not-for-real-use",
     };
-    run("pnpm", ["db:migrate"], childEnv);
+    run("pnpm", ["db:migrate:local"], childEnv);
     run("pnpm", ["db:seed:local"], childEnv);
 
     // --- 2b. Every column the migrations create has been reviewed -------------
