@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.8.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.7.0...admin@2.8.0) (2026-10-10)
+
+
+### Features
+
+* **scripts:** add PII obfuscation script for staging refresh (F3-65) ([#768](https://github.com/F3-Nation/f3-nation/issues/768)) ([870d24a](https://github.com/F3-Nation/f3-nation/commit/870d24a966afd089687eb6967a05f2be16d61226))
+
+
+### Bug Fixes
+
+* **api,admin:** let home-region editors and admins see and edit user PII ([#1150](https://github.com/F3-Nation/f3-nation/issues/1150)) ([35f5efa](https://github.com/F3-Nation/f3-nation/commit/35f5efa9dab0647a3ce98ae2b783d54f0e6b4d45))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.13.0
+    * @acme/logger bumped to 0.3.0
+    * @acme/validators bumped to 0.4.6
+
 ## [2.7.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.6.1...admin@2.7.0) (2026-10-06)
 
 
