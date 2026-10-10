@@ -307,6 +307,18 @@ describe("connectionHint", () => {
     ).toMatch(/gcloud auth application-default login/);
   });
 
+  it("blames the proxy, not IP access, for a socket timeout", () => {
+    const hint = connectionHint(
+      new Error("write CONNECT_TIMEOUT"),
+      "postgresql://u:p@/f3_prod?host=/cloudsql/x",
+      PROD,
+    );
+    expect(hint).toContain(
+      "socket /cloudsql/x (timed out). Is the proxy running?",
+    );
+    expect(hint).not.toMatch(/IP/);
+  });
+
   it("explains timeouts and a rejected login", () => {
     expect(
       connectionHint(

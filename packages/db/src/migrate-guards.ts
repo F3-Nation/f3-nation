@@ -360,9 +360,10 @@ export function connectionHint(
     return "The database rejected the login in the migration URL. Ask an admin to check the secret.";
   }
   if (/timeout|ETIMEDOUT/i.test(msg)) {
-    return local
-      ? `Couldn't reach the database at ${where} (timed out). Is the proxy running? Check its output.`
-      : `Couldn't reach the database at ${where} (timed out). Is your IP allowed?`;
+    if (local || host.startsWith("/")) {
+      return `Couldn't reach the database at ${where} (timed out). Is the proxy running? Check its output.`;
+    }
+    return `Couldn't reach the database at ${where} (timed out). Is your IP allowed?`;
   }
   return `Couldn't connect to the database at ${where}.`;
 }
