@@ -4,9 +4,13 @@ from typing import List
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
+import hashlib
+import json
 import random
+import re
 import shutil
-from datetime import datetime, timedelta
+from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 from math import isnan
 from numbers import Real
 
@@ -31,6 +35,7 @@ from f3_data_models.models import (
 # import dataframe_image as dfi
 from f3_data_models.utils import DbManager, get_session
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from slack_sdk.models import blocks
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import aliased
@@ -48,6 +53,38 @@ from utilities.helper_functions import current_date_cst, safe_convert, safe_get,
 from utilities.slack import actions
 
 DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
+CALENDAR_IMAGE_TIMESTAMP_FORMAT = "%Y%m%dT%H%M%S%fZ"
+CALENDAR_IMAGE_V1_PATTERN = re.compile(
+    r"(?P<region_id>[1-9][0-9]*)-(?P<week>current|next|third)-v1-"
+    r"(?P<generated_at>[0-9]{8}T[0-9]{12}Z)-(?P<fingerprint>[0-9a-f]{64})-[a-z]{10}\.png"
+)
+
+
+def parse_calendar_image_filename(
+    filename, region_id: int, week: str, query_started_at: datetime
+) -> tuple[datetime, str] | None:
+    """Read metadata only from this region/week's valid, non-future v1 filename."""
+    if not isinstance(filename, str):
+        return None
+    match = CALENDAR_IMAGE_V1_PATTERN.fullmatch(filename)
+    if match is None or match["region_id"] != str(region_id) or match["week"] != week:
+        return None
+    try:
+        generated_at = datetime.strptime(match["generated_at"], CALENDAR_IMAGE_TIMESTAMP_FORMAT).replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    if generated_at > query_started_at:
+        return None
+    return generated_at, match["fingerprint"]
+
+
+def calendar_image_is_safe_to_delete(filename, region_id: int, week: str, query_started_at: datetime) -> bool:
+    if not isinstance(filename, str) or region_id <= 0 or week not in WEEK_LABELS:
+        return False
+    return (
+        re.fullmatch(rf"{region_id}-{week}-[a-z]{{10}}\.png", filename) is not None
+        or parse_calendar_image_filename(filename, region_id, week, query_started_at) is not None
+    )
 
 
 def time_int_to_str(time: int) -> str:
@@ -173,31 +210,72 @@ def set_text_color(s, color_dicts):
     return text_color_list
 
 
-def remove_stale_week_images(slack_app_settings: dict, region_id: int, num_weeks: int) -> bool:
-    """Drop the settings and files for weeks a region no longer displays.
+def _remove_week_image(
+    slack_app_settings: dict,
+    region_id: int,
+    week: str,
+    pending_deletions: list | None = None,
+    query_started_at: datetime | None = None,
+) -> bool:
+    """Remove settings and queue file cleanup, including stable-file retries."""
+    removed = f"calendar_image_{week}" in slack_app_settings
+    stale_file = slack_app_settings.pop(f"calendar_image_{week}", None)
+    if LOCAL_DEVELOPMENT:
+        return removed
+    query_started_at = query_started_at or datetime.now(UTC)
+    stale_filenames = (
+        [stale_file] if calendar_image_is_safe_to_delete(stale_file, region_id, week, query_started_at) else []
+    )
+    if DB_SCHEMA == "f3_prod":
+        # Retry even when settings were cleared by an earlier successful commit.
+        stale_filenames.append(f"{region_id}-{week}.png")
+    if pending_deletions is not None:
+        pending_deletions.extend(stale_filenames)
+        return removed
+    for filename in stale_filenames:
+        try:
+            os.remove(f"/mnt/calendar-images/{filename}")
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            print(f"Error deleting stale file {filename} from local storage: {e}")
+    return removed
 
-    Returns True if anything was removed, meaning the region's Slack post needs to be refreshed.
-    """
+
+def remove_stale_week_images(
+    slack_app_settings: dict,
+    region_id: int,
+    num_weeks: int,
+    pending_deletions: list | None = None,
+    query_started_at: datetime | None = None,
+) -> bool:
+    """Drop weeks a region no longer displays and indicate whether its Slack post needs refreshing."""
     removed = False
     for stale_week in WEEK_LABELS[num_weeks:]:
-        stale_file = slack_app_settings.pop(f"calendar_image_{stale_week}", None)
-        if not stale_file:
-            continue
-        removed = True
-        if LOCAL_DEVELOPMENT:
-            continue
-        stale_filenames = [stale_file]
-        if DB_SCHEMA == "f3_prod":
-            # also drop the stable copy written alongside the randomized filename
-            stale_filenames.append(f"{region_id}-{stale_week}.png")
-        for filename in stale_filenames:
-            try:
-                os.remove(f"/mnt/calendar-images/{filename}")
-            except FileNotFoundError:
-                pass
-            except Exception as e:
-                print(f"Error deleting stale file {filename} from local storage: {e}")
+        removed = (
+            _remove_week_image(slack_app_settings, region_id, stale_week, pending_deletions, query_started_at)
+            or removed
+        )
     return removed
+
+
+class CalendarSlackPostError(RuntimeError):
+    """Failed posting; exports are discardable only after every attempt was rejected."""
+
+    def __init__(self, safe_to_discard: bool):
+        super().__init__("Slack calendar posting failed")
+        self.safe_to_discard = safe_to_discard
+
+
+def _slack_attempt_was_rejected(error: Exception) -> bool:
+    return (
+        isinstance(error, CalendarSlackPostError)
+        and error.safe_to_discard
+        # The SDK raises even when Slack returned an explicit rejection response.
+        or isinstance(error, SlackApiError)
+        and error.response is not None
+        and error.response.get("ok") is False
+    )
 
 
 def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunday_run: bool) -> None:
@@ -235,34 +313,41 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
         )
     )
     block_list.extend(create_special_events_blocks(slack_app_settings))
+    all_attempts_rejected = True
     try:
         if slack_app_settings.get("q_image_posting_ts") and (not first_sunday_run):
             try:
-                client.chat_update(
+                response = client.chat_update(
                     channel=slack_app_settings["q_image_posting_channel"],
                     ts=slack_app_settings["q_image_posting_ts"],
                     blocks=block_list,
                     text="Q Sheet",
                 )
+                if response["ok"] is not True:
+                    raise CalendarSlackPostError(safe_to_discard=response["ok"] is False)
             except Exception as e:
+                all_attempts_rejected = _slack_attempt_was_rejected(e)
                 print(f"Error updating Slack message, posting new message: {e}")
                 response = client.chat_postMessage(
                     channel=slack_app_settings["q_image_posting_channel"],
                     text="Q Sheet",
                     blocks=block_list,
                 )
-                if response["ok"]:
-                    slack_app_settings["q_image_posting_ts"] = response["ts"]
+                if response["ok"] is not True:
+                    raise CalendarSlackPostError(safe_to_discard=response["ok"] is False) from e
+                slack_app_settings["q_image_posting_ts"] = response["ts"]
         else:
             response = client.chat_postMessage(
                 channel=slack_app_settings["q_image_posting_channel"],
                 text="Q Sheet",
                 blocks=block_list,
             )
-            if response["ok"]:
-                slack_app_settings["q_image_posting_ts"] = response["ts"]
+            if response["ok"] is not True:
+                raise CalendarSlackPostError(safe_to_discard=response["ok"] is False)
+            slack_app_settings["q_image_posting_ts"] = response["ts"]
     except Exception as e:
         print(f"Error posting to Slack channel: {e}")
+        raise CalendarSlackPostError(safe_to_discard=all_attempts_rejected and _slack_attempt_was_rejected(e)) from e
 
 
 def slack_posting_enabled(slack_app_settings: dict) -> bool:
@@ -276,6 +361,19 @@ def slack_posting_enabled(slack_app_settings: dict) -> bool:
 def calendar_weeks_shown(slack_app_settings: dict) -> int:
     num_weeks = safe_convert(slack_app_settings.get("calendar_weeks_shown"), int) or 2
     return max(1, min(num_weeks, MAX_CALENDAR_WEEKS))
+
+
+def calendar_image_is_stale(
+    filename, region_id: int, week: str, max_changed: datetime, query_started_at: datetime, fingerprint: str
+) -> bool:
+    metadata = parse_calendar_image_filename(filename, region_id, week, query_started_at)
+    if metadata is None:
+        return True
+    generated_at, saved_fingerprint = metadata
+    # DB timestamp-without-timezone columns contain UTC values.
+    if max_changed.tzinfo is None:
+        max_changed = max_changed.replace(tzinfo=UTC)
+    return max_changed > generated_at or saved_fingerprint != fingerprint
 
 
 def generate_calendar_images(force: bool = False):
@@ -370,8 +468,11 @@ def generate_calendar_images(force: bool = False):
             )
         )
 
+        # Use the query start, not export completion: changes during rendering must
+        # still trigger regeneration on the next run.
+        generation_started_at = datetime.now(UTC)
         results = query.all()
-        df_all = pd.DataFrame(results)
+        df_all = pd.DataFrame(results, columns=[column.key for column in query.statement.selected_columns])
 
         event_tags = session.query(EventTag).all()
 
@@ -386,13 +487,16 @@ def generate_calendar_images(force: bool = False):
 
         region_ids_with_events = {int(r) for r in df_all["region_id"].unique()} if not df_all.empty else set()
 
-        for region_id in region_ids_with_events:
+        for region_id in region_ids_with_events | {r[0].id for r in region_org_records}:
             try:
                 df_full = df_all[df_all["region_id"] == region_id].copy()
-                region_name = df_full["region_name"].iloc[0]
+                region_name = str(region_id)
                 region_org_record = safe_get([r for r in region_org_records if r[0].id == region_id], 0)
                 if region_org_record:
-                    slack_app_settings: dict = region_org_record[2].settings
+                    slack_app_settings: dict = deepcopy(region_org_record[2].settings)
+                    pending_deletions = []
+                    generated_backing_files = []
+                    region_name = region_org_record[0].name
                     print(f"Running for {region_name}")
 
                     group_by_option = slack_app_settings.get("calendar_group_by_option") or "ao"
@@ -414,12 +518,25 @@ def generate_calendar_images(force: bool = False):
                         "generic": color_dict_generic,
                     }
                     num_weeks = calendar_weeks_shown(slack_app_settings)
-                    calendar_updated = remove_stale_week_images(slack_app_settings, region_id, num_weeks)
+                    calendar_updated = remove_stale_week_images(
+                        slack_app_settings, region_id, num_weeks, pending_deletions, generation_started_at
+                    )
+                    now_cst = datetime.now(pytz.timezone("US/Central"))
+                    first_sunday_run = now_cst.weekday() == 6 and now_cst.hour < 1
 
                     for week_index, week in enumerate(WEEK_LABELS[:num_weeks]):
                         week_start = current_week_start + timedelta(weeks=week_index)
                         week_end = week_start + timedelta(days=7)
                         df = df_full[(df_full["start_date"] >= week_start) & (df_full["start_date"] < week_end)].copy()
+                        # Remove obsolete images instead of rendering empty calendars.
+                        if df.empty:
+                            calendar_updated = (
+                                _remove_week_image(
+                                    slack_app_settings, region_id, week, pending_deletions, generation_started_at
+                                )
+                                or calendar_updated
+                            )
+                            continue
 
                         max_event_updated = (
                             datetime(year=1900, month=1, day=1)
@@ -432,13 +549,45 @@ def generate_calendar_images(force: bool = False):
                             else df["q_last_updated"].max()
                         )
                         max_changed = max(max_event_updated, max_q_last_updated)
+                        # Hash rendering inputs, not timestamps or unused query metadata.
+                        content = df.drop(
+                            columns=[
+                                "event_updated",
+                                "q_last_updated",
+                                "ao_parent_id",
+                                "region_name",
+                                "region_id",
+                                "event_type",
+                                "event_tag_color",
+                            ]
+                        )
+                        # Sort serialized rows so database row order does not invalidate images.
+                        # Include week boundaries so the displayed range rolls forward on Sundays.
+                        fingerprint = hashlib.sha256(
+                            (
+                                str(week_start)
+                                + str(week_end)
+                                + str(group_by_option)
+                                + json.dumps(all_color_dicts, sort_keys=True)
+                                + repr(
+                                    sorted(
+                                        json.dumps(row, sort_keys=True)
+                                        for row in json.loads(content.to_json(orient="records", date_format="iso"))
+                                    )
+                                )
+                            ).encode()
+                        ).hexdigest()
                         max_changed = datetime(year=1900, month=1, day=1) if pd.isnull(max_changed) else max_changed
-                        now_cst = datetime.now(pytz.timezone("US/Central"))
-                        first_sunday_run = now_cst.weekday() == 6 and now_cst.hour < 1
 
                         if (
-                            not slack_app_settings.get(f"calendar_image_{week}")
-                            or (max_changed > datetime.now() - timedelta(hours=1))
+                            calendar_image_is_stale(
+                                slack_app_settings.get(f"calendar_image_{week}"),
+                                region_id,
+                                week,
+                                max_changed,
+                                generation_started_at,
+                                fingerprint,
+                            )
                             or first_sunday_run
                             or LOCAL_DEVELOPMENT
                             or force
@@ -577,68 +726,74 @@ def generate_calendar_images(force: bool = False):
 
                             # create calendar image
                             random_chars = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10))
-                            filename = f"{region_id}-{week}-{random_chars}.png"
+                            filename = (
+                                f"{region_id}-{week}-v1-"
+                                f"{generation_started_at.strftime(CALENDAR_IMAGE_TIMESTAMP_FORMAT)}-"
+                                f"{fingerprint}-{random_chars}.png"
+                            )
                             filename_static = f"{region_id}-{week}.png"
                             if LOCAL_DEVELOPMENT:
                                 dfi.export(df_styled, filename, table_conversion="playwright")
+                                generated_backing_files.append((week, filename))
                             else:
                                 dfi.export(df_styled, f"/mnt/calendar-images/{filename}", table_conversion="playwright")
+                                generated_backing_files.append((week, filename))
                                 if DB_SCHEMA == "f3_prod":
                                     shutil.copyfile(
                                         f"/mnt/calendar-images/{filename}", f"/mnt/calendar-images/{filename_static}"
                                     )
 
-                            # upload to s3 and remove local file
-                            slack_app_settings = region_org_record[2].settings
                             existing_file = slack_app_settings.get(f"calendar_image_{week}")
-
-                            if LOCAL_DEVELOPMENT:
-                                print(
-                                    f"Local development - skipping upload to S3 and deletion of old file for {filename}"
-                                )
-                            else:
-                                if existing_file:
-                                    try:
-                                        os.remove(f"/mnt/calendar-images/{existing_file}")
-                                    except Exception as e:
-                                        print(f"Error deleting old file {existing_file} from local storage: {e}")
+                            if not LOCAL_DEVELOPMENT and calendar_image_is_safe_to_delete(
+                                existing_file, region_id, week, generation_started_at
+                            ):
+                                pending_deletions.append(existing_file)
                             slack_app_settings[f"calendar_image_{week}"] = filename
                             calendar_updated = True
 
-                    # post to slack channel if enabled
-                    if calendar_updated and slack_posting_enabled(slack_app_settings):
-                        post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run)
+                    if calendar_updated:
+                        if slack_posting_enabled(slack_app_settings):
+                            try:
+                                post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run)
+                            except CalendarSlackPostError as posting_error:
+                                if not posting_error.safe_to_discard:
+                                    raise
+                                # Only definite rejection of every attempt permits cleanup.
+                                # A later DB failure may leave Slack referencing these files.
+                                for generated_week, new_file in generated_backing_files:
+                                    if parse_calendar_image_filename(
+                                        new_file, region_id, generated_week, generation_started_at
+                                    ) is None or new_file in [
+                                        region_org_record[2].settings.get(f"calendar_image_{label}")
+                                        for label in WEEK_LABELS
+                                    ]:
+                                        continue
+                                    try:
+                                        os.remove(new_file if LOCAL_DEVELOPMENT else f"/mnt/calendar-images/{new_file}")
+                                    except FileNotFoundError:
+                                        pass
+                                    except Exception as cleanup_error:
+                                        print(f"Error deleting unposted calendar image: {cleanup_error}")
+                                raise
 
-                    print(f"Updating Slack app settings for region {region_name} with {slack_app_settings}")
-                    session.query(SlackSpace).filter(SlackSpace.team_id == slack_app_settings["team_id"]).update(
-                        {"settings": slack_app_settings}
-                    )
-                    session.commit()
+                        print(f"Updating Slack app settings for region {region_name} with {slack_app_settings}")
+                        session.query(SlackSpace).filter(SlackSpace.team_id == slack_app_settings["team_id"]).update(
+                            {"settings": slack_app_settings}
+                        )
+                        session.commit()
+                    # With no settings change, stable-file retries need no new commit.
+                    for old_file in pending_deletions:
+                        try:
+                            os.remove(f"/mnt/calendar-images/{old_file}")
+                        except FileNotFoundError:
+                            pass
+                        except Exception as e:
+                            print(f"Error deleting old calendar image: {e}")
 
             except Exception as e:
+                session.rollback()
                 print(f"Error processing region {region_id}: {e}")
 
-        # Regions with no events in the calendar range never enter the loop above, so their stale
-        # week images would otherwise linger forever after a drop from 3 weeks to 2.
-        for region_org_record in region_org_records:
-            region_id = region_org_record[0].id
-            if region_id in region_ids_with_events:
-                continue
-            try:
-                slack_app_settings: dict = region_org_record[2].settings
-                num_weeks = calendar_weeks_shown(slack_app_settings)
-                if not remove_stale_week_images(slack_app_settings, region_id, num_weeks):
-                    continue
-                if slack_posting_enabled(slack_app_settings):
-                    # no images were regenerated for this region, so only refresh the existing post
-                    post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run=False)
-                print(f"Removing stale calendar images for region {region_org_record[0].name}")
-                session.query(SlackSpace).filter(SlackSpace.team_id == slack_app_settings["team_id"]).update(
-                    {"settings": slack_app_settings}
-                )
-                session.commit()
-            except Exception as e:
-                print(f"Error cleaning up stale calendar images for region {region_id}: {e}")
     update_local_region_records()
 
 
