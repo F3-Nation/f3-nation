@@ -373,7 +373,7 @@ You can run SQL queries, browse tables, and edit data from here.
 ### Useful database commands
 
 ```bash
-pnpm db:migrate       # apply any pending migrations
+pnpm db:migrate:local # apply any pending migrations
 pnpm db:studio        # open Drizzle Studio (interactive schema browser)
 pnpm db:seed:local    # re-run the local seed (safe to run multiple times)
 pnpm db:reset         # DANGER: wipe and recreate the database
@@ -553,14 +553,14 @@ Make sure Docker is running and Postgres is healthy:
 ```bash
 docker ps                     # should show f3-postgres, f3-adminer, f3-gcs
 docker exec f3-postgres pg_isready -U f3local   # should print "accepting connections"
-pnpm db:migrate
+pnpm db:migrate:local
 ```
 
 If migrations fail with a schema error, try resetting the database:
 
 ```bash
 pnpm db:reset       # wipes and recreates tables
-pnpm db:migrate     # re-applies all migrations
+pnpm db:migrate:local # re-applies all migrations
 pnpm db:seed:local  # re-seeds data
 ```
 
@@ -569,7 +569,7 @@ pnpm db:seed:local  # re-seeds data
 You have pending migrations. Run:
 
 ```bash
-pnpm db:migrate
+pnpm db:migrate:local
 ```
 
 ### App fails to start with env validation errors
