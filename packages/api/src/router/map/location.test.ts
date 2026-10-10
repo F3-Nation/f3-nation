@@ -1532,6 +1532,9 @@ describe("Map Location Router", () => {
         .update(schema.orgs)
         .set({ isActive: false })
         .where(eq(schema.orgs.id, tree.territory.id));
+      // The map datasets are cached for up to MAP_DATA_TTL_MS; a real edit
+      // shows within that window, a test can't wait for it.
+      clearMapDataCache();
       const inactive = await client.map.location.upcomingInstances();
       expect(inactive.map((instance) => instance.id)).not.toContain(
         instanceIds[0],
