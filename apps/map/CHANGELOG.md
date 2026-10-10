@@ -1,5 +1,24 @@
 # Changelog
 
+## [7.7.0](https://github.com/F3-Nation/f3-nation/compare/map@7.6.0...map@7.7.0) (2026-10-10)
+
+
+### Features
+
+* **db:** add public-table audit history ([#1060](https://github.com/F3-Nation/f3-nation/issues/1060)) ([10454d8](https://github.com/F3-Nation/f3-nation/commit/10454d8ab47795b984a76b01768642860b7718b6))
+* **db:** guarded db:migrate:local|staging|prod commands ([#1183](https://github.com/F3-Nation/f3-nation/issues/1183)) ([b7e5b66](https://github.com/F3-Nation/f3-nation/commit/b7e5b665b3d2193f607e24ca96698411463f5d23))
+* **scripts:** add PII obfuscation script for staging refresh (F3-65) ([#768](https://github.com/F3-Nation/f3-nation/issues/768)) ([870d24a](https://github.com/F3-Nation/f3-nation/commit/870d24a966afd089687eb6967a05f2be16d61226))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.13.0
+    * @acme/auth bumped to 0.2.9
+    * @acme/logger bumped to 0.3.0
+    * @acme/validators bumped to 0.4.6
+
 ## [7.6.0](https://github.com/F3-Nation/f3-nation/compare/map@7.5.0...map@7.6.0) (2026-10-06)
 
 

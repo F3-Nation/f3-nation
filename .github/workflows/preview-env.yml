@@ -109,12 +109,13 @@ jobs:
             -e POSTGRES_USER=f3local -e POSTGRES_PASSWORD=f3local -e POSTGRES_DB=f3nation \
             -p 5433:5432 postgres:18.0
           until docker exec seed-pg pg_isready -U f3local -d f3nation >/dev/null 2>&1; do sleep 1; done
-          # db scripts (pnpm db:migrate / db:seed:local) load env via dotenv
+          # db scripts (pnpm db:migrate:local / db:seed:local) load env via dotenv
           # from packages/db/.env
           echo 'DATABASE_URL=postgresql://f3local:f3local@localhost:5433/f3nation' > packages/db/.env
-          # CI= re-enables migrate.ts (it no-ops when CI is set);
+          # CI= lets migrate.ts run (it refuses when CI is set); the database is
+          # the throwaway seed-pg container above, so the local-only guard passes.
           # SKIP_ENV_VALIDATION keeps @acme/env from demanding the full var set.
-          CI= SKIP_ENV_VALIDATION=1 pnpm db:migrate
+          CI= SKIP_ENV_VALIDATION=1 pnpm db:migrate:local
           CI= SKIP_ENV_VALIDATION=1 pnpm db:seed:local
           # Preview-only E2E auth fixtures (docs/PREVIEW_AUTH.md). Previews
           # have no SMTP, so the auth app's email-MFA send path can't work;
