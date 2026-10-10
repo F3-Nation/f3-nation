@@ -54,11 +54,11 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Stop if:** a deploy-staging job fails (red).
 
 <!-- OPTIONAL (only if there is a migration): -->
-<!-- Staging or Production: if the new app or job requires the migration first, move Step 2 before its deployment or execution and renumber. Check old-app compatibility and state the chosen order in the Overview. If already deployed, confirm migration and worker state before testing. -->
+<!-- Staging or Production: migrate only after merge. If the new app or job requires the migration first, split Step 1's merge and deployment items so Step 2 follows merge but precedes the required deployment or execution; coordinate the sequence and renumber. Check old-app compatibility and state the chosen order or maintenance window in the Overview. If unresolved, post in #monorepo and pause; redraft before continuing. If already deployed, confirm migration and worker state before testing. -->
 
 ### Step 2: Run the database migration (~5 min)
 
-<!-- Keep the pinned checkout below when migrating before merge or when already merged at drafting. Otherwise replace it with the run-time checkout alternative. -->
+<!-- Keep the pinned checkout below only when already merged at drafting. Otherwise replace it with the run-time checkout alternative. -->
 
 - [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `git fetch origin {{RELEASE_FETCH_REF}} && git switch --detach {{RELEASE_SHA}} && pnpm install --frozen-lockfile`. Owner: Release lead
   - **Expected:** `git rev-parse HEAD` prints `{{RELEASE_SHA}}`, and `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
@@ -70,14 +70,10 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Expected:** `git rev-parse HEAD` prints the same SHA as `gh pr view {{PR}} --json mergeCommit --jq .mergeCommit.oid`, and `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
   - **Stop if:** the tree isn't clean, lookup/fetch/checkout/install fails, the SHA differs, or a different file prints.
 
-- [ ] **Confirm the migration target** from the repository root: `pnpm -F db with-env node -e 'const u=new URL(process.env.DATABASE_URL);console.log(u.host+u.pathname)'` prints the host and database name, never the password. Owner: Release lead
-  - **Expected:** it ends in `/{{DATABASE_NAME: f3_staging or f3_prod}}`.
-  - **Stop if:** it names any other database. Fix `packages/db/.env` before going on.
-
 <!-- Keep the pinned snapshot check below with the pinned checkout. Otherwise replace it with the run-time snapshot alternative. -->
 
-- [ ] **Confirm the release snapshot** immediately before running the migration: `gh pr view {{PR}} --json state,headRefOid,baseRefOid,mergeCommit --jq 'if .state == "OPEN" then [.state, .headRefOid, .baseRefOid] | join(" ") elif .state == "MERGED" then [.state, .mergeCommit.oid] | join(" ") else "STOP" end'`. Owner: Release lead
-  - **Expected:** it prints `OPEN {{RELEASE_SHA}} {{RELEASE_BASE_SHA}}` before merging, or `MERGED {{RELEASE_SHA}}` using the actual merge commit after merging.
+- [ ] **Confirm the release snapshot** immediately before running the migration: `gh pr view {{PR}} --json state,mergeCommit --jq 'select(.state == "MERGED") | [.state, .mergeCommit.oid] | join(" ")'`. Owner: Release lead
+  - **Expected:** it prints `MERGED {{RELEASE_SHA}}` using the actual merge commit.
   - **Stop if:** it prints anything else, or the check fails. Post in `#monorepo` and pause; the plan must be redrafted before continuing. Do not repeat a migration already run.
 
 <!-- ALTERNATIVE (only if this plan merges before migrating): fill the exact reviewed paths as single-quoted printf arguments, in discovery order. -->
@@ -105,7 +101,9 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Expected:** it prints `MERGED <SHA>; migration contents and list match`, where `<SHA>` is the same merge SHA returned at checkout.
   - **Stop if:** the working tree isn't clean, the reviewed migration contents or list differs, the SHA differs, or any check fails. Post in `#monorepo` and pause; the plan must be redrafted before continuing. Do not repeat a migration already run.
 
-- [ ] **Run the migration** from the repository root, pointed at the {{ENVIRONMENT}} database: `env -u CI pnpm db:migrate`. Owner: Release lead
+- [ ] **Run the migration** from the repository root: `pnpm db:migrate:{{staging or prod}}` (not `pnpm db:migrate:local`, which only migrates a local database). It reads the database login from Secret Manager, checks the checkout's migrations are main's and agree with the database, lists the pending migrations, and asks you to type the database name. Owner: Release lead
+  - **Expected:** it lists the migration in `{{NEWEST_MIGRATION_FILE}}` (and any other migrations in this release) as pending, nothing else; lines starting `note:` are informational. Type `{{DATABASE_NAME: f3_staging or f3_prod}}` and it ends with `Done: {{DATABASE_NAME}} is at <that migration>.`
+  - **Stop if:** it prints `REFUSED`, or lists a migration this release doesn't include. Don't work around a refusal: post it in `#monorepo` and pause.
 - [ ] **Run [the check query](#check-query-after-the-migration).** Every result must match. Owner: Monitor
   - **Expected:** {{WHAT_ERRORS_APPEAR_BETWEEN_DEPLOY_AND_MIGRATION_OR_"none"}}
   - **Stop if:** the migration shows an error, or the check query doesn't match. Retry **once**; if it fails again, stop.

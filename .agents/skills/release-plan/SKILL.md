@@ -42,15 +42,22 @@ Ask for anything missing before starting:
 2. **Find new database migrations.** The previous release is the last
    `chore: release main` commit reachable from `{{RELEASE_BASE_SHA}}`.
 
-   For both migration discovery and checkout, set `{{RELEASE_FETCH_REF}}` to
-   `refs/pull/<PR>/head` and `{{RELEASE_SHA}}` to `headRefOid` while the PR is
-   open, and record `{{RELEASE_BASE_SHA}}` as `baseRefOid`. After merging,
-   use `main` and `mergeCommit.oid`. Fetch `main` before setting
+   For migration discovery while the PR is open, set `{{RELEASE_FETCH_REF}}` to
+   `refs/pull/<PR>/head` and `{{RELEASE_SHA}}` to `headRefOid`, and record
+   `{{RELEASE_BASE_SHA}}` as `baseRefOid`. When drafting after
+   merging, use `main` and `mergeCommit.oid` for discovery and pinned checkout.
+   Fetch `main` before setting
    `{{RELEASE_BASE_SHA}}` to that merge commit's first parent
-   (`git rev-parse "{{RELEASE_SHA}}^"`). Keep these pinned checkout values
-   when migrating before merge or when the PR is already merged at drafting.
-   For a plan that merges first, use the template's run-time merge lookup and
-   migration-list check instead; the future squash commit is not yet known.
+   (`git rev-parse "{{RELEASE_SHA}}^"`). For a plan drafted while open, use the
+   template's run-time merge lookup and migration checks after merging; the
+   future squash commit is not yet known.
+
+   Staging and Production migrations run only after merge, using
+   `pnpm db:migrate:staging` or `pnpm db:migrate:prod`. These guarded commands
+   read the login from Secret Manager and require the Release lead to confirm
+   the database name; they ignore `packages/db/.env`. Never bypass a refusal
+   or use the local migration command for a remote database. See
+   [`docs/db-migrations.md`](../../../docs/db-migrations.md#deploying-migrations).
 
    The open PR's head must contain its pinned base before discovering
    migrations. If the ancestry check below fails, stop and have the Release
@@ -74,9 +81,9 @@ Ask for anything missing before starting:
    )
    ```
 
-   Re-read the PR state, head SHA, and base SHA immediately before merging
-   or migrating while open; after merging, check the state and actual merge
-   SHA instead. Stop if any value no longer matches the plan: post in
+   Re-read the PR state, head SHA, and base SHA immediately before merging;
+   before migrating, check the merged state and actual merge SHA instead.
+   Stop if any value no longer matches the plan: post in
    `#monorepo` and pause; the plan must be redrafted before continuing. For a
    merge-then-migrate plan, look up the actual merge commit at checkout and
    fetch the PR head as well as `main` so the reviewed `{{RELEASE_SHA}}` is
@@ -90,9 +97,13 @@ Ask for anything missing before starting:
    head after merging or repeat a migration already run.
 
    Read any new migration SQL and its linked rollout notes or feature spec
-   before choosing the order. A migration required by the new app or scheduled
-   job must precede that deployment or execution. If it would break the old app,
-   state the compatible sequence or maintenance window in the Overview. For an
+   before choosing the order. If the new app or scheduled job requires a
+   migration before deployment or execution, coordinate the merge and deployment
+   or job execution so the migration runs after merge but before it is needed.
+   Split the merge and deployment checklist items when necessary. If it would
+   break the old app, state the compatible sequence or maintenance window in the
+   Overview. If that sequence is unresolved, post in `#monorepo` and pause;
+   redraft the plan before continuing. For an
    already-deployed release, make confirming migration and worker state a
    prerequisite to testing; do not assume the database is current or pause jobs
    without accounting for their other work.
@@ -152,17 +163,17 @@ Ask for anything missing before starting:
 The template is written for Staging. For a Production release, use the
 Production column of each row while filling it in.
 
-|                         | Staging                                                                                                                      | Production                                                                                                |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Step 1 action           | Merge if still open; otherwise verify the remaining Staging deploys                                                          | Approve each paused `deploy-prod` job (environment `*-production`) on the Actions page                    |
-| Migration order         | Follow the migration's rollout requirements; deploy then migrate only when the new app or job can run against the old schema | Follow the rollout requirements and old-app compatibility; state the order before any Production approval |
-| Homepage                | Already published to production when the PR merges — say so in the Overview                                                  | Nothing to do                                                                                             |
-| Database                | Cloud SQL `f3data-nonprod`, database `f3_staging`                                                                            | Cloud SQL `f3data`, database `f3_prod`                                                                    |
-| Cloud Run and log links | As in the template                                                                                                           | Drop `-staging` from each project ID                                                                      |
-| Step 3 (test plan)      | Create the Staging test plan                                                                                                 | Drop the step                                                                                             |
-| Test step               | Run the Staging test plan issue                                                                                              | Repeat only the per-app smoke checks from the Staging test plan against production URLs                   |
-| Database queries        | Run against `f3_staging`                                                                                                     | Run against `f3_prod`                                                                                     |
-| Last step               | Let it run 24–48 h, then go/no-go for Production                                                                             | Announce done in `#monorepo`                                                                              |
+|                         | Staging                                                                                               | Production                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Step 1 action           | Merge if still open; otherwise verify the remaining Staging deploys                                   | Approve each paused `deploy-prod` job (environment `*-production`) on the Actions page               |
+| Migration order         | Migrate after merge; coordinate deployment or execution so the new app or job has its required schema | Migrate after merge; follow old-app compatibility and state the order before any Production approval |
+| Homepage                | Already published to production when the PR merges — say so in the Overview                           | Nothing to do                                                                                        |
+| Database                | Cloud SQL `f3data-nonprod`, database `f3_staging`                                                     | Cloud SQL `f3data`, database `f3_prod`                                                               |
+| Cloud Run and log links | As in the template                                                                                    | Drop `-staging` from each project ID                                                                 |
+| Step 3 (test plan)      | Create the Staging test plan                                                                          | Drop the step                                                                                        |
+| Test step               | Run the Staging test plan issue                                                                       | Repeat only the per-app smoke checks from the Staging test plan against production URLs              |
+| Database queries        | Run against `f3_staging`                                                                              | Run against `f3_prod`                                                                                |
+| Last step               | Let it run 24–48 h, then go/no-go for Production                                                      | Announce done in `#monorepo`                                                                         |
 
 ## What to leave out
 
