@@ -40,21 +40,24 @@ Ask for anything missing before starting:
    migration, and test steps unchecked; a merged PR does not prove they finished.
 
 2. **Find new database migrations.** The previous release is the last
-   `chore: release main` commit on `main` before this PR's changes:
+   `chore: release main` commit reachable from `{{RELEASE_BASE_SHA}}`.
 
    For both migration discovery and checkout, set `{{RELEASE_FETCH_REF}}` to
    `refs/pull/<PR>/head` and `{{RELEASE_SHA}}` to `headRefOid` while the PR is
    open, and record `{{RELEASE_BASE_SHA}}` as `baseRefOid`. After merging,
    use `main` and `mergeCommit.oid`. Fetch `main` before setting
    `{{RELEASE_BASE_SHA}}` to that merge commit's first parent
-   (`git rev-parse "{{RELEASE_SHA}}^"`). This keeps discovery and checkout
-   on the same snapshot even if `main` has advanced.
+   (`git rev-parse "{{RELEASE_SHA}}^"`). Keep these pinned checkout values
+   when migrating before merge or when the PR is already merged at drafting.
+   For a plan that merges first, use the template's run-time merge lookup and
+   migration-list check instead; the future squash commit is not yet known.
 
    The open PR's head must contain its pinned base before discovering
    migrations. If the ancestry check below fails, stop and have the Release
    lead refresh the PR branch, then reread the PR and rebuild the plan. Pinning
    the base alone would still omit migrations already missing from a stale head.
-   Stop if any command fails or no previous release is found.
+   The following discovers the migration list to review while drafting. Stop
+   if any command fails or no previous release is found.
 
    ```bash
    (
@@ -73,12 +76,18 @@ Ask for anything missing before starting:
 
    Re-read the PR state, head SHA, and base SHA immediately before merging
    or migrating while open; after merging, check the state and actual merge
-   SHA instead. Stop if any value no longer matches the plan. Refresh discovery,
-   the migration list, rollout order, and checkout steps before continuing.
-   If the plan merges before a pending migration, include a checkpoint after
-   merging to refresh discovery and checkout to the actual merge commit, then
-   review the updated migration list and rollout order. Do not migrate from
-   the saved open-PR head after merging or blindly repeat a migration already run.
+   SHA instead. Stop if any value no longer matches the plan: post in
+   `#monorepo` and pause; the plan must be redrafted before continuing. For a
+   merge-then-migrate plan, look up the actual merge commit at checkout and
+   fetch the PR head as well as `main` so the reviewed `{{RELEASE_SHA}}` is
+   available. Immediately before migration, require a clean working tree,
+   recheck the merge SHA against `HEAD`, and compare `packages/db/drizzle`
+   against the reviewed head, including SQL and migration metadata. Fill
+   `{{REVIEWED_MIGRATION_FILES}}` with the exact paths from discovery, each
+   single-quoted and separated by a space, in discovery order. The run-time
+   check must match both the reviewed migration contents and list, with no
+   issue edits during a successful release. Do not migrate from the saved open-PR
+   head after merging or repeat a migration already run.
 
    Read any new migration SQL and its linked rollout notes or feature spec
    before choosing the order. A migration required by the new app or scheduled
@@ -104,7 +113,8 @@ Ask for anything missing before starting:
 4. **Fill in [`template.md`](template.md).** Reorder and renumber checklist
    steps to match the verified rollout requirements. Follow the rules below. Delete
    every `<!-- ... -->` comment and every block marked optional that does not
-   apply. Replace every `{{PLACEHOLDER}}`.
+   apply. Keep only the applicable checkout and snapshot alternatives. Replace
+   every `{{PLACEHOLDER}}`.
 
 5. **Write the draft to a local file**, e.g. `release-plan-<PR>.md` in a
    scratch/temp directory (not in the repo). Show it to the person who asked
