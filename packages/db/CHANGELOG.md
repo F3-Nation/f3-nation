@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.8.0...pkg-db@0.9.0) (2026-10-10)
+
+
+### Features
+
+* **db:** add public-table audit history ([#1060](https://github.com/F3-Nation/f3-nation/issues/1060)) ([10454d8](https://github.com/F3-Nation/f3-nation/commit/10454d8ab47795b984a76b01768642860b7718b6))
+* **db:** drop hand-made event_instance_expanded and attendance_expanded views ([#1066](https://github.com/F3-Nation/f3-nation/issues/1066)) ([fd884ea](https://github.com/F3-Nation/f3-nation/commit/fd884ea1c9a5c5f8b8d73a3f02550b9e4eff3675))
+* **db:** guarded db:migrate:local|staging|prod commands ([#1183](https://github.com/F3-Nation/f3-nation/issues/1183)) ([b7e5b66](https://github.com/F3-Nation/f3-nation/commit/b7e5b665b3d2193f607e24ca96698411463f5d23))
+
 ## [0.8.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.7.0...pkg-db@0.8.0) (2026-10-06)
 
 
