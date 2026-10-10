@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -11,6 +18,7 @@ import {
   migrationsFingerprint,
   PhaseError,
   readGitState,
+  snapshotMigrations,
 } from "./migrate-remote";
 
 // A throwaway "origin" plus a clone, so the git checks run against real git.
@@ -162,6 +170,27 @@ describe("migrationsFingerprint", () => {
     expect(edited).not.toBe(before);
     write(clone, "packages/db/drizzle/meta/_journal.json", '{"x":1}');
     expect(migrationsFingerprint(folder)).not.toBe(edited);
+  });
+});
+
+describe("snapshotMigrations", () => {
+  it("copies exactly what the migrator reads, unaffected by later edits", () => {
+    const folder = path.join(clone, "packages/db/drizzle");
+    write(clone, "packages/db/drizzle/meta/_journal.json", "{}");
+    write(clone, "packages/db/drizzle/notes.md", "not read by the migrator");
+    const before = migrationsFingerprint(folder);
+    const snapshot = snapshotMigrations(folder);
+    try {
+      expect(migrationsFingerprint(snapshot)).toBe(before);
+      expect(existsSync(path.join(snapshot, "notes.md"))).toBe(false);
+      write(clone, "packages/db/drizzle/0000_a.sql", "drop table a;");
+      expect(migrationsFingerprint(snapshot)).toBe(before);
+      expect(readFileSync(path.join(snapshot, "0000_a.sql"), "utf8")).toBe(
+        "create table a();",
+      );
+    } finally {
+      rmSync(snapshot, { recursive: true, force: true });
+    }
   });
 });
 

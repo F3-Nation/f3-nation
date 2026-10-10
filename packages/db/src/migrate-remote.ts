@@ -21,7 +21,15 @@
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -157,6 +165,24 @@ export function migrationsFingerprint(folder: string): string {
       .update("\0");
   }
   return hash.digest("hex");
+}
+
+/**
+ * Copy what the migrator reads (the journal and every .sql file) into a new
+ * temporary folder, so the migrator reads files nothing else can change.
+ * The caller checks the copy's fingerprint and removes the folder.
+ */
+export function snapshotMigrations(folder: string): string {
+  const snapshot = mkdtempSync(path.join(os.tmpdir(), "f3-db-migrate-"));
+  mkdirSync(path.join(snapshot, "meta"));
+  copyFileSync(
+    path.join(folder, "meta/_journal.json"),
+    path.join(snapshot, "meta/_journal.json"),
+  );
+  for (const f of readdirSync(folder).filter((f) => f.endsWith(".sql"))) {
+    copyFileSync(path.join(folder, f), path.join(snapshot, f));
+  }
+  return snapshot;
 }
 
 /**
@@ -499,67 +525,80 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
     console.log("Stopped. Nothing was changed.");
     return;
   }
-  // Exactly the files that were checked and shown: nothing may have changed
-  // while the prompt was open.
-  if (migrationsFingerprint(MIGRATIONS_DIR) !== fingerprint) {
-    throw new Refusal(
-      "packages/db/drizzle changed while you were confirming. Run the command again.",
-    );
-  }
-
-  const rw = postgres(pgUrl, {
-    ...hostOptions,
-    max: 1,
-    connect_timeout: 15,
-    prepare: false,
-    onnotice: () => undefined,
-    connection: { application_name: "f3-db-migrate" },
-  });
-  try {
-    // One migration run at a time: Drizzle reads the newest applied row
-    // before its transaction starts, so two runs confirmed together would
-    // both apply the same migrations. The lock is held by this session (the
-    // pool has one connection) until rw.end() below; then make sure nothing
-    // was applied since the checks.
-    const [lock] = await rw<{ ok: boolean }[]>`
-      SELECT pg_try_advisory_lock(hashtext(${`f3-db-migrate:${database}`})) AS ok`;
-    if (!lock?.ok) {
-      throw new Refusal(
-        `Someone else is migrating ${database} right now. Wait for them to finish, then run this again.`,
-      );
-    }
-    const [now] = await rw<{ newest: string | null }[]>`
-      SELECT max(created_at)::text AS newest FROM ${rw(`drizzle.${migrationsTable}`)}`;
-    if (Number(now?.newest ?? 0) !== newestApplied) {
-      throw new Refusal(
-        `${database} was migrated by someone else while you were confirming. Run this again to see what is still pending.`,
-      );
-    }
-    console.log(`Migrating ${database} ...`);
+  async function applyMigrations(
+    folder: string,
+    expected: JournalEntry,
+  ): Promise<void> {
+    const rw = postgres(pgUrl, {
+      ...hostOptions,
+      max: 1,
+      connect_timeout: 15,
+      prepare: false,
+      onnotice: () => undefined,
+      connection: { application_name: "f3-db-migrate" },
+    });
     try {
-      await migrator(drizzle(rw), {
-        migrationsTable,
-        migrationsFolder: MIGRATIONS_DIR,
-      });
-    } catch (e) {
-      throw new PhaseError("migrating", { cause: e });
-    }
-    // Committed from here on: a failure now must not read as "rolled back".
-    try {
-      const [after] = await rw<{ newest: string | null }[]>`
-        SELECT max(created_at)::text AS newest FROM ${rw(`drizzle.${migrationsTable}`)}`;
-      const expected = plan.pending[plan.pending.length - 1];
-      if (Number(after?.newest) !== expected?.when) {
-        throw new Error(
-          `After migrating, ${database}'s newest migration is ${after?.newest}, expected ${expected?.when} (${expected?.tag}).`,
+      // One migration run at a time: Drizzle reads the newest applied row
+      // before its transaction starts, so two runs confirmed together would
+      // both apply the same migrations. The lock is held by this session (the
+      // pool has one connection) until rw.end() below; then make sure nothing
+      // was applied since the checks.
+      const [lock] = await rw<{ ok: boolean }[]>`
+        SELECT pg_try_advisory_lock(hashtext(${`f3-db-migrate:${database}`})) AS ok`;
+      if (!lock?.ok) {
+        throw new Refusal(
+          `Someone else is migrating ${database} right now. Wait for them to finish, then run this again.`,
         );
       }
-      console.log(`Done: ${database} is at ${expected.tag}.`);
-    } catch (e) {
-      throw new PhaseError("applied", { cause: e });
+      const [now] = await rw<{ newest: string | null }[]>`
+        SELECT max(created_at)::text AS newest FROM ${rw(`drizzle.${migrationsTable}`)}`;
+      if (Number(now?.newest ?? 0) !== newestApplied) {
+        throw new Refusal(
+          `${database} was migrated by someone else while you were confirming. Run this again to see what is still pending.`,
+        );
+      }
+      console.log(`Migrating ${database} ...`);
+      try {
+        await migrator(drizzle(rw), {
+          migrationsTable,
+          migrationsFolder: folder,
+        });
+      } catch (e) {
+        throw new PhaseError("migrating", { cause: e });
+      }
+      // Committed from here on: a failure now must not read as "rolled back".
+      try {
+        const [after] = await rw<{ newest: string | null }[]>`
+          SELECT max(created_at)::text AS newest FROM ${rw(`drizzle.${migrationsTable}`)}`;
+        if (Number(after?.newest) !== expected.when) {
+          throw new Error(
+            `After migrating, ${database}'s newest migration is ${after?.newest}, expected ${expected.when} (${expected.tag}).`,
+          );
+        }
+        console.log(`Done: ${database} is at ${expected.tag}.`);
+      } catch (e) {
+        throw new PhaseError("applied", { cause: e });
+      }
+    } finally {
+      await rw.end();
     }
+  }
+
+  // Exactly the files that were checked and shown: the migrator reads a
+  // private copy, taken now and checked against the fingerprint, so nothing
+  // can change them between the confirmation and the migration.
+  const snapshot = snapshotMigrations(MIGRATIONS_DIR);
+  try {
+    if (migrationsFingerprint(snapshot) !== fingerprint) {
+      throw new Refusal(
+        "packages/db/drizzle changed while you were confirming. Run the command again.",
+      );
+    }
+    const last = plan.pending[plan.pending.length - 1];
+    if (!last) throw new Error("No pending migration to apply.");
+    await applyMigrations(snapshot, last);
   } finally {
-    await rw.end();
+    rmSync(snapshot, { recursive: true, force: true });
   }
 }
 
