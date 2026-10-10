@@ -102,17 +102,18 @@ Ask for anything missing before starting:
 The template is written for Staging. For a Production release, use the
 Production column of each row while filling it in.
 
-|                         | Staging                                                                     | Production                                                                                                                               |
-| ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Step 1 action           | Merge the release PR; staging deploys start automatically                   | Approve each paused `deploy-prod` job (environment `*-production`) on the Actions page                                                   |
-| Migration order         | Deploy, then migrate                                                        | Migrate before approving if Staging's "Expected" line was not "none", unless the migration breaks the old app; say which in the Overview |
-| Homepage                | Already published to production when the PR merges — say so in the Overview | Nothing to do                                                                                                                            |
-| Database                | Cloud SQL `f3data-nonprod`, database `f3_staging`                           | Cloud SQL `f3data`, database `f3_prod`                                                                                                   |
-| Cloud Run and log links | As in the template                                                          | Drop `-staging` from each project ID                                                                                                     |
-| Step 3 (test plan)      | Create the Staging test plan                                                | Drop the step                                                                                                                            |
-| Test step               | Run the Staging test plan issue                                             | Repeat only the per-app smoke checks from the Staging test plan against production URLs                                                  |
-| Database queries        | Run against `f3_staging`                                                    | Run against `f3_prod`                                                                                                                    |
-| Last step               | Let it run 24–48 h, then go/no-go for Production                            | Announce done in `#monorepo`                                                                                                             |
+|                             | Staging                                                                     | Production                                                                                                                               |
+| --------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Step 1 action               | Merge the release PR; staging deploys start automatically                   | Approve each paused `deploy-prod` job (environment `*-production`) on the Actions page                                                   |
+| Migration order             | Deploy, then migrate                                                        | Migrate before approving if Staging's "Expected" line was not "none", unless the migration breaks the old app; say which in the Overview |
+| Homepage                    | Already published to production when the PR merges — say so in the Overview | Nothing to do                                                                                                                            |
+| Database                    | Cloud SQL `f3data-nonprod`, database `f3_staging`                           | Cloud SQL `f3data`, database `f3_prod`                                                                                                   |
+| Proxy (`{{PROXY_COMMAND}}`) | `cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5482`             | `cloud-sql-proxy f3data:us-central1:f3data --port 5481`                                                                                  |
+| Cloud Run and log links     | As in the template                                                          | Drop `-staging` from each project ID                                                                                                     |
+| Step 3 (test plan)          | Create the Staging test plan                                                | Drop the step                                                                                                                            |
+| Test step                   | Run the Staging test plan issue                                             | Repeat only the per-app smoke checks from the Staging test plan against production URLs                                                  |
+| Database queries            | Run against `f3_staging`                                                    | Run against `f3_prod`                                                                                                                    |
+| Last step                   | Let it run 24–48 h, then go/no-go for Production                            | Announce done in `#monorepo`                                                                                                             |
 
 ## What to leave out
 

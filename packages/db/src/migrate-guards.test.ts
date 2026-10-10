@@ -10,6 +10,7 @@ import {
   isMainRepoUrl,
   isProtectedDatabaseName,
   maintenanceUrl,
+  connectionHint,
   planMigrations,
 } from "./migrate-guards";
 
@@ -252,5 +253,74 @@ describe("confirmationMatches", () => {
     expect(confirmationMatches("y", "f3_prod")).toBe(false);
     expect(confirmationMatches("F3_PROD", "f3_prod")).toBe(false);
     expect(confirmationMatches("f3_staging", "f3_prod")).toBe(false);
+  });
+});
+
+describe("connectionHint", () => {
+  const PROD = "f3data:us-central1:f3data";
+  const refused = new Error("connect ECONNREFUSED 127.0.0.1:5481");
+
+  it("names the port and the proxy command when nothing listens locally", () => {
+    const hint = connectionHint(
+      refused,
+      "postgresql://db_migrator:s3cret@127.0.0.1:5481/f3_prod",
+      PROD,
+    );
+    expect(hint).toContain("Nothing is listening at 127.0.0.1:5481");
+    expect(hint).toContain(`cloud-sql-proxy ${PROD} --port 5481`);
+  });
+
+  it("never includes the login", () => {
+    for (const e of [refused, new Error("timeout"), new Error("other")]) {
+      const hint = connectionHint(
+        e,
+        "postgresql://db_migrator:s3cret@127.0.0.1:5481/f3_prod",
+        PROD,
+      );
+      expect(hint).not.toContain("s3cret");
+      expect(hint).not.toContain("db_migrator");
+    }
+  });
+
+  it("doesn't suggest the proxy for a remote host or a socket", () => {
+    expect(
+      connectionHint(refused, "postgresql://u:p@10.0.0.5:5432/f3_prod", PROD),
+    ).toBe(
+      "Nothing is listening at 10.0.0.5:5432. Check the migration URL's host, or ask an admin.",
+    );
+    expect(
+      connectionHint(
+        new Error("connect ENOENT /cloudsql/x/.s.PGSQL.5432"),
+        "postgresql://u:p@/f3_prod?host=/cloudsql/x",
+        PROD,
+      ),
+    ).toContain("Nothing is listening at socket /cloudsql/x");
+  });
+
+  it("points a dropped local connection at the proxy's credentials", () => {
+    expect(
+      connectionHint(
+        new Error("write CONNECTION_CLOSED 127.0.0.1:5481"),
+        "postgresql://u:p@127.0.0.1:5481/f3_prod",
+        PROD,
+      ),
+    ).toMatch(/gcloud auth application-default login/);
+  });
+
+  it("explains timeouts and a rejected login", () => {
+    expect(
+      connectionHint(
+        new Error("write CONNECT_TIMEOUT"),
+        "postgresql://u:p@127.0.0.1:5482/f3_staging",
+        PROD,
+      ),
+    ).toMatch(/127\.0\.0\.1:5482 \(timed out\)\. Is the proxy running/);
+    expect(
+      connectionHint(
+        new Error('password authentication failed for user "u"'),
+        "postgresql://u:p@127.0.0.1:5482/f3_staging",
+        PROD,
+      ),
+    ).toMatch(/rejected the login/);
   });
 });

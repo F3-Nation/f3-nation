@@ -112,15 +112,24 @@ nothing is changed until every check passes:
        `packages/db/src/migrate-guards.ts` (prod: `0008_nice_leech`, applied
        to staging but never to prod);
      - a row whose hash differs from the file is only noted: the file was
-       edited after it ran (prod's `0011` and `0015`), and Drizzle ignores it.
+       edited after it ran (staging's `0011`, prod's `0015`), and Drizzle ignores it.
   5. It lists the pending migrations and asks you to type the database name.
      Then it applies them (in one transaction) and checks the database is at
      the newest one.
 
-**Connecting.** The secret holds a full `postgresql://` URL, used as is. If
-it points at `127.0.0.1:<port>`, start the Cloud SQL proxy on that port first
-(`cloud-sql-proxy f3data:us-central1:f3data --port <port>` for prod,
-`…:f3data-nonprod` for staging); a Cloud SQL socket (`?host=/cloudsql/…`)
+**Connecting.** The secret holds a full `postgresql://` URL, used as is and
+never printed. Both secrets point at a local Cloud SQL proxy, so start it in
+another terminal first and leave it running:
+
+| Command                   | Start this first                                                |
+| ------------------------- | --------------------------------------------------------------- |
+| `pnpm db:migrate:staging` | `cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5482` |
+| `pnpm db:migrate:prod`    | `cloud-sql-proxy f3data:us-central1:f3data --port 5481`         |
+
+The proxy uses Application Default Credentials: run
+`gcloud auth application-default login` once on your machine. If the proxy
+isn't running, the command says which address it tried and prints the proxy
+command. A Cloud SQL socket URL (`?host=/cloudsql/…`) also
 works where one is mounted. It must be a direct connection, never the
 PgBouncer pooler: the runner's lock against two people migrating at once is a
 session lock, which transaction pooling doesn't keep. Your own `gcloud` login
