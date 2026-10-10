@@ -20082,7 +20082,7 @@
         ]
       },
       "post": {
-        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set, and are only returned, if requester has admin access.",
+        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.crupdate",
         "parameters": [
           {
@@ -20538,7 +20538,7 @@
     },
     "/v1/user/email/{email}": {
       "get": {
-        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
+        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.byEmail",
         "parameters": [
           {
@@ -20561,7 +20561,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
               "type": "boolean"
             }
           }
@@ -21145,7 +21145,7 @@
     },
     "/v1/user/id/{id}": {
       "get": {
-        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester has admin role for any of the user's organizations.",
+        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.byId",
         "parameters": [
           {
@@ -21167,7 +21167,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
               "type": "boolean"
             }
           }
