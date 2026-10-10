@@ -115,6 +115,24 @@ describe("readGitState + checkGitState", () => {
     expect(checkGitState(state())).toMatch(/uncommitted or untracked/);
   });
 
+  it("a branch that changes the runner code is refused", () => {
+    git(clone, "switch", "-q", "-c", "edited_runner");
+    commit(clone, "packages/db/src/migrate-remote.ts", "// edited", "edit");
+    expect(state()).toMatchObject({ differsFromMain: true, headOnMain: false });
+    expect(checkGitState(state())).toMatch(/not main's/);
+  });
+
+  it("a branch that changes the root package.json is refused", () => {
+    git(clone, "switch", "-q", "-c", "scripts");
+    commit(clone, "package.json", '{"scripts":{}}', "scripts");
+    expect(checkGitState(state())).toMatch(/not main's/);
+  });
+
+  it("uncommitted runner edits are refused, even on main", () => {
+    write(clone, "packages/db/src/migrate-guards.ts", "// edited");
+    expect(checkGitState(state())).toMatch(/uncommitted or untracked/);
+  });
+
   it("a broken index refuses instead of reading as no changes", () => {
     writeFileSync(path.join(clone, ".git/index"), "x");
     expect(state).toThrow(/git (diff|status) failed/);

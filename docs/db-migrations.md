@@ -88,10 +88,11 @@ nothing is changed until every check passes:
 - **Staging and prod** (`db:migrate:staging`, `db:migrate:prod`):
   1. Run by a person in a terminal: they ask you to type the database name.
      There is no `--yes`.
-  2. After `git fetch` of F3-Nation/f3-nation's `main`, `packages/db/drizzle`
+  2. After `git fetch` of F3-Nation/f3-nation's `main`, `packages/db` (the
+     migrations and the code that applies them) and the root `package.json`
      must be exactly main's, or the checkout must be a commit on main (a
      release commit behind main is fine), with no uncommitted or untracked
-     files under `packages/db/drizzle`.
+     files in either. A branch that changes neither can still run it.
   3. The URL must name the database exactly (`f3_staging` / `f3_prod`) with no
      other URL parameters, since they would rename the migrations table (see
      "Journal table name" below) and Drizzle would re-run every migration.

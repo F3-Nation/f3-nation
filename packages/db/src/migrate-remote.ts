@@ -10,7 +10,8 @@
  *
  * In order, refusing with what to do at the first failure:
  *   1. run by a person in a terminal (it asks for confirmation);
- *   2. packages/db/drizzle is main's (git fetch first), no local changes;
+ *   2. packages/db (the migrations and this runner) and the root package.json
+ *      are main's (git fetch first), with no local changes;
  *   3. the URL names exactly f3_staging / f3_prod, so the migrations table
  *      is the one the environment has always used;
  *   4. read-only: the server's current_database() is that database, the login
@@ -55,7 +56,12 @@ import {
 import { migrationsDatabaseName, postgresArgs } from "./utils/functions";
 
 const MIGRATIONS_DIR = path.resolve(__dirname, "../drizzle");
-const MIGRATIONS_PATH = "packages/db/drizzle";
+/**
+ * What must be main's: the migrations, and the code that applies them (this
+ * runner, everything it imports from the package, the package's scripts) plus
+ * the root package.json that defines `pnpm db:migrate:*`.
+ */
+export const GUARDED_PATHS = ["packages/db", "package.json"];
 
 class Refusal extends Error {}
 
@@ -195,7 +201,7 @@ export function readGitState(repoRoot: string, mainRef: string): GitState {
     "--quiet",
     mainRef,
     "--",
-    MIGRATIONS_PATH,
+    ...GUARDED_PATHS,
   ]);
   if (diff.status > 1)
     throw new Refusal(`git diff failed: ${diff.stderr.trim()}`);
@@ -204,7 +210,7 @@ export function readGitState(repoRoot: string, mainRef: string): GitState {
     "--porcelain",
     "--untracked-files=all",
     "--",
-    MIGRATIONS_PATH,
+    ...GUARDED_PATHS,
   ]);
   const ancestor = git(repoRoot, [
     "merge-base",

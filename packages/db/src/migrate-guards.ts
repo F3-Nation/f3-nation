@@ -152,9 +152,9 @@ export function isProtectedDatabaseName(name: string): boolean {
 // ---------------------------------------------------------------------------
 
 export interface GitState {
-  /** packages/db/drizzle in the working tree differs from origin/main. */
+  /** The guarded paths (packages/db, package.json) differ from main. */
   differsFromMain: boolean;
-  /** Changed (staged or not) or untracked files under packages/db/drizzle. */
+  /** Changed (staged or not) or untracked files in the guarded paths. */
   localChanges: string[];
   /** HEAD is an ancestor of (or equal to) origin/main. */
   headOnMain: boolean;
@@ -172,7 +172,7 @@ export interface GitState {
 export function checkGitState(state: GitState): string | null {
   if (state.localChanges.length > 0) {
     return (
-      `You have uncommitted or untracked changes in packages/db/drizzle:\n` +
+      `You have uncommitted or untracked changes in packages/db or package.json:\n` +
       state.localChanges.map((f) => `  ${f}`).join("\n") +
       `\nStaging and prod are only migrated from main. Commit and merge them ` +
       `through a pull request first, or discard them.`
@@ -180,9 +180,10 @@ export function checkGitState(state: GitState): string | null {
   }
   if (state.differsFromMain && !state.headOnMain) {
     return (
-      `This checkout's migrations (packages/db/drizzle) are not main's. ` +
-      `Staging and prod are only migrated from main, after the pull request ` +
-      `is merged. Run: git switch main && git pull, then try again.`
+      `This checkout's packages/db (the migrations and the code that applies ` +
+      `them) or package.json is not main's. Staging and prod are only ` +
+      `migrated from main, after the pull request is merged. Run: ` +
+      `git switch main && git pull, then try again.`
     );
   }
   return null;
