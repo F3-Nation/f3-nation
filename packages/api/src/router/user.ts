@@ -744,7 +744,12 @@ export const userRouter = {
               "This user has history (such as attendance or achievements) and can't be deleted.",
           });
         }
-        throw error;
+        // Anything else is an unexpected DB/driver fault. Log the original and
+        // surface a generic message that leaks no internals.
+        logError("api.user.delete_failed", { userId: input.id }, error);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unable to delete user",
+        });
       }
     }),
 };

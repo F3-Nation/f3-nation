@@ -23,7 +23,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 import type { Session } from "@acme/auth";
-import { and, eq, schema } from "@acme/db";
+import { and, authSchema, eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
@@ -1942,6 +1942,13 @@ describe("User Router", () => {
         });
       }
 
+      // A linked better_auth_user row must go with the user (ON DELETE CASCADE)
+      await db.insert(authSchema.betterAuthUser).values({
+        id: String(testUser.id),
+        name: "DeleteTest",
+        email: testUser.email,
+      });
+
       // Delete the user
       await client.user.delete({
         id: testUser.id,
@@ -1962,6 +1969,12 @@ describe("User Router", () => {
         .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
 
       expect(roles).toHaveLength(0);
+
+      const authUsers = await db
+        .select()
+        .from(authSchema.betterAuthUser)
+        .where(eq(authSchema.betterAuthUser.id, String(testUser.id)));
+      expect(authUsers).toHaveLength(0);
     });
 
     it("should return CONFLICT and keep roles when the user has history", async () => {
@@ -2028,18 +2041,24 @@ describe("User Router", () => {
         roleId: adminRole.id,
       });
 
-      // An owned API key references users without ON DELETE CASCADE (like
-      // attendance and achievements), so the users delete fails with a
-      // foreign-key violation.
-      const [apiKey] = await db
-        .insert(schema.apiKeys)
+      // Attendance references users without ON DELETE CASCADE, so the users
+      // delete fails with a foreign-key violation.
+      const [eventInstance] = await db
+        .insert(schema.eventInstances)
         .values({
-          key: `f3_${uniqueId()}`,
           name: `Delete history ${uniqueId()}`,
-          ownerId: testUser.id,
+          orgId: f3Nation.id,
+          startDate: new Date().toISOString().split("T")[0]!,
+          isActive: true,
+          highlight: false,
         })
-        .returning({ id: schema.apiKeys.id });
-      if (!apiKey) throw new Error("api key not created");
+        .returning({ id: schema.eventInstances.id });
+      if (!eventInstance) throw new Error("event instance not created");
+      await db.insert(schema.attendance).values({
+        eventInstanceId: eventInstance.id,
+        userId: testUser.id,
+        isPlanned: false,
+      });
 
       try {
         await expect(
@@ -2060,7 +2079,12 @@ describe("User Router", () => {
           .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
         expect(roles).toHaveLength(1);
       } finally {
-        await cleanup.apiKey(apiKey.id);
+        await db
+          .delete(schema.attendance)
+          .where(eq(schema.attendance.userId, testUser.id));
+        await db
+          .delete(schema.eventInstances)
+          .where(eq(schema.eventInstances.id, eventInstance.id));
         await cleanup.user(testUser.id);
       }
     });
