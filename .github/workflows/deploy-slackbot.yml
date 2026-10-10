@@ -62,7 +62,7 @@ jobs:
         --memory=4Gi
         --cpu=2
         --min-instances=1
-        --max-instances=100
+        --max-instances=6
         --add-cloudsql-instances=f3data:us-central1:f3data
         --add-volume=name=user-avatars,type=cloud-storage,bucket=f3-public-images,mount-options=only-dir=user-avatars
         --add-volume-mount=volume=user-avatars,mount-path=/mnt/user-avatars

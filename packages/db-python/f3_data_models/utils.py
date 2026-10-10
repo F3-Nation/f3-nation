@@ -46,6 +46,43 @@ def _default_echo() -> bool:
     return os.environ.get("SQL_ECHO", "False").lower() == "true"
 
 
+# Connection-pool bounds. SQLAlchemy's defaults (pool_size=5 plus
+# max_overflow=10) let every instance open 15 connections, and the prod Slack
+# bot may scale to many instances; once PgBouncer is retired nothing else
+# caps the total, so each instance's share of the whole-database budget is
+# set here (see docs/adr/0004-retire-pgbouncer.md, §7 step 1). Overridable
+# per deployment via env vars; pool_timeout makes an exhausted pool fail
+# fast instead of waiting SQLAlchemy's default 30s.
+DEFAULT_POOL_SIZE = 5
+DEFAULT_MAX_OVERFLOW = 2
+DEFAULT_POOL_TIMEOUT_SECONDS = 10
+
+
+def _env_int(name: str, default: int, minimum: int = 0) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logging.warning("Ignoring non-integer %s=%r; using %d", name, raw, default)
+        return default
+    if value < minimum:
+        logging.warning("Ignoring %s=%r below minimum %d; using %d", name, raw, minimum, default)
+        return default
+    return value
+
+
+def _pool_kwargs() -> dict[str, int]:
+    return {
+        # pool_size=0 means an unlimited QueuePool, and pool_timeout=0 fails every
+        # checkout once the pool is busy, so both need at least 1.
+        "pool_size": _env_int("DATABASE_POOL_SIZE", DEFAULT_POOL_SIZE, minimum=1),
+        "max_overflow": _env_int("DATABASE_MAX_OVERFLOW", DEFAULT_MAX_OVERFLOW),
+        "pool_timeout": _env_int("DATABASE_POOL_TIMEOUT", DEFAULT_POOL_TIMEOUT_SECONDS, minimum=1),
+    }
+
+
 def _create_postgresql_engine(echo: bool) -> Engine:
     host = os.environ["DATABASE_HOST"]
     user = os.environ["DATABASE_USER"]
@@ -62,7 +99,7 @@ def _create_postgresql_engine(echo: bool) -> Engine:
             port=port,
             database=database,
         )
-        return sqlalchemy.create_engine(db_url, echo=echo)
+        return sqlalchemy.create_engine(db_url, echo=echo, **_pool_kwargs())
 
     # Connect via Cloud Run's built-in Cloud SQL Unix socket
     unix_sock_dir = f"/cloudsql/{host}"
@@ -76,6 +113,7 @@ def _create_postgresql_engine(echo: bool) -> Engine:
         db_url,
         echo=echo,
         connect_args={"host": unix_sock_dir},
+        **_pool_kwargs(),
     )
 
 
