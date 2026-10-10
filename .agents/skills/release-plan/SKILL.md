@@ -53,6 +53,26 @@ Ask for anything missing before starting:
    queries section from the template. Otherwise fill
    `{{NEWEST_MIGRATION_FILE}}` with the last file name listed.
 
+   For a Production plan with a migration, keep Step 2's "Update the Staging
+   refresh" item: the refresh job refuses to run once Production is ahead of
+   the migrations in its image. Fill `{{SETUP_COMMAND}}` with
+   `bash tooling/scripts/staging-refresh/setup.sh --image-only`, unless a new
+   migration calls `audit.enable_tracking`. That call removes the refresh
+   login's read access to the history tables, and only the full setup grants
+   it back:
+
+   ```bash
+   git diff --name-only --diff-filter=A "$PREV" "$END" -- packages/db/drizzle/'*.sql' \
+     | xargs -r grep -l 'audit.enable_tracking'
+   ```
+
+   Any file listed → use the full setup instead (the runner list isn't in the
+   repo; the Refresh admin has it):
+
+   ```bash
+   STAGING_REFRESH_RUNNERS="<same runners as last time>" bash tooling/scripts/staging-refresh/setup.sh
+   ```
+
 3. **Skim the linked PRs only for risk.** For each changelog entry, read the
    PR title and, if needed, the first lines of its body. You are looking for
    exactly three things:

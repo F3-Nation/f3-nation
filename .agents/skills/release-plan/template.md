@@ -14,10 +14,11 @@
 
 ## Who's who
 
-| Role         | What they do                                                                                                                                               | Person                 |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Release lead | Merges the release PR, runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys or changes the database. | @taterhead247 (Tackle) |
-| Monitor      | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                                                    | @BigGillyStyle (Crash) |
+| Role          | What they do                                                                                                                                               | Person                 |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Release lead  | Merges the release PR, runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys or changes the database. | @taterhead247 (Tackle) |
+| Monitor       | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                                                    | @BigGillyStyle (Crash) |
+| Refresh admin | Re-runs the Staging refresh setup after a Production migration (an Owner of the `f3data` Google Cloud project)                                             | @dnishiyama (Spuds)    |
 
 **Slack channel:** `#monorepo`. Announce the start there.
 
@@ -64,6 +65,12 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Expected:** {{WHAT_ERRORS_APPEAR_BETWEEN_DEPLOY_AND_MIGRATION_OR_"none"}}
   - **Stop if:** the migration shows an error, or the check query doesn't match. Retry **once**; if it fails again, stop.
 - [ ] **Return to your branch:** `git switch -`. Owner: Release lead
+
+<!-- OPTIONAL (Production only, when there is a migration): -->
+
+- [ ] **Update the Staging refresh** for the new database, before the next refresh. From a checkout of this release: `{{SETUP_COMMAND}}`. Owner: Refresh admin
+  - **Expected:** it ends with the job deployed and no errors.
+  - **Stop if:** it fails. This doesn't affect the release; post it in `#monorepo` so the next Staging refresh waits.
 
 <!-- Production: drop Step 3 and renumber. -->
 
