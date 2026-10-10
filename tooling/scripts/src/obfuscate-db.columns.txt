@@ -570,6 +570,214 @@ public.users.meta:jsonb
 public.users.phone:character varying
 public.users.status:USER-DEFINED
 public.users.updated:timestamp without time zone
+public_history.achievements.changed_at:timestamp with time zone
+public_history.achievements.changed_by:integer
+public_history.achievements.changed_via:text
+public_history.achievements.id:bigint
+public_history.achievements.new_row:jsonb
+public_history.achievements.old_row:jsonb
+public_history.achievements.op:character
+public_history.achievements.row_id:text
+public_history.achievements_x_users.changed_at:timestamp with time zone
+public_history.achievements_x_users.changed_by:integer
+public_history.achievements_x_users.changed_via:text
+public_history.achievements_x_users.id:bigint
+public_history.achievements_x_users.new_row:jsonb
+public_history.achievements_x_users.old_row:jsonb
+public_history.achievements_x_users.op:character
+public_history.achievements_x_users.row_id:text
+public_history.api_keys.changed_at:timestamp with time zone
+public_history.api_keys.changed_by:integer
+public_history.api_keys.changed_via:text
+public_history.api_keys.id:bigint
+public_history.api_keys.new_row:jsonb
+public_history.api_keys.old_row:jsonb
+public_history.api_keys.op:character
+public_history.api_keys.row_id:text
+public_history.attendance.changed_at:timestamp with time zone
+public_history.attendance.changed_by:integer
+public_history.attendance.changed_via:text
+public_history.attendance.id:bigint
+public_history.attendance.new_row:jsonb
+public_history.attendance.old_row:jsonb
+public_history.attendance.op:character
+public_history.attendance.row_id:text
+public_history.attendance_types.changed_at:timestamp with time zone
+public_history.attendance_types.changed_by:integer
+public_history.attendance_types.changed_via:text
+public_history.attendance_types.id:bigint
+public_history.attendance_types.new_row:jsonb
+public_history.attendance_types.old_row:jsonb
+public_history.attendance_types.op:character
+public_history.attendance_types.row_id:text
+public_history.attendance_x_attendance_types.changed_at:timestamp with time zone
+public_history.attendance_x_attendance_types.changed_by:integer
+public_history.attendance_x_attendance_types.changed_via:text
+public_history.attendance_x_attendance_types.id:bigint
+public_history.attendance_x_attendance_types.new_row:jsonb
+public_history.attendance_x_attendance_types.old_row:jsonb
+public_history.attendance_x_attendance_types.op:character
+public_history.attendance_x_attendance_types.row_id:text
+public_history.event_instances.changed_at:timestamp with time zone
+public_history.event_instances.changed_by:integer
+public_history.event_instances.changed_via:text
+public_history.event_instances.id:bigint
+public_history.event_instances.new_row:jsonb
+public_history.event_instances.old_row:jsonb
+public_history.event_instances.op:character
+public_history.event_instances.row_id:text
+public_history.event_instances_x_event_types.changed_at:timestamp with time zone
+public_history.event_instances_x_event_types.changed_by:integer
+public_history.event_instances_x_event_types.changed_via:text
+public_history.event_instances_x_event_types.id:bigint
+public_history.event_instances_x_event_types.new_row:jsonb
+public_history.event_instances_x_event_types.old_row:jsonb
+public_history.event_instances_x_event_types.op:character
+public_history.event_instances_x_event_types.row_id:text
+public_history.event_tags.changed_at:timestamp with time zone
+public_history.event_tags.changed_by:integer
+public_history.event_tags.changed_via:text
+public_history.event_tags.id:bigint
+public_history.event_tags.new_row:jsonb
+public_history.event_tags.old_row:jsonb
+public_history.event_tags.op:character
+public_history.event_tags.row_id:text
+public_history.event_tags_x_event_instances.changed_at:timestamp with time zone
+public_history.event_tags_x_event_instances.changed_by:integer
+public_history.event_tags_x_event_instances.changed_via:text
+public_history.event_tags_x_event_instances.id:bigint
+public_history.event_tags_x_event_instances.new_row:jsonb
+public_history.event_tags_x_event_instances.old_row:jsonb
+public_history.event_tags_x_event_instances.op:character
+public_history.event_tags_x_event_instances.row_id:text
+public_history.event_tags_x_events.changed_at:timestamp with time zone
+public_history.event_tags_x_events.changed_by:integer
+public_history.event_tags_x_events.changed_via:text
+public_history.event_tags_x_events.id:bigint
+public_history.event_tags_x_events.new_row:jsonb
+public_history.event_tags_x_events.old_row:jsonb
+public_history.event_tags_x_events.op:character
+public_history.event_tags_x_events.row_id:text
+public_history.event_types.changed_at:timestamp with time zone
+public_history.event_types.changed_by:integer
+public_history.event_types.changed_via:text
+public_history.event_types.id:bigint
+public_history.event_types.new_row:jsonb
+public_history.event_types.old_row:jsonb
+public_history.event_types.op:character
+public_history.event_types.row_id:text
+public_history.events.changed_at:timestamp with time zone
+public_history.events.changed_by:integer
+public_history.events.changed_via:text
+public_history.events.id:bigint
+public_history.events.new_row:jsonb
+public_history.events.old_row:jsonb
+public_history.events.op:character
+public_history.events.row_id:text
+public_history.events_x_event_types.changed_at:timestamp with time zone
+public_history.events_x_event_types.changed_by:integer
+public_history.events_x_event_types.changed_via:text
+public_history.events_x_event_types.id:bigint
+public_history.events_x_event_types.new_row:jsonb
+public_history.events_x_event_types.old_row:jsonb
+public_history.events_x_event_types.op:character
+public_history.events_x_event_types.row_id:text
+public_history.locations.changed_at:timestamp with time zone
+public_history.locations.changed_by:integer
+public_history.locations.changed_via:text
+public_history.locations.id:bigint
+public_history.locations.new_row:jsonb
+public_history.locations.old_row:jsonb
+public_history.locations.op:character
+public_history.locations.row_id:text
+public_history.orgs.changed_at:timestamp with time zone
+public_history.orgs.changed_by:integer
+public_history.orgs.changed_via:text
+public_history.orgs.id:bigint
+public_history.orgs.new_row:jsonb
+public_history.orgs.old_row:jsonb
+public_history.orgs.op:character
+public_history.orgs.row_id:text
+public_history.orgs_x_slack_spaces.changed_at:timestamp with time zone
+public_history.orgs_x_slack_spaces.changed_by:integer
+public_history.orgs_x_slack_spaces.changed_via:text
+public_history.orgs_x_slack_spaces.id:bigint
+public_history.orgs_x_slack_spaces.new_row:jsonb
+public_history.orgs_x_slack_spaces.old_row:jsonb
+public_history.orgs_x_slack_spaces.op:character
+public_history.orgs_x_slack_spaces.row_id:text
+public_history.permissions.changed_at:timestamp with time zone
+public_history.permissions.changed_by:integer
+public_history.permissions.changed_via:text
+public_history.permissions.id:bigint
+public_history.permissions.new_row:jsonb
+public_history.permissions.old_row:jsonb
+public_history.permissions.op:character
+public_history.permissions.row_id:text
+public_history.positions.changed_at:timestamp with time zone
+public_history.positions.changed_by:integer
+public_history.positions.changed_via:text
+public_history.positions.id:bigint
+public_history.positions.new_row:jsonb
+public_history.positions.old_row:jsonb
+public_history.positions.op:character
+public_history.positions.row_id:text
+public_history.positions_x_orgs_x_users.changed_at:timestamp with time zone
+public_history.positions_x_orgs_x_users.changed_by:integer
+public_history.positions_x_orgs_x_users.changed_via:text
+public_history.positions_x_orgs_x_users.id:bigint
+public_history.positions_x_orgs_x_users.new_row:jsonb
+public_history.positions_x_orgs_x_users.old_row:jsonb
+public_history.positions_x_orgs_x_users.op:character
+public_history.positions_x_orgs_x_users.row_id:text
+public_history.roles.changed_at:timestamp with time zone
+public_history.roles.changed_by:integer
+public_history.roles.changed_via:text
+public_history.roles.id:bigint
+public_history.roles.new_row:jsonb
+public_history.roles.old_row:jsonb
+public_history.roles.op:character
+public_history.roles.row_id:text
+public_history.roles_x_api_keys_x_org.changed_at:timestamp with time zone
+public_history.roles_x_api_keys_x_org.changed_by:integer
+public_history.roles_x_api_keys_x_org.changed_via:text
+public_history.roles_x_api_keys_x_org.id:bigint
+public_history.roles_x_api_keys_x_org.new_row:jsonb
+public_history.roles_x_api_keys_x_org.old_row:jsonb
+public_history.roles_x_api_keys_x_org.op:character
+public_history.roles_x_api_keys_x_org.row_id:text
+public_history.roles_x_permissions.changed_at:timestamp with time zone
+public_history.roles_x_permissions.changed_by:integer
+public_history.roles_x_permissions.changed_via:text
+public_history.roles_x_permissions.id:bigint
+public_history.roles_x_permissions.new_row:jsonb
+public_history.roles_x_permissions.old_row:jsonb
+public_history.roles_x_permissions.op:character
+public_history.roles_x_permissions.row_id:text
+public_history.roles_x_users_x_org.changed_at:timestamp with time zone
+public_history.roles_x_users_x_org.changed_by:integer
+public_history.roles_x_users_x_org.changed_via:text
+public_history.roles_x_users_x_org.id:bigint
+public_history.roles_x_users_x_org.new_row:jsonb
+public_history.roles_x_users_x_org.old_row:jsonb
+public_history.roles_x_users_x_org.op:character
+public_history.roles_x_users_x_org.row_id:text
+public_history.update_requests.changed_at:timestamp with time zone
+public_history.update_requests.changed_by:integer
+public_history.update_requests.changed_via:text
+public_history.update_requests.id:bigint
+public_history.update_requests.new_row:jsonb
+public_history.update_requests.old_row:jsonb
+public_history.update_requests.op:character
+public_history.update_requests.row_id:text
+public_history.users.changed_at:timestamp with time zone
+public_history.users.changed_by:integer
+public_history.users.changed_via:text
+public_history.users.id:bigint
+public_history.users.new_row:jsonb
+public_history.users.old_row:jsonb
+public_history.users.op:character
+public_history.users.row_id:text
 slackbot.f3versary_delivery_pages.blocks:jsonb
 slackbot.f3versary_delivery_pages.claim_expires_at:timestamp with time zone
 slackbot.f3versary_delivery_pages.claim_token:uuid
