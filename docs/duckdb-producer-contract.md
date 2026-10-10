@@ -7,7 +7,7 @@ only when the producer has validated the complete release and atomically
 advanced `current.json`.
 
 The normative Pax Vault migration requirements are in
-[`duckdb-migration-plan.md`](./duckdb-migration-plan.md), and the nine approved
+[`duckdb-migration-plan.md`](./duckdb-migration-plan.md), and the ten approved
 dataset projections and eligibility semantics are in
 [`../specs/pax-vault-parquet-etl.md`](../specs/pax-vault-parquet-etl.md). This
 document turns those requirements into an implementable producer interface.
@@ -27,8 +27,13 @@ already demonstrates:
   `source_read_timestamp` for the actual per-dataset source read;
 - a release-level `release.json` listing dataset manifest URIs and manifest
   generations;
-- all nine required datasets: `pv_pax`, `pv_events`, `pv_regions`, `pv_areas`,
-  `pv_sectors`, `pv_aos`, `pv_upcoming`, `pv_kotter`, and `pv_territories`.
+- the nine legacy datasets represented by the sample: `pv_pax`, `pv_events`,
+  `pv_regions`, `pv_areas`, `pv_sectors`, `pv_aos`, `pv_upcoming`, `pv_kotter`,
+  and `pv_territories`. A newly published serving release must contain all ten
+  datasets, including `pv_attendance`. The only nine-dataset serving exception
+  is rollback to the exact retained pre-upgrade release with `pv_pax.v2` and no
+  `pv_attendance`, as specified in
+  [the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
 
 It is **not yet a serving-contract release**. In particular, the sample has
 no fixed `pax-vault/current.json`, no contract metadata or monotonic
@@ -37,8 +42,9 @@ fingerprints, no required candidate-release verification goldens, and no produce
 all object generations were read back and validated before publication. Its
 per-dataset manifests and `release.json` are useful inputs, but must be
 extended or regenerated to meet the schemas below. The agreed Pax Vault
-contract explicitly includes `pv_territories` among its nine datasets; its
-schema must therefore be included in the external consumer-compatibility gate.
+contract explicitly includes `pv_territories` among its ten datasets and
+appends `pv_attendance`; both schemas must be included in the external
+consumer-compatibility gate.
 
 ## 2. Immutable layout and object set
 
@@ -50,7 +56,7 @@ gs://BUCKET/pax-vault/releases/<releaseId>/pv_pax/manifest.json
 gs://BUCKET/pax-vault/releases/<releaseId>/pv_pax/partitions/pv_pax-0.parquet
 gs://BUCKET/pax-vault/releases/<releaseId>/pv_events/manifest.json
 gs://BUCKET/pax-vault/releases/<releaseId>/pv_events/partitions/pv_events-0.parquet
-... one directory for every one of the nine Pax Vault datasets ...
+... one directory for every one of the ten Pax Vault datasets ...
 gs://BUCKET/pax-vault/current.json
 ```
 
@@ -70,16 +76,21 @@ files, duplicate datasets, and duplicate object entries. Each product's
 
 The required Pax Vault dataset allowlist is exactly:
 `pv_pax`, `pv_events`, `pv_regions`, `pv_areas`, `pv_sectors`, `pv_aos`,
-`pv_upcoming`, `pv_kotter`, and `pv_territories`. A release must contain
-exactly all nine, not merely a subset. Analytics independently requires exactly
+`pv_upcoming`, `pv_kotter`, `pv_territories`, and `pv_attendance`. A newly
+published release must contain exactly all ten, not merely a subset. The only
+rollback exception is the exact retained pre-upgrade nine-dataset release with
+`pv_pax.v2` and no `pv_attendance`, as defined in
+[the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
+Analytics independently requires exactly
 `event_info`, `future_event_info`, `attendance_info`, and
 `missing_backblasts` in its analytics release; these are not Pax Vault datasets.
 
 The currently declared dataset schema versions are `pv_regions.v1`,
-`pv_pax.v2`, `pv_kotter.v1`, `pv_upcoming.v1`, `pv_sectors.v2`,
-`pv_territories.v1`, `pv_areas.v2`, `pv_aos.v1`, and `pv_events.v2` for Pax
-Vault; analytics uses `event_info.v1`, `future_event_info.v1`,
-`attendance_info.v1`, and `missing_backblasts.v1`. These are the declared
+`pv_pax.v3`, `pv_kotter.v1`, `pv_upcoming.v1`, `pv_sectors.v2`,
+`pv_territories.v1`, `pv_areas.v2`, `pv_aos.v1`, `pv_events.v2`, and
+`pv_attendance.v1` for Pax Vault; analytics uses `event_info.v1`,
+`future_event_info.v1`, `attendance_info.v1`, and `missing_backblasts.v1`.
+These are the declared
 producer registry versions; exact columns, logical types, and nullability must
 still pass the external compatibility gate.
 
@@ -100,7 +111,7 @@ values):
     "pv_pax": {
       "manifestUri": "gs://BUCKET/pax-vault/releases/RELEASE/pv_pax/manifest.json",
       "manifestGeneration": "1789820643043457",
-      "schemaVersion": "pv_pax.v2"
+      "schemaVersion": "pv_pax.v3"
     }
   }
 }
@@ -113,7 +124,9 @@ Vault release/pointer contract emitted by the current producer. Analytics is
 independent and uses `analytics-release.v1` for its release and pointer
 contract; it does not use `pv-release.v2` or share Pax Vault publication state.
 
-`pv_pax.v2` includes the approved email and roles fields. `pv_events.v2`
+`pv_pax.v3` includes the email and roles fields and appends `lifetime_posts`
+and `lifetime_qs` as distinct actual event counts. `pv_attendance.v1` records
+one actual attendance per attendance ID. `pv_events.v2`
 includes rich event content (`description`, `preblast`, `preblast_rich`,
 `backblast`, `backblast_rich`, and `meta`), plus type/tag descriptions.
 `pv_areas.v2` and `pv_sectors.v2` carry revised hierarchy outputs. These
@@ -125,7 +138,7 @@ object metadata required to pin and validate reads:
 {
   "contractVersion": "pv-release.v2",
   "dataset": "pv_pax",
-  "schemaVersion": "pv_pax.v2",
+  "schemaVersion": "pv_pax.v3",
   "rowCount": 105026,
   "totalSizeBytes": 4397550,
   "schemaFingerprintSha256": "<sha256-of-canonical-columns-array>",
@@ -325,10 +338,15 @@ machine-readable registry of supported pointer `contractVersion`, manifest
 application revisions remain rollback-eligible. Until then, use the explicit
 external consumer-compatibility gate and do not claim an executable check has
 run. Publishing is blocked if any serving or rollback-eligible revision cannot
-read the candidate. Additive fields require consumer tolerance;
-renames/removals require a new contract version and coordinated rollout.
+read the candidate. For released or consumed contracts, additive fields require
+consumer tolerance; renames/removals require a new contract version and
+coordinated rollout. The `pv_attendance.v1` projection is still unreleased and
+unconsumed, per the product owner, so it may be revised while remaining
+unreleased and unconsumed; this does not mean the compatibility gate has passed.
+Its normative columns and ordering are in the [Pax Vault ETL
+specification](../specs/pax-vault-parquet-etl.md#pv_attendance--one-row-per-eligible-actual-attendance-id).
 
-The nine Pax Vault datasets and four analytics datasets are read sequentially,
+The ten Pax Vault datasets and four analytics datasets are read sequentially,
 with independent per-dataset read boundaries; they are not one PostgreSQL or
 BigQuery snapshot. Record each dataset's actual source read timestamp and the
 declared read policy. Never describe these reads as a shared snapshot or claim
@@ -365,9 +383,13 @@ Consumers must
 continue using their last-known-good release on refresh failure, subject to
 their configured maximum age; they must not fall back silently to BigQuery.
 
-Rollback is a normal validated pointer CAS to a retained, previously valid
-release. It uses the same generation/hash checks and ordering as forward
-publication. Never mutate the rolled-back prefix.
+Rollback is a normal validated pointer CAS to the exact retained pre-upgrade
+nine-dataset release with `pv_pax.v2` and no `pv_attendance`, and is permitted
+only when that release meets the identity and validation requirements in
+[the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
+No other nine-dataset release or arbitrary older release is eligible. Rollback
+uses the same generation/hash checks and ordering as forward publication. Never
+mutate the rolled-back prefix.
 
 Pub/Sub may emit a “release available” event to accelerate reconciliation, but
 it is optional and is not the source of truth. Events may be lost, duplicated,
@@ -376,7 +398,7 @@ or reordered; consumers always reconcile from `current.json`.
 ## 8. Producer implementation checklist
 
 - [ ] Use the configured bucket and exact immutable prefix layout.
-- [ ] Publish exactly the nine Pax Vault datasets, or exactly the four
+- [ ] Publish exactly the ten Pax Vault datasets, or exactly the four
       analytics datasets under their separate product root and pointer.
 - [ ] Generate complete per-dataset manifests and `release.json`.
 - [ ] Record object generations, CRC32C, byte sizes, row counts, schema
@@ -405,7 +427,7 @@ test bucket (or an equivalent generation-faithful emulator):
    release IDs, object generations, or timestamps are expected to differ.
 2. The sample-shaped release is rejected when it lacks pointer metadata,
    manifest SHA-256/schema fingerprints/goldens, or lacks any of the required
-   nine Pax Vault datasets.
+   ten Pax Vault datasets.
 3. Missing dataset, extra file, duplicate dataset, path traversal, wrong
    bucket, unknown schema version, and malformed canonical JSON are rejected.
 4. Changing a Parquet byte, size, CRC32C, generation, row count, schema, or

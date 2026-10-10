@@ -76,6 +76,31 @@ _SCHEMAS = (
     ),
     ExpectedSchema(
         "pv_pax",
+        "pv_pax.v3",
+        _columns(
+            ("refreshed_at", "TIMESTAMP WITH TIME ZONE"),
+            ("user_id", "INTEGER"),
+            ("f3_name", "VARCHAR"),
+            ("home_region_id", "INTEGER"),
+            ("home_region_name", "VARCHAR"),
+            ("avatar_url", "VARCHAR"),
+            ("email", "VARCHAR"),
+            ("status", "VARCHAR"),
+            ("start_date_override", "VARCHAR"),
+            ("regions", "STRUCT(region_org_id INTEGER, region_name VARCHAR)[]"),
+            ("aos", "STRUCT(ao_org_id INTEGER, ao_name VARCHAR)[]"),
+            ("types", "STRUCT(type_id INTEGER, type_name VARCHAR)[]"),
+            ("tags", "STRUCT(tag_id INTEGER, tag_name VARCHAR)[]"),
+            (
+                "roles",
+                "STRUCT(role_id INTEGER, role_name VARCHAR, org_id INTEGER, org_name VARCHAR, org_type VARCHAR)[]",
+            ),
+            ("lifetime_posts", "INTEGER"),
+            ("lifetime_qs", "INTEGER"),
+        ),
+    ),
+    ExpectedSchema(
+        "pv_pax",
         "pv_pax.v2",
         _columns(
             ("refreshed_at", "TIMESTAMP WITH TIME ZONE"),
@@ -233,6 +258,24 @@ _SCHEMAS = (
         ),
     ),
     ExpectedSchema(
+        "pv_attendance",
+        "pv_attendance.v1",
+        _columns(
+            ("refreshed_at", "TIMESTAMP WITH TIME ZONE"),
+            ("id", "INTEGER"),
+            ("user_id", "INTEGER"),
+            ("event_instance_id", "INTEGER"),
+            ("q_ind", "INTEGER"),
+            ("coq_ind", "INTEGER"),
+            ("start_date", "DATE"),
+            ("ao_org_id", "INTEGER"),
+            ("region_org_id", "INTEGER"),
+            ("tags", "INTEGER[]"),
+            ("types", "INTEGER[]"),
+            ("categories", "VARCHAR[]"),
+        ),
+    ),
+    ExpectedSchema(
         "event_info",
         "event_info.v1",
         _columns(
@@ -383,5 +426,8 @@ _SCHEMAS = (
     ),
 )
 
-SCHEMAS_BY_NAME = MappingProxyType({schema.dataset: schema for schema in _SCHEMAS})
+SCHEMAS_BY_VERSION = MappingProxyType({(schema.dataset, schema.schema_version): schema for schema in _SCHEMAS})
+SCHEMAS_BY_NAME = MappingProxyType(
+    {schema.dataset: schema for schema in _SCHEMAS if schema.schema_version != "pv_pax.v2"}
+)
 SCHEMA_REGISTRY = SCHEMAS_BY_NAME

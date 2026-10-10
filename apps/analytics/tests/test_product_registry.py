@@ -28,6 +28,7 @@ def test_registry_has_exact_ordered_product_sets():
             "pv_areas",
             "pv_aos",
             "pv_events",
+            "pv_attendance",
         )
     )
     assert (
@@ -46,7 +47,7 @@ def test_schema_versions_are_registered_per_product():
     versions = {item.name: item.schema_version for group in MATERIALIZATIONS_BY_PRODUCT.values() for item in group}
     assert versions == {
         "pv_regions": "pv_regions.v1",
-        "pv_pax": "pv_pax.v2",
+        "pv_pax": "pv_pax.v3",
         "pv_kotter": "pv_kotter.v1",
         "pv_upcoming": "pv_upcoming.v1",
         "pv_sectors": "pv_sectors.v2",
@@ -54,6 +55,7 @@ def test_schema_versions_are_registered_per_product():
         "pv_areas": "pv_areas.v2",
         "pv_aos": "pv_aos.v1",
         "pv_events": "pv_events.v2",
+        "pv_attendance": "pv_attendance.v1",
         "event_info": "event_info.v1",
         "future_event_info": "future_event_info.v1",
         "attendance_info": "attendance_info.v1",
