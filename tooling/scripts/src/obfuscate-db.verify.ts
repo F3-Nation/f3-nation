@@ -15,6 +15,8 @@
  *      same source email maps to the same fake across tables
  *      (users.email <-> update_requests.submitted_by).
  *   4. Free-text scrubbing rewrote the planted backblast email.
+ *   5. Audit snapshots, including historical-only PII and OLD values captured
+ *      during obfuscation, are discarded without removing audit structures.
  *
  * Usage (from repo root or tooling/scripts):
  *   pnpm -F @acme/scripts obfuscate-db:verify
@@ -290,6 +292,13 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
       '{"notes": "reach me at jane@example.com"}')
     RETURNING id`;
   if (!user) throw new Error("Failed to insert synthetic user");
+
+  // This address no longer exists in the source row. Rewriting current users
+  // cannot remove it from OLD/NEW snapshots already held by the audit trigger.
+  await sql`
+    UPDATE users SET email = 'history.only@example.com' WHERE id = ${user.id}`;
+  await sql`
+    UPDATE users SET email = 'jane@example.com' WHERE id = ${user.id}`;
 
   await sql`
     INSERT INTO auth_sessions (session_token, user_id, expires)
@@ -706,6 +715,30 @@ async function main(): Promise<void> {
     const planted = await plantSyntheticPii(sql);
     const { userId } = planted;
 
+    const historyTables = (
+      await sql<{ qualified: string }[]>`
+        SELECT n.nspname || '.' || c.relname AS qualified FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public_history'
+          AND c.relkind IN ('r', 'p', 'm') AND NOT c.relispartition
+        ORDER BY c.relname`
+    ).map((row) => row.qualified);
+    const [historyFixture] = await sql<
+      { historical: boolean; live: boolean }[]
+    >`
+      SELECT EXISTS (
+        SELECT 1 FROM public_history.users
+        WHERE row_id = ${String(userId)}
+          AND (old_row ->> 'email' = 'history.only@example.com'
+            OR new_row ->> 'email' = 'history.only@example.com')
+      ) AS historical,
+      EXISTS (SELECT 1 FROM users WHERE email = 'history.only@example.com') AS live`;
+    check(
+      "historical-only PII fixture captured by the audit trigger",
+      historyFixture?.historical === true && historyFixture.live === false,
+      `history ${historyFixture?.historical ? "populated" : "missing"}, source ${historyFixture?.live ? "still holds historical email" : "does not hold historical email"}`,
+    );
+
     // Every location only private events use (the planted one plus any the
     // seed has) is dropped; the counts check below expects exactly that many.
     const [privateOnlyBefore] = await sql<{ n: number }[]>`
@@ -756,6 +789,43 @@ async function main(): Promise<void> {
       childEnv,
     );
 
+    // Dry-run must leave every copied snapshot intact, including payloads:
+    // unchanged counts alone would miss rewriting values in place.
+    const historyFingerprint = async () => {
+      const hashes: string[] = [];
+      for (const table of historyTables) {
+        const [row] = await sql<{ h: string | null }[]>`
+          SELECT md5(string_agg(h::text, '|' ORDER BY id)) AS h
+          FROM ${sql(table)} h`;
+        hashes.push(row?.h ?? "");
+      }
+      return hashes.join("|");
+    };
+    const historyBeforeDryRun = await historyFingerprint();
+    const dryRun = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.ts",
+        "--allow-db",
+        DB_NAME,
+        "--i-understand-this-rewrites-data",
+        "--dry-run",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const historyAfterDryRun = await historyFingerprint();
+    check(
+      "dry-run leaves audit history unchanged",
+      dryRun.status === 0 &&
+        dryRun.stdout.toString().includes("No data was written") &&
+        historyBeforeDryRun === historyAfterDryRun,
+      `exit ${dryRun.status}, history ${historyBeforeDryRun === historyAfterDryRun ? "unchanged" : "REWRITTEN"}`,
+    );
+
     // --- 4. Run the obfuscator (NO --preserve-local-seed) --------------------
     run(
       "pnpm",
@@ -788,6 +858,59 @@ async function main(): Promise<void> {
       const [row] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM ${sql(table)}`;
       check(`${table} empty`, row?.n === 0, `${row?.n ?? "?"} rows`);
+    }
+
+    // Source UPDATE/DELETE jobs generate audit rows containing original OLD
+    // values. Clearing history before those jobs would leave these populated.
+    const populatedHistory: string[] = [];
+    for (const table of historyTables) {
+      const [row] = await sql<{ present: boolean }[]>`
+        SELECT EXISTS (SELECT 1 FROM ${sql(table)}) AS present`;
+      if (row?.present) populatedHistory.push(table);
+    }
+    check(
+      "historical and obfuscation-generated snapshots discarded",
+      historyTables.length === 26 && populatedHistory.length === 0,
+      `${historyTables.length} history tables, ${populatedHistory.length} populated${populatedHistory.length > 0 ? `: ${populatedHistory.join(", ")}` : ""}`,
+    );
+    const [auditStructure] = await sql<
+      { functions: number; triggers: number }[]
+    >`
+      SELECT (SELECT count(*)::int FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'audit'
+          AND p.proname IN ('log_change', 'enable_tracking', 'disable_tracking')) AS functions,
+        (SELECT count(*)::int FROM pg_trigger t
+          JOIN pg_proc p ON p.oid = t.tgfoid
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'audit' AND p.proname = 'log_change'
+            AND NOT t.tgisinternal AND t.tgenabled = 'O') AS triggers`;
+    check(
+      "audit helpers and enabled source triggers retained",
+      auditStructure?.functions === 3 && auditStructure.triggers === 26,
+      `${auditStructure?.functions ?? "?"} helpers, ${auditStructure?.triggers ?? "?"} enabled triggers`,
+    );
+    // Prove capture still works after the purge. Roll back both the source
+    // change and its snapshot so later verification still sees empty history.
+    const captureRollback = new Error("Rollback audit capture fixture");
+    try {
+      await sql.begin(async (tx) => {
+        await tx`
+          UPDATE users SET f3_name = 'Audit Capture Fixture' WHERE id = ${userId}`;
+        const [captured] = await tx<{ present: boolean }[]>`
+          SELECT EXISTS (SELECT 1 FROM public_history.users
+            WHERE row_id = ${String(userId)} AND op = 'U'
+              AND old_row ->> 'f3_name' = ${`F3 ${userId}`}
+              AND new_row ->> 'f3_name' = 'Audit Capture Fixture') AS present`;
+        check(
+          "source writes still capture history after obfuscation",
+          captured?.present === true,
+          captured?.present ? "snapshot captured" : "snapshot missing",
+        );
+        throw captureRollback;
+      });
+    } catch (error) {
+      if (error !== captureRollback) throw error;
     }
 
     let countsOk = true;
@@ -1145,6 +1268,35 @@ async function main(): Promise<void> {
             .join("; ")}`,
     );
 
+    // A name-only snapshot defeats email/phone regex sweeps. The intermediate
+    // copy must reject any retained history, and report only its table.
+    await sql`
+      INSERT INTO public_history.users (row_id, op, old_row)
+      VALUES (${String(userId)}, 'D', '{"first_name": "Historical Person"}')`;
+    const historySuite = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.verify-target.ts",
+      ],
+      { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+    );
+    const historyOut = `${historySuite.stdout.toString()}${historySuite.stderr.toString()}`;
+    await sql`TRUNCATE public_history.users`;
+    check(
+      "verify-target rejects a name-only historical snapshot",
+      historySuite.status !== 0 &&
+        /FAIL\s+audit history empty/.test(historyOut) &&
+        historyOut.includes("public_history.users") &&
+        !historyOut.includes("Historical Person"),
+      historySuite.status !== 0
+        ? "FAIL names public_history.users, value withheld"
+        : "verify-target passed with historical PII",
+    );
+
     // The sweep must also read array columns: put one real-looking address
     // back into the Better Auth client's contacts[] and expect a FAIL that
     // names that column (location only), then undo it.
@@ -1403,6 +1555,64 @@ async function main(): Promise<void> {
     );
     await sql`ALTER TABLE users DROP COLUMN _unreviewed_gate_test`;
     await sql`UPDATE users SET email = ${prior?.email ?? ""} WHERE id = ${userId}`;
+
+    // Classifying the approved history tables must not grant a wildcard
+    // exemption to unrelated relations or new payload columns in the schema.
+    const historyHash = async () => {
+      const [row] = await sql<{ h: string }[]>`
+        SELECT md5(string_agg(h::text, '|' ORDER BY id)) AS h
+        FROM public_history.users h`;
+      return row?.h ?? "";
+    };
+    const historyGateRun = () =>
+      spawnSync(
+        "pnpm",
+        [
+          "-F",
+          "@acme/scripts",
+          "exec",
+          "tsx",
+          "src/obfuscate-db.ts",
+          "--allow-db",
+          DB_NAME,
+          "--i-understand-this-rewrites-data",
+        ],
+        { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
+      );
+    await sql`
+      CREATE TABLE public_history._unclassified_gate_test
+        (id integer PRIMARY KEY, email text)`;
+    const beforeHistoryTable = await historyHash();
+    const historyTableRun = historyGateRun();
+    const historyTableGateFired =
+      `${historyTableRun.stdout.toString()}${historyTableRun.stderr.toString()}`.includes(
+        "classified: public_history._unclassified_gate_test",
+      );
+    const afterHistoryTable = await historyHash();
+    check(
+      "unclassified history table aborts before discarding snapshots",
+      historyTableRun.status !== 0 &&
+        historyTableGateFired &&
+        beforeHistoryTable === afterHistoryTable,
+      `exit ${historyTableRun.status}, gate ${historyTableGateFired ? "fired" : "DID NOT FIRE"}, history ${beforeHistoryTable === afterHistoryTable ? "unchanged" : "REWRITTEN"}`,
+    );
+    await sql`DROP TABLE public_history._unclassified_gate_test`;
+    await sql`ALTER TABLE public_history.users ADD COLUMN _unreviewed_gate_test text`;
+    const beforeHistoryColumn = await historyHash();
+    const historyColumnRun = historyGateRun();
+    const historyColumnGateFired =
+      `${historyColumnRun.stdout.toString()}${historyColumnRun.stderr.toString()}`.includes(
+        "public_history.users._unreviewed_gate_test:text",
+      );
+    const afterHistoryColumn = await historyHash();
+    check(
+      "unreviewed history column aborts before discarding snapshots",
+      historyColumnRun.status !== 0 &&
+        historyColumnGateFired &&
+        beforeHistoryColumn === afterHistoryColumn,
+      `exit ${historyColumnRun.status}, gate ${historyColumnGateFired ? "fired" : "DID NOT FIRE"}, history ${beforeHistoryColumn === afterHistoryColumn ? "unchanged" : "REWRITTEN"}`,
+    );
+    await sql`ALTER TABLE public_history.users DROP COLUMN _unreviewed_gate_test`;
 
     // --- 5c. Restore only the named API keys -----------------------------------
     // Without --keep the restore refuses and changes nothing.
