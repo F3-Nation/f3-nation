@@ -72,7 +72,8 @@ describe("organization table ancestry configuration", () => {
     });
     expect(orgAdminConfig.region.hierarchyFilter).toEqual({
       tiers: ["sector", "territory", "area"],
-      match: { tiers: ["area"], includeInactive: false },
+      resetPageOnReconcile: true,
+      match: { tiers: [], includeInactive: true },
     });
     expect(orgAdminConfig.area.displayAncestors).toEqual([
       "territory",

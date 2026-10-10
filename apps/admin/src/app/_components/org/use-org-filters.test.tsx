@@ -240,6 +240,7 @@ describe("a tier added by configuration only", () => {
 
     expect(result.current.filterControls[1]?.selected).toEqual([]);
     expect(result.current.parentOrgIds).toBeUndefined();
+    expect(resetPage).toHaveBeenCalledTimes(1);
   });
 
   it("matches no orgs while the hierarchy is unavailable", () => {

@@ -18,6 +18,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 }));
 
 import { and, count, eq, gte, schema } from "@acme/db";
+import type { OrgType } from "@acme/shared/app/enums";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -1159,6 +1160,307 @@ describe("Org Router", () => {
 
       expect(await aoCountOf(territory, "territory")).toBe(0);
       expect(await aoCountOf(sector, "sector")).toBe(1);
+    });
+
+    describe("Region Area and Territory parents", () => {
+      const createOrg = async (
+        client: ReturnType<typeof createTestClient>,
+        orgType: "area" | "region" | "ao",
+        parentId: number,
+        isActive = true,
+      ) => {
+        const result = await client.org.crupdate({
+          ...blankFields,
+          name: `Region parent ${orgType} ${uniqueId()}`,
+          orgType,
+          parentId,
+          isActive,
+        });
+        if (!result.org) throw new Error(`Failed to create ${orgType}`);
+        createdOrgIds.push(result.org.id);
+        return result.org;
+      };
+      const saveRegion = (
+        client: ReturnType<typeof createTestClient>,
+        region: { id: number; name: string },
+        parentId: number,
+      ) =>
+        client.org.crupdate({
+          ...blankFields,
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId,
+        });
+      const listedCounts = async (
+        client: ReturnType<typeof createTestClient>,
+        named: Record<string, { id: number; name: string; orgType: OrgType }>,
+      ) =>
+        Object.fromEntries(
+          await Promise.all(
+            Object.entries(named).map(async ([label, org]) => {
+              const result = await client.org.all({
+                orgTypes: [org.orgType],
+                searchTerm: org.name,
+              });
+              return [
+                label,
+                result.orgs.find((candidate) => candidate.id === org.id)
+                  ?.aoCount,
+              ] as const;
+            }),
+          ),
+        );
+
+      it("persists both Region parent types, unchanged saves, and both move directions with mixed counts", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const client = createTestClient();
+        const source = await createSectorAndTerritory(client);
+        const destination = await createSectorAndTerritory(client);
+        const sourceArea = await createOrg(client, "area", source.territory.id);
+        const destinationArea = await createOrg(
+          client,
+          "area",
+          destination.territory.id,
+        );
+        const areaRegion = await createOrg(client, "region", sourceArea.id);
+        const directRegion = await createOrg(
+          client,
+          "region",
+          source.territory.id,
+        );
+        await createOrg(client, "ao", areaRegion.id);
+        await createOrg(client, "ao", directRegion.id);
+        await createOrg(client, "ao", directRegion.id, false);
+        const named = {
+          sourceSector: source.sector,
+          sourceTerritory: source.territory,
+          sourceArea,
+          destinationSector: destination.sector,
+          destinationTerritory: destination.territory,
+          destinationArea,
+          areaRegion,
+          directRegion,
+        };
+        const before = {
+          sourceSector: 2,
+          sourceTerritory: 2,
+          sourceArea: 1,
+          destinationSector: 0,
+          destinationTerritory: 0,
+          destinationArea: 0,
+          areaRegion: 1,
+          directRegion: 1,
+        };
+        expect(await listedCounts(client, named)).toEqual(before);
+
+        for (const [region, parentId] of [
+          [areaRegion, sourceArea.id],
+          [directRegion, source.territory.id],
+        ] as const) {
+          const saved = await saveRegion(client, region, parentId);
+          expect(saved.org?.parentId).toBe(parentId);
+          expect((await client.org.byId({ id: region.id })).org?.parentId).toBe(
+            parentId,
+          );
+        }
+        expect(await listedCounts(client, named)).toEqual(before);
+
+        const moved = await saveRegion(
+          client,
+          directRegion,
+          destinationArea.id,
+        );
+        expect(moved.org?.parentId).toBe(destinationArea.id);
+        expect(
+          (await client.org.byId({ id: directRegion.id })).org?.parentId,
+        ).toBe(destinationArea.id);
+        expect(await listedCounts(client, named)).toEqual({
+          ...before,
+          sourceSector: 1,
+          sourceTerritory: 1,
+          destinationSector: 1,
+          destinationTerritory: 1,
+          destinationArea: 1,
+        });
+
+        const restored = await saveRegion(
+          client,
+          directRegion,
+          source.territory.id,
+        );
+        expect(restored.org?.parentId).toBe(source.territory.id);
+        expect(
+          (await client.org.byId({ id: directRegion.id })).org?.parentId,
+        ).toBe(source.territory.id);
+        expect(await listedCounts(client, named)).toEqual(before);
+      });
+
+      it("allows a Region-only editor to change ordinary fields but denies moves to an Area or Territory", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const client = createTestClient();
+        const source = await createSectorAndTerritory(client);
+        const destination = await createSectorAndTerritory(client);
+        const sourceArea = await createOrg(client, "area", source.territory.id);
+        const destinationArea = await createOrg(
+          client,
+          "area",
+          destination.territory.id,
+        );
+        const region = await createOrg(client, "region", sourceArea.id);
+        await createOrg(client, "ao", region.id);
+        const editedRegion = {
+          ...region,
+          name: `Region-only edit ${uniqueId()}`,
+        };
+        const named = {
+          sourceSector: source.sector,
+          sourceTerritory: source.territory,
+          sourceArea,
+          destinationSector: destination.sector,
+          destinationTerritory: destination.territory,
+          destinationArea,
+          region: editedRegion,
+        };
+
+        await mockAuthWithSession(
+          createEditorSession({ orgId: region.id, orgName: region.name }),
+        );
+        const saved = await saveRegion(client, editedRegion, sourceArea.id);
+        expect(saved.org).toMatchObject({
+          id: region.id,
+          name: editedRegion.name,
+          parentId: sourceArea.id,
+        });
+
+        const snapshot = async () => {
+          const persisted = (await client.org.byId({ id: region.id })).org;
+          return {
+            name: persisted?.name,
+            parentId: persisted?.parentId,
+            counts: await listedCounts(client, named),
+          };
+        };
+        const unchanged = {
+          name: editedRegion.name,
+          parentId: sourceArea.id,
+          counts: {
+            sourceSector: 1,
+            sourceTerritory: 1,
+            sourceArea: 1,
+            destinationSector: 0,
+            destinationTerritory: 0,
+            destinationArea: 0,
+            region: 1,
+          },
+        };
+        expect(await snapshot()).toEqual(unchanged);
+
+        for (const parent of [destinationArea, destination.territory]) {
+          await expect(
+            saveRegion(
+              client,
+              { ...editedRegion, name: `Rejected Region edit ${uniqueId()}` },
+              parent.id,
+            ),
+          ).rejects.toMatchObject({
+            code: "UNAUTHORIZED",
+            message:
+              "You are not authorized to move this org to the destination parent organization",
+          });
+          expect(await snapshot()).toEqual(unchanged);
+        }
+      });
+
+      it.each([
+        { sourceType: "area", destinationType: "territory" },
+        { sourceType: "territory", destinationType: "area" },
+      ] as const)(
+        "requires both permissions for a Region move from $sourceType to $destinationType",
+        async ({ sourceType, destinationType }) => {
+          await mockAuthWithSession(await createAdminSession());
+          const client = createTestClient();
+          const sourceHierarchy = await createSectorAndTerritory(client);
+          const destinationHierarchy = await createSectorAndTerritory(client);
+          const source =
+            sourceType === "area"
+              ? await createOrg(client, "area", sourceHierarchy.territory.id)
+              : sourceHierarchy.territory;
+          const destination =
+            destinationType === "area"
+              ? await createOrg(
+                  client,
+                  "area",
+                  destinationHierarchy.territory.id,
+                )
+              : destinationHierarchy.territory;
+          const region = await createOrg(client, "region", source.id);
+          await createOrg(client, "ao", region.id);
+          const named = {
+            sourceSector: sourceHierarchy.sector,
+            sourceTerritory: sourceHierarchy.territory,
+            sourceParent: source,
+            destinationSector: destinationHierarchy.sector,
+            destinationTerritory: destinationHierarchy.territory,
+            destinationParent: destination,
+            region,
+          };
+          const snapshot = async () => ({
+            parentId: (await client.org.byId({ id: region.id })).org?.parentId,
+            counts: await listedCounts(client, named),
+          });
+          const before = await snapshot();
+          expect(before).toEqual({
+            parentId: source.id,
+            counts: {
+              sourceSector: 1,
+              sourceTerritory: 1,
+              sourceParent: 1,
+              destinationSector: 0,
+              destinationTerritory: 0,
+              destinationParent: 0,
+              region: 1,
+            },
+          });
+          const sourceSession = createEditorSession({
+            orgId: source.id,
+            orgName: source.name,
+          });
+          const destinationSession = createEditorSession({
+            orgId: destination.id,
+            orgName: destination.name,
+          });
+          for (const session of [sourceSession, destinationSession]) {
+            await mockAuthWithSession(session);
+            await expect(
+              saveRegion(client, region, destination.id),
+            ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+            expect(await snapshot()).toEqual(before);
+          }
+
+          sourceSession.roles = [
+            ...(sourceSession.roles ?? []),
+            ...(destinationSession.roles ?? []),
+          ];
+          if (sourceSession.user)
+            sourceSession.user.roles = sourceSession.roles;
+          await mockAuthWithSession(sourceSession);
+          const moved = await saveRegion(client, region, destination.id);
+          expect(moved.org?.parentId).toBe(destination.id);
+          expect(await snapshot()).toEqual({
+            parentId: destination.id,
+            counts: {
+              sourceSector: 0,
+              sourceTerritory: 0,
+              sourceParent: 0,
+              destinationSector: 1,
+              destinationTerritory: 1,
+              destinationParent: 1,
+              region: 1,
+            },
+          });
+        },
+      );
     });
 
     it("should accept creating an area parented directly to a sector (un-migrated case)", async () => {

@@ -102,9 +102,12 @@ describe("organization tree traversal", () => {
     }
   });
 
-  const createOrgChain = async (types: OrgType[]) => {
+  const createOrgChain = async (
+    types: OrgType[],
+    initialParentId: number | null = null,
+  ) => {
     const orgs: TestOrg[] = [];
-    let parentId: number | null = null;
+    let parentId: number | null = initialParentId;
 
     for (const [index, orgType] of types.entries()) {
       const insertedOrgs: TestOrg[] = await db
@@ -501,18 +504,27 @@ describe("organization tree traversal", () => {
     }
   });
 
-  it("traverses real Territory and direct-Area branches without widening scope", async () => {
+  it("traverses direct Territory Regions and mixed Area branches without widening scope", async () => {
     const tree = await createMixedOrgTree(createdOrgIds);
     const { territoryBranch, directBranch, unrelatedBranch } = tree;
+    const [directTerritoryRegion, directTerritoryAo] = await createOrgChain(
+      ["region", "ao"],
+      tree.territory.id,
+    );
+    if (!directTerritoryRegion || !directTerritoryAo) {
+      throw new Error("Failed to create direct Territory Region fixture");
+    }
     const ctx = await createDbRoleContext(tree.territory, "editor");
-    await expect(
-      checkHasRoleOnOrg({
-        session: ctx.session,
-        db,
-        orgId: territoryBranch.ao.id,
-        roleName: "editor",
-      }),
-    ).resolves.toMatchObject({ success: true });
+    for (const ao of [territoryBranch.ao, directTerritoryAo]) {
+      await expect(
+        checkHasRoleOnOrg({
+          session: ctx.session,
+          db,
+          orgId: ao.id,
+          roleName: "editor",
+        }),
+      ).resolves.toMatchObject({ success: true });
+    }
     await expect(
       checkHasRoleOnOrg({
         session: ctx.session,
@@ -529,15 +541,16 @@ describe("organization tree traversal", () => {
         tree.territory.id,
         territoryBranch.area.id,
         territoryBranch.region.id,
+        directTerritoryRegion.id,
       ]),
     );
     const sectorCtx = await createDbRoleContext(tree.sector, "editor");
-    for (const branch of [territoryBranch, directBranch]) {
+    for (const ao of [territoryBranch.ao, directBranch.ao, directTerritoryAo]) {
       await expect(
         checkHasRoleOnOrg({
           session: sectorCtx.session,
           db,
-          orgId: branch.ao.id,
+          orgId: ao.id,
           roleName: "editor",
         }),
       ).resolves.toMatchObject({ success: true });
@@ -560,6 +573,7 @@ describe("organization tree traversal", () => {
         territoryBranch.region.id,
         directBranch.area.id,
         directBranch.region.id,
+        directTerritoryRegion.id,
       ]),
     );
     const descendants = await getDescendantOrgIds(db, [tree.sector.id]);
@@ -569,12 +583,74 @@ describe("organization tree traversal", () => {
         tree.territory.id,
         ...Object.values(territoryBranch).map((org) => org.id),
         ...Object.values(directBranch).map((org) => org.id),
+        directTerritoryRegion.id,
+        directTerritoryAo.id,
       ]),
     );
     expect(descendants).not.toContain(unrelatedBranch.ao.id);
     expect(await getDescendantOrgIds(db, [tree.nation.id])).toContain(
       territoryBranch.ao.id,
     );
+  });
+
+  it("follows inherited Area and Territory roles when a Region moves between them", async () => {
+    const [, sourceTerritory, area, region, ao] = await createOrgChain([
+      "sector",
+      "territory",
+      "area",
+      "region",
+      "ao",
+    ]);
+    const [, destinationTerritory] = await createOrgChain([
+      "sector",
+      "territory",
+    ]);
+    if (!sourceTerritory || !area || !region || !ao || !destinationTerritory) {
+      throw new Error("Failed to create Region move fixture");
+    }
+
+    const areaCtx = await createDbRoleContext(area, "editor");
+    const oldTerritoryCtx = await createDbRoleContext(sourceTerritory, "admin");
+    const newTerritoryCtx = await createDbRoleContext(
+      destinationTerritory,
+      "editor",
+    );
+    const assertAccess = async (ctx: Context, success: boolean) => {
+      for (const org of [region, ao]) {
+        await expect(
+          checkHasRoleOnOrg({
+            session: ctx.session,
+            db,
+            orgId: org.id,
+            roleName: "editor",
+          }),
+        ).resolves.toMatchObject({ success });
+      }
+      const editable = await getEditableOrgIdsForUser(ctx);
+      expect(editable.isNationAdmin).toBe(false);
+      expect(editable.editableOrgs.some((org) => org.id === region.id)).toBe(
+        success,
+      );
+      expect(editable.editableOrgs.map((org) => org.id)).not.toContain(ao.id);
+    };
+    const assertScopes = async (moved: boolean) => {
+      await assertAccess(areaCtx, !moved);
+      await assertAccess(oldTerritoryCtx, !moved);
+      await assertAccess(newTerritoryCtx, moved);
+    };
+
+    await assertScopes(false);
+    await db
+      .update(schema.orgs)
+      .set({ parentId: destinationTerritory.id })
+      .where(eq(schema.orgs.id, region.id));
+    await assertScopes(true);
+
+    await db
+      .update(schema.orgs)
+      .set({ parentId: area.id })
+      .where(eq(schema.orgs.id, region.id));
+    await assertScopes(false);
   });
 
   it("reaches the deepest node in a synthetic six-level hierarchy", async () => {

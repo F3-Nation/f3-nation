@@ -35,6 +35,9 @@ first, then extend the extraction in small reviewable steps.
   - `packages/api/src/router/org.ts` (existing API contract)
 - Preserve the ancestry behavior delivered by #920. This work extracts its
   integration without redesigning the filtering algorithm.
+- [Region parents and ancestry filters](admin-region-parent-filters.md) governs
+  Region Area/Territory parent choices and Sector/Territory/Area filters where
+  they extend the baseline behavior below.
 
 ### Design
 
@@ -114,13 +117,13 @@ and dialogs and requires no new per-type page files.
 All five tables display name, status, annual review, and creation date. Each
 retains its existing column order, formatting, row actions, and responsive UI.
 
-| Type   | Parent selector | Additional table columns | Filters                         | Editor extras                                     |
-| ------ | --------------- | ------------------------ | ------------------------------- | ------------------------------------------------- |
-| Nation | None            | None                     | No custom filters               | No dialog deactivate button                       |
-| Sector | Nation          | AO count                 | Status, Only Mine               | New name defaults to `Unknown`                    |
-| Area   | Sector          | Sector, AO count         | Status, Only Mine, Sector       | New name defaults to blank                        |
-| Region | Area            | Area, Sector, AO count   | Status, Only Mine, Sector, Area | Logo and location short description               |
-| AO     | Region          | Region                   | Status, Only Mine, Region       | Logo; existing development-only fake-data control |
+| Type   | Parent selector   | Additional table columns | Filters                                    | Editor extras                                     |
+| ------ | ----------------- | ------------------------ | ------------------------------------------ | ------------------------------------------------- |
+| Nation | None              | None                     | No custom filters                          | No dialog deactivate button                       |
+| Sector | Nation            | AO count                 | Status, Only Mine                          | New name defaults to `Unknown`                    |
+| Area   | Sector            | Sector, AO count         | Status, Only Mine, Sector                  | New name defaults to blank                        |
+| Region | Area or Territory | Area, Sector, AO count   | Status, Only Mine, Sector, Territory, Area | Logo and location short description               |
+| AO     | Region            | Region                   | Status, Only Mine, Region                  | Logo; existing development-only fake-data control |
 
 The four non-Nation pages retain their add buttons and default Active + Only
 Mine filters. Nation retains no add button, its `Nations` page heading, and its

@@ -27,6 +27,9 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
   which introduced the shared table, editor, and ancestry filters. Where this spec
   gives the Territory table or the Area columns different behavior, this spec
   governs.
+- [Region parents and ancestry filters](admin-region-parent-filters.md) governs
+  the Region editor's Area/Territory parent choices and optional
+  Sector/Territory/Area filters.
 - Traversal conventions (depth cap, cycle guard) follow
   [`org-tree-depth-agnostic-traversal.md`](org-tree-depth-agnostic-traversal.md).
 - Apps affected: admin, api, db (migration and seed), shared.
@@ -53,7 +56,9 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
 ### Design
 
 - The Area editor's parent selector offers Sectors and Territories, grouped by
-  type. Other editors keep a single parent type and an ungrouped list. The
+  type. Region parent choices follow
+  [the Region specification](admin-region-parent-filters.md); Sector, Territory,
+  and AO editors keep a single parent type and an ungrouped list. The
   selectable parent types per tier are an explicit, deliberately narrower list than
   the server's ordinal rule, and every selectable type must be accepted by that
   rule.
@@ -113,7 +118,8 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
 - **AC-4** — GIVEN the Area editor WHEN parent choices load THEN the selector is
   labeled "Sector or Territory", queries Sectors and Territories, and lists them
   in two groups titled "Sectors" and "Territories", each sorted by name. Sector,
-  Territory, Region, and AO editors keep a single-type, ungrouped list.
+  Territory, and AO editors keep a single-type, ungrouped list. Region parent
+  choices follow [the Region specification](admin-region-parent-filters.md).
 - **AC-5** — GIVEN an existing Area whose parent is a Sector WHEN it is opened THEN
   that Sector is selected, and saving without changing the parent succeeds and
   submits the same parent.
@@ -157,11 +163,12 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
   Territories; WHEN a Territory is also selected THEN only that Territory's direct
   children are requested; WHEN the Sector selection changes THEN selected
   Territories that are no longer beneath a selected Sector are removed.
-- **AC-11** — GIVEN the Region table WHEN a Sector or Area filter is applied THEN
-  Regions whose Area sits directly under the Sector and Regions whose Area sits
-  under one of the Sector's Territories are both returned, including when
-  intermediate organizations are inactive; a selection that matches nothing
-  requests no rows rather than all rows.
+- **AC-11** — GIVEN the Region table WHEN a Sector, Territory, or Area filter is
+  applied THEN matching follows actual ancestry, including direct Territory
+  Regions and Regions beneath Areas, with OR within a tier and AND across tiers.
+  Inactive intermediate organizations remain in the traversal; a selection that
+  matches nothing requests no rows rather than all rows. Selection pruning and
+  reconciliation follow [the Region specification](admin-region-parent-filters.md).
 - **AC-12** — GIVEN the ancestor-type lists used by the admin filters WHEN they are
   computed THEN they are derived from hierarchy rank (types above Region, and types
   above Area) and equal Area, Territory, Sector, Nation and Territory, Sector,
@@ -248,8 +255,9 @@ existing depth-agnostic role check; this change does not alter inheritance.
   update for six-level trees (each tracked separately).
 - The stale organization-type description text in the API schema, which belongs with
   the OpenAPI golden update.
-- Regions parented directly to a Sector, Territory, or Nation, which the admin
-  editor cannot create.
+- Regions parented directly to a Sector or Nation, which the admin editor cannot
+  create. Territory parents are covered by
+  [the Region specification](admin-region-parent-filters.md).
 - Any change to authorization inheritance, procedure tiers, or role rules.
 
 ## 7. Critical-path test cases
