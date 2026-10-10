@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   getDatabaseNameFromUri,
   migrationsDatabaseName,
-  IDLE_TIMEOUT_POOLER_S,
-  IDLE_TIMEOUT_SOCKET_S,
   poolOptions,
   postgresArgs,
   splitSocketHost,
@@ -118,7 +116,8 @@ describe("poolOptions", () => {
     expect(poolOptions(hostOptions)).toMatchObject({
       host: SOCKET,
       max: 5,
-      idle_timeout: IDLE_TIMEOUT_SOCKET_S,
+      // Literal on purpose: shortening this regressed prod latency (#1136).
+      idle_timeout: 600,
       prepare: false,
     });
   });
@@ -129,7 +128,7 @@ describe("poolOptions", () => {
     );
     expect(poolOptions(hostOptions)).toMatchObject({
       max: 5,
-      idle_timeout: IDLE_TIMEOUT_POOLER_S,
+      idle_timeout: 20,
     });
     expect(poolOptions(hostOptions)).not.toHaveProperty("host");
   });
