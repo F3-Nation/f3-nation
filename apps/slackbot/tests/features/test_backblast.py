@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 import pytest
 from f3_data_models.models import EventInstance, EventType_x_EventInstance, Org
 
-from features.backblast import build_backblast_form, handle_backblast_post
+from features.backblast import backblast_middleware, build_backblast_form, handle_backblast_post
 from utilities.slack import actions, forms
 
 
@@ -113,6 +113,52 @@ def _assert_ineligible_submission_rejected(posting_context):
     assert response["channel"] == "U_TEST"
     assert "event type" in response["text"].lower()
     assert "reopen" in response["text"].lower()
+
+
+def test_backblast_selector_emits_unscheduled_event_confirmation(region_record):
+    region_record.migration_date = "2020-01-01"
+    event = SimpleNamespace(
+        id=42,
+        start_date=datetime.date(2026, 10, 5),
+        org=SimpleNamespace(name="Test AO"),
+        event_types=[SimpleNamespace(name="Bootcamp")],
+    )
+    body = {"user": {"id": "U_TEST"}, actions.LOADING_ID: "V_BACKBLAST"}
+    client = MagicMock()
+
+    with (
+        patch("features.backblast.get_user", return_value=SimpleNamespace(user_id=1)),
+        patch("features.backblast.event_attendance_query", return_value=[event]),
+        patch("features.backblast.get_admin_users", return_value=[]),
+        patch("features.backblast.get_aoq_users", return_value=[]),
+    ):
+        backblast_middleware(body, client, MagicMock(), {}, region_record)
+
+    client.views_update.assert_called_once()
+    client.views_open.assert_not_called()
+    assert client.views_update.call_args.kwargs["view_id"] == "V_BACKBLAST"
+    view = client.views_update.call_args.kwargs["view"]
+    assert view["callback_id"] == actions.BACKBLAST_SELECT_CALLBACK_ID
+    buttons = [element for block in view["blocks"] for element in block.get("elements", [])]
+    scheduled = next(button for button in buttons if button["action_id"] == f"{actions.BACKBLAST_FILL_BUTTON}_42")
+    assert scheduled["value"] == "42"
+    assert "confirm" not in scheduled
+    unscheduled = next(button for button in buttons if button["action_id"] == actions.BACKBLAST_NEW_BLANK_BUTTON)
+    assert unscheduled["text"]["text"] == "New Unscheduled Event"
+    assert unscheduled["value"] == "New Unscheduled Event"
+    assert unscheduled["confirm"] == {
+        "title": {"type": "plain_text", "text": "Are you sure?"},
+        "text": {
+            "type": "plain_text",
+            "text": (
+                "This option should ONLY BE USED FOR UNSCHEDULED EVENTS that are not listed on the calendar. "
+                "If this is for a normal, scheduled event, please select it from the lists above."
+            ),
+        },
+        "confirm": {"type": "plain_text", "text": "Yes, I'm sure"},
+        "deny": {"type": "plain_text", "text": "Whups, never mind"},
+        "style": "danger",
+    }
 
 
 @pytest.mark.parametrize("update_view_id", [None, "V_BACKBLAST"])

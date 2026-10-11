@@ -15,7 +15,9 @@ from features.calendar.series import (
     handle_series_edit_delete,
     manage_series,
 )
+from tests.modal_assertions import assert_edit_delete_selector
 from utilities.database.orm import SlackSettings
+from utilities.slack import actions
 
 
 def _make_series(
@@ -94,6 +96,44 @@ class BuildSeriesListFormTest(unittest.TestCase):
         ao_svc = MagicMock()
         ao_svc.get_region_aos.return_value = ao_list or []
         return series_svc, ao_svc
+
+    @patch("features.calendar.series._build_ao_service")
+    @patch("features.calendar.series._build_series_service")
+    def test_list_emits_series_cascade_confirmation(self, mock_build_series, mock_build_ao):
+        series_svc, ao_svc = self._patch_services(series_list=[_make_series(id=7, name="Workout")])
+        mock_build_series.return_value = series_svc
+        mock_build_ao.return_value = ao_svc
+        client = MagicMock()
+
+        build_series_list_form({}, client, MagicMock(), {}, _make_region_record(), update_view_id="V_SERIES")
+
+        client.views_update.assert_called_once()
+        client.views_push.assert_not_called()
+        self.assertEqual(client.views_update.call_args.kwargs["view_id"], "V_SERIES")
+        view = client.views_update.call_args.kwargs["view"]
+        selector = assert_edit_delete_selector(
+            self,
+            view,
+            callback_id=actions.EDIT_DELETE_SERIES_CALLBACK_ID,
+            action_id=f"{actions.SERIES_EDIT_DELETE}_7",
+            label="Workout (Monday @ 0530)",
+        )
+        self.assertEqual(
+            selector["confirm"],
+            {
+                "title": {"type": "plain_text", "text": "Are you sure?"},
+                "text": {
+                    "type": "plain_text",
+                    "text": (
+                        "Are you sure you want to edit / delete this series? This cannot be undone. Also, "
+                        "editing or deleting a series will also edit or delete all future events associated "
+                        "with the series."
+                    ),
+                },
+                "confirm": {"type": "plain_text", "text": "Yes, I'm sure"},
+                "deny": {"type": "plain_text", "text": "Whups, never mind"},
+            },
+        )
 
     @patch("features.calendar.series._build_ao_service")
     @patch("features.calendar.series._build_series_service")
