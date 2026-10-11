@@ -15,6 +15,7 @@ from features.calendar.series import (
     handle_series_edit_delete,
     manage_series,
 )
+from tests.modal_assertions import assert_edit_delete_selector
 from utilities.database.orm import SlackSettings
 from utilities.slack import actions
 
@@ -110,16 +111,12 @@ class BuildSeriesListFormTest(unittest.TestCase):
         client.views_push.assert_not_called()
         self.assertEqual(client.views_update.call_args.kwargs["view_id"], "V_SERIES")
         view = client.views_update.call_args.kwargs["view"]
-        self.assertEqual(view["callback_id"], actions.EDIT_DELETE_SERIES_CALLBACK_ID)
-        action_id = f"{actions.SERIES_EDIT_DELETE}_7"
-        block = next(b for b in view["blocks"] if b.get("block_id") == action_id)
-        self.assertEqual(block["text"]["text"], "Workout (Monday @ 0530)")
-        selector = block["accessory"]
-        self.assertEqual(selector["action_id"], action_id)
-        self.assertEqual(selector["placeholder"]["text"], "Edit or Delete")
-        self.assertEqual(
-            [(o["text"]["text"], o["value"]) for o in selector["options"]],
-            [("Edit", "Edit"), ("Delete", "Delete")],
+        selector = assert_edit_delete_selector(
+            self,
+            view,
+            callback_id=actions.EDIT_DELETE_SERIES_CALLBACK_ID,
+            action_id=f"{actions.SERIES_EDIT_DELETE}_7",
+            label="Workout (Monday @ 0530)",
         )
         self.assertEqual(
             selector["confirm"],

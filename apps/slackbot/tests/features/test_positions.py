@@ -17,6 +17,7 @@ from features.positions import (
     handle_new_position_post,
     handle_position_edit_delete,
 )
+from tests.modal_assertions import assert_edit_delete_selector
 from utilities.slack import actions
 
 # ---------------------------------------------------------------------------
@@ -210,16 +211,12 @@ class PositionViewsBuildListModalTest(unittest.TestCase):
                     self.assertEqual(client.views_push.call_args.kwargs["trigger_id"], "T_TRIGGER")
                     view = client.views_push.call_args.kwargs["view"]
 
-                self.assertEqual(view["callback_id"], actions.EDIT_DELETE_POSITION_CALLBACK_ID)
-                action_id = f"{actions.POSITION_EDIT_DELETE}_5"
-                block = next(b for b in view["blocks"] if b.get("block_id") == action_id)
-                self.assertEqual(block["text"]["text"], "President")
-                selector = block["accessory"]
-                self.assertEqual(selector["action_id"], action_id)
-                self.assertEqual(selector["placeholder"]["text"], "Edit or Delete")
-                self.assertEqual(
-                    [(o["text"]["text"], o["value"]) for o in selector["options"]],
-                    [("Edit", "Edit"), ("Delete", "Delete")],
+                selector = assert_edit_delete_selector(
+                    self,
+                    view,
+                    callback_id=actions.EDIT_DELETE_POSITION_CALLBACK_ID,
+                    action_id=f"{actions.POSITION_EDIT_DELETE}_5",
+                    label="President",
                 )
                 self.assertEqual(
                     selector["confirm"],
