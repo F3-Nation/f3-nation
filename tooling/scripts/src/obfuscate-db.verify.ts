@@ -28,6 +28,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -55,11 +56,14 @@ import {
   SNAPSHOT_EMAIL_SINK,
   SNAPSHOT_TABLES,
 } from "./staging-refresh.config";
+import { pgMajor } from "./staging-refresh.proc";
+import type { SnapshotManifest } from "./staging-refresh.snapshot";
 import {
   assertSnapshotColumnsReviewed,
   leakScan,
   publishSnapshot,
   trimSnapshot,
+  writeTo,
 } from "./staging-refresh.snapshot";
 
 const CONTAINER = "f3-obfuscate-verify-pg";
@@ -641,8 +645,11 @@ async function sweepForEmails(
 
 const SNAPSHOT_DB = "f3_snapshot";
 const SNAPSHOT_COPY_DB = "f3_snapshot_copy";
-const dbUrl = (db: string) =>
-  `postgresql://f3local:f3local@localhost:${PORT}/${db}`;
+const dbUrl = (db: string) => {
+  const url = new URL(DATABASE_URL);
+  url.pathname = `/${db}`;
+  return url.toString();
+};
 
 /**
  * A clone of the planted, not yet obfuscated sandbox for the snapshot
@@ -708,6 +715,43 @@ async function verifySnapshotMode(
         SELECT ${row.id}, min(id) FROM event_types`;
     }
 
+    // Inside the window: a private series and one under it, a private
+    // instance and an instance of each series; plus a free-text profile
+    // answer.
+    const [series] = await snap<{ priv: number; child: number }[]>`
+      SELECT min(id)::int AS priv, max(id)::int AS child FROM events`;
+    if (!series || series.priv === series.child) {
+      throw new Error("Harness bug: need two events");
+    }
+    const privateSeries = [series.priv, series.child];
+    await snap`UPDATE events SET is_private = true WHERE id = ${series.priv}`;
+    await snap`
+      UPDATE events SET is_private = false, series_id = ${series.priv}
+      WHERE id = ${series.child}`;
+    const privateInstances: number[] = [];
+    for (const [isPrivate, seriesId] of [
+      [true, null],
+      [false, series.priv],
+      [false, series.child],
+    ] as const) {
+      const [row] = await snap<{ id: number }[]>`
+        INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+          name, is_private, series_id)
+        SELECT org_id, true, false, current_date, 'Private probe',
+          ${isPrivate}, ${seriesId}
+        FROM event_instances LIMIT 1
+        RETURNING id`;
+      if (!row) throw new Error("Harness bug: no event_instances to copy");
+      privateInstances.push(row.id);
+      await snap`
+        INSERT INTO event_instances_x_event_types (event_instance_id, event_type_id)
+        SELECT ${row.id}, min(id) FROM event_types`;
+    }
+    await snap`
+      UPDATE users
+      SET meta = '{"my_f3_why": "I am Jane Smith and live at 123 Main Street"}'::jsonb
+      WHERE id = (SELECT min(id) FROM users)`;
+
     const obf = spawnSync(
       "pnpm",
       [
@@ -767,6 +811,27 @@ async function verifySnapshotMode(
         trim.instancesDropped > 0,
       `${survivors.length}/2 edge rows kept, ${outside?.n ?? "?"} outside the window, ${orphanLinks?.n ?? "?"} orphaned link rows, ${trim.instancesDropped} dropped`,
     );
+    const [privateLeft] = await snap<{ n: number }[]>`
+      SELECT (SELECT count(*) FROM event_instances
+              WHERE is_private OR id IN ${snap(privateInstances)})::int
+        + (SELECT count(*) FROM events
+           WHERE is_private OR id IN ${snap(privateSeries)})::int
+        + (SELECT count(*) FROM event_instances_x_event_types
+           WHERE event_instance_id IN ${snap(privateInstances)})::int
+        + (SELECT count(*) FROM events_x_event_types
+           WHERE event_id IN ${snap(privateSeries)})::int AS n`;
+    check(
+      "snapshot trim drops private series and instances, with their link rows",
+      privateLeft?.n === 0 && trim.privateSeriesDropped >= 2,
+      `${privateLeft?.n ?? "?"} private row(s) left, ${trim.privateSeriesDropped} series dropped`,
+    );
+    const [metaLeft] = await snap<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM users WHERE meta IS NOT NULL`;
+    check(
+      "snapshot trim clears users.meta",
+      metaLeft?.n === 0,
+      `${metaLeft?.n ?? "?"} user(s) still have meta`,
+    );
     check(
       "snapshot trim nulls every blast",
       blasts?.n === 0,
@@ -801,6 +866,101 @@ async function verifySnapshotMode(
       "leak scan passes on the trimmed snapshot",
       await leakScan(snapUrl),
       "verify-target with the @f3nation.local sink",
+    );
+
+    // The path that is actually published, with the real pg tools.
+    const pgVersions = [pgMajor("pg_dump"), pgMajor("pg_restore")];
+    if (pgVersions.some((v) => v !== 18)) {
+      throw new Error(
+        `the snapshot checks need pg_dump and pg_restore 18 on PATH (or PG_BIN_DIR); found ${pgVersions.join(", ")}`,
+      );
+    }
+    const publishWork = path.join(work, "publish");
+    const extracted = path.join(work, "extracted");
+    mkdirSync(publishWork);
+    mkdirSync(extracted);
+    const outFile = path.join(work, "out.tar");
+    let published = 0;
+    const manifest = await publishSnapshot({
+      sql: snap,
+      copyUrl: snapUrl,
+      work: publishWork,
+      migration: { tag: "harness", createdAt: 0 },
+      window: trim.window,
+      deliver: (file) => {
+        published += 1;
+        return writeTo(outFile)(file);
+      },
+    });
+    const listing = execFileSync("tar", ["-tf", outFile], { encoding: "utf8" })
+      .trim()
+      .split("\n")
+      .sort();
+    execFileSync("tar", ["-xf", outFile, "-C", extracted]);
+    const shipped = JSON.parse(
+      readFileSync(path.join(extracted, "manifest.json"), "utf8"),
+    ) as SnapshotManifest;
+    const miscounted: string[] = [];
+    for (const t of SNAPSHOT_TABLES) {
+      const [row] = await snap.unsafe<{ n: number }[]>(
+        `SELECT count(*)::int AS n FROM ${quoteQualified(t)}`,
+      );
+      if (shipped.tables[t]?.rows !== row?.n) miscounted.push(t);
+    }
+    const tableData = execFileSync(
+      process.env.PG_BIN_DIR
+        ? path.join(process.env.PG_BIN_DIR, "pg_restore")
+        : "pg_restore",
+      ["-l", path.join(extracted, "snapshot.dump")],
+      { encoding: "utf8" },
+    )
+      .split("\n")
+      .filter((l) => l.includes(" TABLE DATA ")).length;
+    check(
+      "snapshot publishes a tar of the manifest and every kept table's data",
+      published === 1 &&
+        listing.join(",") === "manifest.json,snapshot.dump" &&
+        Object.keys(shipped.tables).sort().join() ===
+          [...SNAPSHOT_TABLES].sort().join() &&
+        miscounted.length === 0 &&
+        tableData === SNAPSHOT_TABLES.length &&
+        JSON.stringify(shipped) === JSON.stringify(manifest),
+      `delivered ${published}x; tar [${listing.join(", ")}]; ${tableData} TABLE DATA entries; ` +
+        `row counts ${miscounted.length === 0 ? "match" : `differ: ${miscounted.join(", ")}`}`,
+    );
+
+    // An empty required table: refused before anything is built. The
+    // rollback restores it; the leak scan's own connection still sees rows.
+    const reserved = await snap.reserve();
+    let floorDelivered = 0;
+    let floorError = "";
+    try {
+      await reserved`BEGIN`;
+      await reserved`DELETE FROM event_instances_x_event_types`;
+      await reserved`DELETE FROM event_tags_x_event_instances`;
+      await reserved`DELETE FROM event_instances`;
+      await publishSnapshot({
+        sql: reserved,
+        copyUrl: snapUrl,
+        work: publishWork,
+        migration: { tag: "harness", createdAt: 0 },
+        window: trim.window,
+        deliver: () => {
+          floorDelivered += 1;
+          return Promise.resolve("delivered");
+        },
+      });
+    } catch (e) {
+      floorError = e instanceof Error ? e.message : String(e);
+    } finally {
+      await reserved`ROLLBACK`;
+      reserved.release();
+    }
+    check(
+      "an empty required table stops the snapshot before it is published",
+      floorError.includes("public.event_instances has 0 rows") &&
+        floorDelivered === 0,
+      `${floorError ? "refused" : "NOT refused"}, delivered ${floorDelivered}x`,
     );
 
     await snap`ALTER TABLE orgs ADD COLUMN snapshot_probe text`;
@@ -906,6 +1066,19 @@ async function verifySnapshotMode(
       snapshotEnv,
     );
     const noOut = await runAsync([...script, "--snapshot-only"], snapshotEnv);
+    const inJob = { ...snapshotEnv, CLOUD_RUN_JOB: "harness" };
+    const bareOut = await runAsync(
+      [...script, "--snapshot-only", "--snapshot-out"],
+      inJob,
+    );
+    const emptyOut = await runAsync(
+      [...script, "--snapshot-only", "--snapshot-out="],
+      inJob,
+    );
+    const refreshOut = await runAsync(
+      [...script, "--snapshot-out", out],
+      snapshotEnv,
+    );
     check(
       "--snapshot-only refuses refresh flags, and publishing outside Cloud Run",
       withYes.status !== 0 &&
@@ -914,6 +1087,20 @@ async function verifySnapshotMode(
         noOut.out.includes("only the job publishes") &&
         stagingConnections === 0,
       `--yes ${withYes.status !== 0 ? "refused" : "ACCEPTED"}, no --snapshot-out ${noOut.status !== 0 ? "refused" : "ACCEPTED"}`,
+    );
+    check(
+      "--snapshot-out is refused without a path, or without --snapshot-only",
+      [bareOut, emptyOut].every(
+        (r) =>
+          r.status !== 0 && r.out.includes("--snapshot-out needs a file path"),
+      ) &&
+        refreshOut.status !== 0 &&
+        refreshOut.out.includes(
+          "--snapshot-out only works with --snapshot-only",
+        ) &&
+        stagingConnections === 0,
+      `bare ${bareOut.status !== 0 ? "refused" : "ACCEPTED"}, empty ${emptyOut.status !== 0 ? "refused" : "ACCEPTED"}, ` +
+        `without --snapshot-only ${refreshOut.status !== 0 ? "refused" : "ACCEPTED"}`,
     );
   } finally {
     decoy.close();

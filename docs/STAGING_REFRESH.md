@@ -188,40 +188,51 @@ locally. It never touches staging:
 gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1 --wait --args=--snapshot-only
 ```
 
-It runs the refresh's steps 1–4 unchanged, then cuts the snapshot from that
-same obfuscated, verified copy. It has no obfuscation rules or Prod login of
-its own:
+It runs the refresh's dump, restore, and obfuscate-and-verify steps
+unchanged (the preflight is cut down, below), then cuts the snapshot from
+that same obfuscated, verified copy. It has no obfuscation rules or Prod
+login of its own. The steps match the job log's `1/6` to `6/6`:
 
-1. **Preflight.** Only the check that Prod isn't ahead of the code in the
-   job's image. Prod and staging needn't be at the same migration level,
+1. **Preflight.** Only the migration check differs: Prod must not be ahead
+   of the code in the job's image. The pg tool versions and the prod/copy
+   guards are kept, and there is no prod = staging gate or staging lock,
    since nothing is loaded anywhere. The entrypoint builds no staging URL,
    and the snapshot code never opens a staging connection.
-2. **Dump Prod and restore it into the throwaway copy**, as for a refresh.
-3. **Obfuscate and verify the copy** with
+2. **Dump Prod**, as for a refresh.
+3. **Restore it into the throwaway copy**, as for a refresh.
+4. **Obfuscate and verify the copy** with
    `--email-sink dev.staging-email-sink@f3nation.local`, so every fake address
    is on a domain that can't receive mail. verify-target must pass 100%.
-4. **Trim the copy in place**, in one transaction. Only `SNAPSHOT_TABLES`
+5. **Trim the copy in place**, in one transaction. Only `SNAPSHOT_TABLES`
    (`tooling/scripts/src/staging-refresh.config.ts`) are kept, and every
    other table in `public`, `auth`, `slackbot` and `public_history` is
    emptied. The trim refuses if a kept table has a foreign key into an
-   emptied one. `event_instances` keeps only `start_date` from 30 days back
-   to 90 days ahead (about 150k of ~1.76M rows), with their link rows.
+   emptied one. Private event series (and series under them) and private
+   event instances (and instances of a private series) are deleted with
+   their link rows. `event_instances` keeps only `start_date` from 30 days
+   back to 90 days ahead (about 150k of ~1.76M rows), with their link rows.
    `preblast`, `backblast`, `preblast_rich` and `backblast_rich` are set to
-   NULL; `pax_count` and `fng_count` are kept. Before trimming, the job
-   refuses if a kept table has a column that isn't in
-   `obfuscate-db.columns.txt`.
-5. **Leak scan.** verify-target runs again on the trimmed copy, so the scan
-   covers exactly what will be published. It fails on any email-shaped
-   string that isn't a `@f3nation.local` sink address, any phone number that
-   isn't one of the obfuscator's `555-` fakes, and any uppercase Slack id.
-   If the scan fails, nothing is built or uploaded.
-6. **Package and publish.** A `pg_dump --data-only --format=custom` of the
-   kept tables, plus `manifest.json`, in one uncompressed tar:
-   `gs://f3-public-images/dev-snapshots/f3-dev-snapshot.tar`. Each run
-   overwrites it, with `Cache-Control: no-cache`. The manifest holds
-   `formatVersion`, `exportedAt`, the newest migration Prod had applied
-   (`migration.tag`), the `event_instances` window, and the row count and
-   column names of every table.
+   NULL; `pax_count` and `fng_count` are kept. `users.meta` is set to NULL:
+   the obfuscator only scrubs emails and phones in it, and its profile
+   answers are free text. Before trimming, the job refuses if a kept table
+   has a column that isn't in `obfuscate-db.columns.txt`.
+6. **Leak scan, package and publish.**
+   - verify-target runs again on the trimmed copy, so the scan covers
+     exactly what will be published. It fails on any email-shaped string
+     other than `dev.staging-email-sink+<tag>@f3nation.local`, any phone
+     number that isn't one of the obfuscator's `555-` fakes, and any Slack
+     mention (`<@U…>` / `<@W…>`) whose id isn't an obfuscator `Uf3…` id.
+   - `orgs`, `users`, `event_types`, `events` and `event_instances` must
+     each have rows (`SNAPSHOT_REQUIRED_TABLES`), so an empty copy can't
+     replace a good snapshot.
+   - If either check fails, nothing is built or uploaded. Otherwise a
+     `pg_dump --data-only --format=custom` of the kept tables, plus
+     `manifest.json`, goes into one uncompressed tar:
+     `gs://f3-public-images/dev-snapshots/f3-dev-snapshot.tar`. Each run
+     overwrites it, with `Cache-Control: no-cache`. The manifest holds
+     `formatVersion`, `exportedAt`, the newest migration Prod had applied
+     (`migration.tag`), the `event_instances` window, and the row count and
+     column names of every table.
 
 The last line is `DEV SNAPSHOT: OK` or `DEV SNAPSHOT FAILED — nothing was
 published; staging was not touched.` As for a refresh, the logs hold
@@ -235,7 +246,8 @@ pnpm -F @acme/scripts staging-refresh -- --snapshot-only --snapshot-out /tmp/f3-
 ```
 
 `--snapshot-only` refuses `--yes`, `--dry-run`, `--reuse-existing-stash`,
-`--skip-slackbot-restart` and `--allow-staging-db`. Adding a table to
+`--skip-slackbot-restart` and `--allow-staging-db`, and a refresh refuses
+`--snapshot-out`. Adding a table to
 `SNAPSHOT_TABLES` publishes it to a public bucket, so review it as a PII
 decision.
 

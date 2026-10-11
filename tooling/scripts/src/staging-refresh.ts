@@ -117,6 +117,11 @@ const REUSE_STASH = argv.includes("--reuse-existing-stash");
 const STAGING_DB = flagValue(argv, "--allow-staging-db");
 const SNAPSHOT_ONLY = argv.includes("--snapshot-only");
 const SNAPSHOT_OUT = flagValue(argv, "--snapshot-out");
+const HAS_SNAPSHOT_OUT = argv.some(
+  (a) => a === "--snapshot-out" || a.startsWith("--snapshot-out="),
+);
+/** For the SIGTERM message: what a snapshot run has handed on so far. */
+let delivery: "none" | "in-flight" | "done" = "none";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const JOURNAL_PATH = path.resolve(
@@ -640,6 +645,9 @@ function connect(url: string, extra: Record<string, string> = {}): Sql {
 }
 
 function guards(): Context {
+  if (HAS_SNAPSHOT_OUT) {
+    throw new Refusal("--snapshot-out only works with --snapshot-only.");
+  }
   if (!STAGING_DB) {
     throw new Refusal(
       "pass --allow-staging-db <name> naming the exact staging database.",
@@ -874,16 +882,25 @@ function snapshotGuards(): CopyContext & {
       `--snapshot-only can't be combined with ${conflicting.join(", ")}.`,
     );
   }
-  const deliver = SNAPSHOT_OUT
+  if (HAS_SNAPSHOT_OUT && (!SNAPSHOT_OUT || SNAPSHOT_OUT.startsWith("--"))) {
+    throw new Refusal("--snapshot-out needs a file path.");
+  }
+  const target = SNAPSHOT_OUT
     ? writeTo(path.resolve(SNAPSHOT_OUT))
     : process.env.CLOUD_RUN_JOB
       ? uploadToGcs
       : undefined;
-  if (!deliver) {
+  if (!target) {
     throw new Refusal(
       "outside Cloud Run, pass --snapshot-out <file>: only the job publishes.",
     );
   }
+  const deliver = async (file: string) => {
+    delivery = "in-flight";
+    const result = await target(file);
+    delivery = "done";
+    return result;
+  };
   const prodUrl = requireEnv("PROD_DATABASE_URL");
   const copyUrl = requireEnv("INTERMEDIATE_DATABASE_URL");
   requireEnv("OBFUSCATION_SALT");
@@ -1801,10 +1818,17 @@ function printSummary(s: {
   for (const t of timings) log(`   ${minutes(t.ms).padStart(7)}  ${t.step}`);
 }
 
+const SNAPSHOT_SIGTERM = {
+  none: "Nothing was published.",
+  "in-flight":
+    "Stopped while delivering: the previous snapshot may or may not have been replaced.",
+  done: "The new snapshot had already been delivered.",
+};
+
 process.on("SIGTERM", () => {
   log(
     SNAPSHOT_ONLY
-      ? "\n!!! SIGTERM (task timeout?). Nothing was published."
+      ? `\n!!! SIGTERM (task timeout?). ${SNAPSHOT_SIGTERM[delivery]}`
       : "\n!!! SIGTERM (task timeout?). If this hit after step 8, staging may be half-loaded; " +
           "re-run with --reuse-existing-stash if refresh_keep schemas are left on staging.",
   );

@@ -18,10 +18,12 @@ import {
   readTargetColumns,
   unreviewedColumns,
 } from "./obfuscate-db.columns";
+import type { FkEdge } from "./staging-refresh.checks";
 import { fkEdges, filterToc, quoteTable } from "./staging-refresh.checks";
 import {
   SNAPSHOT_EMAIL_SINK,
   SNAPSHOT_OBJECT,
+  SNAPSHOT_REQUIRED_TABLES,
   SNAPSHOT_TABLES,
   SNAPSHOT_WINDOW,
 } from "./staging-refresh.config";
@@ -46,6 +48,7 @@ export interface TrimResult {
   emptied: number;
   instancesKept: number;
   instancesDropped: number;
+  privateSeriesDropped: number;
   linkRowsDropped: number;
   window: { from: string; to: string };
 }
@@ -82,23 +85,33 @@ export async function assertSnapshotColumnsReviewed(sql: Sql): Promise<void> {
   }
 }
 
-/**
- * Trim the (throwaway) copy in place, in one transaction: empty every table
- * outside SNAPSHOT_TABLES, keep only event_instances inside SNAPSHOT_WINDOW
- * (and their link rows), drop their blasts, then empty the history the
- * audit triggers just wrote.
- */
-export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
+/** FKs from kept tables into `ref`, each a single column onto its id. */
+async function linksInto(sql: Sql, ref: string): Promise<FkEdge[]> {
   const links = (await fkEdges(sql, ["public"])).filter(
-    (e) =>
-      e.refTable === "public.event_instances" &&
-      SNAPSHOT_TABLES.includes(e.table),
+    (e) => e.refTable === ref && SNAPSHOT_TABLES.includes(e.table),
   );
   for (const e of links) {
     if (e.columns.length !== 1 || e.refColumns[0] !== "id") {
-      throw new Error(`unexpected FK ${e.name} into event_instances`);
+      throw new Error(`unexpected FK ${e.name} into ${ref}`);
     }
   }
+  return links;
+}
+
+/**
+ * Trim the (throwaway) copy in place, in one transaction: empty every table
+ * outside SNAPSHOT_TABLES, drop private event series and instances, keep
+ * only event_instances inside SNAPSHOT_WINDOW (and their link rows), drop
+ * their blasts and users' free-text profile answers, then empty the history
+ * the audit triggers just wrote.
+ */
+export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
+  const links = await linksInto(sql, "public.event_instances");
+  // event_instances rows go with the instances below; events.series_id rows
+  // are themselves in the private set.
+  const seriesLinks = (await linksInto(sql, "public.events")).filter(
+    (e) => e.table !== "public.event_instances" && e.table !== "public.events",
+  );
   return sql.begin(async (tx) => {
     const tables = (
       await tx<{ t: string; s: string }[]>`
@@ -123,8 +136,17 @@ export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
       SELECT (current_date - ${SNAPSHOT_WINDOW.daysBack}::int)::text AS from,
         (current_date + ${SNAPSHOT_WINDOW.daysAhead}::int)::text AS to`;
     if (!win) throw new Error("could not compute the event_instances window");
+    // A series under a private series is private too.
+    await tx`
+      CREATE TEMP TABLE snapshot_private_series ON COMMIT DROP AS
+      WITH RECURSIVE p AS (
+        SELECT id FROM public.events WHERE is_private
+        UNION SELECT e.id FROM public.events e JOIN p ON e.series_id = p.id
+      ) SELECT id FROM p`;
+    const privateSeries = "SELECT id FROM snapshot_private_series";
     const outside = `SELECT id FROM public.event_instances
-      WHERE start_date IS NULL OR start_date NOT BETWEEN '${win.from}'::date AND '${win.to}'::date`;
+      WHERE start_date IS NULL OR start_date NOT BETWEEN '${win.from}'::date AND '${win.to}'::date
+        OR is_private OR series_id IN (${privateSeries})`;
 
     let linkRowsDropped = 0;
     for (const e of links) {
@@ -136,9 +158,21 @@ export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
     const dropped = await tx.unsafe(
       `DELETE FROM public.event_instances WHERE id IN (${outside})`,
     );
+    for (const e of seriesLinks) {
+      const res = await tx.unsafe(
+        `DELETE FROM ${quoteTable(e.table)} WHERE ${quoteIdent(e.columns[0]!)} IN (${privateSeries})`,
+      );
+      linkRowsDropped += res.count;
+    }
+    const seriesDropped = await tx.unsafe(
+      `DELETE FROM public.events WHERE id IN (${privateSeries})`,
+    );
     await tx`
       UPDATE public.event_instances SET preblast = NULL, backblast = NULL,
         preblast_rich = NULL, backblast_rich = NULL`;
+    // obfuscate-db only scrubs emails and phones in it; the profile answers
+    // (my_f3_why, f3_name_origin, …) are free text.
+    await tx`UPDATE public.users SET meta = NULL WHERE meta IS NOT NULL`;
     const [kept] = await tx<{ n: number }[]>`
       SELECT count(*)::int AS n FROM public.event_instances`;
 
@@ -151,6 +185,7 @@ export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
       emptied: excluded.length,
       instancesKept: kept?.n ?? 0,
       instancesDropped: dropped.count,
+      privateSeriesDropped: seriesDropped.count,
       linkRowsDropped,
       window: { from: win.from, to: win.to },
     };
@@ -183,8 +218,8 @@ async function describeTables(sql: Sql): Promise<SnapshotManifest["tables"]> {
 }
 
 /**
- * Leak scan, then dump + manifest + tar, then `deliver`. Throws before
- * anything is built or delivered if the scan doesn't pass.
+ * Leak scan, row floor, then dump + manifest + tar, then `deliver`. Throws
+ * before anything is built or delivered if either check fails.
  */
 export async function publishSnapshot(opts: {
   sql: Sql;
@@ -196,6 +231,12 @@ export async function publishSnapshot(opts: {
 }): Promise<SnapshotManifest> {
   if (!(await leakScan(opts.copyUrl))) {
     throw new Error("leak scan did not pass (see above); nothing published.");
+  }
+  const tables = await describeTables(opts.sql);
+  for (const t of SNAPSHOT_REQUIRED_TABLES) {
+    if (!tables[t]?.rows) {
+      throw new Error(`snapshot table ${t} has 0 rows; nothing published.`);
+    }
   }
 
   const dump = path.join(opts.work, "snapshot.dump");
@@ -229,7 +270,7 @@ export async function publishSnapshot(opts: {
     exportedAt: new Date().toISOString(),
     migration: opts.migration,
     window: opts.window,
-    tables: await describeTables(opts.sql),
+    tables,
   };
   writeFileSync(
     path.join(opts.work, "manifest.json"),
@@ -289,6 +330,7 @@ export async function uploadToGcs(file: string): Promise<string> {
         "Content-Type": `multipart/related; boundary=${boundary}`,
       },
       body,
+      signal: AbortSignal.timeout(5 * 60_000),
     },
   );
   if (!res.ok) {

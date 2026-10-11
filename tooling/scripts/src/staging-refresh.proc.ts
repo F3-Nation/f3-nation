@@ -133,7 +133,10 @@ export function pgMajor(tool: string): number | undefined {
 export async function metadataToken(): Promise<string> {
   const res = await fetch(
     "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
-    { headers: { "Metadata-Flavor": "Google" } },
+    {
+      headers: { "Metadata-Flavor": "Google" },
+      signal: AbortSignal.timeout(30_000),
+    },
   );
   if (!res.ok) throw new Error(`metadata token: HTTP ${res.status}`);
   const { access_token: token } = (await res.json()) as {

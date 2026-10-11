@@ -100,6 +100,15 @@ export const SNAPSHOT_TABLES = [
   "event_tags_x_event_instances",
 ].map((t) => `public.${t}`);
 
+/** Must have rows, or the snapshot is refused rather than replace a good one. */
+export const SNAPSHOT_REQUIRED_TABLES = [
+  "orgs",
+  "users",
+  "event_types",
+  "events",
+  "event_instances",
+].map((t) => `public.${t}`);
+
 /** Non-deliverable: every fake address in the snapshot is on this domain. */
 export const SNAPSHOT_EMAIL_SINK = "dev.staging-email-sink@f3nation.local";
 
