@@ -54,7 +54,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Stop if:** a deploy-staging job fails (red).
 
 <!-- OPTIONAL (only if there is a migration): -->
-<!-- Staging or Production: migrate only after merge. If the new app or job requires the migration first, split Step 1's merge and deployment items so Step 2 follows merge but precedes the required deployment or execution; coordinate the sequence and renumber. Check old-app compatibility and state the chosen order or maintenance window in the Overview. If unresolved, post in #monorepo and pause; redraft before continuing. If already deployed, confirm migration and worker state before testing. -->
+<!-- Staging or Production: migrate only after merge. If the new app or job requires the migration first, verify an existing supported gate holds every affected deployment or execution until migration completes. Reordering the checklist does not pause automatic Staging deployments. Without a verified gate, post in #monorepo and pause before merge (or before further deployment approval or job execution if already merged); redraft a compatible rollout before continuing. With a verified gate, split Step 1's merge and deployment items so Step 2 follows merge but precedes the affected deployment or execution, then renumber. Check old-app compatibility and state the chosen order or maintenance window in the Overview. If unresolved, post in #monorepo and pause; redraft before continuing. If already deployed, confirm migration and worker state before testing. -->
 
 ### Step 2: Run the database migration (~5 min)
 
