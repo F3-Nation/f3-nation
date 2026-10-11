@@ -1,6 +1,7 @@
 <!--
   Release plan issue body. Replace every {{PLACEHOLDER}}, delete every
-  OPTIONAL block that does not apply, then delete all HTML comments.
+  OPTIONAL block that does not apply, keep only the applicable checkout and
+  snapshot alternatives, then delete all HTML comments.
   Production: apply the "Staging vs Production" table in this folder's SKILL.md.
 -->
 
@@ -39,8 +40,12 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 ### Step 1: Deploy (~20–30 min)
 
+<!-- Already merged: mark the merge item complete, omit its pre-merge checks, and adapt the wait item to the verified deployment state. Leave unverified work unchecked. -->
+
 - [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 - [ ] **Merge release PR #{{PR}}.** The deploys start automatically. Owner: Release lead
+  - **Expected:** immediately before merging, `gh pr view {{PR}} --json state,headRefOid,baseRefOid --jq '[.state, .headRefOid, .baseRefOid] | join(" ")'` prints `OPEN {{RELEASE_SHA}} {{RELEASE_BASE_SHA}}`.
+  - **Stop if:** the state, head SHA, or base SHA differs, or the check fails. Post in `#monorepo` and pause; the plan must be redrafted before continuing.
 
 <!-- Production: replace the item below with "Approve each paused production deploy job and wait for it to finish", and drop "Leave those paused". Watch: every `deploy-prod` job (environment `*-production`) turns green, and each Production service shows a new Ready revision. Stop if: a `deploy-prod` job fails (red). -->
 
@@ -49,13 +54,53 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Stop if:** a deploy-staging job fails (red).
 
 <!-- OPTIONAL (only if there is a migration): -->
-<!-- Production: if Staging's "Expected" line was not "none", move Step 2 before the production approval, unless the migration drops or renames something the old app still uses. State the chosen order in the Overview. -->
+<!-- Staging or Production: migrate only after merge. If the new app or job requires the migration first, verify an existing supported gate holds every affected deployment or execution until migration completes. Reordering the checklist does not pause automatic Staging deployments. Without a verified gate, post in #monorepo and pause before merge (or before further deployment approval or job execution if already merged); redraft a compatible rollout before continuing. With a verified gate, split Step 1's merge and deployment items so Step 2 follows merge but precedes the affected deployment or execution, then renumber. Check old-app compatibility and state the chosen order or maintenance window in the Overview. If unresolved, post in #monorepo and pause; redraft before continuing. If already deployed, confirm migration and worker state before testing. -->
 
 ### Step 2: Run the database migration (~5 min)
 
-- [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `git fetch origin && git switch --detach "$(git log origin/main --grep '^chore: release main (#{{PR}})' --format=%H -n 1)" && pnpm install --frozen-lockfile`. Owner: Release lead
-  - **Expected:** `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
-  - **Stop if:** the tree isn't clean, or a different file prints.
+<!-- Keep the pinned checkout below only when already merged at drafting. Otherwise replace it with the run-time checkout alternative. -->
+
+- [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `git fetch origin {{RELEASE_FETCH_REF}} && git switch --detach {{RELEASE_SHA}} && pnpm install --frozen-lockfile`. Owner: Release lead
+  - **Expected:** `git rev-parse HEAD` prints `{{RELEASE_SHA}}`, and `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
+  - **Stop if:** the tree isn't clean, fetch/checkout/install fails, the SHA differs, or a different file prints.
+
+<!-- ALTERNATIVE (only if this plan merges before migrating): -->
+
+- [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `SHA=$(gh pr view {{PR}} --json state,mergeCommit --jq 'select(.state == "MERGED") | .mergeCommit.oid') && test -n "$SHA" && git fetch origin main refs/pull/{{PR}}/head && git switch --detach "$SHA" && pnpm install --frozen-lockfile`. Owner: Release lead
+  - **Expected:** `git rev-parse HEAD` prints the same SHA as `gh pr view {{PR}} --json mergeCommit --jq .mergeCommit.oid`, and `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
+  - **Stop if:** the tree isn't clean, lookup/fetch/checkout/install fails, the SHA differs, or a different file prints.
+
+<!-- Keep the pinned snapshot check below with the pinned checkout. Otherwise replace it with the run-time snapshot alternative. -->
+
+- [ ] **Confirm the release snapshot** immediately before running the migration: `gh pr view {{PR}} --json state,mergeCommit --jq 'select(.state == "MERGED") | [.state, .mergeCommit.oid] | join(" ")'`. Owner: Release lead
+  - **Expected:** it prints `MERGED {{RELEASE_SHA}}` using the actual merge commit.
+  - **Stop if:** it prints anything else, or the check fails. Post in `#monorepo` and pause; the plan must be redrafted before continuing. Do not repeat a migration already run.
+
+<!-- ALTERNATIVE (only if this plan merges before migrating): fill the exact reviewed paths as single-quoted printf arguments, in discovery order. -->
+
+- [ ] **Confirm the release snapshot and reviewed migration contents and list** immediately before running the migration. Run from the repository root. Owner: Release lead
+
+  ```bash
+  (
+    set -e
+    STATUS=$(git status --porcelain)
+    test -z "$STATUS"
+    SHA=$(gh pr view {{PR}} --json state,mergeCommit --jq 'select(.state == "MERGED") | .mergeCommit.oid')
+    test -n "$SHA"
+    test "$(git rev-parse HEAD)" = "$SHA"
+    git diff --quiet {{RELEASE_SHA}} "$SHA" -- packages/db/drizzle
+    BASE=$(git rev-parse "$SHA^")
+    PREV=$(git log "$BASE" --grep '^chore: release main' --format=%H -n 1)
+    test -n "$PREV"
+    MIGRATIONS=$(git diff --name-only --diff-filter=A "$PREV" "$SHA" -- packages/db/drizzle/'*.sql')
+    test "$MIGRATIONS" = "$(printf '%s\n' {{REVIEWED_MIGRATION_FILES}})"
+    printf 'MERGED %s; migration contents and list match\n' "$SHA"
+  )
+  ```
+
+  - **Expected:** it prints `MERGED <SHA>; migration contents and list match`, where `<SHA>` is the same merge SHA returned at checkout.
+  - **Stop if:** the working tree isn't clean, the reviewed migration contents or list differs, the SHA differs, or any check fails. Post in `#monorepo` and pause; the plan must be redrafted before continuing. Do not repeat a migration already run.
+
 - [ ] **Run the migration** from the repository root: `pnpm db:migrate:{{staging or prod}}` (not `pnpm db:migrate:local`, which only migrates a local database). It reads the database login from Secret Manager, checks the checkout's migrations are main's and agree with the database, lists the pending migrations, and asks you to type the database name. Owner: Release lead
   - **Expected:** it lists the migration in `{{NEWEST_MIGRATION_FILE}}` (and any other migrations in this release) as pending, nothing else; lines starting `note:` are informational. Type `{{DATABASE_NAME: f3_staging or f3_prod}}` and it ends with `Done: {{DATABASE_NAME}} is at <that migration>.`
   - **Stop if:** it prints `REFUSED`, or lists a migration this release doesn't include. Don't work around a refusal: post it in `#monorepo` and pause.

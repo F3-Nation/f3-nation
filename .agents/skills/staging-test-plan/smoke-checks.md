@@ -25,7 +25,7 @@ Keep this list to 2–3 checks per app; edit it here when an app changes.
 ## Me
 
 - [ ] Sign in with F3 SSO. Your profile shows your name.
-- [ ] Edit a field (e.g. bio) and save. It saves with no error.
+- [ ] Edit **My F3 Why** and click **Save Changes**. Reload to confirm the edit saved with no error.
 
 ## Slackbot
 
