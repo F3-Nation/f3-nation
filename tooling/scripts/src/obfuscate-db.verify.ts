@@ -57,11 +57,16 @@ import {
   SNAPSHOT_TABLES,
 } from "./staging-refresh.config";
 import { pgMajor } from "./staging-refresh.proc";
-import type { SnapshotManifest } from "./staging-refresh.snapshot";
+import type {
+  DeliveryState,
+  SnapshotManifest,
+} from "./staging-refresh.snapshot";
 import {
   assertSnapshotColumnsReviewed,
+  deliveryOutcome,
   leakScan,
   publishSnapshot,
+  trackDelivery,
   trimSnapshot,
   writeTo,
 } from "./staging-refresh.snapshot";
@@ -747,6 +752,35 @@ async function verifySnapshotMode(
         INSERT INTO event_instances_x_event_types (event_instance_id, event_type_id)
         SELECT ${row.id}, min(id) FROM event_types`;
     }
+    // A location the private series, its public child and that child's
+    // public instance share (obfuscate-db keeps it: not every row using it
+    // is flagged private), and one a kept public instance also uses.
+    const [locs] = await snap<{ priv: number; shared: number }[]>`
+      WITH ins AS (
+        INSERT INTO locations (org_id, name, is_active, address_street,
+          latitude, longitude)
+        SELECT org_id, 'Private probe ' || n, true,
+          n || ' Evergreen Terrace', 12.3456789 + n, -98.7654321
+        FROM (SELECT org_id FROM event_instances LIMIT 1) o,
+          generate_series(1, 2) n
+        RETURNING id, name)
+      SELECT min(id) FILTER (WHERE name LIKE '%1')::int AS priv,
+        min(id) FILTER (WHERE name LIKE '%2')::int AS shared FROM ins`;
+    if (!locs?.priv || !locs.shared) {
+      throw new Error("Harness bug: could not plant locations");
+    }
+    await snap`
+      UPDATE events SET location_id = ${locs.priv}
+      WHERE id IN ${snap(privateSeries)}`;
+    await snap`
+      UPDATE event_instances SET location_id = ${locs.priv}
+      WHERE id = ${privateInstances[2]!}`;
+    await snap`
+      UPDATE orgs SET default_location_id = ${locs.priv}
+      WHERE id = (SELECT min(id) FROM orgs)`;
+    await snap`
+      UPDATE event_instances SET location_id = ${locs.shared}
+      WHERE id IN (${privateInstances[0]!}, ${planted.get(90)!})`;
     await snap`
       UPDATE users
       SET meta = '{"my_f3_why": "I am Jane Smith and live at 123 Main Street"}'::jsonb
@@ -824,6 +858,23 @@ async function verifySnapshotMode(
       "snapshot trim drops private series and instances, with their link rows",
       privateLeft?.n === 0 && trim.privateSeriesDropped >= 2,
       `${privateLeft?.n ?? "?"} private row(s) left, ${trim.privateSeriesDropped} series dropped`,
+    );
+    const [locLeft] = await snap<
+      { priv: number; shared: number; defaults: number }[]
+    >`
+      SELECT
+        (SELECT count(*) FROM locations WHERE id = ${locs.priv})::int AS priv,
+        (SELECT count(*) FROM locations WHERE id = ${locs.shared})::int AS shared,
+        (SELECT count(*) FROM orgs
+         WHERE default_location_id = ${locs.priv})::int AS defaults`;
+    check(
+      "snapshot trim drops a location only an effectively private series uses",
+      locLeft?.priv === 0 &&
+        locLeft.defaults === 0 &&
+        locLeft.shared === 1 &&
+        trim.privateLocationsDropped >= 1,
+      `private-only ${locLeft?.priv === 0 ? "dropped" : "KEPT"}, ` +
+        `shared ${locLeft?.shared === 1 ? "kept" : "DROPPED"}, ${locLeft?.defaults ?? "?"} org default(s) left`,
     );
     const [metaLeft] = await snap<{ n: number }[]>`
       SELECT count(*)::int AS n FROM users WHERE meta IS NOT NULL`;
@@ -907,10 +958,11 @@ async function verifySnapshotMode(
       );
       if (shipped.tables[t]?.rows !== row?.n) miscounted.push(t);
     }
+    const pgRestore = process.env.PG_BIN_DIR
+      ? path.join(process.env.PG_BIN_DIR, "pg_restore")
+      : "pg_restore";
     const tableData = execFileSync(
-      process.env.PG_BIN_DIR
-        ? path.join(process.env.PG_BIN_DIR, "pg_restore")
-        : "pg_restore",
+      pgRestore,
       ["-l", path.join(extracted, "snapshot.dump")],
       { encoding: "utf8" },
     )
@@ -927,6 +979,21 @@ async function verifySnapshotMode(
         JSON.stringify(shipped) === JSON.stringify(manifest),
       `delivered ${published}x; tar [${listing.join(", ")}]; ${tableData} TABLE DATA entries; ` +
         `row counts ${miscounted.length === 0 ? "match" : `differ: ${miscounted.join(", ")}`}`,
+    );
+
+    const dumpedData = execFileSync(
+      pgRestore,
+      ["--data-only", "-f", "-", path.join(extracted, "snapshot.dump")],
+      { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
+    );
+    check(
+      "the published dump holds no private-only location's address or coordinates",
+      !dumpedData.includes("1 Evergreen Terrace") &&
+        !dumpedData.includes("13.3456789") &&
+        dumpedData.includes("2 Evergreen Terrace"),
+      dumpedData.includes("2 Evergreen Terrace")
+        ? "private-only address and coordinates absent; shared location present"
+        : "shared location MISSING from the dump (probe is not looking at locations data)",
     );
 
     // An empty required table: refused before anything is built. The
@@ -999,6 +1066,32 @@ async function verifySnapshotMode(
     } catch (e) {
       publishError = e instanceof Error ? e.message : String(e);
     }
+    // Upload accepted, then the response fails: the run can't say nothing
+    // was published.
+    const states: DeliveryState[] = [];
+    let deliverError = "";
+    try {
+      await trackDelivery(
+        async (file) => {
+          await writeTo(path.join(work, "accepted.tar"))(file);
+          throw new Error("response body failed");
+        },
+        (state) => states.push(state),
+      )(outFile);
+    } catch (e) {
+      deliverError = e instanceof Error ? e.message : String(e);
+    }
+    const lastState = states.at(-1) ?? "none";
+    check(
+      "a delivery that fails after starting reports the snapshot as maybe replaced",
+      deliverError === "response body failed" &&
+        lastState === "in-flight" &&
+        deliveryOutcome(lastState).includes(
+          "may or may not have been replaced",
+        ),
+      `state ${lastState}: ${deliveryOutcome(lastState)}`,
+    );
+
     check(
       "a leak stops the snapshot before it is built or published",
       publishError.includes("leak scan did not pass") &&

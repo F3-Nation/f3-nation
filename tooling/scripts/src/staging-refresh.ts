@@ -100,9 +100,12 @@ import {
   pgTool,
   runScript,
 } from "./staging-refresh.proc";
+import type { DeliveryState } from "./staging-refresh.snapshot";
 import {
   assertSnapshotColumnsReviewed,
+  deliveryOutcome,
   publishSnapshot,
+  trackDelivery,
   trimSnapshot,
   uploadToGcs,
   writeTo,
@@ -120,8 +123,8 @@ const SNAPSHOT_OUT = flagValue(argv, "--snapshot-out");
 const HAS_SNAPSHOT_OUT = argv.some(
   (a) => a === "--snapshot-out" || a.startsWith("--snapshot-out="),
 );
-/** For the SIGTERM message: what a snapshot run has handed on so far. */
-let delivery: "none" | "in-flight" | "done" = "none";
+/** For the stop messages: what a snapshot run has handed on so far. */
+let delivery: DeliveryState = "none";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const JOURNAL_PATH = path.resolve(
@@ -895,12 +898,9 @@ function snapshotGuards(): CopyContext & {
       "outside Cloud Run, pass --snapshot-out <file>: only the job publishes.",
     );
   }
-  const deliver = async (file: string) => {
-    delivery = "in-flight";
-    const result = await target(file);
-    delivery = "done";
-    return result;
-  };
+  const deliver = trackDelivery(target, (state) => {
+    delivery = state;
+  });
   const prodUrl = requireEnv("PROD_DATABASE_URL");
   const copyUrl = requireEnv("INTERMEDIATE_DATABASE_URL");
   requireEnv("OBFUSCATION_SALT");
@@ -950,7 +950,8 @@ async function snapshotMain(): Promise<number> {
       const r = await trimSnapshot(copy);
       log(
         `   emptied ${r.emptied} other tables; event_instances ${r.window.from}..${r.window.to}: ` +
-          `${r.instancesKept} kept, ${r.instancesDropped} dropped (+${r.linkRowsDropped} link rows)`,
+          `${r.instancesKept} kept, ${r.instancesDropped} dropped (+${r.linkRowsDropped} link rows); ` +
+          `${r.privateLocationsDropped} private-only location(s) dropped`,
       );
       return r;
     });
@@ -980,7 +981,7 @@ async function snapshotMain(): Promise<number> {
     if (!(error instanceof Refusal) && error instanceof Error && error.stack)
       log(error.stack);
     log(
-      "\nDEV SNAPSHOT FAILED — nothing was published; staging was not touched.",
+      `\nDEV SNAPSHOT FAILED — ${deliveryOutcome(delivery)} Staging was not touched.`,
     );
     return 1;
   } finally {
@@ -1818,17 +1819,10 @@ function printSummary(s: {
   for (const t of timings) log(`   ${minutes(t.ms).padStart(7)}  ${t.step}`);
 }
 
-const SNAPSHOT_SIGTERM = {
-  none: "Nothing was published.",
-  "in-flight":
-    "Stopped while delivering: the previous snapshot may or may not have been replaced.",
-  done: "The new snapshot had already been delivered.",
-};
-
 process.on("SIGTERM", () => {
   log(
     SNAPSHOT_ONLY
-      ? `\n!!! SIGTERM (task timeout?). ${SNAPSHOT_SIGTERM[delivery]}`
+      ? `\n!!! SIGTERM (task timeout?). ${deliveryOutcome(delivery)}`
       : "\n!!! SIGTERM (task timeout?). If this hit after step 8, staging may be half-loaded; " +
           "re-run with --reuse-existing-stash if refresh_keep schemas are left on staging.",
   );

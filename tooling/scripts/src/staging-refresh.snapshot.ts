@@ -49,6 +49,7 @@ export interface TrimResult {
   instancesKept: number;
   instancesDropped: number;
   privateSeriesDropped: number;
+  privateLocationsDropped: number;
   linkRowsDropped: number;
   window: { from: string; to: string };
 }
@@ -102,8 +103,8 @@ async function linksInto(sql: Sql, ref: string): Promise<FkEdge[]> {
  * Trim the (throwaway) copy in place, in one transaction: empty every table
  * outside SNAPSHOT_TABLES, drop private event series and instances, keep
  * only event_instances inside SNAPSHOT_WINDOW (and their link rows), drop
- * their blasts and users' free-text profile answers, then empty the history
- * the audit triggers just wrote.
+ * locations only private events use, their blasts and users' free-text
+ * profile answers, then empty the history the audit triggers just wrote.
  */
 export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
   const links = await linksInto(sql, "public.event_instances");
@@ -144,6 +145,24 @@ export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
         UNION SELECT e.id FROM public.events e JOIN p ON e.series_id = p.id
       ) SELECT id FROM p`;
     const privateSeries = "SELECT id FROM snapshot_private_series";
+    // obfuscate-db keeps a location while any row using it is not itself
+    // flagged private; here privacy is inherited, so a private series' public
+    // children don't keep it.
+    await tx.unsafe(`
+      CREATE TEMP TABLE snapshot_private_locations ON COMMIT DROP AS
+      SELECT location_id AS id FROM public.events
+        WHERE id IN (${privateSeries}) AND location_id IS NOT NULL
+      UNION SELECT location_id FROM public.event_instances
+        WHERE (is_private OR series_id IN (${privateSeries}))
+          AND location_id IS NOT NULL
+      EXCEPT (
+        SELECT location_id FROM public.events
+          WHERE id NOT IN (${privateSeries}) AND location_id IS NOT NULL
+        UNION SELECT location_id FROM public.event_instances
+          WHERE NOT is_private AND location_id IS NOT NULL
+            AND (series_id IS NULL OR series_id NOT IN (${privateSeries}))
+      )`);
+    const privateLocations = "SELECT id FROM snapshot_private_locations";
     const outside = `SELECT id FROM public.event_instances
       WHERE start_date IS NULL OR start_date NOT BETWEEN '${win.from}'::date AND '${win.to}'::date
         OR is_private OR series_id IN (${privateSeries})`;
@@ -167,6 +186,16 @@ export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
     const seriesDropped = await tx.unsafe(
       `DELETE FROM public.events WHERE id IN (${privateSeries})`,
     );
+    // No FK, so nothing stops a dangling default; any FK'd reference left
+    // over makes the DELETE fail instead.
+    const defaults = await tx.unsafe(
+      `UPDATE public.orgs SET default_location_id = NULL
+      WHERE default_location_id IN (${privateLocations})`,
+    );
+    linkRowsDropped += defaults.count;
+    const locationsDropped = await tx.unsafe(
+      `DELETE FROM public.locations WHERE id IN (${privateLocations})`,
+    );
     await tx`
       UPDATE public.event_instances SET preblast = NULL, backblast = NULL,
         preblast_rich = NULL, backblast_rich = NULL`;
@@ -186,6 +215,7 @@ export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
       instancesKept: kept?.n ?? 0,
       instancesDropped: dropped.count,
       privateSeriesDropped: seriesDropped.count,
+      privateLocationsDropped: locationsDropped.count,
       linkRowsDropped,
       window: { from: win.from, to: win.to },
     };
@@ -289,6 +319,37 @@ export async function publishSnapshot(opts: {
 
   log(`   ${await opts.deliver(tar)}`);
   return manifest;
+}
+
+/** What a snapshot run has handed on so far. */
+export type DeliveryState = "none" | "in-flight" | "done";
+
+/** For operators, when a run stops: whether the published file changed. */
+export function deliveryOutcome(state: DeliveryState): string {
+  switch (state) {
+    case "none":
+      return "Nothing was published.";
+    case "in-flight":
+      return "Stopped while delivering: the previous snapshot may or may not have been replaced.";
+    case "done":
+      return "The new snapshot had already been delivered.";
+  }
+}
+
+/**
+ * `target`, reporting "in-flight" before it starts: a rejection after that
+ * may come after the object was already replaced.
+ */
+export function trackDelivery(
+  target: (file: string) => Promise<string>,
+  onState: (state: DeliveryState) => void,
+): (file: string) => Promise<string> {
+  return async (file) => {
+    onState("in-flight");
+    const result = await target(file);
+    onState("done");
+    return result;
+  };
 }
 
 /** --snapshot-out: copy the file there instead of publishing it. */

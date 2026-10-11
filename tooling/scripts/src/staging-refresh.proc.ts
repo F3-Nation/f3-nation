@@ -21,6 +21,8 @@ export interface RunResult {
   code: number;
   stdout: string;
   stderr: string[];
+  /** stderr ran past the lines kept in `stderr`. */
+  stderrTruncated: boolean;
 }
 
 export function baseEnv(): Record<string, string> {
@@ -52,17 +54,21 @@ export function run(
     });
     let stdout = "";
     const stderr: string[] = [];
+    let stderrTruncated = false;
     createInterface({ input: child.stdout }).on("line", (line) => {
       stdout += `${line}\n`;
       log(`   | ${line}`);
     });
     createInterface({ input: child.stderr }).on("line", (line) => {
       if (stderr.length < 5000) stderr.push(line);
+      else stderrTruncated = true;
       if (ROW_DATA.test(line)) log("   ! [row data withheld from the log]");
       else if (!opts.quietStderr?.test(line)) log(`   ! ${line}`);
     });
     child.on("error", reject);
-    child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+    child.on("close", (code) =>
+      resolve({ code: code ?? 1, stdout, stderr, stderrTruncated }),
+    );
   });
 }
 
@@ -88,6 +94,12 @@ export async function pgTool(
     quietStderr: opts.quietStderr,
   });
   if (result.code === 0) return;
+  // Errors past the kept lines can't be judged benign.
+  if (result.stderrTruncated) {
+    throw new Error(
+      `${tool} exited with ${result.code} after more stderr than was kept`,
+    );
+  }
   // pg_restore exits 1 when it "ignored" errors. Only the expected ones are
   // allowed through (e.g. `schema "auth" already exists` on the copy).
   const errors = result.stderr.filter((l) => /\berror:/.test(l));
