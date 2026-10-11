@@ -97,6 +97,12 @@
       "matchDatasources": ["npm"],
       "matchPackageNames": ["zod"],
       "allowedVersions": "<4.6.0 || >=4.7.0"
+    },
+    {
+      "description": "Hold pnpm below 12.6: pnpm 12.8+ writes catalog settings that `turbo prune --docker` (<= 2.11.7) fails to prune, so `pnpm install --frozen-lockfile` fails with ERR_PNPM_LOCKFILE_CONFIG_MISMATCH in every app's Docker build (vercel/turborepo#14372). The fix first shipped in turbo 2.11.8-canary.1; remove this rule once a stable turbo with it is adopted.",
+      "matchDatasources": ["npm"],
+      "matchDepNames": ["pnpm"],
+      "allowedVersions": "<12.6.0"
     }
   ]
 }
