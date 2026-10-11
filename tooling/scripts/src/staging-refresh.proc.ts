@@ -1,8 +1,7 @@
 /**
  * Child processes and output for staging-refresh.ts and its snapshot mode
  * (staging-refresh.snapshot.ts). stdin is always ignored: a child must never
- * read the orchestrator's stdin (the 2026-10-07 FK loop validated 1 of 74
- * because `docker run -i` swallowed the rest of its input).
+ * read the orchestrator's stdin.
  */
 import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
