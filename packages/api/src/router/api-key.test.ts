@@ -179,6 +179,10 @@ describe("API Key Router", () => {
             orgId: nationOrg.id,
             roleName: "editor",
           },
+          {
+            orgId: nationOrg.id,
+            roleName: "admin",
+          },
         ],
       });
 
@@ -189,10 +193,53 @@ describe("API Key Router", () => {
         createdApiKeyIds.push(result.id);
       }
 
-      // Verify the role was created
+      // Verify every requested role was committed with the key.
       const listResult = await client.apiKey.list();
       const createdKey = listResult.apiKeys.find((k) => k.id === result.id);
-      expect(createdKey?.roles?.length).toBeGreaterThan(0);
+      expect(createdKey?.roles).toHaveLength(2);
+      expect(createdKey?.roles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            orgId: nationOrg.id,
+            roleName: "editor",
+          }),
+          expect.objectContaining({
+            orgId: nationOrg.id,
+            roleName: "admin",
+          }),
+        ]),
+      );
+    });
+
+    it("should roll back the API key when duplicate role assignments fail", async () => {
+      const nationOrg = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+      const keyName = `Rollback API Key ${uniqueId()}`;
+
+      await expect(
+        client.apiKey.create({
+          name: keyName,
+          roles: [
+            { orgId: nationOrg.id, roleName: "editor" },
+            { orgId: nationOrg.id, roleName: "editor" },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Unable to create API key",
+      });
+
+      const remainingKeys = await db
+        .select({ id: schema.apiKeys.id })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.name, keyName));
+
+      // Also clean up a leaked key if the rollback regression fails.
+      createdApiKeyIds.push(...remainingKeys.map((key) => key.id));
+      expect(remainingKeys).toEqual([]);
     });
 
     it("should create an API key with expiration date", async () => {
