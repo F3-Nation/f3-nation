@@ -102,12 +102,34 @@ describe("User Router - Grant Access", () => {
       await cleanup.user(user.id);
     });
 
-    it("editor cannot see PII fields even when requesting includePii=true", async () => {
+    it("editor of an org the user has a role on cannot see PII when it is not the user's home region", async () => {
       const nationOrg = await getOrCreateF3NationOrg();
 
       // First create user as admin
       const adminSession = await createAdminSession();
       await mockAuthWithSession(adminSession);
+
+      const [roleRegion, homeRegion] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `PiiEditorRoleRegion-${uniqueId()}`,
+            orgType: "region",
+            isActive: true,
+            parentId: nationOrg.id,
+          },
+          {
+            name: `PiiEditorHomeRegion-${uniqueId()}`,
+            orgType: "region",
+            isActive: true,
+            parentId: nationOrg.id,
+          },
+        ])
+        .returning();
+
+      if (!roleRegion || !homeRegion) {
+        throw new Error("Failed to create test regions");
+      }
 
       const testEmail = `pii-editor-test-${uniqueId()}@example.com`;
       const testPhone = "555-987-6543";
@@ -119,6 +141,7 @@ describe("User Router - Grant Access", () => {
           firstName: "Editor",
           lastName: "Test",
           phone: testPhone,
+          homeRegionId: homeRegion.id,
         })
         .returning();
 
@@ -126,7 +149,7 @@ describe("User Router - Grant Access", () => {
         throw new Error("Failed to create test user");
       }
 
-      // Assign user to nation org
+      // Give the user a role on a region other than their home region
       const [editorRole] = await db
         .select({ id: schema.roles.id })
         .from(schema.roles)
@@ -136,15 +159,15 @@ describe("User Router - Grant Access", () => {
       if (editorRole) {
         await db.insert(schema.rolesXUsersXOrg).values({
           userId: user.id,
-          orgId: nationOrg.id,
+          orgId: roleRegion.id,
           roleId: editorRole.id,
         });
       }
 
-      // Switch to editor session (editor on nation org, not admin)
+      // Switch to editor session (editor on the role region, not admin)
       const editorSession = createEditorSession({
-        orgId: nationOrg.id,
-        orgName: nationOrg.name ?? "F3 Nation",
+        orgId: roleRegion.id,
+        orgName: roleRegion.name,
       });
       await mockAuthWithSession(editorSession);
       const editorClient = createTestClient();
@@ -156,13 +179,15 @@ describe("User Router - Grant Access", () => {
       });
 
       expect(result.user).not.toBeNull();
-      expect(result.includePii).toBe(false); // Should be false since editor doesn't have admin access
+      expect(result.includePii).toBe(false); // Editors only get PII through the user's home region
       expect(result.user).not.toHaveProperty("phone");
       expect(result.user).not.toHaveProperty("email");
 
       // Cleanup as admin
       await mockAuthWithSession(adminSession);
       await cleanup.user(user.id);
+      await cleanup.org(roleRegion.id);
+      await cleanup.org(homeRegion.id);
     });
 
     it("admin can update PII fields for users in their org", async () => {

@@ -20,6 +20,7 @@
  *   6. No kept OAuth client URI points at a production F3 host.
  *   7. attendance FK integrity.
  *   8. No location that only private events use (likely a private residence).
+ *   9. No snapshots remain in public_history in the intermediate copy.
  *
  * Usage:
  *   DATABASE_URL=postgresql://… pnpm -F @acme/scripts obfuscate-db:verify-target \
@@ -135,6 +136,29 @@ async function tableExists(sql: Sql, table: string): Promise<boolean> {
   const [row] = await sql<{ present: boolean }[]>`
     SELECT to_regclass(${quoteQualified(table)}) IS NOT NULL AS present`;
   return row?.present ?? false;
+}
+
+async function checkHistory(sql: Sql): Promise<void> {
+  const tables = await sql<{ qualified: string }[]>`
+    SELECT n.nspname || '.' || c.relname AS qualified FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public_history'
+      AND c.relkind IN ('r', 'p', 'm') AND NOT c.relispartition
+    ORDER BY c.relname`;
+  const populated: string[] = [];
+  for (const { qualified } of tables) {
+    const [row] = await sql.unsafe<{ present: boolean }[]>(
+      `SELECT EXISTS (SELECT 1 FROM ${quoteQualified(qualified)}) AS present`,
+    );
+    if (row?.present) populated.push(qualified);
+  }
+  check(
+    "audit history empty",
+    populated.length === 0,
+    populated.length === 0
+      ? `${tables.length} history tables checked`
+      : `snapshots remain in ${populated.join(", ")}`,
+  );
 }
 
 /** Collect every string in a JSON value: leaves and object keys. */
@@ -349,6 +373,7 @@ async function main(): Promise<void> {
 
     console.log(`=== obfuscation target verification: "${dbName}" ===`);
 
+    await checkHistory(sql);
     await sweepForEmails(sql);
     await checkProse(sql);
 

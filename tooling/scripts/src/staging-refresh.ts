@@ -33,7 +33,8 @@
  *
  * Steps (docs/STAGING_REFRESH.md has the why of each):
  *   1. preflight: guards, pg tool versions, migration gate, staging lock
- *   2. dump prod (public, auth, drizzle, slackbot if present)
+ *   2. dump prod (public, auth, drizzle, slackbot, audit, public_history if
+ *      present; history structure only)
  *   3. restore into the copy; the raw dump is deleted right after
  *   4. obfuscate-db, then obfuscate-db.verify-target (must pass 100%)
  *   5. plan the load: shared tables minus PRESERVED_TABLES, identical columns,
@@ -100,9 +101,17 @@ const JOURNAL_PATH = path.resolve(
   "../../../packages/db/drizzle/meta/_journal.json",
 );
 
-/** Schemas taken from prod. Never codex/regionpages/temp: unclassified PII. */
-const DUMP_SCHEMAS = ["public", "auth", "drizzle", "slackbot"];
-/** Schemas whose tables are loaded into staging. */
+/** Schemas taken from prod. Never codex/regionpages/temp: unclassified PII.
+ * Audit helpers/history structure keep source capture triggers usable in the copy. */
+const DUMP_SCHEMAS = [
+  "public",
+  "auth",
+  "drizzle",
+  "slackbot",
+  "audit",
+  "public_history",
+];
+/** Source data is loaded into staging; its existing history remains there. */
 const LOAD_SCHEMAS = ["public", "auth", "slackbot"];
 const STASH_SCHEMAS = { keys: "refresh_keep", slack: "refresh_keep_slack" };
 /** Staging's FK definitions while they are dropped (see stashFks). */
@@ -896,6 +905,8 @@ async function main(): Promise<number> {
           "--no-privileges",
           "--no-publications",
           "--no-subscriptions",
+          // Historical snapshots contain PII and are unnecessary for the copy.
+          "--exclude-table-data=public_history.*",
           ...preflight.dumpSchemas.flatMap((s) => ["-n", quoteIdent(s)]),
           "-f",
           files.prodDump,

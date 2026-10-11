@@ -374,6 +374,63 @@ describe("captureException root cause", () => {
     expect(properties).not.toHaveProperty("root_cause_message");
   });
 
+  it("preserves a sanitized audit SQLSTATE without restoring its cause", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const error = Object.assign(new Error("Audit history capture failed"), {
+      code: "AH002",
+    });
+    await captureException(error);
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.cause).toBeUndefined();
+    expect(properties.root_cause_code).toBe("AH002");
+    expect(properties).not.toHaveProperty("root_cause_message");
+  });
+
+  it.each([
+    ["an unrelated error", "ordinary failure", "ABCDE"],
+    ["an invalid audit code", "Audit history capture failed", "not-sqlstate"],
+  ])("does not promote the code from %s", async (_case, message, code) => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(Object.assign(new Error(message), { code }));
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties).not.toHaveProperty("root_cause_code");
+  });
+
+  it("ignores an error code getter that throws", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const error = new Error("Audit history capture failed");
+    Object.defineProperty(error, "code", {
+      get() {
+        throw new Error("unsafe getter");
+      },
+    });
+    await captureException(error);
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties).not.toHaveProperty("root_cause_code");
+  });
+
+  it("ignores a root cause code getter that throws", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const cause = new Error("inner failure");
+    Object.defineProperty(cause, "code", {
+      get() {
+        throw new Error("unsafe getter");
+      },
+    });
+    await captureException(new Error("outer failure", { cause }));
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toBe("inner failure");
+    expect(properties).not.toHaveProperty("root_cause_code");
+  });
+
   it("callers cannot inject a root cause onto an error without one", async () => {
     const { registerObservability, captureException } = await freshModule();
     registerObservability(config);

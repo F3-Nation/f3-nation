@@ -5,6 +5,7 @@ import { serve } from "@hono/node-server";
 import { flushObservability } from "@acme/observability";
 
 import { app } from "~/app";
+import { env } from "~/env";
 import { logError, logInfo } from "~/lib/logging";
 
 // `Number(process.env.PORT)` silently produces 0 (empty string) or NaN
@@ -25,7 +26,12 @@ const port = resolvePort(process.env.PORT);
 // Response, whose default string-body content-type ("text/plain; charset=UTF-8")
 // differs from undici's ("text/plain;charset=UTF-8") that Next served and the
 // characterization goldens pin.
-const server = serve({ fetch: app.fetch, port, overrideGlobalObjects: false });
+const server = serve({
+  fetch: app.fetch,
+  hostname: env.F3_API_HOST,
+  port,
+  overrideGlobalObjects: false,
+});
 
 // Cloud Run sends SIGTERM with a ~10s grace window before SIGKILL — force-exit
 // a couple seconds ahead of that so a hung close() reports its own error

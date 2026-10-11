@@ -131,9 +131,12 @@ export class PostHogExceptionExporter implements LogRecordExporter {
         error.cause = cause;
         rootCause.root_cause_type = cause.name;
         rootCause.root_cause_message = causeMessage;
-        if (typeof causeCode === "string" && causeCode)
-          rootCause.root_cause_code = causeCode;
       }
+      // A sanitized audit error has no cause by design, but retains its safe
+      // SQLSTATE on the top-level replacement error. index.ts carries that in
+      // the existing cause-code attribute so alerts keep their stable field.
+      if (typeof causeCode === "string" && causeCode)
+        rootCause.root_cause_code = causeCode;
 
       // Both apps report into one PostHog project (single shared POSTHOG_KEY),
       // so without this every $exception is distinguishable only by
