@@ -268,17 +268,20 @@ describe.each([
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
-    mount(type, record.id);
-    await waitFor(() => expect(field("Name").value).toBe(record.name));
-    expect(
-      consoleError.mock.calls.some((args) =>
-        args.some(
-          (argument) =>
-            typeof argument === "string" && argument.includes("uncontrolled"),
+    try {
+      mount(type, record.id);
+      await waitFor(() => expect(field("Name").value).toBe(record.name));
+      expect(
+        consoleError.mock.calls.some((args) =>
+          args.some(
+            (argument) =>
+              typeof argument === "string" && argument.includes("uncontrolled"),
+          ),
         ),
-      ),
-    ).toBe(false);
-    consoleError.mockRestore();
+      ).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+    }
     expect(screen.getByRole("heading").textContent).toBe(`Edit ${label}`);
     expect(field("ID").disabled).toBe(true);
     expect(field("ID").value).toBe("40");
