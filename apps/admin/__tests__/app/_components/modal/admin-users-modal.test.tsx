@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,13 +80,49 @@ const roleLessUser = {
   positions: [],
 };
 
-describe("AdminUsersModal email field", () => {
+describe("AdminUsersModal", () => {
   beforeEach(() => {
     mocks.byId.mockReset();
   });
 
   afterEach(() => {
     cleanup();
+  });
+
+  // React deduplicates this warning, so check it before other user loads.
+  it("keeps the disabled ID controlled while user details load", async () => {
+    let resolveUser!: (value: unknown) => void;
+    const byId = new Promise((resolve) => {
+      resolveUser = resolve;
+    });
+    mocks.byId.mockReturnValue(byId);
+    const consoleError = vi.spyOn(console, "error");
+    const queryClient = new QueryClient();
+
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AdminUsersModal data={{ id: 42 }} />
+        </QueryClientProvider>,
+      );
+      const id = screen.getByPlaceholderText<HTMLInputElement>("ID");
+      expect(id.disabled).toBe(true);
+      expect(id.value).toBe("");
+
+      await act(async () => {
+        resolveUser({ user: roleLessUser, includePii: false });
+        await byId;
+      });
+      await waitFor(() => expect(id.value).toBe("42"));
+      expect(id.disabled).toBe(true);
+      expect(consoleError.mock.calls.flat().join("\n")).not.toMatch(
+        /uncontrolled input to be controlled|controlled input to be uncontrolled/,
+      );
+    } finally {
+      cleanup();
+      queryClient.clear();
+      consoleError.mockRestore();
+    }
   });
 
   it("shows the email of a user with no roles when byId grants PII access", async () => {
