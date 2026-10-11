@@ -42,12 +42,14 @@ type NavLink =
       icon: React.ElementType;
       label: string;
       type: "link";
+      adminOnly?: boolean;
       nationAdminOnly?: boolean;
     }
   | {
       icon?: React.ElementType;
       label: string;
       type: "section";
+      adminOnly?: boolean;
       nationAdminOnly?: boolean;
     };
 
@@ -60,7 +62,7 @@ export const AdminNavLinks = ({
   sectionClassName,
 }: AdminNavLinksProps) => {
   const pathname = usePathname();
-  const { isNationAdmin } = useAuth();
+  const { isAdmin, isNationAdmin } = useAuth();
 
   const links: NavLink[] = [
     {
@@ -143,6 +145,7 @@ export const AdminNavLinks = ({
       icon: KeyRound,
       label: "API Keys",
       type: "link",
+      adminOnly: true,
     },
     {
       label: "Nation Admin",
@@ -168,9 +171,9 @@ export const AdminNavLinks = ({
     },
   ];
 
-  // Filter out nation admin only links if user is not a nation admin
   const visibleLinks = links.filter(
-    (link) => !link.nationAdminOnly || isNationAdmin,
+    (link) =>
+      (!link.adminOnly || isAdmin) && (!link.nationAdminOnly || isNationAdmin),
   );
 
   return (
