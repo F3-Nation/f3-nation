@@ -383,9 +383,10 @@ Consumers must
 continue using their last-known-good release on refresh failure, subject to
 their configured maximum age; they must not fall back silently to BigQuery.
 
-Rollback is a normal validated pointer CAS to the exact retained pre-upgrade
-nine-dataset release with `pv_pax.v2` and no `pv_attendance`, and is permitted
-only when that release meets the identity and validation requirements in
+Rollback selects the pointer's retained previous release after full validation.
+That release may use the current ten-dataset format or the exact pre-upgrade
+nine-dataset format with `pv_pax.v2` and no `pv_attendance`. The legacy exception
+must meet the identity and validation requirements in
 [the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
 No other nine-dataset release or arbitrary older release is eligible. Rollback
 uses the same generation/hash checks and ordering as forward publication. Never
