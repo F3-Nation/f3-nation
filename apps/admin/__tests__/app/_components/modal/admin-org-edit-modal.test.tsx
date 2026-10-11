@@ -1078,6 +1078,9 @@ describe("Region Area or Territory parent selection", () => {
     "restores the current parent without losing detail edits after a failed %s refetch",
     async (lookup) => {
       mount("region", record.id);
+      await waitFor(() =>
+        expect(parentSelect().value).toBe(String(record.parentId)),
+      );
       await waitFor(() => expect(parentSelect().disabled).toBe(false));
       expect(
         screen.queryByRole("button", { name: "Keep current parent" }),
