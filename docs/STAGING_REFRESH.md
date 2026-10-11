@@ -179,6 +179,66 @@ pnpm -F @acme/scripts staging-refresh -- --allow-staging-db f3_staging --dry-run
 pnpm -F @acme/scripts staging-refresh -- --allow-staging-db f3_staging --yes
 ```
 
+## Developer snapshot (`--snapshot-only`)
+
+The same job also produces the sanitized Prod snapshot that developers load
+locally. It never touches staging:
+
+```bash
+gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1 --wait --args=--snapshot-only
+```
+
+It runs the refresh's steps 1–4 unchanged, then cuts the snapshot from that
+same obfuscated, verified copy. It has no obfuscation rules or Prod login of
+its own:
+
+1. **Preflight.** Only the check that Prod isn't ahead of the code in the
+   job's image. Prod and staging needn't be at the same migration level,
+   since nothing is loaded anywhere. The entrypoint builds no staging URL,
+   and the snapshot code never opens a staging connection.
+2. **Dump Prod and restore it into the throwaway copy**, as for a refresh.
+3. **Obfuscate and verify the copy** with
+   `--email-sink dev.staging-email-sink@f3nation.local`, so every fake address
+   is on a domain that can't receive mail. verify-target must pass 100%.
+4. **Trim the copy in place**, in one transaction. Only `SNAPSHOT_TABLES`
+   (`tooling/scripts/src/staging-refresh.config.ts`) are kept, and every
+   other table in `public`, `auth`, `slackbot` and `public_history` is
+   emptied. The trim refuses if a kept table has a foreign key into an
+   emptied one. `event_instances` keeps only `start_date` from 30 days back
+   to 90 days ahead (about 150k of ~1.76M rows), with their link rows.
+   `preblast`, `backblast`, `preblast_rich` and `backblast_rich` are set to
+   NULL; `pax_count` and `fng_count` are kept. Before trimming, the job
+   refuses if a kept table has a column that isn't in
+   `obfuscate-db.columns.txt`.
+5. **Leak scan.** verify-target runs again on the trimmed copy, so the scan
+   covers exactly what will be published. It fails on any email-shaped
+   string that isn't a `@f3nation.local` sink address, any phone number that
+   isn't one of the obfuscator's `555-` fakes, and any uppercase Slack id.
+   If the scan fails, nothing is built or uploaded.
+6. **Package and publish.** A `pg_dump --data-only --format=custom` of the
+   kept tables, plus `manifest.json`, in one uncompressed tar:
+   `gs://f3-public-images/dev-snapshots/f3-dev-snapshot.tar`. Each run
+   overwrites it, with `Cache-Control: no-cache`. The manifest holds
+   `formatVersion`, `exportedAt`, the newest migration Prod had applied
+   (`migration.tag`), the `event_instances` window, and the row count and
+   column names of every table.
+
+The last line is `DEV SNAPSHOT: OK` or `DEV SNAPSHOT FAILED — nothing was
+published; staging was not touched.` As for a refresh, the logs hold
+counts, never row data.
+
+Outside Cloud Run the snapshot is never uploaded. Pass an absolute
+`--snapshot-out <file>` to write it locally instead:
+
+```bash
+pnpm -F @acme/scripts staging-refresh -- --snapshot-only --snapshot-out /tmp/f3-dev-snapshot.tar
+```
+
+`--snapshot-only` refuses `--yes`, `--dry-run`, `--reuse-existing-stash`,
+`--skip-slackbot-restart` and `--allow-staging-db`. Adding a table to
+`SNAPSHOT_TABLES` publishes it to a public bucket, so review it as a PII
+decision.
+
 ## Pipeline design
 
 ```text
@@ -606,7 +666,15 @@ legacy. Two things are specific to them:
      about a member that isn't on the sink.
 4. Runs `obfuscate-db:verify-target` (below) against the obfuscated sandbox,
    so the real-copy suite is exercised on every PR too.
-5. Tears the container down and restores `packages/env/.env`.
+5. Checks the developer snapshot on a clone of the planted sandbox,
+   obfuscated with the `@f3nation.local` sink: the trim keeps exactly the
+   −30/+90-day window (with link rows and counts) and nulls every blast; it
+   empties every other table; the leak scan passes; an unreviewed column on
+   a kept table is refused; and a planted address stops the run before the
+   file is built or delivered. It then runs `staging-refresh --snapshot-only`
+   itself, with `STAGING_DATABASE_URL` pointing at a listener that counts
+   connections: preflight completes, and staging gets no connection.
+6. Tears the container down and restores `packages/env/.env`.
 
 CI runs it on every PR (`obfuscate-db-verify` in `.github/workflows/ci.yml`),
 so a migration that adds an unclassified table or column fails on its own PR

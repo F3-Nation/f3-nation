@@ -25,7 +25,7 @@
  * to a throwaway local cluster via initdb/pg_ctl (still localhost:5434, still
  * ephemeral). Cleans up the instance and restores packages/env/.env.
  */
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -34,6 +34,8 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import type { AddressInfo } from "node:net";
+import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,8 +48,19 @@ import {
   unreviewedColumns,
 } from "./obfuscate-db.columns";
 import { isLoremRich, isLoremText } from "./obfuscate-db.lorem";
+import { quoteQualified } from "./db-url";
 import { fkEdges, planKeptFks } from "./staging-refresh.checks";
-import { PRESERVED_TABLES } from "./staging-refresh.config";
+import {
+  PRESERVED_TABLES,
+  SNAPSHOT_EMAIL_SINK,
+  SNAPSHOT_TABLES,
+} from "./staging-refresh.config";
+import {
+  assertSnapshotColumnsReviewed,
+  leakScan,
+  publishSnapshot,
+  trimSnapshot,
+} from "./staging-refresh.snapshot";
 
 const CONTAINER = "f3-obfuscate-verify-pg";
 const PORT = 5434;
@@ -622,6 +635,292 @@ async function sweepForEmails(
   return { violations, columnsScanned: columns.length };
 }
 
+// ---------------------------------------------------------------------------
+// staging-refresh --snapshot-only (staging-refresh.snapshot.ts)
+// ---------------------------------------------------------------------------
+
+const SNAPSHOT_DB = "f3_snapshot";
+const SNAPSHOT_COPY_DB = "f3_snapshot_copy";
+const dbUrl = (db: string) =>
+  `postgresql://f3local:f3local@localhost:${PORT}/${db}`;
+
+/**
+ * A clone of the planted, not yet obfuscated sandbox for the snapshot
+ * checks, plus an empty database to stand in for the refresh's copy.
+ * CREATE DATABASE … TEMPLATE needs no other session on the template.
+ */
+async function cloneForSnapshot(): Promise<void> {
+  const admin = postgres(dbUrl("postgres"), {
+    max: 1,
+    onnotice: () => undefined,
+  });
+  try {
+    await admin.unsafe(`CREATE DATABASE ${SNAPSHOT_DB} TEMPLATE ${DB_NAME}`);
+    await admin.unsafe(`CREATE DATABASE ${SNAPSHOT_COPY_DB}`);
+  } finally {
+    await admin.end();
+  }
+}
+
+/** A child that is awaited, not spawnSync'd: the decoy below needs the loop. */
+function runAsync(
+  args: string[],
+  env: Record<string, string>,
+): Promise<{ status: number; out: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("pnpm", args, {
+      cwd: repoRoot,
+      env: { ...process.env, ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    child.stdout.on("data", (d: Buffer) => (out += d.toString()));
+    child.stderr.on("data", (d: Buffer) => (out += d.toString()));
+    child.on("error", reject);
+    child.on("close", (status) => resolve({ status: status ?? 1, out }));
+  });
+}
+
+async function verifySnapshotMode(
+  childEnv: Record<string, string>,
+): Promise<void> {
+  console.log("\n--- staging-refresh --snapshot-only ---");
+  const snapUrl = dbUrl(SNAPSHOT_DB);
+  const snap = postgres(snapUrl, { max: 1, onnotice: () => undefined });
+  const work = mkdtempSync(path.join(os.tmpdir(), "f3-snapshot-verify-"));
+  try {
+    // Instances on both sides of each edge of the window, with link rows,
+    // blasts and counts.
+    const planted = new Map<number, number>();
+    for (const offset of [-31, -30, 90, 91]) {
+      const [row] = await snap<{ id: number }[]>`
+        INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+          name, preblast, backblast, pax_count, fng_count)
+        SELECT org_id, true, false, current_date + ${offset}::int,
+          'Window ' || ${offset}::int, 'Preblast by Bob Smith',
+          'Backblast: Bob Smith, Jim Jones', 7, 2
+        FROM event_instances LIMIT 1
+        RETURNING id`;
+      if (!row) throw new Error("Harness bug: no event_instances to copy");
+      planted.set(offset, row.id);
+      await snap`
+        INSERT INTO event_instances_x_event_types (event_instance_id, event_type_id)
+        SELECT ${row.id}, min(id) FROM event_types`;
+    }
+
+    const obf = spawnSync(
+      "pnpm",
+      [
+        "-F",
+        "@acme/scripts",
+        "exec",
+        "tsx",
+        "src/obfuscate-db.ts",
+        "--allow-db",
+        SNAPSHOT_DB,
+        "--i-understand-this-rewrites-data",
+        "--email-sink",
+        SNAPSHOT_EMAIL_SINK,
+      ],
+      {
+        cwd: repoRoot,
+        env: { ...process.env, ...childEnv, DATABASE_URL: snapUrl },
+        stdio: "pipe",
+      },
+    );
+    if (obf.status !== 0) {
+      throw new Error(
+        `obfuscate-db on the snapshot clone exited ${obf.status}: ${obf.stderr.toString().slice(-500)}`,
+      );
+    }
+
+    const trim = await trimSnapshot(snap);
+    const ids = [...planted.values()];
+    const survivors = await snap<
+      { id: number; pax: number; fng: number; links: number }[]
+    >`
+      SELECT ei.id, ei.pax_count AS pax, ei.fng_count AS fng,
+        (SELECT count(*)::int FROM event_instances_x_event_types x
+         WHERE x.event_instance_id = ei.id) AS links
+      FROM event_instances ei WHERE ei.id IN ${snap(ids)} ORDER BY ei.start_date`;
+    const [orphanLinks] = await snap<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM event_instances_x_event_types
+      WHERE event_instance_id IN ${snap(ids)}
+        AND event_instance_id NOT IN (SELECT id FROM event_instances)`;
+    const [outside] = await snap<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM event_instances
+      WHERE start_date NOT BETWEEN current_date - 30 AND current_date + 90`;
+    const [blasts] = await snap<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM event_instances
+      WHERE preblast IS NOT NULL OR backblast IS NOT NULL
+        OR preblast_rich IS NOT NULL OR backblast_rich IS NOT NULL`;
+    const keptIds = [planted.get(-30), planted.get(90)];
+    check(
+      "snapshot trim keeps exactly the -30..+90 day window, with link rows and counts",
+      survivors.length === 2 &&
+        survivors.every(
+          (r, i) =>
+            r.id === keptIds[i] && r.pax === 7 && r.fng === 2 && r.links === 1,
+        ) &&
+        orphanLinks?.n === 0 &&
+        outside?.n === 0 &&
+        trim.instancesDropped > 0,
+      `${survivors.length}/2 edge rows kept, ${outside?.n ?? "?"} outside the window, ${orphanLinks?.n ?? "?"} orphaned link rows, ${trim.instancesDropped} dropped`,
+    );
+    check(
+      "snapshot trim nulls every blast",
+      blasts?.n === 0,
+      `${blasts?.n ?? "?"} instance(s) still carry a blast`,
+    );
+
+    const others = (
+      await snap<{ t: string }[]>`
+        SELECT n.nspname || '.' || c.relname AS t FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind IN ('r', 'p') AND NOT c.relispartition
+          AND n.nspname IN ('public', 'auth', 'slackbot', 'public_history')`
+    )
+      .map((r) => r.t)
+      .filter((t) => !SNAPSHOT_TABLES.includes(t));
+    const populated: string[] = [];
+    for (const t of others) {
+      const [row] = await snap.unsafe<{ present: boolean }[]>(
+        `SELECT EXISTS (SELECT 1 FROM ${quoteQualified(t)}) AS present`,
+      );
+      if (row?.present) populated.push(t);
+    }
+    check(
+      "snapshot trim empties every table outside SNAPSHOT_TABLES",
+      populated.length === 0 && others.length > 0,
+      populated.length === 0
+        ? `${others.length} tables empty (attendance, slack_*, api_keys, auth.*, history, …)`
+        : `still populated: ${populated.join(", ")}`,
+    );
+
+    check(
+      "leak scan passes on the trimmed snapshot",
+      await leakScan(snapUrl),
+      "verify-target with the @f3nation.local sink",
+    );
+
+    await snap`ALTER TABLE orgs ADD COLUMN snapshot_probe text`;
+    let gateError = "";
+    try {
+      await assertSnapshotColumnsReviewed(snap);
+    } catch (e) {
+      gateError = e instanceof Error ? e.message : String(e);
+    }
+    await snap`ALTER TABLE orgs DROP COLUMN snapshot_probe`;
+    check(
+      "snapshot refuses a kept table with an unreviewed column",
+      gateError.includes("public.orgs.snapshot_probe"),
+      gateError ? "refused, naming the column" : "DID NOT REFUSE",
+    );
+
+    // A real address in a kept table: the scan fails and nothing is built
+    // or handed on.
+    await snap`
+      UPDATE orgs SET website = 'real.person@gmail.com'
+      WHERE id = (SELECT min(id) FROM orgs)`;
+    let delivered = 0;
+    let publishError = "";
+    try {
+      await publishSnapshot({
+        sql: snap,
+        copyUrl: snapUrl,
+        work,
+        migration: { tag: "harness", createdAt: 0 },
+        window: trim.window,
+        deliver: () => {
+          delivered += 1;
+          return Promise.resolve("delivered");
+        },
+      });
+    } catch (e) {
+      publishError = e instanceof Error ? e.message : String(e);
+    }
+    check(
+      "a leak stops the snapshot before it is built or published",
+      publishError.includes("leak scan did not pass") &&
+        delivered === 0 &&
+        !existsSync(path.join(work, "snapshot.dump")),
+      `${publishError ? "refused" : "NOT refused"}, delivered ${delivered}x`,
+    );
+  } finally {
+    await snap.end();
+    rmSync(work, { recursive: true, force: true });
+  }
+
+  // The orchestrator itself: snapshot mode never opens staging. STAGING_
+  // DATABASE_URL points at a listener that counts connections; stub pg tools
+  // pass the version check and then fail the dump, after preflight has read
+  // prod and the copy.
+  const stubs = mkdtempSync(path.join(os.tmpdir(), "f3-snapshot-pgstub-"));
+  for (const tool of ["pg_dump", "pg_restore"]) {
+    writeFileSync(
+      path.join(stubs, tool),
+      `#!/usr/bin/env bash\nif [ "\${1:-}" = "--version" ]; then echo "${tool} (PostgreSQL) 18.0"; exit 0; fi\necho "stub ${tool}" >&2; exit 1\n`,
+      { mode: 0o755 },
+    );
+  }
+  let stagingConnections = 0;
+  const decoy = createServer((socket) => {
+    stagingConnections += 1;
+    socket.destroy();
+  });
+  await new Promise<void>((resolve) => decoy.listen(0, "127.0.0.1", resolve));
+  const decoyPort = (decoy.address() as AddressInfo).port;
+  const snapshotEnv = {
+    ...childEnv,
+    PROD_DATABASE_URL: DATABASE_URL,
+    INTERMEDIATE_DATABASE_URL: dbUrl(SNAPSHOT_COPY_DB),
+    STAGING_DATABASE_URL: `postgresql://decoy:decoy@127.0.0.1:${decoyPort}/f3_staging`,
+    PG_BIN_DIR: stubs,
+    CLOUD_RUN_JOB: "",
+  };
+  const script = [
+    "-F",
+    "@acme/scripts",
+    "exec",
+    "tsx",
+    "src/staging-refresh.ts",
+  ];
+  try {
+    const out = path.join(stubs, "snapshot.tar");
+    const runRes = await runAsync(
+      [...script, "--snapshot-only", "--snapshot-out", out],
+      snapshotEnv,
+    );
+    check(
+      "--snapshot-only never connects to staging",
+      stagingConnections === 0 &&
+        runRes.out.includes("will dump prod schemas") &&
+        runRes.out.includes("stub pg_dump") &&
+        runRes.out.includes("DEV SNAPSHOT FAILED") &&
+        !existsSync(out),
+      `${stagingConnections} connection(s) to the staging decoy; preflight ${runRes.out.includes("will dump prod schemas") ? "passed" : "DID NOT PASS"}`,
+    );
+
+    const withYes = await runAsync(
+      [...script, "--snapshot-only", "--yes", "--snapshot-out", out],
+      snapshotEnv,
+    );
+    const noOut = await runAsync([...script, "--snapshot-only"], snapshotEnv);
+    check(
+      "--snapshot-only refuses refresh flags, and publishing outside Cloud Run",
+      withYes.status !== 0 &&
+        withYes.out.includes("can't be combined with --yes") &&
+        noOut.status !== 0 &&
+        noOut.out.includes("only the job publishes") &&
+        stagingConnections === 0,
+      `--yes ${withYes.status !== 0 ? "refused" : "ACCEPTED"}, no --snapshot-out ${noOut.status !== 0 ? "refused" : "ACCEPTED"}`,
+    );
+  } finally {
+    decoy.close();
+    rmSync(stubs, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   console.log("=== obfuscate-db verification harness (sandbox seed only) ===");
 
@@ -671,7 +970,7 @@ async function main(): Promise<void> {
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
 
-  const sql = postgres(DATABASE_URL, { max: 1, onnotice: () => undefined });
+  let sql = postgres(DATABASE_URL, { max: 1, onnotice: () => undefined });
   try {
     const childEnv = {
       CI: "",
@@ -768,6 +1067,12 @@ async function main(): Promise<void> {
     if (preViolations.length === 0) {
       throw new Error("Harness bug: expected planted PII before obfuscation");
     }
+
+    // --- 3a. --snapshot-only, on a clone taken before obfuscation -------------
+    await sql.end();
+    await cloneForSnapshot();
+    sql = postgres(DATABASE_URL, { max: 1, onnotice: () => undefined });
+    await verifySnapshotMode(childEnv);
 
     // --- 3b. Stash the target's own API keys ------------------------------------
     // On a real refresh the stash runs on staging before the load; here the
