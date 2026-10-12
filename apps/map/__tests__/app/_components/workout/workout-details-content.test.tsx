@@ -165,9 +165,9 @@ describe("WorkoutDetailsContent event resolution", () => {
   beforeEach(() => {
     queryStates.clear();
     enabledCalls.length = 0;
-    // The location always resolves with at least one event — the API returns
-    // `location: null` when it has none, so the panel can never see an empty
-    // events array alongside a non-null location.
+    // Most locations carry a series event. An empty events array alongside a
+    // non-null location means the location's only workouts are upcoming
+    // instances; that case has its own describe block below.
     queryStates.set("locationWorkout", {
       data: locationWorkout([locationEvent()]),
     });
@@ -305,6 +305,66 @@ describe("WorkoutDetailsContent event resolution", () => {
     renderPanel(-5);
 
     expect(warning()).toBeTruthy();
+  });
+});
+
+describe("WorkoutDetailsContent at an instance-only location", () => {
+  // A one-off workout: no series, so the API returns the location with no
+  // events and the panel synthesizes the event from the instance list.
+  const oneOff = {
+    id: 5,
+    seriesId: null,
+    locationId: 10,
+    startDate: "2026-05-17",
+    startTime: "0001",
+    endTime: "0100",
+    seriesException: null,
+    highlight: false,
+    name: "Third F Gathering",
+    lat: 35.5,
+    lon: -80.5,
+    aoName: "Alpha AO",
+    aoLogo: null,
+    locationAddress: "123 Main St",
+    locationAddress2: null,
+    locationCity: "Charlotte",
+    locationState: "NC",
+    locationCountry: "US",
+    fullAddress: "123 Main St, Charlotte, NC",
+    eventTypes: [{ id: 3, name: "3rd F" }],
+  } satisfies UpcomingInstance;
+
+  beforeEach(() => {
+    queryStates.clear();
+    enabledCalls.length = 0;
+    queryStates.set("locationWorkout", { data: locationWorkout([]) });
+  });
+
+  it("renders the instance when the sidebar chip supplies its negative id", () => {
+    queryStates.set("upcomingInstances", { data: [oneOff] });
+
+    renderPanel(-5);
+
+    expect(warning()).toBeNull();
+    expect(screen.getByTestId("chip--5")).toBeTruthy();
+    expect(screen.getByText("Copy Link to Event")).toBeTruthy();
+  });
+
+  // A map pin click opens the panel with no event id; the default selection
+  // can't come from the (empty) series list.
+  it("selects the instance by default when no event id is provided", () => {
+    queryStates.set("upcomingInstances", { data: [oneOff] });
+
+    renderPanel(null);
+
+    expect(warning()).toBeNull();
+    expect(screen.getByText("Copy Link to Event")).toBeTruthy();
+  });
+
+  it("holds off warning while the instance list backing the default selection loads", () => {
+    renderPanel(null);
+
+    expect(warning()).toBeNull();
   });
 });
 

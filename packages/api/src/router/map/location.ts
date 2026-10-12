@@ -6,6 +6,7 @@ import type { AnyColumn } from "@acme/db";
 import {
   aliasedTable,
   and,
+  asc,
   count,
   eq,
   gte,
@@ -28,6 +29,7 @@ import {
   logIfOrgTreeExceedsMaxDepth,
   ORG_TREE_MAX_DEPTH,
 } from "../../org-tree";
+import type { Context } from "../../shared";
 import { protectedProcedure } from "../../shared";
 
 /**
@@ -113,6 +115,133 @@ const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
     ) t
     WHERE t.id = ${orgIdColumn}
   )`);
+};
+
+/**
+ * Which event instances the map surfaces as their own pin or pin status.
+ * Shared by upcomingInstances and locationWorkout's instance-only fallback so
+ * a pin drawn from an instance always opens a detail panel, never "no longer
+ * scheduled".
+ *
+ * The caller's query must LEFT JOIN `schema.locations` on the instance's
+ * location, `aoOrg` on its org, and `seriesEvent` on its series.
+ */
+const isVisibleUpcomingInstance = ({
+  aoOrg,
+  seriesEvent,
+}: {
+  aoOrg: typeof schema.orgs;
+  seriesEvent: typeof schema.events;
+}) =>
+  and(
+    eq(schema.eventInstances.isActive, true),
+    eq(schema.eventInstances.isPrivate, false),
+    eq(aoOrg.isActive, true),
+    // Descendants stay active when any ancestor organization is
+    // retired; exclude their instances from public markers and pin
+    // statuses.
+    ancestorOrgsAreActive(schema.eventInstances.orgId),
+    or(
+      isNull(schema.eventInstances.seriesId),
+      and(eq(seriesEvent.isActive, true), eq(seriesEvent.isPrivate, false)),
+    ),
+    sql`${schema.eventInstances.startDate} >= CURRENT_DATE`,
+    sql`${schema.eventInstances.startDate} <= CURRENT_DATE + INTERVAL '30 days'`,
+    // Locationless rows pass through (client skips markers without coords);
+    // rows with a location must resolve to an active one.
+    or(
+      isNull(schema.eventInstances.locationId),
+      eq(schema.locations.isActive, true),
+    ),
+    or(
+      isNotNull(schema.eventInstances.seriesException),
+      isNull(schema.eventInstances.seriesId),
+      and(
+        isNotNull(schema.eventInstances.seriesId),
+        // Include a series occurrence not at its parent's location:
+        // either side null, or the two differ. Both isNull arms are
+        // required — `ne` yields NULL (not true) when a side is NULL,
+        // which would silently drop those rows.
+        or(
+          isNull(seriesEvent.locationId),
+          isNull(schema.eventInstances.locationId),
+          ne(schema.eventInstances.locationId, seriesEvent.locationId),
+        ),
+      ),
+    ),
+  );
+
+/**
+ * AO and region context for a location whose only map presence is an upcoming
+ * instance, taken from the soonest visible one. Shaped as the `parent*` and
+ * `region*` fields locationWorkout otherwise reads off a series' org, so it can
+ * be spread straight over them. Returns undefined when no instance would draw a
+ * pin here.
+ */
+const getInstanceOrgsAtLocation = async (
+  db: Context["db"],
+  locationId: number,
+) => {
+  const aoOrg = aliasedTable(schema.orgs, "ao_org");
+  const seriesEvent = aliasedTable(schema.events, "series_event");
+  const regionOrg = aliasedTable(schema.orgs, "region_org");
+
+  const [row] = await db
+    .select({
+      parentId: aoOrg.id,
+      parentLogo: aoOrg.logoUrl,
+      parentName: aoOrg.name,
+      parentWebsite: aoOrg.website,
+      parentEmail: aoOrg.email,
+      parentPhone: aoOrg.phone,
+      parentTwitter: aoOrg.twitter,
+      parentFacebook: aoOrg.facebook,
+      parentInstagram: aoOrg.instagram,
+      regionId: regionOrg.id,
+      regionName: regionOrg.name,
+      regionLogo: regionOrg.logoUrl,
+      regionWebsite: regionOrg.website,
+      regionEmail: regionOrg.email,
+      regionPhone: regionOrg.phone,
+      regionTwitter: regionOrg.twitter,
+      regionFacebook: regionOrg.facebook,
+      regionInstagram: regionOrg.instagram,
+      regionType: regionOrg.orgType,
+    })
+    .from(schema.eventInstances)
+    .leftJoin(
+      schema.locations,
+      eq(schema.eventInstances.locationId, schema.locations.id),
+    )
+    .leftJoin(aoOrg, eq(schema.eventInstances.orgId, aoOrg.id))
+    .leftJoin(seriesEvent, eq(seriesEvent.id, schema.eventInstances.seriesId))
+    // Same region resolution as locationWorkout's series path: the org is
+    // the region itself, or an AO directly under one.
+    .leftJoin(
+      regionOrg,
+      or(
+        and(eq(aoOrg.id, regionOrg.id), eq(regionOrg.orgType, "region")),
+        and(
+          eq(aoOrg.orgType, "ao"),
+          eq(aoOrg.parentId, regionOrg.id),
+          eq(regionOrg.orgType, "region"),
+        ),
+      ),
+    )
+    .where(
+      and(
+        eq(schema.eventInstances.locationId, locationId),
+        isVisibleUpcomingInstance({ aoOrg, seriesEvent }),
+      ),
+    )
+    .orderBy(
+      asc(schema.eventInstances.startDate),
+      asc(schema.eventInstances.startTime),
+      asc(schema.eventInstances.id),
+    )
+    .limit(1);
+
+  return row;
 };
 
 export const mapLocationRouter = os.router({
@@ -430,48 +559,7 @@ export const mapLocationRouter = os.router({
             schema.eventInstancesXEventTypes.eventTypeId,
           ),
         )
-        .where(
-          and(
-            eq(schema.eventInstances.isActive, true),
-            eq(schema.eventInstances.isPrivate, false),
-            eq(aoOrg.isActive, true),
-            // Descendants stay active when any ancestor organization is
-            // retired; exclude their instances from public markers and pin
-            // statuses.
-            ancestorOrgsAreActive(schema.eventInstances.orgId),
-            or(
-              isNull(schema.eventInstances.seriesId),
-              and(
-                eq(seriesEvent.isActive, true),
-                eq(seriesEvent.isPrivate, false),
-              ),
-            ),
-            sql`${schema.eventInstances.startDate} >= CURRENT_DATE`,
-            sql`${schema.eventInstances.startDate} <= CURRENT_DATE + INTERVAL '30 days'`,
-            // Locationless rows pass through (client skips markers without coords);
-            // rows with a location must resolve to an active one.
-            or(
-              isNull(schema.eventInstances.locationId),
-              eq(schema.locations.isActive, true),
-            ),
-            or(
-              isNotNull(schema.eventInstances.seriesException),
-              isNull(schema.eventInstances.seriesId),
-              and(
-                isNotNull(schema.eventInstances.seriesId),
-                // Include a series occurrence not at its parent's location:
-                // either side null, or the two differ. Both isNull arms are
-                // required — `ne` yields NULL (not true) when a side is NULL,
-                // which would silently drop those rows.
-                or(
-                  isNull(seriesEvent.locationId),
-                  isNull(schema.eventInstances.locationId),
-                  ne(schema.eventInstances.locationId, seriesEvent.locationId),
-                ),
-              ),
-            ),
-          ),
-        )
+        .where(isVisibleUpcomingInstance({ aoOrg, seriesEvent }))
         .groupBy(
           schema.eventInstances.id,
           schema.locations.id,
@@ -758,30 +846,42 @@ export const mapLocationRouter = os.router({
         )
         .map((e) => ({ ...e, id: e.id, name: e.name }));
 
-      // No events → stale link (LEFT JOIN yields a null-event row when all
-      // events fall outside the date window). Return a message instead of
-      // throwing so the client shows a friendly panel.
-      if (events.length === 0) {
+      // No series events can still mean a live pin: upcomingInstances draws
+      // markers for one-off instances and away-from-home occurrences, which
+      // this query's events join never sees. The client builds those events
+      // itself, so only the AO/region context — normally reached through the
+      // series' org — has to come from the instance here.
+      const instanceOrgs =
+        events.length === 0 && location
+          ? await getInstanceOrgsAtLocation(ctx.db, input.locationId)
+          : undefined;
+
+      // No events and no instances → stale link (LEFT JOIN yields a
+      // null-event row when all events fall outside the date window). Return
+      // a message instead of throwing so the client shows a friendly panel.
+      if (!location || (events.length === 0 && !instanceOrgs)) {
         return {
           location: null,
           message: "This workout is no longer scheduled.",
         };
       }
 
-      if (location?.lat == null || location?.lon == null) {
+      if (location.lat == null || location.lon == null) {
         return {
           location: null,
           message: `Lat/lng not found for location id: ${input.locationId}`,
         };
       }
 
+      const { parentLogo, regionLogo } = instanceOrgs ?? location;
       const locationWithEvents = {
         ...location,
+        ...instanceOrgs,
         // Need to handle empty string values for parent and region logos
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        parentLogo: !location.parentLogo ? null : location.parentLogo,
+        parentLogo: !parentLogo ? null : parentLogo,
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        regionLogo: !location.regionLogo ? null : location.regionLogo,
+        regionLogo: !regionLogo ? null : regionLogo,
         lat: location.lat,
         lon: location.lon,
         fullAddress: getFullAddress(location),

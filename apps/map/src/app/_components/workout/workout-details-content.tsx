@@ -94,18 +94,6 @@ export const WorkoutDetailsContent = ({
     );
   }, [providedEventId, upcomingInstancesData]);
 
-  const selectedEventId = useMemo(() => {
-    if (providedEventId) return providedEventId;
-    return results?.location?.events?.[0]?.id ?? null;
-  }, [providedEventId, results]);
-
-  const selectedInstance = useMemo(() => {
-    if (selectedEventId == null || selectedEventId >= 0) return undefined;
-    return upcomingInstancesData?.find(
-      (instance) => instance.id === -selectedEventId,
-    );
-  }, [selectedEventId, upcomingInstancesData]);
-
   const locationInstances = useMemo(() => {
     const currentLocation = results?.location;
     if (!upcomingInstancesData || !currentLocation) return [];
@@ -113,26 +101,6 @@ export const WorkoutDetailsContent = ({
       (instance) => instance.locationId === currentLocation.id,
     );
   }, [upcomingInstancesData, results?.location]);
-
-  const selectedEventUpdates = useMemo(() => {
-    if (selectedEventId == null || !upcomingInstancesData) return [];
-
-    const seriesId =
-      selectedEventId > 0
-        ? selectedEventId
-        : (selectedInstance?.seriesId ?? null);
-
-    const matches =
-      seriesId != null
-        ? upcomingInstancesData.filter((i) => i.seriesId === seriesId)
-        : selectedInstance
-          ? upcomingInstancesData.filter((i) => i.id === selectedInstance.id)
-          : [];
-
-    // The API returns these unordered, so sort for display — the list reads as
-    // a timeline, and the soonest change is the one that matters most.
-    return sortUpcomingInstancesByDate(matches);
-  }, [selectedEventId, upcomingInstancesData, selectedInstance]);
 
   const baseEvents = useMemo(
     () => results?.location?.events ?? [],
@@ -181,6 +149,41 @@ export const WorkoutDetailsContent = ({
 
     return combined;
   }, [results, instanceEvents]);
+
+  // A location whose only workouts are upcoming instances has no series
+  // events, so fall back to the first displayed event rather than the first
+  // series event — otherwise a pin click with no eventId selects nothing.
+  const selectedEventId = useMemo(() => {
+    if (providedEventId) return providedEventId;
+    return displayedEvents[0]?.id ?? null;
+  }, [providedEventId, displayedEvents]);
+
+  const selectedInstance = useMemo(() => {
+    if (selectedEventId == null || selectedEventId >= 0) return undefined;
+    return upcomingInstancesData?.find(
+      (instance) => instance.id === -selectedEventId,
+    );
+  }, [selectedEventId, upcomingInstancesData]);
+
+  const selectedEventUpdates = useMemo(() => {
+    if (selectedEventId == null || !upcomingInstancesData) return [];
+
+    const seriesId =
+      selectedEventId > 0
+        ? selectedEventId
+        : (selectedInstance?.seriesId ?? null);
+
+    const matches =
+      seriesId != null
+        ? upcomingInstancesData.filter((i) => i.seriesId === seriesId)
+        : selectedInstance
+          ? upcomingInstancesData.filter((i) => i.id === selectedInstance.id)
+          : [];
+
+    // The API returns these unordered, so sort for display — the list reads as
+    // a timeline, and the soonest change is the one that matters most.
+    return sortUpcomingInstancesByDate(matches);
+  }, [selectedEventId, upcomingInstancesData, selectedInstance]);
 
   // The parent-series lookup is a fallback, not a primary source: it only has
   // something to add when the selected id is absent from the location's own
@@ -236,7 +239,12 @@ export const WorkoutDetailsContent = ({
   // flash the deleted-workout warning mid-fetch. A failed query counts as
   // settled: the answer is never arriving.
   const isResolvingEvent = useMemo(() => {
-    const needsInstanceList = providedEventId != null && providedEventId < 0;
+    // With no series events, the default selection can only come from the
+    // instance list too.
+    const needsInstanceList =
+      providedEventId != null
+        ? providedEventId < 0
+        : results?.location != null && baseEvents.length === 0;
     if (
       needsInstanceList &&
       !upcomingInstancesData &&
@@ -249,6 +257,8 @@ export const WorkoutDetailsContent = ({
     );
   }, [
     providedEventId,
+    results?.location,
+    baseEvents.length,
     upcomingInstancesData,
     isUpcomingInstancesError,
     needsParentEventFallback,
