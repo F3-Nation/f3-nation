@@ -14,11 +14,12 @@ interface RoleInput {
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
-import { logDebug, logError } from "../logger";
+import { logDebug, logError, logWarn } from "../logger";
 import {
   buildSingleUserQuery,
   buildUserListQuery,
   checkUserPiiAccess,
+  getPgError,
   getProfileScopeOrgIds,
   hasRoleOnAny,
   isDuplicateEmailError,
@@ -734,14 +735,19 @@ export const userRouter = {
           await tx.delete(schema.users).where(eq(schema.users.id, input.id));
         });
       } catch (error) {
-        // Attendance, achievements, Slack links, API keys and similar history
+        // Attendance, positions, linked accounts, API keys and similar records
         // reference users without ON DELETE CASCADE. The transaction has
         // already rolled back the roles delete, so the user keeps their roles.
-        // No email or other PII in the message (docs/LOGGING.md).
+        // Log the blocking constraint (a schema identifier, not PII) so the
+        // cause is traceable; no email or other PII (docs/LOGGING.md).
         if (isForeignKeyViolationError(error)) {
+          logWarn("api.user.delete_blocked", {
+            userId: input.id,
+            constraint: getPgError(error)?.constraint_name,
+          });
           throw new ORPCError("CONFLICT", {
             message:
-              "This user has history (such as attendance or achievements) and can't be deleted.",
+              "This user is still referenced by other records (such as attendance, positions or linked accounts) and can't be deleted.",
           });
         }
         // Anything else is an unexpected DB/driver fault. Log the original and
