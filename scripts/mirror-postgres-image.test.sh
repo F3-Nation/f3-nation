@@ -44,9 +44,10 @@ chmod +x "$tmp_dir/docker"
 
 # Runs the script with the given SOURCE_IMAGE/TARGET_REF, honoring any of
 # DOCKER_PUSH_EXIT/DOCKER_INSPECT_OUTPUT/SKIP_GITHUB_FILES already exported
-# by the caller, and records its exit status in $tmp_dir/exit_code. On an
-# unexpected status, dumps stdout so the real failure is visible instead of
-# just a mismatched assertion further down.
+# by the caller, and asserts its exit status against expect_status (also
+# recorded in $tmp_dir/exit_code for callers that check it directly). On a
+# mismatch, dumps stdout so the real failure is visible alongside the
+# counted assertion failure.
 run_mirror() {
   local source_image="$1" target_ref="$2" expect_status="$3"
   : >"$tmp_dir/docker.calls"
@@ -67,8 +68,9 @@ run_mirror() {
     DOCKER_INSPECT_OUTPUT="${DOCKER_INSPECT_OUTPUT:-}" \
     "$mirror_script" >"$tmp_dir/stdout" 2>&1
   echo "$?" >"$tmp_dir/exit_code"
+  assert_eq "exit status for SOURCE_IMAGE=${source_image}" \
+    "$expect_status" "$(cat "$tmp_dir/exit_code")"
   if [[ "$(cat "$tmp_dir/exit_code")" != "$expect_status" ]]; then
-    echo "  (exit ${expect_status} expected, got $(cat "$tmp_dir/exit_code"); stdout was:)"
     sed 's/^/    /' "$tmp_dir/stdout"
   fi
 }
@@ -77,9 +79,6 @@ default_source="postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec2747
 default_target="ghcr.io/f3-nation/f3-nation-ci-postgres"
 
 run_mirror "$default_source" "$default_target" 0
-
-assert_eq "exits 0 on the happy path" \
-  "0" "$(cat "$tmp_dir/exit_code")"
 
 assert_eq "pulls, tags, and pushes in order, with the source's own tag" \
   "pull ${default_source}
@@ -128,8 +127,6 @@ assert_eq "a failed push exits non-zero and records no digest output" \
   "0" "$(grep -c '^digest=' "$tmp_dir/output")"
 
 DOCKER_INSPECT_OUTPUT='[]' run_mirror "$default_source" "$default_target" 1
-assert_eq "an inspect result with no matching digest exits non-zero" \
-  "1" "$(cat "$tmp_dir/exit_code")"
 
 (
   PATH="$tmp_dir:$PATH" MIRROR_TEST_DIR="$tmp_dir" TARGET_REF="$default_target" "$mirror_script"
