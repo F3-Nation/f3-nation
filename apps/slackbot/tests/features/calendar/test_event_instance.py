@@ -34,6 +34,7 @@ from infrastructure.api_client.event_instance_repository import (
     get_api_event_instance_repository,
 )
 from infrastructure.api_client.exceptions import F3ApiNotFoundError
+from utilities.slack import actions
 
 
 def _make_instance(
@@ -914,6 +915,69 @@ class BuildEventInstanceListFormTest(unittest.TestCase):
         r = MagicMock()
         r.org_id = 10
         return r
+
+    @patch("features.calendar.event_instance._build_ao_service")
+    @patch("features.calendar.event_instance._build_event_instance_service")
+    def test_list_emits_open_and_closed_event_confirmations(self, mock_build_service, mock_build_ao):
+        mock_build_service.return_value.get_region_instances.return_value = [
+            _make_instance(id=1, name="Workout"),
+            _make_instance(id=2, name="Cancelled", series_exception="closed"),
+        ]
+        mock_build_ao.return_value.get_region_aos.return_value = []
+        body = {"trigger_id": "T_TRIGGER"}
+
+        for update_view_id in (None, "V_EVENTS"):
+            with self.subTest(update_view_id=update_view_id):
+                client = MagicMock()
+                build_event_instance_list_form(
+                    body, client, MagicMock(), {}, self._region_record(), update_view_id=update_view_id
+                )
+                if update_view_id:
+                    client.views_update.assert_called_once()
+                    client.views_push.assert_not_called()
+                    self.assertEqual(client.views_update.call_args.kwargs["view_id"], update_view_id)
+                    view = client.views_update.call_args.kwargs["view"]
+                else:
+                    client.views_push.assert_called_once()
+                    client.views_update.assert_not_called()
+                    self.assertEqual(client.views_push.call_args.kwargs["trigger_id"], "T_TRIGGER")
+                    view = client.views_push.call_args.kwargs["view"]
+
+                for event_id, label, placeholder, choices, warning in (
+                    (
+                        1,
+                        "Workout (06/01/2026)",
+                        "Edit, Close, or Delete",
+                        ["Edit", "Close", "Delete"],
+                        "Are you sure you want to edit / close / delete this event?",
+                    ),
+                    (
+                        2,
+                        "Cancelled (06/01/2026) [CLOSED]",
+                        "Reopen, Edit, or Delete",
+                        ["Reopen", "Edit", "Delete"],
+                        "Are you sure you want to reopen / edit / delete this event?",
+                    ),
+                ):
+                    action_id = f"{actions.EVENT_INSTANCE_EDIT_DELETE}_{event_id}"
+                    block = next(b for b in view["blocks"] if b.get("block_id") == action_id)
+                    self.assertEqual(block["text"]["text"], label)
+                    selector = block["accessory"]
+                    self.assertEqual(selector["action_id"], action_id)
+                    self.assertEqual(selector["placeholder"]["text"], placeholder)
+                    self.assertEqual(
+                        [(o["text"]["text"], o["value"]) for o in selector["options"]],
+                        [(c, c) for c in choices],
+                    )
+                    self.assertEqual(
+                        selector["confirm"],
+                        {
+                            "title": {"type": "plain_text", "text": "Are you sure?"},
+                            "text": {"type": "plain_text", "text": warning},
+                            "confirm": {"type": "plain_text", "text": "Yes, I'm sure"},
+                            "deny": {"type": "plain_text", "text": "Whups, never mind"},
+                        },
+                    )
 
     @patch("features.calendar.event_instance._build_ao_service")
     @patch("features.calendar.event_instance._build_event_instance_service")
