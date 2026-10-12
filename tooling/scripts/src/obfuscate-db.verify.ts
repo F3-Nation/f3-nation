@@ -289,6 +289,14 @@ interface PlantedIds {
   inheritedInstanceIds: number[];
   inheritedRequestId: string;
   inheritedOrgId: number;
+  mixedEventIds: number[];
+  mixedInstanceId: number;
+  publicParentLocationId: number;
+  publicParentEventId: number;
+  publicSiblingLocationId: number;
+  publicSiblingEventId: number;
+  cycleLocationId: number;
+  cycleEventId: number;
 }
 
 /**
@@ -521,8 +529,16 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
     privateLocationId,
     true,
   );
-  await event("Synthetic Public Beatdown", mixedLocationId, false);
-  await event("Synthetic Private Ruck", mixedLocationId, true);
+  const publicMixedEventId = await event(
+    "Synthetic Public Beatdown",
+    mixedLocationId,
+    false,
+  );
+  const privateMixedEventId = await event(
+    "Synthetic Private Ruck",
+    mixedLocationId,
+    true,
+  );
   await sql`
     INSERT INTO event_instances (org_id, is_active, highlight, start_date,
       name, location_id, is_private)
@@ -577,6 +593,55 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
   await sql`
     UPDATE orgs SET default_location_id = ${descendantLocationId}
     WHERE id = ${ao.id}`;
+
+  // Inherited privacy must not delete a location a genuinely public event
+  // shares, or unlink any of that location's series or instance references.
+  const inheritedMixedEventId = await event(
+    "Synthetic Private Series Shared Child",
+    mixedLocationId,
+    false,
+    privateSeriesId,
+  );
+  const [mixedInstance] = await sql<{ id: number }[]>`
+    INSERT INTO event_instances (org_id, is_active, highlight, start_date,
+      name, location_id, is_private, series_id)
+    VALUES (${ao.id}, true, false, current_date,
+      'Synthetic Inherited Private Shared Instance', ${mixedLocationId}, false,
+      ${privateSeriesId}) RETURNING id`;
+  if (!mixedInstance)
+    throw new Error("Failed to insert inherited private shared instance");
+
+  // Keep the cycle before the final event: the snapshot checks rewrite the
+  // highest event ID's series_id. Its private location is already included in
+  // the direct-private deletion count, not the inherited-only fixture list.
+  const cycleLocationId = await location("Synthetic Private Cycle Yard");
+  const cycleEventId = await event(
+    "Synthetic Private Cycle",
+    cycleLocationId,
+    true,
+  );
+  await sql`UPDATE events SET series_id = id WHERE id = ${cycleEventId}`;
+
+  // A private child must not make its public parent or sibling private.
+  // Separate locations expose both upward and sideways privacy propagation.
+  const publicParentLocationId = await location("Synthetic Public Parent Park");
+  const publicParentEventId = await event(
+    "Synthetic Public Parent",
+    publicParentLocationId,
+    false,
+  );
+  await sql`
+    UPDATE events SET series_id = ${publicParentEventId}
+    WHERE id = ${privateEventId}`;
+  const publicSiblingLocationId = await location(
+    "Synthetic Public Sibling Park",
+  );
+  const publicSiblingEventId = await event(
+    "Synthetic Public Sibling",
+    publicSiblingLocationId,
+    false,
+    publicParentEventId,
+  );
 
   // Better Auth shadow row, 1:1 with the users row above. f3_user_id is a
   // GENERATED ALWAYS column ((id)::integer) with an FK to users.id and a
@@ -641,6 +706,18 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
     inheritedInstanceIds,
     inheritedRequestId: inheritedRequest.id,
     inheritedOrgId: ao.id,
+    mixedEventIds: [
+      publicMixedEventId,
+      privateMixedEventId,
+      inheritedMixedEventId,
+    ],
+    mixedInstanceId: mixedInstance.id,
+    publicParentLocationId,
+    publicParentEventId,
+    publicSiblingLocationId,
+    publicSiblingEventId,
+    cycleLocationId,
+    cycleEventId,
   };
 }
 
@@ -1655,6 +1732,60 @@ async function main(): Promise<void> {
         inherited.request_unlinked &&
         inherited.org_unlinked,
       `${inherited?.locations_left ?? "?"} locations left; ${inherited?.events_unlinked ?? "?"}/${planted.inheritedEventIds.length} events and ${inherited?.instances_unlinked ?? "?"}/${planted.inheritedInstanceIds.length} instances kept without locations; request ${inherited?.request_unlinked ? "unlinked" : "NOT unlinked"}, org ${inherited?.org_unlinked ? "unlinked" : "NOT unlinked"}`,
+    );
+
+    const [shared] = await sql<
+      {
+        location_kept: boolean;
+        events_linked: number;
+        instance_linked: boolean;
+      }[]
+    >`
+      SELECT
+        EXISTS (SELECT 1 FROM locations
+          WHERE id = ${planted.mixedLocationId}) AS location_kept,
+        (SELECT count(*)::int FROM events
+          WHERE id IN ${sql(planted.mixedEventIds)}
+            AND location_id = ${planted.mixedLocationId}) AS events_linked,
+        EXISTS (SELECT 1 FROM event_instances
+          WHERE id = ${planted.mixedInstanceId}
+            AND location_id = ${planted.mixedLocationId}) AS instance_linked`;
+    check(
+      "public-shared locations retain inherited-private series and instance references",
+      shared?.location_kept === true &&
+        shared.events_linked === planted.mixedEventIds.length &&
+        shared.instance_linked,
+      `location ${shared?.location_kept ? "kept" : "DROPPED"}; ${shared?.events_linked ?? "?"}/${planted.mixedEventIds.length} events linked; instance ${shared?.instance_linked ? "linked" : "UNLINKED"}`,
+    );
+
+    const [publicRelations] = await sql<
+      { parent_kept: boolean; sibling_kept: boolean }[]
+    >`
+      SELECT
+        EXISTS (SELECT 1 FROM events e JOIN locations l ON e.location_id = l.id
+          WHERE e.id = ${planted.publicParentEventId}
+            AND l.id = ${planted.publicParentLocationId}) AS parent_kept,
+        EXISTS (SELECT 1 FROM events e JOIN locations l ON e.location_id = l.id
+          WHERE e.id = ${planted.publicSiblingEventId}
+            AND l.id = ${planted.publicSiblingLocationId}) AS sibling_kept`;
+    check(
+      "a private child does not make its public parent or sibling locations private",
+      publicRelations?.parent_kept === true && publicRelations.sibling_kept,
+      `parent location/reference ${publicRelations?.parent_kept ? "kept" : "LOST"}; sibling location/reference ${publicRelations?.sibling_kept ? "kept" : "LOST"}`,
+    );
+
+    const [cycle] = await sql<
+      { location_gone: boolean; event_unlinked: boolean }[]
+    >`
+      SELECT
+        NOT EXISTS (SELECT 1 FROM locations
+          WHERE id = ${planted.cycleLocationId}) AS location_gone,
+        EXISTS (SELECT 1 FROM events WHERE id = ${planted.cycleEventId}
+          AND location_id IS NULL) AS event_unlinked`;
+    check(
+      "a private self-referencing series terminates and loses only its location",
+      cycle?.location_gone === true && cycle.event_unlinked,
+      `location ${cycle?.location_gone ? "gone" : "KEPT"}; event ${cycle?.event_unlinked ? "kept without a location" : "NOT unlinked"}`,
     );
 
     const [named] = await sql<

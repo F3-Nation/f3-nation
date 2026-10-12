@@ -1128,17 +1128,17 @@ async function obfuscate(sql: Sql): Promise<void> {
   });
 
   // ---- locations used only by private events -----------------------------------
-  // A location whose every event (series and instances alike) is private is
-  // likely a private residence, so it isn't carried into staging. Locations
-  // with no events (useful for testing) and any location a public event uses
-  // are kept. Every reference to a location is nullable, so the private
+  // A location is dropped when every event and instance using it is private,
+  // either flagged itself or under a private ancestor series (a false flag
+  // doesn't override that). Such a location is likely a private residence.
+  // Locations with no events (useful for testing) and any location a
+  // non-private row uses are kept. Every reference is nullable, so private
   // events are kept and just lose their location; nothing else is deleted.
-  // Privacy is inherited through series ancestry, even when a descendant or
-  // instance's own flag is false. UNION deduplicates IDs so cycles terminate.
   const privateOnlyLocations = (
     await sql<{ id: number }[]>`
       WITH RECURSIVE private_series AS (
         SELECT id FROM events WHERE is_private
+        -- UNION (not ALL) dedupes ids, so series_id cycles terminate
         UNION
         SELECT child.id FROM events child
         JOIN private_series parent ON child.series_id = parent.id
