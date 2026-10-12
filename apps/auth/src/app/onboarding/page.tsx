@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import Image from "next/image";
 
+import { isValidCallbackUrl } from "~/lib/callback-url";
+
 export default function OnboardingPage() {
   return (
     <Suspense>
@@ -100,7 +102,13 @@ function OnboardingForm() {
       }
 
       // The OAuth continuation can redirect across origins, so use a full navigation.
-      window.location.assign(callbackUrl);
+      const safeUrl = isValidCallbackUrl(
+        callbackUrl,
+        process.env.NEXT_PUBLIC_AUTH_URL ?? window.location.origin,
+      )
+        ? callbackUrl
+        : "/";
+      window.location.assign(safeUrl);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
