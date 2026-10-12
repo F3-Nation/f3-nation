@@ -10,6 +10,9 @@ import { vi } from "vitest";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
 const mockLimit = vi.hoisted(() => vi.fn());
+const mockRoleCheckHook = vi.hoisted(() => ({
+  afterSuccess: null as null | (() => Promise<void>),
+}));
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -17,7 +20,26 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { and, count, eq, gte, inArray, schema } from "@acme/db";
+vi.mock("../check-has-role-on-org", async (importOriginal) => {
+  const original = await importOriginal<typeof CheckHasRoleOnOrgModule>();
+  return {
+    ...original,
+    checkHasRoleOnOrg: async (
+      params: Parameters<typeof original.checkHasRoleOnOrg>[0],
+    ) => {
+      const result = await original.checkHasRoleOnOrg(params);
+      const afterSuccess = mockRoleCheckHook.afterSuccess;
+      if (result.success && afterSuccess) {
+        mockRoleCheckHook.afterSuccess = null;
+        await afterSuccess();
+      }
+      return result;
+    },
+  };
+});
+
+import type * as CheckHasRoleOnOrgModule from "../check-has-role-on-org";
+import { and, count, eq, gte, inArray, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -39,6 +61,7 @@ const nextFutureMonday = (n: number): string => {
 describe("Org Router", () => {
   // Track created orgs for cleanup
   const createdOrgIds: number[] = [];
+  const createdLocationIds: number[] = [];
   // Track created users for cleanup (only the accessible/non-nation-admin
   // tests need a real DB-backed user — everything else uses a purely mocked
   // session)
@@ -46,6 +69,7 @@ describe("Org Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRoleCheckHook.afterSuccess = null;
     // Reset rate limiter to allow requests
     mockLimit.mockResolvedValue({
       success: true,
@@ -62,6 +86,13 @@ describe("Org Router", () => {
     for (const userId of createdUserIds.reverse()) {
       try {
         await cleanup.user(userId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    for (const locationId of createdLocationIds.reverse()) {
+      try {
+        await cleanup.location(locationId);
       } catch {
         // Ignore errors during cleanup
       }
@@ -645,6 +676,240 @@ describe("Org Router", () => {
 
       expect(result.org?.id).toBe(testOrg.id);
       expect(result.org?.name).toBe(updatedName);
+    });
+
+    it("rejects an update when the org hierarchy changes before its row lock", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+      const regions = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Stale Read Source Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Stale Read Concurrent Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Stale Read Destination Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      const [sourceRegion, concurrentRegion, destinationRegion] = regions;
+      if (!sourceRegion || !concurrentRegion || !destinationRegion) {
+        throw new Error("Failed to create stale-read test regions");
+      }
+      createdOrgIds.push(
+        sourceRegion.id,
+        concurrentRegion.id,
+        destinationRegion.id,
+      );
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Stale Read AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: sourceRegion.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create stale-read test AO");
+      createdOrgIds.push(ao.id);
+
+      let signalLockHeld!: (pid: number) => void;
+      let releaseLock!: () => void;
+      const lockHeld = new Promise<number>((resolve) => {
+        signalLockHeld = resolve;
+      });
+      const waitToReleaseLock = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+      });
+      const lockTransaction = db.transaction(async (tx) => {
+        await tx
+          .update(schema.orgs)
+          .set({ parentId: concurrentRegion.id })
+          .where(eq(schema.orgs.id, ao.id));
+        const lockPidRow = (
+          await tx.execute<{ pid: number }>(sql`
+          SELECT pg_backend_pid() AS pid
+        `)
+        )[0];
+        if (!lockPidRow) throw new Error("Failed to identify lock holder");
+        signalLockHeld(lockPidRow.pid);
+        await waitToReleaseLock;
+      });
+
+      const blockerPid = await lockHeld;
+      const update = createTestClient().org.crupdate({
+        ...blankFields,
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        parentId: destinationRegion.id,
+      });
+
+      let isWaitingForRowLock = false;
+      let pollingError: unknown;
+      try {
+        // Wait until crupdate has completed its pre-lock reads and is blocked
+        // on the row lock held above. This makes the stale-read ordering
+        // deterministic rather than relying on a timing delay.
+        for (
+          let attempt = 0;
+          attempt < 500 && !isWaitingForRowLock;
+          attempt++
+        ) {
+          const activity = (await db.execute(sql`
+            SELECT wait_event_type, query
+            FROM pg_stat_activity
+            WHERE pid <> pg_backend_pid()
+              AND wait_event_type = 'Lock'
+              AND query ILIKE '%for update%'
+              AND pg_blocking_pids(pid) @> ARRAY[${blockerPid}]::int[]
+          `)) as unknown as {
+            wait_event_type: string | null;
+            query: string;
+          }[];
+          isWaitingForRowLock = activity.some(
+            ({ wait_event_type, query }) =>
+              wait_event_type === "Lock" && /for update/i.test(query),
+          );
+          if (!isWaitingForRowLock) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+        }
+      } catch (error) {
+        pollingError = error;
+      } finally {
+        releaseLock();
+      }
+
+      const [lockResult, updateResult] = await Promise.allSettled([
+        lockTransaction,
+        update,
+      ]);
+      expect(pollingError).toBeUndefined();
+      expect(lockResult.status).toBe("fulfilled");
+      expect(isWaitingForRowLock).toBe(true);
+      expect(updateResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          code: "CONFLICT",
+          message:
+            "Organization hierarchy changed while this update was being prepared. Reload and retry.",
+        },
+      });
+
+      const [unchangedAo] = await db
+        .select({ parentId: schema.orgs.parentId })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(unchangedAo?.parentId).toBe(concurrentRegion.id);
+    });
+
+    it("rechecks editor access after the org's parent changes before its first read", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const [authorizedRegion, movedRegion] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Pre-read Authorized Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Pre-read Moved Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!authorizedRegion || !movedRegion) {
+        throw new Error("Failed to create pre-read race test regions");
+      }
+      createdOrgIds.push(authorizedRegion.id, movedRegion.id);
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Pre-read Race AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: authorizedRegion.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create pre-read race test AO");
+      createdOrgIds.push(ao.id);
+
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Pre-read Race Location ${uniqueId()}`,
+          orgId: ao.id,
+          isActive: true,
+          latitude: 35.5,
+          longitude: -80.5,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create pre-read race location");
+      createdLocationIds.push(location.id);
+      await db
+        .update(schema.orgs)
+        .set({ defaultLocationId: location.id })
+        .where(eq(schema.orgs.id, ao.id));
+
+      await mockAuthWithSession(
+        createEditorSession({
+          orgId: authorizedRegion.id,
+          orgName: authorizedRegion.name,
+        }),
+      );
+      mockRoleCheckHook.afterSuccess = async () => {
+        await db
+          .update(schema.orgs)
+          .set({ parentId: movedRegion.id })
+          .where(eq(schema.orgs.id, ao.id));
+      };
+
+      await expect(
+        createTestClient().org.crupdate({
+          ...blankFields,
+          id: ao.id,
+          name: `Unauthorized mutation ${uniqueId()}`,
+          orgType: "ao",
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const [unchangedAo] = await db
+        .select({
+          name: schema.orgs.name,
+          parentId: schema.orgs.parentId,
+          defaultLocationId: schema.orgs.defaultLocationId,
+        })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(unchangedAo).toEqual({
+        name: ao.name,
+        parentId: movedRegion.id,
+        defaultLocationId: location.id,
+      });
+      const [unchangedLocation] = await db
+        .select({ orgId: schema.locations.orgId })
+        .from(schema.locations)
+        .where(eq(schema.locations.id, location.id));
+      expect(unchangedLocation).toEqual({ orgId: ao.id });
     });
 
     it("cascades an active AO status update to its series and future instances only", async () => {

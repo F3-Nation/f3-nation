@@ -11851,7 +11851,7 @@
         ]
       },
       "post": {
-        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → territory → area → region → ao).",
+        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → territory → area → region → ao). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances.",
         "operationId": "org.crupdate",
         "parameters": [
           {

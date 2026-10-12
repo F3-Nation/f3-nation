@@ -702,7 +702,9 @@ export const orgRouter = {
       ]
         .reverse()
         .map((t) => orgTypeDisplay[t].label.toLowerCase())
-        .join(" → ")}).`,
+        .join(
+          " → ",
+        )}). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances.`,
     })
     .output(
       z.object({
@@ -894,6 +896,28 @@ export const orgRouter = {
 
         if (!lockedOrg) {
           throw new ORPCError("NOT_FOUND", { message: "Org not found" });
+        }
+
+        const lockedRoleCheckResult = await checkHasRoleOnOrg({
+          orgId: lockedOrg.id,
+          session: ctx.session,
+          db: tx as unknown as AppDb,
+          roleName: "editor",
+        });
+        if (!lockedRoleCheckResult.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to update this org",
+          });
+        }
+
+        if (
+          lockedOrg.parentId !== existingOrg.parentId ||
+          lockedOrg.orgType !== existingOrg.orgType
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "Organization hierarchy changed while this update was being prepared. Reload and retry.",
+          });
         }
 
         const deactivatingAo =

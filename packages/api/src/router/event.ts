@@ -897,6 +897,15 @@ export const eventRouter = {
               .where(eq(schema.events.id, input.id))
               .for("update")
           : [];
+        if (
+          transactionExistingEvent &&
+          transactionExistingEvent.orgId !== existingEvent?.orgId
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message: "Event was modified concurrently; reload and retry",
+          });
+        }
+
         const isDeactivationTransition =
           transactionExistingEvent?.isActive === true && !input.isActive;
         const isStatusTransition =
@@ -915,6 +924,42 @@ export const eventRouter = {
               message: "You are not authorized to deactivate this Event",
             });
           }
+        }
+
+        if (transactionExistingEvent?.dayOfWeek && input.dayOfWeek === null) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "An existing event series cannot be converted to a one-off",
+          });
+        }
+
+        const structuralScheduleChanged =
+          transactionExistingEvent !== undefined &&
+          ((input.dayOfWeek !== undefined &&
+            input.dayOfWeek !== transactionExistingEvent.dayOfWeek) ||
+            (input.recurrencePattern !== undefined &&
+              input.recurrencePattern !==
+                transactionExistingEvent.recurrencePattern) ||
+            (input.recurrenceInterval !== undefined &&
+              input.recurrenceInterval !==
+                transactionExistingEvent.recurrenceInterval) ||
+            (input.indexWithinInterval !== undefined &&
+              input.indexWithinInterval !==
+                transactionExistingEvent.indexWithinInterval) ||
+            (input.startDate !== undefined &&
+              input.startDate !== transactionExistingEvent.startDate) ||
+            (input.endDate !== undefined &&
+              input.endDate !== transactionExistingEvent.endDate));
+
+        if (
+          isDeactivationTransition &&
+          transactionExistingEvent?.dayOfWeek &&
+          structuralScheduleChanged
+        ) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "An active event series cannot be deactivated with a structural schedule change",
+          });
         }
 
         const [result] = await transactionDb
