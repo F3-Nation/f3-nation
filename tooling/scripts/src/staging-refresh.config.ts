@@ -69,3 +69,54 @@ export const STAGING_SLACKBOT = {
   region: "us-central1",
   service: "f3-slackbot",
 };
+
+/**
+ * --snapshot-only: the developer snapshot (docs/STAGING_REFRESH.md), cut
+ * from the same obfuscated, verify-target-passed copy as a refresh. Only
+ * these public tables are exported; every other table in the copy is
+ * emptied before the leak scan, so the scan covers exactly what is
+ * published. Adding a table here publishes it to a public bucket: every
+ * column it has must already be in obfuscate-db.columns.txt.
+ */
+export const SNAPSHOT_TABLES = [
+  "orgs",
+  "locations",
+  "events",
+  "event_types",
+  "event_tags",
+  "positions",
+  "attendance_types",
+  "achievements",
+  "users",
+  "events_x_event_types",
+  "event_tags_x_events",
+  "roles",
+  "permissions",
+  "roles_x_permissions",
+  "roles_x_users_x_org",
+  "positions_x_orgs_x_users",
+  "event_instances",
+  "event_instances_x_event_types",
+  "event_tags_x_event_instances",
+].map((t) => `public.${t}`);
+
+/** Must have rows, or the snapshot is refused rather than replace a good one. */
+export const SNAPSHOT_REQUIRED_TABLES = [
+  "orgs",
+  "users",
+  "event_types",
+  "events",
+  "event_instances",
+].map((t) => `public.${t}`);
+
+/** Non-deliverable: every fake address in the snapshot is on this domain. */
+export const SNAPSHOT_EMAIL_SINK = "dev.staging-email-sink@f3nation.local";
+
+/** event_instances kept, by start_date, in days around the export date. */
+export const SNAPSHOT_WINDOW = { daysBack: 30, daysAhead: 90 };
+
+/** Overwritten on every run; the bucket itself is public. */
+export const SNAPSHOT_OBJECT = {
+  bucket: "f3-public-images",
+  name: "dev-snapshots/f3-dev-snapshot.tar",
+};
