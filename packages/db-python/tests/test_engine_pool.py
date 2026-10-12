@@ -1,4 +1,4 @@
-"""The Postgres engine's connection pool is bounded (ADR 0004 §7 step 1).
+"""The Postgres engine's connection pool is bounded (ADR 0004, whole-instance connection budget).
 
 create_engine is lazy, so these build real engines without a database.
 """

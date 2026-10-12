@@ -48,11 +48,11 @@ def _default_echo() -> bool:
 
 # Connection-pool bounds. SQLAlchemy's defaults (pool_size=5 plus
 # max_overflow=10) let every instance open 15 connections, and the prod Slack
-# bot may scale to many instances; once PgBouncer is retired nothing else
-# caps the total, so each instance's share of the whole-database budget is
-# set here (see docs/adr/0004-retire-pgbouncer.md, §7 step 1). Overridable
-# per deployment via env vars; pool_timeout makes an exhausted pool fail
-# fast instead of waiting SQLAlchemy's default 30s.
+# bot may scale to many instances; the ADR's connection budget assumes every
+# instance is bounded, so each instance's share of the whole-database budget
+# is set here (see docs/adr/0004-retire-pgbouncer.md, Decision: whole-instance
+# connection budget). Overridable per deployment via env vars; pool_timeout
+# makes an exhausted pool fail fast instead of waiting SQLAlchemy's default 30s.
 DEFAULT_POOL_SIZE = 5
 DEFAULT_MAX_OVERFLOW = 2
 DEFAULT_POOL_TIMEOUT_SECONDS = 10
