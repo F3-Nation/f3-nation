@@ -71,6 +71,18 @@ describe("canEditUserProfile", () => {
     ).toBe(true);
   });
 
+  it.each([{ id: 7 }, { id: 7, homeRegionId: null, roles: null }])(
+    "needs Nation for a user with missing or null roles: %j",
+    (user) => {
+      expect(
+        canEditUserProfile({ user, sessionUserId: 5, editableOrgs: [region] }),
+      ).toBe(false);
+      expect(
+        canEditUserProfile({ user, sessionUserId: 5, editableOrgs: [nation] }),
+      ).toBe(true);
+    },
+  );
+
   it("counts an AO role through the AO's region", () => {
     const aoId = 101;
     const user = { id: 7, homeRegionId: null, roles: [{ orgId: aoId }] };
@@ -97,6 +109,15 @@ describe("canEditUserProfile", () => {
 });
 
 describe("roleOrgIdsNeedingParent", () => {
+  it.each([{}, { homeRegionId: null, roles: null }])(
+    "needs no parent lookup when roles are missing or null: %j",
+    (user) => {
+      expect(roleOrgIdsNeedingParent({ user, editableOrgs: [region] })).toEqual(
+        [],
+      );
+    },
+  );
+
   it("lists only role orgs the caller can't already edit", () => {
     expect(
       roleOrgIdsNeedingParent({

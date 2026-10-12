@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-logger@0.2.0...pkg-logger@0.3.0) (2026-10-10)
+
+
+### Features
+
+* **db:** add public-table audit history ([#1060](https://github.com/F3-Nation/f3-nation/issues/1060)) ([10454d8](https://github.com/F3-Nation/f3-nation/commit/10454d8ab47795b984a76b01768642860b7718b6))
+
 ## [0.2.0](https://github.com/F3-Nation/f3-nation/compare/pkg-logger@0.1.1...pkg-logger@0.2.0) (2026-09-23)
 
 
