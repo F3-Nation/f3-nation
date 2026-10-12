@@ -1,7 +1,7 @@
 # Seeded Postgres image for per-PR preview environments (F3-57).
 #
 # Built by preview-env.yml: the workflow runs drizzle migrations + the
-# deterministic local seed (pnpm db:migrate && pnpm db:seed:local) against a
+# deterministic local seed (pnpm db:migrate:local && pnpm db:seed:local) against a
 # throwaway Postgres, pg_dumps the result to seed.sql, and bakes it in here.
 # The official postgres entrypoint restores it on first boot (PGDATA lives on
 # an in-memory emptyDir in Cloud Run, so every cold start is a fresh,

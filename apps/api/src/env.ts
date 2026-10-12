@@ -27,6 +27,8 @@ export const env = createEnv({
    */
   server: {
     AUTH_SECRET: z.string().min(1),
+    // Optional bind address; disposable local tests restrict the API to loopback.
+    F3_API_HOST: z.string().min(1).optional(),
     // DB connection strings consumed by @acme/db. This schema only declares and
     // validates them; the DATABASE_URL -> TEST_DATABASE_URL switch for
     // NODE_ENV=test happens in getDbUrl() (packages/db), not here.
@@ -54,6 +56,7 @@ export const env = createEnv({
     NEXT_PUBLIC_CHANNEL: process.env.NEXT_PUBLIC_CHANNEL,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     AUTH_SECRET: process.env.AUTH_SECRET,
+    F3_API_HOST: process.env.F3_API_HOST,
     DATABASE_URL: process.env.DATABASE_URL,
     TEST_DATABASE_URL: process.env.TEST_DATABASE_URL,
   },

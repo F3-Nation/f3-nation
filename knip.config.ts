@@ -31,6 +31,11 @@ const config: KnipConfig = {
     "gcloud",
   ],
   workspaces: {
+    "packages/logger": {
+      // index.test.ts executes this fixture in a separate Node process so
+      // real pino output can be checked without Vitest's logger mocks.
+      entry: ["src/__tests__/fixtures/audit-log-output.ts"],
+    },
     ".": {
       // scripts/lint-staged.mjs spawns the eslint binary by path, so the root
       // devDependency is never a static import knip can follow.
