@@ -8,16 +8,21 @@ set -euo pipefail
 : "${SOURCE_IMAGE:?SOURCE_IMAGE is required}"
 : "${TARGET_REF:?TARGET_REF is required}"
 
-tag="${SOURCE_IMAGE#*:}"
-tag="${tag%@*}"
+name="${SOURCE_IMAGE%@*}"
+last="${name##*/}"
+if [[ "$last" != *:* ]]; then
+  echo "SOURCE_IMAGE must include a tag (e.g. postgres:18.6-trixie@sha256:...), got: ${SOURCE_IMAGE}" >&2
+  exit 1
+fi
+tag="${last##*:}"
 
 docker pull "$SOURCE_IMAGE"
 docker tag "$SOURCE_IMAGE" "${TARGET_REF}:${tag}"
 docker push "${TARGET_REF}:${tag}"
 
 # The local image now carries RepoDigests for both the original Docker Hub
-# pull and this push, in no guaranteed order -- grep for the one under our
-# own TARGET_REF rather than trusting index 0 (Qodo review on #1188).
+# pull and this push, in no guaranteed order -- match on TARGET_REF rather
+# than trusting index 0.
 digest="$(docker inspect --format '{{json .RepoDigests}}' "${TARGET_REF}:${tag}" | grep -o "${TARGET_REF}@sha256:[a-f0-9]*")"
 echo "Mirrored to ${digest}"
 

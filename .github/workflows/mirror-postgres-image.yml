@@ -3,8 +3,8 @@ name: Mirror Postgres Image to GHCR
 # Docker Hub rate-limits unauthenticated pulls per source IP, shared across
 # every ubuntu-latest runner in GitHub's pool. ci.yml's test-coverage service
 # container and tooling/scripts/src/obfuscate-db.verify.ts's `docker run`
-# both pull postgres straight from docker.io, so CI-wide load can (and did,
-# see #1187) exhaust that limit before any test even starts.
+# both pull postgres straight from docker.io, so CI-wide load can exhaust
+# that limit before any test even starts.
 #
 # This re-tags a pinned postgres image into this repo's own GHCR package,
 # the same registry docker-build/docker-cache-refresh already push to with
