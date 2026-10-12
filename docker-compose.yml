@@ -25,7 +25,7 @@ services:
       retries: 10
 
   adminer:
-    image: adminer:6.1.0@sha256:8df93d7bb4313b60cc0d46c773d842f14e39b89ef4c2cedde9d2a17663ec98b5
+    image: adminer:6.1.1@sha256:74f29c416e148b98305e84446a18db7cd2c1038264dec464359d36774ef080ce
     container_name: f3-adminer
     restart: unless-stopped
     ports:
@@ -47,7 +47,7 @@ services:
     command: -scheme http -port 9023 -public-host localhost:9023 -backend filesystem -filesystem-root /data
 
   mailpit:
-    image: axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+    image: axllent/mailpit:v1.31.4@sha256:b68349e3a014b90c5610bfb26b2ae36f3892d7b8cf25ee140c6c71c98d2fcf48
     container_name: f3-mailpit
     restart: unless-stopped
     ports:

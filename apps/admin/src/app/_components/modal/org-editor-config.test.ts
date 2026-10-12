@@ -18,17 +18,19 @@ describe("orgEditorConfig parent types", () => {
     expect(orgEditorConfig.area.parentTypes).toEqual(["sector", "territory"]);
   });
 
-  it("offers a single parent type to every other editor", () => {
+  it("offers both an area and a territory as a region's parent, area first", () => {
+    expect(orgEditorConfig.region.parentTypes).toEqual(["area", "territory"]);
+  });
+
+  it("preserves the other editors' parent choices", () => {
     expect(
       Object.fromEntries(
-        OrgType.filter((orgType) => orgType !== "area").map((orgType) => [
-          orgType,
-          orgEditorConfig[orgType].parentTypes,
-        ]),
+        OrgType.filter(
+          (orgType) => orgType !== "area" && orgType !== "region",
+        ).map((orgType) => [orgType, orgEditorConfig[orgType].parentTypes]),
       ),
     ).toEqual({
       ao: ["region"],
-      region: ["area"],
       territory: ["sector"],
       sector: ["nation"],
       nation: [],
