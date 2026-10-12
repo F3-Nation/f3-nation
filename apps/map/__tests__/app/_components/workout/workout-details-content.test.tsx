@@ -100,8 +100,13 @@ const locationEvent = (
   ...overrides,
 });
 
+type InstanceOrgs = NonNullable<
+  LocationWorkout["location"]
+>["instanceOrgs"][number];
+
 const locationWorkout = (
   events: NonNullable<LocationWorkout["location"]>["events"],
+  instanceOrgs: InstanceOrgs[] = [],
 ): LocationWorkout => ({
   location: {
     id: 10,
@@ -141,6 +146,7 @@ const locationWorkout = (
     regionFacebook: null,
     regionInstagram: null,
     regionType: "region",
+    instanceOrgs,
     fullAddress: "123 Main St, Charlotte, NC",
     events,
   },
@@ -365,6 +371,111 @@ describe("WorkoutDetailsContent at an instance-only location", () => {
     renderPanel(null);
 
     expect(warning()).toBeNull();
+  });
+
+  // Instances at one location can come from different orgs. The location-level
+  // org fields only describe the soonest, so the panel must take the selected
+  // instance's AO and region from its own `instanceOrgs` entry.
+  describe("with workouts from different orgs", () => {
+    const orgsFor = (
+      instanceId: number,
+      ao: string,
+      region: string,
+    ): InstanceOrgs => ({
+      instanceId,
+      parentId: instanceId * 100,
+      parentLogo: null,
+      parentName: ao,
+      parentWebsite: `https://${ao.toLowerCase().replace(/ /g, "-")}.example`,
+      parentEmail: null,
+      parentPhone: null,
+      parentTwitter: null,
+      parentFacebook: null,
+      parentInstagram: null,
+      regionId: instanceId * 1000,
+      regionName: region,
+      regionLogo: null,
+      regionWebsite: null,
+      regionEmail: null,
+      regionPhone: null,
+      regionTwitter: null,
+      regionFacebook: null,
+      regionInstagram: null,
+      regionType: "region",
+    });
+    const laterOneOff = {
+      ...oneOff,
+      id: 6,
+      startDate: "2026-05-20",
+      name: "Bravo Convergence",
+      aoName: "Bravo AO",
+    } satisfies UpcomingInstance;
+
+    beforeEach(() => {
+      queryStates.set("locationWorkout", {
+        data: locationWorkout(
+          [],
+          [orgsFor(5, "Alpha AO", "Metro"), orgsFor(6, "Bravo AO", "Uptown")],
+        ),
+      });
+      queryStates.set("upcomingInstances", { data: [oneOff, laterOneOff] });
+    });
+
+    const regionHeading = (region: string) =>
+      screen.queryByText(`About F3 ${region}`);
+    const aoContactLink = (ao: string) =>
+      document.querySelector(
+        `a[href^="https://${ao.toLowerCase().replace(/ /g, "-")}.example"]`,
+      );
+
+    it("shows the later workout's own AO and region when it is selected", () => {
+      renderPanel(-6);
+
+      expect(screen.getByAltText("Logo for Bravo AO")).toBeTruthy();
+      expect(regionHeading("Uptown")).toBeTruthy();
+      expect(regionHeading("Metro")).toBeNull();
+      expect(aoContactLink("Bravo AO")).toBeTruthy();
+      expect(aoContactLink("Alpha AO")).toBeNull();
+    });
+
+    it("follows the selection when switching between the workouts' chips", () => {
+      const { rerender } = renderPanel(-5);
+      expect(screen.getByAltText("Logo for Alpha AO")).toBeTruthy();
+      expect(regionHeading("Metro")).toBeTruthy();
+
+      rerender(
+        <WorkoutDetailsContent
+          locationId={10}
+          providedEventId={-6}
+          chipSize="small"
+        />,
+      );
+      expect(screen.getByAltText("Logo for Bravo AO")).toBeTruthy();
+      expect(regionHeading("Uptown")).toBeTruthy();
+      expect(aoContactLink("Bravo AO")).toBeTruthy();
+
+      rerender(
+        <WorkoutDetailsContent
+          locationId={10}
+          providedEventId={-5}
+          chipSize="small"
+        />,
+      );
+      expect(screen.getByAltText("Logo for Alpha AO")).toBeTruthy();
+      expect(regionHeading("Metro")).toBeTruthy();
+      expect(aoContactLink("Alpha AO")).toBeTruthy();
+    });
+
+    // The instance list arrives unordered; the default must still be the
+    // soonest, matching the API's location-level fallback.
+    it("defaults to the soonest workout regardless of list order", () => {
+      queryStates.set("upcomingInstances", { data: [laterOneOff, oneOff] });
+
+      renderPanel(null);
+
+      expect(screen.getByAltText("Logo for Alpha AO")).toBeTruthy();
+      expect(regionHeading("Metro")).toBeTruthy();
+    });
   });
 });
 

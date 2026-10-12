@@ -172,11 +172,12 @@ const isVisibleUpcomingInstance = ({
   );
 
 /**
- * AO and region context for a location whose only map presence is an upcoming
- * instance, taken from the soonest visible one. Shaped as the `parent*` and
- * `region*` fields locationWorkout otherwise reads off a series' org, so it can
- * be spread straight over them. Returns undefined when no instance would draw a
- * pin here.
+ * AO and region context for each visible upcoming instance at a location whose
+ * only map presence is those instances, soonest first. One location can hold
+ * instances from different orgs, so the context is per instance rather than
+ * per location. Each row is shaped as the `parent*` and `region*` fields
+ * locationWorkout otherwise reads off a series' org, plus the `instanceId` it
+ * belongs to. Empty when no instance would draw a pin here.
  */
 const getInstanceOrgsAtLocation = async (
   db: Context["db"],
@@ -186,62 +187,62 @@ const getInstanceOrgsAtLocation = async (
   const seriesEvent = aliasedTable(schema.events, "series_event");
   const regionOrg = aliasedTable(schema.orgs, "region_org");
 
-  const [row] = await db
-    .select({
-      parentId: aoOrg.id,
-      parentLogo: aoOrg.logoUrl,
-      parentName: aoOrg.name,
-      parentWebsite: aoOrg.website,
-      parentEmail: aoOrg.email,
-      parentPhone: aoOrg.phone,
-      parentTwitter: aoOrg.twitter,
-      parentFacebook: aoOrg.facebook,
-      parentInstagram: aoOrg.instagram,
-      regionId: regionOrg.id,
-      regionName: regionOrg.name,
-      regionLogo: regionOrg.logoUrl,
-      regionWebsite: regionOrg.website,
-      regionEmail: regionOrg.email,
-      regionPhone: regionOrg.phone,
-      regionTwitter: regionOrg.twitter,
-      regionFacebook: regionOrg.facebook,
-      regionInstagram: regionOrg.instagram,
-      regionType: regionOrg.orgType,
-    })
-    .from(schema.eventInstances)
-    .leftJoin(
-      schema.locations,
-      eq(schema.eventInstances.locationId, schema.locations.id),
-    )
-    .leftJoin(aoOrg, eq(schema.eventInstances.orgId, aoOrg.id))
-    .leftJoin(seriesEvent, eq(seriesEvent.id, schema.eventInstances.seriesId))
-    // Same region resolution as locationWorkout's series path: the org is
-    // the region itself, or an AO directly under one.
-    .leftJoin(
-      regionOrg,
-      or(
-        and(eq(aoOrg.id, regionOrg.id), eq(regionOrg.orgType, "region")),
-        and(
-          eq(aoOrg.orgType, "ao"),
-          eq(aoOrg.parentId, regionOrg.id),
-          eq(regionOrg.orgType, "region"),
+  return (
+    db
+      .select({
+        instanceId: schema.eventInstances.id,
+        parentId: aoOrg.id,
+        parentLogo: aoOrg.logoUrl,
+        parentName: aoOrg.name,
+        parentWebsite: aoOrg.website,
+        parentEmail: aoOrg.email,
+        parentPhone: aoOrg.phone,
+        parentTwitter: aoOrg.twitter,
+        parentFacebook: aoOrg.facebook,
+        parentInstagram: aoOrg.instagram,
+        regionId: regionOrg.id,
+        regionName: regionOrg.name,
+        regionLogo: regionOrg.logoUrl,
+        regionWebsite: regionOrg.website,
+        regionEmail: regionOrg.email,
+        regionPhone: regionOrg.phone,
+        regionTwitter: regionOrg.twitter,
+        regionFacebook: regionOrg.facebook,
+        regionInstagram: regionOrg.instagram,
+        regionType: regionOrg.orgType,
+      })
+      .from(schema.eventInstances)
+      .leftJoin(
+        schema.locations,
+        eq(schema.eventInstances.locationId, schema.locations.id),
+      )
+      .leftJoin(aoOrg, eq(schema.eventInstances.orgId, aoOrg.id))
+      .leftJoin(seriesEvent, eq(seriesEvent.id, schema.eventInstances.seriesId))
+      // Same region resolution as locationWorkout's series path: the org is
+      // the region itself, or an AO directly under one.
+      .leftJoin(
+        regionOrg,
+        or(
+          and(eq(aoOrg.id, regionOrg.id), eq(regionOrg.orgType, "region")),
+          and(
+            eq(aoOrg.orgType, "ao"),
+            eq(aoOrg.parentId, regionOrg.id),
+            eq(regionOrg.orgType, "region"),
+          ),
         ),
-      ),
-    )
-    .where(
-      and(
-        eq(schema.eventInstances.locationId, locationId),
-        isVisibleUpcomingInstance({ aoOrg, seriesEvent }),
-      ),
-    )
-    .orderBy(
-      asc(schema.eventInstances.startDate),
-      asc(schema.eventInstances.startTime),
-      asc(schema.eventInstances.id),
-    )
-    .limit(1);
-
-  return row;
+      )
+      .where(
+        and(
+          eq(schema.eventInstances.locationId, locationId),
+          isVisibleUpcomingInstance({ aoOrg, seriesEvent }),
+        ),
+      )
+      .orderBy(
+        asc(schema.eventInstances.startDate),
+        asc(schema.eventInstances.startTime),
+        asc(schema.eventInstances.id),
+      )
+  );
 };
 
 export const mapLocationRouter = os.router({
@@ -655,6 +656,34 @@ export const mapLocationRouter = os.router({
             regionFacebook: z.string().nullable().describe("Region Facebook"),
             regionInstagram: z.string().nullable().describe("Region Instagram"),
             regionType: z.string().nullable().describe("Region org type"),
+            instanceOrgs: z
+              .array(
+                z.object({
+                  instanceId: z.number().describe("Event instance ID"),
+                  parentId: z.number().nullable(),
+                  parentLogo: z.string().nullable(),
+                  parentName: z.string().nullable(),
+                  parentWebsite: z.string().nullable(),
+                  parentEmail: z.string().nullable(),
+                  parentPhone: z.string().nullable(),
+                  parentTwitter: z.string().nullable(),
+                  parentFacebook: z.string().nullable(),
+                  parentInstagram: z.string().nullable(),
+                  regionId: z.number().nullable(),
+                  regionName: z.string().nullable(),
+                  regionLogo: z.string().nullable(),
+                  regionWebsite: z.string().nullable(),
+                  regionEmail: z.string().nullable(),
+                  regionPhone: z.string().nullable(),
+                  regionTwitter: z.string().nullable(),
+                  regionFacebook: z.string().nullable(),
+                  regionInstagram: z.string().nullable(),
+                  regionType: z.string().nullable(),
+                }),
+              )
+              .describe(
+                "AO and region context per visible upcoming instance, soonest first; populated only when the location has no series events",
+              ),
             fullAddress: z
               .string()
               .nullable()
@@ -850,16 +879,27 @@ export const mapLocationRouter = os.router({
       // markers for one-off instances and away-from-home occurrences, which
       // this query's events join never sees. The client builds those events
       // itself, so only the AO/region context — normally reached through the
-      // series' org — has to come from the instance here.
-      const instanceOrgs =
+      // series' org — has to come from the instances here. Those instances can
+      // belong to different orgs, so the context is returned per instance; the
+      // soonest one's also fills the location-level fields as the default.
+      const instanceOrgs = (
         events.length === 0 && location
           ? await getInstanceOrgsAtLocation(ctx.db, input.locationId)
-          : undefined;
+          : []
+      ).map((orgs) => ({
+        ...orgs,
+        // Same empty-string logo handling as the location-level fields below
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        parentLogo: orgs.parentLogo || null,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        regionLogo: orgs.regionLogo || null,
+      }));
+      const soonestInstanceOrgs = instanceOrgs[0];
 
       // No events and no instances → stale link (LEFT JOIN yields a
       // null-event row when all events fall outside the date window). Return
       // a message instead of throwing so the client shows a friendly panel.
-      if (!location || (events.length === 0 && !instanceOrgs)) {
+      if (!location || (events.length === 0 && !soonestInstanceOrgs)) {
         return {
           location: null,
           message: "This workout is no longer scheduled.",
@@ -873,10 +913,13 @@ export const mapLocationRouter = os.router({
         };
       }
 
-      const { parentLogo, regionLogo } = instanceOrgs ?? location;
+      const { instanceId: _instanceId, ...defaultInstanceOrgs } =
+        soonestInstanceOrgs ?? {};
+      const { parentLogo, regionLogo } = soonestInstanceOrgs ?? location;
       const locationWithEvents = {
         ...location,
-        ...instanceOrgs,
+        ...defaultInstanceOrgs,
+        instanceOrgs,
         // Need to handle empty string values for parent and region logos
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         parentLogo: !parentLogo ? null : parentLogo,

@@ -97,9 +97,18 @@ export const WorkoutDetailsContent = ({
   const locationInstances = useMemo(() => {
     const currentLocation = results?.location;
     if (!upcomingInstancesData || !currentLocation) return [];
-    return upcomingInstancesData.filter(
-      (instance) => instance.locationId === currentLocation.id,
-    );
+    // Match the API's location-level fallback order (startDate, startTime, id;
+    // Postgres ASC puts a null startTime last) so the default selection is the
+    // same instance whose orgs the location reports.
+    return upcomingInstancesData
+      .filter((instance) => instance.locationId === currentLocation.id)
+      .sort(
+        (a, b) =>
+          a.startDate.localeCompare(b.startDate) ||
+          (a.startTime == null ? 1 : 0) - (b.startTime == null ? 1 : 0) ||
+          (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
+          a.id - b.id,
+      );
   }, [upcomingInstancesData, results?.location]);
 
   const baseEvents = useMemo(
@@ -266,7 +275,21 @@ export const WorkoutDetailsContent = ({
     isParentEventError,
   ]);
 
-  const location = useMemo(() => results?.location ?? null, [results]);
+  // At an instance-only location the workouts can belong to different orgs,
+  // so the AO/region context follows the selected instance. The location-level
+  // fields (the soonest instance's) remain the fallback.
+  const location = useMemo(() => {
+    const baseLocation = results?.location;
+    if (!baseLocation) return null;
+    const selectedInstanceOrgs =
+      selectedInstance &&
+      baseLocation.instanceOrgs.find(
+        (orgs) => orgs.instanceId === selectedInstance.id,
+      );
+    if (!selectedInstanceOrgs) return baseLocation;
+    const { instanceId: _instanceId, ...orgs } = selectedInstanceOrgs;
+    return { ...baseLocation, ...orgs };
+  }, [results, selectedInstance]);
 
   // Update the search params when the panel is open
   useUpdateEventSearchParams(location?.id ?? null, selectedEventId);

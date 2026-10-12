@@ -2196,6 +2196,66 @@ describe("Map Location Router", () => {
       );
     });
 
+    it("should return each instance's own AO and region when the instances come from different orgs", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const { region, ao, location, instance } =
+        await createInstanceOnlyFixture();
+
+      const otherRegion = await createTestRegion();
+      if (!otherRegion) throw new Error("Failed to create other region");
+      const otherAo = await createTestAO(otherRegion.id, {
+        logoUrl: "https://example.com/other-ao.png",
+      });
+      if (!otherAo) throw new Error("Failed to create other AO");
+      const [laterInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Other-Org Instance ${uniqueId()}`,
+          orgId: otherAo.id,
+          seriesId: null,
+          locationId: location.id,
+          startDate: shiftDays(await getDbTomorrow(), 1),
+          startTime: "0600",
+          endTime: "0700",
+          highlight: false,
+          isActive: true,
+          isPrivate: false,
+        })
+        .returning();
+      if (!laterInstance) throw new Error("Failed to create later instance");
+      createdEventInstanceIds.push(laterInstance.id);
+
+      const client = createTestClient();
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      // The location-level fields default to the soonest instance's orgs…
+      expect(workout.location).toEqual(
+        expect.objectContaining({ parentId: ao.id, regionId: region.id }),
+      );
+      // …while each instance carries its own, soonest first.
+      expect(workout.location?.instanceOrgs).toEqual([
+        expect.objectContaining({
+          instanceId: instance.id,
+          parentId: ao.id,
+          parentLogo: "https://example.com/ao.png",
+          regionId: region.id,
+          regionName: region.name,
+        }),
+        expect.objectContaining({
+          instanceId: laterInstance.id,
+          parentId: otherAo.id,
+          parentName: otherAo.name,
+          parentLogo: "https://example.com/other-ao.png",
+          regionId: otherRegion.id,
+          regionName: otherRegion.name,
+        }),
+      ]);
+    });
+
     it("should still report no longer scheduled when the only instance is private", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
