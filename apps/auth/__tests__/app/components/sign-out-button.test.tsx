@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -68,15 +69,42 @@ describe("sign out", () => {
   ])(
     "clears the active session after revocation (Better Auth: %s, status: %s)",
     async (useBetterAuth, status) => {
-      fetchMock.mockResolvedValueOnce(new Response(null, { status }));
+      let resolveRevocation!: (response: Response) => void;
+      fetchMock.mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          resolveRevocation = resolve;
+        }),
+      );
+      let resolveSignOut!: (result: { error: null }) => void;
+      betterAuthSignOut.mockReturnValueOnce(
+        new Promise<{ error: null }>((resolve) => {
+          resolveSignOut = resolve;
+        }),
+      );
       confirmLogout(useBetterAuth);
 
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/logout", {
+        method: "POST",
+      });
+      expect(nextAuthSignOut).not.toHaveBeenCalled();
+      expect(betterAuthSignOut).not.toHaveBeenCalled();
+      expect(router.push).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveRevocation(new Response(null, { status }));
+      });
+
       if (useBetterAuth) {
+        expect(betterAuthSignOut).toHaveBeenCalledExactlyOnceWith();
+        expect(nextAuthSignOut).not.toHaveBeenCalled();
+        expect(router.push).not.toHaveBeenCalled();
+
+        await act(async () => {
+          resolveSignOut({ error: null });
+        });
         await waitFor(() =>
           expect(router.push).toHaveBeenCalledExactlyOnceWith("/login"),
         );
-        expect(betterAuthSignOut).toHaveBeenCalledExactlyOnceWith();
-        expect(nextAuthSignOut).not.toHaveBeenCalled();
       } else {
         await waitFor(() =>
           expect(nextAuthSignOut).toHaveBeenCalledExactlyOnceWith({
@@ -86,9 +114,6 @@ describe("sign out", () => {
         expect(betterAuthSignOut).not.toHaveBeenCalled();
         expect(router.push).not.toHaveBeenCalled();
       }
-      expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/logout", {
-        method: "POST",
-      });
       expect(screen.queryByText(errorMessage)).toBeNull();
     },
   );
