@@ -50,8 +50,16 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # The snapshot checks run the real pg_dump/pg_restore, which must match
+      # the harness's Postgres 18.
+      - name: Install the PostgreSQL 18 client
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y --no-install-recommends postgresql-client-18
       - name: Verify PII obfuscation against the sandbox seed
         run: pnpm -F @acme/scripts obfuscate-db:verify
+        env:
+          PG_BIN_DIR: /usr/lib/postgresql/18/bin
 
   format-check:
     runs-on: ubuntu-latest
