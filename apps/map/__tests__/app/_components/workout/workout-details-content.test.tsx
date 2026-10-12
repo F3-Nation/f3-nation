@@ -476,6 +476,56 @@ describe("WorkoutDetailsContent at an instance-only location", () => {
       expect(screen.getByAltText("Logo for Alpha AO")).toBeTruthy();
       expect(regionHeading("Metro")).toBeTruthy();
     });
+
+    // Same day: the earlier start time wins even when it has the higher id,
+    // so an id-only tie-break would pick the wrong workout.
+    it("defaults to the earlier start time on the same day", () => {
+      const later = { ...oneOff, id: 5, startTime: "0600" };
+      const earlier = {
+        ...laterOneOff,
+        startDate: oneOff.startDate,
+        startTime: "0500",
+      };
+      queryStates.set("upcomingInstances", { data: [later, earlier] });
+
+      renderPanel(null);
+
+      expect(screen.getByAltText("Logo for Bravo AO")).toBeTruthy();
+      expect(regionHeading("Uptown")).toBeTruthy();
+    });
+
+    // Postgres ASC puts a null startTime last, like the API's ordering.
+    it("ranks a workout with no start time last on the same day", () => {
+      const untimed = { ...oneOff, id: 5, startTime: null };
+      const timed = {
+        ...laterOneOff,
+        startDate: oneOff.startDate,
+        startTime: "2300",
+      };
+      queryStates.set("upcomingInstances", { data: [untimed, timed] });
+
+      renderPanel(null);
+
+      expect(screen.getByAltText("Logo for Bravo AO")).toBeTruthy();
+      expect(regionHeading("Uptown")).toBeTruthy();
+    });
+
+    // The cached instance list can be newer than locationWorkout. Showing no
+    // AO or region beats showing another workout's contact links.
+    it("shows no AO or region when the selected workout has no orgs entry", () => {
+      queryStates.set("locationWorkout", {
+        data: locationWorkout([], [orgsFor(5, "Alpha AO", "Metro")]),
+      });
+
+      renderPanel(-6);
+
+      expect(screen.getAllByText("Bravo Convergence").length).toBeGreaterThan(
+        0,
+      );
+      expect(screen.queryByAltText("Logo for Alpha AO")).toBeNull();
+      expect(aoContactLink("Alpha AO")).toBeNull();
+      expect(regionHeading("Metro")).toBeNull();
+    });
   });
 });
 

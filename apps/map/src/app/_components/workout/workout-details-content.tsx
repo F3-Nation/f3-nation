@@ -41,6 +41,31 @@ type WorkoutDetailsEvent = NonNullable<
 >;
 type UpcomingInstance =
   RouterOutputs["map"]["location"]["upcomingInstances"][number];
+type InstanceOrgs = NonNullable<
+  RouterOutputs["map"]["location"]["locationWorkout"]["location"]
+>["instanceOrgs"][number];
+
+const UNKNOWN_ORGS: Omit<InstanceOrgs, "instanceId"> = {
+  parentId: null,
+  parentLogo: null,
+  parentName: null,
+  parentWebsite: null,
+  parentEmail: null,
+  parentPhone: null,
+  parentTwitter: null,
+  parentFacebook: null,
+  parentInstagram: null,
+  regionId: null,
+  regionName: null,
+  regionLogo: null,
+  regionWebsite: null,
+  regionEmail: null,
+  regionPhone: null,
+  regionTwitter: null,
+  regionFacebook: null,
+  regionInstagram: null,
+  regionType: null,
+};
 
 export function createWorkoutEventFromInstance(
   instance: UpcomingInstance,
@@ -276,17 +301,20 @@ export const WorkoutDetailsContent = ({
   ]);
 
   // At an instance-only location the workouts can belong to different orgs,
-  // so the AO/region context follows the selected instance. The location-level
-  // fields (the soonest instance's) remain the fallback.
+  // so the AO/region context follows the selected instance. Series-backed
+  // locations (no instanceOrgs) keep the location-level fields.
   const location = useMemo(() => {
     const baseLocation = results?.location;
     if (!baseLocation) return null;
-    const selectedInstanceOrgs =
-      selectedInstance &&
-      baseLocation.instanceOrgs.find(
-        (orgs) => orgs.instanceId === selectedInstance.id,
-      );
-    if (!selectedInstanceOrgs) return baseLocation;
+    if (!selectedInstance || baseLocation.instanceOrgs.length === 0) {
+      return baseLocation;
+    }
+    const selectedInstanceOrgs = baseLocation.instanceOrgs.find(
+      (orgs) => orgs.instanceId === selectedInstance.id,
+    );
+    // The cached instance list and locationWorkout can disagree when one was
+    // refetched later. Show no AO or region rather than another workout's.
+    if (!selectedInstanceOrgs) return { ...baseLocation, ...UNKNOWN_ORGS };
     const { instanceId: _instanceId, ...orgs } = selectedInstanceOrgs;
     return { ...baseLocation, ...orgs };
   }, [results, selectedInstance]);
