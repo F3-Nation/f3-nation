@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import OnboardingPage from "~/app/onboarding/page";
 
-const { router, searchParams } = vi.hoisted(() => ({
+const { envMock, router, searchParams } = vi.hoisted(() => ({
+  envMock: { NEXT_PUBLIC_AUTH_URL: undefined as string | undefined },
   router: { push: vi.fn() },
   searchParams: new URLSearchParams(),
 }));
@@ -21,6 +22,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
 }));
 vi.mock("next/image", () => ({ default: () => null }));
+vi.mock("~/env", () => ({ env: envMock }));
 
 const fetchMock = vi.fn<typeof fetch>();
 const assign = vi.fn();
@@ -50,7 +52,8 @@ beforeEach(() => {
   fetchMock.mockResolvedValueOnce(Response.json({ isExistingUser: false }));
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("location", { assign, origin: browserOrigin });
-  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", authOrigin);
+  envMock.NEXT_PUBLIC_AUTH_URL = authOrigin;
+  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", browserOrigin);
 });
 
 afterEach(() => {
@@ -93,7 +96,7 @@ describe("onboarding continuation", () => {
   );
 
   it("uses the browser origin when no canonical Auth URL is configured", async () => {
-    vi.stubEnv("NEXT_PUBLIC_AUTH_URL", undefined);
+    envMock.NEXT_PUBLIC_AUTH_URL = undefined;
     searchParams.set("callbackUrl", `${browserOrigin}${callback}`);
     fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
 
