@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Regression tests for scripts/mirror-postgres-image.sh: that it extracts the
-# right tag from source-image shapes beyond the default `name:tag@digest`,
-# that it selects the pushed GHCR digest out of RepoDigests by matching
-# TARGET_REF even when another entry sorts first or a same-prefix decoy
-# repo is present, and that it fails loudly (and pushes nothing) on each
-# documented failure mode. Run directly: bash scripts/mirror-postgres-image.test.sh
+# Regression tests for scripts/mirror-postgres-image.sh: that it rejects a
+# non-digest-pinned SOURCE_IMAGE, extracts the right tag from source-image
+# shapes beyond the default `name:tag@digest`, selects the pushed GHCR
+# digest out of RepoDigests by matching TARGET_REF even when another entry
+# sorts first or a same-prefix decoy repo is present, and fails loudly (and
+# pushes nothing) on each documented failure mode.
+# Run directly: bash scripts/mirror-postgres-image.test.sh
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -106,8 +107,14 @@ assert_eq "digest-only source: no push attempted" \
   "0" "$(grep -c '^push' "$tmp_dir/docker.calls")"
 
 run_mirror "postgres" "$default_target" 1
-assert_eq "no-tag, no-digest source fails loudly" \
-  "1" "$(grep -c "SOURCE_IMAGE must include a tag" "$tmp_dir/stdout")"
+assert_eq "no-tag, no-digest source fails the digest-pin check first" \
+  "1" "$(grep -c "SOURCE_IMAGE must be digest-pinned" "$tmp_dir/stdout")"
+
+run_mirror "postgres:18.6-trixie" "$default_target" 1
+assert_eq "a mutable tag with no digest is rejected, not silently mirrored" \
+  "1" "$(grep -c "SOURCE_IMAGE must be digest-pinned" "$tmp_dir/stdout")"
+assert_eq "mutable-tag source: no pull attempted" \
+  "0" "$(grep -c '^pull' "$tmp_dir/docker.calls")"
 
 run_mirror "localhost:5000/postgres:18@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722" "$default_target" 0
 assert_eq "a registry-with-port source still yields the image's own tag, not the port" \

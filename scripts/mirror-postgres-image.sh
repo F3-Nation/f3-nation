@@ -8,6 +8,14 @@ set -euo pipefail
 : "${SOURCE_IMAGE:?SOURCE_IMAGE is required}"
 : "${TARGET_REF:?TARGET_REF is required}"
 
+# The whole point of this workflow is mirroring a pinned image; a mutable
+# tag typed into the workflow_dispatch input would mirror whatever that tag
+# currently resolves to instead.
+if [[ ! "$SOURCE_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+  echo "SOURCE_IMAGE must be digest-pinned (end with @sha256:<64 hex chars>), got: ${SOURCE_IMAGE}" >&2
+  exit 1
+fi
+
 name="${SOURCE_IMAGE%@*}"
 last="${name##*/}"
 if [[ "$last" != *:* ]]; then
