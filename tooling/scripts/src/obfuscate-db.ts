@@ -1133,14 +1133,27 @@ async function obfuscate(sql: Sql): Promise<void> {
   // with no events (useful for testing) and any location a public event uses
   // are kept. Every reference to a location is nullable, so the private
   // events are kept and just lose their location; nothing else is deleted.
+  // Privacy is inherited through series ancestry, even when a descendant or
+  // instance's own flag is false. UNION deduplicates IDs so cycles terminate.
   const privateOnlyLocations = (
     await sql<{ id: number }[]>`
+      WITH RECURSIVE private_series AS (
+        SELECT id FROM events WHERE is_private
+        UNION
+        SELECT child.id FROM events child
+        JOIN private_series parent ON child.series_id = parent.id
+      )
       SELECT location_id AS id FROM (
-        SELECT location_id, is_private FROM events
-        WHERE location_id IS NOT NULL
+        SELECT e.location_id, private_series.id IS NOT NULL AS is_private
+        FROM events e
+        LEFT JOIN private_series ON private_series.id = e.id
+        WHERE e.location_id IS NOT NULL
         UNION ALL
-        SELECT location_id, is_private FROM event_instances
-        WHERE location_id IS NOT NULL
+        SELECT ei.location_id,
+          ei.is_private OR private_series.id IS NOT NULL AS is_private
+        FROM event_instances ei
+        LEFT JOIN private_series ON private_series.id = ei.series_id
+        WHERE ei.location_id IS NOT NULL
       ) refs
       GROUP BY location_id
       HAVING bool_and(is_private)`
