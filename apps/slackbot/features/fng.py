@@ -109,6 +109,7 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     display_name = f"{first_name} {(last_name or '')[:1]}."
     if f3_name:
         display_name = f"{f3_name} ({display_name})"
+    display_name = html.escape(display_name, quote=False)  # Slack mrkdwn: neutralize <!channel> and friends
 
     def done(level: AlertLevel, message: str):
         update_submission_wait_view(
@@ -129,23 +130,28 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     if not existing:
         buddy = get_user(safe_get(body, "user", "id"), region_record, client, logger)
         buddy_user_id = safe_get(buddy, "user_id")
-        DbManager.create_record(
-            User(
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-                f3_name=f3_name,
-                phone=text(FNG_PHONE),
-                home_region_id=region_record.org_id,
-                meta={USER_META_BROUGHT_BY: buddy_user_id} if buddy_user_id else {},
+        try:
+            DbManager.create_record(
+                User(
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    f3_name=f3_name,
+                    phone=text(FNG_PHONE),
+                    home_region_id=region_record.org_id,
+                    meta={USER_META_BROUGHT_BY: buddy_user_id} if buddy_user_id else {},
+                )
             )
-        )
+        except Exception:
+            logger.exception("fng.create_user_failed")
+            done(AlertLevel.ERROR, "I couldn't create his F3 Nation profile, so nothing was sent. Please try again.")
+            return
 
     region = safe_get(DbManager.get(Org, region_record.org_id), "name") or region_record.workspace_name or "F3"
     emailed = _send_welcome_email(email, first_name, region, region_record.downrange_invite_link)
 
     if region_record.welcome_channel_enable and region_record.welcome_channel:
-        where = f"*{ao_name}*" if ao_name else region
+        where = f"*{html.escape(ao_name, quote=False)}*" if ao_name else html.escape(region, quote=False)
         try:
             client.chat_postMessage(
                 channel=region_record.welcome_channel,

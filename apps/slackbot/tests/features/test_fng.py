@@ -139,3 +139,28 @@ def test_form_lists_region_aos_alphabetically(monkeypatch):
     assert view["view"]["callback_id"] == fng.FNG_CALLBACK_ID
     ao_block = next(b for b in view["view"]["blocks"] if b.get("block_id") == fng.FNG_AO)
     assert [o["value"] for o in ao_block["element"]["options"]] == ["1", "2"]
+
+
+def test_failed_user_create_shows_error_and_sends_nothing(monkeypatch):
+    db, send, view = patch_db(monkeypatch)
+    db.create_record.side_effect = RuntimeError("duplicate key")
+    client = MagicMock()
+
+    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
+
+    send.assert_not_called()
+    client.chat_postMessage.assert_not_called()
+    assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
+
+
+def test_welcome_post_escapes_typed_names(monkeypatch):
+    patch_db(monkeypatch)
+    client = MagicMock()
+    body = submission(**{fng.FNG_F3_NAME: "<!channel>"})
+    body["view"]["state"]["values"][fng.FNG_AO][fng.FNG_AO]["selected_option"]["text"]["text"] = "Rock & Roll"
+
+    fng.handle_fng_form(body, client, MagicMock(), {}, region_record())
+
+    text = client.chat_postMessage.call_args.kwargs["text"]
+    assert "<!channel>" not in text and "&lt;!channel&gt;" in text
+    assert "*Rock &amp; Roll*" in text and "<@U_BUDDY>" in text
