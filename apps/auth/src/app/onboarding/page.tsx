@@ -99,8 +99,8 @@ function OnboardingForm() {
         return;
       }
 
-      // Redirect back to the original flow
-      router.push(callbackUrl);
+      // The OAuth continuation can redirect across origins, so use a full navigation.
+      window.location.assign(callbackUrl);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
