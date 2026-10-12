@@ -1,5 +1,27 @@
 # Changelog
 
+## [6.11.0](https://github.com/F3-Nation/f3-nation/compare/api@6.10.0...api@6.11.0) (2026-10-10)
+
+
+### Features
+
+* **db:** add public-table audit history ([#1060](https://github.com/F3-Nation/f3-nation/issues/1060)) ([10454d8](https://github.com/F3-Nation/f3-nation/commit/10454d8ab47795b984a76b01768642860b7718b6))
+
+
+### Bug Fixes
+
+* **api,admin:** let home-region editors and admins see and edit user PII ([#1150](https://github.com/F3-Nation/f3-nation/issues/1150)) ([35f5efa](https://github.com/F3-Nation/f3-nation/commit/35f5efa9dab0647a3ce98ae2b783d54f0e6b4d45))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.13.0
+    * @acme/logger bumped to 0.3.0
+  * devDependencies
+    * @acme/db bumped to 0.9.0
+
 ## [6.10.0](https://github.com/F3-Nation/f3-nation/compare/api@6.9.0...api@6.10.0) (2026-10-06)
 
 
