@@ -24,6 +24,9 @@ const feedbackSchema = z.object({
 // for ordinary reads, not for something that can be turned into an
 // email-flooding tool against the F3 Nation team's inbox. A separate,
 // much tighter limiter scopes that risk to this one endpoint.
+// WARNING: like shared.ts's limiter, this is in-memory. In multi-instance
+// deployments each instance maintains separate counters, so the effective
+// limit is 5 * number_of_instances, not a shared cap.
 const feedbackLimiter = new MemoryRatelimiter({
   maxRequests: 5,
   window: 60_000,
