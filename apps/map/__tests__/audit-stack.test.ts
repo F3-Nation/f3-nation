@@ -54,11 +54,8 @@ beforeEach(() => {
     queueMicrotask(() => {
       child.emit("spawn");
       const command = args.at(-1);
-      if (command === "migrate" || command === "seed:local") {
-        child.exitCode =
-          command === (failedSetup === "seed" ? "seed:local" : failedSetup)
-            ? 1
-            : 0;
+      if (command === "migrate:local" || command === "seed:local") {
+        child.exitCode = command === `${failedSetup}:local` ? 1 : 0;
         child.emit("exit", child.exitCode);
       }
     });
