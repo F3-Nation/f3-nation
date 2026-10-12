@@ -61,7 +61,9 @@ beforeEach(() => {
   searchParams.set("email", email);
   searchParams.set("code", code);
   searchParams.set("callbackUrl", callback);
-  fetchMock.mockReset().mockResolvedValue(Response.json({ success: true }));
+  fetchMock
+    .mockReset()
+    .mockImplementation(async () => Response.json({ success: true }));
   fetchMock.mockResolvedValueOnce(Response.json(regions));
   signIn.mockReset().mockResolvedValue({ error: null });
   emailOtp.mockReset().mockResolvedValue({ error: null });
