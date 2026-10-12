@@ -121,13 +121,13 @@ describe("registration", () => {
     ["external callback", "https://outside.example/callback", "/"],
     [
       "same-origin callback",
-      "http://localhost:3000/account",
-      "http://localhost:3000/account",
+      "https://auth.example.test/account",
+      "https://auth.example.test/account",
     ],
   ])("uses a safe destination for a %s", async (_name, input, destination) => {
     if (input === null) searchParams.delete("callbackUrl");
     else searchParams.set("callbackUrl", input);
-    vi.stubGlobal("location", { origin: "http://localhost:3000" });
+    vi.stubGlobal("location", { origin: "https://auth.example.test" });
     await fillForm();
     submit();
     await waitFor(() =>
