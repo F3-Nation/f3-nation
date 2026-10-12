@@ -74,6 +74,12 @@ import {
 const CONTAINER = "f3-obfuscate-verify-pg";
 const PORT = 5434;
 const DB_NAME = "f3nation";
+// Local dev defaults to the mutable Docker Hub tag (no auth needed). CI sets
+// this to the repo's own GHCR mirror (mirror-postgres-image.yml) to dodge
+// Docker Hub's shared unauthenticated pull rate limit; that image is
+// private, so the CI job logs in to GHCR before this script runs.
+const POSTGRES_IMAGE =
+  process.env.OBFUSCATE_VERIFY_POSTGRES_IMAGE ?? "postgres:18";
 const DATABASE_URL = `postgresql://f3local:f3local@localhost:${PORT}/${DB_NAME}`;
 
 const repoRoot = path.resolve(
@@ -173,7 +179,7 @@ async function startDockerPostgres(): Promise<() => void> {
     `POSTGRES_DB=${DB_NAME}`,
     "-p",
     `${PORT}:5432`,
-    "postgres:18",
+    POSTGRES_IMAGE,
   ]);
   for (let i = 0; ; i++) {
     const ready = spawnSync("docker", [
