@@ -2256,6 +2256,118 @@ describe("Map Location Router", () => {
       ]);
     });
 
+    it("should open an away-from-home series occurrence at a location with no series of its own", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const homeLocation = await createTestLocation(region.id);
+      const awayLocation = await createTestLocation(region.id);
+      if (!homeLocation || !awayLocation)
+        throw new Error("Failed to create test locations");
+
+      const series = await createDatedEvent({
+        aoId: ao.id,
+        locationId: homeLocation.id,
+        label: "Home Series",
+        dayOfWeek: "monday",
+        startDate: "2026-01-01",
+      });
+
+      const [awayInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Away Occurrence ${uniqueId()}`,
+          orgId: ao.id,
+          seriesId: series.id,
+          locationId: awayLocation.id,
+          startDate: await getDbTomorrow(),
+          startTime: "0600",
+          endTime: "0700",
+          highlight: false,
+          isActive: true,
+          isPrivate: false,
+          seriesException: null,
+        })
+        .returning();
+      if (!awayInstance) throw new Error("Failed to create away instance");
+      createdEventInstanceIds.push(awayInstance.id);
+
+      const client = createTestClient();
+      const pins = await client.map.location.upcomingInstances();
+      expect(pins.some((pin) => pin.id === awayInstance.id)).toBe(true);
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: awayLocation.id,
+      });
+
+      expect(workout.message).toBeUndefined();
+      expect(workout.location).toEqual(
+        expect.objectContaining({
+          id: awayLocation.id,
+          events: [],
+          parentId: ao.id,
+          regionId: region.id,
+        }),
+      );
+      expect(workout.location?.instanceOrgs).toEqual([
+        expect.objectContaining({
+          instanceId: awayInstance.id,
+          parentId: ao.id,
+        }),
+      ]);
+    });
+
+    it("should open a one-off pin at a location whose only series is under a retired AO", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const retiredAo = await createTestAO(region.id);
+      if (!retiredAo) throw new Error("Failed to create retired AO");
+      const { ao, location, instance } = await createInstanceOnlyFixture();
+
+      await createDatedEvent({
+        aoId: retiredAo.id,
+        locationId: location.id,
+        label: "Retired AO Series",
+        dayOfWeek: "monday",
+        startDate: "2026-01-01",
+      });
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, retiredAo.id));
+
+      const client = createTestClient();
+      const locations = await client.map.location.eventsAndLocations();
+      expect(
+        locations.find((loc: [number, ...unknown[]]) => loc[0] === location.id),
+      ).toBeUndefined();
+      const pins = await client.map.location.upcomingInstances();
+      expect(pins.some((pin) => pin.id === instance.id)).toBe(true);
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      expect(workout.message).toBeUndefined();
+      expect(workout.location).toEqual(
+        expect.objectContaining({
+          id: location.id,
+          events: [],
+          parentId: ao.id,
+        }),
+      );
+      expect(workout.location?.instanceOrgs).toEqual([
+        expect.objectContaining({ instanceId: instance.id, parentId: ao.id }),
+      ]);
+    });
+
     it("should still report no longer scheduled when the only instance is private", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);

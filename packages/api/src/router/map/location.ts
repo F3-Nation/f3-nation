@@ -814,6 +814,16 @@ export const mapLocationRouter = os.router({
             eq(schema.events.isActive, true),
             eq(schema.events.isPrivate, false),
             withinCurrentEventDateWindow(),
+            // Org checks live in the join, not the WHERE: a location whose
+            // only series sits under a retired org must still come back (with
+            // no events) so the instance fallback below can run for one-offs
+            // from other orgs that upcomingInstances still pins here.
+            sql`NOT EXISTS (
+              SELECT 1 FROM ${schema.orgs}
+              WHERE ${schema.orgs.id} = ${schema.events.orgId}
+                AND ${schema.orgs.isActive} = false
+            )`,
+            ancestorOrgsAreActive(schema.events.orgId),
           ),
         )
         .leftJoin(parentOrg, eq(schema.events.orgId, parentOrg.id))
@@ -846,13 +856,6 @@ export const mapLocationRouter = os.router({
           and(
             eq(schema.locations.id, input.locationId),
             eq(schema.locations.isActive, true),
-            or(
-              isNull(schema.events.id),
-              and(
-                or(isNull(parentOrg.id), eq(parentOrg.isActive, true)),
-                ancestorOrgsAreActive(schema.events.orgId),
-              ),
-            ),
           ),
         )
         .groupBy(
