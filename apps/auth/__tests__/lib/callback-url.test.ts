@@ -15,6 +15,14 @@ describe("callback URL validation", () => {
     expect(isValidCallbackUrl(callback, authUrl)).toBe(true);
   });
 
+  it("allows relative and absolute callbacks for local HTTP Auth", () => {
+    const localAuthUrl = "http://localhost:3004";
+    expect(isValidCallbackUrl("/account", localAuthUrl)).toBe(true);
+    expect(isValidCallbackUrl(`${localAuthUrl}/account`, localAuthUrl)).toBe(
+      true,
+    );
+  });
+
   it.each([
     "",
     "account",
@@ -30,6 +38,7 @@ describe("callback URL validation", () => {
     "javascript:void(0)",
     "java\tscript:void(0)",
     "data:text/html,<p>External document</p>",
+    "blob:https://auth.f3nation.test/id",
     "https://[invalid",
   ])("rejects unsafe or malformed callbacks: %j", (callback) => {
     expect(isValidCallbackUrl(callback, authUrl)).toBe(false);
@@ -37,5 +46,11 @@ describe("callback URL validation", () => {
 
   it("fails closed when the Auth URL is invalid", () => {
     expect(isValidCallbackUrl("/account", "invalid")).toBe(false);
+  });
+
+  it("rejects a non-HTTP Auth URL even when the callback origin matches", () => {
+    expect(isValidCallbackUrl(`${authUrl}/account`, `blob:${authUrl}/id`)).toBe(
+      false,
+    );
   });
 });

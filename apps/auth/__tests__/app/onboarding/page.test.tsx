@@ -72,6 +72,7 @@ describe("onboarding continuation", () => {
     ],
     ["missing callback", null, "/"],
     ["javascript callback", "javascript:void(0)", "/"],
+    ["same-origin blob callback", `blob:${authOrigin}/id`, "/"],
     ["proxy-origin callback", `${browserOrigin}${callback}`, "/"],
   ])(
     "uses full-page navigation after saving with a %s",
