@@ -261,6 +261,16 @@ function buildEventWhereClause(params: {
     // least a signed-in user. Keep that behavior unchanged for authenticated
     // callers and only hide private events from anonymous ones.
     isAnonymous ? eq(schema.events.isPrivate, false) : undefined,
+    // location.delete only soft-deletes the location (isActive: false) and
+    // leaves its events untouched, so an anonymous caller could otherwise
+    // still read a deleted location's name/address through an active event
+    // that still points at it. Authenticated callers are unaffected.
+    isAnonymous
+      ? or(
+          isNull(schema.events.locationId),
+          eq(schema.locations.isActive, true),
+        )
+      : undefined,
     input?.searchTerm
       ? or(
           ilike(schema.events.name, `%${input.searchTerm}%`),

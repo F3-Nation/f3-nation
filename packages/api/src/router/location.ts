@@ -6,6 +6,7 @@ import {
   and,
   count,
   eq,
+  exists,
   gt,
   gte,
   ilike,
@@ -184,6 +185,24 @@ export const locationRouter = {
         // Filter by editable org IDs if onlyMine is true and not a nation admin
         input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
           ? inArray(schema.locations.orgId, editableOrgIds)
+          : undefined,
+        // An editor can keep a location active while its workouts are all
+        // isPrivate (or inactive) — the public map hides that location, so
+        // an anonymous caller shouldn't be able to retrieve its address
+        // through this list either. Authenticated callers are unaffected.
+        isAnonymous
+          ? exists(
+              ctx.db
+                .select({ one: count() })
+                .from(schema.events)
+                .where(
+                  and(
+                    eq(schema.events.locationId, schema.locations.id),
+                    eq(schema.events.isActive, true),
+                    eq(schema.events.isPrivate, false),
+                  ),
+                ),
+            )
           : undefined,
       );
 
