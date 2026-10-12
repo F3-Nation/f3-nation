@@ -10,7 +10,14 @@
 #    PROD_DATABASE_URL / STAGING_DATABASE_URL are given (local rehearsals).
 # 3. Runs the orchestrator with --yes. Extra args are passed through, e.g.
 #    gcloud run jobs execute f3-staging-refresh ... --args=--dry-run
+#    With --args=--snapshot-only it runs the developer snapshot instead: no
+#    staging URL is built or passed on, and no --yes / --allow-staging-db.
 set -euo pipefail
+
+SNAPSHOT_ONLY=false
+for arg in "$@"; do
+  if [[ "$arg" = "--snapshot-only" ]]; then SNAPSHOT_ONLY=true; fi
+done
 
 STAGING_DB_NAME="${STAGING_DB_NAME:-f3_staging}"
 COPY_PORT="${COPY_PORT:-5499}"
@@ -37,14 +44,21 @@ export INTERMEDIATE_DATABASE_URL="postgresql://postgres@127.0.0.1:${COPY_PORT}/f
 
 # URL-encode via the environment so a password never lands in argv.
 urlenc() { V="$1" node -e 'process.stdout.write(encodeURIComponent(process.env.V))'; }
-if [ -z "${PROD_DATABASE_URL:-}" ]; then
+if [[ -z "${PROD_DATABASE_URL:-}" ]]; then
   PROD_DATABASE_URL="postgresql://$(urlenc "$PROD_DB_USER"):$(urlenc "$PROD_DB_PASSWORD")@localhost/${PROD_DB_NAME}?host=${PROD_DB_SOCKET}"
 fi
-if [ -z "${STAGING_DATABASE_URL:-}" ]; then
-  STAGING_DATABASE_URL="postgresql://$(urlenc "$STAGING_DB_USER"):$(urlenc "$STAGING_DB_PASSWORD")@localhost/${STAGING_DB_NAME}?host=${STAGING_DB_SOCKET}"
+export PROD_DATABASE_URL
+if [[ "$SNAPSHOT_ONLY" = true ]]; then
+  # The snapshot never touches staging: don't hand it a way to.
+  unset STAGING_DATABASE_URL STAGING_DB_USER STAGING_DB_PASSWORD STAGING_DB_SOCKET
+else
+  if [[ -z "${STAGING_DATABASE_URL:-}" ]]; then
+    STAGING_DATABASE_URL="postgresql://$(urlenc "$STAGING_DB_USER"):$(urlenc "$STAGING_DB_PASSWORD")@localhost/${STAGING_DB_NAME}?host=${STAGING_DB_SOCKET}"
+  fi
+  export STAGING_DATABASE_URL
+  unset STAGING_DB_PASSWORD
 fi
-export PROD_DATABASE_URL STAGING_DATABASE_URL
-unset PROD_DB_PASSWORD STAGING_DB_PASSWORD
+unset PROD_DB_PASSWORD
 export TMPDIR=/tmp
 
 cd /app/tooling/scripts
@@ -53,7 +67,11 @@ status=0
 # PID 1, and bash neither acts on it nor forwards it to a foreground child. Run
 # the orchestrator in the background and forward the signal, so its SIGTERM
 # handler can print the half-loaded-staging recovery instructions.
-node --import tsx src/staging-refresh.ts --allow-staging-db "$STAGING_DB_NAME" --yes "$@" &
+if [[ "$SNAPSHOT_ONLY" = true ]]; then
+  node --import tsx src/staging-refresh.ts "$@" &
+else
+  node --import tsx src/staging-refresh.ts --allow-staging-db "$STAGING_DB_NAME" --yes "$@" &
+fi
 child=$!
 trap 'kill -TERM "$child" 2>/dev/null || true' TERM INT
 wait "$child" || status=$?

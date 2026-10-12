@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import quote
 
 from .materializations import MATERIALIZATIONS_BY_NAME, Materialization
-from .schema_registry import SCHEMAS_BY_NAME, ExpectedSchema, schema_fingerprint
+from .schema_registry import SCHEMAS_BY_NAME, SCHEMAS_BY_VERSION, ExpectedSchema, schema_fingerprint
 from .settings import Settings
 
 
@@ -64,8 +64,23 @@ def validate_artifacts(
     definition: Materialization,
 ) -> SchemaEvidence:
     """Validate every local Parquet file against its explicit versioned contract."""
+    return validate_artifacts_for_schema(connection, artifacts, definition, _expected_schema(definition))
+
+
+def validate_artifacts_for_schema(
+    connection: Any,
+    artifacts: MaterializationArtifacts,
+    definition: Materialization,
+    expected: ExpectedSchema,
+) -> SchemaEvidence:
+    """Run the full physical-artifact checks against an explicitly selected schema."""
     try:
-        expected = _expected_schema(definition)
+        if (
+            MATERIALIZATIONS_BY_NAME.get(definition.name) is not definition
+            or expected.dataset != definition.name
+            or SCHEMAS_BY_VERSION.get((expected.dataset, expected.schema_version)) is not expected
+        ):
+            raise SchemaValidationError("materialization is not in the approved registry")
         files_on_disk = tuple(sorted(path for path in artifacts.root.rglob("*.parquet") if path.is_file()))
         expected_files = tuple(sorted(path for path in artifacts.sorted_parquet_files if path.is_file()))
         if not expected_files or files_on_disk != expected_files:

@@ -176,6 +176,40 @@ class AoViewsTest(unittest.TestCase):
 
 
 class ManageAosTest(unittest.TestCase):
+    @patch("features.calendar.ao._build_ao_service")
+    def test_edit_list_emits_ao_cascade_confirmation(self, mock_svc):
+        mock_svc.return_value.get_region_aos.return_value = [_make_ao(id=5, name="The Grind")]
+        body = {"actions": [{"selected_option": {"value": "edit"}}], "trigger_id": "T_TRIGGER"}
+        region_record = MagicMock(org_id=10)
+        client = MagicMock()
+
+        manage_aos(body, client, MagicMock(), {}, region_record)
+
+        client.views_push.assert_called_once()
+        client.views_update.assert_not_called()
+        self.assertEqual(client.views_push.call_args.kwargs["trigger_id"], "T_TRIGGER")
+        view = client.views_push.call_args.kwargs["view"]
+        self.assertEqual(view["callback_id"], actions.EDIT_DELETE_AO_CALLBACK_ID)
+        block = view["blocks"][0]
+        self.assertEqual(block["block_id"], f"{actions.AO_EDIT_DELETE}_5")
+        self.assertEqual(block["text"]["text"], "The Grind")
+        selector = block["accessory"]
+        self.assertEqual(selector["action_id"], f"{actions.AO_EDIT_DELETE}_5")
+        self.assertEqual(selector["placeholder"]["text"], "Edit or Delete")
+        self.assertEqual(
+            [(o["text"]["text"], o["value"]) for o in selector["options"]],
+            [("Edit", "Edit"), ("Delete", "Delete")],
+        )
+        confirmation = selector["confirm"]
+        self.assertEqual(confirmation["title"]["text"], "Are you sure?")
+        self.assertEqual(
+            confirmation["text"]["text"],
+            "Are you sure you want to edit / delete this AO? This cannot be undone. "
+            "Deleting an AO will also delete all associated series and events.",
+        )
+        self.assertEqual(confirmation["confirm"]["text"], "Yes, I'm sure")
+        self.assertEqual(confirmation["deny"]["text"], "Whups, never mind")
+
     @patch("features.calendar.ao.add_loading_form")
     @patch("features.calendar.ao.AoViews")
     @patch("features.calendar.ao._build_location_service")

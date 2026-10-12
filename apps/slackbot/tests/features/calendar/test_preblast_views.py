@@ -2,7 +2,10 @@ import os
 import sys
 import unittest
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
@@ -12,6 +15,7 @@ from application.preblast.service import PreblastService
 from features.calendar import get_preblast_action_blocks
 from features.calendar.event_preblast import (
     PreblastInfo,
+    build_event_preblast_select_form,
     build_preblast_info,
     get_preblast_channel,
     handle_event_preblast_edit,
@@ -55,6 +59,62 @@ def _event_tags():
         {"id": 20, "name": "Open"},
         {"id": 30, "name": "Convergence"},
     ]
+
+
+@pytest.mark.parametrize("view_source", [None, "view", "loading"])
+def test_preblast_selector_emits_unscheduled_event_confirmation(view_source):
+    region = MagicMock(spec=SlackSettings)
+    region.org_id = 10
+    event = SimpleNamespace(
+        id=42,
+        start_date=date(2026, 10, 12),
+        org=SimpleNamespace(name="Test AO"),
+        event_types=[SimpleNamespace(name="Bootcamp")],
+    )
+    client = MagicMock()
+    body = {"user": {"id": "U_TEST"}, "trigger_id": "T_TRIGGER"}
+    if view_source == "view":
+        body["view"] = {"id": "V_PREBLAST"}
+    elif view_source == "loading":
+        body[actions.LOADING_ID] = "V_PREBLAST"
+
+    with (
+        patch("features.calendar.event_preblast.get_user", return_value=SimpleNamespace(user_id=1)),
+        patch("features.calendar.event_preblast.event_attendance_query", return_value=[event]),
+    ):
+        build_event_preblast_select_form(body, client, MagicMock(), {}, region)
+
+    if view_source:
+        client.views_update.assert_called_once()
+        client.views_open.assert_not_called()
+        assert client.views_update.call_args.kwargs["view_id"] == "V_PREBLAST"
+        view = client.views_update.call_args.kwargs["view"]
+    else:
+        client.views_open.assert_called_once()
+        client.views_update.assert_not_called()
+        assert client.views_open.call_args.kwargs["trigger_id"] == "T_TRIGGER"
+        view = client.views_open.call_args.kwargs["view"]
+    assert view["callback_id"] == actions.EVENT_PREBLAST_SELECT_CALLBACK_ID
+    buttons = [element for block in view["blocks"] for element in block.get("elements", [])]
+    scheduled = next(button for button in buttons if button["action_id"] == f"{actions.EVENT_PREBLAST_FILL_BUTTON}_42")
+    assert scheduled["value"] == "42"
+    assert "confirm" not in scheduled
+    unscheduled = next(button for button in buttons if button["action_id"] == actions.EVENT_PREBLAST_NEW_BUTTON)
+    assert unscheduled["text"]["text"] == "New Unscheduled Event"
+    assert unscheduled["value"] == "New Unscheduled Event"
+    assert unscheduled["confirm"] == {
+        "title": {"type": "plain_text", "text": "Are you sure?"},
+        "text": {
+            "type": "plain_text",
+            "text": (
+                "This option should ONLY BE USED FOR UNSCHEDULED EVENTS that are not listed on the calendar. "
+                "If this is for a normal, scheduled event, please select it from the lists above."
+            ),
+        },
+        "confirm": {"type": "plain_text", "text": "Yes, I'm sure"},
+        "deny": {"type": "plain_text", "text": "Whups, never mind"},
+        "style": "danger",
+    }
 
 
 class PreblastViewsTest(unittest.TestCase):
