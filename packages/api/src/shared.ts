@@ -123,9 +123,19 @@ export const publicProcedure = base;
  */
 export const publicReadProcedure = withSessionAndDb;
 
+const hasBearerToken = (headers?: Headers | null): boolean => {
+  const authHeader =
+    headers?.get(Header.Authorization) ??
+    headers?.get(Header.Authorization.toLowerCase());
+  return authHeader?.toLowerCase().startsWith("bearer ") ?? false;
+};
+
 export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
   if (!context.session?.user) {
-    if (isDevelopment) {
+    // A bearer token was supplied but failed to resolve to a session (bad
+    // JWT, or an API key that doesn't match any row) — that's a rejected
+    // credential, not "no credential", so the dev mock must not mask it.
+    if (isDevelopment && !hasBearerToken(context.reqHeaders)) {
       return next({ context: { ...context, session: getDevMockSession() } });
     }
     throw new ORPCError("UNAUTHORIZED");
