@@ -59,8 +59,8 @@ export const orgEditorConfig: Record<OrgType, OrgEditorConfig> = {
     deactivate: "existing",
   },
   region: {
-    parentTypes: ["area"],
-    parentPlaceholder: "Select an area",
+    parentTypes: ["area", "territory"],
+    parentPlaceholder: "Select an area or territory",
     defaultName: "",
     retainLogo: true,
     logoPosition: "afterParent",
