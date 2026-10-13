@@ -184,10 +184,14 @@ describe("User Router", () => {
         async ({ desc, expectedOrder }) => {
           const prefix = `FullNameSort-${uniqueId()}`;
           const fixtures = [
-            { firstName: "Jordan", lastName: "Aaron", name: "Jordan Aaron" },
+            {
+              firstName: "  Jordan",
+              lastName: "Aaron  ",
+              name: "Jordan Aaron",
+            },
             { firstName: "Alex", lastName: "Zimmer", name: "Alex Zimmer" },
             { firstName: "Alex", lastName: "Baker", name: "Alex Baker" },
-            { firstName: "Alex", lastName: "Baker", name: "Alex Baker" },
+            { firstName: "  Alex", lastName: "Baker  ", name: "Alex Baker" },
             { firstName: "Aaron", lastName: "Zimmer", name: "Aaron Zimmer" },
             { firstName: null, lastName: "Baker", name: "Baker" },
             { firstName: "Cameron", lastName: null, name: "Cameron" },
