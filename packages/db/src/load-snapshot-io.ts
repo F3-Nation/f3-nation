@@ -44,34 +44,61 @@ export function runProc(
   });
 }
 
+/** Why a download failed, without the URL (a signed one could carry a token). */
+const downloadError = (url: URL, err: unknown, timeoutMs: number) => {
+  const why =
+    err instanceof Error && err.name === "TimeoutError"
+      ? `timed out after ${Math.round(timeoutMs / 60_000)} min`
+      : err instanceof Error && err.cause instanceof Error
+        ? err.cause.message
+        : err instanceof Error
+          ? err.message
+          : String(err);
+  return new Error(
+    `Could not download the snapshot from ${url.host}: ${why}. Check your network, or load a local copy with --file.`,
+    { cause: err },
+  );
+};
+
 export async function fetchToFile(
   url: URL,
   dest: string,
   opts: { maxBytes?: number; timeoutMs?: number } = {},
 ): Promise<void> {
-  const res = await fetch(url, {
-    // validateSourceUrl vetted this URL only; a redirect could leave https.
-    redirect: "error",
-    signal: AbortSignal.timeout(opts.timeoutMs ?? DOWNLOAD_TIMEOUT_MS),
-  });
+  const timeoutMs = opts.timeoutMs ?? DOWNLOAD_TIMEOUT_MS;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      // validateSourceUrl vetted this URL only; a redirect could leave https.
+      redirect: "error",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    throw downloadError(url, err, timeoutMs);
+  }
   if (!res.ok || !res.body) {
     throw new Error(
       `Download failed: ${res.status} ${res.statusText}. Has the snapshot been published yet? (--file loads a local one.)`,
     );
   }
   const max = opts.maxBytes ?? MAX_BYTES;
+  const tooLarge = `Snapshot is larger than ${max} bytes`;
   const declared = Number(res.headers.get("content-length") ?? 0);
-  if (declared > max) throw new Error(`Snapshot is larger than ${max} bytes`);
+  if (declared > max) throw new Error(tooLarge);
   let seen = 0;
   const capped = Readable.fromWeb(res.body as ReadableStream).on(
     "data",
     (chunk: Buffer) => {
       seen += chunk.length;
-      if (seen > max)
-        capped.destroy(new Error(`Snapshot is larger than ${max} bytes`));
+      if (seen > max) capped.destroy(new Error(tooLarge));
     },
   );
-  await pipeline(capped, createWriteStream(dest));
+  try {
+    await pipeline(capped, createWriteStream(dest));
+  } catch (err) {
+    if (err instanceof Error && err.message === tooLarge) throw err;
+    throw downloadError(url, err, timeoutMs);
+  }
 }
 
 export async function confirm(question: string): Promise<string> {

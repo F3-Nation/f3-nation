@@ -70,6 +70,8 @@ describe("fetchToFile", () => {
       res.statusCode = 302;
       res.setHeader("location", "http://example.invalid/a.tar");
       res.end();
+    } else if (req.url === "/stall") {
+      res.write("partial");
     } else if (req.url === "/declared") {
       res.setHeader("content-length", "100");
       res.end("x".repeat(100));
@@ -83,6 +85,7 @@ describe("fetchToFile", () => {
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
   afterAll(() => {
+    server.closeAllConnections();
     server.close();
   });
 
@@ -98,7 +101,31 @@ describe("fetchToFile", () => {
   it("refuses to follow a redirect", async () => {
     await expect(
       fetchToFile(new URL(`${base}/redirect`), await dest()),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/Could not download the snapshot from 127\.0\.0\.1/);
+  });
+
+  it("names the host and --file when the connection fails, never the query", async () => {
+    const err = await fetchToFile(
+      new URL("http://127.0.0.1:1/x?token=secret"),
+      await dest(),
+    ).catch((e: Error) => e);
+    expect((err as Error).message).toMatch(
+      /Could not download the snapshot from 127\.0\.0\.1:1: .+--file/,
+    );
+    expect((err as Error).message).not.toContain("secret");
+    expect((err as Error).cause).toBeInstanceOf(Error);
+  });
+
+  it("reports a timeout during the download", async () => {
+    await expect(
+      fetchToFile(new URL(`${base}/stall`), await dest(), { timeoutMs: 200 }),
+    ).rejects.toThrow(/timed out after 0 min/);
+  });
+
+  it("reports a local write failure with the same guidance", async () => {
+    await expect(
+      fetchToFile(new URL(`${base}/ok`), "/nonexistent-dir/out"),
+    ).rejects.toThrow(/Could not download.*ENOENT/);
   });
 
   it("says the snapshot may not be published on a 404", async () => {

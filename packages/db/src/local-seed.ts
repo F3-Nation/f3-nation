@@ -5,6 +5,7 @@
  */
 
 import { db } from "./client";
+import { logError, logInfo } from "./lib/logging";
 import { seedAttendanceTypes } from "./local-seed-lib/attendance";
 import { DEV_LOGIN_HINT } from "./local-seed-lib/data";
 import { seedEventTags } from "./local-seed-lib/event-tags";
@@ -22,7 +23,7 @@ import {
 } from "./local-seed-lib/users";
 
 async function seed() {
-  console.log("Seeding local development database...");
+  logInfo("db.seed.start", {});
   const { nationId, regionIds, aoIds } = await seedOrgHierarchy(db);
   await seedAttendanceTypes(db);
   const allEventTypes = await seedEventTypes(db);
@@ -33,13 +34,16 @@ async function seed() {
   await seedOAuthClients(db);
   await seedPositions(db);
   await resetSequences(db);
-  console.log("\nLocal seed complete.");
-  console.log(`  ${DEV_LOGIN_HINT}`);
+  logInfo("db.seed.done", {});
+  process.stdout.write(`\nLocal seed complete.\n  ${DEV_LOGIN_HINT}\n`);
 }
 
 void seed()
   .then(() => process.exit(0))
-  .catch((e) => {
-    console.error("Seed failed:", e);
+  .catch((e: unknown) => {
+    logError("db.seed.failed", {}, e);
+    process.stderr.write(
+      `\nSeed failed: ${e instanceof Error ? e.message : String(e)}\n`,
+    );
     process.exit(1);
   });

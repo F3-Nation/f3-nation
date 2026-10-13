@@ -4,6 +4,7 @@
  * load-snapshot-lib.ts for the flow and its guards.
  */
 import { copyFile } from "node:fs/promises";
+import path from "node:path";
 import { performance } from "node:perf_hooks";
 
 import { env } from "@acme/env";
@@ -38,7 +39,16 @@ async function main() {
   if (!databaseUrl) throw new Error("DATABASE_URL is not set");
   const clientUrl = getDbUrl().databaseUrl;
 
-  const result = await runLoad(parseArgs(process.argv.slice(2)), {
+  const args = parseArgs(process.argv.slice(2));
+  // pnpm runs this from packages/db and the nested `pnpm with-env` resets
+  // INIT_CWD, so the script captures where the user ran it first.
+  if (args.file) {
+    const from =
+      process.env.SNAPSHOT_CALLER_CWD ?? process.env.INIT_CWD ?? process.cwd();
+    args.file = path.resolve(from, args.file);
+  }
+
+  const result = await runLoad(args, {
     now: () => new Date(),
     clock: () => performance.now(),
     isCI: Boolean(process.env.CI),

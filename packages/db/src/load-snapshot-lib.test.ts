@@ -1,3 +1,9 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 
 import type { LoadArgs, LoadDeps, SnapshotManifest } from "./load-snapshot-lib";
@@ -9,6 +15,7 @@ import {
   createLoadDb,
   LIST_ARGS,
   manifestAge,
+  NATION_CHECK_SQL,
   parseArgs,
   parseManifest,
   redactStderr,
@@ -61,6 +68,10 @@ describe("parseArgs", () => {
     });
   });
 
+  it("accepts an inline value that starts with a dash", () => {
+    expect(parseArgs(["--file=-odd.tar"]).file).toBe("-odd.tar");
+  });
+
   it("ignores the leading -- pnpm may forward", () => {
     expect(parseArgs(["--", "--yes"]).yes).toBe(true);
   });
@@ -68,6 +79,8 @@ describe("parseArgs", () => {
   it.each([
     [["--bogus"], /Unknown argument/],
     [["--url"], /needs a value/],
+    [["--url", "--yes"], /--url needs a value/],
+    [["--file", "-y"], /--file needs a value/],
     [["--url", "https://x.test", "--file", "a.tar"], /not both/],
   ])("rejects %j", (argv, message) => {
     expect(() => parseArgs(argv)).toThrow(message);
@@ -286,6 +299,21 @@ describe("redactStderr", () => {
     expect(out.split(" / ")).toHaveLength(5);
     expect(out).toContain("[row data withheld]");
   });
+
+  it.each([
+    'psql:/tmp/f:12: ERROR:  invalid input syntax for type integer: "abc"',
+    'ERROR:  invalid input value for enum org_type: "secret"',
+  ])("withholds the value an input error quotes: %s", (line) => {
+    const out = redactStderr(line);
+    expect(out).toMatch(/ERROR: .*: \[value withheld\]$/);
+    expect(out).not.toMatch(/"abc"|"secret"/);
+  });
+
+  it("keeps quoted names that aren't row values", () => {
+    const line =
+      'ERROR:  new row for relation "orgs" violates check constraint "c"';
+    expect(redactStderr(line)).toBe(line);
+  });
 });
 
 const TAR_LISTING = [
@@ -416,9 +444,17 @@ describe("runLoad", () => {
       new URL(SNAPSHOT_URL),
       "/tmp/x/snapshot.tar",
     );
-    expect(restores).toEqual([
-      restoreArgs(truncateSql(["public.orgs", "public.users"])),
-    ]);
+    expect(restores).toHaveLength(1);
+    expect(restores[0]).toContain(
+      'TRUNCATE_SQL=TRUNCATE TABLE "public"."orgs", "public"."users" CASCADE',
+    );
+    expect(restores[0]).toContain(`NATION_CHECK_SQL=${NATION_CHECK_SQL}`);
+    const script = restores[0]?.at(-1) ?? "";
+    expect(script).toMatch(/^set -euo pipefail/);
+    expect(script).toMatch(
+      /psql .*-v ON_ERROR_STOP=1 --single-transaction -f "\$f"/,
+    );
+    expect(script).not.toMatch(/pg_restore[^\n]*\|\s*psql/);
   });
 
   it("copies a local --file instead of downloading", async () => {
@@ -698,12 +734,112 @@ describe("runLoad", () => {
       );
     },
   );
+
+  it("reports a post-restore failure as a partial load, keeping the cause", async () => {
+    const { deps } = harness();
+    const cause = new Error("seed exploded");
+    deps.seeders.seedOAuthClients = () => Promise.reject(cause);
+    const err = await runLoad({ ...ARGS, yes: true }, deps).catch(
+      (e: Error) => e,
+    );
+    expect((err as Error).message).toMatch(
+      /snapshot was loaded, but post-load setup failed.*seed exploded/,
+    );
+    expect((err as Error).cause).toBe(cause);
+  });
+
+  it("keeps the load's own error when the temp dir can't be removed", async () => {
+    const { deps } = harness({
+      rmTmp: () => Promise.reject(new Error("EACCES")),
+      fetchToFile: () => Promise.reject(new Error("Download failed: 404")),
+    });
+    await expect(runLoad(ARGS, deps)).rejects.toThrow(/404/);
+  });
+
+  it("still succeeds when the temp dir can't be removed", async () => {
+    const { deps } = harness({
+      rmTmp: () => Promise.reject(new Error("EACCES")),
+    });
+    await expect(runLoad({ ...ARGS, yes: true }, deps)).resolves.toMatchObject({
+      tables: 2,
+    });
+  });
+});
+
+describe("restore script", () => {
+  // Runs the real script against stub pg_restore/psql on PATH, no Docker.
+  const run = (env: Record<string, string> = {}) => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "f3-restore-test-"));
+    const stub = (name: string, body: string) => {
+      const file = path.join(dir, name);
+      writeFileSync(file, `#!/usr/bin/env bash\n${body}\n`);
+      chmodSync(file, 0o755);
+    };
+    stub(
+      "pg_restore",
+      'cat > /dev/null; [ "${FAIL:-}" = 1 ] && exit 1; echo "COPY x FROM stdin;"',
+    );
+    stub(
+      "psql",
+      `echo "$@" > "${dir}/psql.args"
+while [ $# -gt 0 ]; do [ "$1" = -f ] && cp "$2" "${dir}/psql.sql"; shift; done`,
+    );
+    const args = restoreArgs(truncateSql(["public.orgs"]));
+    const envFrom = (prefix: string) =>
+      args.find((a) => a.startsWith(prefix))?.slice(prefix.length) ?? "";
+    const inherited = { ...process.env };
+    const result = spawnSync("bash", ["-c", args.at(-1) ?? ""], {
+      input: "dump",
+      env: {
+        ...inherited,
+        PATH: `${dir}${path.delimiter}${inherited.PATH ?? ""}`,
+        TRUNCATE_SQL: envFrom("TRUNCATE_SQL="),
+        NATION_CHECK_SQL: envFrom("NATION_CHECK_SQL="),
+        ...env,
+      },
+    });
+    const read = (f: string) => {
+      try {
+        return readFileSync(path.join(dir, f), "utf8");
+      } catch {
+        return null;
+      }
+    };
+    return {
+      status: result.status,
+      args: read("psql.args"),
+      sql: read("psql.sql"),
+    };
+  };
+
+  it("applies truncate, data and the nation check in one transaction", () => {
+    const r = run();
+    expect(r.status).toBe(0);
+    expect(r.args).toContain("--single-transaction");
+    expect(r.args).toContain("ON_ERROR_STOP=1");
+    expect(r.sql).toBe(
+      [
+        "SET client_min_messages = warning;",
+        'TRUNCATE TABLE "public"."orgs" CASCADE;',
+        "COPY x FROM stdin;",
+        NATION_CHECK_SQL,
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("never reaches psql when pg_restore fails", () => {
+    const r = run({ FAIL: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.args).toBeNull();
+  });
 });
 
 describe("createLoadDb", () => {
   interface Fake {
     execute: ReturnType<typeof vi.fn>;
   }
+  const render = (q: unknown) => new PgDialect().sqlToQuery(q as SQL);
   const make = (...results: unknown[][]) => {
     const execute = vi.fn();
     for (const r of results) execute.mockResolvedValueOnce(r);
@@ -726,7 +862,7 @@ describe("createLoadDb", () => {
   });
 
   it("groups local columns by public table", async () => {
-    const { loadDb } = make([
+    const { fake, loadDb } = make([
       { table_name: "orgs", column_name: "id" },
       { table_name: "orgs", column_name: "name" },
       { table_name: "users", column_name: "id" },
@@ -737,32 +873,40 @@ describe("createLoadDb", () => {
       "public.orgs": ["id", "name"],
       "public.users": ["id"],
     });
+    const q = render(fake.execute.mock.calls[0]?.[0]);
+    expect(q.sql).toContain("table_schema = 'public'");
+    expect(q.sql).toContain("IN ($1, $2)");
+    expect(q.params).toEqual(["orgs", "users"]);
   });
 
   it("reads the newest migration, or null without a history table or rows", async () => {
-    await expect(
-      make(
-        [{ "?column?": 1 }],
-        [{ newest: "1746334397565" }],
-      ).loadDb.newestMigration(),
-    ).resolves.toBe(1746334397565);
+    const found = make([{ "?column?": 1 }], [{ newest: "1746334397565" }]);
+    await expect(found.loadDb.newestMigration()).resolves.toBe(1746334397565);
+    const [exists, newest] = found.fake.execute.mock.calls.map(([q]) =>
+      render(q),
+    );
+    expect(exists?.params).toContain("__drizzle_migrations_f3nation");
+    expect(newest?.sql).toContain('drizzle."__drizzle_migrations_f3nation"');
     await expect(make([]).loadDb.newestMigration()).resolves.toBeNull();
     await expect(
       make([{ x: 1 }], [{ newest: null }]).loadDb.newestMigration(),
     ).resolves.toBeNull();
   });
 
-  it("analyzes, recomputes ao_count with three updates, and resets sequences", async () => {
+  it("analyzes, recomputes ao_count over the whole tree, and resets sequences", async () => {
     const { fake, loadDb } = make();
     await loadDb.analyze();
     expect(fake.execute).toHaveBeenCalledTimes(1);
     await loadDb.recomputeAoCounts();
-    expect(fake.execute).toHaveBeenCalledTimes(4);
+    expect(fake.execute).toHaveBeenCalledTimes(2);
+    expect(render(fake.execute.mock.calls[1]?.[0]).sql).toBe(
+      "SELECT public.recount_org_ao_counts()",
+    );
     await expect(loadDb.resetAllSequences()).resolves.toBe(0);
   });
 
   it("lists nation ids and maps region names to the lowest id", async () => {
-    const { loadDb } = make(
+    const { fake, loadDb } = make(
       [{ id: 1 }, { id: 2 }],
       [
         { id: 9, name: "Boone" },
@@ -773,6 +917,10 @@ describe("createLoadDb", () => {
     await expect(loadDb.regionIdsByName(["Boone"])).resolves.toEqual({
       Boone: 4,
     });
+    const regions = render(fake.execute.mock.calls[1]?.[0]);
+    expect(regions.sql).toContain("org_type = 'region'");
+    expect(regions.sql).toContain("ORDER BY id DESC");
+    expect(regions.params).toEqual(["Boone"]);
     await expect(loadDb.regionIdsByName([])).resolves.toEqual({});
   });
 });

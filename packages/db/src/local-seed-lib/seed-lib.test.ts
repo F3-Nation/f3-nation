@@ -1,3 +1,5 @@
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 
 import { LOCAL_API_KEYS, LOCAL_OAUTH_CLIENTS } from "./data";
@@ -17,6 +19,21 @@ describe("resetAllSequences", () => {
     await expect(resetAllSequences({ execute } as never)).resolves.toBe(2);
     // One catalog query, then a setval per sequence.
     expect(execute).toHaveBeenCalledTimes(3);
+    const setvals = execute.mock.calls
+      .slice(1)
+      .map(([q]) => new PgDialect().sqlToQuery(q as SQL));
+    expect(setvals).toHaveLength(2);
+    for (const [q, table] of [
+      [setvals[0], "orgs"],
+      [setvals[1], "users"],
+    ] as const) {
+      expect(q?.sql).toMatch(
+        new RegExp(
+          `setval\\(\\s*\\$1::regclass,\\s*coalesce\\(max\\("id"\\), 1\\),\\s*max\\("id"\\) IS NOT NULL\\s*\\) FROM "${table}"`,
+        ),
+      );
+      expect(q?.params).toEqual([`public.${table}_id_seq`]);
+    }
   });
 });
 

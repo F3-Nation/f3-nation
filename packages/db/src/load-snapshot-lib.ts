@@ -59,8 +59,11 @@ export function parseArgs(argv: string[]): LoadArgs {
       ? (arg.split(/=(.*)/s, 2) as [string, string | undefined])
       : [arg, undefined];
     const value = () => {
-      const v = inline ?? args[++i];
-      if (!v) throw new Error(`${flag} needs a value`);
+      const v = inline ?? args[i + 1];
+      if (!v || (inline === undefined && v.startsWith("-"))) {
+        throw new Error(`${flag} needs a value`);
+      }
+      if (inline === undefined) i++;
       return v;
     };
     if (flag === "--url") url = value();
@@ -89,7 +92,7 @@ export function validateSourceUrl(raw: string): URL {
   return url;
 }
 
-/** Mirrors SnapshotManifest in tooling/scripts staging-refresh.snapshot.ts. */
+/** The fields the loader reads from SnapshotManifest in tooling/scripts staging-refresh.snapshot.ts (it ignores `window`). */
 export interface SnapshotManifest {
   formatVersion: number;
   exportedAt: string;
@@ -275,12 +278,18 @@ export function truncateSql(tables: string[]): string {
 // pg_restore quotes failing rows in some errors; never print them.
 const ROW_DATA =
   /Failing row contains|^\s*CONTEXT:\s+COPY .* line \d+|^\s*DETAIL:\s+Key \(/;
+// Input errors end with the rejected value: `...type integer: "abc"`.
+const QUOTED_VALUE = /(ERROR:.*?:\s*)".*"\s*$/;
 
 export function redactStderr(stderr: string, keep = 5): string {
   return stderr
     .split("\n")
     .filter((l) => l.trim() !== "")
-    .map((l) => (ROW_DATA.test(l) ? "[row data withheld]" : l))
+    .map((l) =>
+      ROW_DATA.test(l)
+        ? "[row data withheld]"
+        : l.replace(QUOTED_VALUE, "$1[value withheld]"),
+    )
     .slice(0, keep)
     .join(" / ");
 }
@@ -296,19 +305,29 @@ export const LIST_ARGS = [...EXEC_STDIN, CONTAINER, "pg_restore", "-l"];
  * plus pg_restore's data-only SQL (triggers off, no ownership), applied by
  * psql in a single transaction. It is built in full before psql starts, so a
  * failing pg_restore never reaches the database, and any SQL error rolls the
- * truncate back.
+ * truncate back. The dev logins need exactly one nation org, so that is
+ * checked before the commit too.
  */
 const RESTORE_SCRIPT = `set -euo pipefail
 f=$(mktemp)
 trap 'rm -f "$f"' EXIT
 printf 'SET client_min_messages = warning;\\n%s;\\n' "$TRUNCATE_SQL" > "$f"
 pg_restore --data-only --disable-triggers --no-owner -f - >> "$f"
+printf '%s\n' "$NATION_CHECK_SQL" >> "$f"
 psql -U ${PG_USER} -d ${PG_DB} -q -o /dev/null -v ON_ERROR_STOP=1 --single-transaction -f "$f"`;
+
+export const NATION_CHECK_SQL = `DO $check$ BEGIN
+  IF (SELECT count(*) FROM public.orgs WHERE org_type = 'nation') <> 1 THEN
+    RAISE EXCEPTION 'Expected exactly one nation org in the snapshot';
+  END IF;
+END $check$;`;
 
 export const restoreArgs = (truncate: string) => [
   ...EXEC_STDIN,
   "-e",
   `TRUNCATE_SQL=${truncate}`,
+  "-e",
+  `NATION_CHECK_SQL=${NATION_CHECK_SQL}`,
   CONTAINER,
   "bash",
   "-c",
@@ -554,16 +573,26 @@ export async function runLoad(
     }
 
     // Triggers were off during the restore, and the seeders insert next.
-    await deps.db.analyze();
-    await deps.db.recomputeAoCounts();
-    await deps.db.resetAllSequences();
-    await seedDevLogins(deps);
+    try {
+      await deps.db.analyze();
+      await deps.db.recomputeAoCounts();
+      await deps.db.resetAllSequences();
+      await seedDevLogins(deps);
+    } catch (err) {
+      throw new Error(
+        `The snapshot was loaded, but post-load setup failed (dev logins may be missing); run the load again: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    }
 
     const elapsedMs = Math.round(deps.clock() - started);
     logInfo("db.snapshot.done", { tables: tables.length, rows, elapsedMs });
     return { tables: tables.length, rows, elapsedMs };
   } finally {
-    await deps.rmTmp(dir);
+    // Best-effort: a cleanup failure must not hide the load's own error.
+    await deps.rmTmp(dir).catch((err: unknown) => {
+      logWarn("db.snapshot.tmp_cleanup_failed", { dir, err: String(err) });
+    });
   }
 }
 
@@ -622,32 +651,9 @@ export function createLoadDb(db: AppDb, migrationsTable: string): LoadDb {
       await db.execute(sql`ANALYZE`);
     },
 
-    // Mirrors the ao_count backfill migration: the trigger that keeps it
-    // current is off during a restore.
+    // The trigger that keeps ao_count current is off during a restore.
     async recomputeAoCounts() {
-      await db.execute(sql`
-        UPDATE orgs region SET ao_count = (
-          SELECT COUNT(*) FROM orgs ao
-          WHERE ao.parent_id = region.id AND ao.org_type = 'ao' AND ao.is_active = true
-        ) WHERE region.org_type = 'region'`);
-      await db.execute(sql`
-        UPDATE orgs area SET ao_count = (
-          SELECT COUNT(*) FROM orgs ao
-          JOIN orgs region ON ao.parent_id = region.id
-          WHERE region.parent_id = area.id AND ao.org_type = 'ao'
-            AND region.org_type = 'region' AND ao.is_active = true
-            AND region.is_active = true
-        ) WHERE area.org_type = 'area'`);
-      await db.execute(sql`
-        UPDATE orgs sector SET ao_count = (
-          SELECT COUNT(*) FROM orgs ao
-          JOIN orgs region ON ao.parent_id = region.id
-          JOIN orgs area ON region.parent_id = area.id
-          WHERE area.parent_id = sector.id AND ao.org_type = 'ao'
-            AND region.org_type = 'region' AND area.org_type = 'area'
-            AND ao.is_active = true AND region.is_active = true
-            AND area.is_active = true
-        ) WHERE sector.org_type = 'sector'`);
+      await db.execute(sql`SELECT public.recount_org_ao_counts()`);
     },
 
     resetAllSequences: () => resetAllSequences(db),
