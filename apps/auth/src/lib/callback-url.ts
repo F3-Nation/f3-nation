@@ -1,7 +1,8 @@
 /**
  * Returns true if `callbackUrl` is safe to redirect to:
- * - A relative path starting with "/" (but not "//" which is protocol-relative)
- * - An absolute URL whose origin matches `authUrl`
+ * - A relative path starting with "/" (but not "//") that resolves to the auth origin
+ * - An absolute HTTP(S) URL whose origin matches `authUrl`
+ * An invalid or non-HTTP(S) `authUrl` is rejected.
  *
  * This prevents open-redirect attacks where an attacker supplies an external
  * URL as the callbackUrl and gets it embedded into an emailed magic link or
@@ -11,16 +12,20 @@ export function isValidCallbackUrl(
   callbackUrl: string,
   authUrl: string,
 ): boolean {
-  if (!callbackUrl) return false;
+  if (!callbackUrl || callbackUrl.startsWith("//")) return false;
 
-  // Relative path — safe as long as it isn't protocol-relative ("//evil.com")
-  if (callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")) return true;
-
-  // Absolute URL — only allow same origin as the auth server
   try {
-    const cb = new URL(callbackUrl);
     const auth = new URL(authUrl);
-    return cb.origin === auth.origin;
+    if (auth.protocol !== "http:" && auth.protocol !== "https:") return false;
+    // Resolve relative paths as the browser does: backslashes and control
+    // characters can turn an apparent path into an external destination.
+    const cb = callbackUrl.startsWith("/")
+      ? new URL(callbackUrl, auth)
+      : new URL(callbackUrl);
+    return (
+      (cb.protocol === "http:" || cb.protocol === "https:") &&
+      cb.origin === auth.origin
+    );
   } catch {
     return false;
   }

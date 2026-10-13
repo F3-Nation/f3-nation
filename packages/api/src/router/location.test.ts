@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -112,6 +112,89 @@ describe("Location Router", () => {
   };
 
   describe("all", () => {
+    it("pages tied sort values without repeats or omissions and preserves sort precedence", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const prefix = `Pagination ${uniqueId()}`;
+      const locations = await db
+        .insert(schema.locations)
+        .values(
+          Array.from({ length: 40 }, (_, index) => ({
+            name: `${prefix} ${index % 2 ? "Alpha" : "Zulu"}`,
+            orgId: region.id,
+            isActive: true,
+            latitude: 35.5,
+            longitude: -80.5,
+          })),
+        )
+        .returning({ id: schema.locations.id, name: schema.locations.name });
+      createdLocationIds.push(...locations.map((location) => location.id));
+      // Move a tied tuple so physical row order cannot stand in for ID order.
+      await db
+        .update(schema.locations)
+        .set({ name: sql`${schema.locations.name}` })
+        .where(eq(schema.locations.id, locations[0]!.id));
+
+      const byId = [...locations].sort((a, b) => a.id - b.id);
+      const client = createTestClient();
+      const unsorted = await client.location.all({
+        searchTerm: prefix,
+        sorting: [],
+        pageSize: 50,
+      });
+      expect(unsorted.locations.map((location) => location.id)).toEqual(
+        byId.map((location) => location.id),
+      );
+      for (const desc of [false, true]) {
+        for (const id of ["regionName", "locationName"]) {
+          const expected = [...byId]
+            .sort((a, b) =>
+              id === "regionName"
+                ? 0
+                : (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) *
+                  (desc ? -1 : 1),
+            )
+            .map((location) => location.id);
+          for (const pageSize of [5, 7]) {
+            const paged: number[] = [];
+            for (
+              let pageIndex = 0;
+              pageIndex < Math.ceil(40 / pageSize);
+              pageIndex++
+            ) {
+              const page = await client.location.all({
+                searchTerm: prefix,
+                sorting: [{ id, desc }],
+                pageIndex,
+                pageSize,
+              });
+              expect(page.totalCount).toBe(40);
+              paged.push(...page.locations.map((location) => location.id));
+            }
+            expect(paged).toEqual(expected);
+            expect(new Set(paged).size).toBe(40);
+          }
+        }
+      }
+      for (const sorting of [
+        undefined,
+        [
+          { id: "regionName", desc: false },
+          { id: "id", desc: true },
+        ],
+      ]) {
+        const result = await client.location.all({
+          searchTerm: prefix,
+          sorting,
+          pageSize: 50,
+        });
+        expect(result.locations.map((location) => location.id)).toEqual(
+          byId.map((location) => location.id).reverse(),
+        );
+      }
+    });
+
     it("should return a list of locations", async () => {
       const client = createTestClient();
       const result = await client.location.all({
