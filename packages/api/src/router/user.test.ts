@@ -172,12 +172,12 @@ describe("User Router", () => {
         {
           direction: "ascending",
           desc: false,
-          expectedOrder: [7, 4, 2, 3, 1, 5, 6, 0],
+          expectedOrder: [7, 9, 4, 2, 3, 8, 1, 5, 6, 0],
         },
         {
           direction: "descending",
           desc: true,
-          expectedOrder: [0, 6, 5, 1, 2, 3, 4, 7],
+          expectedOrder: [0, 6, 5, 1, 2, 3, 8, 4, 7, 9],
         },
       ])(
         "sorts by displayed full name $direction before pagination",
@@ -185,17 +185,23 @@ describe("User Router", () => {
           const prefix = `FullNameSort-${uniqueId()}`;
           const fixtures = [
             {
-              firstName: "  Jordan",
-              lastName: "Aaron  ",
+              firstName: " \t\nJordan",
+              lastName: "Aaron\r\n ",
               name: "Jordan Aaron",
             },
             { firstName: "Alex", lastName: "Zimmer", name: "Alex Zimmer" },
             { firstName: "Alex", lastName: "Baker", name: "Alex Baker" },
-            { firstName: "  Alex", lastName: "Baker  ", name: "Alex Baker" },
+            { firstName: " \tAlex", lastName: "Baker\n ", name: "Alex Baker" },
             { firstName: "Aaron", lastName: "Zimmer", name: "Aaron Zimmer" },
             { firstName: null, lastName: "Baker", name: "Baker" },
             { firstName: "Cameron", lastName: null, name: "Cameron" },
             { firstName: null, lastName: null, name: "" },
+            {
+              firstName: "\u00a0\u2003Alex",
+              lastName: "Baker\u2028\u2029\ufeff",
+              name: "Alex Baker",
+            },
+            { firstName: "\t\n", lastName: "\u00a0\ufeff", name: "" },
           ];
           const createdUsers: { id: number; name: string }[] = [];
           let regionId: number | undefined;

@@ -321,12 +321,16 @@ export const buildUserListQuery = async ({
 
   const homeRegion = aliasedTable(schema.orgs, "homeRegion");
 
+  // Match the whitespace removed by the displayed name's JavaScript trim().
+  const fullNameTrimCharacters =
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
+
   const sortedColumns = [
     ...getSortingColumns(
       input?.sorting,
       {
         id: schema.users.id,
-        name: sql`btrim(concat_ws(' ', ${schema.users.firstName}, ${schema.users.lastName}))`,
+        name: sql`btrim(concat_ws(' ', ${schema.users.firstName}, ${schema.users.lastName}), ${fullNameTrimCharacters})`,
         f3Name: schema.users.f3Name,
         roles: sql`MIN(${schema.roles.name})`,
         status: schema.users.status,
