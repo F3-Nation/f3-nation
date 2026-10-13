@@ -15,6 +15,15 @@ import { vi } from "vitest";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
 const mockLimit = vi.hoisted(() => vi.fn());
+type LogFn = (
+  event: string,
+  fields?: Record<string, unknown>,
+  error?: unknown,
+) => void;
+const { logError, logWarn } = vi.hoisted(() => ({
+  logError: vi.fn<LogFn>(),
+  logWarn: vi.fn<LogFn>(),
+}));
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -22,8 +31,14 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
+vi.mock("../logger", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  logError,
+  logWarn,
+}));
+
 import type { Session } from "@acme/auth";
-import { and, eq, schema } from "@acme/db";
+import { and, authSchema, eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { Client, Header } from "@acme/shared/common/enums";
 import { createRouterClient } from "@orpc/server";
@@ -164,6 +179,119 @@ describe("User Router", () => {
       });
     });
   });
+
+  describe.each(["all", "byOrgs"] as const)(
+    "name sorting for %s",
+    (endpoint) => {
+      it.each([
+        {
+          direction: "ascending",
+          desc: false,
+          expectedOrder: [7, 9, 4, 2, 3, 8, 1, 5, 6, 0],
+        },
+        {
+          direction: "descending",
+          desc: true,
+          expectedOrder: [0, 6, 5, 1, 2, 3, 8, 4, 7, 9],
+        },
+      ])(
+        "sorts by displayed full name $direction before pagination",
+        async ({ desc, expectedOrder }) => {
+          const prefix = `FullNameSort-${uniqueId()}`;
+          const fixtures = [
+            {
+              firstName: " \t\nJordan",
+              lastName: "Aaron\r\n ",
+              name: "Jordan Aaron",
+            },
+            { firstName: "Alex", lastName: "Zimmer", name: "Alex Zimmer" },
+            { firstName: "Alex", lastName: "Baker", name: "Alex Baker" },
+            { firstName: " \tAlex", lastName: "Baker\n ", name: "Alex Baker" },
+            { firstName: "Aaron", lastName: "Zimmer", name: "Aaron Zimmer" },
+            { firstName: null, lastName: "Baker", name: "Baker" },
+            { firstName: "Cameron", lastName: null, name: "Cameron" },
+            { firstName: null, lastName: null, name: "" },
+            {
+              firstName: "\u00a0\u2003Alex",
+              lastName: "Baker\u2028\u2029\ufeff",
+              name: "Alex Baker",
+            },
+            { firstName: "\t\n", lastName: "\u00a0\ufeff", name: "" },
+          ];
+          const createdUsers: { id: number; name: string }[] = [];
+          let regionId: number | undefined;
+
+          try {
+            const f3Nation = await getOrCreateF3NationOrg();
+            const [region] = await db
+              .insert(schema.orgs)
+              .values({
+                name: prefix,
+                orgType: "region",
+                parentId: f3Nation.id,
+                isActive: true,
+              })
+              .returning({ id: schema.orgs.id });
+            if (!region) throw new Error("Failed to create sorting region");
+            regionId = region.id;
+
+            for (const [index, fixture] of fixtures.entries()) {
+              const [user] = await db
+                .insert(schema.users)
+                .values({
+                  email: `${prefix}-${index}@sorting.test`,
+                  f3Name: `${prefix}-${index}`,
+                  firstName: fixture.firstName,
+                  lastName: fixture.lastName,
+                  homeRegionId: region.id,
+                })
+                .returning({ id: schema.users.id });
+              if (!user) throw new Error("Failed to create sorting user");
+              createdUsers.push({ id: user.id, name: fixture.name });
+            }
+
+            await mockAuthWithSession(await createAdminSession());
+            const client = createTestClient();
+            const seenUsers: { id: number; name: string }[] = [];
+            for (
+              let pageIndex = 0;
+              pageIndex < fixtures.length / 2;
+              pageIndex++
+            ) {
+              const input = {
+                searchTerm: prefix,
+                sorting: [{ id: "name", desc }],
+                pageIndex,
+                pageSize: 2,
+              };
+              const result =
+                endpoint === "all"
+                  ? await client.user.all(input)
+                  : await client.user.byOrgs({
+                      ...input,
+                      orgIds: [region.id],
+                    });
+
+              expect(result.totalCount).toBe(fixtures.length);
+              expect(result.users).toHaveLength(2);
+              seenUsers.push(
+                ...result.users.map(({ id, name }) => ({ id, name })),
+              );
+            }
+
+            expect(seenUsers).toEqual(
+              expectedOrder.map((index) => createdUsers[index]),
+            );
+          } finally {
+            for (const user of createdUsers) {
+              await cleanup.user(user.id);
+            }
+            if (regionId !== undefined) await cleanup.org(regionId);
+          }
+        },
+      );
+    },
+  );
 
   describe("byOrgs", () => {
     it("should require at least one orgId", async () => {
@@ -1927,41 +2055,274 @@ describe("User Router", () => {
         return;
       }
 
-      // Add a role
-      const [adminRole] = await dbInstance
-        .select({ id: schema.roles.id })
-        .from(schema.roles)
-        .where(eq(schema.roles.name, "admin"))
-        .limit(1);
+      try {
+        // Add a role
+        const [adminRole] = await dbInstance
+          .select({ id: schema.roles.id })
+          .from(schema.roles)
+          .where(eq(schema.roles.name, "admin"))
+          .limit(1);
 
-      if (adminRole) {
-        await dbInstance.insert(schema.rolesXUsersXOrg).values({
+        if (adminRole) {
+          await dbInstance.insert(schema.rolesXUsersXOrg).values({
+            userId: testUser.id,
+            orgId: f3Nation.id,
+            roleId: adminRole.id,
+          });
+        }
+
+        // A linked better_auth_user row must go with the user (ON DELETE CASCADE)
+        await db.insert(authSchema.betterAuthUser).values({
+          id: String(testUser.id),
+          name: "DeleteTest",
+          email: testUser.email,
+        });
+
+        // Delete the user
+        await client.user.delete({
+          id: testUser.id,
+        });
+
+        // Verify user is deleted
+        const [deletedUser] = await dbInstance
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, testUser.id));
+
+        expect(deletedUser).toBeUndefined();
+
+        // Verify roles are deleted
+        const roles = await dbInstance
+          .select()
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
+
+        expect(roles).toHaveLength(0);
+
+        const authUsers = await db
+          .select()
+          .from(authSchema.betterAuthUser)
+          .where(eq(authSchema.betterAuthUser.id, String(testUser.id)));
+        expect(authUsers).toHaveLength(0);
+      } finally {
+        // No-ops when the delete succeeded; removes leftovers when it did not.
+        await db
+          .delete(authSchema.betterAuthUser)
+          .where(eq(authSchema.betterAuthUser.id, String(testUser.id)));
+        await cleanup.user(testUser.id);
+      }
+    });
+
+    it("should return CONFLICT and keep roles when the user has history", async () => {
+      // The handler looks the nation up by name, and getOrCreateF3NationOrg
+      // returns whichever nation org comes first, so match the handler.
+      let [f3Nation] = await db
+        .select({ id: schema.orgs.id })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "nation"),
+            eq(schema.orgs.name, "F3 Nation"),
+          ),
+        )
+        .limit(1);
+      f3Nation ??= (
+        await db
+          .insert(schema.orgs)
+          .values({ name: "F3 Nation", orgType: "nation", isActive: true })
+          .returning({ id: schema.orgs.id })
+      )[0];
+      if (!f3Nation) throw new Error("F3 Nation org not found");
+
+      const adminRoles = [
+        {
+          orgId: f3Nation.id,
+          orgName: "F3 Nation",
+          roleName: "admin" as const,
+        },
+      ];
+      await mockAuthWithSession({
+        id: 1,
+        email: "admin@example.com",
+        user: {
+          id: "1",
+          email: "admin@example.com",
+          name: "Admin",
+          roles: adminRoles,
+        },
+        roles: adminRoles,
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      });
+      const client = createTestClient();
+
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({
+          email: `delete-history-${uniqueId()}@example.com`,
+          f3Name: "DeleteHistory",
+        })
+        .returning();
+      if (!testUser) throw new Error("test user not created");
+
+      let eventInstanceId: number | undefined;
+      try {
+        const [adminRole] = await db
+          .select({ id: schema.roles.id })
+          .from(schema.roles)
+          .where(eq(schema.roles.name, "admin"))
+          .limit(1);
+        if (!adminRole) throw new Error("admin role not seeded");
+
+        await db.insert(schema.rolesXUsersXOrg).values({
           userId: testUser.id,
           orgId: f3Nation.id,
           roleId: adminRole.id,
         });
+
+        // Attendance references users without ON DELETE CASCADE, so the users
+        // delete fails with a foreign-key violation.
+        const [eventInstance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Delete history ${uniqueId()}`,
+            orgId: f3Nation.id,
+            startDate: new Date().toISOString().split("T")[0]!,
+            isActive: true,
+            highlight: false,
+          })
+          .returning({ id: schema.eventInstances.id });
+        if (!eventInstance) throw new Error("event instance not created");
+        eventInstanceId = eventInstance.id;
+        await db.insert(schema.attendance).values({
+          eventInstanceId: eventInstance.id,
+          userId: testUser.id,
+          isPlanned: false,
+        });
+
+        await expect(
+          client.user.delete({ id: testUser.id }),
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message:
+            "This user has history (such as attendance or achievements) and can't be deleted.",
+        });
+
+        // The blocking constraint is logged so the cause is traceable.
+        const blocked = logWarn.mock.calls.find(
+          ([event]) => event === "api.user.delete_blocked",
+        );
+        expect(blocked?.[1]).toMatchObject({ userId: testUser.id });
+        expect(typeof blocked?.[1]?.constraint).toBe("string");
+
+        const [stillThere] = await db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.id, testUser.id));
+        expect(stillThere).toBeDefined();
+
+        // The roles delete ran first in the same transaction; it must have
+        // rolled back.
+        const roles = await db
+          .select()
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
+        expect(roles).toHaveLength(1);
+      } finally {
+        await db
+          .delete(schema.attendance)
+          .where(eq(schema.attendance.userId, testUser.id));
+        if (eventInstanceId !== undefined) {
+          await db
+            .delete(schema.eventInstances)
+            .where(eq(schema.eventInstances.id, eventInstanceId));
+        }
+        await cleanup.user(testUser.id);
       }
+    });
 
-      // Delete the user
-      await client.user.delete({
-        id: testUser.id,
+    it("should return a generic error and keep the user on an unexpected failure", async () => {
+      let [f3Nation] = await db
+        .select({ id: schema.orgs.id })
+        .from(schema.orgs)
+        .where(
+          and(
+            eq(schema.orgs.orgType, "nation"),
+            eq(schema.orgs.name, "F3 Nation"),
+          ),
+        )
+        .limit(1);
+      f3Nation ??= (
+        await db
+          .insert(schema.orgs)
+          .values({ name: "F3 Nation", orgType: "nation", isActive: true })
+          .returning({ id: schema.orgs.id })
+      )[0];
+      if (!f3Nation) throw new Error("F3 Nation org not found");
+
+      const adminRoles = [
+        {
+          orgId: f3Nation.id,
+          orgName: "F3 Nation",
+          roleName: "admin" as const,
+        },
+      ];
+      await mockAuthWithSession({
+        id: 1,
+        email: "admin@example.com",
+        user: {
+          id: "1",
+          email: "admin@example.com",
+          name: "Admin",
+          roles: adminRoles,
+        },
+        roles: adminRoles,
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
       });
+      const client = createTestClient();
 
-      // Verify user is deleted
-      const [deletedUser] = await dbInstance
-        .select()
-        .from(schema.users)
-        .where(eq(schema.users.id, testUser.id));
+      const [testUser] = await db
+        .insert(schema.users)
+        .values({
+          email: `delete-fault-${uniqueId()}@example.com`,
+          f3Name: "DeleteFault",
+        })
+        .returning();
+      if (!testUser) throw new Error("test user not created");
 
-      expect(deletedUser).toBeUndefined();
+      // ctx.db is the lazy `db` proxy, which forwards every access to the
+      // instance cached on globalThis.db outside production. Spy on that
+      // instance so the handler's transaction call rejects.
+      const realDb = globalThis.db;
+      if (!realDb) throw new Error("db instance not initialised");
+      const transactionSpy = vi
+        .spyOn(realDb, "transaction")
+        .mockRejectedValueOnce(new Error("boom"));
 
-      // Verify roles are deleted
-      const roles = await dbInstance
-        .select()
-        .from(schema.rolesXUsersXOrg)
-        .where(eq(schema.rolesXUsersXOrg.userId, testUser.id));
+      try {
+        const error: unknown = await client.user
+          .delete({ id: testUser.id })
+          .catch((e: unknown) => e);
+        expect(error).toMatchObject({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Unable to delete user",
+        });
+        expect((error as Error).message).not.toContain("boom");
 
-      expect(roles).toHaveLength(0);
+        expect(logError).toHaveBeenCalledWith(
+          "api.user.delete_failed",
+          { userId: testUser.id },
+          expect.objectContaining({ message: "boom" }),
+        );
+
+        const [stillThere] = await db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.id, testUser.id));
+        expect(stillThere).toBeDefined();
+      } finally {
+        transactionSpy.mockRestore();
+        await cleanup.user(testUser.id);
+      }
     });
   });
 

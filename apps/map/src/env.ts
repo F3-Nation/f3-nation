@@ -19,15 +19,6 @@ export const env = createEnv({
     F3_API_BASE_URL: z.url(),
     F3_CHANNEL: z.enum(["local", "ci", "branch", "dev", "staging", "prod"]),
     F3_GOOGLE_API_KEY: z.string().min(1),
-    // Required in non-development environments, optional in development
-    F3_MAP_API_KEY: z
-      .string()
-      .min(1)
-      .optional()
-      .refine(
-        (val) => process.env.NODE_ENV === "development" || val !== undefined,
-        { error: "Required in non-development environments" },
-      ),
     F3_MAP_BASE_URL: z.url(),
     SUPER_ADMIN_API_KEY: z.string().min(1),
   },

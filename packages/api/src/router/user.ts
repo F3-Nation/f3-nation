@@ -14,14 +14,16 @@ interface RoleInput {
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
-import { logDebug, logError } from "../logger";
+import { logDebug, logError, logWarn } from "../logger";
 import {
   buildSingleUserQuery,
   buildUserListQuery,
   checkUserPiiAccess,
+  getPgError,
   getProfileScopeOrgIds,
   hasRoleOnAny,
   isDuplicateEmailError,
+  isForeignKeyViolationError,
   shapeUserPii,
   userDetailOutputSchema,
   userListInputSchema,
@@ -724,10 +726,36 @@ export const userRouter = {
         });
       }
 
-      await ctx.db
-        .delete(schema.rolesXUsersXOrg)
-        .where(eq(schema.rolesXUsersXOrg.userId, input.id));
+      try {
+        await ctx.db.transaction(async (tx) => {
+          await tx
+            .delete(schema.rolesXUsersXOrg)
+            .where(eq(schema.rolesXUsersXOrg.userId, input.id));
 
-      await ctx.db.delete(schema.users).where(eq(schema.users.id, input.id));
+          await tx.delete(schema.users).where(eq(schema.users.id, input.id));
+        });
+      } catch (error) {
+        // Attendance, positions, linked accounts, API keys and similar records
+        // reference users without ON DELETE CASCADE. The transaction has
+        // already rolled back the roles delete, so the user keeps their roles.
+        // Log the blocking constraint (a schema identifier, not PII) so the
+        // cause is traceable; no email or other PII (docs/LOGGING.md).
+        if (isForeignKeyViolationError(error)) {
+          logWarn("api.user.delete_blocked", {
+            userId: input.id,
+            constraint: getPgError(error)?.constraint_name,
+          });
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This user has history (such as attendance or achievements) and can't be deleted.",
+          });
+        }
+        // Anything else is an unexpected DB/driver fault. Log the original and
+        // surface a generic message that leaks no internals.
+        logError("api.user.delete_failed", { userId: input.id }, error);
+        throw new ORPCError("INTERNAL_SERVER_ERROR", {
+          message: "Unable to delete user",
+        });
+      }
     }),
 };
