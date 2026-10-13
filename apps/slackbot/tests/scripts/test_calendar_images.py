@@ -1,6 +1,8 @@
 import os
 import sys
+import threading
 from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
@@ -247,16 +249,21 @@ def calendar_generation(monkeypatch):
         now = at
         exports.clear()
         space.settings = deepcopy(settings)
+        monkeypatch.setattr(calendar_images, "get_session", MagicMock(side_effect=[session]))
         session.query.return_value.all.side_effect = [
+            [(SimpleNamespace(id=1, name="Test region"), None, space)],
             rows,
             [],
-            [(SimpleNamespace(id=1, name="Test region"), None, space)],
+            rows,
         ]
         calendar_images.generate_calendar_images(force=force)
         return list(exports)
 
     monkeypatch.setitem(sys.modules, "dataframe_image", SimpleNamespace(export=export))
     monkeypatch.setattr(calendar_images, "get_session", lambda: session)
+    monkeypatch.setattr(
+        session, "refresh", lambda record, attribute_names: setattr(record, "settings", deepcopy(settings))
+    )
     monkeypatch.setattr(calendar_images, "datetime", Clock)
     monkeypatch.setattr(calendar_images, "current_date_cst", lambda: date(2026, 9, 30))
     monkeypatch.setattr(calendar_images, "LOCAL_DEVELOPMENT", False)
@@ -267,6 +274,323 @@ def calendar_generation(monkeypatch):
     # An empty query still exposes its selected columns.
     event_row("Schema AO", now)
     return run, event_row, settings, session
+
+
+@pytest.fixture
+def overlapping_calendar_runs(calendar_generation, monkeypatch):
+    """Separate workers/sessions sharing persisted settings, storage, and a DB lock."""
+    _, row, settings, existing_session = calendar_generation
+    settings["calendar_weeks_shown"] = 3
+    columns = existing_session.query.return_value.statement.selected_columns
+    worker = threading.local()
+    database_locks = {}
+    state = SimpleNamespace(
+        rows=[],
+        files={},
+        operations=[],
+        lock_owner=None,
+        pause_delete=None,
+        pause_discovery=None,
+        paused=threading.Event(),
+        resume=threading.Event(),
+        refresh_lock_attempted=threading.Event(),
+        fail_commit_for=None,
+        pause_after_commit=None,
+    )
+
+    def record(action):
+        state.operations.append((worker.name, action, state.lock_owner))
+
+    def pause():
+        state.paused.set()
+        assert state.resume.wait(timeout=10), "overlapping run was not released"
+
+    def session_factory():
+        session = MagicMock()
+        session.__enter__.return_value = session
+        space = SimpleNamespace(settings=deepcopy(settings))
+        pending = None
+        owned_lock = None
+
+        def execute(statement):
+            nonlocal owned_lock
+            assert "pg_advisory_xact_lock" in str(statement)
+            assert not worker.work_transaction, "work connection/table locks retained while waiting"
+            (lock_key,) = statement.compile().params.values()
+            assert isinstance(lock_key, int)
+            region_lock = database_locks.setdefault(lock_key, threading.Lock())
+            if worker.name == "refresh":
+                state.refresh_lock_attempted.set()
+            assert region_lock.acquire(timeout=10), "calendar region lock was not released"
+            owned_lock = region_lock
+            state.lock_owner = worker.name
+            record("lock")
+
+        def close(*args):
+            nonlocal owned_lock
+            if owned_lock is not None:
+                record("unlock")
+                state.lock_owner = None
+                owned_lock.release()
+                owned_lock = None
+            worker.work_transaction = False
+
+        def refresh(record_to_refresh, attribute_names):
+            assert attribute_names == ["settings"]
+            worker.work_transaction = True
+            record("refresh_settings")
+            record_to_refresh.settings = deepcopy(settings)
+
+        def read_regions():
+            worker.work_transaction = True
+            if worker.name == state.pause_discovery:
+                pause()
+            return [(SimpleNamespace(id=1, name="Test region"), None, space)]
+
+        def read_events():
+            worker.work_transaction = True
+            record("read_events")
+            return list(state.rows)
+
+        def update(payload):
+            nonlocal pending
+            pending = deepcopy(payload["settings"])
+
+        def commit():
+            nonlocal pending
+            assert pending is not None, "settings UPDATE must precede commit"
+            if worker.name == state.fail_commit_for:
+                raise RuntimeError("DB commit failed")
+            record("commit")
+            settings.clear()
+            settings.update(pending)
+            pending = None
+            # PostgreSQL releases this session's transaction locks at commit.
+            close()
+            if worker.name == state.pause_after_commit:
+                pause()
+
+        def rollback():
+            nonlocal pending
+            pending = None
+            record("rollback")
+            close()
+
+        def chain_query():
+            query = MagicMock()
+            for method in ("select_from", "join", "outerjoin", "filter"):
+                getattr(query, method).return_value = query
+            return query
+
+        events = chain_query()
+        events.statement.selected_columns = columns
+        events.all.side_effect = read_events
+        regions = chain_query()
+        regions.all.side_effect = read_regions
+        tags = chain_query()
+        tags.all.return_value = []
+        updates = chain_query()
+        updates.update.side_effect = update
+
+        def query(*entities):
+            if len(entities) == 3 and entities[0] is calendar_images.Org:
+                return regions
+            if len(entities) == 1 and entities[0] is calendar_images.EventTag:
+                return tags
+            if len(entities) == 1 and entities[0] is calendar_images.SlackSpace:
+                return updates
+            return events
+
+        session.query.side_effect = query
+        session.execute.side_effect = execute
+        session.refresh.side_effect = refresh
+        session.commit.side_effect = commit
+        session.rollback.side_effect = rollback
+        session.close.side_effect = close
+        session.__exit__.side_effect = close
+        return session
+
+    def export(style, filename, **kwargs):
+        record("export")
+        state.files[filename] = worker.name
+
+    def copy(source, destination):
+        record("copy")
+        state.files[destination] = state.files[source]
+
+    def remove(path):
+        if worker.name == "cleanup" and path == state.pause_delete:
+            pause()
+        record("delete")
+        if path not in state.files:
+            raise FileNotFoundError(path)
+        del state.files[path]
+
+    def run(name, force=False):
+        worker.name = name
+        worker.work_transaction = False
+        calendar_images.generate_calendar_images(force=force)
+
+    monkeypatch.setattr(calendar_images, "DB_SCHEMA", "f3_prod")
+    monkeypatch.setattr(calendar_images, "get_session", session_factory)
+    monkeypatch.setattr(sys.modules["dataframe_image"], "export", export)
+    monkeypatch.setattr(calendar_images.shutil, "copyfile", copy)
+    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    return state, run, row, settings
+
+
+@pytest.mark.parametrize("week_index", [0, 1, 2])
+@pytest.mark.parametrize("had_image", [False, True])
+def test_overlapping_refresh_waits_through_stable_deletion(overlapping_calendar_runs, week_index, had_image):
+    state, run, row, settings = overlapping_calendar_runs
+    week = ("current", "next", "third")[week_index]
+    stable_path = f"/mnt/calendar-images/1-{week}.png"
+    if had_image:
+        existing = v1_filename(week=week, timestamp="20260929T100000000000Z")
+        settings[f"calendar_image_{week}"] = existing
+        state.files[f"/mnt/calendar-images/{existing}"] = "old"
+        state.files[stable_path] = "old"
+    state.pause_delete = stable_path
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        cleanup = executor.submit(run, "cleanup")
+        try:
+            if not state.paused.wait(timeout=5):
+                cleanup.result(timeout=1)
+                pytest.fail("cleanup did not reach stable deletion")
+            assert f"calendar_image_{week}" not in settings
+            state.rows = [
+                row("New AO", datetime(2026, 9, 30, 9), start_date=date(2026, 10, 1) + timedelta(weeks=week_index))
+            ]
+            refresh = executor.submit(run, "refresh", True)
+            if not state.refresh_lock_attempted.wait(timeout=1):
+                # Without locking the refresh finishes while deletion is paused.
+                refresh.result(timeout=5)
+            else:
+                assert not refresh.done()
+                assert not any(owner == "refresh" and action == "export" for owner, action, _ in state.operations)
+        finally:
+            state.resume.set()
+        cleanup.result(timeout=5)
+        refresh.result(timeout=5)
+    assert state.files.get(stable_path) == "refresh"
+    assert f"/mnt/calendar-images/{settings[f'calendar_image_{week}']}" in state.files
+    assert all(owner == lock_owner for owner, action, lock_owner in state.operations if action != "rollback")
+
+
+@pytest.mark.parametrize("week_index", [0, 1, 2])
+def test_waiting_run_refreshes_settings_and_events_after_region_lock(overlapping_calendar_runs, week_index):
+    state, run, row, settings = overlapping_calendar_runs
+    state.pause_discovery = "cleanup"
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        cleanup = executor.submit(run, "cleanup")
+        try:
+            if not state.paused.wait(timeout=5):
+                cleanup.result(timeout=1)
+                pytest.fail("cleanup did not reach region discovery")
+            state.rows = [
+                row("New AO", datetime(2026, 9, 30, 9), start_date=date(2026, 10, 1) + timedelta(weeks=week_index))
+            ]
+            executor.submit(run, "refresh", True).result(timeout=5)
+            committed = deepcopy(settings)
+        finally:
+            state.resume.set()
+        cleanup.result(timeout=5)
+    week = ("current", "next", "third")[week_index]
+    assert state.files.get(f"/mnt/calendar-images/1-{week}.png") == "refresh"
+    assert f"/mnt/calendar-images/{settings[f'calendar_image_{week}']}" in state.files
+    assert settings == committed
+    assert not any(owner == "cleanup" and action in {"export", "commit"} for owner, action, _ in state.operations)
+    assert all(owner == lock_owner for owner, action, lock_owner in state.operations if action != "rollback")
+
+
+@pytest.mark.parametrize("refresh_commit_fails", [False, True])
+@pytest.mark.parametrize("week_index", [0, 1, 2])
+def test_cleanup_revalidates_when_refresh_publishes_between_commit_and_relock(
+    overlapping_calendar_runs, week_index, refresh_commit_fails
+):
+    state, run, row, settings = overlapping_calendar_runs
+    week = ("current", "next", "third")[week_index]
+    existing = v1_filename(week=week, timestamp="20260929T100000000000Z")
+    settings[f"calendar_image_{week}"] = existing
+    state.files[f"/mnt/calendar-images/{existing}"] = "old"
+    state.files[f"/mnt/calendar-images/1-{week}.png"] = "old"
+    state.pause_after_commit = "cleanup"
+    if refresh_commit_fails:
+        state.fail_commit_for = "refresh"
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        cleanup = executor.submit(run, "cleanup")
+        try:
+            assert state.paused.wait(timeout=5), "cleanup did not reach its committed state"
+            assert state.lock_owner is None
+            state.rows = [
+                row("New AO", datetime(2026, 9, 30, 9), start_date=date(2026, 10, 1) + timedelta(weeks=week_index))
+            ]
+            executor.submit(run, "refresh", True).result(timeout=5)
+            committed = deepcopy(settings)
+            new_backing_paths = {
+                path for path, owner in state.files.items() if owner == "refresh" and f"1-{week}-v1-" in path
+            }
+        finally:
+            state.resume.set()
+        cleanup.result(timeout=5)
+    assert settings == committed
+    assert state.files[f"/mnt/calendar-images/1-{week}.png"] == "refresh"
+    assert len(new_backing_paths) == 1
+    assert new_backing_paths <= state.files.keys()
+    assert (f"calendar_image_{week}" in settings) == (not refresh_commit_fails)
+    assert f"/mnt/calendar-images/{existing}" not in state.files
+    assert all(owner == lock_owner for owner, action, lock_owner in state.operations if action != "rollback")
+
+
+def test_special_event_blocks_reuse_generation_session(monkeypatch):
+    session = MagicMock()
+    session.query.return_value.options.return_value.filter.return_value.all.return_value = []
+    find_records = MagicMock(side_effect=AssertionError("must not open another DB session while locked"))
+    monkeypatch.setattr(calendar_images.DbManager, "find_records", find_records)
+    assert calendar_images.create_special_events_blocks({"org_id": 1}, session) == []
+    session.query.assert_called_once_with(calendar_images.EventInstance)
+    find_records.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", ["export", "slack_rejected", "slack_ambiguous", "commit", "interrupt"])
+def test_region_lock_released_after_failure_or_interruption(overlapping_calendar_runs, monkeypatch, failure):
+    state, run, row, settings = overlapping_calendar_runs
+    state.rows = [row("AO", datetime(2026, 9, 30, 9))]
+    export = sys.modules["dataframe_image"].export
+
+    def fail_export(style, filename, **kwargs):
+        if state.lock_owner == "cleanup":
+            if failure == "interrupt":
+                raise KeyboardInterrupt()
+            raise RuntimeError("Export failed")
+        export(style, filename, **kwargs)
+
+    if failure in {"export", "interrupt"}:
+        monkeypatch.setattr(sys.modules["dataframe_image"], "export", fail_export)
+    elif failure.startswith("slack_"):
+        settings.update(q_image_posting_enabled=True, q_image_posting_channel="TEST_CHANNEL", bot_token="test-token")
+
+        def post(*args):
+            if state.lock_owner == "cleanup":
+                raise calendar_images.CalendarSlackPostError(safe_to_discard=failure == "slack_rejected")
+
+        monkeypatch.setattr(calendar_images, "post_calendar_to_slack", post)
+    else:
+        state.fail_commit_for = "cleanup"
+    before = deepcopy(settings)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        attempted = executor.submit(run, "cleanup", True)
+        if failure == "interrupt":
+            with pytest.raises(KeyboardInterrupt):
+                attempted.result(timeout=5)
+        else:
+            attempted.result(timeout=5)
+        assert state.lock_owner is None
+        assert settings == before
+        executor.submit(run, "refresh", True).result(timeout=5)
+    assert state.lock_owner is None
+    assert state.files.get("/mnt/calendar-images/1-current.png") == "refresh"
+    assert f"/mnt/calendar-images/{settings['calendar_image_current']}" in state.files
 
 
 @pytest.mark.parametrize("delay_seconds", [3600, 3601, 86401])
@@ -665,7 +989,7 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
     if failed:
         fail(client.chat_postMessage)
     monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
-    monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings: [])
+    monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings, session=None: [])
 
     def remove(path):
         if session.commit.call_count == 1:
@@ -778,7 +1102,7 @@ def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, mon
     client.chat_update.return_value = {"ok": True}
     client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
     monkeypatch.setattr(calendar_images, "WebClient", lambda **kwargs: client)
-    monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings: [])
+    monkeypatch.setattr(calendar_images, "create_special_events_blocks", lambda settings, session=None: [])
     if failure in {"both_rejected", "update_rejected_post_timeout"}:
         client.chat_update.return_value = {"ok": False}
     elif failure in {"update_timeout_post_rejected", "update_timeout_post_success"}:

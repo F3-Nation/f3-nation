@@ -38,7 +38,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models import blocks
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, joinedload
 
 from utilities.constants import (
     EVENT_TAG_COLORS,
@@ -49,7 +49,7 @@ from utilities.constants import (
     WEEK_ALT_TEXT,
     WEEK_LABELS,
 )
-from utilities.helper_functions import current_date_cst, safe_convert, safe_get, update_local_region_records
+from utilities.helper_functions import current_date_cst, safe_convert, update_local_region_records
 from utilities.slack import actions
 
 DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
@@ -278,7 +278,7 @@ def _slack_attempt_was_rejected(error: Exception) -> bool:
     )
 
 
-def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunday_run: bool) -> None:
+def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunday_run: bool, session=None) -> None:
     print("Posting to Slack channel")
     client = WebClient(token=slack_app_settings["bot_token"])
     if LOCAL_DEVELOPMENT:
@@ -312,7 +312,7 @@ def post_calendar_to_slack(slack_app_settings: dict, num_weeks: int, first_sunda
             ]
         )
     )
-    block_list.extend(create_special_events_blocks(slack_app_settings))
+    block_list.extend(create_special_events_blocks(slack_app_settings, session))
     all_attempts_rejected = True
     try:
         if slack_app_settings.get("q_image_posting_ts") and (not first_sunday_run):
@@ -468,14 +468,6 @@ def generate_calendar_images(force: bool = False):
             )
         )
 
-        # Use the query start, not export completion: changes during rendering must
-        # still trigger regeneration on the next run.
-        generation_started_at = datetime.now(UTC)
-        results = query.all()
-        df_all = pd.DataFrame(results, columns=[column.key for column in query.statement.selected_columns])
-
-        event_tags = session.query(EventTag).all()
-
         region_org_records = (
             session.query(Org, Org_x_SlackSpace, SlackSpace)
             .select_from(Org)
@@ -485,14 +477,28 @@ def generate_calendar_images(force: bool = False):
             .all()
         )
 
-        region_ids_with_events = {int(r) for r in df_all["region_id"].unique()} if not df_all.empty else set()
-
-        for region_id in region_ids_with_events | {r[0].id for r in region_org_records}:
+        for region_org_record in region_org_records:
+            region_id = region_org_record[0].id
             try:
-                df_full = df_all[df_all["region_id"] == region_id].copy()
-                region_name = str(region_id)
-                region_org_record = safe_get([r for r in region_org_records if r[0].id == region_id], 0)
-                if region_org_record:
+                # Release discovery/previous reads before waiting for another run:
+                # retaining their connection or table locks can block the holder.
+                session.close()
+                with session:
+                    lock_key = int.from_bytes(
+                        hashlib.sha256(f"calendar-images:{DB_SCHEMA}:{region_id}".encode()).digest()[:8],
+                        "big",
+                        signed=True,
+                    )
+                    session.connection(execution_options={"isolation_level": "READ COMMITTED"})
+                    session.execute(select(func.pg_advisory_xact_lock(lock_key)))
+                    session.add(region_org_record[2])
+                    session.refresh(region_org_record[2], attribute_names=["settings"])
+                    # Read a fresh region snapshot only after acquiring its lock.
+                    # Use query start, not export completion, as the watermark.
+                    generation_started_at = datetime.now(UTC)
+                    results = query.filter(RegionOrg.id == region_id).all()
+                    df_full = pd.DataFrame(results, columns=[column.key for column in query.statement.selected_columns])
+                    event_tags = session.query(EventTag).all()
                     slack_app_settings: dict = deepcopy(region_org_record[2].settings)
                     pending_deletions = []
                     generated_backing_files = []
@@ -754,7 +760,7 @@ def generate_calendar_images(force: bool = False):
                     if calendar_updated:
                         if slack_posting_enabled(slack_app_settings):
                             try:
-                                post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run)
+                                post_calendar_to_slack(slack_app_settings, num_weeks, first_sunday_run, session)
                             except CalendarSlackPostError as posting_error:
                                 if not posting_error.safe_to_discard:
                                     raise
@@ -781,8 +787,37 @@ def generate_calendar_images(force: bool = False):
                             {"settings": slack_app_settings}
                         )
                         session.commit()
-                    # With no settings change, stable-file retries need no new commit.
+                    cleanup_settings = slack_app_settings
+                    cleanup_df = df_full
+                    if calendar_updated and pending_deletions:
+                        # Commit released the lock. Another run may have published
+                        # in that gap, so reacquire and reread before any deletion.
+                        session.connection(execution_options={"isolation_level": "READ COMMITTED"})
+                        session.execute(select(func.pg_advisory_xact_lock(lock_key)))
+                        session.refresh(region_org_record[2], attribute_names=["settings"])
+                        cleanup_settings = region_org_record[2].settings
+                        results = query.filter(RegionOrg.id == region_id).all()
+                        cleanup_df = pd.DataFrame(
+                            results, columns=[column.key for column in query.statement.selected_columns]
+                        )
+                    # With no settings change, the original lock still protects retries.
                     for old_file in pending_deletions:
+                        if old_file in [cleanup_settings.get(f"calendar_image_{label}") for label in WEEK_LABELS]:
+                            continue
+                        stable_week = next(
+                            (label for label in WEEK_LABELS if old_file == f"{region_id}-{label}.png"), None
+                        )
+                        if stable_week is not None:
+                            week_index = WEEK_LABELS.index(stable_week)
+                            week_start = current_week_start + timedelta(weeks=week_index)
+                            week_end = week_start + timedelta(days=7)
+                            if cleanup_settings.get(f"calendar_image_{stable_week}") or (
+                                week_index < calendar_weeks_shown(cleanup_settings)
+                                and not cleanup_df[
+                                    (cleanup_df["start_date"] >= week_start) & (cleanup_df["start_date"] < week_end)
+                                ].empty
+                            ):
+                                continue
                         try:
                             os.remove(f"/mnt/calendar-images/{old_file}")
                         except FileNotFoundError:
@@ -819,22 +854,24 @@ def create_special_events_text(events: List[EventInstance], slack_settings_dict:
     return text
 
 
-def create_special_events_blocks(slack_settings_dict: dict) -> blocks.Block:
+def create_special_events_blocks(slack_settings_dict: dict, session=None) -> blocks.Block:
     blocks_list = []
     # list special events
-    special_events: List[EventInstance] = DbManager.find_records(
-        cls=EventInstance,
-        filters=[
-            or_(
-                EventInstance.org_id == slack_settings_dict.get("org_id"),
-                EventInstance.org.has(Org.parent_id == slack_settings_dict.get("org_id")),
-            ),
-            EventInstance.start_date >= current_date_cst(),
-            EventInstance.is_active,
-            EventInstance.highlight,
-        ],
-        joinedloads=[EventInstance.org],
-    )
+    filters = [
+        or_(
+            EventInstance.org_id == slack_settings_dict.get("org_id"),
+            EventInstance.org.has(Org.parent_id == slack_settings_dict.get("org_id")),
+        ),
+        EventInstance.start_date >= current_date_cst(),
+        EventInstance.is_active,
+        EventInstance.highlight,
+    ]
+    if session is None:
+        special_events: List[EventInstance] = DbManager.find_records(
+            cls=EventInstance, filters=filters, joinedloads=[EventInstance.org]
+        )
+    else:
+        special_events = session.query(EventInstance).options(joinedload(EventInstance.org)).filter(*filters).all()
     # limit to 10 upcoming events
     special_events = sorted(special_events, key=lambda x: (x.start_date, x.start_time))[:10]
     if len(special_events) > 0:
