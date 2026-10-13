@@ -326,7 +326,7 @@ export const buildUserListQuery = async ({
       input?.sorting,
       {
         id: schema.users.id,
-        name: schema.users.firstName,
+        name: sql`btrim(concat_ws(' ', ${schema.users.firstName}, ${schema.users.lastName}))`,
         f3Name: schema.users.f3Name,
         roles: sql`MIN(${schema.roles.name})`,
         status: schema.users.status,
