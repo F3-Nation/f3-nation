@@ -1,17 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AppliedRow, JournalEntry } from "./migrate-guards";
 import {
+  assertLocalTarget,
   checkGitState,
   checkPlan,
   classifyHost,
   confirmationMatches,
   ENVIRONMENTS,
+  isCloudSqlServer,
   isMainRepoUrl,
   isProtectedDatabaseName,
   maintenanceUrl,
   planMigrations,
 } from "./migrate-guards";
+
+// The server lookup behind isCloudSqlServer.
+const pg = vi.hoisted(() => ({
+  rows: [{ cloudsql: false }] as { cloudsql: boolean }[],
+  end: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("postgres", () => ({
+  default: () => Object.assign(() => Promise.resolve(pg.rows), { end: pg.end }),
+}));
 
 describe("classifyHost", () => {
   it.each([
@@ -252,5 +263,76 @@ describe("confirmationMatches", () => {
     expect(confirmationMatches("y", "f3_prod")).toBe(false);
     expect(confirmationMatches("F3_PROD", "f3_prod")).toBe(false);
     expect(confirmationMatches("f3_staging", "f3_prod")).toBe(false);
+  });
+});
+
+describe("assertLocalTarget", () => {
+  const LOCAL = "postgresql://u:p@localhost:5432/f3nation";
+  const notCloudSql = () => Promise.resolve(false);
+
+  it.each([
+    ["a remote host", "postgresql://u:p@34.66.1.2/f3nation"],
+    ["a prod-named database", "postgresql://u:p@localhost/f3_prod"],
+    [
+      "a Cloud SQL socket",
+      "postgresql://u:p@localhost/f3_prod?host=/cloudsql/f3data:us-central1:f3data",
+    ],
+  ])("refuses %s without asking the server", async (_, url) => {
+    const lookup = vi.fn(notCloudSql);
+    await expect(assertLocalTarget(url, undefined, lookup)).rejects.toThrow(
+      /Refusing to migrate/,
+    );
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it("refuses a localhost URL whose server is Cloud SQL (a proxy)", async () => {
+    const lookup = vi.fn(() => Promise.resolve(true));
+    await expect(assertLocalTarget(LOCAL, undefined, lookup)).rejects.toThrow(
+      /reaches a Cloud SQL server/,
+    );
+    // Asked from the maintenance database, which exists before f3nation does.
+    expect(lookup).toHaveBeenCalledWith(
+      "postgresql://u:p@localhost:5432/postgres",
+    );
+  });
+
+  it("allows a local database", async () => {
+    await expect(
+      assertLocalTarget(LOCAL, undefined, notCloudSql),
+    ).resolves.toBeUndefined();
+  });
+
+  it("words every refusal with the caller's action and help", async () => {
+    const action = { verb: "load a snapshot into", help: "Use Docker." };
+    await expect(
+      assertLocalTarget("postgresql://u:p@34.66.1.2/f3nation", action),
+    ).rejects.toThrow(/Refusing to load a snapshot into: .*Use Docker\./);
+    await expect(
+      assertLocalTarget("postgresql://u:p@localhost/f3_prod", action),
+    ).rejects.toThrow(/Refusing to load a snapshot into database "f3_prod"/);
+    await expect(
+      assertLocalTarget(LOCAL, action, () => Promise.resolve(true)),
+    ).rejects.toThrow(/Refusing to load a snapshot into: .*Cloud SQL/);
+  });
+});
+
+describe("isCloudSqlServer", () => {
+  const URL = "postgresql://u:p@localhost:5432/postgres";
+
+  it("is true when the server has the Cloud SQL superuser role", async () => {
+    pg.rows = [{ cloudsql: true }];
+    await expect(isCloudSqlServer(URL)).resolves.toBe(true);
+  });
+
+  it("is false for a plain Postgres", async () => {
+    pg.rows = [{ cloudsql: false }];
+    await expect(isCloudSqlServer(URL)).resolves.toBe(false);
+  });
+
+  it("is false when the lookup returns no row, and always closes the client", async () => {
+    pg.rows = [];
+    pg.end.mockClear();
+    await expect(isCloudSqlServer(URL)).resolves.toBe(false);
+    expect(pg.end).toHaveBeenCalledOnce();
   });
 });

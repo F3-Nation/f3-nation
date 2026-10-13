@@ -43,45 +43,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("assertLocalTarget", () => {
-  const notCloudSql = () => Promise.resolve(false);
-
-  it.each([
-    ["a remote host", "postgresql://u:p@34.66.1.2/f3nation"],
-    ["a prod-named database", "postgresql://u:p@localhost/f3_prod"],
-    [
-      "a Cloud SQL socket",
-      "postgresql://u:p@localhost/f3_prod?host=/cloudsql/f3data:us-central1:f3data",
-    ],
-  ])("refuses %s without asking the server", async (_, url) => {
-    const { assertLocalTarget } = await load(LOCAL);
-    const lookup = vi.fn(notCloudSql);
-    await expect(assertLocalTarget(url, lookup)).rejects.toThrow(
-      /Refusing to migrate/,
-    );
-    expect(lookup).not.toHaveBeenCalled();
-  });
-
-  it("refuses a localhost URL whose server is Cloud SQL (a proxy)", async () => {
-    const { assertLocalTarget } = await load(LOCAL);
-    const lookup = vi.fn(() => Promise.resolve(true));
-    await expect(assertLocalTarget(LOCAL, lookup)).rejects.toThrow(
-      /reaches a Cloud SQL server/,
-    );
-    // Asked from the maintenance database, which exists before f3nation does.
-    expect(lookup).toHaveBeenCalledWith(
-      "postgresql://u:p@localhost:5432/postgres",
-    );
-  });
-
-  it("allows a local database", async () => {
-    const { assertLocalTarget } = await load(LOCAL);
-    await expect(
-      assertLocalTarget(LOCAL, notCloudSql),
-    ).resolves.toBeUndefined();
-  });
-});
-
 describe("migrate", () => {
   it("refuses under CI before touching any database", async () => {
     vi.stubEnv("CI", "1");

@@ -6,6 +6,7 @@
 
 import { db } from "./client";
 import { seedAttendanceTypes } from "./local-seed-lib/attendance";
+import { DEV_LOGIN_HINT } from "./local-seed-lib/data";
 import { seedEventTags } from "./local-seed-lib/event-tags";
 import {
   seedAoLocationsAndEvents,
@@ -33,9 +34,7 @@ async function seed() {
   await seedPositions(db);
   await resetSequences(db);
   console.log("\nLocal seed complete.");
-  console.log(
-    "  Log in with: dev-admin@f3local.dev, dev-editor@f3local.dev, or dev-user@f3local.dev",
-  );
+  console.log(`  ${DEV_LOGIN_HINT}`);
 }
 
 void seed()
