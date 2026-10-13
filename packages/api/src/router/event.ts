@@ -1186,14 +1186,25 @@ export const eventRouter = {
             ),
           ),
         )
+        .leftJoin(
+          schema.locations,
+          eq(schema.locations.id, schema.events.locationId),
+        )
         // publicReadProcedure lets an anonymous caller reach this endpoint
         // don't leak a private OR inactive event's ID (even bare,
         // with no other fields) to a caller with no session at all.
+        // location.delete only soft-deletes the location and leaves its
+        // events untouched, so an event at a deleted location must be
+        // hidden here too, same as buildEventWhereClause.
         .where(
           !ctx.session?.user
             ? and(
                 eq(schema.events.isPrivate, false),
                 eq(schema.events.isActive, true),
+                or(
+                  isNull(schema.events.locationId),
+                  eq(schema.locations.isActive, true),
+                ),
               )
             : undefined,
         )

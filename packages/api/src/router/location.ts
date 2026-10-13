@@ -15,6 +15,7 @@ import {
   lte,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -193,7 +194,11 @@ export const locationRouter = {
         isAnonymous
           ? exists(
               ctx.db
-                .select({ one: count() })
+                // `count()` is an aggregate: with no GROUP BY, Postgres
+                // always returns exactly one row (0 when nothing matches),
+                // so EXISTS(...) would always be true. Select a constant
+                // instead so EXISTS actually tests for a matching row.
+                .select({ one: sql`1` })
                 .from(schema.events)
                 .where(
                   and(

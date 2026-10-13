@@ -2143,6 +2143,50 @@ describe("Event Router", () => {
       expect(result).toHaveProperty("lookup");
       expect(typeof result.lookup).toBe("object");
     });
+
+    it("should hide an active, non-private event at an inactive location from an anonymous caller, but not from a signed-in caller", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const location = await createTestLocation(ao.id);
+      if (!location) return;
+
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Deleted Location Lookup Event ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: location.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+
+      // location.delete only soft-deletes the location (isActive: false)
+      await db
+        .update(schema.locations)
+        .set({ isActive: false })
+        .where(eq(schema.locations.id, location.id));
+
+      const anonymousClient = createTestClient();
+      const anonymousResult =
+        await anonymousClient.event.eventIdToRegionNameLookup();
+      expect(anonymousResult.lookup).not.toHaveProperty(String(event.id));
+
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+      const signedInClient = createTestClient();
+      const signedInResult =
+        await signedInClient.event.eventIdToRegionNameLookup();
+      expect(signedInResult.lookup).toHaveProperty(String(event.id));
+    });
   });
   describe("cascade service integration", () => {
     describe("crupdate with recurrence", () => {
