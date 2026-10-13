@@ -35,15 +35,15 @@ Ask for anything missing before starting:
    else.** Find the most recently merged release PR:
 
    ```bash
-   TZ=America/New_York gh pr list --state merged --base main \
+   gh pr list --state merged --base main \
      --author app/f3-nation-release-please \
      --search "chore: release main in:title" --limit 100 \
      --json number,title,mergedAt \
      --jq 'sort_by(.mergedAt) | last | "#\(.number) merged \(.mergedAt | fromdateiso8601 | strflocaltime("%a %b %-d, %-I:%M %p %Z"))"'
    ```
 
-   Tell the user the PR number and merge time in US Eastern time (the command
-   prints it; never report UTC) and ask them to confirm. If
+   Tell the user the PR number and merge time in the user's local time (the
+   command prints it; never report UTC) and ask them to confirm. If
    they gave a number that is not this PR, say so and ask which one they
    mean; do not silently follow either. If the PR they name is open or was
    closed without merging, stop and explain that only a merged release can be
@@ -94,7 +94,8 @@ Ask for anything missing before starting:
    `deploy-prod` approvals matters: put the migration first if the new app
    needs it, and if the old app would break on the new schema, state the
    compatible order or maintenance window in the Overview. If the right order
-   is unclear, post in `#monorepo` and pause before approving anything.
+   is unclear, tell the user to raise it in `#monorepo` and pause before
+   approving anything.
    Scheduled jobs and workers may already be running against the old schema:
    make confirming migration and worker state a prerequisite to testing; do
    not assume the database is current or pause jobs without accounting for
