@@ -9,10 +9,10 @@ Both Cloud Run Jobs are in project `f3data`, region `us-central1`:
 | Nonprod     | `analytics-etl-nonprod` | `f3_staging` on `f3data-nonprod` | `gs://f3-analytics-nonprod` |
 | Production  | `analytics-etl`         | `f3_prod` on `f3data`            | `gs://f3-analytics`         |
 
-| Product     | Exact publication set                                                                                                                  | Immutable layout                               | Sole mutable pointer              |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
-| `pax-vault` | `pv_regions`, `pv_pax`, `pv_kotter`, `pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`, `pv_events`, `pv_attendance` | `<bucket>/pax-vault/releases/<release-id>/...` | `<bucket>/pax-vault/current.json` |
-| `analytics` | `event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`                                                             | `<bucket>/analytics/releases/<release-id>/...` | `<bucket>/analytics/current.json` |
+| Product     | Exact publication set                                                                                                                                      | Immutable layout                               | Sole mutable pointer              |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
+| `pax-vault` | `pv_regions`, `pv_pax`, `pv_kotter`, `pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`, `pv_events`, `pv_event_details`, `pv_attendance` | `<bucket>/pax-vault/releases/<release-id>/...` | `<bucket>/pax-vault/current.json` |
+| `analytics` | `event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`                                                                                 | `<bucket>/analytics/releases/<release-id>/...` | `<bucket>/analytics/current.json` |
 
 Every release has per-dataset manifests/objects and a final `release.json`.
 `current.json` is the only mutable selection object for that product. The roots,

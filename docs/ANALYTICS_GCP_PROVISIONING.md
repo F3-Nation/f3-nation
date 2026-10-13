@@ -23,10 +23,10 @@ repository `cloud-run-builds`.
 
 The bucket has independent roots and pointers:
 
-| Product     | Exact datasets                                                                                                                         | Release prefix                              | Mutable pointer                   |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------- |
-| `pax-vault` | `pv_regions`, `pv_pax`, `pv_kotter`, `pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`, `pv_events`, `pv_attendance` | `<bucket>/pax-vault/releases/<release-id>/` | `<bucket>/pax-vault/current.json` |
-| `analytics` | `event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`                                                             | `<bucket>/analytics/releases/<release-id>/` | `<bucket>/analytics/current.json` |
+| Product     | Exact datasets                                                                                                                                             | Release prefix                              | Mutable pointer                   |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------- |
+| `pax-vault` | `pv_regions`, `pv_pax`, `pv_kotter`, `pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`, `pv_events`, `pv_event_details`, `pv_attendance` | `<bucket>/pax-vault/releases/<release-id>/` | `<bucket>/pax-vault/current.json` |
+| `analytics` | `event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`                                                                                 | `<bucket>/analytics/releases/<release-id>/` | `<bucket>/analytics/current.json` |
 
 Pax Vault uses `pv-release.v2`; Analytics uses `analytics-release.v1`. Each
 pointer selects only its product release. Runtime `run` defaults to both

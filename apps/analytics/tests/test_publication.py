@@ -830,6 +830,11 @@ def test_retained_legacy_nine_dataset_release_can_be_rolled_back(tmp_path):
     publisher = GcsPublisher(Storage(), settings(tmp_path))
     old_release, old_digest = _release(publisher, "run-1", legacy=True)
     assert hashlib.sha256(Blob.objects["pax-vault/releases/run-1/release.json"].content).hexdigest() == old_digest
+    legacy_manifest = json.loads(Blob.objects["pax-vault/releases/run-1/release.json"].content)
+    assert set(legacy_manifest["datasets"]) == set(PAX_VAULT_LEGACY_NAMES)
+    assert {name: dataset["schemaVersion"] for name, dataset in legacy_manifest["datasets"].items()} == dict(
+        PAX_VAULT_LEGACY_SCHEMA_VERSIONS
+    )
     seed_legacy_pointer(publisher, old_release)
     old_contents = {
         key: (value.content, value.generation)
@@ -957,7 +962,7 @@ def test_rollback_rejects_v2_manifest_with_v3_parquet(tmp_path):
     )
 
 
-def test_ten_dataset_v2_hybrid_is_rejected(tmp_path):
+def test_eleven_dataset_v2_hybrid_is_rejected(tmp_path):
     reset()
     publisher = GcsPublisher(Storage(), settings(tmp_path))
     release, _ = _release(publisher, "run-2")
