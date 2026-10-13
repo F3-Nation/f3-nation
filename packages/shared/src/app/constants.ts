@@ -117,11 +117,14 @@ export const MOBILE_SEARCH_RESULT_ITEM_HEIGHT = 128;
 
 export const MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS = 3;
 
+// Length caps mirror packages/api/src/router/map/index.ts's feedbackSchema so
+// the form flags an over-length field inline instead of round-tripping to an
+// API validation error.
 export const feedbackSchema = z.object({
   type: z.enum(["bug", "feature request", "feedback", "other"]),
-  subject: z.string(),
-  email: z.string(),
-  description: z.string(),
+  subject: z.string().max(200),
+  email: z.string().max(320),
+  description: z.string().max(5000),
 });
 
 export type FeedbackSchema = z.infer<typeof feedbackSchema>;

@@ -180,6 +180,119 @@ describe("User Router", () => {
     });
   });
 
+  describe.each(["all", "byOrgs"] as const)(
+    "name sorting for %s",
+    (endpoint) => {
+      it.each([
+        {
+          direction: "ascending",
+          desc: false,
+          expectedOrder: [7, 9, 4, 2, 3, 8, 1, 5, 6, 0],
+        },
+        {
+          direction: "descending",
+          desc: true,
+          expectedOrder: [0, 6, 5, 1, 2, 3, 8, 4, 7, 9],
+        },
+      ])(
+        "sorts by displayed full name $direction before pagination",
+        async ({ desc, expectedOrder }) => {
+          const prefix = `FullNameSort-${uniqueId()}`;
+          const fixtures = [
+            {
+              firstName: " \t\nJordan",
+              lastName: "Aaron\r\n ",
+              name: "Jordan Aaron",
+            },
+            { firstName: "Alex", lastName: "Zimmer", name: "Alex Zimmer" },
+            { firstName: "Alex", lastName: "Baker", name: "Alex Baker" },
+            { firstName: " \tAlex", lastName: "Baker\n ", name: "Alex Baker" },
+            { firstName: "Aaron", lastName: "Zimmer", name: "Aaron Zimmer" },
+            { firstName: null, lastName: "Baker", name: "Baker" },
+            { firstName: "Cameron", lastName: null, name: "Cameron" },
+            { firstName: null, lastName: null, name: "" },
+            {
+              firstName: "\u00a0\u2003Alex",
+              lastName: "Baker\u2028\u2029\ufeff",
+              name: "Alex Baker",
+            },
+            { firstName: "\t\n", lastName: "\u00a0\ufeff", name: "" },
+          ];
+          const createdUsers: { id: number; name: string }[] = [];
+          let regionId: number | undefined;
+
+          try {
+            const f3Nation = await getOrCreateF3NationOrg();
+            const [region] = await db
+              .insert(schema.orgs)
+              .values({
+                name: prefix,
+                orgType: "region",
+                parentId: f3Nation.id,
+                isActive: true,
+              })
+              .returning({ id: schema.orgs.id });
+            if (!region) throw new Error("Failed to create sorting region");
+            regionId = region.id;
+
+            for (const [index, fixture] of fixtures.entries()) {
+              const [user] = await db
+                .insert(schema.users)
+                .values({
+                  email: `${prefix}-${index}@sorting.test`,
+                  f3Name: `${prefix}-${index}`,
+                  firstName: fixture.firstName,
+                  lastName: fixture.lastName,
+                  homeRegionId: region.id,
+                })
+                .returning({ id: schema.users.id });
+              if (!user) throw new Error("Failed to create sorting user");
+              createdUsers.push({ id: user.id, name: fixture.name });
+            }
+
+            await mockAuthWithSession(await createAdminSession());
+            const client = createTestClient();
+            const seenUsers: { id: number; name: string }[] = [];
+            for (
+              let pageIndex = 0;
+              pageIndex < fixtures.length / 2;
+              pageIndex++
+            ) {
+              const input = {
+                searchTerm: prefix,
+                sorting: [{ id: "name", desc }],
+                pageIndex,
+                pageSize: 2,
+              };
+              const result =
+                endpoint === "all"
+                  ? await client.user.all(input)
+                  : await client.user.byOrgs({
+                      ...input,
+                      orgIds: [region.id],
+                    });
+
+              expect(result.totalCount).toBe(fixtures.length);
+              expect(result.users).toHaveLength(2);
+              seenUsers.push(
+                ...result.users.map(({ id, name }) => ({ id, name })),
+              );
+            }
+
+            expect(seenUsers).toEqual(
+              expectedOrder.map((index) => createdUsers[index]),
+            );
+          } finally {
+            for (const user of createdUsers) {
+              await cleanup.user(user.id);
+            }
+            if (regionId !== undefined) await cleanup.org(regionId);
+          }
+        },
+      );
+    },
+  );
+
   describe("byOrgs", () => {
     it("should require at least one orgId", async () => {
       const client = createTestClient();
