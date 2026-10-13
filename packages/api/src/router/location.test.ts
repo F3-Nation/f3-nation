@@ -235,6 +235,11 @@ describe("Location Router", () => {
     });
 
     it("should hide a location whose only workout is private from anonymous callers, but not from a signed-in caller", async () => {
+      // The test harness defaults to a signed-in admin session; a prior
+      // test case may have left the auth mock on a specific session too,
+      // so explicitly reset to anonymous before the "anonymous" assertions.
+      await mockAuthWithSession(null);
+
       const region = await createTestRegion();
       if (!region) return;
       const ao = await createTestAO(region.id);
