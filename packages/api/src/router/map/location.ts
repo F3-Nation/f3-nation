@@ -1148,7 +1148,7 @@ export const mapLocationRouter = os.router({
       return { lookup };
     }),
   getAOsInRegion: publicReadProcedure
-    .input(z.object({ regionId: z.number() }))
+    .input(z.object({ regionId: z.coerce.number() }))
     .output(
       z.object({
         aos: z.array(
