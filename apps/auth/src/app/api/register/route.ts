@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 
 import { checkEmailCode } from "~/lib/email-mfa";
 import { logError } from "~/lib/logging";
@@ -19,6 +20,9 @@ interface RegisterBody {
   emergencyPhone?: string;
   emergencyNotes?: string;
 }
+
+/** The emailed sign-in code is always six digits. */
+const codeSchema = z.string().regex(/^\d{6}$/);
 
 /** Strip the +1 country code from US E.164 numbers — most users are US-based
  *  and the DB stores bare 10-digit numbers for domestic numbers. */
@@ -55,11 +59,20 @@ export async function POST(request: NextRequest) {
   // Proof of email ownership: the code we emailed to this address. Checked
   // without consuming it, so the sign-in right after registration still
   // works. Without this, anyone could create an account for any email.
-  if (
-    typeof body.code !== "string" ||
-    !body.code ||
-    !(await checkEmailCode(email, body.code))
-  ) {
+  const code = codeSchema.safeParse(body.code);
+  let ownsEmail = false;
+  if (code.success) {
+    try {
+      ownsEmail = await checkEmailCode(email, code.data);
+    } catch (err) {
+      logError("auth.register.code_check_failed", {}, err);
+      return NextResponse.json(
+        { error: "Unable to verify your code. Please try again." },
+        { status: 503 },
+      );
+    }
+  }
+  if (!ownsEmail) {
     return NextResponse.json(
       {
         error:

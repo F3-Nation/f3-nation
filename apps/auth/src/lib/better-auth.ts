@@ -437,8 +437,7 @@ export async function getAuth() {
 
   const { db } = await import("~/lib/db");
   const { env } = await import("~/env");
-  const { sendBetterAuthOtpEmail } = await import("~/lib/better-auth-email");
-  const { recordEmailCode } = await import("~/lib/email-mfa");
+  const { deliverBetterAuthOtp } = await import("~/lib/better-auth-email");
 
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error(
@@ -465,12 +464,7 @@ export async function getAuth() {
       schemaName: "auth",
       schema: betterAuthDrizzleSchema,
     }),
-    sendVerificationOTP: async ({ email, otp, type }) => {
-      // Better Auth's own store burns the code on any read, so /api/register
-      // checks ownership against this copy instead (see checkEmailCode).
-      if (type === "sign-in") await recordEmailCode(email, otp);
-      await sendBetterAuthOtpEmail(email, otp);
-    },
+    sendVerificationOTP: deliverBetterAuthOtp,
     findF3UserId: async (email) => {
       const normalizedEmail = email.toLowerCase().trim();
       const [existing] = await db

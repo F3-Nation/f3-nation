@@ -1,12 +1,13 @@
 import type { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { checkEmailCode } = vi.hoisted(() => ({
+const { checkEmailCode, logError } = vi.hoisted(() => ({
   checkEmailCode: vi.fn<(email: string, code: string) => Promise<boolean>>(),
+  logError: vi.fn(),
 }));
 
 vi.mock("~/lib/email-mfa", () => ({ checkEmailCode }));
-vi.mock("~/lib/logging", () => ({ logError: vi.fn() }));
+vi.mock("~/lib/logging", () => ({ logError }));
 vi.mock("~/lib/rate-limit", () => ({
   rateLimit: vi.fn(() => ({ allowed: true })),
 }));
@@ -55,10 +56,25 @@ describe("POST /api/register", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("rejects a non-string code without hashing it", async () => {
-    const res = await register({ ...valid, code: 123456 });
-    expect(res.status).toBe(401);
-    expect(checkEmailCode).not.toHaveBeenCalled();
+  it.each([123456, "12345", "abcdef"])(
+    "rejects a malformed code (%s) without checking it",
+    async (code) => {
+      const res = await register({ ...valid, code });
+      expect(res.status).toBe(401);
+      expect(checkEmailCode).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("returns a retryable error when the code check fails", async () => {
+    checkEmailCode.mockRejectedValue(new Error("db down"));
+    const res = await register(valid);
+    expect(res.status).toBe(503);
+    expect(logError).toHaveBeenCalledWith(
+      "auth.register.code_check_failed",
+      {},
+      expect.any(Error),
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
