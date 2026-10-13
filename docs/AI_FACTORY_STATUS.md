@@ -27,7 +27,7 @@
 - `.github/workflows/adversarial-review.yml` runs on `pull_request_target`
   `[labeled, synchronize]` for same-repo PRs carrying the `ai-review` label
   (opt-in in phase 1). It collects the `origin/main...HEAD` diff (capped at
-  ~120KB with a truncation note), all `specs/*.md` when the diff touches
+  ~120KB with a truncation note), all `docs/specs/*.md` when the diff touches
   `apps/map`/`apps/admin`/`packages/api`, and existing CodeRabbit review
   comments, then runs `pnpm -F @acme/ci-factory review`:
   - **Reviewer A** — spec-anchored, Anthropic `claude-opus-4-8`
@@ -58,6 +58,6 @@
 - F3-62 phase 2: review on all non-draft sandbox PRs (currently label-only),
   and inline per-line review comments (currently one summary comment with a
   findings table).
-- A `specs/` directory — reviewer A runs spec-less until specs land at the
+- A `docs/specs/` directory — reviewer A runs spec-less until specs land at the
   reviewed commit.
 - Precision tracking / weekly review metrics.

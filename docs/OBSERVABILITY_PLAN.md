@@ -113,7 +113,7 @@
 ### The request-path spots the specs name
 
 From the `/specs` observability sections (PR #551,
-`specs/map-update-request-flow.md` §9 and `specs/map-browse-and-search.md` §9):
+`docs/specs/map-update-request-flow.md` §9 and `docs/specs/map-browse-and-search.md` §9):
 
 | Spec-named signal                                    | Where it lives today                                                                                                                              |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
