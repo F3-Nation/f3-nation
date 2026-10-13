@@ -738,6 +738,7 @@ export const eventRouter = {
           isActive: schema.events.isActive,
           location: aoOrg.name,
           locationId: schema.events.locationId,
+          locationIsActive: schema.locations.isActive,
           startDate: schema.events.startDate,
           endDate: schema.events.endDate,
           dayOfWeek: schema.events.dayOfWeek,
@@ -822,27 +823,36 @@ export const eventRouter = {
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
         .where(eq(schema.events.id, input.id))
-        .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
+        .groupBy(schema.events.id, aoOrg.id, regionOrg.id, schema.locations.id);
 
       // publicReadProcedure lets an anonymous caller reach this endpoint
-      // don't let a guessed/enumerated ID leak a private OR
-      // inactive event's details to someone with no session at all (the
-      // `all` list endpoint already clamps anonymous callers to active,
-      // non-private events; byId must not be a backdoor around that).
+      // don't let a guessed/enumerated ID leak a private, inactive, or
+      // soft-deleted-location event's details to someone with no session at
+      // all (the `all` list endpoint and eventIdToRegionNameLookup already
+      // clamp anonymous callers the same way; byId must not be a backdoor
+      // around that).
       const isAnonymousById = !ctx.session?.user;
-      if (isAnonymousById && (event?.isPrivate || event?.isActive === false)) {
+      if (
+        isAnonymousById &&
+        (event?.isPrivate ||
+          event?.isActive === false ||
+          (event?.locationId && event.locationIsActive === false))
+      ) {
         return { event: null };
       }
 
-      // email/meta aren't part of the map's own public event payload.
+      // email/meta aren't part of the map's own public event payload;
+      // locationIsActive is only here to compute the anonymous clamp above.
+      if (!event) {
+        return { event: null };
+      }
+      const { locationIsActive: _locationIsActive, ...eventFields } = event;
       return {
-        event: event
-          ? {
-              ...event,
-              email: isAnonymousById ? null : event.email,
-              meta: isAnonymousById ? null : event.meta,
-            }
-          : null,
+        event: {
+          ...eventFields,
+          email: isAnonymousById ? null : event.email,
+          meta: isAnonymousById ? null : event.meta,
+        },
       };
     }),
   crupdate: editorProcedure
