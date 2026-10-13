@@ -2126,4 +2126,390 @@ describe("Map Location Router", () => {
       expect(workout.message).toBe("This workout is no longer scheduled.");
     });
   });
+
+  /**
+   * upcomingInstances draws pins for one-off instances and away-from-home
+   * occurrences at locations with no current series. locationWorkout has to
+   * open those pins instead of reporting them as no longer scheduled.
+   */
+  describe("locationWorkout at an instance-only location", () => {
+    const createInstanceOnlyFixture = async (
+      overrides: Partial<typeof schema.eventInstances.$inferInsert> = {},
+    ) => {
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id, {
+        logoUrl: "https://example.com/ao.png",
+      });
+      if (!ao) throw new Error("Failed to create test AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Instance-Only Workout ${uniqueId()}`,
+          orgId: ao.id,
+          seriesId: null,
+          locationId: location.id,
+          startDate: await getDbTomorrow(),
+          startTime: "0600",
+          endTime: "0700",
+          highlight: false,
+          isActive: true,
+          isPrivate: false,
+          ...overrides,
+        })
+        .returning();
+      if (!instance) throw new Error("Failed to create event instance");
+      createdEventInstanceIds.push(instance.id);
+
+      return { region, ao, location, instance };
+    };
+
+    it("should return the location with the instance's AO and region", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const { region, ao, location, instance } =
+        await createInstanceOnlyFixture();
+
+      const client = createTestClient();
+      const pins = await client.map.location.upcomingInstances();
+      expect(pins.some((pin) => pin.id === instance.id)).toBe(true);
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      expect(workout.message).toBeUndefined();
+      expect(workout.location).toEqual(
+        expect.objectContaining({
+          id: location.id,
+          events: [],
+          parentId: ao.id,
+          parentName: ao.name,
+          parentLogo: "https://example.com/ao.png",
+          regionId: region.id,
+          regionName: region.name,
+        }),
+      );
+    });
+
+    it("should return each instance's own AO and region when the instances come from different orgs", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const { region, ao, location, instance } =
+        await createInstanceOnlyFixture();
+
+      const otherRegion = await createTestRegion();
+      if (!otherRegion) throw new Error("Failed to create other region");
+      const otherAo = await createTestAO(otherRegion.id, {
+        logoUrl: "https://example.com/other-ao.png",
+      });
+      if (!otherAo) throw new Error("Failed to create other AO");
+      const [laterInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Other-Org Instance ${uniqueId()}`,
+          orgId: otherAo.id,
+          seriesId: null,
+          locationId: location.id,
+          startDate: shiftDays(await getDbTomorrow(), 1),
+          startTime: "0600",
+          endTime: "0700",
+          highlight: false,
+          isActive: true,
+          isPrivate: false,
+        })
+        .returning();
+      if (!laterInstance) throw new Error("Failed to create later instance");
+      createdEventInstanceIds.push(laterInstance.id);
+
+      const client = createTestClient();
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      // The location-level fields default to the soonest instance's orgs…
+      expect(workout.location).toEqual(
+        expect.objectContaining({ parentId: ao.id, regionId: region.id }),
+      );
+      // …while each instance carries its own, soonest first.
+      expect(workout.location?.instanceOrgs).toEqual([
+        expect.objectContaining({
+          instanceId: instance.id,
+          parentId: ao.id,
+          parentLogo: "https://example.com/ao.png",
+          regionId: region.id,
+          regionName: region.name,
+        }),
+        expect.objectContaining({
+          instanceId: laterInstance.id,
+          parentId: otherAo.id,
+          parentName: otherAo.name,
+          parentLogo: "https://example.com/other-ao.png",
+          regionId: otherRegion.id,
+          regionName: otherRegion.name,
+        }),
+      ]);
+    });
+
+    it("should open an away-from-home series occurrence at a location with no series of its own", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const homeLocation = await createTestLocation(region.id);
+      const awayLocation = await createTestLocation(region.id);
+      if (!homeLocation || !awayLocation)
+        throw new Error("Failed to create test locations");
+
+      const series = await createDatedEvent({
+        aoId: ao.id,
+        locationId: homeLocation.id,
+        label: "Home Series",
+        dayOfWeek: "monday",
+        startDate: "2026-01-01",
+      });
+
+      const [awayInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Away Occurrence ${uniqueId()}`,
+          orgId: ao.id,
+          seriesId: series.id,
+          locationId: awayLocation.id,
+          startDate: await getDbTomorrow(),
+          startTime: "0600",
+          endTime: "0700",
+          highlight: false,
+          isActive: true,
+          isPrivate: false,
+          seriesException: null,
+        })
+        .returning();
+      if (!awayInstance) throw new Error("Failed to create away instance");
+      createdEventInstanceIds.push(awayInstance.id);
+
+      const client = createTestClient();
+      const pins = await client.map.location.upcomingInstances();
+      expect(pins.some((pin) => pin.id === awayInstance.id)).toBe(true);
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: awayLocation.id,
+      });
+
+      expect(workout.message).toBeUndefined();
+      expect(workout.location).toEqual(
+        expect.objectContaining({
+          id: awayLocation.id,
+          events: [],
+          parentId: ao.id,
+          regionId: region.id,
+        }),
+      );
+      expect(workout.location?.instanceOrgs).toEqual([
+        expect.objectContaining({
+          instanceId: awayInstance.id,
+          parentId: ao.id,
+        }),
+      ]);
+    });
+
+    it("should open a one-off pin at a location whose only series is under a retired AO", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const retiredAo = await createTestAO(region.id);
+      if (!retiredAo) throw new Error("Failed to create retired AO");
+      const { ao, location, instance } = await createInstanceOnlyFixture();
+
+      await createDatedEvent({
+        aoId: retiredAo.id,
+        locationId: location.id,
+        label: "Retired AO Series",
+        dayOfWeek: "monday",
+        startDate: "2026-01-01",
+      });
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, retiredAo.id));
+
+      const client = createTestClient();
+      const locations = await client.map.location.eventsAndLocations();
+      expect(
+        locations.find((loc: [number, ...unknown[]]) => loc[0] === location.id),
+      ).toBeUndefined();
+      const pins = await client.map.location.upcomingInstances();
+      expect(pins.some((pin) => pin.id === instance.id)).toBe(true);
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      expect(workout.message).toBeUndefined();
+      expect(workout.location).toEqual(
+        expect.objectContaining({
+          id: location.id,
+          events: [],
+          parentId: ao.id,
+        }),
+      );
+      expect(workout.location?.instanceOrgs).toEqual([
+        expect.objectContaining({ instanceId: instance.id, parentId: ao.id }),
+      ]);
+    });
+
+    it("should keep a series location's own AO and region when another org has a one-off there", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const seriesAo = await createTestAO(region.id, {
+        logoUrl: "https://example.com/series-ao.png",
+      });
+      if (!seriesAo) throw new Error("Failed to create series AO");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+      await createDatedEvent({
+        aoId: seriesAo.id,
+        locationId: location.id,
+        label: "Home Series",
+        dayOfWeek: "monday",
+        startDate: "2026-01-01",
+      });
+
+      const otherRegion = await createTestRegion();
+      if (!otherRegion) throw new Error("Failed to create other region");
+      const otherAo = await createTestAO(otherRegion.id);
+      if (!otherAo) throw new Error("Failed to create other AO");
+      const [oneOff] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Other-Org One-Off ${uniqueId()}`,
+          orgId: otherAo.id,
+          seriesId: null,
+          locationId: location.id,
+          startDate: await getDbTomorrow(),
+          startTime: "0600",
+          endTime: "0700",
+          highlight: false,
+          isActive: true,
+          isPrivate: false,
+        })
+        .returning();
+      if (!oneOff) throw new Error("Failed to create one-off instance");
+      createdEventInstanceIds.push(oneOff.id);
+
+      const client = createTestClient();
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      expect(workout.location?.instanceOrgs).toEqual([]);
+      expect(workout.location?.events).toHaveLength(1);
+      expect(workout.location).toEqual(
+        expect.objectContaining({
+          parentId: seriesAo.id,
+          parentLogo: "https://example.com/series-ao.png",
+          regionId: region.id,
+        }),
+      );
+    });
+
+    it("should order same-day instances by start time with no start time last", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const location = await createTestLocation(region.id);
+      if (!location) throw new Error("Failed to create test location");
+      const tomorrow = await getDbTomorrow();
+
+      // Inserted 0700, null, 0600 so neither insert order nor id order
+      // matches the expected result.
+      const instanceIdsByTime: Record<string, number> = {};
+      for (const startTime of ["0700", null, "0600"]) {
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create test AO");
+        const [instance] = await db
+          .insert(schema.eventInstances)
+          .values({
+            name: `Same-Day Instance ${uniqueId()}`,
+            orgId: ao.id,
+            seriesId: null,
+            locationId: location.id,
+            startDate: tomorrow,
+            startTime,
+            endTime: null,
+            highlight: false,
+            isActive: true,
+            isPrivate: false,
+          })
+          .returning();
+        if (!instance) throw new Error("Failed to create instance");
+        createdEventInstanceIds.push(instance.id);
+        instanceIdsByTime[startTime ?? "null"] = instance.id;
+      }
+
+      const client = createTestClient();
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      const instanceOrgs = workout.location?.instanceOrgs ?? [];
+      expect(instanceOrgs.map((orgs) => orgs.instanceId)).toEqual([
+        instanceIdsByTime["0600"],
+        instanceIdsByTime["0700"],
+        instanceIdsByTime.null,
+      ]);
+      expect(workout.location?.parentId).toBe(instanceOrgs[0]?.parentId);
+    });
+
+    it("should still report no longer scheduled when the only instance is private", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const { location, instance } = await createInstanceOnlyFixture({
+        isPrivate: true,
+      });
+
+      const client = createTestClient();
+      const pins = await client.map.location.upcomingInstances();
+      expect(pins.some((pin) => pin.id === instance.id)).toBe(false);
+
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+      expect(workout.location).toBeNull();
+      expect(workout.message).toBe("This workout is no longer scheduled.");
+    });
+
+    it("should still report no longer scheduled when the only instance is past the 30-day window", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const today = await getDbCurrentDate();
+      const { location } = await createInstanceOnlyFixture({
+        startDate: shiftDays(today, 31),
+      });
+
+      const client = createTestClient();
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+      expect(workout.location).toBeNull();
+      expect(workout.message).toBe("This workout is no longer scheduled.");
+    });
+  });
 });
