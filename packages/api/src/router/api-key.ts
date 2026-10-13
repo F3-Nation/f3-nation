@@ -349,52 +349,54 @@ export const apiKeyRouter = {
 
       const generatedKey = buildApiKey();
       try {
-        const [apiKey] = await ctx.db
-          .insert(schema.apiKeys)
-          .values({
-            key: generatedKey,
-            name: input.name,
-            description: input.description,
-            ownerId: ctx.session?.id,
-            expiresAt,
-          })
-          .returning();
+        return await ctx.db.transaction(async (tx) => {
+          const [apiKey] = await tx
+            .insert(schema.apiKeys)
+            .values({
+              key: generatedKey,
+              name: input.name,
+              description: input.description,
+              ownerId: ctx.session?.id,
+              expiresAt,
+            })
+            .returning();
 
-        if (!apiKey) {
-          throw new ORPCError("INTERNAL_SERVER_ERROR", {
-            message: "Unable to generate unique API key",
-          });
-        }
+          if (!apiKey) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Unable to generate unique API key",
+            });
+          }
 
-        if (roles.length > 0) {
-          // Get role IDs for all unique role names
-          const roleNames = [...new Set(roles.map((r) => r.roleName))];
-          const roleRecords = await ctx.db
-            .select({ id: schema.roles.id, name: schema.roles.name })
-            .from(schema.roles)
-            .where(inArray(schema.roles.name, roleNames));
+          if (roles.length > 0) {
+            // Get role IDs for all unique role names
+            const roleNames = [...new Set(roles.map((r) => r.roleName))];
+            const roleRecords = await tx
+              .select({ id: schema.roles.id, name: schema.roles.name })
+              .from(schema.roles)
+              .where(inArray(schema.roles.name, roleNames));
 
-          const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
+            const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
 
-          // Insert org associations with roles
-          await ctx.db.insert(schema.rolesXApiKeysXOrg).values(
-            roles.map((role) => {
-              const roleId = roleMap.get(role.roleName);
-              if (roleId == null) {
-                throw new ORPCError("INTERNAL_SERVER_ERROR", {
-                  message: `Role "${role.roleName}" not found`,
-                });
-              }
-              return {
-                roleId,
-                apiKeyId: apiKey.id,
-                orgId: role.orgId,
-              };
-            }),
-          );
-        }
+            // Insert org associations with roles
+            await tx.insert(schema.rolesXApiKeysXOrg).values(
+              roles.map((role) => {
+                const roleId = roleMap.get(role.roleName);
+                if (roleId == null) {
+                  throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                    message: `Role "${role.roleName}" not found`,
+                  });
+                }
+                return {
+                  roleId,
+                  apiKeyId: apiKey.id,
+                  orgId: role.orgId,
+                };
+              }),
+            );
+          }
 
-        return { ...apiKey, secret: generatedKey };
+          return { ...apiKey, secret: generatedKey };
+        });
       } catch (error) {
         if (isUniqueError(error)) {
           throw new ORPCError("INTERNAL_SERVER_ERROR", {
