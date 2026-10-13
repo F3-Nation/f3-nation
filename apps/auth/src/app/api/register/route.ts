@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { checkEmailCode } from "~/lib/email-mfa";
 import { logError } from "~/lib/logging";
 import { env } from "~/env";
 import { rateLimit } from "~/lib/rate-limit";
 
 interface RegisterBody {
   email?: string;
+  /** The emailed sign-in code — proof the caller owns `email`. */
+  code?: string;
   f3Name?: string;
   firstName?: string;
   lastName?: string;
@@ -47,8 +50,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const email = body.email.toLowerCase().trim();
+
+  // Proof of email ownership: the code we emailed to this address. Checked
+  // without consuming it, so the sign-in right after registration still
+  // works. Without this, anyone could create an account for any email.
+  if (!body.code || !(await checkEmailCode(email, body.code))) {
+    return NextResponse.json(
+      {
+        error:
+          "Your verification code is invalid or has expired. Please sign in again.",
+      },
+      { status: 401 },
+    );
+  }
+
   const payload = {
-    email: body.email.toLowerCase().trim(),
+    email,
     firstName: body.firstName.trim(),
     lastName: body.lastName.trim(),
     ...(body.f3Name?.trim() && { f3Name: body.f3Name.trim() }),

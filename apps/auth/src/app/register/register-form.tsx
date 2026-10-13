@@ -132,6 +132,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
+          code,
           f3Name: f3Name || undefined,
           firstName,
           lastName,
@@ -148,6 +149,8 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
           error?: string;
         };
         setError(data.error ?? "Registration failed. Please try again.");
+        // A rejected code can't be fixed from this form — offer a fresh one.
+        if (res.status === 401) setNeedsSignInAgain(true);
         return;
       }
 

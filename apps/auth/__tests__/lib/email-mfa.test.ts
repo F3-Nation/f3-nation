@@ -51,7 +51,7 @@ vi.mock("~/env", () => ({
   },
 }));
 
-const { sendEmailCode, verifyEmailCode } =
+const { checkEmailCode, recordEmailCode, sendEmailCode, verifyEmailCode } =
   await import("../../src/lib/email-mfa");
 
 function hashCode(code: string): string {
@@ -335,5 +335,65 @@ describe("verifyEmailCode", () => {
 
     const result = await verifyEmailCode("newuser@example.com", code);
     expect(result).toBeNull();
+  });
+});
+
+describe("recordEmailCode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("stores a hash of an externally generated code without sending mail", async () => {
+    await recordEmailCode(" User@Example.COM", "246810");
+
+    expect(updateChain(0).set).toHaveBeenCalledWith({ consumedAt: NOW });
+    const insertChain = dbMock.insert.mock.results[0]?.value as ChainMock;
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "user@example.com",
+        codeHash: hashCode("246810"),
+        attemptCount: 0,
+      }),
+    );
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkEmailCode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const activeCode = (attemptCount = 0) =>
+    chain([
+      {
+        id: "code-1",
+        email: "user@example.com",
+        codeHash: hashCode("123456"),
+        attemptCount,
+      },
+    ]);
+
+  it("accepts a matching code without consuming it", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode());
+
+    expect(await checkEmailCode("user@example.com", "123456")).toBe(true);
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("counts a wrong code toward the lockout", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode(1));
+
+    expect(await checkEmailCode("user@example.com", "999999")).toBe(false);
+    expect(updateChain(0).set).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects once the code is locked out or missing", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode(5));
+    expect(await checkEmailCode("user@example.com", "123456")).toBe(false);
+
+    dbMock.select.mockReturnValueOnce(chain([]));
+    expect(await checkEmailCode("user@example.com", "123456")).toBe(false);
+    expect(dbMock.update).not.toHaveBeenCalled();
   });
 });

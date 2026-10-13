@@ -97,7 +97,12 @@ describe("registration", () => {
       expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, firstName: "Test", lastName: "PAX" }),
+        body: JSON.stringify({
+          email,
+          code,
+          firstName: "Test",
+          lastName: "PAX",
+        }),
       });
 
       resolveRegistration(Response.json({ success: true }));
@@ -180,6 +185,7 @@ describe("registration", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email,
+        code,
         f3Name: "Test Runner",
         firstName: "Test",
         lastName: "PAX",
@@ -228,7 +234,12 @@ describe("registration", () => {
       2,
       "/api/register",
       expect.objectContaining({
-        body: JSON.stringify({ email, firstName: "Test", lastName: "PAX" }),
+        body: JSON.stringify({
+          email,
+          code,
+          firstName: "Test",
+          lastName: "PAX",
+        }),
       }),
     );
   });
@@ -294,6 +305,20 @@ describe("registration", () => {
       expect(router.push).toHaveBeenCalledExactlyOnceWith(callback),
     );
     expect(screen.queryByText(error)).toBeNull();
+  });
+
+  it("offers a fresh code when registration rejects the code", async () => {
+    const error =
+      "Your verification code is invalid or has expired. Please sign in again.";
+    fetchMock.mockResolvedValueOnce(Response.json({ error }, { status: 401 }));
+    await fillForm();
+    submit();
+    expect(await screen.findByText(error)).toBeDefined();
+    expect(signIn).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    expect(router.push).toHaveBeenCalledExactlyOnceWith(
+      `/login/email?callbackUrl=${encodeURIComponent(callback)}`,
+    );
   });
 
   it("shows a retryable error after a network failure", async () => {
