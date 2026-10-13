@@ -55,6 +55,13 @@ describe("POST /api/register", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("rejects a non-string code without hashing it", async () => {
+    const res = await register({ ...valid, code: 123456 });
+    expect(res.status).toBe(401);
+    expect(checkEmailCode).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("creates the account once the emailed code checks out", async () => {
     checkEmailCode.mockResolvedValue(true);
     const res = await register(valid);

@@ -55,7 +55,11 @@ export async function POST(request: NextRequest) {
   // Proof of email ownership: the code we emailed to this address. Checked
   // without consuming it, so the sign-in right after registration still
   // works. Without this, anyone could create an account for any email.
-  if (!body.code || !(await checkEmailCode(email, body.code))) {
+  if (
+    typeof body.code !== "string" ||
+    !body.code ||
+    !(await checkEmailCode(email, body.code))
+  ) {
     return NextResponse.json(
       {
         error:
