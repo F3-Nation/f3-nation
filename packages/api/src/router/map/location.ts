@@ -1152,10 +1152,10 @@ export const mapLocationRouter = os.router({
       z.object({
         regionId: z.preprocess(
           (value) =>
-            typeof value === "string" && /^\s*-?\d+(\.\d+)?\s*$/.test(value)
+            typeof value === "string" && /^\s*-?\d+(\.0+)?\s*$/.test(value)
               ? Number(value)
               : value,
-          z.number(),
+          z.number().int().min(-2_147_483_648).max(2_147_483_647),
         ),
       }),
     )
