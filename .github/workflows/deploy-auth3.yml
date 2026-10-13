@@ -58,3 +58,10 @@ jobs:
       # single instance to stay authoritative until it moves to a shared
       # store.
       flags: "--min-instances=1 --max-instances=1"
+      # A brand-new service has no Cloud SQL attachment (f3-auth got its
+      # attachment when it was created by hand; see apps/auth/README.md), and
+      # auth reaches the database over the /cloudsql socket. --set (not --add)
+      # keeps redeploys idempotent. staging_flags/prod_flags replace `flags`,
+      # so they repeat the instance pinning.
+      staging_flags: "--min-instances=1 --max-instances=1 --set-cloudsql-instances=f3data:us-central1:f3data-nonprod"
+      prod_flags: "--min-instances=1 --max-instances=1 --set-cloudsql-instances=f3data:us-central1:f3data"
