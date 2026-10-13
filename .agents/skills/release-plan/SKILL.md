@@ -35,13 +35,15 @@ Ask for anything missing before starting:
    else.** Find the most recently merged release PR:
 
    ```bash
-   gh pr list --state merged --base main --author app/f3-nation-release-please \
+   TZ=America/New_York gh pr list --state merged --base main \
+     --author app/f3-nation-release-please \
      --search "chore: release main in:title" --limit 5 \
      --json number,title,mergedAt \
-     --jq 'sort_by(.mergedAt) | last | "#\(.number) merged \(.mergedAt)"'
+     --jq 'sort_by(.mergedAt) | last | "#\(.number) merged \(.mergedAt | fromdateiso8601 | strflocaltime("%a %b %-d, %-I:%M %p %Z"))"'
    ```
 
-   Tell the user the PR number and merge time and ask them to confirm. If
+   Tell the user the PR number and merge time in US Eastern time (the command
+   prints it; never report UTC) and ask them to confirm. If
    they gave a number that is not this PR, say so and ask which one they
    mean; do not silently follow either. If the PR they name is open or was
    closed without merging, stop and explain that only a merged release can be
