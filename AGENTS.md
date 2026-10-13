@@ -31,8 +31,8 @@ Code doesn't read `.agents/`, so a `SessionStart` hook in
 them into `.claude/skills/`, which is generated and gitignored — never commit
 anything under it.
 
-When asked for a **release plan** or a **Staging test plan** for a
-release-please PR, follow
+When asked for a **release plan** or a **Staging test plan** for the most
+recently merged release-please PR, follow
 [`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
 or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
