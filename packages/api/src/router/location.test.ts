@@ -34,6 +34,7 @@ describe("Location Router", () => {
   // Track created locations for cleanup
   const createdLocationIds: number[] = [];
   const createdOrgIds: number[] = [];
+  const createdEventIds: number[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -47,6 +48,14 @@ describe("Location Router", () => {
   });
 
   afterAll(async () => {
+    // Clean up events first -- they reference locations via a FK.
+    for (const eventId of createdEventIds.reverse()) {
+      try {
+        await cleanup.event(eventId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
     // Clean up all created locations in reverse order
     for (const locationId of createdLocationIds.reverse()) {
       try {
@@ -82,6 +91,24 @@ describe("Location Router", () => {
       createdOrgIds.push(region.id);
     }
     return region;
+  };
+
+  // Helper to create a test AO under a region
+  const createTestAO = async (regionId: number) => {
+    const [ao] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `Test AO ${uniqueId()}`,
+        orgType: "ao",
+        parentId: regionId,
+        isActive: true,
+      })
+      .returning();
+
+    if (ao) {
+      createdOrgIds.push(ao.id);
+    }
+    return ao;
   };
 
   describe("all", () => {
@@ -205,6 +232,100 @@ describe("Location Router", () => {
       expect(result.locations.every((l) => l.regionId === region.id)).toBe(
         true,
       );
+    });
+
+    it("should hide a location whose only workout is private from anonymous callers, but not from a signed-in caller", async () => {
+      // The test harness defaults to a signed-in admin session; a prior
+      // test case may have left the auth mock on a specific session too,
+      // so explicitly reset to anonymous before the "anonymous" assertions.
+      await mockAuthWithSession(null);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const [privateOnlyLocation] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Private Only Location ${uniqueId()}`,
+          orgId: region.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!privateOnlyLocation) return;
+      createdLocationIds.push(privateOnlyLocation.id);
+
+      const [privateEvent] = await db
+        .insert(schema.events)
+        .values({
+          name: `Private Workout ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: privateOnlyLocation.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: true,
+        })
+        .returning();
+      if (!privateEvent) return;
+      createdEventIds.push(privateEvent.id);
+
+      const [inactiveOnlyLocation] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Inactive Only Location ${uniqueId()}`,
+          orgId: region.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!inactiveOnlyLocation) return;
+      createdLocationIds.push(inactiveOnlyLocation.id);
+
+      const [inactiveEvent] = await db
+        .insert(schema.events)
+        .values({
+          name: `Inactive Workout ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: inactiveOnlyLocation.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: false,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+      if (!inactiveEvent) return;
+      createdEventIds.push(inactiveEvent.id);
+
+      const anonymousClient = createTestClient();
+      const anonymousResult = await anonymousClient.location.all({
+        statuses: ["active", "inactive"],
+        pageIndex: 0,
+        pageSize: 100,
+      });
+      const anonymousIds = anonymousResult.locations.map((l) => l.id);
+      expect(anonymousIds).not.toContain(privateOnlyLocation.id);
+      expect(anonymousIds).not.toContain(inactiveOnlyLocation.id);
+
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+      const signedInClient = createTestClient();
+      const signedInResult = await signedInClient.location.all({
+        statuses: ["active", "inactive"],
+        pageIndex: 0,
+        pageSize: 100,
+      });
+      const signedInIds = signedInResult.locations.map((l) => l.id);
+      expect(signedInIds).toContain(privateOnlyLocation.id);
+      expect(signedInIds).toContain(inactiveOnlyLocation.id);
     });
   });
 

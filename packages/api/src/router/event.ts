@@ -36,7 +36,11 @@ import { notifyMapDataChange } from "../lib/webhook-events";
 import { logError } from "../logger";
 import { requireEditorOnRescope } from "../require-editor-on-rescope";
 import type { Context } from "../shared";
-import { editorProcedure, protectedProcedure } from "../shared";
+import {
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 // Shared filter schema for events (used by both `all` and `count` endpoints)
@@ -236,15 +240,39 @@ function buildEventWhereClause(params: {
   input?: EventFilterInput;
   editableOrgIds: number[];
   isNationAdmin: boolean;
+  isAnonymous: boolean;
 }): SQL | undefined {
-  const { input, editableOrgIds, isNationAdmin } = params;
+  const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
+
+  // publicReadProcedure lets an anonymous caller reach `all`/`count` —
+  // clamp to active-only regardless of what `statuses` it passes, since
+  // inactive events were never meant to be public. Authenticated behavior
+  // (including an explicit request for inactive/both) is unchanged.
+  const effectiveStatuses = isAnonymous
+    ? (["active"] as NonNullable<EventFilterInput["statuses"]>)
+    : input?.statuses;
 
   return and(
-    !input?.statuses?.length // no statuses provided, default to active
+    !effectiveStatuses?.length // no statuses provided, default to active
       ? eq(schema.events.isActive, true)
-      : input.statuses.length === IsActiveStatus.length
+      : effectiveStatuses.length === IsActiveStatus.length
         ? undefined
-        : eq(schema.events.isActive, input.statuses.includes("active")),
+        : eq(schema.events.isActive, effectiveStatuses.includes("active")),
+    // publicReadProcedure lets an anonymous caller reach this endpoint;
+    // isPrivate events were never filtered because every prior caller was at
+    // least a signed-in user. Keep that behavior unchanged for authenticated
+    // callers and only hide private events from anonymous ones.
+    isAnonymous ? eq(schema.events.isPrivate, false) : undefined,
+    // location.delete only soft-deletes the location (isActive: false) and
+    // leaves its events untouched, so an anonymous caller could otherwise
+    // still read a deleted location's name/address through an active event
+    // that still points at it. Authenticated callers are unaffected.
+    isAnonymous
+      ? or(
+          isNull(schema.events.locationId),
+          eq(schema.locations.isActive, true),
+        )
+      : undefined,
     input?.searchTerm
       ? or(
           ilike(schema.events.name, `%${input.searchTerm}%`),
@@ -328,7 +356,7 @@ async function getEventCount(params: {
 }
 
 export const eventRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(eventAllInputSchema)
     .route({
       method: "GET",
@@ -403,6 +431,11 @@ export const eventRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      // resolvePagination already bounds the "omit both params"
+      // branch to a single default-sized page for every caller, so an
+      // anonymous caller reaching this endpoint can no longer scrape
+      // the whole table in one request — no anonymous-specific override
+      // needed here (unlike isActive/isPrivate filtering, which still is).
       const { limit, offset, usePagination } = resolvePagination({
         pageSize: input?.pageSize,
         pageIndex: input?.pageIndex,
@@ -426,6 +459,7 @@ export const eventRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: !ctx.session?.user,
       });
 
       const sortedColumns = input?.sorting?.map((sorting) => {
@@ -572,9 +606,14 @@ export const eventRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
+      const isAnonymousAll = !ctx.session?.user;
       const eventsWithLocation = events.map((event) => ({
         ...event,
         location: getFullAddress(event),
+        // publicReadProcedure lets an anonymous caller reach this endpoint
+        // an event's contact email isn't part of the map's own
+        // public browse payload, so don't let it leak here either.
+        email: isAnonymousAll ? null : event.email,
       }));
 
       return { events: eventsWithLocation, totalCount };
@@ -612,13 +651,15 @@ export const eventRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        // protectedProcedure: always an authenticated caller.
+        isAnonymous: false,
       });
 
       const count = await getEventCount({ db: ctx.db, where });
 
       return { count };
     }),
-  byId: protectedProcedure
+  byId: publicReadProcedure
     .input(
       z.object({
         id: z.coerce.number().describe("The unique identifier of the event"),
@@ -699,6 +740,7 @@ export const eventRouter = {
           isActive: schema.events.isActive,
           location: aoOrg.name,
           locationId: schema.events.locationId,
+          locationIsActive: schema.locations.isActive,
           startDate: schema.events.startDate,
           endDate: schema.events.endDate,
           dayOfWeek: schema.events.dayOfWeek,
@@ -783,9 +825,37 @@ export const eventRouter = {
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
         .where(eq(schema.events.id, input.id))
-        .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
+        .groupBy(schema.events.id, aoOrg.id, regionOrg.id, schema.locations.id);
 
-      return { event: event ?? null };
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // don't let a guessed/enumerated ID leak a private, inactive, or
+      // soft-deleted-location event's details to someone with no session at
+      // all (the `all` list endpoint and eventIdToRegionNameLookup already
+      // clamp anonymous callers the same way; byId must not be a backdoor
+      // around that).
+      const isAnonymousById = !ctx.session?.user;
+      if (
+        isAnonymousById &&
+        (event?.isPrivate ||
+          event?.isActive === false ||
+          (event?.locationId && event.locationIsActive === false))
+      ) {
+        return { event: null };
+      }
+
+      // email/meta aren't part of the map's own public event payload;
+      // locationIsActive is only here to compute the anonymous clamp above.
+      if (!event) {
+        return { event: null };
+      }
+      const { locationIsActive: _locationIsActive, ...eventFields } = event;
+      return {
+        event: {
+          ...eventFields,
+          email: isAnonymousById ? null : event.email,
+          meta: isAnonymousById ? null : event.meta,
+        },
+      };
     }),
   crupdate: editorProcedure
     .input(EventCrupdateSchema)
@@ -1290,7 +1360,7 @@ export const eventRouter = {
 
       return { event: result ?? null };
     }),
-  eventIdToRegionNameLookup: protectedProcedure
+  eventIdToRegionNameLookup: publicReadProcedure
     .route({
       method: "GET",
       path: "/event-id-to-region-name-lookup",
@@ -1326,6 +1396,28 @@ export const eventRouter = {
               eq(regionOrg.orgType, "region"),
             ),
           ),
+        )
+        .leftJoin(
+          schema.locations,
+          eq(schema.locations.id, schema.events.locationId),
+        )
+        // publicReadProcedure lets an anonymous caller reach this endpoint
+        // don't leak a private OR inactive event's ID (even bare,
+        // with no other fields) to a caller with no session at all.
+        // location.delete only soft-deletes the location and leaves its
+        // events untouched, so an event at a deleted location must be
+        // hidden here too, same as buildEventWhereClause.
+        .where(
+          !ctx.session?.user
+            ? and(
+                eq(schema.events.isPrivate, false),
+                eq(schema.events.isActive, true),
+                or(
+                  isNull(schema.events.locationId),
+                  eq(schema.locations.isActive, true),
+                ),
+              )
+            : undefined,
         )
         .groupBy(schema.events.id, regionOrg.id);
 

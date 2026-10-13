@@ -18,15 +18,17 @@ import { logError, logWarn } from "./logger";
 
 type BaseContext = RequestHeadersPluginContext;
 
-export interface Context {
+export interface Context extends BaseContext {
   session: Session | null;
   db: AppDb;
 }
 
 /**
- * Returns a mock session for development mode.
- * This allows the app to work without an API key when running locally.
- * The mock session has admin access to all endpoints.
+ * Mock session used in development when a request reaching a tier that
+ * requires a user carries no credential. It has no roles, so
+ * `editorProcedure`/`adminProcedure`/`nationAdminProcedure` still reject it.
+ * `publicReadProcedure` never receives it, so its anonymous branches run
+ * locally exactly as in production.
  */
 const getDevMockSession = (): Session => ({
   id: 0,
@@ -72,7 +74,7 @@ const limiter = new MemoryRatelimiter({
  * Extract client IP from request headers.
  * Handles x-forwarded-for chains by taking the first (client) IP.
  */
-const getClientIP = (headers: Headers | null): string => {
+export const getClientIP = (headers: Headers | null): string => {
   const forwarded = headers?.get("x-forwarded-for");
   if (forwarded) {
     // Take first IP in chain (closest to client)
@@ -108,8 +110,34 @@ const withSessionAndDb = base.use(async ({ context, next }) => {
 
 export const publicProcedure = base;
 
+/**
+ * No credential required — session is resolved if present (so a signed-in
+ * caller's identity is still available to handlers) but never asserted.
+ * Mostly for reads (the map's public browse/search surface); the one write
+ * on this tier (`map.submitFeedback`) derives nothing from `ctx.session`, so
+ * anonymity doesn't change what it's allowed to do. Use only for endpoints
+ * whose response — or, for a write, whose effect — is safe for an anonymous
+ * caller; see the procedure-tier table in docs/AI_DEVELOPMENT_GUIDE.md before
+ * adding an endpoint here. `protectedProcedure` remains the default for anything that
+ * requires a real credential.
+ */
+export const publicReadProcedure = withSessionAndDb;
+
+const hasBearerToken = (headers?: Headers | null): boolean => {
+  const authHeader =
+    headers?.get(Header.Authorization) ??
+    headers?.get(Header.Authorization.toLowerCase());
+  return authHeader?.toLowerCase().startsWith("bearer ") ?? false;
+};
+
 export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
   if (!context.session?.user) {
+    // A bearer token was supplied but failed to resolve to a session (bad
+    // JWT, or an API key that doesn't match any row) — that's a rejected
+    // credential, not "no credential", so the dev mock must not mask it.
+    if (isDevelopment && !hasBearerToken(context.reqHeaders)) {
+      return next({ context: { ...context, session: getDevMockSession() } });
+    }
     throw new ORPCError("UNAUTHORIZED");
   }
   return next({ context });
@@ -209,8 +237,9 @@ export const nationAdminProcedure = withSessionAndDb.use(
 const getSession = async ({ context }: { context: BaseContext }) => {
   let session: Session | null = null;
 
-  // Skip session resolution for SSG requests to allow static generation
-  // The SSG client uses API key auth instead of session auth
+  // Skip session resolution for SSG requests to allow static generation.
+  // The SSG client sends no credential, so SSG calls are anonymous and may
+  // only target publicProcedure or publicReadProcedure endpoints.
   const isSSGRequest =
     context.reqHeaders?.get(Header.Client) === Client.ORPC_SSG;
   if (!isSSGRequest) {
@@ -230,7 +259,6 @@ const getSession = async ({ context }: { context: BaseContext }) => {
 
   // No session or bearer token provided
   if (!bearerToken) {
-    if (isDevelopment) return getDevMockSession();
     return null;
   }
 

@@ -6,6 +6,7 @@ import {
   and,
   count,
   eq,
+  exists,
   gt,
   gte,
   ilike,
@@ -14,6 +15,7 @@ import {
   lte,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -26,11 +28,16 @@ import { getSortingColumns } from "../get-sorting-columns";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { requireEditorOnRescope } from "../require-editor-on-rescope";
-import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
+import {
+  adminProcedure,
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const locationRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(
       z
         .object({
@@ -117,6 +124,11 @@ export const locationRouter = {
     )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
+      // resolvePagination already bounds the "omit both params"
+      // branch to a single default-sized page for every caller, so an
+      // anonymous caller reaching this endpoint can no longer scrape
+      // the whole table in one request — no anonymous-specific override
+      // needed here (unlike isActive/email/meta, which still is below).
       const { limit, offset, usePagination } = resolvePagination({
         pageSize: input?.pageSize,
         pageIndex: input?.pageIndex,
@@ -145,11 +157,21 @@ export const locationRouter = {
         }
       }
 
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // Every authenticated-caller behavior below is unchanged
+      // (including "no statuses means no filter"); an anonymous caller is
+      // additionally clamped to active-only, whatever `statuses` it passes,
+      // since inactive locations were never meant to be public.
+      const isAnonymous = !ctx.session?.user;
+      const effectiveStatuses = isAnonymous
+        ? ["active" as const]
+        : input?.statuses;
+
       const where = and(
-        !input?.statuses?.length ||
-          input.statuses.length === IsActiveStatus.length
+        !effectiveStatuses?.length ||
+          effectiveStatuses.length === IsActiveStatus.length
           ? undefined
-          : input.statuses.includes("active")
+          : effectiveStatuses.includes("active")
             ? eq(schema.locations.isActive, true)
             : eq(schema.locations.isActive, false),
         input?.searchTerm
@@ -164,6 +186,28 @@ export const locationRouter = {
         // Filter by editable org IDs if onlyMine is true and not a nation admin
         input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
           ? inArray(schema.locations.orgId, editableOrgIds)
+          : undefined,
+        // An editor can keep a location active while its workouts are all
+        // isPrivate (or inactive) — the public map hides that location, so
+        // an anonymous caller shouldn't be able to retrieve its address
+        // through this list either. Authenticated callers are unaffected.
+        isAnonymous
+          ? exists(
+              ctx.db
+                // `count()` is an aggregate: with no GROUP BY, Postgres
+                // always returns exactly one row (0 when nothing matches),
+                // so EXISTS(...) would always be true. Select a constant
+                // instead so EXISTS actually tests for a matching row.
+                .select({ one: sql`1` })
+                .from(schema.events)
+                .where(
+                  and(
+                    eq(schema.events.locationId, schema.locations.id),
+                    eq(schema.events.isActive, true),
+                    eq(schema.events.isPrivate, false),
+                  ),
+                ),
+            )
           : undefined,
       );
 
@@ -222,7 +266,17 @@ export const locationRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
-      return { locations, totalCount: locationCount?.count ?? 0 };
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // a location's contact email/metadata isn't part of the
+      // map's own public browse payload, so don't let it leak here either.
+      const maskedLocations = isAnonymous
+        ? locations.map((loc) => ({ ...loc, email: null, meta: null }))
+        : locations;
+
+      return {
+        locations: maskedLocations,
+        totalCount: locationCount?.count ?? 0,
+      };
     }),
 
   byId: protectedProcedure
