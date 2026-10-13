@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import type * as functions from "./utils/functions";
 
@@ -33,6 +41,13 @@ const load = async (databaseUrl: string) => {
   vi.resetModules();
   return import("./migrate");
 };
+
+// The first import transforms migrate.ts's whole dependency tree, which can
+// take most of a test's timeout on a busy CI runner; pay for it once here.
+beforeAll(async () => {
+  await load(LOCAL);
+  vi.unstubAllEnvs();
+}, 60_000);
 
 beforeEach(() => {
   vi.stubEnv("CI", "");
