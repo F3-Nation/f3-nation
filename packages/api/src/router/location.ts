@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   aliasedTable,
   and,
+  asc,
   count,
   eq,
   exists,
@@ -229,7 +230,7 @@ export const locationRouter = {
           created: schema.locations.created,
         },
         "id",
-      );
+      ).concat(asc(schema.locations.id));
 
       const select = {
         id: schema.locations.id,
