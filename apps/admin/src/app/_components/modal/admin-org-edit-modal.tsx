@@ -133,7 +133,8 @@ export default function AdminOrgEditModal({
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
         orgTypes: parentTypes,
-        ...(isRegionEditor ? { statuses: IsActiveStatus, onlyMine: true } : {}),
+        statuses: IsActiveStatus,
+        ...(isRegionEditor ? { onlyMine: true } : {}),
         pageIndex,
         pageSize,
       });
@@ -144,10 +145,7 @@ export default function AdminOrgEditModal({
   const router = useRouter();
   const currentParent = currentParentResponse?.org;
   const parentOptions = (parents ?? [])
-    .filter(
-      (parent) =>
-        !isRegionEditor || parent.isActive || parent.id === org?.parentId,
-    )
+    .filter((parent) => parent.isActive || parent.id === org?.parentId)
     .map(({ id, name, orgType, isActive }) => ({
       id,
       name,
@@ -164,7 +162,9 @@ export default function AdminOrgEditModal({
     // parent is inactive or outside the caller's editable destination scope.
     parentOptions.push(currentParent);
   }
-  parentOptions.sort((a, b) => a.name.localeCompare(b.name));
+  if (config.parentControl !== "combobox") {
+    parentOptions.sort((a, b) => a.name.localeCompare(b.name));
+  }
   const hasAlternativeParent = parents?.some(
     (parent) => parent.isActive && parent.id !== org?.parentId,
   );
@@ -213,6 +213,7 @@ export default function AdminOrgEditModal({
       value={parent.id.toString()}
     >
       {parent.name}
+      {!parent.isActive && " (inactive)"}
     </SelectItem>
   );
 
@@ -524,16 +525,14 @@ export default function AdminOrgEditModal({
                         {config.parentControl === "combobox" ? (
                           <VirtualizedCombobox
                             value={field.value?.toString()}
-                            options={
-                              parents
-                                ?.filter((org) =>
-                                  parentTypes.includes(org.orgType),
-                                )
-                                .map((region) => ({
-                                  value: region.id.toString(),
-                                  label: region.name,
-                                })) ?? []
-                            }
+                            options={parentOptions
+                              .filter((org) =>
+                                parentTypes.includes(org.orgType),
+                              )
+                              .map((region) => ({
+                                value: region.id.toString(),
+                                label: `${region.name}${region.isActive ? "" : " (inactive)"}`,
+                              }))}
                             searchPlaceholder={config.parentPlaceholder}
                             onSelect={(value) => {
                               const orgId = safeParseInt(value as string);
