@@ -11,8 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import OnboardingPage from "~/app/onboarding/page";
 
-const { envMock, router, searchParams } = vi.hoisted(() => ({
-  envMock: { NEXT_PUBLIC_AUTH_URL: undefined as string | undefined },
+const { router, searchParams } = vi.hoisted(() => ({
   router: { push: vi.fn() },
   searchParams: new URLSearchParams(),
 }));
@@ -22,7 +21,6 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
 }));
 vi.mock("next/image", () => ({ default: () => null }));
-vi.mock("~/env", () => ({ env: envMock }));
 
 const fetchMock = vi.fn<typeof fetch>();
 const assign = vi.fn();
@@ -52,8 +50,7 @@ beforeEach(() => {
   fetchMock.mockResolvedValueOnce(Response.json({ isExistingUser: false }));
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("location", { assign, origin: browserOrigin });
-  envMock.NEXT_PUBLIC_AUTH_URL = authOrigin;
-  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", browserOrigin);
+  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", authOrigin);
 });
 
 afterEach(() => {
@@ -97,7 +94,7 @@ describe("onboarding continuation", () => {
   );
 
   it("uses the browser origin when no canonical Auth URL is configured", async () => {
-    envMock.NEXT_PUBLIC_AUTH_URL = undefined;
+    vi.stubEnv("NEXT_PUBLIC_AUTH_URL", undefined);
     searchParams.set("callbackUrl", `${browserOrigin}${callback}`);
     fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
 
@@ -110,6 +107,45 @@ describe("onboarding continuation", () => {
       ),
     );
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("keeps Continue disabled while full-page navigation is pending", async () => {
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+
+    await fillForm();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledExactlyOnceWith(callback),
+    );
+    const button = screen.getByRole("button");
+    expect(button).toHaveProperty("disabled", true);
+    fireEvent.click(button);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(assign).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows retry if starting full-page navigation throws", async () => {
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValue(Response.json({ success: true }));
+    assign.mockImplementationOnce(() => {
+      throw new DOMException("Navigation failed", "SecurityError");
+    });
+
+    await fillForm();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText("Something went wrong. Please try again."),
+    ).toBeDefined();
+    const button = screen.getByRole("button", { name: "Continue" });
+    expect(button).toHaveProperty("disabled", false);
+    fireEvent.click(button);
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(2));
+    expect(assign).toHaveBeenLastCalledWith(callback);
+    expect(screen.getByRole("button")).toHaveProperty("disabled", true);
   });
 
   it.each([
