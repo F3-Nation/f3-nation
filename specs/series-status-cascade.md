@@ -46,9 +46,9 @@ hard-deleting or regenerating instances.
 - **AC-3** — GIVEN an instance with `seriesException: "closed"` WHEN its series
   is reactivated THEN its exception, ID, attendance, and associations are
   unchanged.
-- **AC-4** — GIVEN an existing series with `dayOfWeek` and simultaneous
-  schedule changes WHEN it is reactivated THEN existing instances are not
-  hard-deleted, recreated, or supplemented with missing instances.
+- **AC-4** — GIVEN an existing series with `dayOfWeek` and an effective
+  structural schedule change WHEN its status is changed THEN the request fails
+  with `BAD_REQUEST` and no instances are deleted, recreated, or generated.
 - **AC-5** — GIVEN an inactive AO with inactive events or instances WHEN an
   editor reactivates the AO THEN event and instance statuses remain unchanged.
 - **AC-6** — GIVEN an active event WHEN an editor deactivates it through
@@ -105,7 +105,7 @@ event authorization is unchanged.
 - Reactivate a series and verify today's/future instances, including inactive
   ones, while past/unrelated instances and instance relationships stay intact.
 - Reactivate an existing series with a structural schedule edit and verify
-  existing instances survive without deletion or generation.
+  `BAD_REQUEST` with no instances deleted, recreated, or generated.
 - Reactivate an inactive one-off event with `dayOfWeek: null`, supplying
   non-null `dayOfWeek`, and verify its series instances are generated (see the
   linked `event.test.ts` case above).

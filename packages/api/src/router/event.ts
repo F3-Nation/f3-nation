@@ -952,13 +952,13 @@ export const eventRouter = {
               input.endDate !== transactionExistingEvent.endDate));
 
         if (
-          isDeactivationTransition &&
+          isStatusTransition &&
           transactionExistingEvent?.dayOfWeek &&
           structuralScheduleChanged
         ) {
           throw new ORPCError("BAD_REQUEST", {
             message:
-              "An active event series cannot be deactivated with a structural schedule change",
+              "An existing event series cannot change its schedule during a status transition",
           });
         }
 

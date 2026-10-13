@@ -1372,8 +1372,7 @@ describe("Event Router", () => {
         dayOfWeek: "monday",
         startTime: "0545",
         endTime: "0630",
-        // Structural schedule edit exercises status-transition precedence.
-        startDate: "2020-01-13",
+        startDate: series.startDate,
         endDate: null,
         recurrencePattern: "weekly",
         recurrenceInterval: 1,
@@ -2010,6 +2009,100 @@ describe("Event Router", () => {
         .from(schema.attendance)
         .where(eq(schema.attendance.eventInstanceId, instance.id));
       expect(persistedAttendance).toEqual({ userId: attendanceUser.id });
+    });
+
+    it("rejects structural schedule changes while reactivating an inactive series", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+      const eventType = await createTestEventType();
+      if (!eventType) return;
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `Inactive series reactivation ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: "2020-01-06",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series) return;
+      createdEventIds.push(series.id);
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `Inactive series instance ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          startTime: "0530",
+          endTime: "0615",
+          startDate: nextFutureMonday(2),
+          isActive: false,
+          highlight: false,
+          seriesId: series.id,
+          isPrivate: false,
+        })
+        .returning();
+      if (!instance) return;
+
+      const error = await createTestClient()
+        .event.crupdate({
+          id: series.id,
+          name: series.name,
+          aoId: ao.id,
+          regionId: region.id,
+          locationId: null,
+          dayOfWeek: "tuesday",
+          startTime: "0530",
+          endTime: "0615",
+          startDate: series.startDate,
+          endDate: null,
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          indexWithinInterval: null,
+          highlight: false,
+          isActive: true,
+          eventTypeIds: [eventType.id],
+          email: null,
+        })
+        .then(
+          () => undefined,
+          (rejection: unknown) => rejection,
+        );
+      expect(error).toMatchObject({ code: "BAD_REQUEST" });
+
+      const [persistedSeries] = await db
+        .select({
+          isActive: schema.events.isActive,
+          dayOfWeek: schema.events.dayOfWeek,
+        })
+        .from(schema.events)
+        .where(eq(schema.events.id, series.id));
+      expect(persistedSeries).toEqual({ isActive: false, dayOfWeek: "monday" });
+
+      const persistedInstances = await db
+        .select({
+          id: schema.eventInstances.id,
+          isActive: schema.eventInstances.isActive,
+        })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      expect(persistedInstances).toEqual([
+        { id: instance.id, isActive: false },
+      ]);
     });
 
     it("preserves existing instance IDs across status-only deactivation and reactivation", async () => {
