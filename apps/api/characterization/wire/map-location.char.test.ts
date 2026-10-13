@@ -63,6 +63,8 @@ describe("map location region query validation", () => {
     "?regionId=%20%20",
     "?regionId=not-a-number",
     "?regionId=Infinity",
+    "?regionId=0x10",
+    "?regionId=1e3",
   ])("rejects missing or invalid numeric input: %s", async (query) => {
     const res = await target.invoke(
       req(`/v1/map/location/aos-in-region${query}`, {
@@ -74,5 +76,40 @@ describe("map location region query validation", () => {
     );
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it.each(
+    [null, false, true, [], [1], {}, "0x10", "1e3"].map((regionId) => ({
+      regionId,
+    })),
+  )("rejects nonnumeric RPC input: %j", async ({ regionId }) => {
+    const res = await rpcResponse(
+      (client) => client.map.location.getAOsInRegion({ regionId }),
+      { "x-forwarded-for": "10.96.0.4" },
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      json: { code: "BAD_REQUEST" },
+    });
+  });
+
+  it("preserves the Map's negative region fallback for REST and RPC", async () => {
+    const rpc = await rpcResponse(
+      (client) => client.map.location.getAOsInRegion({ regionId: -1 }),
+      { "x-forwarded-for": "10.96.0.5" },
+    );
+    expect(rpc.status).toBe(200);
+    expect(await rpc.json()).toEqual({ json: { aos: [] } });
+
+    const rest = await target.invoke(
+      req("/v1/map/location/aos-in-region?regionId=-1", {
+        headers: {
+          client: "characterization",
+          "x-forwarded-for": "10.96.0.6",
+        },
+      }),
+    );
+    expect(rest.status).toBe(200);
+    expect(await rest.json()).toEqual({ aos: [] });
   });
 });
