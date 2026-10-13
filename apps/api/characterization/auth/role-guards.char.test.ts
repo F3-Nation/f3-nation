@@ -229,7 +229,12 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
     const PATH = "/v1/map/location/events-and-locations";
 
     it("authorizes a fully anonymous caller (no cookie, no bearer)", async () => {
-      await expectAuthorized(await target.invoke(guardReq(PATH, { ip: 13 })));
+      const res = await target.invoke(guardReq(PATH, { ip: 13 }));
+      await expectAuthorized(res);
+      // expectAuthorized also lets a post-auth 400 through; anonymous browse
+      // must actually succeed and return the map's marker array.
+      expect(res.status).toBe(200);
+      expect(Array.isArray(await res.json())).toBe(true);
     });
   });
 
