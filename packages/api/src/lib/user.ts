@@ -151,6 +151,29 @@ export const isDuplicateEmailError = (error: unknown): boolean => {
   );
 };
 
+interface PgErrorFields {
+  code: string;
+  constraint_name?: string;
+}
+
+const hasPgCode = (value: unknown): value is PgErrorFields =>
+  typeof value === "object" &&
+  value !== null &&
+  "code" in value &&
+  typeof (value as { code?: unknown }).code === "string";
+
+// Returns the Postgres error carried by `error`. The postgres-js/drizzle driver
+// can wrap the real PostgresError in `.cause`, so check both levels.
+export const getPgError = (error: unknown): PgErrorFields | undefined => {
+  if (hasPgCode(error)) return error;
+  if (error instanceof Error && hasPgCode(error.cause)) return error.cause;
+  return undefined;
+};
+
+// Helper to check if error is a foreign-key violation (Postgres 23503).
+export const isForeignKeyViolationError = (error: unknown): boolean =>
+  getPgError(error)?.code === "23503";
+
 // Base input schema object (before optional)
 export const userListInputSchema = z.object({
   roles: arrayOrSingle(z.enum(UserRole))
