@@ -306,14 +306,16 @@ export const LIST_ARGS = [...EXEC_STDIN, CONTAINER, "pg_restore", "-l"];
  * psql in a single transaction. It is built in full before psql starts, so a
  * failing pg_restore never reaches the database, and any SQL error rolls the
  * truncate back. The dev logins need exactly one nation org, so that is
- * checked before the commit too. SEQUENCE SET entries are left out: setval
- * survives a rollback, and the loader resets sequences after the commit.
+ * checked before the commit too. Only TABLE DATA entries, the ones checked
+ * against the manifest, are restored: that leaves out large objects, and
+ * SEQUENCE SET, whose setval survives a rollback (the loader resets
+ * sequences after the commit instead).
  */
 const RESTORE_SCRIPT = `set -euo pipefail
 d=$(mktemp) l=$(mktemp) f=$(mktemp)
 trap 'rm -f "$d" "$l" "$f"' EXIT
 cat > "$d"
-pg_restore -l "$d" | awk '!/^[0-9]+; [0-9]+ [0-9]+ SEQUENCE SET /' > "$l"
+pg_restore -l "$d" | awk '/^[0-9]+; [0-9]+ [0-9]+ TABLE DATA /' > "$l"
 printf 'SET client_min_messages = warning;\\n%s;\\n' "$TRUNCATE_SQL" > "$f"
 pg_restore --data-only --disable-triggers --no-owner -L "$l" -f - "$d" >> "$f"
 printf '%s\n' "$NATION_CHECK_SQL" >> "$f"

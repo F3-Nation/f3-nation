@@ -775,18 +775,20 @@ describe("restore script", () => {
       writeFileSync(file, `#!/usr/bin/env bash\n${body}\n`);
       chmodSync(file, 0o755);
     };
-    // `-l` lists one table and one sequence; a restore emits what `-L` keeps.
+    // `-l` lists a table, a sequence and a large object; a restore emits
+    // what `-L` keeps.
     stub(
       "pg_restore",
       `[ "$(cat "\${@: -1}")" = dump ] || exit 2
 if [ "$1" = -l ]; then
-  printf '%s\\n' '10; 0 0 TABLE DATA public orgs f3' '11; 0 0 SEQUENCE SET public orgs_id_seq f3'
+  printf '%s\\n' '10; 0 0 TABLE DATA public orgs f3' '11; 0 0 SEQUENCE SET public orgs_id_seq f3' '12; 0 0 BLOBS - BLOBS '
   exit 0
 fi
 [ "\${FAIL:-}" = 1 ] && exit 1
 while [ $# -gt 0 ]; do [ "$1" = -L ] && list="$2"; shift; done
 if grep -q 'TABLE DATA' "$list"; then echo "COPY x FROM stdin;"; fi
-if grep -q 'SEQUENCE SET' "$list"; then echo "SELECT pg_catalog.setval('orgs_id_seq', 9, true);"; fi`,
+if grep -q 'SEQUENCE SET' "$list"; then echo "SELECT pg_catalog.setval('orgs_id_seq', 9, true);"; fi
+if grep -q 'BLOBS' "$list"; then echo "SELECT pg_catalog.lo_open('16384', 131072);"; fi`,
     );
     stub(
       "psql",
@@ -837,11 +839,13 @@ while [ $# -gt 0 ]; do [ "$1" = -f ] && cp "$2" "${dir}/psql.sql"; shift; done`,
     );
   });
 
-  it("leaves sequence values out of the transaction", () => {
-    // setval is not rolled back, so a failed restore would keep them.
+  it("restores only table data", () => {
+    // setval is not rolled back, and large objects aren't in the manifest.
     const r = run();
     expect(r.status).toBe(0);
+    expect(r.sql).toContain("COPY x FROM stdin;");
     expect(r.sql).not.toContain("setval");
+    expect(r.sql).not.toContain("lo_open");
   });
 
   it("never reaches psql when pg_restore fails", () => {
