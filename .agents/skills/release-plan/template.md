@@ -62,7 +62,7 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Stop if:** the migration shows an error, or the check query doesn't match. Retry **once**; if it fails again, stop.
 - [ ] **Return to your branch:** `git switch -`. Owner: Release lead
 
-<!-- Production: drop this step. -->
+<!-- Production: drop the "Create the test plan" step below and renumber. -->
 
 ### Step 3: Create the test plan
 

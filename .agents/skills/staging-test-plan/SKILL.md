@@ -33,7 +33,7 @@ Both are optional. The skill finds the release PR itself.
    ```bash
    TZ=America/New_York gh pr list --state merged --base main \
      --author app/f3-nation-release-please \
-     --search "chore: release main in:title" --limit 5 \
+     --search "chore: release main in:title" --limit 100 \
      --json number,title,mergedAt \
      --jq 'sort_by(.mergedAt) | last | "#\(.number) merged \(.mergedAt | fromdateiso8601 | strflocaltime("%a %b %-d, %-I:%M %p %Z"))"'
    ```
