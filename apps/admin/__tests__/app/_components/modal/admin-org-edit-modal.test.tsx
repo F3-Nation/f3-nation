@@ -1592,6 +1592,74 @@ it("keeps the AO fake-data action restricted to development", async () => {
   expect(field("Description").value).toBe("Fake AO description");
 });
 
+describe.each([
+  { mode: "create", id: undefined },
+  { mode: "edit", id: record.id },
+])("AO fake-data parent selection in $mode mode", ({ id }) => {
+  const inactiveParents = [
+    { id: 21, name: "Other Inactive", orgType: "region", isActive: false },
+    {
+      id: record.parentId,
+      name: "Inactive Current",
+      orgType: "region",
+      isActive: false,
+    },
+  ];
+
+  const fillFakeData = () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      fireEvent.click(screen.getByText("(DEV) Fake data"));
+    } finally {
+      random.mockRestore();
+    }
+    // The development preset's handle is invalid under the URL validator.
+    // Correct it so these tests isolate parent selection and submission.
+    fireEvent.change(field("Twitter"), {
+      target: { value: "https://x.com/fakeao" },
+    });
+  };
+
+  it("chooses an active parent instead of an inactive current or unrelated parent", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: [
+        ...inactiveParents,
+        { id: 3, name: "Active Parent", orgType: "region", isActive: true },
+      ],
+      total: 3,
+    });
+    mount("ao", id, false);
+    await waitFor(() => expect(parentOptions()).toHaveLength(id ? 2 : 1));
+    if (id) expect(parentSelect().value).toBe(String(record.parentId));
+
+    fillFakeData();
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(id ? 1 : 2));
+    for (const [payload] of mocks.save.mock.calls) {
+      expect(payload).toMatchObject({
+        name: "Fake AO",
+        orgType: "ao",
+        parentId: 3,
+      });
+    }
+  });
+
+  it("requires a valid selection without saving when no active parent exists", async () => {
+    mocks.all.mockResolvedValue({ orgs: inactiveParents, total: 2 });
+    mount("ao", id, false);
+    await waitFor(() => expect(mocks.all).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clients.at(-1)!.isFetching()).toBe(0));
+    expect(parentOptions()).toHaveLength(id ? 1 : 0);
+
+    fillFakeData();
+    save();
+
+    await screen.findByText("Invalid selection");
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+});
+
 describe("Territory organization integration", () => {
   it("hides Add when Territory creation is disabled in configuration", async () => {
     const original = orgAdminConfig.territory.add;

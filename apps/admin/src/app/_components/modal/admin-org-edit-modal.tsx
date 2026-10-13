@@ -868,11 +868,14 @@ export default function AdminOrgEditModal({
                       type="button"
                       className="w-full bg-black hover:bg-black/80"
                       onClick={() => {
+                        const activeParents = parentOptions.filter(
+                          (parent) => parent.isActive,
+                        );
                         form.setValue("name", `Fake ${label}`);
                         form.setValue(
                           "parentId",
-                          parents?.[
-                            Math.floor(Math.random() * (parents?.length ?? 0))
+                          activeParents[
+                            Math.floor(Math.random() * activeParents.length)
                           ]?.id ?? -1,
                         );
                         form.setValue("website", `https://fake${orgType}.com`);
