@@ -51,7 +51,6 @@ beforeEach(() => {
   signIn.mockReset().mockResolvedValue({ error: null });
   emailOtp.mockReset().mockResolvedValue({ error: null });
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubGlobal("location", { origin: "https://proxy.f3nation.test" });
   vi.stubEnv("NEXT_PUBLIC_AUTH_URL", "https://auth.f3nation.test");
 });
 
@@ -215,6 +214,7 @@ describe("email verification", () => {
 
   it("uses the browser origin when a canonical Auth URL is absent", async () => {
     vi.stubEnv("NEXT_PUBLIC_AUTH_URL", undefined);
+    vi.stubGlobal("location", { origin: "https://proxy.f3nation.test" });
     const destination = "https://proxy.f3nation.test/continue";
     searchParams.set("callbackUrl", destination);
     render(<VerifyEmailForm useBetterAuth={false} />);

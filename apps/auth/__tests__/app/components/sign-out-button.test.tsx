@@ -35,7 +35,7 @@ function confirmLogout(useBetterAuth: boolean) {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+  fetchMock.mockImplementation(async () => new Response(null, { status: 200 }));
   nextAuthSignOut.mockResolvedValue(undefined);
   betterAuthSignOut.mockResolvedValue({ error: null });
   vi.stubGlobal("fetch", fetchMock);
