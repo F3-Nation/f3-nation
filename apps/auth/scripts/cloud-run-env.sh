@@ -19,6 +19,8 @@ set -euo pipefail
 #   - .env.cloud-run.prod / .env.cloud-run.staging populated
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/gcloud-env-vars.sh
+source "$SCRIPT_DIR/lib/gcloud-env-vars.sh"
 
 # ---------------------------------------------------------------------------
 # Environment → GCP project mapping
@@ -219,10 +221,13 @@ done
 
 echo ""
 echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
+# "|" instead of a comma join so a comma inside EMAIL_FROM stays in the value
+# (see lib/gcloud-env-vars.sh).
+ENV_VARS_ARG="$(join_env_vars "|" "${UPDATE_ARGS[@]}")"
 gcloud run services update "$SERVICE_NAME" \
     --project "$PROJECT" \
     --region "$REGION" \
-    --update-env-vars "$(IFS=,; echo "${UPDATE_ARGS[*]}")" \
+    --update-env-vars "$ENV_VARS_ARG" \
     --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
     --quiet
 

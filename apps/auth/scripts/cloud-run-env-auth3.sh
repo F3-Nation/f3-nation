@@ -35,6 +35,8 @@ set -euo pipefail
 #     issuer another service also claims)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/gcloud-env-vars.sh
+source "$SCRIPT_DIR/lib/gcloud-env-vars.sh"
 
 # ---------------------------------------------------------------------------
 # Environment → GCP project mapping (same projects as f3-auth — Phase 3
@@ -305,16 +307,13 @@ done
 
 echo ""
 echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
-# A custom delimiter (gcloud's own "^DELIM^" syntax) instead of a plain comma
-# join -- EMAIL_FROM can legitimately contain a comma (e.g. a quoted display
-# name), which a comma-joined --update-env-vars value would misparse as a
-# vars boundary instead of part of the value. "|" doesn't occur in any of
-# this script's env values (URLs, an email address, the hardcoded flags).
-ENV_VARS_DELIM="|"
+# "|" instead of a comma join so a comma inside EMAIL_FROM stays in the value
+# (see lib/gcloud-env-vars.sh).
+ENV_VARS_ARG="$(join_env_vars "|" "${UPDATE_ARGS[@]}")"
 gcloud run services update "$SERVICE_NAME" \
     --project "$PROJECT" \
     --region "$REGION" \
-    --update-env-vars "^${ENV_VARS_DELIM}^$(IFS="$ENV_VARS_DELIM"; echo "${UPDATE_ARGS[*]}")" \
+    --update-env-vars "$ENV_VARS_ARG" \
     --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
     --quiet
 
