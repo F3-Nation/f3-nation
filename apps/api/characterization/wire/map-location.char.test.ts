@@ -57,19 +57,22 @@ describe.runIf(target.sharesDatabase)("map location AOs in region", () => {
 });
 
 describe("map location region query validation", () => {
-  it.each(["", "?regionId=not-a-number", "?regionId=Infinity"])(
-    "rejects missing or invalid numeric input: %s",
-    async (query) => {
-      const res = await target.invoke(
-        req(`/v1/map/location/aos-in-region${query}`, {
-          headers: {
-            client: "characterization",
-            "x-forwarded-for": "10.96.0.3",
-          },
-        }),
-      );
-      expect(res.status).toBe(400);
-      expect(await res.json()).toMatchObject({ code: "BAD_REQUEST" });
-    },
-  );
+  it.each([
+    "",
+    "?regionId=",
+    "?regionId=%20%20",
+    "?regionId=not-a-number",
+    "?regionId=Infinity",
+  ])("rejects missing or invalid numeric input: %s", async (query) => {
+    const res = await target.invoke(
+      req(`/v1/map/location/aos-in-region${query}`, {
+        headers: {
+          client: "characterization",
+          "x-forwarded-for": "10.96.0.3",
+        },
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: "BAD_REQUEST" });
+  });
 });
