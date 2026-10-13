@@ -39,7 +39,12 @@ export function runProc(
     if (stdinFile && child.stdin) {
       // The child may exit before reading all of it (e.g. a bad archive).
       child.stdin.on("error", () => undefined);
-      createReadStream(stdinFile).pipe(child.stdin);
+      createReadStream(stdinFile)
+        .on("error", (err) => {
+          child.kill();
+          resolve({ code: 1, stdout, stderr: `${stderr}${err.message}` });
+        })
+        .pipe(child.stdin);
     }
   });
 }

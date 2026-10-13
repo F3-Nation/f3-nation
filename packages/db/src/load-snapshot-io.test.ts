@@ -48,6 +48,18 @@ describe("runProc", () => {
     expect(r.stderr).toMatch(/ENOENT/);
   });
 
+  it("fails, and stops the child, when the stdin file can't be read", async () => {
+    const dir = await mkTmp();
+    const r = await runProc(
+      process.execPath,
+      ["-e", "process.stdin.pipe(process.stdout)"],
+      path.join(dir, "missing.dump"),
+    );
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/ENOENT/);
+    await rmTmp(dir);
+  });
+
   it("tolerates a child that exits without reading stdin", async () => {
     const dir = await mkTmp();
     const file = path.join(dir, "big.txt");
