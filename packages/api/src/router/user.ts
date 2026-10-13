@@ -747,7 +747,7 @@ export const userRouter = {
           });
           throw new ORPCError("CONFLICT", {
             message:
-              "This user is still referenced by other records (such as attendance, positions or linked accounts) and can't be deleted.",
+              "This user has history (such as attendance or achievements) and can't be deleted.",
           });
         }
         // Anything else is an unexpected DB/driver fault. Log the original and

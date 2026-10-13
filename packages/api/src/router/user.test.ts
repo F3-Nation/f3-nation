@@ -2088,7 +2088,11 @@ describe("User Router", () => {
 
         await expect(
           client.user.delete({ id: testUser.id }),
-        ).rejects.toMatchObject({ code: "CONFLICT" });
+        ).rejects.toMatchObject({
+          code: "CONFLICT",
+          message:
+            "This user has history (such as attendance or achievements) and can't be deleted.",
+        });
 
         // The blocking constraint is logged so the cause is traceable.
         const blocked = logWarn.mock.calls.find(
