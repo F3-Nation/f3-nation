@@ -75,15 +75,41 @@ export async function seedDevUsers(
   };
 }
 
+export interface SeedApiKeysOptions {
+  /**
+   * Skip a region-scoped key whose region isn't in `regionIds` (a loaded
+   * snapshot doesn't have the fake regions) instead of throwing. Returns the
+   * skipped keys.
+   */
+  skipMissingRegions?: boolean;
+}
+
 export async function seedApiKeys(
   db: AppDb,
   adminUserId: number,
   nationId: number,
   roleIds: RoleIds,
   regionIds: Record<string, number>,
-): Promise<void> {
+  { skipMissingRegions = false }: SeedApiKeysOptions = {},
+): Promise<string[]> {
+  const skipped: string[] = [];
   // 9. API keys
   for (const apiKey of LOCAL_API_KEYS) {
+    // Roles attach to the nation by default; keys with a regionName are
+    // region-scoped (e.g. local-boone-editor-key) so e2e tests can
+    // exercise cross-region RBAC denials. Resolved before inserting so a
+    // skipped key leaves no role-less (read-only) key behind.
+    const orgId = apiKey.regionName ? regionIds[apiKey.regionName] : nationId;
+    if (orgId === undefined) {
+      if (skipMissingRegions) {
+        skipped.push(apiKey.key);
+        continue;
+      }
+      throw new Error(
+        `API key ${apiKey.key} references unknown region "${apiKey.regionName}"`,
+      );
+    }
+
     const [inserted] = await db
       .insert(schema.apiKeys)
       .values({ ...apiKey, ownerId: adminUserId })
@@ -110,17 +136,6 @@ export async function seedApiKeys(
             ? roleIds.editorId
             : null;
       if (roleId !== null) {
-        // Roles attach to the nation by default; keys with a regionName are
-        // region-scoped (e.g. local-boone-editor-key) so e2e tests can
-        // exercise cross-region RBAC denials.
-        const orgId = apiKey.regionName
-          ? regionIds[apiKey.regionName]
-          : nationId;
-        if (orgId === undefined) {
-          throw new Error(
-            `API key ${apiKey.key} references unknown region "${apiKey.regionName}"`,
-          );
-        }
         await db
           .insert(schema.rolesXApiKeysXOrg)
           .values({ apiKeyId: keyId, roleId, orgId })
@@ -129,6 +144,7 @@ export async function seedApiKeys(
     }
     console.log(`  ✓ API key: ${apiKey.key}`);
   }
+  return skipped;
 }
 
 export async function seedOAuthClients(db: AppDb): Promise<void> {
