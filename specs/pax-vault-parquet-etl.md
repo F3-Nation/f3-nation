@@ -1,17 +1,20 @@
 # Pax Vault Parquet materializations
 
 > **Approval scope:** The 2026-08-26 approval applies to the inherited scope
-> and ordered set of nine `pv_*` materializations listed here. This document
-> records their current SQL projections and eligibility semantics. It is not
-> evidence that database, GCS, IAM, schema-registry, consumer-compatibility, or
-> production validation has passed. Security and operational gates remain
-> explicit release blockers.
+> and ordered set of nine `pv_*` materializations only. The separately
+> human-approved revised acceptance criteria defined below expand the scope to
+> ten datasets by appending `pv_attendance`; they also revise `pv_pax` as
+> described below. Neither scope approval satisfies human security, platform,
+> scale, consumer-compatibility, or production gates.
+> This document is not evidence that database, GCS, IAM,
+> schema-registry, consumer-compatibility, or production validation has passed.
+> Security and operational gates remain explicit release blockers.
 
 ## 1. Product and release boundary
 
 Pax Vault is an independent product from the four analytics materializations in
 [`analytics-parquet-etl.md`](./analytics-parquet-etl.md). It publishes exactly
-these nine datasets, in this order:
+these ten datasets, in this order:
 
 1. `pv_regions`
 2. `pv_pax`
@@ -22,16 +25,33 @@ these nine datasets, in this order:
 7. `pv_areas`
 8. `pv_aos`
 9. `pv_events`
+10. `pv_attendance`
 
 Production objects are rooted under
 `gs://BUCKET/pax-vault/releases/<releaseId>/`; nonproduction uses the
 corresponding configured nonproduction bucket and the same `pax-vault/` product
 prefix. A release has one immutable `release.json`, one dataset manifest for
-each of the nine names, and their immutable Parquet objects. The independent
+each of the ten names, and their immutable Parquet objects. The independent
 mutable selector is `gs://BUCKET/pax-vault/current.json`. A subset can be used
-for local diagnostics, but only the exact nine-dataset set can be published.
+for local diagnostics, but only the exact ten-dataset set can be published.
 Analytics uses its separate `analytics/releases/` root and
 `analytics/current.json` pointer.
+
+The ten-dataset set and current schema versions below are the only schemas for
+new publication. A narrowly scoped rollback may select the exact retained
+pre-upgrade nine-dataset release whose version vector is
+`pv_regions.v1`, `pv_pax.v2`, `pv_kotter.v1`, `pv_upcoming.v1`,
+`pv_sectors.v2`, `pv_territories.v1`, `pv_areas.v2`, `pv_aos.v1`, and
+`pv_events.v2`. The historical `pv_pax.v2` projection has fourteen columns and
+ends in `roles`; it does not include the `lifetime_posts` or `lifetime_qs`
+columns in current `pv_pax.v3`. Rollback eligibility requires the exact release
+identity, generation, URI, and manifest hash recorded as `retainedPrevious` by
+the current pointer, followed by full release and Parquet validation. That hash
+binds the retained manifest bytes but is not a signature or independent proof
+of publisher identity. Rollback continues to use pointer generation
+compare-and-swap and preserves the source-order high-water mark. No hybrid
+version vector or arbitrary old release is eligible. Consumer compatibility
+for serving this historical shape remains a human release gate.
 
 The batch reads datasets in the order above, sequentially. Each dataset has its
 own source read boundary. Sequential reads do not constitute a shared
@@ -88,7 +108,7 @@ produces an empty list.
 
 Columns, in order: `refreshed_at`, `user_id`, `f3_name`, `home_region_id`,
 `home_region_name`, `avatar_url`, `email`, `status`, `start_date_override`,
-`regions`, `aos`, `types`, `tags`, `roles`.
+`regions`, `aos`, `types`, `tags`, `roles`, `lifetime_posts`, `lifetime_qs`.
 
 Email must be non-null and match the practical SQL pattern
 `^[^\s@]+@[^\s@]+\.[^\s@]+$`: non-empty local and domain portions, no
@@ -108,6 +128,14 @@ hierarchy rows contribute observations. `types` and `tags` contain distinct
 eligible events. All four lists are ordered deterministically by name and ID
 (roles by organization ID then role ID), and are empty lists when there are no
 matching records.
+
+`lifetime_posts` is the distinct count of eligible event instances with actual
+(non-planned) attendance by the user; `lifetime_qs` is the distinct count of
+those event instances where the user's actual attendance has an attached `Q`
+attendance type. Count distinct event-instance IDs, not attendance rows. Both
+are `INTEGER` and are zero when there are no qualifying events. Q status is
+derived only from the attendance's attached Q attendance-type row, not from a
+user-level flag or another event attribute.
 
 `roles` is a list of records shaped
 `{role_id, role_name, org_id, org_name, org_type}` sourced from
@@ -221,6 +249,39 @@ contains `{user_id, f3_name, q_ind, coq_ind, avatar_url, attended, ghost,
 fartsack}`; the flags distinguish actual from planned attendance and lists sort
 by name then user ID. Missing attendance, types, or tags produce empty lists.
 
+### `pv_attendance` — one row per eligible actual attendance ID
+
+Columns, in exact order: `refreshed_at`, `id`, `user_id`,
+`event_instance_id`, `q_ind`, `coq_ind`, `start_date`, `ao_org_id`,
+`region_org_id`, `tags`, `types`, `categories`. Do not include
+`attendance_meta`, `created`, `updated`, `ao_name`, or pax profile fields
+(`f3_name`, `home_region_id`, `home_region_name`, `avatar_url`,
+`user_status`).
+
+Each source attendance ID produces one row; do not aggregate or deduplicate
+attendance records by user or event. Include actual attendance only (exclude
+planned attendance), and only for users with a non-null email matching the
+practical email syntax specified for `pv_pax`. Events use exactly the
+`pv_events` eligibility rule: active event instances with non-null `pax_count`,
+and `exclude_from_pax_vault` false or null. A true exclusion flag excludes the
+event; malformed non-null/non-boolean values fail the dataset. `attendance_meta`
+is not projected. `q_ind` and `coq_ind` identify whether the attendance has the
+attached Q and Co-Q attendance types, respectively. `start_date` is the event
+date. `ao_org_id` and `region_org_id` come from the same recursive
+event-organization ancestry used by `pv_events`: retain the AO ID, and set
+`region_org_id` to the event organization's region ancestor, including when the
+event organization is itself a region; it is null when no region ancestor
+exists. `tags` and `types` are distinct lists of integer IDs (not records),
+sorted by ID ascending; `categories` is a distinct list of non-null enum
+identifier strings, sorted lexicographically. The source has no numeric
+category ID. Empty relationships are `[]`.
+
+`pv_attendance.v1` is currently unreleased and unconsumed, per the product
+owner. This projection may therefore be revised while it remains unreleased and
+unconsumed; it does not imply compatibility gates have passed. The general
+schema-version bump rule applies to released or consumed contracts, not to this
+still-unreleased `pv_attendance.v1` revision.
+
 ## 3. Security and operational release gates
 
 These are sensitive PAX and event datasets. The `pv_events` SQL currently has
@@ -245,7 +306,7 @@ evidence that the deployed permissions or identities have been verified. The
 publisher writes create-only immutable
 objects below the product's release prefix and updates only
 `pax-vault/current.json` through GCS object-generation compare-and-swap. The
-producer must validate all nine datasets and the complete release before the
+producer must validate all ten datasets and the complete release before the
 pointer CAS; a failure leaves the prior pointer selected. Replacing pointer
 content requires the GCS content-replacement permission scoped to the exact
 `pax-vault/current.json` object. A generic metadata-update permission is not a
@@ -270,9 +331,10 @@ contracts, not passed gates or live validation evidence.
 The exact SQL projections and materialization rules live in
 `apps/analytics/analytics/sql/pv_*.sql`; unit contracts and schema-version
 declarations are in `apps/analytics/tests/`. Registry-declared current schema
-versions are `pv_regions.v1`, `pv_pax.v2`, `pv_kotter.v1`, `pv_upcoming.v1`,
+versions are `pv_regions.v1`, `pv_pax.v3`, `pv_kotter.v1`, `pv_upcoming.v1`,
 `pv_sectors.v2`, `pv_territories.v1`, `pv_areas.v2`, `pv_aos.v1`, and
-`pv_events.v2`. The approved schema-registry concept does not establish that an
+`pv_events.v2`, and `pv_attendance.v1`. The approved schema-registry concept
+does not establish that an
 external executable registry or consumer compatibility check has been
 furnished or run. The external compatibility gate must verify the exact
 projection, logical types, nullability, and rollback-eligible consumer support.

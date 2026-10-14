@@ -10,14 +10,14 @@
 
 <!-- OPTIONAL (Staging only, when Homepage is in the release): -->
 
-**Homepage has no Staging.** Merging the release PR publishes the Homepage straight to **production** (apps.f3nation.com).
+**Homepage has no Staging.** Merging the release PR published the Homepage straight to **production** (apps.f3nation.com).
 
 ## Who's who
 
-| Role         | What they do                                                                                                                                               | Person                 |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Release lead | Merges the release PR, runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys or changes the database. | @taterhead247 (Tackle) |
-| Monitor      | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                                                    | @BigGillyStyle (Crash) |
+| Role         | What they do                                                                                                                        | Person                 |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Release lead | Runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys or changes the database. | @taterhead247 (Tackle) |
+| Monitor      | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                             | @BigGillyStyle (Crash) |
 
 **Slack channel:** `#monorepo`. Announce the start there.
 
@@ -29,7 +29,9 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 ## Checklist
 
-### Step 0: Before release day
+### Step 0: Before you start
+
+- [ ] **Announce the start** in `#monorepo`. Owner: Release lead
 
 <!-- OPTIONAL (only if there is a migration): -->
 
@@ -37,35 +39,30 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 
 <!-- Add at most 2 more pre-checks, only if a migration needs one (e.g. a query that must return 0 first). -->
 
-### Step 1: Deploy (~20–30 min)
+<!-- OPTIONAL (Production only): -->
 
-- [ ] **Announce the start** in `#monorepo`. Owner: Release lead
-- [ ] **Merge release PR #{{PR}}.** The deploys start automatically. Owner: Release lead
+### Step 1: Deploy to Production (~20–30 min)
 
-<!-- Production: replace the item below with "Approve each paused production deploy job and wait for it to finish", and drop "Leave those paused". Watch: every `deploy-prod` job (environment `*-production`) turns green, and each Production service shows a new Ready revision. Stop if: a `deploy-prod` job fails (red). -->
+- [ ] **Approve each paused production deploy job and wait for it to finish** on the [Actions page](https://github.com/F3-Nation/f3-nation/actions). Owner: Release lead
+  - **Watch** (Monitor): every `deploy-prod` job (environment `*-production`) turns green, and each Production service shows a new Ready revision.
+  - **Stop if:** a `deploy-prod` job fails (red).
 
-- [ ] **Wait for the deploys to finish** on the [Actions page](https://github.com/F3-Nation/f3-nation/actions). Each app deploys to Staging, then pauses at "waiting for approval" for Production. Leave those paused. Owner: Release lead
-  - **Watch** (Monitor): every "deploy-staging" job turns green, and each Cloud Run service shows a new Ready revision (jobs: the job shows the new image; deploying does not run it). Homepage goes straight to GitHub Pages: no staging job, no Cloud Run revision.
-  - **Stop if:** a deploy-staging job fails (red).
-
-<!-- OPTIONAL (only if there is a migration): -->
-<!-- Production: if Staging's "Expected" line was not "none", move Step 2 before the production approval, unless the migration drops or renames something the old app still uses. State the chosen order in the Overview. -->
+<!-- OPTIONAL (only if there is a migration). Production: place this step before or after the deploy step, per the order stated in the Overview. -->
 
 ### Step 2: Run the database migration (~5 min)
 
-- [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `git fetch origin && git switch --detach "$(git log origin/main --grep '^chore: release main (#{{PR}})' --format=%H -n 1)" && pnpm install --frozen-lockfile`. Owner: Release lead
-  - **Expected:** `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
-  - **Stop if:** the tree isn't clean, or a different file prints.
-- [ ] **Confirm the migration target** from the repository root: `pnpm -F db with-env node -e 'const u=new URL(process.env.DATABASE_URL);console.log(u.host+u.pathname)'` prints the host and database name, never the password. Owner: Release lead
-  - **Expected:** it ends in `/{{DATABASE_NAME: f3_staging or f3_prod}}`.
-  - **Stop if:** it names any other database. Fix `packages/db/.env` before going on.
-- [ ] **Run the migration** from the repository root, pointed at the {{ENVIRONMENT}} database: `env -u CI pnpm db:migrate`. Owner: Release lead
+- [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `git fetch origin main && git switch --detach {{RELEASE_SHA}} && pnpm install --frozen-lockfile`. Owner: Release lead
+  - **Expected:** `git rev-parse HEAD` prints `{{RELEASE_SHA}}`, and `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
+  - **Stop if:** the tree isn't clean, fetch/checkout/install fails, the SHA differs, or a different file prints.
+- [ ] **Run the migration** from the repository root: `pnpm db:migrate:{{staging or prod}}` (not `pnpm db:migrate:local`, which only migrates a local database). It reads the database login from Secret Manager, checks the checkout's migrations are main's and agree with the database, lists the pending migrations, and asks you to type the database name. Owner: Release lead
+  - **Expected:** it lists the migration in `{{NEWEST_MIGRATION_FILE}}` (and any other migrations in this release) as pending, nothing else; lines starting `note:` are informational. Type `{{DATABASE_NAME: f3_staging or f3_prod}}` and it ends with `Done: {{DATABASE_NAME}} is at <that migration>.` If nothing is pending, the migration already ran: skip to the check query.
+  - **Stop if:** it prints `REFUSED`, or lists a migration this release doesn't include. Don't work around a refusal: post it in `#monorepo` and pause.
 - [ ] **Run [the check query](#check-query-after-the-migration).** Every result must match. Owner: Monitor
   - **Expected:** {{WHAT_ERRORS_APPEAR_BETWEEN_DEPLOY_AND_MIGRATION_OR_"none"}}
   - **Stop if:** the migration shows an error, or the check query doesn't match. Retry **once**; if it fails again, stop.
 - [ ] **Return to your branch:** `git switch -`. Owner: Release lead
 
-<!-- Production: drop Step 3 and renumber. -->
+<!-- Production: drop the "Create the test plan" step below and renumber. -->
 
 ### Step 3: Create the test plan
 

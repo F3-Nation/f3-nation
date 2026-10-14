@@ -26,11 +26,9 @@ import { MobileFilterSheet } from "../mobile-filter-sheet";
 import { ResetFilter } from "../reset-filter";
 import { StatusFilter } from "../status-filter";
 import { RegionFilter } from "../region-filter";
-import { AreaFilter } from "./area-filter";
-import { SectorFilter } from "./sector-filter";
-import { TerritoryFilter } from "./territory-filter";
 import { orgAdminConfig } from "./org-admin-config";
 import { findAncestorByType } from "./org-ancestry";
+import { OrgPickerFilter } from "./org-picker-filter";
 import { useOrgFilters } from "./use-org-filters";
 
 type Org = RouterOutputs["org"]["all"]["orgs"][number];
@@ -197,57 +195,30 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
     />
   );
   const extraFilters = [
-    ...(config.filters === "sector" ||
-    config.filters === "sectorTerritory" ||
-    config.filters === "sectorArea"
-      ? [
-          {
-            label: "Sector",
-            control: (
-              <SectorFilter
-                onSectorSelect={filters.handleSectorSelect}
-                selectedSectors={filters.selectedSectors}
-                sectors={filters.sectors}
-              />
-            ),
-          },
-        ]
-      : []),
-    ...(config.filters === "sectorTerritory"
-      ? [
-          {
-            label: "Territory",
-            control: (
-              <TerritoryFilter
-                onTerritorySelect={filters.handleTerritorySelect}
-                selectedTerritories={filters.selectedTerritories}
-                territories={filters.availableTerritories}
-              />
-            ),
-          },
-        ]
-      : []),
-    ...(config.filters === "sectorArea"
-      ? [
-          {
-            label: "Area",
-            control: (
-              <AreaFilter
-                onAreaSelect={filters.handleAreaSelect}
-                selectedAreas={filters.selectedAreas}
-                areas={filters.availableAreas}
-              />
-            ),
-          },
-        ]
-      : []),
+    ...filters.filterControls.map(
+      ({ orgType: tier, label, orgs, selected, onToggle }) => ({
+        key: tier,
+        label,
+        control: (
+          <OrgPickerFilter
+            orgType={tier}
+            orgs={orgs}
+            selected={selected}
+            onSelect={onToggle}
+          />
+        ),
+      }),
+    ),
+    // The AO table's region picker loads its own list rather than the
+    // hierarchy, so it is not a config tier.
     ...(config.filters === "region"
       ? [
           {
-            label: "Region",
+            key: "region",
+            label: orgTypeDisplay.region.label,
             control: (
               <RegionFilter
-                onRegionSelect={filters.handleRegionSelect}
+                onRegionSelect={(region) => filters.toggle("region", region)}
                 selectedRegions={filters.selectedRegions}
               />
             ),
@@ -285,8 +256,8 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
           <>
             <div className="hidden items-center gap-2 md:flex">
               {status}
-              {extraFilters.map(({ label, control }) => (
-                <span key={label} className="contents">
+              {extraFilters.map(({ key, control }) => (
+                <span key={key} className="contents">
                   {control}
                 </span>
               ))}
@@ -300,8 +271,8 @@ export function OrgTable({ orgType }: { orgType: OrgType }) {
                 <p className="mb-1 text-sm font-medium">Status</p>
                 {status}
               </div>
-              {extraFilters.map(({ label, control }) => (
-                <div key={label}>
+              {extraFilters.map(({ key, label, control }) => (
+                <div key={key}>
                   <p className="mb-1 text-sm font-medium">{label}</p>
                   {control}
                 </div>

@@ -208,15 +208,29 @@
     {
       "idx": 29,
       "version": "7",
-      "when": 1791338775788,
-      "tag": "0029_repoint_roles_to_user_role",
+      "when": 1791213464696,
+      "tag": "0029_drop_hand_made_views",
       "breakpoints": true
     },
     {
       "idx": 30,
       "version": "7",
-      "when": 1791338804109,
-      "tag": "0030_add_password_user_roles",
+      "when": 1791244800000,
+      "tag": "0030_public_audit_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791935682073,
+      "tag": "0031_repoint_roles_to_user_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791935688550,
+      "tag": "0032_add_password_user_roles",
       "breakpoints": true
     }
   ]

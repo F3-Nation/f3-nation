@@ -118,6 +118,11 @@ export async function captureException(
     // The innermost `.cause` — for a Drizzle-wrapped query failure, the only
     // place the real reason lives (see error-details.ts).
     const cause = rootCause(error);
+    // Audit sanitization deliberately drops the original cause (which can
+    // contain SQL and bind values) and retains only its validated SQLSTATE on
+    // the replacement error. Keep that code alertable without promoting
+    // arbitrary top-level error fields or restoring the unsafe cause chain.
+    const topLevelCode = cause ? undefined : sanitizedAuditCode(error);
     provider.getLogger("@acme/observability").emit({
       severityNumber: SeverityNumber.ERROR,
       severityText: "ERROR",
@@ -134,7 +139,11 @@ export async function captureException(
         ...(error.stack && !stack
           ? { [ATTR_EXCEPTION_STACKTRACE_DROPPED]: "redaction" }
           : {}),
-        ...(cause ? causeAttributes(cause) : {}),
+        ...(cause
+          ? causeAttributes(cause)
+          : topLevelCode
+            ? { [ATTR_EXCEPTION_CAUSE_CODE]: topLevelCode }
+            : {}),
       },
     });
     await provider.forceFlush();
@@ -226,18 +235,39 @@ function toLogAttributes(
  */
 function causeAttributes(cause: Error): Record<string, string> {
   const stack = redactStack(cause.stack, cause.message, redactCauseMessage);
-  const code = (cause as { code?: unknown }).code;
+  const code = errorCode(cause);
   return {
     [ATTR_EXCEPTION_CAUSE_TYPE]: cause.name,
     [ATTR_EXCEPTION_CAUSE_MESSAGE]: redactCauseMessage(cause.message),
-    ...(typeof code === "string" || typeof code === "number"
-      ? { [ATTR_EXCEPTION_CAUSE_CODE]: String(code) }
-      : {}),
+    ...(code ? { [ATTR_EXCEPTION_CAUSE_CODE]: code } : {}),
     ...(stack ? { [ATTR_EXCEPTION_CAUSE_STACKTRACE]: stack } : {}),
     ...(cause.stack && !stack
       ? { [ATTR_EXCEPTION_CAUSE_STACKTRACE_DROPPED]: "redaction" }
       : {}),
   };
+}
+
+function errorCode(error: Error): string | undefined {
+  try {
+    const code: unknown = Reflect.get(error, "code");
+    return typeof code === "string" || typeof code === "number"
+      ? String(code)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizedAuditCode(error: Error): string | undefined {
+  if (error.message !== "Audit history capture failed") return undefined;
+  try {
+    const code: unknown = Reflect.get(error, "code");
+    return typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)
+      ? code
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

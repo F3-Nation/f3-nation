@@ -41,8 +41,10 @@ gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1
 
 1. Checks prod and staging are at the same migration level, and that prod
    isn't ahead of the code in the job's image.
-2. Dumps prod's `public`, `auth`, `drizzle` (and `slackbot`) schemas with a
-   read-only login. Never `codex`, `regionpages` or `temp`: they hold PII
+2. Dumps prod's `public`, `auth`, `drizzle`, `slackbot`, `audit` and
+   `public_history` schemas with a read-only login. History table data is
+   excluded; the audit helpers and empty history tables keep source triggers
+   usable in the copy. Never `codex`, `regionpages` or `temp`: they hold PII
    nothing here classifies.
 3. Restores the dump into a throwaway Postgres inside the job's container and
    deletes the dump. Raw prod data never leaves that container.
@@ -145,8 +147,9 @@ It creates:
 
 - service account `staging-refresh@f3data.iam.gserviceaccount.com`;
 - DB login `staging_refresh`: on prod a plain read-only role
-  (`prod-login.sql`: SELECT on `public`/`auth`/`drizzle`/`slackbot`, member of
-  nothing, `default_transaction_read_only`), on staging a member of the roles
+  (`prod-login.sql`: SELECT on `public`/`auth`/`drizzle`/`slackbot`/`public_history`,
+  USAGE on those schemas and `audit`, member of nothing,
+  `default_transaction_read_only`), on staging a member of the roles
   that own staging's tables (`staging-login.sql`); passwords in Secret Manager
   (`staging-refresh-prod-db-password`, `staging-refresh-staging-db-password`);
 - the job (`tooling/scripts/Dockerfile.staging-refresh`, built with Cloud
@@ -175,6 +178,78 @@ given `PROD_DATABASE_URL`, `STAGING_DATABASE_URL`, an empty
 pnpm -F @acme/scripts staging-refresh -- --allow-staging-db f3_staging --dry-run
 pnpm -F @acme/scripts staging-refresh -- --allow-staging-db f3_staging --yes
 ```
+
+## Developer snapshot (`--snapshot-only`)
+
+The same job also produces the sanitized Prod snapshot that developers load
+locally. It never touches staging:
+
+```bash
+gcloud run jobs execute f3-staging-refresh --project f3data --region us-central1 --wait --args=--snapshot-only
+```
+
+It runs the refresh's dump, restore, and obfuscate-and-verify steps
+unchanged (the preflight is cut down, below), then cuts the snapshot from
+that same obfuscated, verified copy. It has no obfuscation rules or Prod
+login of its own. The steps match the job log's `1/6` to `6/6`:
+
+1. **Preflight.** Only the migration check differs: Prod must not be ahead
+   of the code in the job's image. The pg tool versions and the prod/copy
+   guards are kept, and there is no prod = staging gate or staging lock,
+   since nothing is loaded anywhere. The entrypoint builds no staging URL,
+   and the snapshot code never opens a staging connection.
+2. **Dump Prod**, as for a refresh.
+3. **Restore it into the throwaway copy**, as for a refresh.
+4. **Obfuscate and verify the copy** with
+   `--email-sink dev.staging-email-sink@f3nation.local`, so every fake address
+   is on a domain that can't receive mail. verify-target must pass 100%.
+5. **Trim the copy in place**, in one transaction. Only `SNAPSHOT_TABLES`
+   (`tooling/scripts/src/staging-refresh.config.ts`) are kept, and every
+   other table in `public`, `auth`, `slackbot` and `public_history` is
+   emptied. The trim refuses if a kept table has a foreign key into an
+   emptied one. Private event series (and series under them) and private
+   event instances (and instances of a private series) are deleted with
+   their link rows. `event_instances` keeps only `start_date` from 30 days
+   back to 90 days ahead (about 150k of ~1.76M rows), with their link rows.
+   `preblast`, `backblast`, `preblast_rich` and `backblast_rich` are set to
+   NULL; `pax_count` and `fng_count` are kept. `users.meta` is set to NULL:
+   the obfuscator only scrubs emails and phones in it, and its profile
+   answers are free text. Before trimming, the job refuses if a kept table
+   has a column that isn't in `obfuscate-db.columns.txt`.
+6. **Leak scan, package and publish.**
+   - verify-target runs again on the trimmed copy, so the scan covers
+     exactly what will be published. It fails on any email-shaped string
+     other than `dev.staging-email-sink+<tag>@f3nation.local`, any phone
+     number that isn't one of the obfuscator's `555-` fakes, and any Slack
+     mention (`<@U…>` / `<@W…>`) whose id isn't an obfuscator `Uf3…` id.
+   - `orgs`, `users`, `event_types`, `events` and `event_instances` must
+     each have rows (`SNAPSHOT_REQUIRED_TABLES`), so an empty copy can't
+     replace a good snapshot.
+   - If either check fails, nothing is built or uploaded. Otherwise a
+     `pg_dump --data-only --format=custom` of the kept tables, plus
+     `manifest.json`, goes into one uncompressed tar:
+     `gs://f3-public-images/dev-snapshots/f3-dev-snapshot.tar`. Each run
+     overwrites it, with `Cache-Control: no-cache`. The manifest holds
+     `formatVersion`, `exportedAt`, the newest migration Prod had applied
+     (`migration.tag`), the `event_instances` window, and the row count and
+     column names of every table.
+
+The last line is `DEV SNAPSHOT: OK` or `DEV SNAPSHOT FAILED — nothing was
+published; staging was not touched.` As for a refresh, the logs hold
+counts, never row data.
+
+Outside Cloud Run the snapshot is never uploaded. Pass an absolute
+`--snapshot-out <file>` to write it locally instead:
+
+```bash
+pnpm -F @acme/scripts staging-refresh -- --snapshot-only --snapshot-out /tmp/f3-dev-snapshot.tar
+```
+
+`--snapshot-only` refuses `--yes`, `--dry-run`, `--reuse-existing-stash`,
+`--skip-slackbot-restart` and `--allow-staging-db`, and a refresh refuses
+`--snapshot-out`. Adding a table to
+`SNAPSHOT_TABLES` publishes it to a public bucket, so review it as a PII
+decision.
 
 ## Pipeline design
 
@@ -205,10 +280,14 @@ it is, learned on the hand-run refreshes.
    - **Match staging's migration level**, not the repo's. Staging's
      `drizzle.__drizzle_migrations_<db>` says where it is; obfuscate the copy
      at that level and do not migrate it further.
-   - **Dump only `public`, `auth` and `drizzle` from prod.** Prod also has
-     `codex`, `regionpages` and `temp`; `codex.user_submissions` and
-     `codex.admins` hold names and emails this script does not classify.
-   - **Load data only** into staging's existing tables. Its schemas belong
+   - **Dump only the reviewed schemas from prod:** `public`, `auth`,
+     `drizzle`, `slackbot`, `audit` and `public_history`. Exclude all
+     `public_history` table data while retaining audit helpers, history
+     definitions and source triggers. Prod also has `codex`, `regionpages`
+     and `temp`; their PII is not classified here.
+   - **Load data only** from `public`, `auth` and `slackbot` into staging's
+     existing tables. Its existing audit history stays there; capture triggers
+     may record the refreshed, obfuscated source rows. Its schemas belong
      to several roles (`dev_generic`, `tackle`, `app_auth`) whose grants the
      other apps need; a drop-and-restore loses them. Skip any prod table
      staging doesn't have.
@@ -457,6 +536,34 @@ URL repointed at its staging equivalent; **KEEP**: non-PII, left untouched.
 | `api_keys`                                                                                                                                     | all                                                          | DELETE                     | Live API secrets; cascades `roles_x_api_keys_x_org`. Staging gets its own keys. With `--preserve-local-seed`, `local-*` keys survive                                                                                                                                                                                                                                        |
 | `permissions`, `roles`, `event_types`, `event_tags`, `attendance_types`, join tables (`*_x_*` except `orgs_x_slack_spaces`), `alembic_version` | all                                                          | KEEP                       | Reference data / integer-FK join rows, no PII                                                                                                                                                                                                                                                                                                                               |
 
+### `public_history` schema
+
+All eight columns (`id`, `row_id`, `op`, `changed_at`, `changed_by`,
+`changed_via`, `old_row`, `new_row`) in the 26 history tables enabled by
+[migration 0030](../packages/db/drizzle/0030_public_audit_history.sql) are
+classified **TRUNCATE** in disposable refresh copies. JSON snapshots can retain
+names, phones, emails and other PII that no longer exists in the source tables.
+The dump excludes history data but retains definitions and `audit` helpers.
+Obfuscation truncates the explicitly reviewed history tables **after** all source
+transforms, because capture triggers record original values in `old_row` while
+those transforms run. Dry runs report counts without deleting snapshots.
+
+The intermediate copy must have empty history before loading. History is never
+loaded into staging, and staging's existing history is preserved. This policy
+does not delete production history or authorize sanitizing an existing deployed
+history dataset. New history tables and columns still require review through
+both coverage gates.
+
+After migration 0030, the refresh's production login needs reviewed read access
+to the history schema before the next refresh. Even a schema-only `pg_dump`
+locks history tables and requires SELECT. The provisioning SQL includes those
+read-only grants and no audit-helper EXECUTE grant; an operator must approve and
+apply the provisioning update. The refresh itself does not grant privileges.
+Every migration that calls `audit.enable_tracking`, including changing an
+existing table's capture options, requires an operator-approved reapplication
+of `prod-login.sql` before the next refresh: that helper revokes history-reader
+grants, overriding default privileges.
+
 ### `slackbot` schema
 
 | Table                                                                   | Column(s) | Classification | Notes                                                                                                                                                                                                                                                          |
@@ -554,6 +661,9 @@ legacy. Two things are specific to them:
      and `auth` schemas except `dev.staging-email-sink+<tag>@f3nation.com`;
    - every user is renamed to `F3/First/Last <id>` and emailed at `sink+<id>`;
    - sessions/tokens/api-key tables and the Slack tables are empty;
+   - all 26 history tables are empty, including historical-only PII and OLD
+     values generated during obfuscation; audit helpers and capture triggers
+     remain present;
    - row counts of all kept tables are unchanged (referential integrity);
    - the same source email maps to the same fake across tables;
    - prose (backblast, preblast, descriptions, Block Kit) is lorem ipsum,
@@ -568,7 +678,15 @@ legacy. Two things are specific to them:
      about a member that isn't on the sink.
 4. Runs `obfuscate-db:verify-target` (below) against the obfuscated sandbox,
    so the real-copy suite is exercised on every PR too.
-5. Tears the container down and restores `packages/env/.env`.
+5. Checks the developer snapshot on a clone of the planted sandbox,
+   obfuscated with the `@f3nation.local` sink: the trim keeps exactly the
+   −30/+90-day window (with link rows and counts) and nulls every blast; it
+   empties every other table; the leak scan passes; an unreviewed column on
+   a kept table is refused; and a planted address stops the run before the
+   file is built or delivered. It then runs `staging-refresh --snapshot-only`
+   itself, with `STAGING_DATABASE_URL` pointing at a listener that counts
+   connections: preflight completes, and staging gets no connection.
+6. Tears the container down and restores `packages/env/.env`.
 
 CI runs it on every PR (`obfuscate-db-verify` in `.github/workflows/ci.yml`),
 so a migration that adds an unclassified table or column fails on its own PR
@@ -583,7 +701,8 @@ run with `users` unchanged).
 (`DATABASE_URL=… pnpm -F @acme/scripts obfuscate-db:verify-target`) is a
 read-only assertion suite for a database the obfuscator has already run
 against. Run it on the intermediate instance after step 2 and before the
-load in step 3. It sweeps every text/json column of `public` and `auth` for
+load in step 3. It requires every `public_history` table to be empty and sweeps
+every text/json column of `public` and `auth` for
 non-obfuscated emails, asserts the secret/session/token tables are empty,
 checks the deterministic cross-table mapping, confirms OAuth client secrets
 are invalidated, and checks attendance FK integrity. It refuses any database

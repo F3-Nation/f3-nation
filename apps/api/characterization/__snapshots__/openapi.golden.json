@@ -3432,7 +3432,7 @@
         ]
       },
       "post": {
-        "description": "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
+        "description": "Create a new event or update an existing one. Requires editor role for the event's organization; deactivating an active event requires admin role. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
         "operationId": "event.crupdate",
         "parameters": [
           {
@@ -9244,6 +9244,231 @@
                               "description": "Location ID",
                               "type": "number"
                             },
+                            "instanceOrgs": {
+                              "description": "AO and region context per visible upcoming instance, soonest first; populated only when the location has no series events",
+                              "items": {
+                                "properties": {
+                                  "instanceId": {
+                                    "description": "Event instance ID",
+                                    "type": "number"
+                                  },
+                                  "parentEmail": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentFacebook": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentInstagram": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentLogo": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentName": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentPhone": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentTwitter": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentWebsite": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionEmail": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionFacebook": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionInstagram": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionLogo": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionName": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionPhone": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionTwitter": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionType": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionWebsite": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "instanceId",
+                                  "parentId",
+                                  "parentLogo",
+                                  "parentName",
+                                  "parentWebsite",
+                                  "parentEmail",
+                                  "parentPhone",
+                                  "parentTwitter",
+                                  "parentFacebook",
+                                  "parentInstagram",
+                                  "regionId",
+                                  "regionName",
+                                  "regionLogo",
+                                  "regionWebsite",
+                                  "regionEmail",
+                                  "regionPhone",
+                                  "regionTwitter",
+                                  "regionFacebook",
+                                  "regionInstagram",
+                                  "regionType"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
                             "isActive": {
                               "description": "Whether the location is active",
                               "type": "boolean"
@@ -9612,6 +9837,7 @@
                             "regionFacebook",
                             "regionInstagram",
                             "regionType",
+                            "instanceOrgs",
                             "fullAddress",
                             "events"
                           ],
@@ -10174,15 +10400,19 @@
               "schema": {
                 "properties": {
                   "description": {
+                    "maxLength": 5000,
                     "type": "string"
                   },
                   "email": {
+                    "maxLength": 320,
                     "type": "string"
                   },
                   "subject": {
+                    "maxLength": 200,
                     "type": "string"
                   },
                   "type": {
+                    "maxLength": 200,
                     "type": "string"
                   }
                 },
@@ -11855,7 +12085,7 @@
         ]
       },
       "post": {
-        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → territory → area → region → ao).",
+        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → territory → area → region → ao). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances.",
         "operationId": "org.crupdate",
         "parameters": [
           {
@@ -20086,7 +20316,7 @@
         ]
       },
       "post": {
-        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set, and are only returned, if requester has admin access.",
+        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.crupdate",
         "parameters": [
           {
@@ -20542,7 +20772,7 @@
     },
     "/v1/user/email/{email}": {
       "get": {
-        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
+        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.byEmail",
         "parameters": [
           {
@@ -20565,7 +20795,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
               "type": "boolean"
             }
           }
@@ -21153,7 +21383,7 @@
     },
     "/v1/user/id/{id}": {
       "get": {
-        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester has admin role for any of the user's organizations.",
+        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.byId",
         "parameters": [
           {
@@ -21175,7 +21405,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
               "type": "boolean"
             }
           }

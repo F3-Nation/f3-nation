@@ -704,7 +704,40 @@ const KEPT_TABLES = new Set([
   "auth.drizzle_migrations",
 ]);
 
+// Explicitly reviewed history tables: discard snapshots in disposable refresh
+// copies, including OLD values recorded while obfuscating source rows. Keep the
+// schemas, helpers and triggers; new history tables still fail the coverage gate.
+const AUDIT_HISTORY_TABLES = [
+  "public_history.achievements",
+  "public_history.achievements_x_users",
+  "public_history.api_keys",
+  "public_history.attendance",
+  "public_history.attendance_types",
+  "public_history.attendance_x_attendance_types",
+  "public_history.event_instances",
+  "public_history.event_instances_x_event_types",
+  "public_history.event_tags",
+  "public_history.event_tags_x_event_instances",
+  "public_history.event_tags_x_events",
+  "public_history.event_types",
+  "public_history.events",
+  "public_history.events_x_event_types",
+  "public_history.locations",
+  "public_history.orgs",
+  "public_history.orgs_x_slack_spaces",
+  "public_history.permissions",
+  "public_history.positions",
+  "public_history.positions_x_orgs_x_users",
+  "public_history.roles",
+  "public_history.roles_x_api_keys_x_org",
+  "public_history.roles_x_permissions",
+  "public_history.roles_x_users_x_org",
+  "public_history.update_requests",
+  "public_history.users",
+];
+
 const TOUCHED_TABLES = new Set([
+  ...AUDIT_HISTORY_TABLES,
   "public.attendance_types",
   "public.event_tags",
   "public.event_types",
@@ -1095,19 +1128,32 @@ async function obfuscate(sql: Sql): Promise<void> {
   });
 
   // ---- locations used only by private events -----------------------------------
-  // A location whose every event (series and instances alike) is private is
-  // likely a private residence, so it isn't carried into staging. Locations
-  // with no events (useful for testing) and any location a public event uses
-  // are kept. Every reference to a location is nullable, so the private
+  // A location is dropped when every event and instance using it is private,
+  // either flagged itself or under a private ancestor series (a false flag
+  // doesn't override that). Such a location is likely a private residence.
+  // Locations with no events (useful for testing) and any location a
+  // non-private row uses are kept. Every reference is nullable, so private
   // events are kept and just lose their location; nothing else is deleted.
   const privateOnlyLocations = (
     await sql<{ id: number }[]>`
+      WITH RECURSIVE private_series AS (
+        SELECT id FROM events WHERE is_private
+        -- UNION (not ALL) dedupes ids, so series_id cycles terminate
+        UNION
+        SELECT child.id FROM events child
+        JOIN private_series parent ON child.series_id = parent.id
+      )
       SELECT location_id AS id FROM (
-        SELECT location_id, is_private FROM events
-        WHERE location_id IS NOT NULL
+        SELECT e.location_id, private_series.id IS NOT NULL AS is_private
+        FROM events e
+        LEFT JOIN private_series ON private_series.id = e.id
+        WHERE e.location_id IS NOT NULL
         UNION ALL
-        SELECT location_id, is_private FROM event_instances
-        WHERE location_id IS NOT NULL
+        SELECT ei.location_id,
+          ei.is_private OR private_series.id IS NOT NULL AS is_private
+        FROM event_instances ei
+        LEFT JOIN private_series ON private_series.id = ei.series_id
+        WHERE ei.location_id IS NOT NULL
       ) refs
       GROUP BY location_id
       HAVING bool_and(is_private)`
@@ -1702,6 +1748,11 @@ async function obfuscate(sql: Sql): Promise<void> {
       0,
     );
   }
+
+  // Source triggers can capture original PII in OLD rows during the transforms
+  // above. Purge history last so neither imported nor newly captured snapshots
+  // survive verification or enter staging. Dry runs only report row counts.
+  await truncateTables(sql, AUDIT_HISTORY_TABLES);
 }
 
 // ---------------------------------------------------------------------------

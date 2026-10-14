@@ -30,13 +30,17 @@ END $$;
 ALTER ROLE staging_refresh SET default_transaction_read_only = on;
 
 -- Read access to the schemas the refresh dumps. Granting needs the owners' rights:
+-- public_history is dumped without rows, but pg_dump still needs SELECT to lock
+-- its tables. This read-only login does not receive audit helper EXECUTE grants.
 -- borrow each owning role just long enough (the pattern that set up spuds on
--- 2026-10-07), including default privileges so tables created later stay readable.
+-- 2026-10-07), including default privileges for ordinary tables created later.
+-- audit.enable_tracking removes history reader grants, including defaults:
+-- reapply this provisioning after every migration that calls it.
 -- A role is borrowed only if the admin login isn't already in it.
 DO $$
 DECLARE
   schemas text[] := ARRAY(SELECT nspname::text FROM pg_namespace
-                          WHERE nspname IN ('public', 'auth', 'drizzle', 'slackbot'));
+                          WHERE nspname IN ('public', 'auth', 'drizzle', 'slackbot', 'audit', 'public_history'));
   owners text[];
   borrowed text[] := '{}';
   r text;
@@ -84,7 +88,7 @@ DECLARE unreadable text; memberships text;
 BEGIN
   SELECT string_agg(n.nspname || '.' || c.relname, ', ') INTO unreadable
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname IN ('public', 'auth', 'drizzle', 'slackbot') AND c.relkind IN ('r', 'p', 'm', 'S')
+  WHERE n.nspname IN ('public', 'auth', 'drizzle', 'slackbot', 'audit', 'public_history') AND c.relkind IN ('r', 'p', 'm', 'S')
     AND NOT has_table_privilege('staging_refresh', c.oid, 'SELECT');
   IF unreadable IS NOT NULL THEN
     RAISE EXCEPTION 'staging_refresh cannot read: %', unreadable;
@@ -99,5 +103,5 @@ SELECT n.nspname AS schema, count(*) AS objects,
        count(*) FILTER (WHERE has_table_privilege('staging_refresh', c.oid, 'SELECT')) AS readable,
        count(*) FILTER (WHERE has_table_privilege('staging_refresh', c.oid, 'INSERT, UPDATE, DELETE, TRUNCATE')) AS writable
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname IN ('public', 'auth', 'drizzle', 'slackbot') AND c.relkind IN ('r', 'p', 'm', 'S')
+WHERE n.nspname IN ('public', 'auth', 'drizzle', 'slackbot', 'audit', 'public_history') AND c.relkind IN ('r', 'p', 'm', 'S')
 GROUP BY 1 ORDER BY 1;

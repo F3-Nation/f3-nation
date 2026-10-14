@@ -63,15 +63,8 @@ export function migrationGate(
     );
   }
 
-  const unknown = prod.filter((r) => !tagOf.has(r.createdAt));
-  if (unknown.length > 0) {
-    errors.push(
-      `prod has ${unknown.length} migration(s) this build's packages/db/drizzle/meta/_journal.json ` +
-        `doesn't know (${unknown.map((r) => r.createdAt).join(", ")}): the copy would be ahead of the ` +
-        `code that classifies it. Rebuild the refresh image from current main ` +
-        `(tooling/scripts/staging-refresh/setup.sh) and run again.`,
-    );
-  }
+  const ahead = prodAheadOfImage(prod, journal);
+  if (ahead) errors.push(ahead);
 
   const prodSet = new Set(prod.map((r) => r.createdAt));
   const stagingSet = new Set(staging.map((r) => r.createdAt));
@@ -99,6 +92,36 @@ export function migrationGate(
     );
   }
   return { errors, warnings };
+}
+
+/**
+ * Why prod (so the copy) is ahead of the code that classifies it, if it is:
+ * a migration prod applied that this build's journal doesn't know.
+ */
+export function prodAheadOfImage(
+  prod: AppliedMigration[],
+  journal: JournalEntry[],
+): string | undefined {
+  const known = new Set(journal.map((j) => j.when));
+  const unknown = prod.filter((r) => !known.has(r.createdAt));
+  if (unknown.length === 0) return undefined;
+  return (
+    `prod has ${unknown.length} migration(s) this build's packages/db/drizzle/meta/_journal.json ` +
+    `doesn't know (${unknown.map((r) => r.createdAt).join(", ")}): the copy would be ahead of the ` +
+    `code that classifies it. Rebuild the refresh image from current main ` +
+    `(tooling/scripts/staging-refresh/setup.sh) and run again.`
+  );
+}
+
+/** The newest migration prod applied, by its journal tag. */
+export function latestMigration(
+  prod: AppliedMigration[],
+  journal: JournalEntry[],
+): { tag: string; createdAt: number } {
+  const createdAt = prod.reduce((max, r) => Math.max(max, r.createdAt), 0);
+  const tag = journal.find((j) => j.when === createdAt)?.tag;
+  if (!tag) throw new Error(`no journal entry for created_at ${createdAt}`);
+  return { tag, createdAt };
 }
 
 /** table ("schema.table") -> column -> type */

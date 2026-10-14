@@ -151,6 +151,29 @@ export const isDuplicateEmailError = (error: unknown): boolean => {
   );
 };
 
+interface PgErrorFields {
+  code: string;
+  constraint_name?: string;
+}
+
+const hasPgCode = (value: unknown): value is PgErrorFields =>
+  typeof value === "object" &&
+  value !== null &&
+  "code" in value &&
+  typeof (value as { code?: unknown }).code === "string";
+
+// Returns the Postgres error carried by `error`. The postgres-js/drizzle driver
+// can wrap the real PostgresError in `.cause`, so check both levels.
+export const getPgError = (error: unknown): PgErrorFields | undefined => {
+  if (hasPgCode(error)) return error;
+  if (error instanceof Error && hasPgCode(error.cause)) return error.cause;
+  return undefined;
+};
+
+// Helper to check if error is a foreign-key violation (Postgres 23503).
+export const isForeignKeyViolationError = (error: unknown): boolean =>
+  getPgError(error)?.code === "23503";
+
 // Base input schema object (before optional)
 export const userListInputSchema = z.object({
   roles: arrayOrSingle(z.enum(UserRole))
@@ -338,12 +361,16 @@ export const buildUserListQuery = async ({
 
   const homeRegion = aliasedTable(schema.orgs, "homeRegion");
 
+  // Match the whitespace removed by the displayed name's JavaScript trim().
+  const fullNameTrimCharacters =
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
+
   const sortedColumns = [
     ...getSortingColumns(
       input?.sorting,
       {
         id: schema.users.id,
-        name: schema.users.firstName,
+        name: sql`btrim(concat_ws(' ', ${schema.users.firstName}, ${schema.users.lastName}), ${fullNameTrimCharacters})`,
         f3Name: schema.users.f3Name,
         roles: sql`MIN(${schema.roles.name})`,
         status: schema.users.status,
@@ -496,7 +523,46 @@ export const buildSingleUserQuery = async (
   };
 };
 
-// Helper to check PII access for a user
+export const hasRoleOnAny = async (
+  ctx: Context,
+  orgIds: number[],
+  roleName: "editor" | "admin",
+): Promise<boolean> => {
+  for (const orgId of new Set(orgIds)) {
+    const { success } = await checkHasRoleOnOrg({
+      orgId,
+      session: ctx.session,
+      db: ctx.db,
+      roleName,
+    });
+    if (success) return true;
+  }
+  return false;
+};
+
+/**
+ * Orgs whose editors may edit a user's profile: the home region, else any org
+ * the user holds a role on, else the nation.
+ */
+export const getProfileScopeOrgIds = async (
+  ctx: Context,
+  homeRegionId: number | null,
+  roleOrgIds: number[],
+): Promise<number[]> => {
+  if (homeRegionId) return [homeRegionId];
+  if (roleOrgIds.length > 0) return roleOrgIds;
+  const nations = await ctx.db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.orgType, "nation"));
+  return nations.map(({ id }) => id);
+};
+
+/**
+ * PII access for an existing user: editors and admins of the orgs that scope
+ * their profile (checkHasRoleOnOrg walks up the org tree), or admins of an org
+ * the user has a role on. user.crupdate applies the same rule.
+ */
 export const checkUserPiiAccess = async ({
   ctx,
   userId,
@@ -504,26 +570,24 @@ export const checkUserPiiAccess = async ({
   ctx: Context;
   userId: number;
 }): Promise<boolean> => {
-  // Get the user's orgs to check if requester is admin of any
-  const userOrgs = await ctx.db
-    .selectDistinct({
-      orgId: schema.rolesXUsersXOrg.orgId,
-    })
-    .from(schema.rolesXUsersXOrg)
-    .where(eq(schema.rolesXUsersXOrg.userId, userId));
+  const [user] = await ctx.db
+    .select({ homeRegionId: schema.users.homeRegionId })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId));
+  if (!user) return false;
 
-  // Check if requester is an admin for any of the user's orgs
-  for (const userOrg of userOrgs) {
-    const { success } = await checkHasRoleOnOrg({
-      orgId: userOrg.orgId,
-      session: ctx.session,
-      db: ctx.db,
-      roleName: "admin",
-    });
-    if (success) {
-      return true;
-    }
-  }
+  const roleOrgIds = (
+    await ctx.db
+      .selectDistinct({ orgId: schema.rolesXUsersXOrg.orgId })
+      .from(schema.rolesXUsersXOrg)
+      .where(eq(schema.rolesXUsersXOrg.userId, userId))
+  ).map(({ orgId }) => orgId);
 
-  return false;
+  return (
+    (await hasRoleOnAny(
+      ctx,
+      await getProfileScopeOrgIds(ctx, user.homeRegionId, roleOrgIds),
+      "editor",
+    )) || (await hasRoleOnAny(ctx, roleOrgIds, "admin"))
+  );
 };
