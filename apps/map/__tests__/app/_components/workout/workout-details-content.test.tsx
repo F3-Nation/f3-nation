@@ -6,10 +6,11 @@
  * warn, rather than render a near-empty panel, when none of them does.
  */
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RouterOutputs } from "~/orpc/types";
+import * as modal from "~/utils/store/modal";
 
 type UpcomingInstance =
   RouterOutputs["map"]["location"]["upcomingInstances"][number];
@@ -100,8 +101,14 @@ const locationEvent = (
   ...overrides,
 });
 
+type InstanceOrgs = NonNullable<
+  LocationWorkout["location"]
+>["instanceOrgs"][number];
+
 const locationWorkout = (
   events: NonNullable<LocationWorkout["location"]>["events"],
+  instanceOrgs: InstanceOrgs[] = [],
+  orgs: Partial<Omit<InstanceOrgs, "instanceId">> = {},
 ): LocationWorkout => ({
   location: {
     id: 10,
@@ -141,6 +148,8 @@ const locationWorkout = (
     regionFacebook: null,
     regionInstagram: null,
     regionType: "region",
+    ...orgs,
+    instanceOrgs,
     fullAddress: "123 Main St, Charlotte, NC",
     events,
   },
@@ -165,9 +174,9 @@ describe("WorkoutDetailsContent event resolution", () => {
   beforeEach(() => {
     queryStates.clear();
     enabledCalls.length = 0;
-    // The location always resolves with at least one event — the API returns
-    // `location: null` when it has none, so the panel can never see an empty
-    // events array alongside a non-null location.
+    // Most locations carry a series event. An empty events array alongside a
+    // non-null location means the location's only workouts are upcoming
+    // instances; that case has its own describe block below.
     queryStates.set("locationWorkout", {
       data: locationWorkout([locationEvent()]),
     });
@@ -305,6 +314,492 @@ describe("WorkoutDetailsContent event resolution", () => {
     renderPanel(-5);
 
     expect(warning()).toBeTruthy();
+  });
+});
+
+describe("WorkoutDetailsContent with one-off workouts", () => {
+  // A one-off workout: no series, so the API returns the location with no
+  // events and the panel synthesizes the event from the instance list.
+  const oneOff = {
+    id: 5,
+    seriesId: null,
+    locationId: 10,
+    startDate: "2026-05-17",
+    startTime: "0001",
+    endTime: "0100",
+    seriesException: null,
+    highlight: false,
+    name: "Third F Gathering",
+    lat: 35.5,
+    lon: -80.5,
+    aoName: "Alpha AO",
+    aoLogo: null,
+    locationAddress: "123 Main St",
+    locationAddress2: null,
+    locationCity: "Charlotte",
+    locationState: "NC",
+    locationCountry: "US",
+    fullAddress: "123 Main St, Charlotte, NC",
+    eventTypes: [{ id: 3, name: "3rd F" }],
+  } satisfies UpcomingInstance;
+
+  beforeEach(() => {
+    queryStates.clear();
+    enabledCalls.length = 0;
+    queryStates.set("locationWorkout", { data: locationWorkout([]) });
+  });
+
+  it("renders the instance when the sidebar chip supplies its negative id", () => {
+    queryStates.set("upcomingInstances", { data: [oneOff] });
+
+    renderPanel(-5);
+
+    expect(warning()).toBeNull();
+    expect(screen.getByTestId("chip--5")).toBeTruthy();
+    expect(screen.getByText("Copy Link to Event")).toBeTruthy();
+  });
+
+  // A map pin click opens the panel with no event id; the default selection
+  // can't come from the (empty) series list.
+  it("selects the instance by default when no event id is provided", () => {
+    queryStates.set("upcomingInstances", { data: [oneOff] });
+
+    renderPanel(null);
+
+    expect(warning()).toBeNull();
+    expect(screen.getByText("Copy Link to Event")).toBeTruthy();
+  });
+
+  it("holds off warning while the instance list backing the default selection loads", () => {
+    renderPanel(null);
+
+    expect(warning()).toBeNull();
+  });
+
+  // Instances at one location can come from different orgs. The location-level
+  // org fields only describe the soonest, so the panel must take the selected
+  // instance's AO and region from its own `instanceOrgs` entry.
+  describe("with workouts from different orgs", () => {
+    const orgsFor = (
+      instanceId: number,
+      ao: string,
+      region: string,
+    ): InstanceOrgs => ({
+      instanceId,
+      parentId: instanceId * 100,
+      parentLogo: null,
+      parentName: ao,
+      parentWebsite: `https://${ao.toLowerCase().replace(/ /g, "-")}.example`,
+      parentEmail: null,
+      parentPhone: null,
+      parentTwitter: null,
+      parentFacebook: null,
+      parentInstagram: null,
+      regionId: instanceId * 1000,
+      regionName: region,
+      regionLogo: null,
+      regionWebsite: null,
+      regionEmail: null,
+      regionPhone: null,
+      regionTwitter: null,
+      regionFacebook: null,
+      regionInstagram: null,
+      regionType: "region",
+    });
+    const laterOneOff = {
+      ...oneOff,
+      id: 6,
+      startDate: "2026-05-20",
+      name: "Bravo Convergence",
+      aoName: "Bravo AO",
+    } satisfies UpcomingInstance;
+
+    beforeEach(() => {
+      queryStates.set("locationWorkout", {
+        data: locationWorkout(
+          [],
+          [orgsFor(5, "Alpha AO", "Metro"), orgsFor(6, "Bravo AO", "Uptown")],
+        ),
+      });
+      queryStates.set("upcomingInstances", { data: [oneOff, laterOneOff] });
+    });
+
+    const regionHeading = (region: string) =>
+      screen.queryByText(`About F3 ${region}`);
+    const aoContactLink = (ao: string) =>
+      document.querySelector(
+        `a[href^="https://${ao.toLowerCase().replace(/ /g, "-")}.example"]`,
+      );
+
+    it("shows the later workout's own AO and region when it is selected", () => {
+      renderPanel(-6);
+
+      expect(screen.getByAltText("Logo for Bravo AO")).toBeTruthy();
+      expect(regionHeading("Uptown")).toBeTruthy();
+      expect(regionHeading("Metro")).toBeNull();
+      expect(aoContactLink("Bravo AO")).toBeTruthy();
+      expect(aoContactLink("Alpha AO")).toBeNull();
+    });
+
+    it("follows the selection when switching between the workouts' chips", () => {
+      const { rerender } = renderPanel(-5);
+      expect(screen.getByAltText("Logo for Alpha AO")).toBeTruthy();
+      expect(regionHeading("Metro")).toBeTruthy();
+
+      rerender(
+        <WorkoutDetailsContent
+          locationId={10}
+          providedEventId={-6}
+          chipSize="small"
+        />,
+      );
+      expect(screen.getByAltText("Logo for Bravo AO")).toBeTruthy();
+      expect(regionHeading("Uptown")).toBeTruthy();
+      expect(aoContactLink("Bravo AO")).toBeTruthy();
+
+      rerender(
+        <WorkoutDetailsContent
+          locationId={10}
+          providedEventId={-5}
+          chipSize="small"
+        />,
+      );
+      expect(screen.getByAltText("Logo for Alpha AO")).toBeTruthy();
+      expect(regionHeading("Metro")).toBeTruthy();
+      expect(aoContactLink("Alpha AO")).toBeTruthy();
+    });
+
+    // The instance list arrives unordered; the default must still be the
+    // soonest, matching the API's location-level fallback.
+    it("defaults to the soonest workout regardless of list order", () => {
+      queryStates.set("upcomingInstances", { data: [laterOneOff, oneOff] });
+
+      renderPanel(null);
+
+      expect(screen.getByAltText("Logo for Alpha AO")).toBeTruthy();
+      expect(regionHeading("Metro")).toBeTruthy();
+    });
+
+    // Same day: the earlier start time wins even when it has the higher id,
+    // so an id-only tie-break would pick the wrong workout.
+    it("defaults to the earlier start time on the same day", () => {
+      const later = { ...oneOff, id: 5, startTime: "0600" };
+      const earlier = {
+        ...laterOneOff,
+        startDate: oneOff.startDate,
+        startTime: "0500",
+      };
+      queryStates.set("upcomingInstances", { data: [later, earlier] });
+
+      renderPanel(null);
+
+      expect(screen.getByAltText("Logo for Bravo AO")).toBeTruthy();
+      expect(regionHeading("Uptown")).toBeTruthy();
+    });
+
+    // Postgres ASC puts a null startTime last, like the API's ordering.
+    it("ranks a workout with no start time last on the same day", () => {
+      const untimed = { ...oneOff, id: 5, startTime: null };
+      const timed = {
+        ...laterOneOff,
+        startDate: oneOff.startDate,
+        startTime: "2300",
+      };
+      queryStates.set("upcomingInstances", { data: [untimed, timed] });
+
+      renderPanel(null);
+
+      expect(screen.getByAltText("Logo for Bravo AO")).toBeTruthy();
+      expect(regionHeading("Uptown")).toBeTruthy();
+    });
+
+    // The cached instance list can be newer than locationWorkout. Showing no
+    // AO or region beats showing another workout's contact links.
+    it("shows no AO or region when the selected workout has no orgs entry", () => {
+      queryStates.set("locationWorkout", {
+        data: locationWorkout([], [orgsFor(5, "Alpha AO", "Metro")]),
+      });
+
+      renderPanel(-6);
+
+      expect(screen.getAllByText("Bravo Convergence").length).toBeGreaterThan(
+        0,
+      );
+      expect(screen.queryByAltText("Logo for Alpha AO")).toBeNull();
+      expect(aoContactLink("Alpha AO")).toBeNull();
+      expect(regionHeading("Metro")).toBeNull();
+    });
+
+    describe("at a location that also has a recurring workout", () => {
+      const recurringOrgs = {
+        ...orgsFor(1, "Alpha AO", "Metro"),
+        parentName: "Alpha AO",
+        regionName: "Metro",
+        parentLogo: "https://alpha-ao.example/logo.png",
+        parentEmail: "alpha@ao.example",
+        regionLogo: "https://metro.example/logo.png",
+        regionWebsite: "https://metro.example",
+        regionEmail: "metro@region.example",
+      };
+      const oneOffOrgs = {
+        ...orgsFor(6, "Bravo AO", "Uptown"),
+        parentName: "Bravo AO",
+        regionName: "Uptown",
+        parentLogo: "https://bravo-ao.example/logo.png",
+        parentEmail: "bravo@ao.example",
+        regionLogo: "https://uptown.example/logo.png",
+        regionWebsite: "https://uptown.example",
+        regionEmail: "uptown@region.example",
+      };
+      const { instanceId: _recurringInstanceId, ...recurringLocationOrgs } =
+        recurringOrgs;
+      const recurringEventResponse: EventById = {
+        event: {
+          id: 1,
+          name: "Monday Bootcamp",
+          description: null,
+          isActive: true,
+          isPrivate: false,
+          location: "Alpha AO",
+          locationId: 10,
+          startDate: null,
+          endDate: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          email: null,
+          highlight: false,
+          created: "2026-01-01",
+          meta: null,
+          aos: [{ aoId: 5, aoName: "Alpha AO" }],
+          regions: [{ regionId: 2, regionName: "Metro" }],
+          eventTypes: [{ eventTypeId: 1, eventTypeName: "Bootcamp" }],
+          eventTagIds: [],
+        },
+      };
+      const recurringException = {
+        ...laterOneOff,
+        seriesId: 1,
+        name: "Monday Exception",
+      } satisfies UpcomingInstance;
+
+      beforeEach(() => {
+        queryStates.set("locationWorkout", {
+          data: locationWorkout(
+            [locationEvent()],
+            [{ ...oneOffOrgs, instanceId: 5 }, oneOffOrgs],
+            recurringLocationOrgs,
+          ),
+        });
+      });
+
+      const expectOrgs = (
+        selected: typeof recurringOrgs,
+        other: typeof recurringOrgs,
+      ) => {
+        expect(
+          screen
+            .getByAltText(`Logo for ${selected.parentName}`)
+            .getAttribute("src"),
+        ).toBe(selected.parentLogo);
+        expect(
+          screen.getByAltText(selected.regionName).getAttribute("src"),
+        ).toBe(selected.regionLogo);
+        expect(regionHeading(selected.regionName)).toBeTruthy();
+        expect(regionHeading(other.regionName)).toBeNull();
+        for (const orgs of [selected, other]) {
+          for (const href of [
+            orgs.parentWebsite,
+            orgs.regionWebsite,
+            `mailto:${orgs.parentEmail}`,
+            `mailto:${orgs.regionEmail}`,
+          ]) {
+            const link = document.querySelector(`a[href="${href}"]`);
+            if (orgs === selected) expect(link).toBeTruthy();
+            else expect(link).toBeNull();
+          }
+        }
+      };
+
+      it("uses the recurring workout's orgs for the default selection", () => {
+        renderPanel(null);
+
+        expectOrgs(recurringOrgs, oneOffOrgs);
+      });
+
+      it.each([
+        { name: "empty", instanceOrgs: [] },
+        {
+          name: "missing the selected instance",
+          instanceOrgs: [{ ...oneOffOrgs, instanceId: 5 }],
+        },
+      ])(
+        "keeps recurring orgs for an exception when instance metadata is $name",
+        ({ instanceOrgs }) => {
+          queryStates.set("locationWorkout", {
+            data: locationWorkout(
+              [locationEvent()],
+              instanceOrgs,
+              recurringLocationOrgs,
+            ),
+          });
+          queryStates.set("upcomingInstances", {
+            data: [oneOff, recurringException],
+          });
+          queryStates.set("eventById", { data: recurringEventResponse });
+
+          renderPanel(-6);
+
+          expect(warning()).toBeNull();
+          expectOrgs(recurringOrgs, oneOffOrgs);
+          expect(screen.getByText("Copy Link to Event")).toBeTruthy();
+        },
+      );
+
+      it("uses matching exception metadata before the recurring org fallback", () => {
+        queryStates.set("upcomingInstances", {
+          data: [oneOff, recurringException],
+        });
+        queryStates.set("eventById", { data: recurringEventResponse });
+
+        renderPanel(-6);
+
+        expect(warning()).toBeNull();
+        expectOrgs(oneOffOrgs, recurringOrgs);
+      });
+
+      it.each([1, 7])(
+        "rejects another location's instance even when its series id is %i",
+        (seriesId) => {
+          queryStates.set("upcomingInstances", {
+            data: [oneOff, { ...laterOneOff, locationId: 20, seriesId }],
+          });
+          queryStates.set("eventById", { data: recurringEventResponse });
+
+          renderPanel(-6);
+
+          expect(warning()).toBeTruthy();
+          expect(wasEverEnabled("eventById")).toBe(false);
+          expect(screen.queryByText("Copy Link to Event")).toBeNull();
+        },
+      );
+
+      it("switches AO, region, logos and contacts with the selected workout", () => {
+        const { rerender } = renderPanel(-6);
+
+        expectOrgs(oneOffOrgs, recurringOrgs);
+        expect(screen.getByTestId("chip-1")).toBeTruthy();
+        expect(screen.getByTestId("chip--6")).toBeTruthy();
+
+        for (const providedEventId of [1, -6]) {
+          rerender(
+            <WorkoutDetailsContent
+              locationId={10}
+              providedEventId={providedEventId}
+              chipSize="small"
+            />,
+          );
+          expectOrgs(
+            providedEventId === 1 ? recurringOrgs : oneOffOrgs,
+            providedEventId === 1 ? oneOffOrgs : recurringOrgs,
+          );
+        }
+      });
+
+      it("opens the selected workout's AO and region logos at full size", () => {
+        const openModal = vi
+          .spyOn(modal, "openModal")
+          .mockImplementation(() => undefined);
+        try {
+          const { rerender } = renderPanel(-6);
+
+          for (const [providedEventId, orgs] of [
+            [-6, oneOffOrgs],
+            [1, recurringOrgs],
+          ] as const) {
+            rerender(
+              <WorkoutDetailsContent
+                locationId={10}
+                providedEventId={providedEventId}
+                chipSize="small"
+              />,
+            );
+            fireEvent.click(
+              screen.getByRole("button", {
+                name: `Logo for ${orgs.parentName}`,
+              }),
+            );
+            expect(openModal).toHaveBeenLastCalledWith(
+              modal.ModalType.FULL_IMAGE,
+              {
+                title: `${orgs.parentName} logo`,
+                src: orgs.parentLogo,
+                fallbackSrc: "/f3_logo.png",
+                alt: `Logo for ${orgs.parentName}`,
+              },
+            );
+
+            fireEvent.click(
+              screen.getByRole("button", { name: orgs.regionName }),
+            );
+            expect(openModal).toHaveBeenLastCalledWith(
+              modal.ModalType.FULL_IMAGE,
+              {
+                title: orgs.regionName,
+                src: orgs.regionLogo,
+                fallbackSrc: "/f3_logo.png",
+                alt: orgs.regionName,
+              },
+            );
+          }
+          expect(openModal).toHaveBeenCalledTimes(4);
+        } finally {
+          openModal.mockRestore();
+        }
+      });
+
+      it.each([
+        { kind: "one-off", seriesId: null, name: "empty", instanceOrgs: [] },
+        {
+          kind: "one-off",
+          seriesId: null,
+          name: "missing the selected instance",
+          instanceOrgs: [{ ...oneOffOrgs, instanceId: 5 }],
+        },
+        { kind: "away", seriesId: 7, name: "empty", instanceOrgs: [] },
+        {
+          kind: "away",
+          seriesId: 7,
+          name: "missing the selected instance",
+          instanceOrgs: [{ ...oneOffOrgs, instanceId: 5 }],
+        },
+      ])(
+        "does not substitute recurring orgs for a $kind when instance metadata is $name",
+        ({ instanceOrgs, seriesId }) => {
+          queryStates.set("locationWorkout", {
+            data: locationWorkout(
+              [locationEvent()],
+              instanceOrgs,
+              recurringLocationOrgs,
+            ),
+          });
+          queryStates.set("upcomingInstances", {
+            data: [oneOff, { ...laterOneOff, seriesId }],
+          });
+
+          renderPanel(-6);
+
+          expect(warning()).toBeNull();
+          expect(screen.getByAltText("Logo for F3")).toBeTruthy();
+          expect(regionHeading("Metro")).toBeNull();
+          expect(screen.queryByAltText("Metro")).toBeNull();
+          expect(aoContactLink("Alpha AO")).toBeNull();
+          expect(
+            document.querySelector('a[href="https://metro.example"]'),
+          ).toBeNull();
+        },
+      );
+    });
   });
 });
 

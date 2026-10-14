@@ -1,6 +1,6 @@
 {
   "name": "@acme/db",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "exports": {
     ".": "./src/index.ts",
@@ -25,6 +25,7 @@
     "studio": "pnpm with-env drizzle-kit studio",
     "drop": "pnpm with-env drizzle-kit drop",
     "reset-test-db": "QUERY_TIMEOUT_MS=0 SKIP_ENV_VALIDATION=1 NODE_ENV=test pnpm with-env node -r esbuild-register src/utils/run-reset-test-db.ts",
+    "load:snapshot": "QUERY_TIMEOUT_MS=0 SNAPSHOT_CALLER_CWD=\"$INIT_CWD\" pnpm with-env tsx src/load-snapshot.ts",
     "seed:local": "QUERY_TIMEOUT_MS=0 pnpm with-env tsx src/local-seed.ts",
     "test": "SKIP_ENV_VALIDATION=1 vitest --run --coverage",
     "typecheck": "tsc --noEmit",
@@ -32,13 +33,15 @@
   },
   "dependencies": {
     "@acme/env": "workspace:*",
+    "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:*",
     "dotenv-cli": "catalog:",
     "drizzle-orm": "catalog:",
     "esbuild-register": "catalog:",
     "pg": "catalog:",
     "pg-connection-string": "catalog:",
-    "postgres": "catalog:"
+    "postgres": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",

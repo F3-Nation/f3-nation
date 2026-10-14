@@ -1,10 +1,10 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "2.2.9",
+  "version": "2.3.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3003",
+    "dev": "next dev --port ${F3_ME_PORT:-3003}",
     "build": "next build",
     "start": "next start --port 3003",
     "lint": "eslint . --max-warnings 0",
