@@ -58,6 +58,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
   const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
   const regionRef = useRef<HTMLDivElement>(null);
   const regionSelectedRef = useRef(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     fetch("/api/regions")
@@ -98,9 +99,10 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current || needsSignInAgain) return;
+
     setLoading(true);
     setError("");
-    setNeedsSignInAgain(false);
 
     if (!firstName.trim() || !lastName.trim()) {
       setError("First name and last name are required.");
@@ -122,6 +124,9 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
       setLoading(false);
       return;
     }
+
+    submittingRef.current = true;
+    let accountCreated = false;
 
     try {
       // Create user via API — backend-agnostic, creates the `users` row
@@ -150,6 +155,8 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
         setError(data.error ?? "Registration failed. Please try again.");
         return;
       }
+
+      accountCreated = true;
 
       // User created — now sign in with the original MFA code. The `users`
       // row exists now, so Better Auth's databaseHooks.user.create.before
@@ -194,8 +201,16 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
         : "/";
       router.push(safeUrl);
     } catch {
-      setError("Something went wrong. Please try again.");
+      if (accountCreated) {
+        setError(
+          "Your account was created, but we couldn't sign you in. Please sign in again to continue.",
+        );
+        setNeedsSignInAgain(true);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }
@@ -441,7 +456,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || needsSignInAgain}
               className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {loading ? "Creating Account..." : "Create Account"}
