@@ -27,7 +27,11 @@ write_local_ports() {
   if [ -f "$env_file" ]; then
     grep -vE "$LOCAL_PORT_KEYS_RE" "$env_file" >"$tmp" || true
   fi
-  if [ "$slot" -gt 0 ]; then
+  if [ "$slot" -eq 0 ]; then
+    # Exported overrides would otherwise outlive the .env lines just removed.
+    unset COMPOSE_PROJECT_NAME F3_CONTAINER_PREFIX
+    for pair in $LOCAL_PORT_DEFAULTS; do unset "${pair%%=*}"; done
+  else
     {
       echo "COMPOSE_PROJECT_NAME=f3-local-wt$slot"
       echo "F3_CONTAINER_PREFIX=f3-wt$slot"

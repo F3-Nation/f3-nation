@@ -110,7 +110,7 @@ or
 
 ### Driving auth-bounded flows in local dev
 
-Apps that require sign-in (e.g. `apps/map`, `apps/me`) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved** — outbound mail is caught by Mailpit (`http://localhost:8025`, started by `pnpm docker:up`), and agents drive the full sign-in flow headlessly by reading the 6-digit code from its REST API.
+Apps that require sign-in (e.g. `apps/map`, `apps/me`) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved** — outbound mail is caught by Mailpit (default `http://localhost:8025`; in a slotted checkout use `F3_MAILPIT_UI_PORT` from the root `.env`; started by `pnpm docker:up`), and agents drive the full sign-in flow headlessly by reading the 6-digit code from its REST API.
 
 The full recipe lives in [`apps/auth/AGENTS.md`](apps/auth/AGENTS.md). Assistants that scan nested `AGENTS.md` files, Claude Code included, pick it up when they work under `apps/auth`.
 

@@ -55,7 +55,7 @@ services:
     restart: unless-stopped
     ports:
       - "${F3_MAILPIT_SMTP_PORT:-1025}:1025" # SMTP — matches EMAIL_SERVER in the .env.example files
-      - "${F3_MAILPIT_UI_PORT:-8025}:8025" # Web UI — open http://localhost:8025 to read sent emails
+      - "${F3_MAILPIT_UI_PORT:-8025}:8025" # Web UI (default http://localhost:8025) — read sent emails here
 
 volumes:
   postgres_data:

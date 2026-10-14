@@ -305,6 +305,8 @@ The slot is saved in the root `.env` (gitignored), which `docker compose`, `pnpm
 
 - `pnpm dev` picks up the slot by itself. To start a single app with `pnpm --filter <app> dev`, export the slot's ports first: `set -a; . ./.env; set +a`.
 - To put a checkout back on the defaults, run `pnpm local:setup --slot 0`.
+- Homepage gets `NEXT_PUBLIC_API_URL` for the slot's API. Its landing-page app links and the status page's health targets still use the default ports.
+- Slackbot stays on 3006. To run it in two checkouts at once, set `LOCAL_HTTP_PORT` in the second checkout's `apps/slackbot/.env` by hand.
 - `pnpm docker:down` in a slotted checkout stops only that checkout's containers. Remove a worktree's data for good with `docker compose down -v` from inside it before deleting the worktree.
 
 ---
@@ -555,7 +557,7 @@ pnpm local:setup
 Check the container logs:
 
 ```bash
-docker logs f3-postgres
+docker logs ${F3_CONTAINER_PREFIX:-f3}-postgres
 ```
 
 If the logs show a data directory error, try removing the volume and starting fresh:
@@ -580,8 +582,8 @@ curl -X POST http://localhost:9023/storage/v1/b \
 Make sure Docker is running and Postgres is healthy:
 
 ```bash
-docker ps                     # should show f3-postgres, f3-adminer, f3-gcs
-docker exec f3-postgres pg_isready -U f3local   # should print "accepting connections"
+docker ps                     # should show f3-postgres, f3-adminer, f3-gcs (f3-wtN-* in a slot)
+docker exec ${F3_CONTAINER_PREFIX:-f3}-postgres pg_isready -U f3local   # should print "accepting connections"
 pnpm db:migrate:local
 ```
 

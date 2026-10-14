@@ -14,7 +14,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 The two most useful things to know up front:
 
-1. **In local development all outbound mail is caught by [Mailpit](https://mailpit.axllent.org/), started for you by `pnpm docker:up`.** Nothing leaves your machine, no SendGrid credentials are needed, and no real inbox has to be polled. Read messages at `http://localhost:8025` -- web UI for humans, REST API on the same port for agents.
+1. **In local development all outbound mail is caught by [Mailpit](https://mailpit.axllent.org/), started for you by `pnpm docker:up`.** Nothing leaves your machine, no SendGrid credentials are needed, and no real inbox has to be polled. Read messages at `$MAILPIT` (default `http://localhost:8025`) -- web UI for humans, REST API on the same port for agents.
 2. **Sign-in completes via NextAuth's standard CSRF + Credentials callback flow.** A `curl` of the magic link does **not** complete sign-in (the verify page is a client component that calls `signIn()` from a `useEffect`). For headless automation, POST `email + code` to `/api/auth/callback/email-mfa` with a CSRF token. See the recipe below.
 
 If you only read this section, you have enough to drive the auth flow programmatically. The rest of this doc is the recipe.
@@ -27,12 +27,12 @@ If you only read this section, you have enough to drive the auth flow programmat
 
 The MFA logic lives in `apps/auth/src/lib/email-mfa.ts`. There is **no environment branching in the transport** -- it is a single nodemailer transport built from the `EMAIL_SERVER` connection string, so which mail server receives a message is purely a matter of configuration:
 
-| Environment | `EMAIL_SERVER`                                | Where the mail lands                          |
-| ----------- | --------------------------------------------- | --------------------------------------------- |
-| Local dev   | `smtp://localhost:1025` (from `.env.example`) | Mailpit -- read it at `http://localhost:8025` |
-| Production  | SendGrid SMTP credentials                     | The recipient's real inbox                    |
+| Environment | `EMAIL_SERVER`                                | Where the mail lands                                               |
+| ----------- | --------------------------------------------- | ------------------------------------------------------------------ |
+| Local dev   | `smtp://localhost:1025` (from `.env.example`) | Mailpit -- read it at `$MAILPIT` (default `http://localhost:8025`) |
+| Production  | SendGrid SMTP credentials                     | The recipient's real inbox                                         |
 
-`smtp://localhost:1025` is the default in `apps/auth/.env.example`, and port 1025 is Mailpit's SMTP listener in `docker-compose.yml`. **Nothing is logged when a message is sent** -- retrieve mail from Mailpit, never from the auth server's stdout.
+`smtp://localhost:1025` is the default in `apps/auth/.env.example` (a slotted checkout gets `F3_MAILPIT_SMTP_PORT` instead), and port 1025 is Mailpit's SMTP listener in `docker-compose.yml`. **Nothing is logged when a message is sent** -- retrieve mail from Mailpit, never from the auth server's stdout.
 
 ---
 
@@ -94,7 +94,9 @@ Make sure the Docker services are up, since Mailpit is the only place sent mail 
 
 ```bash
 pnpm docker:up
-curl -sf http://localhost:8025/api/v1/messages >/dev/null && echo "Mailpit is up"
+# Slotted checkout (`local:setup --slot N`)? Load its ports first: set -a; . ./.env; set +a
+MAILPIT="http://localhost:${F3_MAILPIT_UI_PORT:-8025}"
+curl -sf "$MAILPIT"/api/v1/messages >/dev/null && echo "Mailpit is up"
 ```
 
 ### 1. Get a CSRF token
@@ -132,8 +134,8 @@ Either way, `sendEmailCode()` runs and a new message appears in Mailpit.
 Mailpit's REST API lists messages newest-first, so read the newest ID and grep the `code=` parameter out of its HTML body:
 
 ```bash
-ID=$(curl -s http://localhost:8025/api/v1/messages | jq -r '.messages[0].ID')
-CODE=$(curl -s "http://localhost:8025/api/v1/message/$ID" \
+ID=$(curl -s "$MAILPIT"/api/v1/messages | jq -r '.messages[0].ID')
+CODE=$(curl -s "$MAILPIT/api/v1/message/$ID" \
   | jq -r '.HTML' \
   | grep -oE 'code=[0-9]{6}' | head -1 | cut -d= -f2)
 echo "MFA code: $CODE"
@@ -142,7 +144,7 @@ echo "MFA code: $CODE"
 Codes are single-use, and each new send invalidates the previous code for that address -- so reusing a stale message is the most common silent failure. The cheapest guard is to empty the mailbox before triggering the send, which makes "newest message" unambiguous:
 
 ```bash
-curl -s -X DELETE http://localhost:8025/api/v1/messages
+curl -s -X DELETE "$MAILPIT"/api/v1/messages
 ```
 
 ### 4. POST the code to NextAuth's Credentials callback
@@ -193,7 +195,7 @@ browser_click "[type=submit]"
 Or exercise the magic link in a JS-capable browser:
 
 ```bash
-MAGIC_LINK=$(curl -s "http://localhost:8025/api/v1/message/$ID" \
+MAGIC_LINK=$(curl -s "$MAILPIT/api/v1/message/$ID" \
   | jq -r '.HTML' \
   | grep -oE 'http://localhost:3004/login/email/verify\?[^"]+' | head -1)
 browser_navigate "$MAGIC_LINK"
@@ -206,8 +208,8 @@ Form/magic-link modes are slower and only needed if you specifically want to QA 
 
 ## Failure modes worth knowing
 
-- **Mailpit's message list is empty.** Either the send never happened, or the mail went somewhere else. Check that Mailpit is running (`docker ps | grep f3-mailpit`, or `pnpm docker:up`) and that `EMAIL_SERVER` in `apps/auth/.env` is `smtp://localhost:1025` -- a stale value pointed at SendGrid will fail or, worse, deliver to a real address.
-- **You extracted a code but it's rejected.** You probably read a stale message. Codes are single-use and each send invalidates the prior one, so `.messages[0]` may be a previous run's email. Empty the mailbox (`curl -s -X DELETE http://localhost:8025/api/v1/messages`) before triggering the send.
+- **Mailpit's message list is empty.** Either the send never happened, or the mail went somewhere else. Check that Mailpit is running (`docker ps | grep mailpit`, or `pnpm docker:up`) and that `EMAIL_SERVER` in `apps/auth/.env` is `smtp://localhost:1025` -- a stale value pointed at SendGrid will fail or, worse, deliver to a real address.
+- **You extracted a code but it's rejected.** You probably read a stale message. Codes are single-use and each send invalidates the prior one, so `.messages[0]` may be a previous run's email. Empty the mailbox (`curl -s -X DELETE "$MAILPIT"/api/v1/messages`) before triggering the send.
 - **CSRF callback returns 200 but no session cookie is set.** `verifyEmailCode()` returned null -- likely the user doesn't exist (new user flow), the code was already consumed, or the code expired. Codes have a 10-minute TTL (`CODE_TTL_MINUTES` in `email-mfa.ts`). Each new send invalidates older codes for the same email. To unblock new-user testing, seed the user before driving the flow.
 - **CSRF callback redirects to `/login?error=...`.** Add `--data-urlencode "json=true"` to the curl invocation; without it, NextAuth returns an HTTP redirect instead of JSON, and `curl -L` may follow that redirect into the error page. With JSON mode you can inspect the body directly.
 - **Magic link "works" in a browser but `curl` gets HTML and no session.** Expected -- `/login/email/verify` is a client component. Use the CSRF + callback recipe instead. If you must exercise the magic link, drive a real browser.

@@ -27,7 +27,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/local-ports.sh"
 slot=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --slot) slot="${2:-}"; shift 2 ;;
+    --slot) [ $# -ge 2 ] || { echo "ERROR: --slot needs a number from 0 to 9."; exit 1; }; slot="$2"; shift 2 ;;
     --slot=*) slot="${1#*=}"; shift ;;
     *) echo "Unknown argument: $1 (usage: pnpm local:setup [--slot 0-9])"; exit 1 ;;
   esac
@@ -66,6 +66,7 @@ done
 # db scripts need to find this checkout's container and seed its OAuth clients.
 if [ -n "${F3_API_PORT:-}" ]; then
   echo "PORT=$F3_API_PORT" >>apps/api/.env
+  echo "NEXT_PUBLIC_API_URL=http://localhost:$F3_API_PORT" >>apps/homepage/.env
 fi
 for var in F3_CONTAINER_PREFIX F3_ADMIN_PORT F3_ME_PORT; do
   if [ -n "${!var:-}" ]; then
