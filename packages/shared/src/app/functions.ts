@@ -172,6 +172,11 @@ export const arrayOrSingle = <T extends z.ZodType>(schema: T) =>
     z.array(schema),
   );
 
+// Query strings need explicit parsing: Boolean("false") is true.
+export const queryBooleanSchema = z
+  .union([z.boolean(), z.enum(["true", "false", "1", "0"])])
+  .transform((value) => value === true || value === "true" || value === "1");
+
 // Helper to parse sorting parameter from query string (can be JSON stringified)
 export const parseSorting = () =>
   z.preprocess(
@@ -211,7 +216,7 @@ export const parseSorting = () =>
       .array(
         z.object({
           id: z.string(),
-          desc: z.boolean().optional().default(false),
+          desc: queryBooleanSchema.optional().default(false),
         }),
       )
       .optional(),
