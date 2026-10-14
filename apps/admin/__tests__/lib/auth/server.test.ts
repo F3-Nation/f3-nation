@@ -207,6 +207,51 @@ describe("admin auth server helpers", () => {
     });
   });
 
+  it("drops non-admin roles when hydrating the session", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "valid-token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue(validPayload);
+    getMyProfileMock.mockResolvedValue({
+      roles: [
+        ...adminRoles,
+        {
+          roleId: 4,
+          orgId: 10,
+          orgName: "F3 Nation",
+          roleName: "password_manager",
+        },
+      ],
+    });
+
+    const { getSessionUser } = await import("~/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user?.roles).toEqual(adminRoles);
+  });
+
+  it("hydrates no roles when the profile holds only password roles", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "valid-token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue(validPayload);
+    getMyProfileMock.mockResolvedValue({
+      roles: [
+        {
+          roleId: 5,
+          orgId: 10,
+          orgName: "F3 Nation",
+          roleName: "password_reader",
+        },
+      ],
+    });
+
+    const { getSessionUser } = await import("~/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user?.roles).toEqual([]);
+  });
+
   it("returns session without roles when getMyProfile throws", async () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "valid-token" }),
