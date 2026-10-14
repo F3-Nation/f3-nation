@@ -40,10 +40,12 @@ vi.mock("../logger", async (importOriginal) => ({
 import type { Session } from "@acme/auth";
 import { and, authSchema, eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
+import type { UserRole } from "@acme/shared/app/enums";
 import { ERRORS } from "@acme/shared/app/errors";
 import { Client, Header } from "@acme/shared/common/enums";
+import { CrupdateUserSchema } from "@acme/validators";
 import { createRouterClient } from "@orpc/server";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -2489,240 +2491,298 @@ describe("User Router", () => {
   });
 
   describe("dormant password roles", () => {
-    const adminSession = (nation: {
+    // Rows created here are removed after each test, roles last, so a leftover
+    // password_* roles row never leaks into other tests (none exists in prod).
+    const created = {
+      users: [] as number[],
+      orgs: [] as number[],
+      roles: [] as number[],
+    };
+
+    afterEach(async () => {
+      for (const id of created.users.splice(0)) await cleanup.user(id);
+      for (const id of created.orgs.splice(0)) await cleanup.org(id);
+      for (const id of created.roles.splice(0))
+        await db.delete(schema.roles).where(eq(schema.roles.id, id));
+    });
+
+    const nationAdminSession = (nation: {
       id: number;
       name: string | null;
-    }): Session => {
-      const orgName = nation.name ?? "F3 Nation";
-      return {
-        id: 1,
-        email: "admin@example.com",
-        user: {
-          id: "1",
-          email: "admin@example.com",
-          name: "Admin",
-          roles: [{ orgId: nation.id, orgName, roleName: "admin" }],
-        },
-        roles: [{ orgId: nation.id, orgName, roleName: "admin" }],
-        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
-      };
+    }): Session =>
+      createRegionAdminSession({
+        orgId: nation.id,
+        orgName: nation.name ?? "F3 Nation",
+      });
+
+    const getOrCreateRole = async (name: UserRole) => {
+      const [existing] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, name));
+      if (existing) return existing.id;
+      const [role] = await db
+        .insert(schema.roles)
+        .values({ name })
+        .returning({ id: schema.roles.id });
+      if (!role) throw new Error(`Failed to create ${name} role`);
+      created.roles.push(role.id);
+      return role.id;
     };
+
+    const createRegion = async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `DormantRegion-${uniqueId()}`,
+          orgType: "region",
+          isActive: true,
+          parentId: nation.id,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create region");
+      created.orgs.push(region.id);
+      return region;
+    };
+
+    const createUser = async (
+      f3Name: string,
+      assignments: { orgId: number; roleId: number }[] = [],
+    ) => {
+      const email = `dormant-${uniqueId()}@example.com`;
+      const [user] = await db
+        .insert(schema.users)
+        .values({ email, f3Name })
+        .returning({ id: schema.users.id });
+      if (!user) throw new Error("Failed to create user");
+      created.users.push(user.id);
+      if (assignments.length)
+        await db
+          .insert(schema.rolesXUsersXOrg)
+          .values(assignments.map((a) => ({ ...a, userId: user.id })));
+      return { id: user.id, email };
+    };
+
+    const roleRows = async (userId: number) =>
+      (
+        await db
+          .select({
+            orgId: schema.rolesXUsersXOrg.orgId,
+            roleId: schema.rolesXUsersXOrg.roleId,
+          })
+          .from(schema.rolesXUsersXOrg)
+          .where(eq(schema.rolesXUsersXOrg.userId, userId))
+      ).sort((a, b) => a.orgId - b.orgId || a.roleId - b.roleId);
 
     it("rejects granting a dormant (non-grantable) role", async () => {
       const nation = await getOrCreateF3NationOrg();
-      await mockAuthWithSession(adminSession(nation));
+      // With a password_manager roles row present, only the input schema
+      // stands between this payload and a real grant.
+      await getOrCreateRole("password_manager");
+      const user = await createUser("DormantGrant");
+      const payload = {
+        id: user.id,
+        email: user.email,
+        roles: [{ orgId: nation.id, roleName: "password_manager" }],
+      };
+
+      expect(CrupdateUserSchema.safeParse(payload).success).toBe(false);
+
+      await mockAuthWithSession(nationAdminSession(nation));
       const client = createTestClient();
-
       await expect(
-        client.user.crupdate({
-          email: `dormant-${uniqueId()}@example.com`,
-          // Cast past the narrowed grant-input type to prove the schema, not
-          // just TypeScript, rejects dormant roles at the boundary.
-          roles: [
-            { orgId: nation.id, roleName: "password_manager" as "editor" },
-          ],
-        }),
-      ).rejects.toThrow();
+        // Cast past the narrowed input type to exercise runtime validation.
+        client.user.crupdate(
+          payload as Parameters<typeof client.user.crupdate>[0],
+        ),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "Input validation failed",
+      });
+      expect(await roleRows(user.id)).toEqual([]);
     });
 
-    it("includes role-bearing users when filtering by all visible roles", async () => {
+    it("filters users by role, including role-less and dormant-role users", async () => {
       const nation = await getOrCreateF3NationOrg();
-      const [editorRole] = await db
-        .select({ id: schema.roles.id })
-        .from(schema.roles)
-        .where(eq(schema.roles.name, "editor"));
-      if (!editorRole) throw new Error("editor role not seeded");
+      const [editorId, adminId, pmId, userRoleId] = await Promise.all([
+        getOrCreateRole("editor"),
+        getOrCreateRole("admin"),
+        getOrCreateRole("password_manager"),
+        getOrCreateRole("user"),
+      ]);
+      const marker = `RoleFilter${uniqueId()}`;
+      const roleLess = await createUser(`${marker}None`);
+      const explicitUser = await createUser(`${marker}User`, [
+        { orgId: nation.id, roleId: userRoleId },
+      ]);
+      const editor = await createUser(`${marker}Editor`, [
+        { orgId: nation.id, roleId: editorId },
+      ]);
+      const admin = await createUser(`${marker}Admin`, [
+        { orgId: nation.id, roleId: adminId },
+      ]);
+      const pm = await createUser(`${marker}Pm`, [
+        { orgId: nation.id, roleId: pmId },
+      ]);
 
-      const marker = `FilterEditor${uniqueId()}`;
-      const [user] = await db
-        .insert(schema.users)
-        .values({ email: `filter-${uniqueId()}@example.com`, f3Name: marker })
-        .returning({ id: schema.users.id });
-      if (!user) throw new Error("Failed to create user");
-      await db.insert(schema.rolesXUsersXOrg).values({
-        userId: user.id,
-        orgId: nation.id,
-        roleId: editorRole.id,
-      });
-
-      try {
-        await mockAuthWithSession(adminSession(nation));
-        const client = createTestClient();
-
-        // Selecting every visible role must not collapse to the "role-less
-        // only" branch — the editor user has to remain in the results.
-        const allVisible = await client.user.all({
-          roles: ["user", "editor", "admin"],
+      await mockAuthWithSession(nationAdminSession(nation));
+      const client = createTestClient();
+      const matching = async (roles: UserRole[]) => {
+        const result = await client.user.all({
+          roles,
           searchTerm: marker,
           pageIndex: 0,
           pageSize: 50,
         });
-        expect(allVisible.users.some((u) => u.id === user.id)).toBe(true);
+        return new Set(result.users.map((u) => u.id));
+      };
 
-        // Filtering by "editor" alone still finds them.
-        const editorOnly = await client.user.all({
-          roles: ["editor"],
-          searchTerm: marker,
-          pageIndex: 0,
-          pageSize: 50,
-        });
-        expect(editorOnly.users.some((u) => u.id === user.id)).toBe(true);
-
-        // This user holds an "editor" role, which is neither role-less nor
-        // "user", so the "user" filter excludes them.
-        const roleLessOnly = await client.user.all({
-          roles: ["user"],
-          searchTerm: marker,
-          pageIndex: 0,
-          pageSize: 50,
-        });
-        expect(roleLessOnly.users.some((u) => u.id === user.id)).toBe(false);
-      } finally {
-        await cleanup.user(user.id);
-      }
-    });
-
-    it("includes users with an explicit 'user' role row when filtering by 'user'", async () => {
-      const nation = await getOrCreateF3NationOrg();
-      // "user" is usually the absence of a role row, but a stored "user"
-      // roles.name is valid too and must still match the "user" filter.
-      let [userRole] = await db
-        .select({ id: schema.roles.id })
-        .from(schema.roles)
-        .where(eq(schema.roles.name, "user"));
-      if (!userRole) {
-        [userRole] = await db
-          .insert(schema.roles)
-          .values({ name: "user" })
-          .returning({ id: schema.roles.id });
-      }
-      if (!userRole) throw new Error("Failed to create user role");
-
-      const marker = `FilterUserRole${uniqueId()}`;
-      const [user] = await db
-        .insert(schema.users)
-        .values({ email: `filter-${uniqueId()}@example.com`, f3Name: marker })
-        .returning({ id: schema.users.id });
-      if (!user) throw new Error("Failed to create user");
-      await db.insert(schema.rolesXUsersXOrg).values({
-        userId: user.id,
-        orgId: nation.id,
-        roleId: userRole.id,
-      });
-
-      try {
-        await mockAuthWithSession(adminSession(nation));
-        const client = createTestClient();
-
-        const userFiltered = await client.user.all({
-          roles: ["user"],
-          searchTerm: marker,
-          pageIndex: 0,
-          pageSize: 50,
-        });
-        expect(userFiltered.users.some((u) => u.id === user.id)).toBe(true);
-      } finally {
-        await cleanup.user(user.id);
-      }
+      expect(await matching(["user"])).toEqual(
+        new Set([roleLess.id, explicitUser.id]),
+      );
+      expect(await matching(["editor"])).toEqual(new Set([editor.id]));
+      expect(await matching(["editor", "admin"])).toEqual(
+        new Set([editor.id, admin.id]),
+      );
+      expect(await matching(["user", "admin"])).toEqual(
+        new Set([roleLess.id, explicitUser.id, admin.id]),
+      );
+      expect(await matching(["user", "editor", "admin"])).toEqual(
+        new Set([roleLess.id, explicitUser.id, editor.id, admin.id]),
+      );
+      expect(await matching(["password_manager"])).toEqual(new Set([pm.id]));
     });
 
     it("preserves dormant role assignments when crupdate omits them", async () => {
       const nation = await getOrCreateF3NationOrg();
-      // Dormant roles have no seeded `roles` row; create one so a user can
-      // hold the assignment this test is about.
-      let [pmRole] = await db
-        .select({ id: schema.roles.id })
-        .from(schema.roles)
-        .where(eq(schema.roles.name, "password_manager"));
-      if (!pmRole) {
-        [pmRole] = await db
-          .insert(schema.roles)
-          .values({ name: "password_manager" })
-          .returning({ id: schema.roles.id });
-      }
-      if (!pmRole) throw new Error("Failed to create password_manager role");
+      const pmId = await getOrCreateRole("password_manager");
+      const user = await createUser("PreserveMe", [
+        { orgId: nation.id, roleId: pmId },
+      ]);
 
-      const email = `preserve-${uniqueId()}@example.com`;
-      const [user] = await db
-        .insert(schema.users)
-        .values({ email, f3Name: "PreserveMe" })
-        .returning({ id: schema.users.id });
-      if (!user) throw new Error("Failed to create user");
-      await db.insert(schema.rolesXUsersXOrg).values({
-        userId: user.id,
-        orgId: nation.id,
-        roleId: pmRole.id,
+      await mockAuthWithSession(nationAdminSession(nation));
+      const client = createTestClient();
+      // The admin UI hides the dormant role, so crupdate submits none. The
+      // assignment must survive instead of being treated as "removed".
+      await client.user.crupdate({ id: user.id, email: user.email, roles: [] });
+
+      expect(await roleRows(user.id)).toEqual([
+        { orgId: nation.id, roleId: pmId },
+      ]);
+    });
+
+    it("grants a role on another org while keeping a dormant role", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const [regionA, regionB] = [await createRegion(), await createRegion()];
+      const [pmId, editorId] = [
+        await getOrCreateRole("password_manager"),
+        await getOrCreateRole("editor"),
+      ];
+      const user = await createUser("GrantElsewhere", [
+        { orgId: regionA.id, roleId: pmId },
+      ]);
+
+      await mockAuthWithSession(nationAdminSession(nation));
+      const client = createTestClient();
+      await client.user.crupdate({
+        id: user.id,
+        email: user.email,
+        roles: [{ orgId: regionB.id, roleName: "editor" }],
       });
 
-      try {
-        await mockAuthWithSession(adminSession(nation));
-        const client = createTestClient();
+      expect(await roleRows(user.id)).toEqual([
+        { orgId: regionA.id, roleId: pmId },
+        { orgId: regionB.id, roleId: editorId },
+      ]);
+    });
 
-        // The admin UI hides the dormant role, so crupdate submits none. The
-        // assignment must survive instead of being treated as "removed".
-        await client.user.crupdate({ id: user.id, email, roles: [] });
+    it("removes visible roles without requiring admin on a dormant role's org", async () => {
+      const [regionA, regionB] = [await createRegion(), await createRegion()];
+      const [pmId, editorId] = [
+        await getOrCreateRole("password_manager"),
+        await getOrCreateRole("editor"),
+      ];
+      const user = await createUser("RemoveVisible", [
+        { orgId: regionA.id, roleId: editorId },
+        { orgId: regionB.id, roleId: pmId },
+      ]);
+      const client = createTestClient();
 
-        const remaining = await db
-          .select({ roleId: schema.rolesXUsersXOrg.roleId })
-          .from(schema.rolesXUsersXOrg)
-          .where(eq(schema.rolesXUsersXOrg.userId, user.id));
-        expect(remaining.some((r) => r.roleId === pmRole.id)).toBe(true);
-      } finally {
-        await cleanup.user(user.id);
-      }
+      // An editor on org A may not remove roles there.
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+      await expect(
+        client.user.crupdate({ id: user.id, email: user.email, roles: [] }),
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: ERRORS.MUST_BE_ADMIN_TO_REMOVE_ROLES,
+      });
+
+      // An admin on org A only: the dormant role on org B is not a removal,
+      // so admin on B is not required.
+      await mockAuthWithSession(
+        createRegionAdminSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+      await client.user.crupdate({ id: user.id, email: user.email, roles: [] });
+
+      expect(await roleRows(user.id)).toEqual([
+        { orgId: regionB.id, roleId: pmId },
+      ]);
+    });
+
+    it("re-submits an existing role alongside a dormant role on the same org", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const region = await createRegion();
+      const [pmId, editorId] = [
+        await getOrCreateRole("password_manager"),
+        await getOrCreateRole("editor"),
+      ];
+      // Legacy data: two roles on one org, one of them dormant.
+      const user = await createUser("LegacyPair", [
+        { orgId: region.id, roleId: pmId },
+        { orgId: region.id, roleId: editorId },
+      ]);
+      const before = await roleRows(user.id);
+
+      await mockAuthWithSession(nationAdminSession(nation));
+      const client = createTestClient();
+      await client.user.crupdate({
+        id: user.id,
+        email: user.email,
+        roles: [{ orgId: region.id, roleName: "editor" }],
+      });
+
+      expect(await roleRows(user.id)).toEqual(before);
     });
 
     it("rejects granting a role on an org where a hidden role is retained", async () => {
       const nation = await getOrCreateF3NationOrg();
-      // Give the user a dormant password_manager assignment on the org.
-      let [pmRole] = await db
-        .select({ id: schema.roles.id })
-        .from(schema.roles)
-        .where(eq(schema.roles.name, "password_manager"));
-      if (!pmRole) {
-        [pmRole] = await db
-          .insert(schema.roles)
-          .values({ name: "password_manager" })
-          .returning({ id: schema.roles.id });
-      }
-      if (!pmRole) throw new Error("Failed to create password_manager role");
+      const pmId = await getOrCreateRole("password_manager");
+      const user = await createUser("ConflictMe", [
+        { orgId: nation.id, roleId: pmId },
+      ]);
 
-      const email = `conflict-${uniqueId()}@example.com`;
-      const [user] = await db
-        .insert(schema.users)
-        .values({ email, f3Name: "ConflictMe" })
-        .returning({ id: schema.users.id });
-      if (!user) throw new Error("Failed to create user");
-      await db.insert(schema.rolesXUsersXOrg).values({
-        userId: user.id,
-        orgId: nation.id,
-        roleId: pmRole.id,
+      await mockAuthWithSession(nationAdminSession(nation));
+      const client = createTestClient();
+      // The form hides password_manager, so the admin submits only editor
+      // on the same org. Saving it would leave the user with two roles on
+      // that org, so it must be rejected rather than silently created.
+      await expect(
+        client.user.crupdate({
+          id: user.id,
+          email: user.email,
+          roles: [{ orgId: nation.id, roleName: "editor" }],
+        }),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: ERRORS.ROLE_CONFLICTS_WITH_HIDDEN_ROLE,
       });
 
-      try {
-        await mockAuthWithSession(adminSession(nation));
-        const client = createTestClient();
-
-        // The form hides password_manager, so the admin submits only editor
-        // on the same org. Saving it would leave the user with two roles on
-        // that org, so it must be rejected rather than silently created.
-        await expect(
-          client.user.crupdate({
-            id: user.id,
-            email,
-            roles: [{ orgId: nation.id, roleName: "editor" }],
-          }),
-        ).rejects.toThrow(ERRORS.ROLE_CONFLICTS_WITH_HIDDEN_ROLE);
-
-        // The hidden role survives and no editor assignment was added.
-        const remaining = await db
-          .select({ roleId: schema.rolesXUsersXOrg.roleId })
-          .from(schema.rolesXUsersXOrg)
-          .where(eq(schema.rolesXUsersXOrg.userId, user.id));
-        expect(remaining.map((r) => r.roleId)).toEqual([pmRole.id]);
-      } finally {
-        await cleanup.user(user.id);
-      }
+      expect(await roleRows(user.id)).toEqual([
+        { orgId: nation.id, roleId: pmId },
+      ]);
     });
   });
 });

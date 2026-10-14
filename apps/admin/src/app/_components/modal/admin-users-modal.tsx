@@ -202,8 +202,10 @@ export default function UserModal({
       },
       onError: (err) => {
         toast.error(
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You are not authorized to update this user"
+          err instanceof ORPCError
+            ? err.code === "UNAUTHORIZED"
+              ? "You are not authorized to update this user"
+              : err.message || "Failed to update user"
             : "Failed to update user",
         );
       },
