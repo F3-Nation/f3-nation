@@ -300,15 +300,13 @@ export const WorkoutDetailsContent = ({
     isParentEventError,
   ]);
 
-  // At an instance-only location the workouts can belong to different orgs,
-  // so the AO/region context follows the selected instance. Series-backed
-  // locations (no instanceOrgs) keep the location-level fields.
+  // Upcoming instances can belong to different orgs from each other and from
+  // recurring workouts at the same location. Follow the selected instance's
+  // AO/region context; recurring selections keep the location-level fields.
   const location = useMemo(() => {
     const baseLocation = results?.location;
     if (!baseLocation) return null;
-    if (!selectedInstance || baseLocation.instanceOrgs.length === 0) {
-      return baseLocation;
-    }
+    if (!selectedInstance) return baseLocation;
     const selectedInstanceOrgs = baseLocation.instanceOrgs.find(
       (orgs) => orgs.instanceId === selectedInstance.id,
     );
