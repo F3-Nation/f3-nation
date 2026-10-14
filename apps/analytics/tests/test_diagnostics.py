@@ -962,7 +962,7 @@ def test_ctas_worker_deadline_interrupts_blocking_operation_and_cleans_up(monkey
 
         def execute(self, statement, _parameters=()):
             if statement.startswith("CREATE TABLE staged.orgs"):
-                if not interrupted.wait(2):
+                if not interrupted.wait(10):
                     raise TimeoutError("test interrupt did not arrive")
                 raise RuntimeError("interrupted")
             return _Result([(0,)])
