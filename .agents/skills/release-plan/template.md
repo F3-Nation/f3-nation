@@ -14,11 +14,11 @@
 
 ## Who's who
 
-| Role          | What they do                                                                                                                                                      | Person                 |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Release lead  | Runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys the apps or migrates the database.                     | @taterhead247 (Tackle) |
-| Monitor       | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                                                           | @BigGillyStyle (Crash) |
-| Refresh admin | After a Production migration, re-runs the Staging refresh setup (the refresh job and its read-only database login). An Owner of the `f3data` Google Cloud project | @dnishiyama (Spuds)    |
+| Role          | What they do                                                                                                                                                                                                                                                                          | Person                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Release lead  | Runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys the apps or migrates the database.                                                                                                                                         | @taterhead247 (Tackle) |
+| Monitor       | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                                                                                                                                                                               | @BigGillyStyle (Crash) |
+| Refresh admin | After a Production migration, re-runs the Staging refresh setup (the refresh job and its read-only database login). An Owner of the `f3data` Google Cloud project who can read the spuds database passwords in Secret Manager (`DB_SPUDS_PASSWORD_PROD`, `DB_SPUDS_PASSWORD_STAGING`) | @dnishiyama (Spuds)    |
 
 **Slack channel:** `#monorepo`. Announce the start there.
 
