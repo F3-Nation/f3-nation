@@ -20,28 +20,38 @@ const shouldSkipSsg =
   // process.env.CI === "true" || // Needed to turn this off so that docker builds do SSG for inital location loads
   process.env.SKIP_SSG === "1" || process.env.F3_CHANNEL === "ci";
 
-export default async function MapPage() {
-  interface MapPageData {
-    eventsAndLocations: RouterOutputs["map"]["location"]["eventsAndLocations"];
-    regionsWithLocation: RouterOutputs["map"]["location"]["regionsWithLocation"];
+interface MapPageData {
+  eventsAndLocations: RouterOutputs["map"]["location"]["eventsAndLocations"];
+  regionsWithLocation: RouterOutputs["map"]["location"]["regionsWithLocation"];
+  /**
+   * When the datasets were fetched. An ISR page is served for up to
+   * `revalidate`, so the client needs this to know how old its copy is.
+   */
+  dataFetchedAt: number;
+}
+
+async function loadMapPageData(): Promise<MapPageData> {
+  if (shouldSkipSsg) {
+    return {
+      eventsAndLocations: [],
+      regionsWithLocation: { regionsWithLocation: [] },
+      dataFetchedAt: Date.now(),
+    };
   }
+  const { client } = await import("~/orpc/client");
 
-  const { eventsAndLocations, regionsWithLocation }: MapPageData = shouldSkipSsg
-    ? {
-        eventsAndLocations: [],
-        regionsWithLocation: { regionsWithLocation: [] },
-      }
-    : await (async () => {
-        const { client } = await import("~/orpc/client");
+  // Independent queries - run them concurrently
+  const [eventsAndLocations, regionsWithLocation] = await Promise.all([
+    client.map.location.eventsAndLocations(),
+    client.map.location.regionsWithLocation(),
+  ]);
 
-        // Independent queries - run them concurrently
-        const [eventsAndLocations, regionsWithLocation] = await Promise.all([
-          client.map.location.eventsAndLocations(),
-          client.map.location.regionsWithLocation(),
-        ]);
+  return { eventsAndLocations, regionsWithLocation, dataFetchedAt: Date.now() };
+}
 
-        return { eventsAndLocations, regionsWithLocation };
-      })();
+export default async function MapPage() {
+  const { eventsAndLocations, regionsWithLocation, dataFetchedAt } =
+    await loadMapPageData();
 
   RERENDER_LOGS && console.log("MapPage rerender");
 
@@ -49,6 +59,7 @@ export default async function MapPage() {
     <ReactQueryHydrator
       eventsAndLocations={eventsAndLocations}
       regionsWithLocation={regionsWithLocation}
+      dataFetchedAt={dataFetchedAt}
     >
       <TouchDeviceProvider>
         <InitialLocationProvider>
