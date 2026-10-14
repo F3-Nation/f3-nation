@@ -3,6 +3,8 @@
 
 # join_env_vars DELIM KEY=VALUE...
 #
+# DELIM must be one character: IFS joins with only its first character.
+#
 # Prints the entries as one --update-env-vars value in gcloud's "^DELIM^"
 # custom-delimiter syntax. A plain comma join breaks values that contain a
 # comma (EMAIL_FROM can carry a quoted display name, e.g.
@@ -14,6 +16,10 @@
 #   ENV_VARS_ARG="$(join_env_vars "|" "${UPDATE_ARGS[@]}")"
 join_env_vars() {
   local delim="$1"
+  if [[ ${#delim} -ne 1 ]]; then
+    echo "Error: env-var delimiter must be a single character, got '$delim'." >&2
+    return 1
+  fi
   shift
   local entry
   for entry in "$@"; do

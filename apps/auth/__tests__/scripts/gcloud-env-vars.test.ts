@@ -55,4 +55,11 @@ describe("join_env_vars", () => {
     expect(stdout).toBe("");
     expect(stderr).toContain("EMAIL_FROM");
   });
+
+  it("rejects a delimiter that is not exactly one character", () => {
+    const { status, stdout, stderr } = joinEnvVars("::", ["A=1", "B=2"]);
+    expect(status).not.toBe(0);
+    expect(stdout).toBe("");
+    expect(stderr).toContain("single character");
+  });
 });
