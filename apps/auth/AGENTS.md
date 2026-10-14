@@ -88,7 +88,7 @@ From the monorepo root:
 pnpm dev   # turbo dev --parallel -- starts apps/auth, apps/api, apps/me, apps/map, ...
 ```
 
-Or run only what you need. For an apps/me QA run you need at least `apps/auth` (`:3004`) and `apps/api` (`:3001`) plus a Postgres DB.
+Or run only what you need. For an apps/me QA run you need at least `apps/auth` (default `:3004`) and `apps/api` (default `:3001`) plus a Postgres DB.
 
 Make sure the Docker services are up, since Mailpit is the only place sent mail can be read:
 
@@ -96,6 +96,8 @@ Make sure the Docker services are up, since Mailpit is the only place sent mail 
 pnpm docker:up
 # Slotted checkout (`local:setup --slot N`)? Load its ports first: set -a; . ./.env; set +a
 MAILPIT="http://localhost:${F3_MAILPIT_UI_PORT:-8025}"
+AUTH="http://localhost:${F3_AUTH_PORT:-3004}"
+ME="http://localhost:${F3_ME_PORT:-3003}"
 curl -sf "$MAILPIT"/api/v1/messages >/dev/null && echo "Mailpit is up"
 ```
 
@@ -104,7 +106,7 @@ curl -sf "$MAILPIT"/api/v1/messages >/dev/null && echo "Mailpit is up"
 NextAuth requires a CSRF token on every Credentials POST. Fetch it once and reuse the cookie jar:
 
 ```bash
-CSRF=$(curl -sc /tmp/jar http://localhost:3004/api/auth/csrf | jq -r .csrfToken)
+CSRF=$(curl -sc /tmp/jar $AUTH/api/auth/csrf | jq -r .csrfToken)
 echo "csrfToken: $CSRF"
 ```
 
@@ -116,7 +118,7 @@ Either drive a calling app's login route...
 
 ```bash
 # example: apps/me
-curl -sb /tmp/jar -L 'http://localhost:3003/api/auth/login?returnTo=/profile' >/dev/null
+curl -sb /tmp/jar -L "$ME/api/auth/login?returnTo=/profile" >/dev/null
 ```
 
 ...or hit the auth server's `POST /api/verify-email?action=send` endpoint directly with `{ email }` and skip the UI:
@@ -124,7 +126,7 @@ curl -sb /tmp/jar -L 'http://localhost:3003/api/auth/login?returnTo=/profile' >/
 ```bash
 curl -sb /tmp/jar -X POST -H 'Content-Type: application/json' \
   -d '{"email":"qa-bot@f3nation.test"}' \
-  'http://localhost:3004/api/verify-email?action=send'
+  "$AUTH/api/verify-email?action=send"
 ```
 
 Either way, `sendEmailCode()` runs and a new message appears in Mailpit.
@@ -155,9 +157,9 @@ curl -sb /tmp/jar -c /tmp/jar -L -X POST \
   --data-urlencode "csrfToken=$CSRF" \
   --data-urlencode "email=qa-bot@f3nation.test" \
   --data-urlencode "code=$CODE" \
-  --data-urlencode "callbackUrl=http://localhost:3004/" \
+  --data-urlencode "callbackUrl=$AUTH/" \
   --data-urlencode "json=true" \
-  http://localhost:3004/api/auth/callback/email-mfa
+  $AUTH/api/auth/callback/email-mfa
 ```
 
 NextAuth runs the `email-mfa` provider's `authorize()` callback (see `apps/auth/src/lib/auth-options.ts`), which calls `verifyEmailCode(email, code)`. On success the response sets the session cookie (`next-auth.session-token` in dev) in `/tmp/jar`. The `json=true` form field makes the callback respond with JSON instead of an HTTP redirect, which is easier to assert on.
@@ -170,10 +172,10 @@ You now have a logged-in session in the cookie jar. Continue any OAuth callback 
 
 ```bash
 # Follow the calling-app callback to mint that app's session
-curl -sb /tmp/jar -c /tmp/jar -L 'http://localhost:3003/api/auth/callback?...' >/dev/null
+curl -sb /tmp/jar -c /tmp/jar -L "$ME/api/auth/callback?..." >/dev/null
 
 # Use the session
-curl -sb /tmp/jar http://localhost:3003/api/auth/me
+curl -sb /tmp/jar $ME/api/auth/me
 # -> {"user":{"id":...,"email":"qa-bot@f3nation.test",...}}
 ```
 
@@ -183,7 +185,7 @@ When you're driving a real browser and want to exercise the verify form's UI its
 
 ```bash
 # Drive the browser to /login/email, submit the email
-browser_navigate "http://localhost:3004/login/email"
+browser_navigate "$AUTH/login/email"
 browser_fill "[name=email]" "qa-bot@f3nation.test"
 browser_click "[type=submit]"
 
@@ -197,7 +199,7 @@ Or exercise the magic link in a JS-capable browser:
 ```bash
 MAGIC_LINK=$(curl -s "$MAILPIT/api/v1/message/$ID" \
   | jq -r '.HTML' \
-  | grep -oE 'http://localhost:3004/login/email/verify\?[^"]+' | head -1)
+  | grep -oE "$AUTH/login/email/verify\?[^\"]+" | head -1)
 browser_navigate "$MAGIC_LINK"
 # -> page renders, useEffect fires signIn("email-mfa", ...), session cookie is set
 ```

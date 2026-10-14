@@ -557,7 +557,7 @@ pnpm local:setup
 Check the container logs:
 
 ```bash
-docker logs ${F3_CONTAINER_PREFIX:-f3}-postgres
+docker compose logs postgres
 ```
 
 If the logs show a data directory error, try removing the volume and starting fresh:
@@ -583,7 +583,7 @@ Make sure Docker is running and Postgres is healthy:
 
 ```bash
 docker ps                     # should show f3-postgres, f3-adminer, f3-gcs (f3-wtN-* in a slot)
-docker exec ${F3_CONTAINER_PREFIX:-f3}-postgres pg_isready -U f3local   # should print "accepting connections"
+docker compose exec postgres pg_isready -U f3local   # should print "accepting connections"
 pnpm db:migrate:local
 ```
 
