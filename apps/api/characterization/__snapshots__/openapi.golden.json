@@ -2650,14 +2650,25 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "boolean"
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "enum": [
+                        "0",
+                        "1",
+                        "true",
+                        "false"
+                      ],
+                      "type": "string"
+                    }
+                  ]
                 },
                 {
                   "enum": [
-                    "0",
-                    "1",
-                    "true",
-                    "false"
+                    "True",
+                    "False"
                   ],
                   "type": "string"
                 }

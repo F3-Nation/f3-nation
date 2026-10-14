@@ -172,7 +172,8 @@ export const arrayOrSingle = <T extends z.ZodType>(schema: T) =>
     z.array(schema),
   );
 
-// Query strings need explicit parsing: Boolean("false") is true.
+// Parse query strings explicitly: Boolean("false") is true.
+// Accept only booleans and "true"/"false"/"1"/"0"; reject other values.
 export const queryBooleanSchema = z
   .union([z.boolean(), z.enum(["true", "false", "1", "0"])])
   .transform((value) => value === true || value === "true" || value === "1");

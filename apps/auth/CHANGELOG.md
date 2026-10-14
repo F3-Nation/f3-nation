@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.4.1...auth@2.5.0) (2026-10-14)
+
+
+### Features
+
+* **repo,db:** run several checkouts side by side with local:setup --slot ([#1246](https://github.com/F3-Nation/f3-nation/issues/1246)) ([7a1377f](https://github.com/F3-Nation/f3-nation/commit/7a1377f3ba83dd5eccae3b322947994f3379205e))
+
+
+### Bug Fixes
+
+* **api,map:** public read tier for the map API ([#378](https://github.com/F3-Nation/f3-nation/issues/378)), plus [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3 groundwork ([#1149](https://github.com/F3-Nation/f3-nation/issues/1149)) ([f65d3d9](https://github.com/F3-Nation/f3-nation/commit/f65d3d9120131c4cbff8bcdb019bcc546b8a6464))
+* **auth,ci:** keep commas in Cloud Run env values and serialize deploys per service ([#1237](https://github.com/F3-Nation/f3-nation/issues/1237)) ([a8e8a46](https://github.com/F3-Nation/f3-nation/commit/a8e8a46a0e215a0e913eac641755b9524feb99f7))
+* **auth:** safely resume sign-in after onboarding ([#1215](https://github.com/F3-Nation/f3-nation/issues/1215)) ([90a6ed5](https://github.com/F3-Nation/f3-nation/commit/90a6ed59228bed4912d8e4dd8f583629c5b7ad25))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.0
+    * @acme/shared bumped to 0.5.0
+
 ## [2.4.1](https://github.com/F3-Nation/f3-nation/compare/auth@2.4.0...auth@2.4.1) (2026-10-10)
 
 

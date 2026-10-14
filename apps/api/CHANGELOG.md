@@ -1,5 +1,31 @@
 # Changelog
 
+## [6.12.0](https://github.com/F3-Nation/f3-nation/compare/api@6.11.0...api@6.12.0) (2026-10-14)
+
+
+### Features
+
+* **api:** filling cascade gaps for ao/series deactivation and reactivation ([#1173](https://github.com/F3-Nation/f3-nation/issues/1173)) ([7eddfd6](https://github.com/F3-Nation/f3-nation/commit/7eddfd60c9d149ba997ca668016be2a444b2e051))
+* **db,shared,admin:** add password_manager and password_reader roles ([#1180](https://github.com/F3-Nation/f3-nation/issues/1180)) ([e69f45d](https://github.com/F3-Nation/f3-nation/commit/e69f45d92f88ed1248a86cdce716e05a66389b85))
+
+
+### Bug Fixes
+
+* **api,map:** public read tier for the map API ([#378](https://github.com/F3-Nation/f3-nation/issues/378)), plus [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3 groundwork ([#1149](https://github.com/F3-Nation/f3-nation/issues/1149)) ([f65d3d9](https://github.com/F3-Nation/f3-nation/commit/f65d3d9120131c4cbff8bcdb019bcc546b8a6464))
+* **api:** accept region IDs from REST query strings ([#1233](https://github.com/F3-Nation/f3-nation/issues/1233)) ([216dd99](https://github.com/F3-Nation/f3-nation/commit/216dd99cbb71fb740c6c3620f8e958045fd9fe1f))
+* **map,api:** use one-off organizations at shared locations ([#1243](https://github.com/F3-Nation/f3-nation/issues/1243)) ([381106a](https://github.com/F3-Nation/f3-nation/commit/381106a39f8f3f51f92916354fa8e81904cbfc21))
+* **map:** open the detail panel for instance-only map pins ([#1216](https://github.com/F3-Nation/f3-nation/issues/1216)) ([af265ea](https://github.com/F3-Nation/f3-nation/commit/af265ea940b6e83982ce8028b2cbeda81e891f0f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.14.0
+    * @acme/shared bumped to 0.5.0
+  * devDependencies
+    * @acme/db bumped to 0.10.0
+
 ## [6.11.0](https://github.com/F3-Nation/f3-nation/compare/api@6.10.0...api@6.11.0) (2026-10-10)
 
 

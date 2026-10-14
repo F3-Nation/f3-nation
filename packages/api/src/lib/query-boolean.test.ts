@@ -26,6 +26,7 @@ describe("queryBooleanSchema", () => {
     { name: "a string array", input: ["false"] },
     { name: "an empty string", input: "" },
     { name: "uppercase true", input: "TRUE" },
+    { name: "mixed-case true", input: "True" },
     { name: "mixed-case false", input: "False" },
     { name: "leading whitespace", input: " true" },
     { name: "trailing whitespace", input: "false " },

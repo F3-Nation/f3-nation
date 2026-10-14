@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db, getOrCreateF3NationOrg, uniqueId } from "@acme/api/testing";
-import { eq, inArray, schema } from "@acme/db";
+import { inArray, schema } from "@acme/db";
 
 import type { FixtureApiKey } from "../fixtures/api-keys";
 import { createApiKey } from "../fixtures/api-keys";
@@ -15,6 +15,16 @@ interface EventList {
 
 interface AttendanceList {
   attendance: { id: number; isPlanned: boolean }[];
+}
+
+interface EventInstanceList {
+  eventInstances: { id: number; startDate: string }[];
+  totalCount: number;
+}
+
+interface EventTagList {
+  eventTags: { id: number; isActive: boolean }[];
+  totalCount: number;
 }
 
 const booleanCases = [
@@ -34,8 +44,13 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
   const orgIds: number[] = [];
   const eventIds: number[] = [];
   const tagIds: number[] = [];
+  const activeRegionTagIds: number[] = [];
+  const eventInstanceIds: number[] = [];
   let apiKey: FixtureApiKey | undefined;
   let eventInstanceId: number | undefined;
+  let standaloneInstanceId: number;
+  let inactiveTagId: number;
+  let nationTagId: number;
   let mineEventId: number;
   let plannedAttendanceId: number;
   let actualAttendanceId: number;
@@ -92,33 +107,53 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
       roles: [{ orgId: orgIds[0]!, roleName: "editor" }],
     });
 
-    for (const label of ["First", "Second"]) {
+    for (const [label, isActive, specificOrgId] of [
+      ["First", true, orgIds[0]!],
+      ["Second", true, orgIds[0]!],
+      ["Inactive", false, orgIds[0]!],
+      ["Nation", true, null],
+    ] as const) {
       const [tag] = await db
         .insert(schema.eventTags)
         .values({
           name: `${prefix} ${label}`,
-          specificOrgId: orgIds[0]!,
-          isActive: true,
+          specificOrgId,
+          isActive,
         })
         .returning({ id: schema.eventTags.id });
       if (!tag) throw new Error("failed to insert boolean fixture tag");
       tagIds.push(tag.id);
+      if (specificOrgId === null) nationTagId = tag.id;
+      else if (isActive) activeRegionTagIds.push(tag.id);
+      else inactiveTagId = tag.id;
     }
 
-    const [instance] = await db
-      .insert(schema.eventInstances)
-      .values({
-        name: prefix,
-        orgId: orgIds[0]!,
-        seriesId: mineEventId,
-        startDate: "2026-01-01",
-        isActive: true,
-        highlight: false,
-      })
-      .returning({ id: schema.eventInstances.id });
-    if (!instance) throw new Error("failed to insert boolean fixture instance");
-    eventInstanceId = instance.id;
+    for (const [label, seriesId, startDate] of [
+      ["Series", mineEventId, "2026-01-01"],
+      ["Standalone", null, "2026-01-02"],
+    ] as const) {
+      const [instance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: `${prefix} ${label}`,
+          orgId: orgIds[0]!,
+          seriesId,
+          startDate,
+          isActive: true,
+          highlight: false,
+        })
+        .returning({ id: schema.eventInstances.id });
+      if (!instance) {
+        throw new Error("failed to insert boolean fixture instance");
+      }
+      eventInstanceIds.push(instance.id);
+      if (seriesId === null) standaloneInstanceId = instance.id;
+      else eventInstanceId = instance.id;
+    }
 
+    if (eventInstanceId === undefined) {
+      throw new Error("failed to insert boolean fixture series instance");
+    }
     for (const isPlanned of [true, false]) {
       const [attendance] = await db
         .insert(schema.attendance)
@@ -137,13 +172,13 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
   });
 
   afterAll(async () => {
-    if (eventInstanceId !== undefined) {
+    if (eventInstanceIds.length) {
       await db
         .delete(schema.attendance)
-        .where(eq(schema.attendance.eventInstanceId, eventInstanceId));
+        .where(inArray(schema.attendance.eventInstanceId, eventInstanceIds));
       await db
         .delete(schema.eventInstances)
-        .where(eq(schema.eventInstances.id, eventInstanceId));
+        .where(inArray(schema.eventInstances.id, eventInstanceIds));
     }
     if (tagIds.length) {
       await db
@@ -175,6 +210,85 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
       );
     },
   );
+
+  it.each(booleanCases)(
+    "sorts map events with REST desc=%s",
+    async (value, descending) => {
+      const res = await rest("/v1/map/event/all", {
+        searchTerm: prefix,
+        "sorting[0][id]": "id",
+        "sorting[0][desc]": value,
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as EventList;
+      expect(body.totalCount).toBe(2);
+      expect(body.events.map(({ id }) => id)).toEqual(
+        descending ? [...eventIds].reverse() : eventIds,
+      );
+    },
+  );
+
+  it.each(booleanCases)(
+    "sorts event instances by startDate with REST desc=%s",
+    async (value, descending) => {
+      const res = await rest("/v1/event-instance", {
+        searchTerm: prefix,
+        "sorting[0][id]": "startDate",
+        "sorting[0][desc]": value,
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as EventInstanceList;
+      expect(body.totalCount).toBe(2);
+      expect(body.eventInstances.map(({ id }) => id)).toEqual(
+        descending ? [...eventInstanceIds].reverse() : eventInstanceIds,
+      );
+      expect(body.eventInstances.map(({ startDate }) => startDate)).toEqual(
+        descending
+          ? ["2026-01-02", "2026-01-01"]
+          : ["2026-01-01", "2026-01-02"],
+      );
+    },
+  );
+
+  it.each([
+    { path: "/v1/event", sortKey: "id" },
+    { path: "/v1/map/event/all", sortKey: "id" },
+    { path: "/v1/event-instance", sortKey: "startDate" },
+  ])(
+    "keeps omitted REST desc required for $path",
+    async ({ path, sortKey }) => {
+      const res = await rest(path, {
+        searchTerm: prefix,
+        "sorting[0][id]": sortKey,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ code: "BAD_REQUEST" });
+    },
+  );
+
+  it.each(booleanCases)(
+    "filters event instances with REST onlyStandalone=%s",
+    async (value, onlyStandalone) => {
+      const res = await rest("/v1/event-instance", {
+        searchTerm: prefix,
+        onlyStandalone: value,
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as EventInstanceList;
+      expect(body.totalCount).toBe(onlyStandalone ? 1 : 2);
+      expect(body.eventInstances.map(({ id }) => id)).toEqual(
+        onlyStandalone ? [standaloneInstanceId] : eventInstanceIds,
+      );
+    },
+  );
+
+  it("keeps both event instances when onlyStandalone is omitted", async () => {
+    const res = await rest("/v1/event-instance", { searchTerm: prefix });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as EventInstanceList;
+    expect(body.totalCount).toBe(2);
+    expect(body.eventInstances.map(({ id }) => id)).toEqual(eventInstanceIds);
+  });
 
   it.each(booleanCases)(
     "scopes map events with REST onlyMine=%s",
@@ -224,18 +338,84 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
     async (value) => {
       const res = await rest("/v1/event-tag", {
         searchTerm: prefix,
+        orgIds: String(orgIds[0]!),
+        statuses: "active",
+        ignoreNationEventTags: "true",
         "sorting[0][id]": "id",
         "sorting[0][desc]": value,
       });
       expect(res.status).toBe(200);
-      const body = (await res.json()) as {
-        eventTags: { id: number }[];
-        totalCount: number;
-      };
+      const body = (await res.json()) as EventTagList;
       expect(body.totalCount).toBe(2);
-      expect(body.eventTags.map(({ id }) => id)).toEqual(tagIds);
+      expect(body.eventTags.map(({ id }) => id)).toEqual(activeRegionTagIds);
     },
   );
+
+  it.each(booleanCases)(
+    "filters nation event tags with REST ignoreNationEventTags=%s",
+    async (value, ignoreNationEventTags) => {
+      const res = await rest("/v1/event-tag", {
+        searchTerm: prefix,
+        orgIds: String(orgIds[0]!),
+        statuses: "active",
+        ignoreNationEventTags: value,
+        "sorting[0][id]": "id",
+        "sorting[0][desc]": "false",
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as EventTagList;
+      expect(body.totalCount).toBe(ignoreNationEventTags ? 2 : 3);
+      expect(body.eventTags.map(({ id }) => id)).toEqual(
+        ignoreNationEventTags
+          ? activeRegionTagIds
+          : [...activeRegionTagIds, nationTagId],
+      );
+    },
+  );
+
+  it("keeps nation event tags when ignoreNationEventTags is omitted", async () => {
+    const res = await rest("/v1/event-tag", {
+      searchTerm: prefix,
+      orgIds: String(orgIds[0]!),
+      statuses: "active",
+      "sorting[0][id]": "id",
+      "sorting[0][desc]": "false",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as EventTagList;
+    expect(body.totalCount).toBe(3);
+    expect(body.eventTags.map(({ id }) => id)).toEqual([
+      ...activeRegionTagIds,
+      nationTagId,
+    ]);
+  });
+
+  it.each(booleanCases)(
+    "selects organization event tags with REST isActive=%s",
+    async (value, isActive) => {
+      const res = await rest(`/v1/event-tag/org/${orgIds[0]!}`, {
+        isActive: value,
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Pick<EventTagList, "eventTags">;
+      expect(body.eventTags.map(({ id }) => id).sort((a, b) => a - b)).toEqual(
+        isActive ? activeRegionTagIds : [inactiveTagId],
+      );
+      expect(body.eventTags.every((tag) => tag.isActive === isActive)).toBe(
+        true,
+      );
+    },
+  );
+
+  it("keeps organization event tags' omitted isActive default true", async () => {
+    const res = await rest(`/v1/event-tag/org/${orgIds[0]!}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Pick<EventTagList, "eventTags">;
+    expect(body.eventTags.map(({ id }) => id).sort((a, b) => a - b)).toEqual(
+      activeRegionTagIds,
+    );
+    expect(body.eventTags.every(({ isActive }) => isActive)).toBe(true);
+  });
 
   it("keeps attendance's omitted isPlanned default true", async () => {
     const res = await rest(`/v1/attendance/event-instance/${eventInstanceId!}`);
@@ -245,9 +425,9 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
     expect(body.attendance[0]?.isPlanned).toBe(true);
   });
 
-  it.each(["false", "0"])(
-    "selects actual attendance with REST isPlanned=%s",
-    async (value) => {
+  it.each([...booleanCases, ["True", true], ["False", false]] as const)(
+    "selects attendance with REST isPlanned=%s",
+    async (value, isPlanned) => {
       const res = await rest(
         `/v1/attendance/event-instance/${eventInstanceId!}`,
         {
@@ -256,8 +436,10 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
       );
       expect(res.status).toBe(200);
       const body = (await res.json()) as AttendanceList;
-      expect(body.attendance.map(({ id }) => id)).toEqual([actualAttendanceId]);
-      expect(body.attendance[0]?.isPlanned).toBe(false);
+      expect(body.attendance.map(({ id }) => id)).toEqual([
+        isPlanned ? plannedAttendanceId : actualAttendanceId,
+      ]);
+      expect(body.attendance[0]?.isPlanned).toBe(isPlanned);
     },
   );
 
@@ -292,6 +474,24 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
       path: "/v1/event",
       query: { "sorting[0][id]": "id", "sorting[0][desc]": "not-a-boolean" },
     },
+    {
+      label: "event instance onlyStandalone",
+      path: "/v1/event-instance",
+      query: { onlyStandalone: "not-a-boolean" },
+    },
+    {
+      label: "event instance descending",
+      path: "/v1/event-instance",
+      query: {
+        "sorting[0][id]": "startDate",
+        "sorting[0][desc]": "not-a-boolean",
+      },
+    },
+    {
+      label: "nation event tags",
+      path: "/v1/event-tag",
+      query: { ignoreNationEventTags: "not-a-boolean" },
+    },
   ];
 
   it.each(invalidQueries)(
@@ -303,14 +503,25 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
     },
   );
 
-  it("rejects invalid attendance isPlanned with HTTP 400", async () => {
-    const res = await rest(
-      `/v1/attendance/event-instance/${eventInstanceId!}`,
-      {
-        isPlanned: "not-a-boolean",
-      },
-    );
+  it("rejects invalid organization event tags isActive with HTTP 400", async () => {
+    const res = await rest(`/v1/event-tag/org/${orgIds[0]!}`, {
+      isActive: "not-a-boolean",
+    });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: "BAD_REQUEST" });
   });
+
+  it.each(["not-a-boolean", "TRUE", "yes", ""])(
+    "rejects invalid attendance isPlanned=%s with HTTP 400",
+    async (value) => {
+      const res = await rest(
+        `/v1/attendance/event-instance/${eventInstanceId!}`,
+        {
+          isPlanned: value,
+        },
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ code: "BAD_REQUEST" });
+    },
+  );
 });

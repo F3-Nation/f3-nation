@@ -47,7 +47,11 @@ export const attendanceRouter = {
     .input(
       z.object({
         eventInstanceId: z.coerce.number(),
-        isPlanned: queryBooleanSchema.optional().default(true),
+        // Preserve Python Boolean spellings for existing attendance callers.
+        isPlanned: queryBooleanSchema
+          .or(z.enum(["True", "False"]).transform((value) => value === "True"))
+          .optional()
+          .default(true),
       }),
     )
     .route({
