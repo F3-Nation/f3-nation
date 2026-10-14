@@ -428,7 +428,14 @@ export function connectionHint(
   }
   const where = host.startsWith("/") ? `socket ${host}` : `${host}:${port}`;
   const local = LOCAL_HOSTNAMES.has(host.toLowerCase());
-  if (msg.includes("ECONNREFUSED") || msg.includes("ENOENT")) {
+  // Classify by the error's code first (node's errno codes, postgres.js's
+  // CONNECT_TIMEOUT / CONNECTION_CLOSED, Postgres SQLSTATEs); the message is
+  // the fallback for errors that carry no code.
+  const rawCode = (error as { code?: unknown } | null)?.code;
+  const code = typeof rawCode === "string" ? rawCode : "";
+  const is = (codes: string[], pattern: RegExp) =>
+    codes.includes(code) || pattern.test(msg);
+  if (is(["ECONNREFUSED", "ENOENT"], /ECONNREFUSED|ENOENT/)) {
     return local
       ? `Nothing is listening at ${where}. Start the Cloud SQL proxy in another ` +
           `terminal and leave it running, then run this again:\n` +
@@ -439,7 +446,10 @@ export function connectionHint(
   // (usually missing credentials) drops it.
   if (
     local &&
-    /ECONNRESET|Connection terminated|CONNECTION_CLOSED/i.test(msg)
+    is(
+      ["ECONNRESET", "CONNECTION_CLOSED"],
+      /ECONNRESET|Connection terminated|CONNECTION_CLOSED/i,
+    )
   ) {
     return (
       `The proxy at ${where} accepted the connection but couldn't reach Cloud SQL. ` +
@@ -447,17 +457,17 @@ export function connectionHint(
       `\`gcloud auth application-default login\` once and restart it.`
     );
   }
-  if (msg.includes("password authentication failed")) {
+  // 28P01: invalid_password.
+  if (is(["28P01"], /password authentication failed/)) {
     return "The database rejected the login in the migration URL. Ask an admin to check the secret.";
   }
-  if (/timeout|ETIMEDOUT/i.test(msg)) {
+  if (is(["ETIMEDOUT", "CONNECT_TIMEOUT"], /timeout|ETIMEDOUT/i)) {
     if (local || host.startsWith("/")) {
       return `Couldn't reach the database at ${where} (timed out). Is the proxy running? Check its output.`;
     }
     return `Couldn't reach the database at ${where} (timed out). Is your IP allowed?`;
   }
-  // postgres.js error codes (ENOTFOUND, 3D000, ...) never contain the URL, so
-  // they're safe to show and give the operator something to search for.
-  const code = (error as { code?: unknown } | null)?.code;
-  return `Couldn't connect to the database at ${where}${typeof code === "string" && code ? ` (${code})` : ""}.`;
+  // Error codes (ENOTFOUND, 3D000, ...) never contain the URL, so they're
+  // safe to show and give the operator something to search for.
+  return `Couldn't connect to the database at ${where}${code ? ` (${code})` : ""}.`;
 }

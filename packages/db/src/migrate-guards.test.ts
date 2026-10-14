@@ -402,6 +402,24 @@ describe("connectionHint", () => {
     }
   });
 
+  it("classifies by error code when the message doesn't say", () => {
+    const withCode = (code: string) =>
+      Object.assign(new Error("connect failed"), { code });
+    const local = "postgresql://u:p@127.0.0.1:5481/f3_prod";
+    expect(connectionHint(withCode("ECONNREFUSED"), local, PROD)).toContain(
+      `cloud-sql-proxy ${PROD} --port 5481`,
+    );
+    expect(connectionHint(withCode("CONNECTION_CLOSED"), local, PROD)).toMatch(
+      /gcloud auth application-default login/,
+    );
+    expect(connectionHint(withCode("CONNECT_TIMEOUT"), local, PROD)).toMatch(
+      /\(timed out\)\. Is the proxy running/,
+    );
+    expect(connectionHint(withCode("28P01"), local, PROD)).toMatch(
+      /rejected the login/,
+    );
+  });
+
   it("names the error code when it doesn't recognise the failure", () => {
     const hint = connectionHint(
       Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
