@@ -6,10 +6,11 @@
  * warn, rather than render a near-empty panel, when none of them does.
  */
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RouterOutputs } from "~/orpc/types";
+import * as modal from "~/utils/store/modal";
 
 type UpcomingInstance =
   RouterOutputs["map"]["location"]["upcomingInstances"][number];
@@ -107,6 +108,7 @@ type InstanceOrgs = NonNullable<
 const locationWorkout = (
   events: NonNullable<LocationWorkout["location"]>["events"],
   instanceOrgs: InstanceOrgs[] = [],
+  orgs: Partial<Omit<InstanceOrgs, "instanceId">> = {},
 ): LocationWorkout => ({
   location: {
     id: 10,
@@ -146,6 +148,7 @@ const locationWorkout = (
     regionFacebook: null,
     regionInstagram: null,
     regionType: "region",
+    ...orgs,
     instanceOrgs,
     fullAddress: "123 Main St, Charlotte, NC",
     events,
@@ -314,7 +317,7 @@ describe("WorkoutDetailsContent event resolution", () => {
   });
 });
 
-describe("WorkoutDetailsContent at an instance-only location", () => {
+describe("WorkoutDetailsContent with one-off workouts", () => {
   // A one-off workout: no series, so the API returns the location with no
   // events and the panel synthesizes the event from the instance list.
   const oneOff = {
@@ -525,6 +528,277 @@ describe("WorkoutDetailsContent at an instance-only location", () => {
       expect(screen.queryByAltText("Logo for Alpha AO")).toBeNull();
       expect(aoContactLink("Alpha AO")).toBeNull();
       expect(regionHeading("Metro")).toBeNull();
+    });
+
+    describe("at a location that also has a recurring workout", () => {
+      const recurringOrgs = {
+        ...orgsFor(1, "Alpha AO", "Metro"),
+        parentName: "Alpha AO",
+        regionName: "Metro",
+        parentLogo: "https://alpha-ao.example/logo.png",
+        parentEmail: "alpha@ao.example",
+        regionLogo: "https://metro.example/logo.png",
+        regionWebsite: "https://metro.example",
+        regionEmail: "metro@region.example",
+      };
+      const oneOffOrgs = {
+        ...orgsFor(6, "Bravo AO", "Uptown"),
+        parentName: "Bravo AO",
+        regionName: "Uptown",
+        parentLogo: "https://bravo-ao.example/logo.png",
+        parentEmail: "bravo@ao.example",
+        regionLogo: "https://uptown.example/logo.png",
+        regionWebsite: "https://uptown.example",
+        regionEmail: "uptown@region.example",
+      };
+      const { instanceId: _recurringInstanceId, ...recurringLocationOrgs } =
+        recurringOrgs;
+      const recurringEventResponse: EventById = {
+        event: {
+          id: 1,
+          name: "Monday Bootcamp",
+          description: null,
+          isActive: true,
+          isPrivate: false,
+          location: "Alpha AO",
+          locationId: 10,
+          startDate: null,
+          endDate: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          email: null,
+          highlight: false,
+          created: "2026-01-01",
+          meta: null,
+          aos: [{ aoId: 5, aoName: "Alpha AO" }],
+          regions: [{ regionId: 2, regionName: "Metro" }],
+          eventTypes: [{ eventTypeId: 1, eventTypeName: "Bootcamp" }],
+          eventTagIds: [],
+        },
+      };
+      const recurringException = {
+        ...laterOneOff,
+        seriesId: 1,
+        name: "Monday Exception",
+      } satisfies UpcomingInstance;
+
+      beforeEach(() => {
+        queryStates.set("locationWorkout", {
+          data: locationWorkout(
+            [locationEvent()],
+            [{ ...oneOffOrgs, instanceId: 5 }, oneOffOrgs],
+            recurringLocationOrgs,
+          ),
+        });
+      });
+
+      const expectOrgs = (
+        selected: typeof recurringOrgs,
+        other: typeof recurringOrgs,
+      ) => {
+        expect(
+          screen
+            .getByAltText(`Logo for ${selected.parentName}`)
+            .getAttribute("src"),
+        ).toBe(selected.parentLogo);
+        expect(
+          screen.getByAltText(selected.regionName).getAttribute("src"),
+        ).toBe(selected.regionLogo);
+        expect(regionHeading(selected.regionName)).toBeTruthy();
+        expect(regionHeading(other.regionName)).toBeNull();
+        for (const orgs of [selected, other]) {
+          for (const href of [
+            orgs.parentWebsite,
+            orgs.regionWebsite,
+            `mailto:${orgs.parentEmail}`,
+            `mailto:${orgs.regionEmail}`,
+          ]) {
+            const link = document.querySelector(`a[href="${href}"]`);
+            if (orgs === selected) expect(link).toBeTruthy();
+            else expect(link).toBeNull();
+          }
+        }
+      };
+
+      it("uses the recurring workout's orgs for the default selection", () => {
+        renderPanel(null);
+
+        expectOrgs(recurringOrgs, oneOffOrgs);
+      });
+
+      it.each([
+        { name: "empty", instanceOrgs: [] },
+        {
+          name: "missing the selected instance",
+          instanceOrgs: [{ ...oneOffOrgs, instanceId: 5 }],
+        },
+      ])(
+        "keeps recurring orgs for an exception when instance metadata is $name",
+        ({ instanceOrgs }) => {
+          queryStates.set("locationWorkout", {
+            data: locationWorkout(
+              [locationEvent()],
+              instanceOrgs,
+              recurringLocationOrgs,
+            ),
+          });
+          queryStates.set("upcomingInstances", {
+            data: [oneOff, recurringException],
+          });
+          queryStates.set("eventById", { data: recurringEventResponse });
+
+          renderPanel(-6);
+
+          expect(warning()).toBeNull();
+          expectOrgs(recurringOrgs, oneOffOrgs);
+          expect(screen.getByText("Copy Link to Event")).toBeTruthy();
+        },
+      );
+
+      it("uses matching exception metadata before the recurring org fallback", () => {
+        queryStates.set("upcomingInstances", {
+          data: [oneOff, recurringException],
+        });
+        queryStates.set("eventById", { data: recurringEventResponse });
+
+        renderPanel(-6);
+
+        expect(warning()).toBeNull();
+        expectOrgs(oneOffOrgs, recurringOrgs);
+      });
+
+      it.each([1, 7])(
+        "rejects another location's instance even when its series id is %i",
+        (seriesId) => {
+          queryStates.set("upcomingInstances", {
+            data: [oneOff, { ...laterOneOff, locationId: 20, seriesId }],
+          });
+          queryStates.set("eventById", { data: recurringEventResponse });
+
+          renderPanel(-6);
+
+          expect(warning()).toBeTruthy();
+          expect(wasEverEnabled("eventById")).toBe(false);
+          expect(screen.queryByText("Copy Link to Event")).toBeNull();
+        },
+      );
+
+      it("switches AO, region, logos and contacts with the selected workout", () => {
+        const { rerender } = renderPanel(-6);
+
+        expectOrgs(oneOffOrgs, recurringOrgs);
+        expect(screen.getByTestId("chip-1")).toBeTruthy();
+        expect(screen.getByTestId("chip--6")).toBeTruthy();
+
+        for (const providedEventId of [1, -6]) {
+          rerender(
+            <WorkoutDetailsContent
+              locationId={10}
+              providedEventId={providedEventId}
+              chipSize="small"
+            />,
+          );
+          expectOrgs(
+            providedEventId === 1 ? recurringOrgs : oneOffOrgs,
+            providedEventId === 1 ? oneOffOrgs : recurringOrgs,
+          );
+        }
+      });
+
+      it("opens the selected workout's AO and region logos at full size", () => {
+        const openModal = vi
+          .spyOn(modal, "openModal")
+          .mockImplementation(() => undefined);
+        try {
+          const { rerender } = renderPanel(-6);
+
+          for (const [providedEventId, orgs] of [
+            [-6, oneOffOrgs],
+            [1, recurringOrgs],
+          ] as const) {
+            rerender(
+              <WorkoutDetailsContent
+                locationId={10}
+                providedEventId={providedEventId}
+                chipSize="small"
+              />,
+            );
+            fireEvent.click(
+              screen.getByRole("button", {
+                name: `Logo for ${orgs.parentName}`,
+              }),
+            );
+            expect(openModal).toHaveBeenLastCalledWith(
+              modal.ModalType.FULL_IMAGE,
+              {
+                title: `${orgs.parentName} logo`,
+                src: orgs.parentLogo,
+                fallbackSrc: "/f3_logo.png",
+                alt: `Logo for ${orgs.parentName}`,
+              },
+            );
+
+            fireEvent.click(
+              screen.getByRole("button", { name: orgs.regionName }),
+            );
+            expect(openModal).toHaveBeenLastCalledWith(
+              modal.ModalType.FULL_IMAGE,
+              {
+                title: orgs.regionName,
+                src: orgs.regionLogo,
+                fallbackSrc: "/f3_logo.png",
+                alt: orgs.regionName,
+              },
+            );
+          }
+          expect(openModal).toHaveBeenCalledTimes(4);
+        } finally {
+          openModal.mockRestore();
+        }
+      });
+
+      it.each([
+        { kind: "one-off", seriesId: null, name: "empty", instanceOrgs: [] },
+        {
+          kind: "one-off",
+          seriesId: null,
+          name: "missing the selected instance",
+          instanceOrgs: [{ ...oneOffOrgs, instanceId: 5 }],
+        },
+        { kind: "away", seriesId: 7, name: "empty", instanceOrgs: [] },
+        {
+          kind: "away",
+          seriesId: 7,
+          name: "missing the selected instance",
+          instanceOrgs: [{ ...oneOffOrgs, instanceId: 5 }],
+        },
+      ])(
+        "does not substitute recurring orgs for a $kind when instance metadata is $name",
+        ({ instanceOrgs, seriesId }) => {
+          queryStates.set("locationWorkout", {
+            data: locationWorkout(
+              [locationEvent()],
+              instanceOrgs,
+              recurringLocationOrgs,
+            ),
+          });
+          queryStates.set("upcomingInstances", {
+            data: [oneOff, { ...laterOneOff, seriesId }],
+          });
+
+          renderPanel(-6);
+
+          expect(warning()).toBeNull();
+          expect(screen.getByAltText("Logo for F3")).toBeTruthy();
+          expect(regionHeading("Metro")).toBeNull();
+          expect(screen.queryByAltText("Metro")).toBeNull();
+          expect(aoContactLink("Alpha AO")).toBeNull();
+          expect(
+            document.querySelector('a[href="https://metro.example"]'),
+          ).toBeNull();
+        },
+      );
     });
   });
 });
