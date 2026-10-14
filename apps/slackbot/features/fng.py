@@ -182,7 +182,17 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     if emailed:
         lines.append("I emailed him the Slack invite.")
     elif region_record.downrange_invite_link:
-        lines.append(f"I couldn't email him; please text him {region_record.downrange_invite_link}")
+        # The result alert caps at 200 chars, which can cut off the link; a DM can't, and it's easy to forward.
+        try:
+            client.chat_postMessage(
+                channel=safe_get(body, "user", "id"),
+                text=f"I couldn't email *{display_name}* his Slack invite. "
+                f"Please text him this link: {region_record.downrange_invite_link}",
+            )
+            lines.append("I couldn't email him, so I DMed you his invite link to text him.")
+        except SlackApiError as exc:
+            logger.warning("fng.invite_dm_failed error=%s", exc.response.get("error"))
+            lines.append(f"I couldn't email him; please text him {region_record.downrange_invite_link}")
     else:
         lines.append("No invite link is set in /f3-nation-settings > Downrange, so no email went out.")
     if welcome_failed:

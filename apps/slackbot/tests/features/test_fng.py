@@ -128,13 +128,27 @@ def test_without_invite_link_no_email_goes_out(monkeypatch):
     assert "Downrange" in view.call_args.kwargs["text"]
 
 
-def test_failed_email_shows_the_link_to_text_him(monkeypatch):
+def test_failed_email_dms_the_buddy_the_link(monkeypatch):
     _, send, view = patch_db(monkeypatch)
     send.return_value = False
+    client = MagicMock()
 
-    fng.handle_fng_form(submission(ao=False), MagicMock(), MagicMock(), {}, region_record(welcome_channel_enable=0))
+    fng.handle_fng_form(submission(ao=False), client, MagicMock(), {}, region_record(welcome_channel_enable=0))
 
+    dm = client.chat_postMessage.call_args.kwargs
+    assert dm["channel"] == "U_BUDDY" and INVITE_LINK in dm["text"]
     assert view.call_args.kwargs["level"] == constants.AlertLevel.WARNING
+    assert "DMed you" in view.call_args.kwargs["text"] and INVITE_LINK not in view.call_args.kwargs["text"]
+
+
+def test_failed_email_and_dm_fall_back_to_the_link_in_the_result(monkeypatch):
+    _, send, view = patch_db(monkeypatch)
+    send.return_value = False
+    client = MagicMock()
+    client.chat_postMessage.side_effect = SlackApiError("cannot_dm", {"error": "cannot_dm_bot"})
+
+    fng.handle_fng_form(submission(ao=False), client, MagicMock(), {}, region_record(welcome_channel_enable=0))
+
     assert INVITE_LINK in view.call_args.kwargs["text"]
 
 
