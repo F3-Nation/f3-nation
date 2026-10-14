@@ -20,7 +20,9 @@ interface Region {
 
 // When the emailed code is rejected (usually because it expired while the
 // form was being filled in), the answers are kept for this tab so asking for
-// a fresh code doesn't mean typing them all again.
+// a fresh code doesn't mean typing them all again. Phone numbers and the
+// emergency contact stay out of it: browser storage is plain text, and those
+// are worth retyping rather than leaving behind on a shared computer.
 const DRAFT_KEY = "f3-register-draft";
 
 interface RegisterDraft {
@@ -30,12 +32,6 @@ interface RegisterDraft {
   lastName: string;
   homeRegionId: number | "";
   regionSearch: string;
-  phone: string;
-  phoneCountry: PhoneCountry;
-  emergencyContact: string;
-  emergencyPhone: string;
-  emergencyPhoneCountry: PhoneCountry;
-  emergencyNotes: string;
 }
 
 function saveDraft(draft: RegisterDraft) {
@@ -120,7 +116,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     setEmergencyPhoneCountry(detectedCountry);
   }, []);
 
-  // Runs after country detection so a saved draft's countries win.
+  // Restore the answers saved when an earlier code was rejected.
   useEffect(() => {
     const draft = loadDraft(email);
     if (!draft) return;
@@ -129,14 +125,6 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     setLastName(draft.lastName);
     setHomeRegionId(draft.homeRegionId);
     setRegionSearch(draft.regionSearch);
-    setPhone(draft.phone);
-    setPhoneCountry(draft.phoneCountry);
-    setEmergencyContact(draft.emergencyContact);
-    setEmergencyPhone(draft.emergencyPhone);
-    setEmergencyPhoneCountry(draft.emergencyPhoneCountry);
-    setEmergencyNotes(draft.emergencyNotes);
-    if (draft.emergencyContact || draft.emergencyPhone || draft.emergencyNotes)
-      setShowEmergency(true);
   }, [email]);
 
   // Close region dropdown on outside click
@@ -224,12 +212,6 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
             lastName,
             homeRegionId,
             regionSearch,
-            phone,
-            phoneCountry,
-            emergencyContact,
-            emergencyPhone,
-            emergencyPhoneCountry,
-            emergencyNotes,
           });
           setNeedsSignInAgain(true);
         }

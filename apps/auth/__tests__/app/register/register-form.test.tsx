@@ -328,10 +328,20 @@ describe("registration", () => {
     );
     await fillForm();
     change("F3 Name", "Test Runner");
+    change("Phone Number", "2025550123");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Emergency Contact Info/ }),
+    );
+    change("Emergency Contact Name", "Test Contact");
     submit();
     fireEvent.click(
       await screen.findByRole("button", { name: "Sign in again" }),
     );
+    // Phone numbers and the emergency contact are never written to storage.
+    const stored = sessionStorage.getItem("f3-register-draft") ?? "";
+    expect(stored).toContain("Test Runner");
+    expect(stored).not.toContain("5550123");
+    expect(stored).not.toContain("Test Contact");
     cleanup();
 
     // Back from the new code: same email, form comes back filled in.
@@ -344,6 +354,7 @@ describe("registration", () => {
       "value",
       "Test Runner",
     );
+    expect(screen.getByLabelText("Phone Number")).toHaveProperty("value", "");
 
     // A different email gets a blank form.
     cleanup();
@@ -365,12 +376,6 @@ describe("registration", () => {
         lastName: "PAX",
         homeRegionId: "",
         regionSearch: "",
-        phone: "",
-        phoneCountry: "US",
-        emergencyContact: "",
-        emergencyPhone: "",
-        emergencyPhoneCountry: "US",
-        emergencyNotes: "",
       }),
     );
     await fillForm();

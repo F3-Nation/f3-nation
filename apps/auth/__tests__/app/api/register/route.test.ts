@@ -95,6 +95,35 @@ describe("POST /api/register", () => {
     expect(payload).not.toHaveProperty("code");
   });
 
+  it("reports a failed account creation without leaking the API response", async () => {
+    checkEmailCode.mockResolvedValue(true);
+    fetchMock.mockResolvedValue(
+      new Response("x".repeat(600), { status: 500, statusText: "Boom" }),
+    );
+    const res = await register(valid);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: "Failed to create account. Please try again.",
+    });
+    expect(logError).toHaveBeenCalledWith("auth.register.f3_api_failed", {
+      status: 500,
+      statusText: "Boom",
+      responseText: "x".repeat(500),
+    });
+  });
+
+  it("reports an unreachable API", async () => {
+    checkEmailCode.mockResolvedValue(true);
+    fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
+    const res = await register(valid);
+    expect(res.status).toBe(502);
+    expect(logError).toHaveBeenCalledWith(
+      "auth.register.f3_api_error",
+      {},
+      expect.any(Error),
+    );
+  });
+
   it("rate-limits on the proxy-appended hop, not the caller-set ones", async () => {
     checkEmailCode.mockResolvedValue(false);
     await register(valid, { "x-forwarded-for": "6.6.6.6, 203.0.113.7" });
