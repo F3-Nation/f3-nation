@@ -13,6 +13,8 @@ import type { RouterOutputs } from "~/orpc/types";
 export const ReactQueryHydrator = (params: {
   eventsAndLocations: RouterOutputs["map"]["location"]["eventsAndLocations"];
   regionsWithLocation: RouterOutputs["map"]["location"]["regionsWithLocation"];
+  /** When the server render fetched the data above (ms since epoch). */
+  dataFetchedAt: number;
   children: ReactNode;
 }) => {
   // Only hydrate when real data exists — empty arrays (from SKIP_SSG builds)
@@ -24,10 +26,14 @@ export const ReactQueryHydrator = (params: {
     orpc.map.location.eventsAndLocations.queryOptions({
       input: undefined,
       staleTime: MAP_DATASET_STALE_TIME_MS,
-      // The SSG/ISR copy can be up to an hour old: treat it as stale so the
-      // first mount still fetches once (as before); only repeat fetches stop.
+      // Stamp the SSG/ISR copy with when it was actually fetched: a fresh
+      // render is used as is, and one older than staleTime (an ISR page can be
+      // served for up to an hour) refetches once on mount.
       ...(hasEvents
-        ? { initialData: params.eventsAndLocations, initialDataUpdatedAt: 0 }
+        ? {
+            initialData: params.eventsAndLocations,
+            initialDataUpdatedAt: params.dataFetchedAt,
+          }
         : {}),
     }),
   );
@@ -36,7 +42,10 @@ export const ReactQueryHydrator = (params: {
       input: undefined,
       staleTime: MAP_DATASET_STALE_TIME_MS,
       ...(hasRegions
-        ? { initialData: params.regionsWithLocation, initialDataUpdatedAt: 0 }
+        ? {
+            initialData: params.regionsWithLocation,
+            initialDataUpdatedAt: params.dataFetchedAt,
+          }
         : {}),
     }),
   );

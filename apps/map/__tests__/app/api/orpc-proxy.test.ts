@@ -272,7 +272,9 @@ describe("oRPC proxy route", () => {
   });
 
   // fetch() decodes a compressed upstream body but keeps its headers; passing
-  // them on makes the browser try to decode plain bytes again.
+  // them on makes the browser try to decode plain bytes again. No
+  // accept-encoding here, so the proxy passes the body through as is and the
+  // upstream headers are the only way an encoding could appear.
   it.each(["/v1/ping", "/v1/request/canEditRegions"])(
     "drops upstream Content-Encoding and Content-Length on %s",
     async (path) => {
@@ -289,26 +291,38 @@ describe("oRPC proxy route", () => {
         await import("../../../src/app/api/orpc/[[...rest]]/route");
 
       const response = await GET(
-        new NextRequest(`http://localhost:3000/api/orpc${path}`, {
-          headers: { "accept-encoding": "gzip, br" },
-        }),
+        new NextRequest(`http://localhost:3000/api/orpc${path}`),
       );
 
-      // The upstream's encoding never leaks onto the decoded body: the only
-      // encoding the response may carry is the proxy's own gzip, and the
-      // body must decode to the original either way.
+      expect(response.headers.get("content-encoding")).toBeNull();
       expect(response.headers.get("content-length")).not.toBe("999");
-      const encoding = response.headers.get("content-encoding");
-      expect([null, "gzip"]).toContain(encoding);
-      const text =
-        encoding === "gzip"
-          ? await new Response(
-              response.body!.pipeThrough(new DecompressionStream("gzip")),
-            ).text()
-          : await response.text();
-      expect(JSON.parse(text)).toEqual({ ok: true });
+      expect(await response.json()).toEqual({ ok: true });
     },
   );
+
+  it("gzips an upstream-gzipped body exactly once when the caller accepts gzip", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response('{"ok":true}', {
+        headers: {
+          "content-type": "application/json",
+          "content-encoding": "gzip",
+        },
+      }),
+    );
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const response = await GET(
+      new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
+        headers: { "accept-encoding": "gzip" },
+      }),
+    );
+
+    expect(response.headers.get("content-encoding")).toBe("gzip");
+    const text = await new Response(
+      response.body!.pipeThrough(new DecompressionStream("gzip")),
+    ).text();
+    expect(JSON.parse(text)).toEqual({ ok: true });
+  });
 
   describe("compression", () => {
     const json = JSON.stringify({

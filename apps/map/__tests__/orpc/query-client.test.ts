@@ -15,14 +15,29 @@ describe("createQueryClient", () => {
     expect(MAP_DATASET_STALE_TIME_MS).toBe(5 * 60_000);
   });
 
+  type ThrowOnError = (
+    e: unknown,
+    query: { state: { data: unknown } },
+  ) => boolean;
+  const noData = { state: { data: undefined } };
+
   it("doesn't throw abort errors, but throws everything else", () => {
-    const throwOnError = queries().throwOnError as (e: unknown) => boolean;
+    const throwOnError = queries().throwOnError as ThrowOnError;
     const abort = Object.assign(new Error("x"), { name: "AbortError" });
-    expect(throwOnError(abort)).toBe(false);
-    expect(throwOnError(new Error("signal is aborted without reason"))).toBe(
+    expect(throwOnError(abort, noData)).toBe(false);
+    expect(
+      throwOnError(new Error("signal is aborted without reason"), noData),
+    ).toBe(false);
+    expect(throwOnError(new Error("boom"), noData)).toBe(true);
+  });
+
+  // A failed background refresh (e.g. of the SSG-hydrated map datasets) must
+  // not replace data the page is already showing with the error boundary.
+  it("doesn't throw when the query already has data", () => {
+    const throwOnError = queries().throwOnError as ThrowOnError;
+    expect(throwOnError(new Error("boom"), { state: { data: [] } })).toBe(
       false,
     );
-    expect(throwOnError(new Error("boom"))).toBe(true);
   });
 
   it("round-trips non-JSON values (Dates) through dehydrate/hydrate", async () => {

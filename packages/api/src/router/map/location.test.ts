@@ -891,6 +891,21 @@ describe("Map Location Router", () => {
       expect(findRegion(result, childless.id)).toEqual([]);
       expect(findRegion(result, noActiveLocation.id)).toEqual([]);
     });
+
+    it("skips a non-region org that has children and a located location", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const area = await createTestArea();
+      if (!area) throw new Error("Failed to create test area");
+      // An area qualifies on every other condition: it has a child region
+      // and an active location with coordinates of its own.
+      await createTestRegion({ parentId: area.id });
+      await insertLocation(area.id, {});
+
+      const result =
+        await createTestClient().map.location.regionsWithLocation();
+
+      expect(findRegion(result, area.id)).toEqual([]);
+    });
   });
 
   describe("upcomingInstances", () => {

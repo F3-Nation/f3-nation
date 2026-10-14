@@ -1038,6 +1038,7 @@ export const mapLocationRouter = os.router({
             and(
               eq(schema.locations.isActive, true),
               eq(region.isActive, true),
+              eq(region.orgType, "region"),
               isNotNull(schema.locations.latitude),
               isNotNull(schema.locations.longitude),
               // Same population as before: regions with at least one child org.
