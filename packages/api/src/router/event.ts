@@ -480,6 +480,9 @@ export const eventRouter = {
         }
       }) ?? [desc(schema.events.id)];
 
+      // Break tied sort values so rows cannot repeat or vanish between pages.
+      sortedColumns.push(asc(schema.events.id));
+
       const select = {
         id: schema.events.id,
         name: schema.events.name,

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm with-env next build",
     "clean": "rm -rf .turbo node_modules .next",
-    "dev": "TZ=UTC pnpm with-env next dev -p 3002",
+    "dev": "TZ=UTC pnpm with-env next dev -p ${F3_ADMIN_PORT:-3002}",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "dotenv -v SKIP_ENV_VALIDATION=1 eslint .",
     "start": "pnpm with-env next start",

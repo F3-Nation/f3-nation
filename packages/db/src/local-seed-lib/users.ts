@@ -153,7 +153,13 @@ export async function seedOAuthClients(db: AppDb): Promise<void> {
     await db
       .insert(authSchema.oauthClients)
       .values(client)
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: authSchema.oauthClients.id,
+        set: {
+          redirectUris: client.redirectUris,
+          allowedOrigin: client.allowedOrigin,
+        },
+      });
     console.log(`  ✓ OAuth client: ${client.id}`);
   }
 }
