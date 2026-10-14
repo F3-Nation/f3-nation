@@ -22,6 +22,7 @@
     "db:pull": "pnpm -F db pull",
     "db:push": "pnpm -F db push",
     "db:reset": "pnpm -F db reset",
+    "db:load:snapshot": "pnpm -F db load:snapshot",
     "db:seed:local": "pnpm -F db seed:local",
     "db:studio": "pnpm -F db studio",
     "dev": "bash scripts/dev.sh",

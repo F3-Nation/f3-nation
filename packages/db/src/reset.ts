@@ -4,6 +4,7 @@ import { isTest } from "@acme/shared/common/constants";
 
 import type { AppDb } from "./client";
 import { alembicVersion } from "../drizzle/schema";
+import { DISPOSABLE_MARKER, DISPOSABLE_REMEDY } from "./migrate-guards";
 import { getDb, getDbUrl } from "./utils/functions";
 
 interface DbUser extends Record<string, unknown> {
@@ -55,10 +56,10 @@ export const reset = async (db?: AppDb) => {
     if (
       !matchesConfiguredDatabase ||
       !["localhost", "127.0.0.1", "[::1]"].includes(target.hostname) ||
-      connectedDb?.disposable_marker !== "f3-disposable-local-v1"
+      connectedDb?.disposable_marker !== DISPOSABLE_MARKER
     ) {
       throw new Error(
-        "Refusing reset: target is not a verified disposable local database. For the local Docker database, run pnpm local:setup, or mark it once with: docker exec f3-postgres psql -U f3local -d f3nation -c \"COMMENT ON DATABASE f3nation IS 'f3-disposable-local-v1'\"",
+        `Refusing reset: target is not a verified disposable local database. ${DISPOSABLE_REMEDY}`,
       );
     }
     // Interactive path only: automated (isTest) callers have no TTY to answer.

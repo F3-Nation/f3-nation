@@ -179,7 +179,7 @@ export const userListInputSchema = z.object({
   roles: arrayOrSingle(z.enum(UserRole))
     .optional()
     .describe(
-      "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+      "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
     ),
   searchTerm: z
     .string()
@@ -223,7 +223,7 @@ export const userListUserOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),
@@ -255,7 +255,7 @@ export const userDetailOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),
@@ -302,17 +302,24 @@ export const buildUserListQuery = async ({
     pageIndex: input?.pageIndex,
     defaultPageSize: 10,
   });
+  const selectedRoles = input?.roles ?? [];
+  // Role-less users have no roles row (LEFT JOIN -> NULL name), so selecting
+  // "user" also matches them. OR the two branches so mixed selections match both.
+  const roleFilter = (() => {
+    if (selectedRoles.length === 0) return undefined;
+    const conditions: SQL[] = [inArray(schema.roles.name, selectedRoles)];
+    if (selectedRoles.includes("user"))
+      conditions.push(isNull(schema.roles.name));
+    return conditions.length === 1 ? conditions[0] : or(...conditions);
+  })();
+
   const where = and(
     !input?.statuses?.length || input.statuses.length === UserStatus.length
       ? undefined
       : input.statuses.includes("active")
         ? eq(schema.users.status, "active")
         : eq(schema.users.status, "inactive"),
-    !input?.roles?.length || input.roles.length === UserRole.length
-      ? undefined
-      : input.roles.includes("user")
-        ? isNull(schema.roles.name)
-        : inArray(schema.roles.name, input.roles),
+    roleFilter,
     input?.searchTerm
       ? or(
           ilike(schema.users.f3Name, `%${input?.searchTerm}%`),

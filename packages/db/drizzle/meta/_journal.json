@@ -218,6 +218,20 @@
       "when": 1791244800000,
       "tag": "0030_public_audit_history",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791935682073,
+      "tag": "0031_repoint_roles_to_user_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791935688550,
+      "tag": "0032_add_password_user_roles",
+      "breakpoints": true
     }
   ]
 }
