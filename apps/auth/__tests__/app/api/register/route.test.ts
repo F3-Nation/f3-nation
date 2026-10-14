@@ -20,13 +20,15 @@ vi.mock("~/env", () => ({
 }));
 
 const { POST } = await import("~/app/api/register/route");
+const { rateLimit } = await import("~/lib/rate-limit");
 
 const fetchMock = vi.fn<typeof fetch>();
 
-function register(body: Record<string, unknown>) {
+function register(body: Record<string, unknown>, headers?: HeadersInit) {
   return POST(
     new Request("https://auth.test.invalid/api/register", {
       method: "POST",
+      headers,
       body: JSON.stringify(body),
     }) as unknown as NextRequest,
   );
@@ -91,5 +93,15 @@ describe("POST /api/register", () => {
     const payload = JSON.parse(init?.body as string) as Record<string, unknown>;
     expect(payload.email).toBe("new-pax@example.test");
     expect(payload).not.toHaveProperty("code");
+  });
+
+  it("rate-limits on the proxy-appended hop, not the caller-set ones", async () => {
+    checkEmailCode.mockResolvedValue(false);
+    await register(valid, { "x-forwarded-for": "6.6.6.6, 203.0.113.7" });
+    expect(rateLimit).toHaveBeenCalledWith(
+      "register:203.0.113.7",
+      5,
+      60 * 1000,
+    );
   });
 });

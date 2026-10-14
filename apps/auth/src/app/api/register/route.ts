@@ -32,7 +32,10 @@ function normalizePhone(phone: string | undefined): string | undefined {
 }
 
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  // The last hop is the one our proxy appended; earlier hops are caller-set.
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
+    "unknown";
   const { allowed } = rateLimit(`register:${ip}`, 5, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });

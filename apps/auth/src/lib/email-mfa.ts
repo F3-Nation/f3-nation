@@ -2,7 +2,7 @@ import crypto from "crypto";
 
 import { createTransport } from "nodemailer";
 
-import { and, eq, gt, isNull, sql } from "@acme/db";
+import { and, eq, gt, isNull, lt, sql } from "@acme/db";
 import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
 import { isValidCallbackUrl } from "~/lib/callback-url";
@@ -154,19 +154,22 @@ async function findMatchingCode(email: string, code: string) {
 
   if (!mfaCode) return null;
 
-  // Check brute-force lockout
-  if (mfaCode.attemptCount >= MAX_ATTEMPTS) return null;
+  // Claim an attempt before comparing, in one conditional update, so a burst
+  // of parallel guesses can't all read "0 attempts used" and each get a free
+  // try. A match spends an attempt too; a new code starts a fresh row.
+  const [claimed] = await db
+    .update(emailMfaCodes)
+    .set({ attemptCount: sql`${emailMfaCodes.attemptCount} + 1` })
+    .where(
+      and(
+        eq(emailMfaCodes.id, mfaCode.id),
+        lt(emailMfaCodes.attemptCount, MAX_ATTEMPTS),
+      ),
+    )
+    .returning({ id: emailMfaCodes.id });
+  if (!claimed) return null;
 
-  const expectedHash = hashCode(code);
-
-  if (!constantTimeEqual(mfaCode.codeHash, expectedHash)) {
-    // Increment attempt count
-    await db
-      .update(emailMfaCodes)
-      .set({ attemptCount: sql`${emailMfaCodes.attemptCount} + 1` })
-      .where(eq(emailMfaCodes.id, mfaCode.id));
-    return null;
-  }
+  if (!constantTimeEqual(mfaCode.codeHash, hashCode(code))) return null;
 
   return mfaCode;
 }
@@ -174,7 +177,8 @@ async function findMatchingCode(email: string, code: string) {
 /**
  * Check a code without consuming it — proof that the caller owns `email`,
  * for steps (registration) that must run before the sign-in that consumes
- * the code. Wrong guesses share the sign-in's attempt budget.
+ * the code. Each check spends one of the code's attempts, the same budget
+ * sign-in draws on.
  */
 export async function checkEmailCode(
   email: string,
