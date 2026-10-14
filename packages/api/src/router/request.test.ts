@@ -1675,6 +1675,44 @@ describe("Request Router", () => {
   };
 
   describe("region notification on reviewed event moves", () => {
+    it("returns NOT_FOUND and leaves a pending move-event request untouched when its event was deleted", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const source = await createTestRegion();
+      const destination = await createTestRegion();
+      const sourceAo = await createTestAO(source.id);
+      const destinationAo = await createTestAO(destination.id);
+      const location = await createTestLocation(sourceAo.id);
+      const event = await createTestEvent(sourceAo.id, location.id);
+
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+      await db.delete(schema.events).where(eq(schema.events.id, event.id));
+
+      await expect(
+        createTestClient().request.validateSubmissionByAdmin({
+          id,
+          requestType: "move_event_to_different_ao",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalAoId: sourceAo.id,
+          originalRegionId: source.id,
+          newAoId: destinationAo.id,
+          newRegionId: destination.id,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      const [request] = await db
+        .select({ status: schema.updateRequests.status })
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, id));
+      expect(request?.status).toBe("pending");
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
     it("uses the event's current source region instead of the request's stale source", async () => {
       await mockAuthWithSession(await createAdminSession());
       const requestedSource = await createTestRegion();

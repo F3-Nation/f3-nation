@@ -1286,6 +1286,11 @@ const handleRequest = async <T extends HandleableRequestInput>({
             .select({ aoId: schema.events.orgId })
             .from(schema.events)
             .where(eq(schema.events.id, input.originalEventId));
+          if (!snapshot) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Failed to find event to update.",
+            });
+          }
           eventSnapshot = snapshot;
         }
 
