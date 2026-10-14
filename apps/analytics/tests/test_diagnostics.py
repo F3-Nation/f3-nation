@@ -980,8 +980,14 @@ def test_ctas_worker_deadline_interrupts_blocking_operation_and_cleans_up(monkey
         directories.append(Path(directory))
         return connection
 
+    # Freeze the worker's clock so its pre-statement deadline checkpoint never trips; only the
+    # watchdog (which waits in real time) may fire, however slow the runner is.
+    monkeypatch.setattr(diagnostics, "time", SimpleNamespace(monotonic=lambda: 0.0, perf_counter=time.perf_counter))
     monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
-    result = _run_ctas_worker_for_test(_settings(), make_connection, _logger(events), deadline_seconds=0.01)
+    with tempfile.TemporaryDirectory(prefix="ctas-worker-test-") as directory:
+        result = diagnostics._run_ctas_events_worker(
+            _settings(), Path(directory), 0.01, make_connection, cast(JsonLogger, _logger(events))
+        )
 
     assert result == {"status": "failed", "error_type": "RuntimeError"}
     assert connection.interrupted is True and connection.closed is True
