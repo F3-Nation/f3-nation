@@ -113,8 +113,11 @@ describe("map location region query validation", () => {
     });
   });
 
-  it.each([1.5, -1.5, 2_147_483_648, -2_147_483_649, 99_999_999_999])(
-    "rejects a REST region ID outside the integer domain: %s",
+  it.each([
+    0, -1, -2, -2_147_483_648, 1.5, -1.5, 2_147_483_648, -2_147_483_649,
+    99_999_999_999,
+  ])(
+    "rejects a REST region ID outside the positive integer domain: %s",
     async (regionId) => {
       const res = await target.invoke(
         req(`/v1/map/location/aos-in-region?regionId=${regionId}`, {
@@ -129,8 +132,11 @@ describe("map location region query validation", () => {
     },
   );
 
-  it.each([1.5, -1.5, 2_147_483_648, -2_147_483_649, 99_999_999_999])(
-    "rejects an RPC region ID outside the integer domain: %s",
+  it.each([
+    0, -1, -2, -2_147_483_648, 1.5, -1.5, 2_147_483_648, -2_147_483_649,
+    99_999_999_999,
+  ])(
+    "rejects an RPC region ID outside the positive integer domain: %s",
     async (regionId) => {
       const res = await rpcResponse(
         (client) => client.map.location.getAOsInRegion({ regionId }),
@@ -143,16 +149,16 @@ describe("map location region query validation", () => {
     },
   );
 
-  // Keep both inclusive bounds and the Map's -1 fallback in the accepted domain.
-  it.each([-2_147_483_648, -1, 0, 2_147_483_647])(
-    "accepts an in-range integer for REST and RPC: %s",
+  it.each([1, 2_147_483_647])(
+    "accepts an inclusive positive integer bound for REST and RPC: %s",
     async (regionId) => {
       const rpc = await rpcResponse(
         (client) => client.map.location.getAOsInRegion({ regionId }),
         { "x-forwarded-for": "10.96.0.5" },
       );
       expect(rpc.status).toBe(200);
-      expect(await rpc.json()).toEqual({ json: { aos: [] } });
+      const rpcBody = (await rpc.json()) as { json: { aos: unknown[] } };
+      expect(rpcBody.json.aos).toBeInstanceOf(Array);
 
       const rest = await target.invoke(
         req(`/v1/map/location/aos-in-region?regionId=${regionId}`, {
@@ -163,7 +169,7 @@ describe("map location region query validation", () => {
         }),
       );
       expect(rest.status).toBe(200);
-      expect(await rest.json()).toEqual({ aos: [] });
+      expect(await rest.json()).toEqual(rpcBody.json);
     },
   );
 });

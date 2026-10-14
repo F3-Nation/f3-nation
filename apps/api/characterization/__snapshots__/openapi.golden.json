@@ -8772,7 +8772,7 @@
             "required": true,
             "schema": {
               "maximum": 2147483647,
-              "minimum": -2147483648,
+              "minimum": 1,
               "type": "integer"
             }
           }

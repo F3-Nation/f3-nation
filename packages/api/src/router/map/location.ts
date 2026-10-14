@@ -1155,7 +1155,7 @@ export const mapLocationRouter = os.router({
             typeof value === "string" && /^\s*-?\d+(\.0+)?\s*$/.test(value)
               ? Number(value)
               : value,
-          z.number().int().min(-2_147_483_648).max(2_147_483_647),
+          z.number().int().min(1).max(2_147_483_647),
         ),
       }),
     )
