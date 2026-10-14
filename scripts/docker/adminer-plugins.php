@@ -9,7 +9,7 @@ namespace docker {
                 return "F3 Nation DB";
             }
             function credentials() {
-                return ['f3-postgres', 'f3local', 'f3local'];
+                return ['postgres', 'f3local', 'f3local'];
             }
             function login($login, $password) {
                 return true;
@@ -60,7 +60,7 @@ namespace {
                 . 'function set(name,val){var el=form.elements[name];if(el)el.value=val;}'
                 . 'driver.value="pgsql";'
                 . 'driver.dispatchEvent(new Event("change",{bubbles:true}));'
-                . 'set("auth[server]","f3-postgres");'
+                . 'set("auth[server]","postgres");'
                 . 'set("auth[username]","f3local");'
                 . 'set("auth[password]","f3local");'
                 . 'set("auth[db]","f3nation");'
