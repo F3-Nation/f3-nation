@@ -43,6 +43,7 @@ def submission(ao=True, **values):
 
 
 def patch_db(monkeypatch, existing_user=None, buddy_user_id=7):
+    monkeypatch.setenv("SLACKBOT_ENV", "production")
     db = SimpleNamespace(
         find_records=MagicMock(return_value=[existing_user] if existing_user else []),
         create_record=MagicMock(),
@@ -66,7 +67,7 @@ def test_creates_profile_emails_invite_and_posts_welcome(monkeypatch):
 
     user = db.create_record.call_args.args[0]
     assert (user.email, user.first_name, user.last_name, user.f3_name) == ("john@example.com", "John", "Smith", "Chip")
-    assert user.home_region_id == 8
+    assert user.home_region_id == 8 and user.phone == "828-555-0100"
     assert user.meta == {"brought_by": 7}
     assert send.call_args.kwargs["to_email"] == "john@example.com"
     assert INVITE_LINK in send.call_args.kwargs["html_content"]
@@ -80,13 +81,40 @@ def test_creates_profile_emails_invite_and_posts_welcome(monkeypatch):
 
 
 def test_existing_user_is_left_alone(monkeypatch):
-    db, send, view = patch_db(monkeypatch, existing_user=SimpleNamespace(id=99))
+    db, send, view = patch_db(monkeypatch, existing_user=SimpleNamespace(id=99, first_name="Jonathan"))
+    client = MagicMock()
+
+    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
+
+    db.create_record.assert_not_called()
+    send.assert_called_once()
+    html_content = send.call_args.kwargs["html_content"]
+    assert "Jonathan!" in html_content and "John!" not in html_content
+    client.chat_postMessage.assert_not_called()
+    assert "already had an F3 Nation profile" in view.call_args.kwargs["text"]
+
+
+def test_outside_production_contact_details_go_to_the_sink(monkeypatch):
+    db, send, _ = patch_db(monkeypatch)
+    monkeypatch.setenv("SLACKBOT_ENV", "staging")
+
+    fng.handle_fng_form(submission(), MagicMock(), MagicMock(), {}, region_record())
+
+    user = db.create_record.call_args.args[0]
+    assert user.email.startswith("dev.staging-email-sink+fng-") and user.email.endswith("@f3nation.com")
+    assert user.phone is None
+    assert send.call_args.kwargs["to_email"] == user.email
+
+
+def test_failed_buddy_lookup_shows_error_and_creates_nothing(monkeypatch):
+    db, send, view = patch_db(monkeypatch)
+    fng.get_user.side_effect = RuntimeError("boom")
 
     fng.handle_fng_form(submission(), MagicMock(), MagicMock(), {}, region_record())
 
     db.create_record.assert_not_called()
-    send.assert_called_once()
-    assert "already had an F3 Nation profile" in view.call_args.kwargs["text"]
+    send.assert_not_called()
+    assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
 
 
 def test_without_invite_link_no_email_goes_out(monkeypatch):

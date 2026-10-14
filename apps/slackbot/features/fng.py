@@ -6,6 +6,7 @@ emails him the region's Slack invite link, and posts a welcome in the welcome ch
 """
 
 import html
+import uuid
 from logging import Logger
 
 from f3_data_models.models import Org, Org_Type, User
@@ -14,6 +15,7 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
 from features.user import USER_META_BROUGHT_BY
+from utilities import constants
 from utilities.builders import update_submission_wait_view
 from utilities.constants import AlertLevel
 from utilities.database.orm import SlackSettings
@@ -105,6 +107,7 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
 
     first_name, last_name, f3_name = text(FNG_FIRST_NAME), text(FNG_LAST_NAME), text(FNG_F3_NAME)
     email = (text(FNG_EMAIL) or "").lower()
+    phone = text(FNG_PHONE)
     ao_name = safe_get(values, FNG_AO, FNG_AO, "selected_option", "text", "text")
     display_name = f"{first_name} {(last_name or '')[:1]}."
     if f3_name:
@@ -128,19 +131,23 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
         done(AlertLevel.ERROR, "First name, last name and email can't be blank.")
         return
 
+    if not constants.is_production_deployment():
+        # Like create_user: keep real contact details out of Staging/local and never email the real person.
+        email, phone = f"dev.staging-email-sink+fng-{uuid.uuid4().hex}@f3nation.com", None
+
     # Create-only: an existing user (maybe from another region) is left exactly as he is.
     existing = safe_get(DbManager.find_records(User, filters=[User.email == email]), 0)
     if not existing:
-        buddy = get_user(safe_get(body, "user", "id"), region_record, client, logger)
-        buddy_user_id = safe_get(buddy, "user_id")
         try:
+            buddy = get_user(safe_get(body, "user", "id"), region_record, client, logger)
+            buddy_user_id = safe_get(buddy, "user_id")
             DbManager.create_record(
                 User(
                     email=email,
                     first_name=first_name,
                     last_name=last_name,
                     f3_name=f3_name,
-                    phone=text(FNG_PHONE),
+                    phone=phone,
                     home_region_id=region_record.org_id,
                     meta={USER_META_BROUGHT_BY: buddy_user_id} if buddy_user_id else {},
                 )
@@ -151,10 +158,12 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
             return
 
     region = safe_get(DbManager.get(Org, region_record.org_id), "name") or region_record.workspace_name or "F3"
-    emailed = _send_welcome_email(email, first_name, region, region_record.downrange_invite_link)
+    # An existing user may still need this region's Slack invite, but greet him by his profile name, not a typed one.
+    greet = safe_get(existing, "first_name") if existing else first_name
+    emailed = _send_welcome_email(email, greet, region, region_record.downrange_invite_link)
 
     welcome_failed = False
-    if region_record.welcome_channel_enable and region_record.welcome_channel:
+    if not existing and region_record.welcome_channel_enable and region_record.welcome_channel:
         where = f"*{html.escape(ao_name, quote=False)}*" if ao_name else html.escape(region, quote=False)
         try:
             client.chat_postMessage(
@@ -181,17 +190,18 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     done(AlertLevel.SUCCESS if emailed and not welcome_failed else AlertLevel.WARNING, " ".join(lines))
 
 
-def _send_welcome_email(email: str, first_name: str, region: str, invite_link: str | None) -> bool:
+def _send_welcome_email(email: str, first_name: str | None, region: str, invite_link: str | None) -> bool:
     if not invite_link:
         return False
     region, link = html.escape(region), html.escape(invite_link)
+    greeting = f", {html.escape(first_name)}" if first_name else ""
     return send_via_sendgrid(
         to_email=email,
         subject=f"Welcome to {region}",
         html_content=f"""
     <html>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <p>Welcome to {region}, {html.escape(first_name)}!</p>
+        <p>Welcome to {region}{greeting}!</p>
         <p>We use Slack to coordinate workouts, post backblasts and stay in touch.
         <a href="{link}">Join us here</a>, using this email address so we can link your account.</p>
         <p>See you in the gloom.</p>
