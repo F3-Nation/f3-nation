@@ -309,8 +309,24 @@ describe.each([
   },
 ])("$label editor", ({ type, label, parentTypes, initialName, deletion }) => {
   it("loads the record and sorted parent options with the current selection", async () => {
-    mount(type, record.id);
-    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    // Must stay the first edit-mode mount: React logs this warning once per module.
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      mount(type, record.id);
+      await waitFor(() => expect(field("Name").value).toBe(record.name));
+      expect(
+        consoleError.mock.calls.some((args) =>
+          args.some(
+            (argument) =>
+              typeof argument === "string" && argument.includes("uncontrolled"),
+          ),
+        ),
+      ).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+    }
     expect(screen.getByRole("heading").textContent).toBe(`Edit ${label}`);
     expect(field("ID").disabled).toBe(true);
     expect(field("ID").value).toBe("40");

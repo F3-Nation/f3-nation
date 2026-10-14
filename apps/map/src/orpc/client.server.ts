@@ -5,16 +5,14 @@ import { createRouterClient } from "@orpc/server";
 import { router } from "@acme/api";
 import { Client, Header } from "@acme/shared/common/enums";
 
-import { env } from "~/env";
-
 /**
  * Server-side oRPC client for static generation (SSG).
  *
  * This follows the oRPC SSR optimization pattern but WITHOUT calling headers()
- * which would opt the page out of static generation.
- *
- * We set isStaticGeneration: true to tell the middleware to skip auth().
- * This only works for public procedures that don't need authentication.
+ * which would opt the page out of static generation — so it never has a real
+ * user's cookies and can only ever act as an anonymous caller. It must only
+ * be used for `publicReadProcedure` endpoints (see packages/api/src/shared.ts);
+ * there is no credential here to elevate a protected call.
  *
  * @see https://orpc.dev/docs/best-practices/optimize-ssr
  */
@@ -23,10 +21,6 @@ globalThis.$client = createRouterClient(router, {
     const headers = new Headers({
       [Header.Client]: Client.ORPC_SSG,
     });
-    // Only set Authorization header if API key is configured (not required locally)
-    if (env.F3_MAP_API_KEY) {
-      headers.set(Header.Authorization, `Bearer ${env.F3_MAP_API_KEY}`);
-    }
     return { reqHeaders: headers };
   },
 });
