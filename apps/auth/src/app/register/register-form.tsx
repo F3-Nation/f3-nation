@@ -18,6 +18,52 @@ interface Region {
   name: string;
 }
 
+// When the emailed code is rejected (usually because it expired while the
+// form was being filled in), the answers are kept for this tab so asking for
+// a fresh code doesn't mean typing them all again.
+const DRAFT_KEY = "f3-register-draft";
+
+interface RegisterDraft {
+  email: string;
+  f3Name: string;
+  firstName: string;
+  lastName: string;
+  homeRegionId: number | "";
+  regionSearch: string;
+  phone: string;
+  phoneCountry: PhoneCountry;
+  emergencyContact: string;
+  emergencyPhone: string;
+  emergencyPhoneCountry: PhoneCountry;
+  emergencyNotes: string;
+}
+
+function saveDraft(draft: RegisterDraft) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    /* storage unavailable — the form still works, just without a draft */
+  }
+}
+
+function loadDraft(email: string): RegisterDraft | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    const draft = raw ? (JSON.parse(raw) as RegisterDraft) : null;
+    return draft?.email === email ? draft : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+}
+
 export default function RegisterForm({
   useBetterAuth,
 }: {
@@ -73,6 +119,25 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     setPhoneCountry(detectedCountry);
     setEmergencyPhoneCountry(detectedCountry);
   }, []);
+
+  // Runs after country detection so a saved draft's countries win.
+  useEffect(() => {
+    const draft = loadDraft(email);
+    if (!draft) return;
+    setF3Name(draft.f3Name);
+    setFirstName(draft.firstName);
+    setLastName(draft.lastName);
+    setHomeRegionId(draft.homeRegionId);
+    setRegionSearch(draft.regionSearch);
+    setPhone(draft.phone);
+    setPhoneCountry(draft.phoneCountry);
+    setEmergencyContact(draft.emergencyContact);
+    setEmergencyPhone(draft.emergencyPhone);
+    setEmergencyPhoneCountry(draft.emergencyPhoneCountry);
+    setEmergencyNotes(draft.emergencyNotes);
+    if (draft.emergencyContact || draft.emergencyPhone || draft.emergencyNotes)
+      setShowEmergency(true);
+  }, [email]);
 
   // Close region dropdown on outside click
   useEffect(() => {
@@ -149,10 +214,28 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
           error?: string;
         };
         setError(data.error ?? "Registration failed. Please try again.");
-        // A rejected code can't be fixed from this form — offer a fresh one.
-        if (res.status === 401) setNeedsSignInAgain(true);
+        // A rejected code can't be fixed from this form: keep the answers
+        // for this tab and offer a fresh code.
+        if (res.status === 401) {
+          saveDraft({
+            email,
+            f3Name,
+            firstName,
+            lastName,
+            homeRegionId,
+            regionSearch,
+            phone,
+            phoneCountry,
+            emergencyContact,
+            emergencyPhone,
+            emergencyPhoneCountry,
+            emergencyNotes,
+          });
+          setNeedsSignInAgain(true);
+        }
         return;
       }
+      clearDraft();
 
       // User created — now sign in with the original MFA code. The `users`
       // row exists now, so Better Auth's databaseHooks.user.create.before

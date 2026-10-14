@@ -57,6 +57,7 @@ function submit() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
   for (const key of [...searchParams.keys()]) searchParams.delete(key);
   searchParams.set("email", email);
   searchParams.set("code", code);
@@ -319,6 +320,66 @@ describe("registration", () => {
     expect(router.push).toHaveBeenCalledExactlyOnceWith(
       `/login/email?callbackUrl=${encodeURIComponent(callback)}`,
     );
+  });
+
+  it("keeps the answers for a fresh code after the code is rejected", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ error: "expired" }, { status: 401 }),
+    );
+    await fillForm();
+    change("F3 Name", "Test Runner");
+    submit();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Sign in again" }),
+    );
+    cleanup();
+
+    // Back from the new code: same email, form comes back filled in.
+    fetchMock.mockResolvedValueOnce(Response.json(regions));
+    await act(async () => {
+      render(<RegisterForm useBetterAuth={false} />);
+    });
+    expect(screen.getByLabelText(/First Name/)).toHaveProperty("value", "Test");
+    expect(screen.getByLabelText("F3 Name")).toHaveProperty(
+      "value",
+      "Test Runner",
+    );
+
+    // A different email gets a blank form.
+    cleanup();
+    searchParams.set("email", "someone-else@example.test");
+    fetchMock.mockResolvedValueOnce(Response.json(regions));
+    await act(async () => {
+      render(<RegisterForm useBetterAuth={false} />);
+    });
+    expect(screen.getByLabelText(/First Name/)).toHaveProperty("value", "");
+  });
+
+  it("clears a saved draft once registration succeeds", async () => {
+    sessionStorage.setItem(
+      "f3-register-draft",
+      JSON.stringify({
+        email,
+        f3Name: "",
+        firstName: "Saved",
+        lastName: "PAX",
+        homeRegionId: "",
+        regionSearch: "",
+        phone: "",
+        phoneCountry: "US",
+        emergencyContact: "",
+        emergencyPhone: "",
+        emergencyPhoneCountry: "US",
+        emergencyNotes: "",
+      }),
+    );
+    await fillForm();
+    expect(screen.getByLabelText(/First Name/)).toHaveProperty("value", "Test");
+    submit();
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledExactlyOnceWith(callback),
+    );
+    expect(sessionStorage.getItem("f3-register-draft")).toBeNull();
   });
 
   it("shows a retryable error after a network failure", async () => {
