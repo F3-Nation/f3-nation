@@ -4,6 +4,7 @@ import { UserRole } from "@acme/shared/app/enums";
 
 import {
   ADMIN_VISIBLE_ROLES,
+  adminRoleOrgNames,
   isAdminRoleName,
   toGrantableRoleEntries,
 } from "./session";
@@ -54,5 +55,24 @@ describe("toGrantableRoleEntries", () => {
     expect(toGrantableRoleEntries(null)).toEqual([]);
     expect(toGrantableRoleEntries(undefined)).toEqual([]);
     expect(toGrantableRoleEntries([])).toEqual([]);
+  });
+});
+
+describe("adminRoleOrgNames", () => {
+  it("lists org names from visible roles only", () => {
+    expect(
+      adminRoleOrgNames([
+        { orgName: "Boone", roleName: "password_reader" },
+        { orgName: "F3 Nation", roleName: "admin" },
+        { orgName: "F3 Charlotte", roleName: "password_manager" },
+        { orgName: "Boone", roleName: "editor" },
+      ]),
+    ).toEqual(["F3 Nation", "Boone"]);
+  });
+
+  it("returns an empty list when every role is dormant", () => {
+    expect(
+      adminRoleOrgNames([{ orgName: "Boone", roleName: "password_reader" }]),
+    ).toEqual([]);
   });
 });

@@ -32,7 +32,11 @@ import { onlyUnique } from "@acme/shared/common/functions";
 import { MobileFilterSheet } from "../../_components/mobile-filter-sheet";
 import { ResetFilter } from "../../_components/reset-filter";
 import { orpc } from "~/orpc/react";
-import { ADMIN_VISIBLE_ROLES, isAdminRoleName } from "~/lib/auth/session";
+import {
+  ADMIN_VISIBLE_ROLES,
+  adminRoleOrgNames,
+  isAdminRoleName,
+} from "~/lib/auth/session";
 import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
@@ -432,9 +436,7 @@ const columns: TableOptions<
     header: Header,
     cell: (cell) => (
       <Cell {...cell}>
-        {cell.row.original.roles
-          .filter((role) => isAdminRoleName(role.roleName))
-          .map((role) => role.orgName)
+        {adminRoleOrgNames(cell.row.original.roles)
           .filter(onlyUnique)
           .join(", ")}
       </Cell>

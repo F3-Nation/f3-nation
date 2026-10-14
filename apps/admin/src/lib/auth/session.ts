@@ -34,6 +34,15 @@ export function toGrantableRoleEntries(
   );
 }
 
+/** Org names from a user's visible roles, for display (dormant roles skipped). */
+export function adminRoleOrgNames(
+  roles: readonly { orgName: string; roleName: string }[],
+): string[] {
+  return roles
+    .filter((role) => isAdminRoleName(role.roleName))
+    .map((role) => role.orgName);
+}
+
 export interface AdminSessionRole {
   roleId?: number;
   orgId: number;

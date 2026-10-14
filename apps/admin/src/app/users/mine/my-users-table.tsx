@@ -33,7 +33,11 @@ import { ResetFilter } from "../../_components/reset-filter";
 import { orpc } from "~/orpc/react";
 import type { RouterOutputs } from "~/orpc/types";
 import { useAdminSession } from "~/lib/auth/client";
-import { ADMIN_VISIBLE_ROLES, isAdminRoleName } from "~/lib/auth/session";
+import {
+  ADMIN_VISIBLE_ROLES,
+  adminRoleOrgNames,
+  isAdminRoleName,
+} from "~/lib/auth/session";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
 import { OrgFilter } from "../org-filter";
@@ -438,10 +442,7 @@ const columns: TableOptions<
     header: Header,
     cell: (cell) => (
       <Cell {...cell}>
-        {cell.row.original.roles
-          .filter((role) => isAdminRoleName(role.roleName))
-          .map((role) => role.orgName)
-          .join(", ")}
+        {adminRoleOrgNames(cell.row.original.roles).join(", ")}
       </Cell>
     ),
   },

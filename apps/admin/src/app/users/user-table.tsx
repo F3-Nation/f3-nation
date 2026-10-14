@@ -29,7 +29,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import { Cell, Header } from "@acme/ui/table";
 
 import { orpc } from "~/orpc/react";
-import { ADMIN_VISIBLE_ROLES, isAdminRoleName } from "~/lib/auth/session";
+import {
+  ADMIN_VISIBLE_ROLES,
+  adminRoleOrgNames,
+  isAdminRoleName,
+} from "~/lib/auth/session";
 import type { RouterOutputs } from "~/orpc/types";
 import { useDebounce } from "~/utils/hooks/use-debounce";
 import { DeleteType, ModalType, openModal } from "~/utils/store/modal";
@@ -353,10 +357,7 @@ const columns: TableOptions<
     header: Header,
     cell: (cell) => (
       <Cell {...cell}>
-        {cell.row.original.roles
-          .filter((role) => isAdminRoleName(role.roleName))
-          .map((role) => role.orgName)
-          .join(", ")}
+        {adminRoleOrgNames(cell.row.original.roles).join(", ")}
       </Cell>
     ),
   },
