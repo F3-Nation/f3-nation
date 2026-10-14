@@ -8,7 +8,7 @@
 import type { ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const { fetchEvents, fetchRegions } = vi.hoisted(() => ({
   fetchEvents: vi.fn(),
@@ -106,7 +106,10 @@ describe("ReactQueryHydrator", () => {
   });
 
   it("keeps the rendered map when that refetch fails", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    onTestFinished(() => consoleError.mockRestore());
     fetchEvents.mockRejectedValue(new Error("API down"));
     const client = renderHydrator({
       dataFetchedAt: Date.now() - MAP_DATASET_STALE_TIME_MS - 1_000,
