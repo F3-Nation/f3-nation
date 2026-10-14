@@ -90,10 +90,10 @@ def mapped_enums() -> Dict[str, List[str]]:
 def declared_enums() -> Dict[str, List[str]]:
     """Map every enum class declared in `models` to its member names.
 
-    Some enums (`Region_Role`, `User_Role`) mirror a Postgres type without yet
-    being attached to a mapped column, so `mapped_enums()` cannot see them.
-    Member names are what SQLAlchemy would persist for them by default, and
-    lowercasing the class name is how `sa.Enum` derives the Postgres type name.
+    Some enums (`User_Role`) mirror a Postgres type without yet being attached
+    to a mapped column, so `mapped_enums()` cannot see them. Member names are
+    what SQLAlchemy would persist for them by default, and lowercasing the
+    class name is how `sa.Enum` derives the Postgres type name.
     """
     return {
         obj.__name__.lower(): [member.name for member in obj]
