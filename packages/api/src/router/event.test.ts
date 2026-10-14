@@ -213,6 +213,121 @@ describe("Event Router", () => {
     return eventTag;
   };
 
+  it.each(["event", "map.event"] as const)(
+    "%s.all provides stable pagination for tied values and preserves sort precedence",
+    async (routerName) => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const prefix = `Pagination ${uniqueId()}`;
+      const events = await db
+        .insert(schema.events)
+        .values(
+          Array.from({ length: 40 }, (_, index) => ({
+            name: `${prefix} ${index % 2 ? "Alpha" : "Zulu"}`,
+            orgId: ao.id,
+            locationId: null,
+            dayOfWeek: "monday" as const,
+            startTime: "0530",
+            isActive: index % 4 < 2,
+            isPrivate: false,
+            highlight: false,
+            startDate: "2026-01-01",
+          })),
+        )
+        .returning({
+          id: schema.events.id,
+          name: schema.events.name,
+          isActive: schema.events.isActive,
+        });
+      createdEventIds.push(...events.map((event) => event.id));
+      // Move a tied tuple so physical row order cannot stand in for ID order.
+      await db
+        .update(schema.events)
+        .set({ name: sql`${schema.events.name}` })
+        .where(eq(schema.events.id, events[0]!.id));
+
+      const byId = [...events].sort((a, b) => a.id - b.id);
+      const cases: {
+        sorting: { id: string; desc: boolean }[] | undefined;
+        expected: number[];
+      }[] = [
+        { sorting: [], expected: byId.map((event) => event.id) },
+        {
+          sorting: undefined,
+          expected: byId.map((event) => event.id).reverse(),
+        },
+        {
+          sorting: [
+            { id: "parent", desc: false },
+            { id: "id", desc: true },
+          ],
+          expected: byId.map((event) => event.id).reverse(),
+        },
+      ];
+      for (const desc of [false, true]) {
+        const fields =
+          routerName === "map.event"
+            ? ["parent", "status", "name"]
+            : ["parent", "status"];
+        for (const id of fields) {
+          cases.push({
+            sorting: [{ id, desc }],
+            expected: [...byId]
+              .sort((a, b) => {
+                const primary =
+                  id === "status"
+                    ? Number(a.isActive) - Number(b.isActive)
+                    : id === "name"
+                      ? a.name < b.name
+                        ? -1
+                        : a.name > b.name
+                          ? 1
+                          : 0
+                      : 0;
+                return primary * (desc ? -1 : 1);
+              })
+              .map((event) => event.id),
+          });
+        }
+      }
+
+      const client = createTestClient();
+      const all =
+        routerName === "event" ? client.event.all : client.map.event.all;
+      for (const { sorting, expected } of cases) {
+        for (const pageSize of [5, 7]) {
+          const paged: number[] = [];
+          for (
+            let pageIndex = 0;
+            pageIndex < Math.ceil(40 / pageSize);
+            pageIndex++
+          ) {
+            const page = await all({
+              searchTerm: prefix,
+              statuses: ["active", "inactive"],
+              sorting,
+              pageIndex,
+              pageSize,
+            });
+            expect(page.totalCount).toBe(40);
+            paged.push(...page.events.map((event) => event.id));
+          }
+          const context = `${routerName}.all sorting=${JSON.stringify(sorting)}, pageSize=${pageSize}`;
+          expect
+            .soft({ context, ids: paged })
+            .toEqual({ context, ids: expected });
+          expect.soft({ context, uniqueCount: new Set(paged).size }).toEqual({
+            context,
+            uniqueCount: 40,
+          });
+        }
+      }
+    },
+  );
+
   describe("all", () => {
     it("should include events without a location (locationId null)", async () => {
       const session = await createAdminSession();

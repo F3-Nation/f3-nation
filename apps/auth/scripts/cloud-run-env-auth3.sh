@@ -35,6 +35,8 @@ set -euo pipefail
 #     issuer another service also claims)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/gcloud-env-vars.sh
+source "$SCRIPT_DIR/lib/gcloud-env-vars.sh"
 
 # ---------------------------------------------------------------------------
 # Environment → GCP project mapping (same projects as f3-auth — Phase 3
@@ -209,6 +211,32 @@ push_secret() {
     --filter="state!=DESTROYED" --format='value(name)' 2>/dev/null)
 }
 
+# ---------------------------------------------------------------------------
+# Build the plain env-var argument first, so a value join_env_vars rejects
+# stops the script before any secret version is added or destroyed.
+# ---------------------------------------------------------------------------
+echo ""
+echo "Preparing Cloud Run env vars..."
+
+UPDATE_ARGS=()
+
+# Plain env vars (hardcoded)
+for var in "${!PLAIN_VARS[@]}"; do
+  echo " [$var] Setting to ${PLAIN_VARS[$var]}"
+  UPDATE_ARGS+=("${var}=${PLAIN_VARS[$var]}")
+done
+
+# Per-environment env vars (from env file, not secrets)
+for var in "${ENV_FILE_VARS[@]}"; do
+  value="${!var:-}"
+  echo " [$var] Setting to $value"
+  [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
+done
+
+# "|" instead of a comma join so a comma inside EMAIL_FROM stays in the value
+# (see lib/gcloud-env-vars.sh).
+ENV_VARS_ARG="$(join_env_vars "|" "${UPDATE_ARGS[@]}")"
+
 # Get the Cloud Run service account to grant secret access. If the service
 # doesn't exist yet, fall back to the Compute Engine default service account,
 # which is what Cloud Run uses when none is configured. The final
@@ -261,21 +289,6 @@ for pid in "${PIDS[@]}"; do wait "$pid"; done
 echo ""
 echo "Updating Cloud Run service env vars and secret references..."
 
-UPDATE_ARGS=()
-
-# Plain env vars (hardcoded)
-for var in "${!PLAIN_VARS[@]}"; do
-  echo " [$var] Setting to ${PLAIN_VARS[$var]}"
-  UPDATE_ARGS+=("${var}=${PLAIN_VARS[$var]}")
-done
-
-# Per-environment env vars (from env file, not secrets)
-for var in "${ENV_FILE_VARS[@]}"; do
-  value="${!var:-}"
-  echo " [$var] Setting to $value"
-  [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
-done
-
 # Secret-backed env vars — both owned (pushed above) and referenced
 # (f3-auth's own secrets, never pushed here) are wired into Cloud Run the
 # same way; only the push step above treats them differently.
@@ -305,16 +318,10 @@ done
 
 echo ""
 echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
-# A custom delimiter (gcloud's own "^DELIM^" syntax) instead of a plain comma
-# join -- EMAIL_FROM can legitimately contain a comma (e.g. a quoted display
-# name), which a comma-joined --update-env-vars value would misparse as a
-# vars boundary instead of part of the value. "|" doesn't occur in any of
-# this script's env values (URLs, an email address, the hardcoded flags).
-ENV_VARS_DELIM="|"
 gcloud run services update "$SERVICE_NAME" \
     --project "$PROJECT" \
     --region "$REGION" \
-    --update-env-vars "^${ENV_VARS_DELIM}^$(IFS="$ENV_VARS_DELIM"; echo "${UPDATE_ARGS[*]}")" \
+    --update-env-vars "$ENV_VARS_ARG" \
     --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
     --quiet
 
