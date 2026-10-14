@@ -124,6 +124,9 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     if not region_record.org_id:
         done(AlertLevel.ERROR, "This workspace isn't linked to an F3 Nation region yet.")
         return
+    if not (first_name and last_name and email):
+        done(AlertLevel.ERROR, "First name, last name and email can't be blank.")
+        return
 
     # Create-only: an existing user (maybe from another region) is left exactly as he is.
     existing = safe_get(DbManager.find_records(User, filters=[User.email == email]), 0)
@@ -142,14 +145,15 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
                     meta={USER_META_BROUGHT_BY: buddy_user_id} if buddy_user_id else {},
                 )
             )
-        except Exception:
-            logger.exception("fng.create_user_failed")
+        except Exception as exc:
+            logger.error("fng.create_user_failed error=%s", type(exc).__name__)  # the message can carry PII
             done(AlertLevel.ERROR, "I couldn't create his F3 Nation profile, so nothing was sent. Please try again.")
             return
 
     region = safe_get(DbManager.get(Org, region_record.org_id), "name") or region_record.workspace_name or "F3"
     emailed = _send_welcome_email(email, first_name, region, region_record.downrange_invite_link)
 
+    welcome_failed = False
     if region_record.welcome_channel_enable and region_record.welcome_channel:
         where = f"*{html.escape(ao_name, quote=False)}*" if ao_name else html.escape(region, quote=False)
         try:
@@ -159,6 +163,7 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
             )
         except SlackApiError as exc:
             logger.warning("fng.welcome_post_failed error=%s", exc.response.get("error"))
+            welcome_failed = True
 
     lines = [
         f"*{display_name}* already had an F3 Nation profile, so I left it as is."
@@ -171,7 +176,9 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
         lines.append(f"I couldn't email him; please text him {region_record.downrange_invite_link}")
     else:
         lines.append("No invite link is set in /f3-nation-settings > Downrange, so no email went out.")
-    done(AlertLevel.SUCCESS if emailed else AlertLevel.WARNING, " ".join(lines))
+    if welcome_failed:
+        lines.append("I couldn't post the welcome; check that I'm in the welcome channel.")
+    done(AlertLevel.SUCCESS if emailed and not welcome_failed else AlertLevel.WARNING, " ".join(lines))
 
 
 def _send_welcome_email(email: str, first_name: str, region: str, invite_link: str | None) -> bool:

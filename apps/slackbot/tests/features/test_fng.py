@@ -3,6 +3,8 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from slack_sdk.errors import SlackApiError
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from features import fng
@@ -164,3 +166,24 @@ def test_welcome_post_escapes_typed_names(monkeypatch):
     text = client.chat_postMessage.call_args.kwargs["text"]
     assert "<!channel>" not in text and "&lt;!channel&gt;" in text
     assert "*Rock &amp; Roll*" in text and "<@U_BUDDY>" in text
+
+
+def test_blank_names_create_nothing(monkeypatch):
+    db, send, view = patch_db(monkeypatch)
+
+    fng.handle_fng_form(submission(**{fng.FNG_FIRST_NAME: "   "}), MagicMock(), MagicMock(), {}, region_record())
+
+    db.create_record.assert_not_called()
+    send.assert_not_called()
+    assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
+
+
+def test_failed_welcome_post_warns_the_buddy(monkeypatch):
+    _, _, view = patch_db(monkeypatch)
+    client = MagicMock()
+    client.chat_postMessage.side_effect = SlackApiError("not_in_channel", {"error": "not_in_channel"})
+
+    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
+
+    assert view.call_args.kwargs["level"] == constants.AlertLevel.WARNING
+    assert "couldn't post the welcome" in view.call_args.kwargs["text"]
