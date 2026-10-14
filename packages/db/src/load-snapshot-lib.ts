@@ -16,13 +16,14 @@ import { z } from "zod";
 import type { AppDb } from "./client";
 import type { LocalTargetAction } from "./migrate-guards";
 import { logInfo, logWarn } from "./lib/logging";
+import { LOCAL_PG_CONTAINER } from "./local-docker";
 import { LOCAL_API_KEY_REGION_NAMES } from "./local-seed-lib/data";
 import { resetAllSequences } from "./local-seed-lib/sequences";
 import { DISPOSABLE_MARKER, DISPOSABLE_REMEDY } from "./migrate-guards";
 
 export const SNAPSHOT_URL =
   "https://storage.googleapis.com/f3-public-images/dev-snapshots/f3-dev-snapshot.tar";
-const CONTAINER = "f3-postgres";
+const CONTAINER = LOCAL_PG_CONTAINER;
 const PG_USER = "f3local";
 export const PG_DB = "f3nation";
 
