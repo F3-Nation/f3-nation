@@ -145,9 +145,8 @@ export async function trimSnapshot(sql: Sql): Promise<TrimResult> {
         UNION SELECT e.id FROM public.events e JOIN p ON e.series_id = p.id
       ) SELECT id FROM p`;
     const privateSeries = "SELECT id FROM snapshot_private_series";
-    // obfuscate-db keeps a location while any row using it is not itself
-    // flagged private; here privacy is inherited, so a private series' public
-    // children don't keep it.
+    // Independently remove locations used only by effectively private rows,
+    // even when the input has not had obfuscate-db's location cleanup.
     await tx.unsafe(`
       CREATE TEMP TABLE snapshot_private_locations ON COMMIT DROP AS
       SELECT location_id AS id FROM public.events

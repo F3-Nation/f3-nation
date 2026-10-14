@@ -127,9 +127,10 @@ another terminal first and leave it running:
 | `pnpm db:migrate:prod`    | `cloud-sql-proxy f3data:us-central1:f3data --port 5481`         |
 
 The proxy uses Application Default Credentials: run
-`gcloud auth application-default login` once on your machine. If the proxy
-isn't running, the command says which address it tried and prints the proxy
-command. A Cloud SQL socket URL (`?host=/cloudsql/…`) also
+`gcloud auth application-default login` once on your machine. If nothing
+is listening at the local address, the command says which address it tried and
+prints the proxy command; if the proxy is running but can't reach Cloud SQL, it
+points at the credentials step above. A Cloud SQL socket URL (`?host=/cloudsql/…`) also
 works where one is mounted. It must be a direct connection, never the
 PgBouncer pooler: the runner's lock against two people migrating at once is a
 session lock, which transaction pooling doesn't keep. Your own `gcloud` login

@@ -188,7 +188,9 @@ a static export, so it can't proxy calls server-side the way `apps/map` does;
 instead the browser sends a **read-only API key** (`NEXT_PUBLIC_ORG_MAP_API_KEY`)
 as a Bearer token on each org-chart request, plus a `client` header. The
 org-chart read procedures stay **`protectedProcedure`** — the API key is the
-trusted caller, exactly like `apps/map`'s `F3_MAP_API_KEY`. Because it is a
+trusted caller (`apps/map`'s equivalent browse endpoints moved to a
+credential-free `publicReadProcedure` tier in #378; this directory's data
+hasn't been re-tiered the same way). Because it is a
 `NEXT_PUBLIC_*` var baked into the static bundle, the key is visible in devtools;
 that is acceptable here because it is scoped to the read-only, already-public
 org-chart directory data and grants nothing else.

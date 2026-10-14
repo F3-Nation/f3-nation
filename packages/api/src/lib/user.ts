@@ -151,12 +151,35 @@ export const isDuplicateEmailError = (error: unknown): boolean => {
   );
 };
 
+interface PgErrorFields {
+  code: string;
+  constraint_name?: string;
+}
+
+const hasPgCode = (value: unknown): value is PgErrorFields =>
+  typeof value === "object" &&
+  value !== null &&
+  "code" in value &&
+  typeof (value as { code?: unknown }).code === "string";
+
+// Returns the Postgres error carried by `error`. The postgres-js/drizzle driver
+// can wrap the real PostgresError in `.cause`, so check both levels.
+export const getPgError = (error: unknown): PgErrorFields | undefined => {
+  if (hasPgCode(error)) return error;
+  if (error instanceof Error && hasPgCode(error.cause)) return error.cause;
+  return undefined;
+};
+
+// Helper to check if error is a foreign-key violation (Postgres 23503).
+export const isForeignKeyViolationError = (error: unknown): boolean =>
+  getPgError(error)?.code === "23503";
+
 // Base input schema object (before optional)
 export const userListInputSchema = z.object({
   roles: arrayOrSingle(z.enum(UserRole))
     .optional()
     .describe(
-      "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+      "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
     ),
   searchTerm: z
     .string()
@@ -200,7 +223,7 @@ export const userListUserOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),
@@ -232,7 +255,7 @@ export const userDetailOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),
@@ -279,17 +302,24 @@ export const buildUserListQuery = async ({
     pageIndex: input?.pageIndex,
     defaultPageSize: 10,
   });
+  const selectedRoles = input?.roles ?? [];
+  // Role-less users have no roles row (LEFT JOIN -> NULL name), so selecting
+  // "user" also matches them. OR the two branches so mixed selections match both.
+  const roleFilter = (() => {
+    if (selectedRoles.length === 0) return undefined;
+    const conditions: SQL[] = [inArray(schema.roles.name, selectedRoles)];
+    if (selectedRoles.includes("user"))
+      conditions.push(isNull(schema.roles.name));
+    return conditions.length === 1 ? conditions[0] : or(...conditions);
+  })();
+
   const where = and(
     !input?.statuses?.length || input.statuses.length === UserStatus.length
       ? undefined
       : input.statuses.includes("active")
         ? eq(schema.users.status, "active")
         : eq(schema.users.status, "inactive"),
-    !input?.roles?.length || input.roles.length === UserRole.length
-      ? undefined
-      : input.roles.includes("user")
-        ? isNull(schema.roles.name)
-        : inArray(schema.roles.name, input.roles),
+    roleFilter,
     input?.searchTerm
       ? or(
           ilike(schema.users.f3Name, `%${input?.searchTerm}%`),
@@ -321,12 +351,16 @@ export const buildUserListQuery = async ({
 
   const homeRegion = aliasedTable(schema.orgs, "homeRegion");
 
+  // Match the whitespace removed by the displayed name's JavaScript trim().
+  const fullNameTrimCharacters =
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
+
   const sortedColumns = [
     ...getSortingColumns(
       input?.sorting,
       {
         id: schema.users.id,
-        name: schema.users.firstName,
+        name: sql`btrim(concat_ws(' ', ${schema.users.firstName}, ${schema.users.lastName}), ${fullNameTrimCharacters})`,
         f3Name: schema.users.f3Name,
         roles: sql`MIN(${schema.roles.name})`,
         status: schema.users.status,

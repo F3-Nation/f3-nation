@@ -309,8 +309,24 @@ describe.each([
   },
 ])("$label editor", ({ type, label, parentTypes, initialName, deletion }) => {
   it("loads the record and sorted parent options with the current selection", async () => {
-    mount(type, record.id);
-    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    // Must stay the first edit-mode mount: React logs this warning once per module.
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      mount(type, record.id);
+      await waitFor(() => expect(field("Name").value).toBe(record.name));
+      expect(
+        consoleError.mock.calls.some((args) =>
+          args.some(
+            (argument) =>
+              typeof argument === "string" && argument.includes("uncontrolled"),
+          ),
+        ),
+      ).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+    }
     expect(screen.getByRole("heading").textContent).toBe(`Edit ${label}`);
     expect(field("ID").disabled).toBe(true);
     expect(field("ID").value).toBe("40");
@@ -323,6 +339,7 @@ describe.each([
     expect(mocks.byId).toHaveBeenCalledWith({ id: 40, orgType: type });
     expect(mocks.all).toHaveBeenCalledWith({
       orgTypes: parentTypes,
+      statuses: ["active", "inactive"],
       pageIndex: 0,
       pageSize: 100,
     });
@@ -468,6 +485,99 @@ describe.each([
   );
 });
 
+describe.each([
+  { type: "sector", parentType: "nation" },
+  { type: "territory", parentType: "sector" },
+  { type: "area", parentType: "sector" },
+  { type: "area", parentType: "territory" },
+  { type: "ao", parentType: "region" },
+] as const)(
+  "$type inactive $parentType parent selection",
+  ({ type, parentType }) => {
+    beforeEach(() => {
+      const choices = [
+        { id: 3, name: "Zulu Active", orgType: parentType, isActive: true },
+        { id: 2, name: "Middle Current", orgType: parentType, isActive: false },
+        {
+          id: 21,
+          name: "Other Inactive",
+          orgType: parentType,
+          isActive: false,
+        },
+        { id: 4, name: "Alpha Active", orgType: parentType, isActive: true },
+      ];
+      // Model the API's active-only default so a missing status request reproduces
+      // the empty current-parent selection instead of returning impossible data.
+      mocks.all.mockImplementation(async (input) => {
+        const query = input as {
+          orgTypes: string[];
+          statuses?: ("active" | "inactive")[];
+        };
+        const statuses = query.statuses ?? ["active"];
+        const orgs = choices.filter(
+          (parent) =>
+            query.orgTypes.includes(parent.orgType) &&
+            statuses.includes(parent.isActive ? "active" : "inactive"),
+        );
+        return { orgs, total: orgs.length };
+      });
+    });
+
+    it("displays and saves the inactive current parent, excluding unrelated inactive choices", async () => {
+      mount(type, record.id);
+      await waitFor(() => expect(field("Name").value).toBe(record.name));
+      await waitFor(() => expect(parentSelect().value).toBe("2"));
+      expect(parentSelect().selectedOptions[0]?.text).toBe(
+        "Middle Current (inactive)",
+      );
+      expect(parentOptions().map((option) => option.text)).toEqual(
+        type === "ao"
+          ? ["Zulu Active", "Middle Current (inactive)", "Alpha Active"]
+          : ["Alpha Active", "Middle Current (inactive)", "Zulu Active"],
+      );
+      fireEvent.change(field("Name"), { target: { value: "Renamed Org" } });
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+        id: record.id,
+        name: "Renamed Org",
+        orgType: type,
+        parentId: record.parentId,
+      });
+      expect(mocks.parentById).not.toHaveBeenCalled();
+      expect(mocks.canEditRegions).not.toHaveBeenCalled();
+    });
+
+    it("allows changing the inactive current parent to an active parent", async () => {
+      mount(type, record.id);
+      await waitFor(() => expect(parentSelect().value).toBe("2"));
+      fireEvent.change(parentSelect(), { target: { value: "4" } });
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+        id: record.id,
+        orgType: type,
+        parentId: 4,
+      });
+    });
+
+    it("offers only active parents when creating, preserving the picker order", async () => {
+      mount(type);
+
+      await waitFor(() => expect(parentOptions()).toHaveLength(2));
+      expect(parentOptions().map((option) => option.text)).toEqual(
+        type === "ao"
+          ? ["Zulu Active", "Alpha Active"]
+          : ["Alpha Active", "Zulu Active"],
+      );
+      expect(mocks.byId).not.toHaveBeenCalled();
+      expect(mocks.parentById).not.toHaveBeenCalled();
+    });
+  },
+);
+
 describe("Area parent selection", () => {
   const sectorsAndTerritories = [
     { id: 2, name: "Zulu Sector", orgType: "sector", isActive: true },
@@ -494,6 +604,7 @@ describe("Area parent selection", () => {
     expect(screen.getByText("Sector or Territory")).toBeTruthy();
     expect(mocks.all).toHaveBeenCalledWith({
       orgTypes: ["sector", "territory"],
+      statuses: ["active", "inactive"],
       pageIndex: 0,
       pageSize: 100,
     });
@@ -656,6 +767,9 @@ describe("Region Area or Territory parent selection", () => {
       await waitFor(() =>
         expect(parentSelect().value).toBe(String(current.id)),
       );
+      expect(parentSelect().selectedOptions[0]?.text).toBe(
+        "Inactive Current Parent (inactive)",
+      );
       expect(parentOptions().map((option) => option.value)).toEqual(
         expect.arrayContaining(["2", "3", "11", "12", "20"]),
       );
@@ -782,6 +896,9 @@ describe("Region Area or Territory parent selection", () => {
       mocks.all.mockResolvedValue({ orgs: [], total: 0 });
       mount("region", record.id);
       await waitFor(() => expect(parentSelect().value).toBe("20"));
+      expect(parentSelect().selectedOptions[0]?.text).toBe(
+        "Inactive Current Parent (inactive)",
+      );
       expect(parentSelect().disabled).toBe(true);
       expect(parentOptions().map((option) => option.value)).toEqual(["20"]);
       await waitFor(() =>
@@ -1475,6 +1592,74 @@ it("keeps the AO fake-data action restricted to development", async () => {
   expect(field("Description").value).toBe("Fake AO description");
 });
 
+describe.each([
+  { mode: "create", id: undefined },
+  { mode: "edit", id: record.id },
+])("AO fake-data parent selection in $mode mode", ({ id }) => {
+  const inactiveParents = [
+    { id: 21, name: "Other Inactive", orgType: "region", isActive: false },
+    {
+      id: record.parentId,
+      name: "Inactive Current",
+      orgType: "region",
+      isActive: false,
+    },
+  ];
+
+  const fillFakeData = () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      fireEvent.click(screen.getByText("(DEV) Fake data"));
+    } finally {
+      random.mockRestore();
+    }
+    // The development preset's handle is invalid under the URL validator.
+    // Correct it so these tests isolate parent selection and submission.
+    fireEvent.change(field("Twitter"), {
+      target: { value: "https://x.com/fakeao" },
+    });
+  };
+
+  it("chooses an active parent instead of an inactive current or unrelated parent", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: [
+        ...inactiveParents,
+        { id: 3, name: "Active Parent", orgType: "region", isActive: true },
+      ],
+      total: 3,
+    });
+    mount("ao", id, false);
+    await waitFor(() => expect(parentOptions()).toHaveLength(id ? 2 : 1));
+    if (id) expect(parentSelect().value).toBe(String(record.parentId));
+
+    fillFakeData();
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(id ? 1 : 2));
+    for (const [payload] of mocks.save.mock.calls) {
+      expect(payload).toMatchObject({
+        name: "Fake AO",
+        orgType: "ao",
+        parentId: 3,
+      });
+    }
+  });
+
+  it("requires a valid selection without saving when no active parent exists", async () => {
+    mocks.all.mockResolvedValue({ orgs: inactiveParents, total: 2 });
+    mount("ao", id, false);
+    await waitFor(() => expect(mocks.all).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clients.at(-1)!.isFetching()).toBe(0));
+    expect(parentOptions()).toHaveLength(id ? 1 : 0);
+
+    fillFakeData();
+    save();
+
+    await screen.findByText("Invalid selection");
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+});
+
 describe("Territory organization integration", () => {
   it("hides Add when Territory creation is disabled in configuration", async () => {
     const original = orgAdminConfig.territory.add;
@@ -1599,6 +1784,7 @@ describe("Territory organization integration", () => {
     );
     expect(mocks.all).toHaveBeenCalledWith({
       orgTypes: ["sector"],
+      statuses: ["active", "inactive"],
       pageIndex: 0,
       pageSize: 100,
     });

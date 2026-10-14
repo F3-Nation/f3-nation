@@ -10,7 +10,17 @@
     "uv.lock",
     "scripts/python-task.sh"
   ],
-  "globalPassThroughEnv": ["GITHUB_SHA"],
+  "globalPassThroughEnv": [
+    "F3_ADMIN_PORT",
+    "F3_AUTH_PORT",
+    "F3_CONTAINER_PREFIX",
+    "F3_HOMEPAGE_PORT",
+    "F3_MAP_PORT",
+    "F3_ME_PORT",
+    "GITHUB_SHA",
+    "INIT_CWD",
+    "SNAPSHOT_CALLER_CWD"
+  ],
   "globalEnv": [
     "CI",
     "NODE_ENV",
@@ -51,7 +61,6 @@
     "F3_API_BASE_URL",
     "F3_API_HOST",
     "F3_ADMIN_URL",
-    "F3_MAP_API_KEY",
     "F3_API_TIMEOUT_MS",
     "F3_CHANNEL",
     "F3_GOOGLE_API_KEY",

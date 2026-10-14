@@ -1,18 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AppliedRow, JournalEntry } from "./migrate-guards";
 import {
+  assertLocalTarget,
   checkGitState,
   checkPlan,
   classifyHost,
   confirmationMatches,
+  connectionHint,
   ENVIRONMENTS,
+  isCloudSqlServer,
   isMainRepoUrl,
   isProtectedDatabaseName,
   maintenanceUrl,
-  connectionHint,
   planMigrations,
 } from "./migrate-guards";
+
+// The server lookup behind isCloudSqlServer.
+const pg = vi.hoisted(() => ({
+  rows: [{ cloudsql: false }] as { cloudsql: boolean }[],
+  end: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("postgres", () => ({
+  default: () => Object.assign(() => Promise.resolve(pg.rows), { end: pg.end }),
+}));
 
 describe("classifyHost", () => {
   it.each([
@@ -256,6 +267,77 @@ describe("confirmationMatches", () => {
   });
 });
 
+describe("assertLocalTarget", () => {
+  const LOCAL = "postgresql://u:p@localhost:5432/f3nation";
+  const notCloudSql = () => Promise.resolve(false);
+
+  it.each([
+    ["a remote host", "postgresql://u:p@34.66.1.2/f3nation"],
+    ["a prod-named database", "postgresql://u:p@localhost/f3_prod"],
+    [
+      "a Cloud SQL socket",
+      "postgresql://u:p@localhost/f3_prod?host=/cloudsql/f3data:us-central1:f3data",
+    ],
+  ])("refuses %s without asking the server", async (_, url) => {
+    const lookup = vi.fn(notCloudSql);
+    await expect(assertLocalTarget(url, undefined, lookup)).rejects.toThrow(
+      /Refusing to migrate/,
+    );
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it("refuses a localhost URL whose server is Cloud SQL (a proxy)", async () => {
+    const lookup = vi.fn(() => Promise.resolve(true));
+    await expect(assertLocalTarget(LOCAL, undefined, lookup)).rejects.toThrow(
+      /reaches a Cloud SQL server/,
+    );
+    // Asked from the maintenance database, which exists before f3nation does.
+    expect(lookup).toHaveBeenCalledWith(
+      "postgresql://u:p@localhost:5432/postgres",
+    );
+  });
+
+  it("allows a local database", async () => {
+    await expect(
+      assertLocalTarget(LOCAL, undefined, notCloudSql),
+    ).resolves.toBeUndefined();
+  });
+
+  it("words every refusal with the caller's action and help", async () => {
+    const action = { verb: "load a snapshot into", help: "Use Docker." };
+    await expect(
+      assertLocalTarget("postgresql://u:p@34.66.1.2/f3nation", action),
+    ).rejects.toThrow(/Refusing to load a snapshot into: .*Use Docker\./);
+    await expect(
+      assertLocalTarget("postgresql://u:p@localhost/f3_prod", action),
+    ).rejects.toThrow(/Refusing to load a snapshot into database "f3_prod"/);
+    await expect(
+      assertLocalTarget(LOCAL, action, () => Promise.resolve(true)),
+    ).rejects.toThrow(/Refusing to load a snapshot into: .*Cloud SQL/);
+  });
+});
+
+describe("isCloudSqlServer", () => {
+  const URL = "postgresql://u:p@localhost:5432/postgres";
+
+  it("is true when the server has the Cloud SQL superuser role", async () => {
+    pg.rows = [{ cloudsql: true }];
+    await expect(isCloudSqlServer(URL)).resolves.toBe(true);
+  });
+
+  it("is false for a plain Postgres", async () => {
+    pg.rows = [{ cloudsql: false }];
+    await expect(isCloudSqlServer(URL)).resolves.toBe(false);
+  });
+
+  it("is false when the lookup returns no row, and always closes the client", async () => {
+    pg.rows = [];
+    pg.end.mockClear();
+    await expect(isCloudSqlServer(URL)).resolves.toBe(false);
+    expect(pg.end).toHaveBeenCalledOnce();
+  });
+});
+
 describe("connectionHint", () => {
   const PROD = "f3data:us-central1:f3data";
   const refused = new Error("connect ECONNREFUSED 127.0.0.1:5481");
@@ -271,15 +353,64 @@ describe("connectionHint", () => {
   });
 
   it("never includes the login", () => {
-    for (const e of [refused, new Error("timeout"), new Error("other")]) {
-      const hint = connectionHint(
-        e,
-        "postgresql://db_migrator:s3cret@127.0.0.1:5481/f3_prod",
-        PROD,
-      );
-      expect(hint).not.toContain("s3cret");
-      expect(hint).not.toContain("db_migrator");
+    const errors = [
+      refused,
+      new Error("timeout"),
+      new Error("other"),
+      new Error('password authentication failed for user "db_migrator"'),
+      Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
+    ];
+    const urls = [
+      "postgresql://db_migrator:s3cret@127.0.0.1:5481/f3_prod",
+      "postgresql://db_migrator:s3cret@/f3_prod?host=/cloudsql/x",
+      "postgresql://db_migrator:s3cret@10.0.0.5:5432/f3_prod",
+      "postgresql://db_migrator:s3cret@127.0.0.1/f3_prod",
+    ];
+    for (const e of errors) {
+      for (const url of urls) {
+        const hint = connectionHint(e, url, PROD);
+        expect(hint).not.toContain("s3cret");
+        expect(hint).not.toContain("db_migrator");
+      }
     }
+  });
+
+  it("defaults the port to 5432 when the URL has none", () => {
+    const hint = connectionHint(
+      refused,
+      "postgresql://u:p@127.0.0.1/f3_prod",
+      PROD,
+    );
+    expect(hint).toContain("Nothing is listening at 127.0.0.1:5432");
+    expect(hint).toContain(`cloud-sql-proxy ${PROD} --port 5432`);
+  });
+
+  it("treats an upper-case local host as local", () => {
+    expect(
+      connectionHint(refused, "postgresql://u:p@LOCALHOST:5481/f3_prod", PROD),
+    ).toContain(`cloud-sql-proxy ${PROD} --port 5481`);
+  });
+
+  it("reports an unusable URL as a bad secret, without echoing it", () => {
+    for (const url of ["not a url", "postgresql://u:p@[::1/f3_prod", ""]) {
+      const hint = connectionHint(new Error("x"), url, PROD);
+      expect(hint).toBe(
+        "The migration URL couldn't be parsed. Ask an admin to check the secret.",
+      );
+      expect(hint).not.toContain("base");
+      if (url) expect(hint).not.toContain(url);
+    }
+  });
+
+  it("names the error code when it doesn't recognise the failure", () => {
+    const hint = connectionHint(
+      Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
+      "postgresql://u:p@db.example.test:5432/f3_prod",
+      PROD,
+    );
+    expect(hint).toBe(
+      "Couldn't connect to the database at db.example.test:5432 (ENOTFOUND).",
+    );
   });
 
   it("doesn't suggest the proxy for a remote host or a socket", () => {

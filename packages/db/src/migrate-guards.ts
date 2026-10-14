@@ -1,7 +1,9 @@
 /**
- * Guards for running migrations (decision logic only, no I/O, so each
- * refusal is unit-tested). Used by migrate.ts (`pnpm db:migrate:local`) and
- * by migrate-remote.ts (`pnpm db:migrate:staging` / `pnpm db:migrate:prod`).
+ * Guards for running migrations (decision logic, so each refusal is
+ * unit-tested; `isCloudSqlServer` is the one function that does I/O, and
+ * `assertLocalTarget` takes it as a parameter). Used by migrate.ts
+ * (`pnpm db:migrate:local`), by migrate-remote.ts (`pnpm db:migrate:staging` /
+ * `pnpm db:migrate:prod`), and by load-snapshot.ts (`pnpm db:load:snapshot`).
  *
  * Why: on 2026-10-08 `pnpm db:migrate` (since removed) was run from an unmerged branch with a
  * production DATABASE_URL in packages/db/.env, and applied that branch's
@@ -10,6 +12,10 @@
  * checks; the local command refuses anything that isn't a local database.
  */
 import pgConnectionString from "pg-connection-string";
+import postgres from "postgres";
+
+import { LOCAL_PG_CONTAINER } from "./local-docker";
+import { postgresArgs } from "./utils/functions";
 
 // ---------------------------------------------------------------------------
 // Environments
@@ -62,8 +68,8 @@ const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 /**
  * Where a database URL points, from the URL alone. A Unix socket counts as
  * local unless it is a Cloud SQL socket (`/cloudsql/...`). This can't see
- * through a cloud-sql-proxy on localhost, so migrate.ts also asks the server
- * (see assertLocalTarget in migrate.ts).
+ * through a cloud-sql-proxy on localhost, so assertLocalTarget also asks the
+ * server.
  */
 export function classifyHost(databaseUrl: string): "local" | "remote" {
   const socketHosts = queryHosts(databaseUrl);
@@ -158,6 +164,83 @@ export function isProtectedDatabaseName(name: string): boolean {
     /(?:^|[-_])(prod|production|staging)(?:$|[-_])/.test(n)
   );
 }
+
+/**
+ * Whether the server behind `serverUrl` is Cloud SQL. The server-wide catalog
+ * answers this from the maintenance database, so it works before the target
+ * database exists.
+ */
+export const isCloudSqlServer = async (serverUrl: string): Promise<boolean> => {
+  const { url, hostOptions } = postgresArgs(serverUrl);
+  const client = postgres(url, {
+    ...hostOptions,
+    max: 1,
+    onnotice: () => undefined,
+    connection: { default_transaction_read_only: true },
+  });
+  try {
+    const [row] = await client<{ cloudsql: boolean }[]>`
+      SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cloudsqlsuperuser')
+        AS cloudsql`;
+    return row?.cloudsql ?? false;
+  } finally {
+    await client.end();
+  }
+};
+
+/**
+ * The database comment `pnpm local:setup` puts on the local Docker database to
+ * say it can be wiped (see reset.ts); the snapshot loader requires it too.
+ */
+export const DISPOSABLE_MARKER = "f3-disposable-local-v1";
+
+/** How to mark the local Docker database disposable, for the refusals that need it. */
+export const DISPOSABLE_REMEDY = `For the local Docker database, run pnpm local:setup, or mark it once with: docker exec ${LOCAL_PG_CONTAINER} psql -U f3local -d f3nation -c "COMMENT ON DATABASE f3nation IS '${DISPOSABLE_MARKER}'"`;
+
+/** What a local-only command is doing, and where else to do it. */
+export interface LocalTargetAction {
+  /** Completes "Refusing to …", e.g. "migrate". */
+  verb: string;
+  /** Appended to every refusal: how to do it for a non-local database. */
+  help: string;
+}
+
+export const MIGRATE_ACTION: LocalTargetAction = {
+  verb: "migrate",
+  help:
+    "pnpm db:migrate:local only migrates a local database. Staging and prod are " +
+    "migrated from main, after merge, with `pnpm db:migrate:staging` or " +
+    "`pnpm db:migrate:prod` (docs/db-migrations.md).",
+};
+
+/**
+ * Refuse a non-local target before anything connects to it for writing:
+ * by URL (host, database name), then by asking the server, which also
+ * catches a Cloud SQL instance behind a cloud-sql-proxy on localhost.
+ * `isCloudSql` is injectable for tests.
+ */
+export const assertLocalTarget = async (
+  url: string,
+  action: LocalTargetAction = MIGRATE_ACTION,
+  isCloudSql: (serverUrl: string) => Promise<boolean> = isCloudSqlServer,
+) => {
+  if (classifyHost(url) !== "local") {
+    throw new Error(
+      `Refusing to ${action.verb}: DATABASE_URL in packages/db/.env is not a local database. ${action.help}`,
+    );
+  }
+  const name = pgConnectionString.parse(url).database ?? "";
+  if (isProtectedDatabaseName(name)) {
+    throw new Error(
+      `Refusing to ${action.verb} database "${name}": it is named like staging or prod. ${action.help}`,
+    );
+  }
+  if (await isCloudSql(maintenanceUrl(url))) {
+    throw new Error(
+      `Refusing to ${action.verb}: DATABASE_URL reaches a Cloud SQL server (probably through a proxy on localhost). ${action.help}`,
+    );
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Git: migrations must come from main
@@ -331,12 +414,20 @@ export function connectionHint(
   try {
     const parsed = pgConnectionString.parse(databaseUrl);
     host = parsed.host ?? "";
-    port = parsed.port ?? port;
+    // pg-connection-string returns "" (not undefined) for a URL with no
+    // port, so `??` would never apply the default.
+    if (parsed.port) port = parsed.port;
   } catch {
-    // Unparseable: fall back to the generic hints below.
+    // Handled below: no host means there's no address worth naming.
+  }
+  // A malformed secret (truncated, wrong scheme, plain text) isn't always
+  // rejected by the parser ("not a url" parses with host "base"). Report it as
+  // a bad secret, not a network problem, and never echo the URL.
+  if (!host || !/^postgres(ql)?:\/\//i.test(databaseUrl)) {
+    return "The migration URL couldn't be parsed. Ask an admin to check the secret.";
   }
   const where = host.startsWith("/") ? `socket ${host}` : `${host}:${port}`;
-  const local = LOCAL_HOSTNAMES.has(host);
+  const local = LOCAL_HOSTNAMES.has(host.toLowerCase());
   if (msg.includes("ECONNREFUSED") || msg.includes("ENOENT")) {
     return local
       ? `Nothing is listening at ${where}. Start the Cloud SQL proxy in another ` +
@@ -365,5 +456,8 @@ export function connectionHint(
     }
     return `Couldn't reach the database at ${where} (timed out). Is your IP allowed?`;
   }
-  return `Couldn't connect to the database at ${where}.`;
+  // postgres.js error codes (ENOTFOUND, 3D000, ...) never contain the URL, so
+  // they're safe to show and give the operator something to search for.
+  const code = (error as { code?: unknown } | null)?.code;
+  return `Couldn't connect to the database at ${where}${typeof code === "string" && code ? ` (${code})` : ""}.`;
 }

@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import Image from "next/image";
 
+import { isValidCallbackUrl } from "~/lib/callback-url";
+
 export default function OnboardingPage() {
   return (
     <Suspense>
@@ -85,6 +87,7 @@ function OnboardingForm() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    let navigating = false;
 
     try {
       const res = await fetch("/api/onboarding", {
@@ -99,12 +102,22 @@ function OnboardingForm() {
         return;
       }
 
-      // Redirect back to the original flow
-      router.push(callbackUrl);
+      // The OAuth continuation can redirect across origins, so use a full navigation.
+      // Public env values are fixed at build time; runtime-only Docker config
+      // is absent in the browser. Avoid importing ~/env here: its required
+      // client validation would throw before this origin fallback can run.
+      const safeUrl = isValidCallbackUrl(
+        callbackUrl,
+        process.env.NEXT_PUBLIC_AUTH_URL ?? window.location.origin,
+      )
+        ? callbackUrl
+        : "/";
+      window.location.assign(safeUrl);
+      navigating = true;
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
-      setLoading(false);
+      if (!navigating) setLoading(false);
     }
   }
 
