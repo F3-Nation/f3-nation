@@ -91,6 +91,26 @@ function getForwardedHeaders(request: NextRequest): Headers {
   return headers;
 }
 
+/**
+ * Whether the caller's Accept-Encoding allows gzip. An explicit `gzip` entry
+ * decides (so `gzip;q=0, *;q=1` refuses it); otherwise `*` does.
+ */
+export function acceptsGzip(request: Pick<NextRequest, "headers">): boolean {
+  const q: Record<string, number> = {};
+  for (const part of (request.headers.get("accept-encoding") ?? "").split(
+    ",",
+  )) {
+    const [name, ...params] = part
+      .split(";")
+      .map((p) => p.trim().toLowerCase());
+    if (!name) continue;
+    const qParam = params.find((p) => p.startsWith("q="));
+    q[name] = qParam === undefined ? 1 : Number(qParam.slice(2)) || 0;
+  }
+  const gzip = q.gzip ?? q["*"];
+  return gzip !== undefined && gzip > 0;
+}
+
 async function proxyRequest(request: NextRequest) {
   const proxiedPath = getProxiedPath(request);
 
@@ -126,7 +146,29 @@ async function proxyRequest(request: NextRequest) {
   // anonymous response for the same path/query, so every response here —
   // not just SIGNED_IN_ONLY_PATHS — must stay uncached.
   headers.set("Cache-Control", "no-store");
-  return new Response(upstreamResponse.body, {
+
+  // Compress JSON for the browser here, at the browser-facing hop. The API
+  // doesn't compress (see apps/api/src/app.ts), so eventsAndLocations went out
+  // as 1.5 MB on every map load. Doing it in the proxy can't break an older
+  // map revision the way enabling it in the API could. Streams (e.g.
+  // text/event-stream) and non-JSON bodies pass through untouched. Only
+  // PUBLIC_PATHS responses are compressed: SIGNED_IN_ONLY_PATHS carry the
+  // caller's own data, and leaving them uncompressed rules out BREACH-style
+  // length leaks for the price of a few small responses.
+  let responseBody = upstreamResponse.body;
+  headers.append("Vary", "Accept-Encoding");
+  if (
+    isPublic &&
+    responseBody &&
+    method !== "HEAD" &&
+    acceptsGzip(request) &&
+    (headers.get("content-type") ?? "").includes("application/json")
+  ) {
+    responseBody = responseBody.pipeThrough(new CompressionStream("gzip"));
+    headers.set("content-encoding", "gzip");
+  }
+
+  return new Response(responseBody, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,
     headers,
