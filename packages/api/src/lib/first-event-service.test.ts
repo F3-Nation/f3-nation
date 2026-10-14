@@ -39,11 +39,14 @@ vi.mock("../logger", () => ({
   logDebug: vi.fn(),
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { logDebug, logWarn } from "../logger";
 import { db, getOrCreateF3NationOrg, uniqueId } from "../__tests__/test-utils";
-import { maybeNotifyFirstEventForRegion } from "./first-event-service";
+import {
+  maybeNotifyFirstEventForRegion,
+  maybeNotifyRegionInABox,
+} from "./first-event-service";
 
 describe("First Event Service", () => {
   // Track created entities for cleanup
@@ -112,16 +115,19 @@ describe("First Event Service", () => {
     return ao!;
   };
 
-  const createTestEvent = async (aoId: number) => {
+  const createTestEvent = async (
+    aoId: number,
+    opts?: { isActive?: boolean; dayOfWeek?: "monday" | null },
+  ) => {
     const [event] = await db
       .insert(schema.events)
       .values({
         name: `FES Event ${uniqueId()}`,
         orgId: aoId,
         locationId: null,
-        dayOfWeek: "monday",
+        dayOfWeek: opts?.dayOfWeek === undefined ? "monday" : opts.dayOfWeek,
         startDate: "2026-01-01",
-        isActive: true,
+        isActive: opts?.isActive ?? true,
         highlight: false,
         isPrivate: false,
         recurrencePattern: "weekly",
@@ -302,6 +308,134 @@ describe("First Event Service", () => {
       await expect(
         maybeNotifyFirstEventForRegion(db, 999_999_999),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe("maybeNotifyRegionInABox", () => {
+    const mailMock = async () => {
+      const { mail } = await import("@acme/mail");
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      return mail.sendTemplateMessages as ReturnType<typeof vi.fn>;
+    };
+
+    it("notifies eligible regions and preserves unrelated metadata", async () => {
+      const region = await createTestRegion({ meta: { keep: "value" } });
+      const ao = await createTestAO(region.id);
+      await createTestEvent(ao.id);
+
+      await maybeNotifyRegionInABox(db, region.id);
+
+      const [updated] = await db
+        .select({ meta: schema.orgs.meta })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, region.id));
+      expect(updated?.meta).toMatchObject({
+        keep: "value",
+        firstEventNotificationSent: true,
+      });
+      expect(await mailMock()).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["inactive", { isActive: false, dayOfWeek: "monday" as const }],
+      ["non-recurring", { isActive: true, dayOfWeek: null }],
+    ])(
+      "leaves the flag unset when the only event is %s",
+      async (_label, opts) => {
+        const region = await createTestRegion();
+        const ao = await createTestAO(region.id);
+        await createTestEvent(ao.id, opts);
+
+        await maybeNotifyRegionInABox(db, region.id);
+
+        const [updated] = await db
+          .select({ meta: schema.orgs.meta })
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, region.id));
+        expect(
+          (updated?.meta as Record<string, unknown> | null)
+            ?.firstEventNotificationSent,
+        ).not.toBe(true);
+        expect(await mailMock()).not.toHaveBeenCalled();
+      },
+    );
+
+    it("leaves the flag unset for an empty region", async () => {
+      const region = await createTestRegion();
+      await maybeNotifyRegionInABox(db, region.id);
+      const [updated] = await db
+        .select({ meta: schema.orgs.meta })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, region.id));
+      expect(
+        (updated?.meta as Record<string, unknown> | null)
+          ?.firstEventNotificationSent,
+      ).not.toBe(true);
+      expect(await mailMock()).not.toHaveBeenCalled();
+    });
+
+    it("can claim a region whose old metadata is JSON null", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      await createTestEvent(ao.id);
+      await db
+        .update(schema.orgs)
+        .set({ meta: sql`'null'::jsonb` })
+        .where(eq(schema.orgs.id, region.id));
+
+      await maybeNotifyRegionInABox(db, region.id);
+
+      const [updated] = await db
+        .select({ meta: schema.orgs.meta })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, region.id));
+      expect(updated?.meta).toMatchObject({ firstEventNotificationSent: true });
+      expect(await mailMock()).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends independently for a distinct region", async () => {
+      const first = await createTestRegion();
+      const second = await createTestRegion();
+      await createTestEvent(await createTestAO(first.id).then((ao) => ao.id));
+      await createTestEvent(await createTestAO(second.id).then((ao) => ao.id));
+      await maybeNotifyRegionInABox(db, first.id);
+      await maybeNotifyRegionInABox(db, second.id);
+      expect(await mailMock()).toHaveBeenCalledTimes(2);
+    });
+
+    it("releases a failed claim so a later trigger can retry", async () => {
+      const region = await createTestRegion({ meta: { keep: 1 } });
+      const ao = await createTestAO(region.id);
+      await createTestEvent(ao.id);
+      const mockedMail = await mailMock();
+      mockedMail.mockRejectedValueOnce(new Error("send failed"));
+
+      await expect(maybeNotifyRegionInABox(db, region.id)).rejects.toThrow(
+        "send failed",
+      );
+      const [afterFailure] = await db
+        .select({ meta: schema.orgs.meta })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, region.id));
+      expect(afterFailure?.meta).toMatchObject({ keep: 1 });
+      expect(
+        (afterFailure?.meta as Record<string, unknown> | null)
+          ?.firstEventNotificationSent,
+      ).not.toBe(true);
+
+      await maybeNotifyRegionInABox(db, region.id);
+      expect(mockedMail).toHaveBeenCalledTimes(2);
+    });
+
+    it("atomically allows only one concurrent sender for a region", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      await createTestEvent(ao.id);
+      await Promise.all([
+        maybeNotifyRegionInABox(db, region.id),
+        maybeNotifyRegionInABox(db, region.id),
+      ]);
+      expect(await mailMock()).toHaveBeenCalledTimes(1);
     });
   });
 });

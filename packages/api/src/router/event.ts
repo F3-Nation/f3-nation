@@ -845,6 +845,31 @@ export const eventRouter = {
             .where(eq(schema.events.id, input.id))
         : [];
 
+      let destinationRegionId: number | undefined;
+      let movedAcrossRegions = false;
+      if (existingEvent) {
+        const aoIds = [
+          ...new Set(
+            [existingEvent.orgId, input.aoId].filter(
+              (id): id is number => id != null,
+            ),
+          ),
+        ];
+        const aos = await ctx.db
+          .select({ id: schema.orgs.id, parentId: schema.orgs.parentId })
+          .from(schema.orgs)
+          .where(inArray(schema.orgs.id, aoIds));
+        const previousRegionId = aos.find(
+          ({ id }) => id === existingEvent.orgId,
+        )?.parentId;
+        destinationRegionId =
+          aos.find(({ id }) => id === input.aoId)?.parentId ?? undefined;
+        movedAcrossRegions =
+          previousRegionId != null &&
+          destinationRegionId != null &&
+          previousRegionId !== destinationRegionId;
+      }
+
       if (!input.aoId) {
         throw new ORPCError("BAD_REQUEST", {
           message: "AO ID is required",
@@ -1069,16 +1094,31 @@ export const eventRouter = {
 
       // Notify only after the transaction commits.
       if (shouldNotifyFirstEventForRegion) {
-        const { maybeNotifyFirstEventForRegion } =
-          await import("../lib/first-event-service");
-        void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
-          (err: unknown) =>
+        void import("../lib/first-event-service")
+          .then(({ maybeNotifyFirstEventForRegion }) =>
+            maybeNotifyFirstEventForRegion(ctx.db, result.orgId),
+          )
+          .catch((err: unknown) =>
             logError(
               "api.event.first_event_notify_failed",
               { orgId: result.orgId, eventId: result.id },
               err,
             ),
-        );
+          );
+      }
+      if (existingEvent && movedAcrossRegions && destinationRegionId != null) {
+        // Keep every notification-only operation detached from the committed update.
+        void import("../lib/first-event-service")
+          .then(({ maybeNotifyRegionInABox }) =>
+            maybeNotifyRegionInABox(ctx.db, destinationRegionId),
+          )
+          .catch((err: unknown) =>
+            logError(
+              "api.event.first_event_notify_failed",
+              { regionId: destinationRegionId, eventId: result.id },
+              err,
+            ),
+          );
       }
       if (result?.dayOfWeek) {
         notifyMapDataChange({

@@ -1248,45 +1248,68 @@ const handleRequest = async <T extends HandleableRequestInput>({
     // Apply the change and record the audit row atomically, so a failure to
     // record can't leave an applied-but-unaudited change behind (and a retry
     // after such a failure can't apply the change twice).
-    const updateRequest = await ctx.db.transaction(async (tx) => {
-      const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
-      // Guard against re-applying an already-reviewed request (two reviewers
-      // racing to approve the same queue item, or an approve after the row was
-      // already resolved). Lock the stored row and require it to still be
-      // pending. A fresh submission has no matching row yet, so this is a no-op
-      // for the submit path. Without this, a second approve re-runs the apply
-      // handler — duplicating created entities — while onConflictDoUpdate reuses
-      // the same audit row. (#11)
-      const existingId = typeof input.id === "string" ? input.id : undefined;
-      if (existingId) {
-        const [existing] = await tx
-          .select({ status: schema.updateRequests.status })
-          .from(schema.updateRequests)
-          .where(eq(schema.updateRequests.id, existingId))
-          .for("update");
-        if (existing && existing.status !== "pending") {
-          throw new ORPCError("CONFLICT", {
-            message: `This request has already been ${existing.status}.`,
-          });
+    const { updateRequest, sourceRegionId } = await ctx.db.transaction(
+      async (tx) => {
+        const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
+        // Guard against re-applying an already-reviewed request (two reviewers
+        // racing to approve the same queue item, or an approve after the row was
+        // already resolved). Lock the stored row and require it to still be
+        // pending. A fresh submission has no matching row yet, so this is a no-op
+        // for the submit path. Without this, a second approve re-runs the apply
+        // handler — duplicating created entities — while onConflictDoUpdate reuses
+        // the same audit row. (#11)
+        const existingId = typeof input.id === "string" ? input.id : undefined;
+        if (existingId) {
+          const [existing] = await tx
+            .select({ status: schema.updateRequests.status })
+            .from(schema.updateRequests)
+            .where(eq(schema.updateRequests.id, existingId))
+            .for("update");
+          if (existing && existing.status !== "pending") {
+            throw new ORPCError("CONFLICT", {
+              message: `This request has already been ${existing.status}.`,
+            });
+          }
         }
-      }
-      const created = (await handler(txCtx, input)) ?? {};
-      return await recordUpdateRequest({
-        ctx: txCtx,
-        updateRequest: {
-          ...updateRequestData,
-          reviewedBy: email,
-          // Link the audit row to the entities the handler just created;
-          // recordUpdateRequest maps new* ids onto the aoId/locationId columns
-          ...(created.eventId !== undefined && { eventId: created.eventId }),
-          ...(created.aoId !== undefined && { newAoId: created.aoId }),
-          ...(created.locationId !== undefined && {
-            newLocationId: created.locationId,
-          }),
-        },
-        status: "approved",
-      });
-    });
+        let sourceRegionId: number | null = null;
+        if (
+          input.requestType === "move_event_to_different_ao" &&
+          input.originalEventId
+        ) {
+          // Read the actual persisted source, not the potentially stale AO on a
+          // pending request. Lock the event until the handler has applied its move.
+          const [event] = await tx
+            .select({ aoId: schema.events.orgId })
+            .from(schema.events)
+            .where(eq(schema.events.id, input.originalEventId))
+            .for("update");
+          if (event) {
+            const [sourceAo] = await tx
+              .select({ regionId: schema.orgs.parentId })
+              .from(schema.orgs)
+              .where(eq(schema.orgs.id, event.aoId));
+            sourceRegionId = sourceAo?.regionId ?? null;
+          }
+        }
+        const created = (await handler(txCtx, input)) ?? {};
+        const updateRequest = await recordUpdateRequest({
+          ctx: txCtx,
+          updateRequest: {
+            ...updateRequestData,
+            reviewedBy: email,
+            // Link the audit row to the entities the handler just created;
+            // recordUpdateRequest maps new* ids onto the aoId/locationId columns
+            ...(created.eventId !== undefined && { eventId: created.eventId }),
+            ...(created.aoId !== undefined && { newAoId: created.aoId }),
+            ...(created.locationId !== undefined && {
+              newLocationId: created.locationId,
+            }),
+          },
+          status: "approved",
+        });
+        return { updateRequest, sourceRegionId };
+      },
+    );
     // Notify webhooks and invalidate the map cache only after the commit
     notifyMapDataChange({
       // handleRequest is only ever invoked by the active-request approve
@@ -1298,6 +1321,44 @@ const handleRequest = async <T extends HandleableRequestInput>({
       locationId: updateRequest.locationId ?? undefined,
       orgId: updateRequest.aoId ?? updateRequest.regionId,
     });
+    if (
+      updateRequest.requestType === "create_ao_and_location_and_event" ||
+      updateRequest.requestType === "create_event" ||
+      updateRequest.requestType === "move_ao_to_different_region" ||
+      updateRequest.requestType === "move_event_to_different_ao"
+    ) {
+      // This side effect must run only after the transaction commits, and must
+      // never make an already-committed map change fail. Keep both destination
+      // resolution and service loading inside the detached, caught task.
+      void (async () => {
+        try {
+          // The recorded AO is the persisted destination for all four request
+          // types. The recorded region can still be the source on an event move.
+          const aoId = updateRequest.aoId;
+          if (!aoId) return;
+          const [destinationAo] = await ctx.db
+            .select({ regionId: schema.orgs.parentId })
+            .from(schema.orgs)
+            .where(eq(schema.orgs.id, aoId));
+          const regionId = destinationAo?.regionId;
+          if (!regionId) return;
+
+          if (updateRequest.requestType === "move_event_to_different_ao") {
+            if (sourceRegionId == null || sourceRegionId === regionId) return;
+          }
+
+          const { maybeNotifyRegionInABox } =
+            await import("../lib/first-event-service");
+          await maybeNotifyRegionInABox(ctx.db, regionId);
+        } catch (error) {
+          logError(
+            "api.request.region_in_a_box_notification_failed",
+            { requestId: updateRequest.id },
+            error,
+          );
+        }
+      })();
+    }
     const result = { status: "approved" as const, updateRequest };
     return result;
   } else {

@@ -15,6 +15,7 @@ import { vi } from "vitest";
 const mockLimit = vi.hoisted(() => vi.fn());
 const mockNotifyMapDataChange = vi.hoisted(() => vi.fn());
 const mockNotifyMapChangeRequest = vi.hoisted(() => vi.fn());
+const mockMaybeNotifyRegionInABox = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -28,6 +29,10 @@ vi.mock("../lib/webhook-events", () => ({
 
 vi.mock("../services/map-request-notification", () => ({
   notifyMapChangeRequest: mockNotifyMapChangeRequest,
+}));
+
+vi.mock("../lib/first-event-service", () => ({
+  maybeNotifyRegionInABox: mockMaybeNotifyRegionInABox,
 }));
 
 import { eq, schema } from "@acme/db";
@@ -69,6 +74,7 @@ describe("Request Router", () => {
       reset: Date.now() + 60000,
     });
     mockNotifyMapChangeRequest.mockResolvedValue(undefined);
+    mockMaybeNotifyRegionInABox.mockResolvedValue(undefined);
   });
 
   afterAll(async () => {
@@ -554,6 +560,7 @@ describe("Request Router", () => {
 
       expect(result.status).toBe("pending");
       expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
 
       // A pending row has no reviewer yet
       const [savedRequest] = await db
@@ -641,6 +648,39 @@ describe("Request Router", () => {
   });
 
   describe("approved request atomicity", () => {
+    it("does not notify when a qualifying event creation rolls back", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const location = await createTestLocation(ao.id);
+      const eventName = `Rolled back series ${uniqueId()}`;
+
+      // The handler inserts the event before its event-type association. An
+      // invalid type FK fails that later write and rolls the whole apply back.
+      await expect(
+        createTestClient().request.submitCreateEventRequest({
+          id: crypto.randomUUID(),
+          requestType: "create_event",
+          submittedBy: "admin@example.com",
+          originalRegionId: region.id,
+          originalAoId: ao.id,
+          originalLocationId: location.id,
+          eventName,
+          eventDayOfWeek: "monday",
+          eventStartTime: "0530",
+          eventEndTime: "0630",
+          eventTypeIds: [999_999_999],
+        }),
+      ).rejects.toThrow();
+
+      expect(
+        await db.query.events.findFirst({
+          where: eq(schema.events.name, eventName),
+        }),
+      ).toBeUndefined();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
     it("rolls back the applied change when recording the audit row fails", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -670,6 +710,7 @@ describe("Request Router", () => {
         .where(eq(schema.events.id, event.id));
       expect(unchangedEvent?.isActive).toBe(true);
       expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
     });
 
     it("applies a multi-write handler through the nested transactions", async () => {
@@ -746,6 +787,12 @@ describe("Request Router", () => {
       }
 
       expect(result.status).toBe("approved");
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          region.id,
+        ),
+      );
 
       // The approved row links to the event the handler just created
       const [savedRequest] = await db
@@ -809,6 +856,12 @@ describe("Request Router", () => {
       createdRequestIds.push(result.updateRequest.id ?? "");
 
       expect(result.status).toBe("approved");
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          region.id,
+        ),
+      );
 
       // The approved row links to all three entities the handler created — not
       // just the event (the create_event case above), but the AO and location
@@ -852,6 +905,44 @@ describe("Request Router", () => {
   });
 
   describe("submitMoveEventToDifferentAoRequest", () => {
+    it("notifies the persisted destination region when newRegionId is omitted", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const sourceRegion = await createTestRegion();
+      const destinationRegion = await createTestRegion();
+      const sourceAo = await createTestAO(sourceRegion.id);
+      const sourceLocation = await createTestLocation(sourceAo.id);
+      const event = await createTestEvent(sourceAo.id, sourceLocation.id);
+      const destinationAo = await createTestAO(destinationRegion.id);
+      const destinationLocation = await createTestLocation(destinationAo.id);
+
+      const client = createTestClient();
+      const result = await client.request.submitMoveEventToDifferentAoRequest({
+        id: crypto.randomUUID(),
+        requestType: "move_event_to_different_ao",
+        submittedBy: "admin@example.com",
+        originalEventId: event.id,
+        originalAoId: sourceAo.id,
+        originalRegionId: sourceRegion.id,
+        newAoId: destinationAo.id,
+        newLocationId: destinationLocation.id,
+      });
+      createdRequestIds.push(result.updateRequest.id ?? "");
+
+      expect(result.status).toBe("approved");
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          destinationRegion.id,
+        ),
+      );
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalledWith(
+        expect.anything(),
+        sourceRegion.id,
+      );
+    });
+
     it("rejects a request without a destination AO instead of silently no-oping", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -1411,6 +1502,87 @@ describe("Request Router", () => {
     return row;
   };
 
+  describe("region notification on reviewed event moves", () => {
+    it("uses the event's current source region instead of the request's stale source", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const requestedSource = await createTestRegion();
+      const currentSource = await createTestRegion();
+      const destination = await createTestRegion();
+      const originalAo = await createTestAO(requestedSource.id);
+      const currentAo = await createTestAO(currentSource.id);
+      const destinationAo = await createTestAO(destination.id);
+      const location = await createTestLocation(originalAo.id);
+      const event = await createTestEvent(originalAo.id, location.id);
+      await db
+        .update(schema.events)
+        .set({ orgId: currentAo.id })
+        .where(eq(schema.events.id, event.id));
+
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+      const result = await createTestClient().request.validateSubmissionByAdmin(
+        {
+          id,
+          requestType: "move_event_to_different_ao",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalAoId: originalAo.id,
+          originalRegionId: requestedSource.id,
+          newAoId: destinationAo.id,
+          newRegionId: destination.id,
+        },
+      );
+
+      expect(result.status).toBe("approved");
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          destination.id,
+        ),
+      );
+    });
+
+    it("does not notify when the event already moved into the destination region", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const requestedSource = await createTestRegion();
+      const destination = await createTestRegion();
+      const originalAo = await createTestAO(requestedSource.id);
+      const destinationAo = await createTestAO(destination.id);
+      const location = await createTestLocation(originalAo.id);
+      const event = await createTestEvent(originalAo.id, location.id);
+      await db
+        .update(schema.events)
+        .set({ orgId: destinationAo.id })
+        .where(eq(schema.events.id, event.id));
+
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+      const result = await createTestClient().request.validateSubmissionByAdmin(
+        {
+          id,
+          requestType: "move_event_to_different_ao",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalAoId: originalAo.id,
+          originalRegionId: requestedSource.id,
+          newAoId: destinationAo.id,
+          newRegionId: destination.id,
+        },
+      );
+
+      expect(result.status).toBe("approved");
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+  });
+
   describe("validateSubmissionByAdmin — originalLocationId preflight scoping", () => {
     // `handleMoveAOToNewLocation` always inserts a fresh location and moves the
     // AO onto it by `originalAoId`; it never reads `originalLocationId`, and the
@@ -1722,6 +1894,12 @@ describe("Request Router", () => {
         .from(schema.orgs)
         .where(eq(schema.orgs.id, ao.id));
       expect(movedAo?.parentId).toBe(target.id);
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          target.id,
+        ),
+      );
     });
   });
 

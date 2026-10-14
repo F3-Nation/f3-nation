@@ -9,12 +9,19 @@
 import { vi } from "vitest";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
-const mockLimit = vi.hoisted(() => vi.fn());
+const { mockLimit, mockRegionNotification } = vi.hoisted(() => ({
+  mockLimit: vi.fn(),
+  mockRegionNotification: vi.fn(),
+}));
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
     return { limit: mockLimit };
   }),
+}));
+
+vi.mock("../lib/first-event-service", () => ({
+  maybeNotifyRegionInABox: mockRegionNotification,
 }));
 
 import { and, count, eq, gte, schema } from "@acme/db";
@@ -55,6 +62,7 @@ describe("Org Router", () => {
       remaining: 9,
       reset: Date.now() + 60000,
     });
+    mockRegionNotification.mockResolvedValue(undefined);
   });
 
   afterAll(async () => {
@@ -725,6 +733,267 @@ describe("Org Router", () => {
 
       expect(result.org?.id).toBe(testOrg.id);
       expect(result.org?.name).toBe(updatedName);
+    });
+
+    it("notifies the destination region after moving an AO with another qualifying event there", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const nation = await getOrCreateF3NationOrg();
+      const [source, destination] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `AO source ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `AO destination ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!source || !destination) throw new Error("Failed to create regions");
+      createdOrgIds.push(source.id, destination.id);
+
+      const [movingAo, existingAo] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Empty moving AO ${uniqueId()}`,
+            orgType: "ao",
+            parentId: source.id,
+            isActive: true,
+          },
+          {
+            name: `Destination event AO ${uniqueId()}`,
+            orgType: "ao",
+            parentId: destination.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!movingAo || !existingAo) throw new Error("Failed to create AOs");
+      createdOrgIds.push(movingAo.id, existingAo.id);
+
+      await db.insert(schema.events).values({
+        name: `Destination recurring event ${uniqueId()}`,
+        orgId: existingAo.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        startDate: "2026-01-01",
+        isActive: true,
+        highlight: false,
+        isPrivate: false,
+      });
+
+      await client.org.crupdate({
+        id: movingAo.id,
+        name: movingAo.name,
+        orgType: "ao",
+        parentId: destination.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+      });
+
+      await vi.waitFor(() =>
+        expect(mockRegionNotification).toHaveBeenCalledWith(
+          expect.anything(),
+          destination.id,
+        ),
+      );
+      expect(mockRegionNotification).toHaveBeenCalledTimes(1);
+
+      // Another AO moved into the same region is independently evaluated by
+      // the region-scoped service, which owns the once-per-region marker.
+      const [secondMovingAo] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Second moving AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: source.id,
+          isActive: true,
+        })
+        .returning();
+      if (!secondMovingAo) throw new Error("Failed to create second AO");
+      createdOrgIds.push(secondMovingAo.id);
+      await client.org.crupdate({
+        id: secondMovingAo.id,
+        name: secondMovingAo.name,
+        orgType: "ao",
+        parentId: destination.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+      });
+      await vi.waitFor(() =>
+        expect(mockRegionNotification).toHaveBeenCalledTimes(2),
+      );
+      expect(mockRegionNotification.mock.calls[1]?.[1]).toBe(destination.id);
+    });
+
+    it("dispatches an eligibility check when an AO moves to an empty destination", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const nation = await getOrCreateF3NationOrg();
+      const [source, destination] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Empty source ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Empty destination ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!source || !destination) throw new Error("Failed to create regions");
+      createdOrgIds.push(source.id, destination.id);
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `AO to empty region ${uniqueId()}`,
+          orgType: "ao",
+          parentId: source.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create AO");
+      createdOrgIds.push(ao.id);
+
+      await client.org.crupdate({
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        parentId: destination.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+      });
+
+      await vi.waitFor(() =>
+        expect(mockRegionNotification).toHaveBeenCalledWith(
+          expect.anything(),
+          destination.id,
+        ),
+      );
+    });
+
+    it("preserves an existing region notification marker for omitted or stale metadata", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const nation = await getOrCreateF3NationOrg();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Flagged region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+          meta: { firstEventNotificationSent: true, keepMe: "present" },
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create region");
+      createdOrgIds.push(region.id);
+
+      const update = (meta?: Record<string, unknown> | null) =>
+        client.org.crupdate({
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+          ...(meta !== undefined && { meta }),
+        });
+
+      await update();
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta,
+      ).toMatchObject({ firstEventNotificationSent: true, keepMe: "present" });
+
+      await update({ firstEventNotificationSent: false, incoming: "kept" });
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta,
+      ).toMatchObject({
+        firstEventNotificationSent: true,
+        incoming: "kept",
+      });
+
+      await update(null);
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta,
+      ).toMatchObject({ firstEventNotificationSent: true });
+
+      // A previously claimed marker that was released after a send error must
+      // not be recreated by an editor submitting stale metadata.
+      await db
+        .update(schema.orgs)
+        .set({ meta: { incoming: "kept" } })
+        .where(eq(schema.orgs.id, region.id));
+      await update({ firstEventNotificationSent: true, incoming: "kept" });
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta?.firstEventNotificationSent,
+      ).not.toBe(true);
+
+      await update(null);
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta?.firstEventNotificationSent,
+      ).not.toBe(true);
     });
 
     it("should enforce editor permissions", async () => {

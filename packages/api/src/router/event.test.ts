@@ -10,11 +10,18 @@ import { vi } from "vitest";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
 const mockLimit = vi.hoisted(() => vi.fn());
+const mockMaybeNotifyFirstEventForRegion = vi.hoisted(() => vi.fn());
+const mockMaybeNotifyRegionInABox = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
     return { limit: mockLimit };
   }),
+}));
+
+vi.mock("../lib/first-event-service", () => ({
+  maybeNotifyFirstEventForRegion: mockMaybeNotifyFirstEventForRegion,
+  maybeNotifyRegionInABox: mockMaybeNotifyRegionInABox,
 }));
 
 import { eq, inArray, schema } from "@acme/db";
@@ -48,6 +55,8 @@ describe("Event Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMaybeNotifyFirstEventForRegion.mockResolvedValue(undefined);
+    mockMaybeNotifyRegionInABox.mockResolvedValue(undefined);
     // Reset rate limiter to allow requests
     mockLimit.mockResolvedValue({
       success: true,
@@ -1476,6 +1485,148 @@ describe("Event Router", () => {
 
       expect(result.event?.id).toBe(testEvent.id);
       expect(result.event?.name).toBe(updatedName);
+    });
+
+    it("notifies after an existing event moves across regions", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) return;
+      const aoA = await createTestAO(regionA.id);
+      const aoB = await createTestAO(regionB.id);
+      const eventType = await createTestEventType();
+      if (!aoA || !aoB || !eventType) return;
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Move Event ${uniqueId()}`,
+          orgId: aoA.id,
+          dayOfWeek: "monday",
+          startDate: nextFutureMonday(1),
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+
+      await createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: aoB.id,
+        regionId: regionB.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: null,
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          regionB.id,
+        ),
+      );
+    });
+
+    it("does not notify for same-region moves or unrelated updates", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      if (!region) return;
+      const aoA = await createTestAO(region.id);
+      const aoB = await createTestAO(region.id);
+      const eventType = await createTestEventType();
+      if (!aoA || !aoB || !eventType) return;
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Same Region Move ${uniqueId()}`,
+          orgId: aoA.id,
+          dayOfWeek: "monday",
+          startDate: nextFutureMonday(1),
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+      const client = createTestClient();
+      const input = {
+        id: event.id,
+        name: event.name,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday" as const,
+        startTime: "0530",
+        endTime: null,
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly" as const,
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      };
+
+      await client.event.crupdate({ ...input, aoId: aoB.id });
+      await client.event.crupdate({
+        ...input,
+        aoId: aoB.id,
+        name: `${event.name} edited`,
+      });
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
+    it("preserves creation notification for inactive recurring events", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      const eventType = await createTestEventType();
+      if (!ao || !eventType) return;
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+
+      const created = await createTestClient().event.crupdate({
+        name: `Inactive Series ${uniqueId()}`,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: null,
+        startDate: nextFutureMonday(1),
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: false,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+      if (created.event) createdEventIds.push(created.event.id);
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyFirstEventForRegion).toHaveBeenCalledWith(
+          expect.anything(),
+          ao.id,
+        ),
+      );
     });
 
     it("should enforce editor permissions", async () => {
