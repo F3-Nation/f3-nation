@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.14.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.13.0...pkg-api@0.14.0) (2026-10-14)
+
+
+### Features
+
+* **admin:** support territory parents and region ancestry filters ([#1175](https://github.com/F3-Nation/f3-nation/issues/1175)) ([eab0386](https://github.com/F3-Nation/f3-nation/commit/eab038617f1a1804ea622f56543a70e75c1d0d68))
+* **api:** filling cascade gaps for ao/series deactivation and reactivation ([#1173](https://github.com/F3-Nation/f3-nation/issues/1173)) ([7eddfd6](https://github.com/F3-Nation/f3-nation/commit/7eddfd60c9d149ba997ca668016be2a444b2e051))
+* **db,shared,admin:** add password_manager and password_reader roles ([#1180](https://github.com/F3-Nation/f3-nation/issues/1180)) ([e69f45d](https://github.com/F3-Nation/f3-nation/commit/e69f45d92f88ed1248a86cdce716e05a66389b85))
+
+
+### Bug Fixes
+
+* **api,map:** public read tier for the map API ([#378](https://github.com/F3-Nation/f3-nation/issues/378)), plus [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3 groundwork ([#1149](https://github.com/F3-Nation/f3-nation/issues/1149)) ([f65d3d9](https://github.com/F3-Nation/f3-nation/commit/f65d3d9120131c4cbff8bcdb019bcc546b8a6464))
+* **api:** accept region IDs from REST query strings ([#1233](https://github.com/F3-Nation/f3-nation/issues/1233)) ([216dd99](https://github.com/F3-Nation/f3-nation/commit/216dd99cbb71fb740c6c3620f8e958045fd9fe1f))
+* **api:** make API key creation atomic ([#1211](https://github.com/F3-Nation/f3-nation/issues/1211)) ([61326b4](https://github.com/F3-Nation/f3-nation/commit/61326b4d5c05701324b9ac7b7da423a18380b052))
+* **api:** roll back user delete on FK conflict and return CONFLICT ([#1073](https://github.com/F3-Nation/f3-nation/issues/1073)) ([#1192](https://github.com/F3-Nation/f3-nation/issues/1192)) ([ba3d0c7](https://github.com/F3-Nation/f3-nation/commit/ba3d0c780b0f4c99bae9bcd8c6a96723525033be))
+* **api:** sort user lists by full name ([#1229](https://github.com/F3-Nation/f3-nation/issues/1229)) ([5b16e01](https://github.com/F3-Nation/f3-nation/commit/5b16e01682d8e60f5f2d79ac56e7548e3e7d2664))
+* **api:** stabilize event and event tag pagination ([#1240](https://github.com/F3-Nation/f3-nation/issues/1240)) ([dade0cf](https://github.com/F3-Nation/f3-nation/commit/dade0cf28b3161eca07f42c53ddef78ecff32117))
+* **api:** stabilize location and request pagination ([#1234](https://github.com/F3-Nation/f3-nation/issues/1234)) ([6995e12](https://github.com/F3-Nation/f3-nation/commit/6995e126a42c25b96e5feafb7eca5053a7aaa126))
+* **map,api:** use one-off organizations at shared locations ([#1243](https://github.com/F3-Nation/f3-nation/issues/1243)) ([381106a](https://github.com/F3-Nation/f3-nation/commit/381106a39f8f3f51f92916354fa8e81904cbfc21))
+* **map:** open the detail panel for instance-only map pins ([#1216](https://github.com/F3-Nation/f3-nation/issues/1216)) ([af265ea](https://github.com/F3-Nation/f3-nation/commit/af265ea940b6e83982ce8028b2cbeda81e891f0f))
+
+
+### Performance Improvements
+
+* **api,map:** fix regionsWithLocation, cache the map datasets, gzip the map proxy ([#1197](https://github.com/F3-Nation/f3-nation/issues/1197)) ([1747ec4](https://github.com/F3-Nation/f3-nation/commit/1747ec49fffa898f5ee70714a1f22244f677746a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.10
+    * @acme/db bumped to 0.10.0
+    * @acme/shared bumped to 0.5.0
+    * @acme/validators bumped to 0.5.0
+
 ## [0.13.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.12.0...pkg-api@0.13.0) (2026-10-10)
 
 

@@ -9247,7 +9247,7 @@
                               "type": "number"
                             },
                             "instanceOrgs": {
-                              "description": "AO and region context per visible upcoming instance, soonest first; populated only when the location has no series events",
+                              "description": "AO and region context per visible upcoming instance, soonest first, including locations with recurring workouts",
                               "items": {
                                 "properties": {
                                   "instanceId": {
