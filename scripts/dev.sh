@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+# shellcheck source=scripts/lib/local-ports.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/local-ports.sh"
+load_local_ports
+
 include_py=false
 slackbot_requested=false
 turbo_args=()

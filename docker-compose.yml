@@ -1,16 +1,19 @@
+# Host ports and container names can be overridden per checkout so several
+# worktrees can run side by side: `pnpm local:setup --slot N` writes them to the
+# root .env, which Compose reads automatically. Defaults are the values below.
 name: f3-local
 
 services:
   postgres:
     image: postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
-    container_name: f3-postgres
+    container_name: ${F3_CONTAINER_PREFIX:-f3}-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-f3local}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-f3local}
       POSTGRES_DB: ${POSTGRES_DB:-f3nation}
     ports:
-      - "5433:5432"
+      - "${F3_POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./scripts/docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
@@ -26,10 +29,10 @@ services:
 
   adminer:
     image: adminer:6.1.1@sha256:74f29c416e148b98305e84446a18db7cd2c1038264dec464359d36774ef080ce
-    container_name: f3-adminer
+    container_name: ${F3_CONTAINER_PREFIX:-f3}-adminer
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${F3_ADMINER_PORT:-8080}:8080"
     volumes:
       - ./scripts/docker/adminer-plugins.php:/var/www/html/index.php:ro
     depends_on:
@@ -38,21 +41,21 @@ services:
 
   gcs-emulator:
     image: fsouza/fake-gcs-server:1.56.1@sha256:797ce226d62f947c009dc40246b30cfb456b8473d8241407f9d6f2c04e4d69ef
-    container_name: f3-gcs
+    container_name: ${F3_CONTAINER_PREFIX:-f3}-gcs
     restart: unless-stopped
     ports:
-      - "9023:9023"
+      - "${F3_GCS_PORT:-9023}:9023"
     volumes:
       - gcs_data:/data
-    command: -scheme http -port 9023 -public-host localhost:9023 -backend filesystem -filesystem-root /data
+    command: -scheme http -port 9023 -public-host localhost:${F3_GCS_PORT:-9023} -backend filesystem -filesystem-root /data
 
   mailpit:
     image: axllent/mailpit:v1.31.4@sha256:b68349e3a014b90c5610bfb26b2ae36f3892d7b8cf25ee140c6c71c98d2fcf48
-    container_name: f3-mailpit
+    container_name: ${F3_CONTAINER_PREFIX:-f3}-mailpit
     restart: unless-stopped
     ports:
-      - "1025:1025" # SMTP — matches EMAIL_SERVER in .env.docker.example
-      - "8025:8025" # Web UI — open http://localhost:8025 to read sent emails
+      - "${F3_MAILPIT_SMTP_PORT:-1025}:1025" # SMTP — matches EMAIL_SERVER in the .env.example files
+      - "${F3_MAILPIT_UI_PORT:-8025}:8025" # Web UI (default http://localhost:8025) — read sent emails here
 
 volumes:
   postgres_data:

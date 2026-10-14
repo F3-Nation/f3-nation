@@ -18,6 +18,7 @@ import {
   mockAuthWithSession,
   uniqueId,
 } from "../../__tests__/test-utils";
+import { clearMapDataCache } from "../../lib/map-data-cache";
 import { ORG_TREE_MAX_DEPTH } from "../../org-tree";
 
 describe("Map Location Router", () => {
@@ -31,6 +32,8 @@ describe("Map Location Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Tests write map data and read it straight back.
+    clearMapDataCache();
   });
 
   afterAll(async () => {
@@ -792,6 +795,119 @@ describe("Map Location Router", () => {
     });
   });
 
+  describe("regionsWithLocation", () => {
+    const findRegion = <T extends { id: number }>(
+      result: { regionsWithLocation: T[] },
+      regionId: number,
+    ) => result.regionsWithLocation.filter((r) => r.id === regionId);
+
+    const insertLocation = async (
+      orgId: number,
+      opts: { lat?: number | null; lon?: number | null; isActive?: boolean },
+    ) => {
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Test Location ${uniqueId()}`,
+          orgId,
+          isActive: opts.isActive ?? true,
+          latitude: opts.lat === undefined ? 35.5 : opts.lat,
+          longitude: opts.lon === undefined ? -80.5 : opts.lon,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create test location");
+      createdLocationIds.push(location.id);
+      return location;
+    };
+
+    it("returns one row per region, at its lowest-id located location", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      await createTestAO(region.id);
+      await createTestAO(region.id);
+      await createTestAO(region.id);
+      // No coordinates: skipped even though it has the lowest id.
+      await insertLocation(region.id, { lat: null, lon: null });
+      const first = await insertLocation(region.id, { lat: 36.1, lon: -81.6 });
+      await insertLocation(region.id, { lat: 37.0, lon: -82.0 });
+      await insertLocation(region.id, { lat: 38.0, lon: -83.0 });
+
+      const rows = findRegion(
+        await createTestClient().map.location.regionsWithLocation(),
+        region.id,
+      );
+
+      expect(rows).toEqual([
+        expect.objectContaining({
+          id: region.id,
+          name: region.name,
+          locationId: first.id,
+          lat: 36.1,
+          lon: -81.6,
+        }),
+      ]);
+    });
+
+    it("uses a child org's logo, preferring one that has a logo", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      await createTestAO(region.id, { logoUrl: null });
+      await createTestAO(region.id, { logoUrl: "" });
+      await createTestAO(region.id, { logoUrl: "https://example.com/ao.png" });
+      await insertLocation(region.id, {});
+
+      const [row] = findRegion(
+        await createTestClient().map.location.regionsWithLocation(),
+        region.id,
+      );
+
+      expect(row?.logo).toBe("https://example.com/ao.png");
+    });
+
+    it("excludes inactive regions, regions without child orgs, and regions with no active located location", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const inactive = await createTestRegion();
+      const childless = await createTestRegion();
+      const noActiveLocation = await createTestRegion();
+      if (!inactive || !childless || !noActiveLocation)
+        throw new Error("Failed to create test regions");
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, inactive.id));
+      await createTestAO(inactive.id);
+      await insertLocation(inactive.id, {});
+      await insertLocation(childless.id, {});
+      await createTestAO(noActiveLocation.id);
+      await insertLocation(noActiveLocation.id, { isActive: false });
+      await insertLocation(noActiveLocation.id, { lat: null, lon: null });
+
+      const result =
+        await createTestClient().map.location.regionsWithLocation();
+
+      expect(findRegion(result, inactive.id)).toEqual([]);
+      expect(findRegion(result, childless.id)).toEqual([]);
+      expect(findRegion(result, noActiveLocation.id)).toEqual([]);
+    });
+
+    it("skips a non-region org that has children and a located location", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const area = await createTestArea();
+      if (!area) throw new Error("Failed to create test area");
+      // An area qualifies on every other condition: it has a child region
+      // and an active location with coordinates of its own.
+      await createTestRegion({ parentId: area.id });
+      await insertLocation(area.id, {});
+
+      const result =
+        await createTestClient().map.location.regionsWithLocation();
+
+      expect(findRegion(result, area.id)).toEqual([]);
+    });
+  });
+
   describe("upcomingInstances", () => {
     it("should include a series-linked instance when the parent event has no location", async () => {
       const session = await createAdminSession();
@@ -1431,6 +1547,9 @@ describe("Map Location Router", () => {
         .update(schema.orgs)
         .set({ isActive: false })
         .where(eq(schema.orgs.id, tree.territory.id));
+      // The map datasets are cached for up to MAP_DATA_TTL_MS; a real edit
+      // shows within that window, a test can't wait for it.
+      clearMapDataCache();
       const inactive = await client.map.location.upcomingInstances();
       expect(inactive.map((instance) => instance.id)).not.toContain(
         instanceIds[0],
