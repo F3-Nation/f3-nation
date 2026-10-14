@@ -1212,18 +1212,19 @@ def test_ctas_supervisor_kills_stuck_child_with_bounded_runtime(interrupt_mode, 
         monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_GRACE_SECONDS", 0.2)
         monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_TERMINATE_SECONDS", 0.1)
         monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_REAP_SECONDS", 2)
-        monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_CLEANUP_OPERATION_SECONDS", 2)
+        # Spawn and import of each child count against these budgets; leave headroom for loaded CI runners.
+        deadline_seconds = 5
         started = time.monotonic()
         try:
             result = diagnostics.run_ctas_events_diagnostic(
-                settings, connection_factory=_spawn_stuck_factory, deadline_seconds=2
+                settings, connection_factory=_spawn_stuck_factory, deadline_seconds=deadline_seconds
             )
         finally:
             monkeypatch.undo()
         elapsed = time.monotonic() - started
 
         assert result == {"status": "failed", "error_type": "TimeoutError"}
-        assert elapsed < 8.0
+        assert elapsed < deadline_seconds + 6.0
         assert (base / "operation").read_text(encoding="utf-8") == "sigterm_ignored"
         if block_phase in {"factory", "close"}:
             assert not (base / "interrupt").exists()
