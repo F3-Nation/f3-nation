@@ -290,6 +290,15 @@ export const LOCAL_API_KEYS: LocalApiKeySeed[] = [
   },
 ];
 
+/** Region orgs the region-scoped dev API keys attach to. */
+export const LOCAL_API_KEY_REGION_NAMES = [
+  ...new Set(
+    LOCAL_API_KEYS.flatMap((k) => (k.regionName ? [k.regionName] : [])),
+  ),
+];
+
+export const DEV_LOGIN_HINT = `Log in with ${DEV_USERS.map((u) => u.email).join(", ")}`;
+
 // ---------------------------------------------------------------------------
 // OAuth clients (local dev — plaintext secret: local-me-client-secret)
 // ---------------------------------------------------------------------------
