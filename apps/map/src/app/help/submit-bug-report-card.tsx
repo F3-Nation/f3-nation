@@ -63,11 +63,28 @@ export const SubmitBugReportCard = () => {
 
   const type = form.watch("type");
 
-  const onSubmit = (values: FeedbackSchema) => {
-    console.log("SubmitBugReportCard", values);
-    submitFeedback.mutate(values);
-    toast.success(`${typeToTitle(values.type)} submitted`);
-    form.reset();
+  const onSubmit = async (values: FeedbackSchema) => {
+    try {
+      await submitFeedback.mutateAsync(values);
+      toast.success(`${typeToTitle(values.type)} submitted`);
+      // Only clear the form if the visitor hasn't started a new message
+      // while this one was in flight -- otherwise the reset would erase
+      // the draft they're now typing. Compared field by field rather than
+      // via JSON.stringify, since the defaultValues object and the
+      // schema-validated `values` object don't declare their keys in the
+      // same order and would never compare equal.
+      const current = form.getValues();
+      const unchangedSinceSubmit =
+        current.type === values.type &&
+        current.subject === values.subject &&
+        current.description === values.description &&
+        current.email === values.email;
+      if (unchangedSinceSubmit) {
+        form.reset();
+      }
+    } catch {
+      toast.error("Failed to submit. Please try again.");
+    }
   };
 
   return (
@@ -172,8 +189,8 @@ export const SubmitBugReportCard = () => {
             size="sm"
             className="bg-black text-white hover:bg-gray-800"
             type="button"
+            disabled={submitFeedback.isPending}
             onClick={() => {
-              console.log("SubmitBugReportCard", form.getValues());
               void form.handleSubmit(onSubmit, () =>
                 window.alert("form error"),
               )();

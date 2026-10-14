@@ -13,6 +13,9 @@ const { mockLimit, mockRegionNotification } = vi.hoisted(() => ({
   mockLimit: vi.fn(),
   mockRegionNotification: vi.fn(),
 }));
+const mockRoleCheckHook = vi.hoisted(() => ({
+  afterSuccess: null as null | (() => Promise<void>),
+}));
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -24,8 +27,27 @@ vi.mock("../lib/first-event-service", () => ({
   maybeNotifyRegionInABox: mockRegionNotification,
 }));
 
-import { and, count, eq, gte, schema } from "@acme/db";
 import type { OrgType } from "@acme/shared/app/enums";
+vi.mock("../check-has-role-on-org", async (importOriginal) => {
+  const original = await importOriginal<typeof CheckHasRoleOnOrgModule>();
+  return {
+    ...original,
+    checkHasRoleOnOrg: async (
+      params: Parameters<typeof original.checkHasRoleOnOrg>[0],
+    ) => {
+      const result = await original.checkHasRoleOnOrg(params);
+      const afterSuccess = mockRoleCheckHook.afterSuccess;
+      if (result.success && afterSuccess) {
+        mockRoleCheckHook.afterSuccess = null;
+        await afterSuccess();
+      }
+      return result;
+    },
+  };
+});
+
+import type * as CheckHasRoleOnOrgModule from "../check-has-role-on-org";
+import { and, count, eq, gte, inArray, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -48,6 +70,7 @@ const nextFutureMonday = (n: number): string => {
 describe("Org Router", () => {
   // Track created orgs for cleanup
   const createdOrgIds: number[] = [];
+  const createdLocationIds: number[] = [];
   // Track created users for cleanup (only the accessible/non-nation-admin
   // tests need a real DB-backed user — everything else uses a purely mocked
   // session)
@@ -55,6 +78,7 @@ describe("Org Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRoleCheckHook.afterSuccess = null;
     // Reset rate limiter to allow requests
     mockLimit.mockResolvedValue({
       success: true,
@@ -72,6 +96,13 @@ describe("Org Router", () => {
     for (const userId of createdUserIds.reverse()) {
       try {
         await cleanup.user(userId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    for (const locationId of createdLocationIds.reverse()) {
+      try {
+        await cleanup.location(locationId);
       } catch {
         // Ignore errors during cleanup
       }
@@ -994,6 +1025,608 @@ describe("Org Router", () => {
           })
         )?.meta?.firstEventNotificationSent,
       ).not.toBe(true);
+    });
+
+    it("rejects an update when the org hierarchy changes before its row lock", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+      const regions = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Stale Read Source Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Stale Read Concurrent Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Stale Read Destination Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      const [sourceRegion, concurrentRegion, destinationRegion] = regions;
+      if (!sourceRegion || !concurrentRegion || !destinationRegion) {
+        throw new Error("Failed to create stale-read test regions");
+      }
+      createdOrgIds.push(
+        sourceRegion.id,
+        concurrentRegion.id,
+        destinationRegion.id,
+      );
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Stale Read AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: sourceRegion.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create stale-read test AO");
+      createdOrgIds.push(ao.id);
+
+      let signalLockHeld!: (pid: number) => void;
+      let releaseLock!: () => void;
+      const lockHeld = new Promise<number>((resolve) => {
+        signalLockHeld = resolve;
+      });
+      const waitToReleaseLock = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+      });
+      const lockTransaction = db.transaction(async (tx) => {
+        await tx
+          .update(schema.orgs)
+          .set({ parentId: concurrentRegion.id })
+          .where(eq(schema.orgs.id, ao.id));
+        const lockPidRow = (
+          await tx.execute<{ pid: number }>(sql`
+          SELECT pg_backend_pid() AS pid
+        `)
+        )[0];
+        if (!lockPidRow) throw new Error("Failed to identify lock holder");
+        signalLockHeld(lockPidRow.pid);
+        await waitToReleaseLock;
+      });
+
+      const blockerPid = await lockHeld;
+      const update = createTestClient().org.crupdate({
+        ...blankFields,
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        parentId: destinationRegion.id,
+      });
+
+      let isWaitingForRowLock = false;
+      let pollingError: unknown;
+      try {
+        // Wait until crupdate has completed its pre-lock reads and is blocked
+        // on the row lock held above. This makes the stale-read ordering
+        // deterministic rather than relying on a timing delay.
+        for (
+          let attempt = 0;
+          attempt < 500 && !isWaitingForRowLock;
+          attempt++
+        ) {
+          const activity = (await db.execute(sql`
+            SELECT wait_event_type, query
+            FROM pg_stat_activity
+            WHERE pid <> pg_backend_pid()
+              AND wait_event_type = 'Lock'
+              AND query ILIKE '%for update%'
+              AND pg_blocking_pids(pid) @> ARRAY[${blockerPid}]::int[]
+          `)) as unknown as {
+            wait_event_type: string | null;
+            query: string;
+          }[];
+          isWaitingForRowLock = activity.some(
+            ({ wait_event_type, query }) =>
+              wait_event_type === "Lock" && /for update/i.test(query),
+          );
+          if (!isWaitingForRowLock) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+        }
+      } catch (error) {
+        pollingError = error;
+      } finally {
+        releaseLock();
+      }
+
+      const [lockResult, updateResult] = await Promise.allSettled([
+        lockTransaction,
+        update,
+      ]);
+      expect(pollingError).toBeUndefined();
+      expect(lockResult.status).toBe("fulfilled");
+      expect(isWaitingForRowLock).toBe(true);
+      expect(updateResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          code: "CONFLICT",
+          message:
+            "Organization hierarchy changed while this update was being prepared. Reload and retry.",
+        },
+      });
+
+      const [unchangedAo] = await db
+        .select({ parentId: schema.orgs.parentId })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(unchangedAo?.parentId).toBe(concurrentRegion.id);
+    });
+
+    it("rechecks editor access after the org's parent changes before its first read", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const [authorizedRegion, movedRegion] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Pre-read Authorized Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Pre-read Moved Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!authorizedRegion || !movedRegion) {
+        throw new Error("Failed to create pre-read race test regions");
+      }
+      createdOrgIds.push(authorizedRegion.id, movedRegion.id);
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Pre-read Race AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: authorizedRegion.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create pre-read race test AO");
+      createdOrgIds.push(ao.id);
+
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Pre-read Race Location ${uniqueId()}`,
+          orgId: ao.id,
+          isActive: true,
+          latitude: 35.5,
+          longitude: -80.5,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create pre-read race location");
+      createdLocationIds.push(location.id);
+      await db
+        .update(schema.orgs)
+        .set({ defaultLocationId: location.id })
+        .where(eq(schema.orgs.id, ao.id));
+
+      await mockAuthWithSession(
+        createEditorSession({
+          orgId: authorizedRegion.id,
+          orgName: authorizedRegion.name,
+        }),
+      );
+      mockRoleCheckHook.afterSuccess = async () => {
+        await db
+          .update(schema.orgs)
+          .set({ parentId: movedRegion.id })
+          .where(eq(schema.orgs.id, ao.id));
+      };
+
+      await expect(
+        createTestClient().org.crupdate({
+          ...blankFields,
+          id: ao.id,
+          name: `Unauthorized mutation ${uniqueId()}`,
+          orgType: "ao",
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const [unchangedAo] = await db
+        .select({
+          name: schema.orgs.name,
+          parentId: schema.orgs.parentId,
+          defaultLocationId: schema.orgs.defaultLocationId,
+        })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(unchangedAo).toEqual({
+        name: ao.name,
+        parentId: movedRegion.id,
+        defaultLocationId: location.id,
+      });
+      const [unchangedLocation] = await db
+        .select({ orgId: schema.locations.orgId })
+        .from(schema.locations)
+        .where(eq(schema.locations.id, location.id));
+      expect(unchangedLocation).toEqual({ orgId: ao.id });
+    });
+
+    it("cascades an active AO status update to its series and future instances only", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Status Cascade Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create test region");
+      createdOrgIds.push(region.id);
+
+      const [ao, otherAo] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Status Cascade AO ${uniqueId()}`,
+            orgType: "ao",
+            parentId: region.id,
+            isActive: true,
+          },
+          {
+            name: `Unrelated Status Cascade AO ${uniqueId()}`,
+            orgType: "ao",
+            parentId: region.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!ao || !otherAo) throw new Error("Failed to create test AOs");
+      createdOrgIds.push(ao.id, otherAo.id);
+
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `Status Cascade Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [otherSeries] = await db
+        .insert(schema.events)
+        .values({
+          name: `Unrelated Status Cascade Series ${uniqueId()}`,
+          orgId: otherAo.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [weeklySeriesWithoutPattern] = await db
+        .insert(schema.events)
+        .values({
+          name: `Status Cascade Weekly Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "wednesday",
+          startTime: "0530",
+          recurrencePattern: null,
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series || !otherSeries || !weeklySeriesWithoutPattern) {
+        throw new Error("Failed to create series");
+      }
+
+      const [pastInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: series.name,
+          orgId: ao.id,
+          seriesId: series.id,
+          startDate: "2025-01-06",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [futureInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: series.name,
+          orgId: ao.id,
+          seriesId: series.id,
+          startDate: nextFutureMonday(2),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [otherFutureInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: otherSeries.name,
+          orgId: otherAo.id,
+          seriesId: otherSeries.id,
+          startDate: nextFutureMonday(2),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [weeklyFutureInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: weeklySeriesWithoutPattern.name,
+          orgId: ao.id,
+          seriesId: weeklySeriesWithoutPattern.id,
+          startDate: nextFutureMonday(2),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (
+        !pastInstance ||
+        !futureInstance ||
+        !otherFutureInstance ||
+        !weeklyFutureInstance
+      ) {
+        throw new Error("Failed to create test instances");
+      }
+
+      await client.org.crupdate({
+        ...blankFields,
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        isActive: false,
+      });
+
+      const [updatedAo] = await db
+        .select({ isActive: schema.orgs.isActive })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      const [updatedSeries] = await db
+        .select({ isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.id, series.id));
+      const [updatedWeeklySeriesWithoutPattern] = await db
+        .select({ isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.id, weeklySeriesWithoutPattern.id));
+      const [updatedPast] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, pastInstance.id));
+      const [updatedFuture] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, futureInstance.id));
+      const [untouchedSeries] = await db
+        .select({ isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.id, otherSeries.id));
+      const [untouchedFuture] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, otherFutureInstance.id));
+      const [updatedWeeklyFuture] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, weeklyFutureInstance.id));
+
+      expect(updatedAo?.isActive).toBe(false);
+      expect(updatedSeries?.isActive).toBe(false);
+      expect(updatedWeeklySeriesWithoutPattern?.isActive).toBe(false);
+      expect(updatedPast?.isActive).toBe(true);
+      expect(updatedFuture?.isActive).toBe(false);
+      expect(updatedWeeklyFuture?.isActive).toBe(false);
+      expect(untouchedSeries?.isActive).toBe(true);
+      expect(untouchedFuture?.isActive).toBe(true);
+
+      await db
+        .delete(schema.eventInstances)
+        .where(
+          inArray(schema.eventInstances.id, [
+            pastInstance.id,
+            futureInstance.id,
+            otherFutureInstance.id,
+            weeklyFutureInstance.id,
+          ]),
+        );
+      await db
+        .delete(schema.events)
+        .where(
+          inArray(schema.events.id, [
+            series.id,
+            otherSeries.id,
+            weeklySeriesWithoutPattern.id,
+          ]),
+        );
+    });
+
+    it("does not cascade for an unchanged or reactivated AO status", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `No Status Cascade Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create test region");
+      createdOrgIds.push(region.id);
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `No Status Cascade AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: region.id,
+          isActive: false,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create test AO");
+      createdOrgIds.push(ao.id);
+
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `No Status Cascade Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series) throw new Error("Failed to create test series");
+      const [futureInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: series.name,
+          orgId: ao.id,
+          seriesId: series.id,
+          startDate: nextFutureMonday(2),
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!futureInstance) throw new Error("Failed to create test instance");
+
+      const client = createTestClient();
+      await client.org.crupdate({
+        ...blankFields,
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        isActive: false,
+      });
+      await client.org.crupdate({
+        ...blankFields,
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        isActive: true,
+      });
+
+      const [unchangedSeries] = await db
+        .select({ isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.id, series.id));
+      const [unchangedFuture] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, futureInstance.id));
+      expect(unchangedSeries?.isActive).toBe(false);
+      expect(unchangedFuture?.isActive).toBe(false);
+
+      await db
+        .delete(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, futureInstance.id));
+      await db.delete(schema.events).where(eq(schema.events.id, series.id));
+    });
+
+    it("requires AO admin permission only for active-to-inactive status changes", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `AO Status RBAC Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create test region");
+      createdOrgIds.push(region.id);
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `AO Status RBAC AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: region.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create test AO");
+      createdOrgIds.push(ao.id);
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+      const client = createTestClient();
+      await expect(
+        client.org.crupdate({
+          ...blankFields,
+          id: ao.id,
+          name: ao.name,
+          orgType: "ao",
+          isActive: false,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const [stillActive] = await db
+        .select({ isActive: schema.orgs.isActive })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(stillActive?.isActive).toBe(true);
+
+      // An inactive-to-active edit remains available to an editor.
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, ao.id));
+      await expect(
+        client.org.crupdate({
+          ...blankFields,
+          id: ao.id,
+          name: ao.name,
+          orgType: "ao",
+          isActive: true,
+        }),
+      ).resolves.toMatchObject({ org: { isActive: true } });
     });
 
     it("should enforce editor permissions", async () => {
