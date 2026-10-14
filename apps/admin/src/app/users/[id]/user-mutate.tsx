@@ -31,6 +31,7 @@ import type { RouterOutputs } from "~/orpc/types";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { client } from "~/orpc/client";
 import { invalidateQueries, orpc, ORPCError, useMutation } from "~/orpc/react";
+import { toGrantableRoleEntries } from "~/lib/auth/session";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 export default function UserMutate({
@@ -63,7 +64,7 @@ export default function UserMutate({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: user?.roles ?? [],
+      roles: toGrantableRoleEntries(user?.roles),
     },
   });
 
@@ -76,8 +77,10 @@ export default function UserMutate({
       },
       onError: (err) => {
         toast.error(
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You are not authorized to upsert this user"
+          err instanceof ORPCError
+            ? err.code === "UNAUTHORIZED"
+              ? "You are not authorized to upsert this user"
+              : err.message || "Failed to upsert user"
             : "Failed to upsert user",
         );
       },

@@ -10,7 +10,7 @@
     "uv.lock",
     "scripts/python-task.sh"
   ],
-  "globalPassThroughEnv": ["GITHUB_SHA"],
+  "globalPassThroughEnv": ["GITHUB_SHA", "INIT_CWD", "SNAPSHOT_CALLER_CWD"],
   "globalEnv": [
     "CI",
     "NODE_ENV",
