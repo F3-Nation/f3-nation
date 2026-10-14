@@ -30,7 +30,7 @@ vi.mock("../services/map-request-notification", () => ({
   notifyMapChangeRequest: mockNotifyMapChangeRequest,
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import {
   afterAll,
   beforeEach,
@@ -185,6 +185,120 @@ describe("Request Router", () => {
   };
 
   describe("all", () => {
+    it("pages tied sort values without repeats or omissions and preserves sort precedence", async () => {
+      await getOrCreateRoles();
+      const nationOrg = await getOrCreateF3NationOrg();
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `${uniqueId()}@example.com`,
+          f3Name: "Pagination Admin",
+        })
+        .returning({ id: schema.users.id });
+      const [adminRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+      if (!user || !adminRole) throw new Error("Failed to seed nation admin");
+      onTestFinished(() => cleanup.user(user.id));
+      await db
+        .insert(schema.rolesXUsersXOrg)
+        .values({ userId: user.id, orgId: nationOrg.id, roleId: adminRole.id });
+      const session = await createAdminSession();
+      await mockAuthWithSession({
+        ...session,
+        id: user.id,
+        user: {
+          id: String(user.id),
+          email: session.email,
+          roles: session.roles ?? [],
+        },
+      });
+
+      const region = await createTestRegion();
+      const prefix = `Pagination ${uniqueId()}`;
+      const requests = await db
+        .insert(schema.updateRequests)
+        .values(
+          Array.from({ length: 40 }, (_, index) => ({
+            regionId: region.id,
+            requestType: "create_event" as const,
+            eventName: `${prefix} ${index % 2 ? "Alpha" : "Zulu"}`,
+            submittedBy: "pagination@example.com",
+            status: "pending" as const,
+          })),
+        )
+        .returning({
+          id: schema.updateRequests.id,
+          name: schema.updateRequests.eventName,
+        });
+      createdRequestIds.push(...requests.map((request) => request.id));
+      // Move a tied tuple so physical row order cannot stand in for ID order.
+      await db
+        .update(schema.updateRequests)
+        .set({ eventName: sql`${schema.updateRequests.eventName}` })
+        .where(eq(schema.updateRequests.id, requests[0]!.id));
+      const byId = [...requests].sort((a, b) =>
+        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      );
+      const client = createTestClient();
+      const unsorted = await client.request.all({
+        searchTerm: prefix,
+        sorting: [],
+        pageSize: 50,
+      });
+      expect(unsorted.requests.map((request) => request.id)).toEqual(
+        byId.map((request) => request.id),
+      );
+      for (const desc of [false, true]) {
+        for (const id of ["status", "workoutName"]) {
+          const expected = [...byId]
+            .sort((a, b) =>
+              id === "status"
+                ? 0
+                : (a.name! < b.name! ? -1 : a.name! > b.name! ? 1 : 0) *
+                  (desc ? -1 : 1),
+            )
+            .map((request) => request.id);
+          for (const pageSize of [5, 7]) {
+            const paged: string[] = [];
+            for (
+              let pageIndex = 0;
+              pageIndex < Math.ceil(40 / pageSize);
+              pageIndex++
+            ) {
+              const page = await client.request.all({
+                searchTerm: prefix,
+                sorting: [{ id, desc }],
+                pageIndex,
+                pageSize,
+              });
+              expect(page.totalCount).toBe(40);
+              paged.push(...page.requests.map((request) => request.id));
+            }
+            expect(paged).toEqual(expected);
+            expect(new Set(paged).size).toBe(40);
+          }
+        }
+      }
+      for (const sorting of [
+        undefined,
+        [
+          { id: "status", desc: false },
+          { id: "id", desc: true },
+        ],
+      ]) {
+        const result = await client.request.all({
+          searchTerm: prefix,
+          sorting,
+          pageSize: 50,
+        });
+        expect(result.requests.map((request) => request.id)).toEqual(
+          byId.map((request) => request.id).reverse(),
+        );
+      }
+    });
+
     it("should return a list of update requests", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
