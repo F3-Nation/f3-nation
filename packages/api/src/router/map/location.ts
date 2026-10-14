@@ -174,9 +174,9 @@ const isVisibleUpcomingInstance = ({
  * AO and region context for each visible upcoming instance at a location,
  * soonest first. One location can hold instances from different orgs, so the
  * context is per instance rather than per location. Each row is shaped as the
- * `parent*` and `region*` fields
- * locationWorkout otherwise reads off a series' org, plus the `instanceId` it
- * belongs to. Empty when no instance would draw a pin here.
+ * `parent*` and `region*` fields locationWorkout otherwise reads off a series'
+ * org, plus the `instanceId` it belongs to. Empty when no instance would draw a
+ * pin here.
  */
 const getInstanceOrgsAtLocation = async (
   db: Context["db"],
@@ -737,7 +737,7 @@ export const mapLocationRouter = os.router({
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 
-      const results = await ctx.db
+      const locationQuery = ctx.db
         .select({
           location: {
             id: schema.locations.id,
@@ -864,6 +864,10 @@ export const mapLocationRouter = os.router({
           regionOrg.id,
         );
 
+      const [results, upcomingInstanceOrgs] = await Promise.all([
+        locationQuery,
+        getInstanceOrgsAtLocation(ctx.db, input.locationId),
+      ]);
       const location = results[0]?.location;
       const events = results
         .map((r) => r.event)
@@ -881,18 +885,16 @@ export const mapLocationRouter = os.router({
       // orgs even when this location also hosts a recurring workout. Return each
       // visible instance's AO/region context for the selected workout. Only use
       // the soonest instance as the location-level default when no series exists.
-      const instanceOrgs = (
-        location
-          ? await getInstanceOrgsAtLocation(ctx.db, input.locationId)
-          : []
-      ).map((orgs) => ({
-        ...orgs,
-        // Same empty-string logo handling as the location-level fields below
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        parentLogo: orgs.parentLogo || null,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        regionLogo: orgs.regionLogo || null,
-      }));
+      const instanceOrgs = (location ? upcomingInstanceOrgs : []).map(
+        (orgs) => ({
+          ...orgs,
+          // Same empty-string logo handling as the location-level fields below
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          parentLogo: orgs.parentLogo || null,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          regionLogo: orgs.regionLogo || null,
+        }),
+      );
       const fallbackInstanceOrgs =
         events.length === 0 ? instanceOrgs[0] : undefined;
 

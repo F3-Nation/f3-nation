@@ -2475,6 +2475,73 @@ describe("Map Location Router", () => {
     });
 
     it.each([
+      {
+        label: "exclude an ordinary occurrence at its series' location",
+        seriesException: null,
+        visible: false,
+      },
+      {
+        label: "include a same-location series exception's own AO and region",
+        seriesException: "different-time" as const,
+        visible: true,
+      },
+    ])("should $label", async ({ seriesException, visible }) => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const { region, ao, location, instance } =
+        await createInstanceOnlyFixture({ seriesException });
+      const seriesRegion = await createTestRegion();
+      if (!seriesRegion) throw new Error("Failed to create series region");
+      const seriesAo = await createTestAO(seriesRegion.id);
+      if (!seriesAo) throw new Error("Failed to create series AO");
+      const series = await createDatedEvent({
+        aoId: seriesAo.id,
+        locationId: location.id,
+        label: "Same-Location Series",
+        dayOfWeek: "monday",
+        startDate: "2026-01-01",
+      });
+      await db
+        .update(schema.eventInstances)
+        .set({ seriesId: series.id })
+        .where(eq(schema.eventInstances.id, instance.id));
+
+      const client = createTestClient();
+      const workout = await client.map.location.locationWorkout({
+        locationId: location.id,
+      });
+
+      expect(workout.location?.instanceOrgs).toEqual(
+        visible
+          ? [
+              expect.objectContaining({
+                instanceId: instance.id,
+                parentId: ao.id,
+                parentName: ao.name,
+                regionId: region.id,
+                regionName: region.name,
+              }),
+            ]
+          : [],
+      );
+      // Distinct orgs expose any accidental use of instance metadata as the
+      // recurring workout's defaults, even when the exception is visible.
+      expect(workout.location).toEqual(
+        expect.objectContaining({
+          id: location.id,
+          parentId: seriesAo.id,
+          parentName: seriesAo.name,
+          regionId: seriesRegion.id,
+          regionName: seriesRegion.name,
+          events: [
+            expect.objectContaining({ id: series.id, aoId: seriesAo.id }),
+          ],
+        }),
+      );
+    });
+
+    it.each([
       { label: "private", flags: { isActive: true, isPrivate: true } },
       { label: "deactivated", flags: { isActive: false, isPrivate: false } },
     ])(

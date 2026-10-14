@@ -553,6 +553,35 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
       };
       const { instanceId: _recurringInstanceId, ...recurringLocationOrgs } =
         recurringOrgs;
+      const recurringEventResponse: EventById = {
+        event: {
+          id: 1,
+          name: "Monday Bootcamp",
+          description: null,
+          isActive: true,
+          isPrivate: false,
+          location: "Alpha AO",
+          locationId: 10,
+          startDate: null,
+          endDate: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          endTime: "0615",
+          email: null,
+          highlight: false,
+          created: "2026-01-01",
+          meta: null,
+          aos: [{ aoId: 5, aoName: "Alpha AO" }],
+          regions: [{ regionId: 2, regionName: "Metro" }],
+          eventTypes: [{ eventTypeId: 1, eventTypeName: "Bootcamp" }],
+          eventTagIds: [],
+        },
+      };
+      const recurringException = {
+        ...laterOneOff,
+        seriesId: 1,
+        name: "Monday Exception",
+      } satisfies UpcomingInstance;
 
       beforeEach(() => {
         queryStates.set("locationWorkout", {
@@ -597,6 +626,63 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
 
         expectOrgs(recurringOrgs, oneOffOrgs);
       });
+
+      it.each([
+        { name: "empty", instanceOrgs: [] },
+        {
+          name: "missing the selected instance",
+          instanceOrgs: [{ ...oneOffOrgs, instanceId: 5 }],
+        },
+      ])(
+        "keeps recurring orgs for an exception when instance metadata is $name",
+        ({ instanceOrgs }) => {
+          queryStates.set("locationWorkout", {
+            data: locationWorkout(
+              [locationEvent()],
+              instanceOrgs,
+              recurringLocationOrgs,
+            ),
+          });
+          queryStates.set("upcomingInstances", {
+            data: [oneOff, recurringException],
+          });
+          queryStates.set("eventById", { data: recurringEventResponse });
+
+          renderPanel(-6);
+
+          expect(warning()).toBeNull();
+          expectOrgs(recurringOrgs, oneOffOrgs);
+          expect(screen.getByText("Copy Link to Event")).toBeTruthy();
+        },
+      );
+
+      it("uses matching exception metadata before the recurring org fallback", () => {
+        queryStates.set("upcomingInstances", {
+          data: [oneOff, recurringException],
+        });
+        queryStates.set("eventById", { data: recurringEventResponse });
+
+        renderPanel(-6);
+
+        expect(warning()).toBeNull();
+        expectOrgs(oneOffOrgs, recurringOrgs);
+      });
+
+      it.each([1, 7])(
+        "rejects another location's instance even when its series id is %i",
+        (seriesId) => {
+          queryStates.set("upcomingInstances", {
+            data: [oneOff, { ...laterOneOff, locationId: 20, seriesId }],
+          });
+          queryStates.set("eventById", { data: recurringEventResponse });
+
+          renderPanel(-6);
+
+          expect(warning()).toBeTruthy();
+          expect(wasEverEnabled("eventById")).toBe(false);
+          expect(screen.queryByText("Copy Link to Event")).toBeNull();
+        },
+      );
 
       it("switches AO, region, logos and contacts with the selected workout", () => {
         const { rerender } = renderPanel(-6);
@@ -673,20 +759,32 @@ describe("WorkoutDetailsContent with one-off workouts", () => {
       });
 
       it.each([
-        { name: "empty", instanceOrgs: [] },
+        { kind: "one-off", seriesId: null, name: "empty", instanceOrgs: [] },
         {
+          kind: "one-off",
+          seriesId: null,
+          name: "missing the selected instance",
+          instanceOrgs: [{ ...oneOffOrgs, instanceId: 5 }],
+        },
+        { kind: "away", seriesId: 7, name: "empty", instanceOrgs: [] },
+        {
+          kind: "away",
+          seriesId: 7,
           name: "missing the selected instance",
           instanceOrgs: [{ ...oneOffOrgs, instanceId: 5 }],
         },
       ])(
-        "does not substitute recurring orgs when instance metadata is $name",
-        ({ instanceOrgs }) => {
+        "does not substitute recurring orgs for a $kind when instance metadata is $name",
+        ({ instanceOrgs, seriesId }) => {
           queryStates.set("locationWorkout", {
             data: locationWorkout(
               [locationEvent()],
               instanceOrgs,
               recurringLocationOrgs,
             ),
+          });
+          queryStates.set("upcomingInstances", {
+            data: [oneOff, { ...laterOneOff, seriesId }],
           });
 
           renderPanel(-6);
