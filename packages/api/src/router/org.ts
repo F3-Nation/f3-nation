@@ -862,11 +862,20 @@ export const orgRouter = {
           await assertValidParentType(ctx.db, input.parentId, input.orgType);
         }
 
+        const insertMeta =
+          input.orgType === "region" && input.meta != null
+            ? Object.fromEntries(
+                Object.entries(input.meta).filter(
+                  ([key]) => key !== "firstEventNotificationSent",
+                ),
+              )
+            : input.meta;
+
         const [result] = await ctx.db
           .insert(schema.orgs)
           .values({
             ...input,
-            meta: input.meta as Record<string, string>,
+            meta: insertMeta as Record<string, string> | null | undefined,
           })
           .returning();
 
@@ -953,17 +962,16 @@ export const orgRouter = {
       // This marker is server-owned. Merge incoming metadata against the
       // current row inside the upsert so a concurrent notification claim is
       // not lost to the earlier `existingOrg` read.
-      if (input.orgType === "region") {
+      if (input.orgType === "region" && input.meta !== undefined) {
         const inputMetaJson =
-          input.meta == null ? null : JSON.stringify(input.meta);
+          input.meta === null ? null : JSON.stringify(input.meta);
         orgUpdateSet = {
           ...orgUpdateSet,
           // Never accept the notification marker from client-supplied metadata:
           // an old editor form must not restore a claim released after failed mail.
           meta: sql`(
             (CASE WHEN ${inputMetaJson}::jsonb IS NULL
-              THEN CASE WHEN jsonb_typeof(${schema.orgs.meta}) = 'object'
-                THEN ${schema.orgs.meta} ELSE '{}'::jsonb END
+              THEN '{}'::jsonb
               ELSE ${inputMetaJson}::jsonb END - 'firstEventNotificationSent')
             || (CASE WHEN ${schema.orgs.meta}->'firstEventNotificationSent' = 'true'::jsonb
               THEN '{"firstEventNotificationSent":true}'::jsonb ELSE '{}'::jsonb END)

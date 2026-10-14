@@ -1210,6 +1210,13 @@ const REQUEST_TYPE_TO_MAP_EVENT: Record<
   delete_ao: "map.deleted",
 };
 
+const pendingRegionNotificationTasks = new Set<Promise<void>>();
+
+/** Wait for detached region notification work to finish (used by deterministic tests). */
+export const waitForRegionNotificationTasks = async () => {
+  await Promise.all([...pendingRegionNotificationTasks]);
+};
+
 type HandleableRequestInput = CheckRequestInput & {
   id?: string | null;
   requestType: UpdateRequestData["requestType"];
@@ -1249,7 +1256,7 @@ const handleRequest = async <T extends HandleableRequestInput>({
     // Apply the change and record the audit row atomically, so a failure to
     // record can't leave an applied-but-unaudited change behind (and a retry
     // after such a failure can't apply the change twice).
-    const { updateRequest, sourceRegionId } = await ctx.db.transaction(
+    const { updateRequest, notificationRegionId } = await ctx.db.transaction(
       async (tx) => {
         const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
         // Guard against re-applying an already-reviewed request (two reviewers
@@ -1272,27 +1279,88 @@ const handleRequest = async <T extends HandleableRequestInput>({
             });
           }
         }
-        let sourceRegionId: number | null = null;
-        if (
-          input.requestType === "move_event_to_different_ao" &&
-          input.originalEventId
-        ) {
-          // Read the actual persisted source, not the potentially stale AO on a
-          // pending request. Lock the event until the handler has applied its move.
+        let notificationRegionId: number | null = null;
+        let eventSnapshot: { aoId: number } | undefined;
+        if (input.originalEventId) {
+          const [snapshot] = await tx
+            .select({ aoId: schema.events.orgId })
+            .from(schema.events)
+            .where(eq(schema.events.id, input.originalEventId));
+          eventSnapshot = snapshot;
+        }
+
+        // Lock every existing AO whose membership participates in the request
+        // (including the event's actual source) in stable order before locking
+        // the event. Rechecking permissions only after these locks prevents a
+        // concurrent AO reparent from making the preflight authorization stale.
+        const aoIds = [input.originalAoId, input.newAoId, eventSnapshot?.aoId]
+          .filter((id): id is number => id != null)
+          .filter((id, index, ids) => ids.indexOf(id) === index)
+          .sort((a, b) => a - b);
+        const lockedAos = aoIds.length
+          ? await tx
+              .select({ id: schema.orgs.id, regionId: schema.orgs.parentId })
+              .from(schema.orgs)
+              .where(inArray(schema.orgs.id, aoIds))
+              .orderBy(asc(schema.orgs.id))
+              .for("no key update")
+          : [];
+
+        if (input.originalEventId && eventSnapshot) {
           const [event] = await tx
             .select({ aoId: schema.events.orgId })
             .from(schema.events)
             .where(eq(schema.events.id, input.originalEventId))
             .for("update");
-          if (event) {
-            const [sourceAo] = await tx
-              .select({ regionId: schema.orgs.parentId })
-              .from(schema.orgs)
-              .where(eq(schema.orgs.id, event.aoId));
-            sourceRegionId = sourceAo?.regionId ?? null;
+          if (event?.aoId !== eventSnapshot.aoId) {
+            throw new ORPCError("CONFLICT", {
+              message:
+                "The event's AO changed while this request was being applied.",
+            });
           }
         }
+
+        const lockedPermissions = await checkUpdatePermissions({
+          input,
+          ctx: txCtx,
+        });
+        if (!lockedPermissions.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message:
+              "You can't apply this request: you no longer have the editor role on every affected org.",
+          });
+        }
+
+        if (
+          input.requestType === "move_event_to_different_ao" &&
+          input.originalEventId
+        ) {
+          const sourceAo = lockedAos.find(
+            (ao) => ao.id === eventSnapshot?.aoId,
+          );
+          const destinationAo = lockedAos.find((ao) => ao.id === input.newAoId);
+          if (!sourceAo || !destinationAo) {
+            throw new ORPCError("CONFLICT", {
+              message: "An AO changed while this request was being applied.",
+            });
+          }
+          if (sourceAo.regionId !== destinationAo.regionId) {
+            notificationRegionId = destinationAo.regionId;
+          }
+        } else if (input.requestType === "create_event" && input.originalAoId) {
+          notificationRegionId =
+            lockedAos.find((ao) => ao.id === input.originalAoId)?.regionId ??
+            null;
+        }
         const created = (await handler(txCtx, input)) ?? {};
+        if (input.requestType === "move_ao_to_different_region") {
+          notificationRegionId =
+            created.notificationSourceRegionId === created.notificationRegionId
+              ? null
+              : (created.notificationRegionId ?? null);
+        } else if (input.requestType === "create_ao_and_location_and_event") {
+          notificationRegionId = input.originalRegionId ?? null;
+        }
         const updateRequest = await recordUpdateRequest({
           ctx: txCtx,
           updateRequest: {
@@ -1308,7 +1376,7 @@ const handleRequest = async <T extends HandleableRequestInput>({
           },
           status: "approved",
         });
-        return { updateRequest, sourceRegionId };
+        return { updateRequest, notificationRegionId };
       },
     );
     // Notify webhooks and invalidate the map cache only after the commit
@@ -1329,28 +1397,16 @@ const handleRequest = async <T extends HandleableRequestInput>({
       updateRequest.requestType === "move_event_to_different_ao"
     ) {
       // This side effect must run only after the transaction commits, and must
-      // never make an already-committed map change fail. Keep both destination
-      // resolution and service loading inside the detached, caught task.
-      void (async () => {
+      // never make an already-committed map change fail. The destination is
+      // captured under the relevant AO lock in the transaction; detached work
+      // must not resolve it again after a possible AO reparent.
+      const notificationTask = (async () => {
         try {
-          // The recorded AO is the persisted destination for all four request
-          // types. The recorded region can still be the source on an event move.
-          const aoId = updateRequest.aoId;
-          if (!aoId) return;
-          const [destinationAo] = await ctx.db
-            .select({ regionId: schema.orgs.parentId })
-            .from(schema.orgs)
-            .where(eq(schema.orgs.id, aoId));
-          const regionId = destinationAo?.regionId;
-          if (!regionId) return;
-
-          if (updateRequest.requestType === "move_event_to_different_ao") {
-            if (sourceRegionId == null || sourceRegionId === regionId) return;
-          }
+          if (!notificationRegionId) return;
 
           const { maybeNotifyRegionInABox } =
             await import("../lib/first-event-service");
-          await maybeNotifyRegionInABox(ctx.db, regionId);
+          await maybeNotifyRegionInABox(ctx.db, notificationRegionId);
         } catch (error) {
           logError(
             "api.request.region_in_a_box_notification_failed",
@@ -1359,6 +1415,10 @@ const handleRequest = async <T extends HandleableRequestInput>({
           );
         }
       })();
+      pendingRegionNotificationTasks.add(notificationTask);
+      void notificationTask.finally(() =>
+        pendingRegionNotificationTasks.delete(notificationTask),
+      );
     }
     const result = { status: "approved" as const, updateRequest };
     return result;

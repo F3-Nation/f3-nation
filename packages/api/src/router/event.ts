@@ -917,50 +917,11 @@ export const eventRouter = {
             .where(eq(schema.events.id, input.id))
         : [];
 
-      let destinationRegionId: number | undefined;
-      let movedAcrossRegions = false;
-      if (existingEvent) {
-        const aoIds = [
-          ...new Set(
-            [existingEvent.orgId, input.aoId].filter(
-              (id): id is number => id != null,
-            ),
-          ),
-        ];
-        const aos = await ctx.db
-          .select({ id: schema.orgs.id, parentId: schema.orgs.parentId })
-          .from(schema.orgs)
-          .where(inArray(schema.orgs.id, aoIds));
-        const previousRegionId = aos.find(
-          ({ id }) => id === existingEvent.orgId,
-        )?.parentId;
-        destinationRegionId =
-          aos.find(({ id }) => id === input.aoId)?.parentId ?? undefined;
-        movedAcrossRegions =
-          previousRegionId != null &&
-          destinationRegionId != null &&
-          previousRegionId !== destinationRegionId;
-      }
-
       if (!input.aoId) {
         throw new ORPCError("BAD_REQUEST", {
           message: "AO ID is required",
         });
       }
-      await requireEditorOnRescope({
-        ctx,
-        currentOrgId: existingEvent?.orgId,
-        targetOrgId: input.aoId,
-        entity: "Event",
-      });
-      await assertEventRefsInScope({
-        ctx,
-        aoId: input.aoId,
-        existingEvent,
-        locationId: input.locationId,
-        eventTypeIds: input.eventTypeIds,
-      });
-
       const { eventTypeIds, eventTagIds, meta, ...eventData } = input;
       const normalizedEventTagIds =
         eventTagIds === undefined ? undefined : [...new Set(eventTagIds)];
@@ -982,9 +943,27 @@ export const eventRouter = {
             }),
       };
 
-      let shouldNotifyFirstEventForRegion = false;
-      const result = await ctx.db.transaction(async (tx) => {
+      const {
+        result,
+        destinationRegionId,
+        movedAcrossRegions,
+        shouldNotifyFirstEventForRegion,
+      } = await ctx.db.transaction(async (tx) => {
         const transactionDb = tx as unknown as AppDb;
+        const transactionContext: Context = { ...ctx, db: transactionDb };
+        const lockedAoIds = [
+          ...new Set(
+            [existingEvent?.orgId, input.aoId].filter(
+              (id): id is number => id != null,
+            ),
+          ),
+        ].sort((a, b) => a - b);
+        const lockedAos = await transactionDb
+          .select({ id: schema.orgs.id, parentId: schema.orgs.parentId })
+          .from(schema.orgs)
+          .where(inArray(schema.orgs.id, lockedAoIds))
+          .orderBy(asc(schema.orgs.id))
+          .for("no key update");
         const [transactionExistingEvent] = input.id
           ? await transactionDb
               .select()
@@ -1000,6 +979,33 @@ export const eventRouter = {
             message: "Event was modified concurrently; reload and retry",
           });
         }
+
+        // Authorization and scope checks use the locked event placement and AO
+        // hierarchy, so a concurrent event/AO move cannot invalidate them.
+        await requireEditorOnRescope({
+          ctx: transactionContext,
+          currentOrgId: transactionExistingEvent?.orgId,
+          targetOrgId: input.aoId,
+          entity: "Event",
+        });
+        await assertEventRefsInScope({
+          ctx: transactionContext,
+          aoId: input.aoId,
+          existingEvent: transactionExistingEvent,
+          locationId: input.locationId,
+          eventTypeIds: input.eventTypeIds,
+        });
+
+        const previousRegionId = lockedAos.find(
+          ({ id }) => id === transactionExistingEvent?.orgId,
+        )?.parentId;
+        const destinationRegionId =
+          lockedAos.find(({ id }) => id === input.aoId)?.parentId ?? undefined;
+        const movedAcrossRegions =
+          transactionExistingEvent !== undefined &&
+          previousRegionId != null &&
+          destinationRegionId != null &&
+          previousRegionId !== destinationRegionId;
 
         const isDeactivationTransition =
           transactionExistingEvent?.isActive === true && !input.isActive;
@@ -1310,8 +1316,8 @@ export const eventRouter = {
               seriesData.startDate,
             );
 
-            // Run this notification only after the transaction commits.
-            shouldNotifyFirstEventForRegion = true;
+            // The transaction result records the destination region for the
+            // detached legacy notification after commit.
           } else if (transactionExistingEvent.dayOfWeek) {
             // Existing series: check for structural changes
             const existingSeriesData = {
@@ -1360,14 +1366,24 @@ export const eventRouter = {
           }
         }
 
-        return result;
+        return {
+          result,
+          destinationRegionId,
+          movedAcrossRegions,
+          shouldNotifyFirstEventForRegion:
+            !transactionExistingEvent && Boolean(result.dayOfWeek),
+        };
       });
 
       // Notify only after the transaction commits.
       if (shouldNotifyFirstEventForRegion) {
         void import("../lib/first-event-service")
           .then(({ maybeNotifyFirstEventForRegion }) =>
-            maybeNotifyFirstEventForRegion(ctx.db, result.orgId),
+            maybeNotifyFirstEventForRegion(
+              ctx.db,
+              result.orgId,
+              destinationRegionId,
+            ),
           )
           .catch((err: unknown) =>
             logError(

@@ -10,6 +10,7 @@
  */
 
 import { vi } from "vitest";
+import { waitForRegionNotificationTasks } from "./request";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
 const mockLimit = vi.hoisted(() => vi.fn());
@@ -1057,6 +1058,63 @@ describe("Request Router", () => {
       );
     });
 
+    it("keeps the auto-applied destination region across a post-commit AO reparent", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const sourceRegion = await createTestRegion();
+      const destinationRegion = await createTestRegion();
+      const laterRegion = await createTestRegion();
+      const sourceAo = await createTestAO(sourceRegion.id);
+      const destinationAo = await createTestAO(destinationRegion.id);
+      const sourceLocation = await createTestLocation(sourceAo.id);
+      const destinationLocation = await createTestLocation(destinationAo.id);
+      const event = await createTestEvent(sourceAo.id, sourceLocation.id);
+
+      let notificationStarted!: () => void;
+      const notificationStartedPromise = new Promise<void>((resolve) => {
+        notificationStarted = resolve;
+      });
+      let releaseNotification!: () => void;
+      const notificationBarrier = new Promise<void>((resolve) => {
+        releaseNotification = resolve;
+      });
+      mockMaybeNotifyRegionInABox.mockImplementation(async (_db, regionId) => {
+        expect(regionId).toBe(destinationRegion.id);
+        notificationStarted();
+        await notificationBarrier;
+      });
+
+      const result =
+        await createTestClient().request.submitMoveEventToDifferentAoRequest({
+          id: crypto.randomUUID(),
+          requestType: "move_event_to_different_ao",
+          submittedBy: "admin@example.com",
+          originalEventId: event.id,
+          originalAoId: sourceAo.id,
+          originalRegionId: sourceRegion.id,
+          newAoId: destinationAo.id,
+          newLocationId: destinationLocation.id,
+        });
+      createdRequestIds.push(result.updateRequest.id ?? "");
+      expect(result.status).toBe("approved");
+      await notificationStartedPromise;
+
+      await db
+        .update(schema.orgs)
+        .set({ parentId: laterRegion.id })
+        .where(eq(schema.orgs.id, destinationAo.id));
+      releaseNotification();
+      await waitForRegionNotificationTasks();
+
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        destinationRegion.id,
+      );
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalledWith(
+        expect.anything(),
+        laterRegion.id,
+      );
+    });
+
     it("rejects a request without a destination AO instead of silently no-oping", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -1693,7 +1751,74 @@ describe("Request Router", () => {
       );
 
       expect(result.status).toBe("approved");
+      // Await the detached task's completion before asserting the negative;
+      // checking immediately after the mutation returned could race its import.
+      await waitForRegionNotificationTasks();
       expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
+    it("keeps the committed destination when the destination AO is reparented before notification completes", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      let notificationStarted!: () => void;
+      const notificationStartedPromise = new Promise<void>((resolve) => {
+        notificationStarted = resolve;
+      });
+      let releaseNotification!: () => void;
+      const notificationBarrier = new Promise<void>((resolve) => {
+        releaseNotification = resolve;
+      });
+      const source = await createTestRegion();
+      const destination = await createTestRegion();
+      const laterRegion = await createTestRegion();
+      mockMaybeNotifyRegionInABox.mockImplementation(async (_db, regionId) => {
+        expect(regionId).toBe(destination.id);
+        notificationStarted();
+        await notificationBarrier;
+      });
+      const sourceAo = await createTestAO(source.id);
+      const destinationAo = await createTestAO(destination.id);
+      const location = await createTestLocation(sourceAo.id);
+      const event = await createTestEvent(sourceAo.id, location.id);
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+
+      const result = await createTestClient().request.validateSubmissionByAdmin(
+        {
+          id,
+          requestType: "move_event_to_different_ao",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalAoId: sourceAo.id,
+          originalRegionId: source.id,
+          newAoId: destinationAo.id,
+          newRegionId: destination.id,
+        },
+      );
+      expect(result.status).toBe("approved");
+      await notificationStartedPromise;
+
+      // The request transaction committed to `destination`; the AO is then
+      // reparented while detached work is held at a deterministic barrier.
+      // Notification must use the transaction's snapshot, not a post-commit AO lookup.
+      await db
+        .update(schema.orgs)
+        .set({ parentId: laterRegion.id })
+        .where(eq(schema.orgs.id, destinationAo.id));
+      releaseNotification();
+      await waitForRegionNotificationTasks();
+
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        destination.id,
+      );
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalledWith(
+        expect.anything(),
+        laterRegion.id,
+      );
     });
   });
 

@@ -66,23 +66,6 @@ export const updateAO = async (
   ctx: Context,
   { id, ...params }: Partial<typeof schema.orgs.$inferInsert> & { id: number },
 ) => {
-  const [ao] = await ctx.db
-    .select()
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, id));
-
-  if (!ao) {
-    throw new ORPCError("NOT_FOUND", {
-      message: "Failed to find ao to update. Does the AO exist?",
-    });
-  }
-
-  if (ao?.orgType !== "ao") {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Organization is not an AO",
-    });
-  }
-
   const set: Partial<typeof schema.orgs.$inferInsert> = {
     ...removeUndefinedFromObject(params),
   };
@@ -92,6 +75,27 @@ export const updateAO = async (
   // failure can't leave the AO's parentId and its locations inconsistent.
   return ctx.db.transaction(async (tx) => {
     const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
+    // Read and lock the AO in the same transaction before copying locations or
+    // touching events. A concurrent reparent must not split those writes across
+    // different region snapshots.
+    const [ao] = await txCtx.db
+      .select()
+      .from(schema.orgs)
+      .where(eq(schema.orgs.id, id))
+      .for("no key update");
+
+    if (!ao) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Failed to find ao to update. Does the AO exist?",
+      });
+    }
+
+    if (ao.orgType !== "ao") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Organization is not an AO",
+      });
+    }
+
     const newLocationIds: number[] = [];
 
     if (params.parentId != null && params.parentId !== ao.parentId) {
@@ -114,16 +118,19 @@ export const updateAO = async (
       .returning();
 
     if (!updatedAO) {
-      // The existence check above runs outside this transaction, so the AO can
-      // be deleted in between — reachable under multiple instances, not
-      // "unexpected server state". Same underlying condition as the NOT_FOUND
-      // above, so it gets the same code rather than a 500 the client can't act
-      // on by refreshing.
+      // The AO can be deleted concurrently with this update under multiple
+      // instances — the same missing-resource condition as the locked read
+      // above, not unexpected server state.
       throw new ORPCError("NOT_FOUND", {
         message: "Failed to find ao to update. Does the AO exist?",
       });
     }
 
-    return { ...updatedAO, newLocationIds };
+    return {
+      ...updatedAO,
+      oldRegionId: ao.parentId,
+      newRegionId: updatedAO.parentId,
+      newLocationIds,
+    };
   });
 };

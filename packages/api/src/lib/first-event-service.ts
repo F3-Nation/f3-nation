@@ -10,6 +10,7 @@ import { and, eq, exists, isNotNull, sql, schema } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { env } from "@acme/env";
 import { mail, Templates } from "@acme/mail";
+import { ORPCError } from "@orpc/server";
 
 import { logError, logDebug, logWarn } from "../logger";
 import { getUsersWithRoles } from "../services/map-request-notification";
@@ -129,19 +130,30 @@ async function maybeNotifyRegion(
     logError("api.first_event.email_failed", { regionId }, error);
     // Delete only our marker, using the current JSONB value to retain other
     // metadata updates made while delivery was in flight.
-    await db
-      .update(schema.orgs)
-      .set({
-        meta: sql`(CASE WHEN jsonb_typeof(${schema.orgs.meta}) = 'object'
+    try {
+      await db
+        .update(schema.orgs)
+        .set({
+          meta: sql`(CASE WHEN jsonb_typeof(${schema.orgs.meta}) = 'object'
             THEN ${schema.orgs.meta} ELSE '{}'::jsonb END) - 'firstEventNotificationSent'`,
-      })
-      .where(
-        and(
-          eq(schema.orgs.id, regionId),
-          sql`${schema.orgs.meta}->'firstEventNotificationSent' = 'true'::jsonb`,
-        ),
+        })
+        .where(
+          and(
+            eq(schema.orgs.id, regionId),
+            sql`${schema.orgs.meta}->'firstEventNotificationSent' = 'true'::jsonb`,
+          ),
+        );
+    } catch (releaseError) {
+      logError(
+        "api.first_event.claim_release_failed",
+        { regionId },
+        releaseError,
       );
-    throw error;
+    }
+    if (error instanceof ORPCError) throw error;
+    throw new ORPCError("BAD_GATEWAY", {
+      message: "Region notification could not be sent",
+    });
   }
 
   logDebug("api.first_event.email_sent", { regionId, regionName: region.name });
@@ -162,7 +174,12 @@ export async function maybeNotifyRegionInABox(
 export async function maybeNotifyFirstEventForRegion(
   db: AppDb,
   aoId: number,
+  capturedRegionId?: number,
 ): Promise<void> {
+  if (capturedRegionId != null) {
+    await maybeNotifyRegion(db, capturedRegionId, false);
+    return;
+  }
   const [ao] = await db
     .select({ parentId: schema.orgs.parentId })
     .from(schema.orgs)

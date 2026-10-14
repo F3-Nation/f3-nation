@@ -7,6 +7,7 @@
  */
 
 import { vi } from "vitest";
+import { ORPCError } from "@orpc/server";
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -410,9 +411,12 @@ describe("First Event Service", () => {
       const mockedMail = await mailMock();
       mockedMail.mockRejectedValueOnce(new Error("send failed"));
 
-      await expect(maybeNotifyRegionInABox(db, region.id)).rejects.toThrow(
-        "send failed",
-      );
+      await expect(
+        maybeNotifyRegionInABox(db, region.id),
+      ).rejects.toMatchObject({
+        code: "BAD_GATEWAY",
+        message: "Region notification could not be sent",
+      });
       const [afterFailure] = await db
         .select({ meta: schema.orgs.meta })
         .from(schema.orgs)
@@ -425,6 +429,29 @@ describe("First Event Service", () => {
 
       await maybeNotifyRegionInABox(db, region.id);
       expect(mockedMail).toHaveBeenCalledTimes(2);
+    });
+
+    it("preserves an already-typed mail error after releasing the claim", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      await createTestEvent(ao.id);
+      const mockedMail = await mailMock();
+      const typedError = new ORPCError("BAD_REQUEST", {
+        message: "Already typed mail failure",
+      });
+      mockedMail.mockRejectedValueOnce(typedError);
+
+      await expect(maybeNotifyRegionInABox(db, region.id)).rejects.toBe(
+        typedError,
+      );
+      const [afterFailure] = await db
+        .select({ meta: schema.orgs.meta })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, region.id));
+      expect(
+        (afterFailure?.meta as Record<string, unknown> | null)
+          ?.firstEventNotificationSent,
+      ).not.toBe(true);
     });
 
     it("atomically allows only one concurrent sender for a region", async () => {

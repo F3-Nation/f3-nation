@@ -700,6 +700,35 @@ describe("Org Router", () => {
       }
     });
 
+    it("strips the server-owned notification marker from new region metadata", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+
+      const result = await createTestClient().org.crupdate({
+        name: `Region with client metadata ${uniqueId()}`,
+        orgType: "region",
+        parentId: nation.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+        meta: { keepMe: "present", firstEventNotificationSent: true },
+      });
+
+      if (!result.org) throw new Error("Failed to create region");
+      createdOrgIds.push(result.org.id);
+      expect(result.org.meta).toEqual({ keepMe: "present" });
+      const [createdRegion] = await db
+        .select({ meta: schema.orgs.meta })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, result.org.id));
+      expect(createdRegion?.meta).toEqual({ keepMe: "present" });
+    });
+
     it("should require parentId or id", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -992,6 +1021,13 @@ describe("Org Router", () => {
         firstEventNotificationSent: true,
         incoming: "kept",
       });
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta,
+      ).not.toHaveProperty("keepMe");
 
       await update(null);
       expect(
@@ -1000,7 +1036,7 @@ describe("Org Router", () => {
             where: eq(schema.orgs.id, region.id),
           })
         )?.meta,
-      ).toMatchObject({ firstEventNotificationSent: true });
+      ).toEqual({ firstEventNotificationSent: true });
 
       // A previously claimed marker that was released after a send error must
       // not be recreated by an editor submitting stale metadata.

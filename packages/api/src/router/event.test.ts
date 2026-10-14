@@ -3086,6 +3086,116 @@ describe("Event Router", () => {
       expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
     });
 
+    it("classifies the destination region after waiting for a destination AO move", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const sourceRegion = await createTestRegion();
+      const initialDestinationRegion = await createTestRegion();
+      if (!sourceRegion || !initialDestinationRegion) return;
+      const sourceAo = await createTestAO(sourceRegion.id);
+      const destinationAo = await createTestAO(initialDestinationRegion.id);
+      const eventType = await createTestEventType();
+      if (!sourceAo || !destinationAo || !eventType) return;
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Concurrent AO move ${uniqueId()}`,
+          orgId: sourceAo.id,
+          dayOfWeek: "monday",
+          startDate: nextFutureMonday(1),
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+
+      let signalLockHeld!: (pid: number) => void;
+      let releaseLock!: () => void;
+      const lockHeld = new Promise<number>((resolve) => {
+        signalLockHeld = resolve;
+      });
+      const waitToReleaseLock = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+      });
+      const lockTransaction = db.transaction(async (tx) => {
+        await tx
+          .update(schema.orgs)
+          .set({ parentId: sourceRegion.id })
+          .where(eq(schema.orgs.id, destinationAo.id));
+        const lockPidRow = (
+          await tx.execute<{ pid: number }>(sql`
+            SELECT pg_backend_pid() AS pid
+          `)
+        )[0];
+        if (!lockPidRow) throw new Error("Failed to identify lock holder");
+        signalLockHeld(lockPidRow.pid);
+        await waitToReleaseLock;
+      });
+
+      const blockerPid = await lockHeld;
+      const update = createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: destinationAo.id,
+        regionId: sourceRegion.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: null,
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      let isWaitingForAoLock = false;
+      try {
+        for (let attempt = 0; attempt < 500 && !isWaitingForAoLock; attempt++) {
+          const activity = (await db.execute(sql`
+            SELECT wait_event_type, query
+            FROM pg_stat_activity
+            WHERE pid <> pg_backend_pid()
+              AND wait_event_type = 'Lock'
+              AND query ILIKE '%no key update%'
+              AND pg_blocking_pids(pid) @> ARRAY[${blockerPid}]::int[]
+          `)) as unknown as {
+            wait_event_type: string | null;
+            query: string;
+          }[];
+          isWaitingForAoLock = activity.some(
+            ({ wait_event_type, query }) =>
+              wait_event_type === "Lock" && /no key update/i.test(query),
+          );
+          if (!isWaitingForAoLock) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+        }
+      } finally {
+        releaseLock();
+      }
+
+      const [lockResult, updateResult] = await Promise.allSettled([
+        lockTransaction,
+        update,
+      ]);
+      expect(lockResult.status).toBe("fulfilled");
+      expect(isWaitingForAoLock).toBe(true);
+      expect(updateResult.status).toBe("fulfilled");
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+      const [updatedEvent] = await db
+        .select({ orgId: schema.events.orgId })
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      expect(updatedEvent?.orgId).toBe(destinationAo.id);
+    });
+
     it("preserves creation notification for inactive recurring events", async () => {
       const region = await createTestRegion();
       if (!region) return;
@@ -3119,6 +3229,7 @@ describe("Event Router", () => {
         expect(mockMaybeNotifyFirstEventForRegion).toHaveBeenCalledWith(
           expect.anything(),
           ao.id,
+          region.id,
         ),
       );
     });
