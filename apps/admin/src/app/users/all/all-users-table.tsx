@@ -433,7 +433,8 @@ const columns: TableOptions<
     cell: (cell) => (
       <Cell {...cell}>
         {cell.row.original.roles
-          .map((role: { orgName: string }) => role.orgName)
+          .filter((role) => isAdminRoleName(role.roleName))
+          .map((role) => role.orgName)
           .filter(onlyUnique)
           .join(", ")}
       </Cell>

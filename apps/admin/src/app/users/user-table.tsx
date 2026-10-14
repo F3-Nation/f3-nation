@@ -353,7 +353,10 @@ const columns: TableOptions<
     header: Header,
     cell: (cell) => (
       <Cell {...cell}>
-        {cell.row.original.roles.map((role) => role.orgName).join(", ")}
+        {cell.row.original.roles
+          .filter((role) => isAdminRoleName(role.roleName))
+          .map((role) => role.orgName)
+          .join(", ")}
       </Cell>
     ),
   },
