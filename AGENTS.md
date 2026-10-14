@@ -52,6 +52,7 @@ or
 ## Build, Test, and Development Commands
 
 - **First-time setup:** `pnpm local:setup` — copies per-directory `.env` files, starts Docker services, runs migrations, and seeds the database. See [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for the full guide.
+- **Second checkout or worktree:** `pnpm local:setup --slot N` (N = 1–9) gives it its own ports, containers, and database so it can run next to the main one. See [Running several checkouts at once](docs/LOCAL_DEV_DOCKER.md#running-several-checkouts-at-once-git-worktrees).
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Each app, `packages/env`, and `packages/db` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
 - Code quality: always run `pnpm lint:fix` and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.

@@ -14,6 +14,7 @@
 import pgConnectionString from "pg-connection-string";
 import postgres from "postgres";
 
+import { LOCAL_PG_CONTAINER } from "./local-docker";
 import { postgresArgs } from "./utils/functions";
 
 // ---------------------------------------------------------------------------
@@ -190,7 +191,7 @@ export const isCloudSqlServer = async (serverUrl: string): Promise<boolean> => {
 export const DISPOSABLE_MARKER = "f3-disposable-local-v1";
 
 /** How to mark the local Docker database disposable, for the refusals that need it. */
-export const DISPOSABLE_REMEDY = `For the local Docker database, run pnpm local:setup, or mark it once with: docker exec f3-postgres psql -U f3local -d f3nation -c "COMMENT ON DATABASE f3nation IS '${DISPOSABLE_MARKER}'"`;
+export const DISPOSABLE_REMEDY = `For the local Docker database, run pnpm local:setup, or mark it once with: docker exec ${LOCAL_PG_CONTAINER} psql -U f3local -d f3nation -c "COMMENT ON DATABASE f3nation IS '${DISPOSABLE_MARKER}'"`;
 
 /** What a local-only command is doing, and where else to do it. */
 export interface LocalTargetAction {
