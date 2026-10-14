@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 
-import type { RegionRole } from "@acme/shared/app/enums";
+import type { UserRole } from "@acme/shared/app/enums";
 
 import type { AppDb } from "../client";
 import { orgs, roles, rolesXUsersXOrg } from "../../drizzle/schema";
@@ -8,7 +8,7 @@ import { orgs, roles, rolesXUsersXOrg } from "../../drizzle/schema";
 export interface UserRoleRow {
   orgId: number;
   orgName: string;
-  roleName: RegionRole;
+  roleName: UserRole;
 }
 
 /**

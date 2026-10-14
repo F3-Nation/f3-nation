@@ -70,7 +70,7 @@ If multiple PRs are merged to `main` before the Release Please PR is merged, Rel
 
 The PR is purely mechanical (version + changelog). Review the changelog entries to make sure they're accurate. When ready, merge it into `main`.
 
-Before merging, have an agent create a release-plan issue with the [`release-plan`](../.agents/skills/release-plan/SKILL.md) skill. That plan's test step creates the Staging test plan with the [`staging-test-plan`](../.agents/skills/staging-test-plan/SKILL.md) skill.
+After the release PR has merged and deployed to Staging, have an agent create a release-plan issue with the [`release-plan`](../.agents/skills/release-plan/SKILL.md) skill. That plan's test step creates the Staging test plan with the [`staging-test-plan`](../.agents/skills/staging-test-plan/SKILL.md) skill. Both skills target the most recently merged release PR and confirm its number with you first; they never plan from an open release PR, which is only a running changelog.
 
 ### 4. Release Please creates the tag
 

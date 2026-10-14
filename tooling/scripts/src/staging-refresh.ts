@@ -30,6 +30,13 @@
  *   --reuse-existing-stash     Use refresh_keep / refresh_keep_slack left on
  *                              staging by a run whose rollback failed, instead
  *                              of refusing.
+ *   --snapshot-only            The developer snapshot instead of a refresh:
+ *                              steps 1-4 (without the prod = staging gate),
+ *                              then trim, leak scan and publish
+ *                              (staging-refresh.snapshot.ts). Never connects
+ *                              to staging; none of the flags above apply.
+ *   --snapshot-out <file>      Write the snapshot there instead of uploading
+ *                              it. Required outside Cloud Run.
  *
  * Steps (docs/STAGING_REFRESH.md has the why of each):
  *   1. preflight: guards, pg tool versions, migration gate, staging lock
@@ -48,11 +55,10 @@
  *  11. VALIDATE each FK on its own
  *  12. summary
  */
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import type postgres from "postgres";
@@ -66,7 +72,6 @@ import type {
 } from "./staging-refresh.checks";
 import {
   databaseNameFromUrl,
-  libpqEnv,
   looksLikeProdDbName,
   openPostgres,
   quoteIdent,
@@ -74,17 +79,37 @@ import {
 import {
   fkEdges,
   filterToc,
+  latestMigration,
   migrationGate,
   planKeptFks,
   planKeptKeys,
   planLoad,
+  prodAheadOfImage,
   quoteTable,
 } from "./staging-refresh.checks";
 import {
   PRESERVED_TABLES,
+  SNAPSHOT_EMAIL_SINK,
   STAGING_API_KEYS_TO_KEEP,
   STAGING_SLACKBOT,
 } from "./staging-refresh.config";
+import {
+  log,
+  metadataToken,
+  pgMajor,
+  pgTool,
+  runScript,
+} from "./staging-refresh.proc";
+import type { DeliveryState } from "./staging-refresh.snapshot";
+import {
+  assertSnapshotColumnsReviewed,
+  deliveryOutcome,
+  publishSnapshot,
+  trackDelivery,
+  trimSnapshot,
+  uploadToGcs,
+  writeTo,
+} from "./staging-refresh.snapshot";
 import { flagValue } from "./staging-target";
 
 const argv = process.argv.slice(2);
@@ -93,9 +118,15 @@ const YES = argv.includes("--yes");
 const SKIP_SLACKBOT_RESTART = argv.includes("--skip-slackbot-restart");
 const REUSE_STASH = argv.includes("--reuse-existing-stash");
 const STAGING_DB = flagValue(argv, "--allow-staging-db");
+const SNAPSHOT_ONLY = argv.includes("--snapshot-only");
+const SNAPSHOT_OUT = flagValue(argv, "--snapshot-out");
+const HAS_SNAPSHOT_OUT = argv.some(
+  (a) => a === "--snapshot-out" || a.startsWith("--snapshot-out="),
+);
+/** For the stop messages: what a snapshot run has handed on so far. */
+let delivery: DeliveryState = "none";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SCRIPTS_DIR = path.resolve(HERE, "..");
 const JOURNAL_PATH = path.resolve(
   HERE,
   "../../../packages/db/drizzle/meta/_journal.json",
@@ -127,10 +158,6 @@ type Sql = postgres.Sql;
 const timings: { step: string; ms: number }[] = [];
 const warnings: string[] = [];
 const startedAt = Date.now();
-
-function log(line = ""): void {
-  console.log(line);
-}
 
 function warn(line: string): void {
   warnings.push(line);
@@ -168,123 +195,6 @@ const listOrNone = (items: string[]): string =>
 
 /** Refused before staging was written: nothing to roll back. */
 class Refusal extends Error {}
-
-// ---------------------------------------------------------------------------
-// Child processes. stdin is always ignored: a child must never read the
-// orchestrator's stdin (the 2026-10-07 FK loop validated 1 of 74 because
-// `docker run -i` swallowed the rest of its input).
-// ---------------------------------------------------------------------------
-
-interface RunResult {
-  code: number;
-  stdout: string;
-  stderr: string[];
-}
-
-function baseEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const k of ["PATH", "HOME", "LANG", "LC_ALL", "TZ", "TMPDIR"]) {
-    const v = process.env[k];
-    if (v !== undefined) env[k] = v;
-  }
-  return env;
-}
-
-// Server messages that quote row values (a failing row, a duplicate key, the
-// COPY line). The data is obfuscated by then, but free text outside the
-// prose columns is only scrubbed (docs/STAGING_REFRESH.md): keep it out of
-// the job's logs.
-const ROW_DATA =
-  /Failing row contains|^\s*CONTEXT:\s+COPY .* line \d+|^\s*DETAIL:\s+Key \(/;
-
-function run(
-  cmd: string,
-  args: string[],
-  opts: { env: Record<string, string>; cwd?: string; quietStderr?: RegExp },
-): Promise<RunResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {
-      cwd: opts.cwd,
-      env: opts.env as NodeJS.ProcessEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    const stderr: string[] = [];
-    createInterface({ input: child.stdout }).on("line", (line) => {
-      stdout += `${line}\n`;
-      log(`   | ${line}`);
-    });
-    createInterface({ input: child.stderr }).on("line", (line) => {
-      if (stderr.length < 5000) stderr.push(line);
-      if (ROW_DATA.test(line)) log("   ! [row data withheld from the log]");
-      else if (!opts.quietStderr?.test(line)) log(`   ! ${line}`);
-    });
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
-  });
-}
-
-const PG_BIN_DIR = process.env.PG_BIN_DIR ?? "";
-const pgBin = (tool: string) =>
-  PG_BIN_DIR ? path.join(PG_BIN_DIR, tool) : tool;
-
-/** pg_dump / pg_restore with credentials in the environment, never argv. */
-async function pgTool(
-  tool: "pg_dump" | "pg_restore",
-  args: string[],
-  url: string,
-  opts: { pgoptions?: string; benignError?: RegExp; quietStderr?: RegExp } = {},
-): Promise<void> {
-  const env: Record<string, string> = {
-    ...baseEnv(),
-    ...libpqEnv(url),
-    PGCONNECT_TIMEOUT: "30",
-  };
-  if (opts.pgoptions) env.PGOPTIONS = opts.pgoptions;
-  const result = await run(pgBin(tool), args, {
-    env,
-    quietStderr: opts.quietStderr,
-  });
-  if (result.code === 0) return;
-  // pg_restore exits 1 when it "ignored" errors. Only the expected ones are
-  // allowed through (e.g. `schema "auth" already exists` on the copy).
-  const errors = result.stderr.filter((l) => /\berror:/.test(l));
-  const real = errors.filter((l) => !opts.benignError?.test(l));
-  if (opts.benignError && errors.length > 0 && real.length === 0) {
-    log(`   ${tool}: ${errors.length} expected error(s) ignored`);
-    return;
-  }
-  throw new Error(
-    `${tool} exited with ${result.code}: ${(real.length > 0 ? real : result.stderr).slice(0, 5).join(" / ")}`,
-  );
-}
-
-/** One of this package's scripts, against `databaseUrl`. */
-async function runScript(
-  script: string,
-  args: string[],
-  databaseUrl: string,
-  extraEnv: Record<string, string> = {},
-): Promise<RunResult> {
-  // Children get only the database they work on: never the other URLs.
-  const env = {
-    ...baseEnv(),
-    SKIP_ENV_VALIDATION: "1",
-    DATABASE_URL: databaseUrl,
-    ...extraEnv,
-  };
-  return run(
-    process.execPath,
-    ["--import", "tsx", path.join(HERE, `${script}.ts`), ...args],
-    { env, cwd: SCRIPTS_DIR },
-  );
-}
-
-function pgMajor(tool: string): number | undefined {
-  const out = spawnSync(pgBin(tool), ["--version"], { encoding: "utf8" });
-  const m = /\(PostgreSQL\) (\d+)/.exec(out.stdout);
-  return m ? Number(m[1]) : undefined;
-}
 
 // ---------------------------------------------------------------------------
 // Catalog reads
@@ -638,15 +548,7 @@ async function restartSlackbot(): Promise<string> {
   if (process.env.CLOUD_RUN_JOB) {
     // In the job: Cloud Run Admin API with the runtime service account.
     try {
-      const tokenRes = await fetch(
-        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
-        { headers: { "Metadata-Flavor": "Google" } },
-      );
-      if (!tokenRes.ok)
-        return manual(`metadata token: HTTP ${tokenRes.status}`);
-      const { access_token: token } = (await tokenRes.json()) as {
-        access_token: string;
-      };
+      const token = await metadataToken();
       const url = `https://run.googleapis.com/v2/projects/${project}/locations/${region}/services/${service}`;
       const headers = {
         Authorization: `Bearer ${token}`,
@@ -711,13 +613,17 @@ async function restartSlackbot(): Promise<string> {
 // Main
 // ---------------------------------------------------------------------------
 
-interface Context {
+/** What both modes need: prod, the throwaway copy, a work dir. */
+interface CopyContext {
   prodUrl: string;
-  stagingUrl: string;
   copyUrl: string;
   copyDb: string;
-  stagingDb: string;
   work: string;
+}
+
+interface Context extends CopyContext {
+  stagingUrl: string;
+  stagingDb: string;
 }
 
 function requireEnv(name: string): string {
@@ -742,6 +648,9 @@ function connect(url: string, extra: Record<string, string> = {}): Sql {
 }
 
 function guards(): Context {
+  if (HAS_SNAPSHOT_OUT) {
+    throw new Refusal("--snapshot-out only works with --snapshot-only.");
+  }
   if (!STAGING_DB) {
     throw new Refusal(
       "pass --allow-staging-db <name> naming the exact staging database.",
@@ -780,6 +689,310 @@ function guards(): Context {
   return { prodUrl, stagingUrl, copyUrl, copyDb, stagingDb: STAGING_DB, work };
 }
 
+function checkPgTools(): void {
+  for (const tool of ["pg_dump", "pg_restore"]) {
+    const major = pgMajor(tool);
+    if (major !== 18) {
+      throw new Refusal(
+        `${tool} must be version 18 (the servers run Postgres 18); found ${major ?? "none"}. Set PG_BIN_DIR.`,
+      );
+    }
+  }
+}
+
+/** The copy is the empty throwaway it should be, and prod is read-only. */
+async function checkProdAndCopy(
+  prod: Sql,
+  copy: Sql,
+  copyDb: string,
+): Promise<string> {
+  const [copyRow] = await copy<
+    { db: string }[]
+  >`SELECT current_database() AS db`;
+  if (copyRow?.db !== copyDb) {
+    throw new Refusal(
+      `copy: connected to "${copyRow?.db}", expected "${copyDb}".`,
+    );
+  }
+  const [prodRow] = await prod<{ db: string; ro: string }[]>`
+    SELECT current_database() AS db, current_setting('transaction_read_only') AS ro`;
+  if (prodRow?.ro !== "on") throw new Refusal("prod session is not read-only");
+  const [copyTables] = await copy<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind IN ('r', 'p', 'm') AND n.nspname = ANY(${DUMP_SCHEMAS})`;
+  if ((copyTables?.n ?? 0) > 0) {
+    throw new Refusal(
+      `the copy database ${copyDb} is not empty; give the refresh a fresh one.`,
+    );
+  }
+  return prodRow.db;
+}
+
+function readJournal(): JournalEntry[] {
+  return (
+    JSON.parse(readFileSync(JOURNAL_PATH, "utf8")) as {
+      entries: JournalEntry[];
+    }
+  ).entries;
+}
+
+async function prodDumpSchemas(prod: Sql): Promise<string[]> {
+  const dumpSchemas = await schemasPresent(prod, DUMP_SCHEMAS);
+  for (const required of ["public", "auth", "drizzle"]) {
+    if (!dumpSchemas.includes(required))
+      throw new Refusal(`prod has no ${required} schema`);
+  }
+  log(`   will dump prod schemas: ${dumpSchemas.join(", ")}`);
+  return dumpSchemas;
+}
+
+/**
+ * Steps 2-4 of both modes: dump prod, restore it into the throwaway copy
+ * (deleting the raw dump), obfuscate the copy and verify it 100%. Closes
+ * `prod`: nothing reads it after the restore.
+ */
+async function copyAndObfuscate(
+  ctx: CopyContext,
+  prod: Sql,
+  copy: Sql,
+  opts: { dumpSchemas: string[]; total: number; emailSink?: string },
+): Promise<void> {
+  const prodDump = path.join(ctx.work, "prod.dump");
+  await step(`2/${opts.total} dump prod`, async () => {
+    await pgTool(
+      "pg_dump",
+      [
+        "-Fc",
+        "--no-owner",
+        "--no-privileges",
+        "--no-publications",
+        "--no-subscriptions",
+        // Historical snapshots contain PII and are unnecessary for the copy.
+        "--exclude-table-data=public_history.*",
+        ...opts.dumpSchemas.flatMap((s) => ["-n", quoteIdent(s)]),
+        "-f",
+        prodDump,
+      ],
+      ctx.prodUrl,
+      { pgoptions: "-c default_transaction_read_only=on" },
+    );
+  });
+
+  await step(`3/${opts.total} restore into the throwaway copy`, async () => {
+    const exts = await prod<{ extname: string }[]>`
+      SELECT extname FROM pg_extension WHERE extname <> 'plpgsql' ORDER BY 1`;
+    for (const { extname } of exts) {
+      try {
+        await copy.unsafe(
+          `CREATE EXTENSION IF NOT EXISTS ${quoteIdent(extname)}`,
+        );
+      } catch {
+        log(`   (extension ${extname} not available on the copy; skipped)`);
+      }
+    }
+    for (const s of opts.dumpSchemas) {
+      await copy.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent(s)}`);
+    }
+    try {
+      await pgTool(
+        "pg_restore",
+        [
+          "--no-owner",
+          "--no-privileges",
+          "--no-publications",
+          "--no-subscriptions",
+          "-j",
+          String(Math.max(1, Math.min(8, os.availableParallelism()))),
+          "-d",
+          ctx.copyDb,
+          prodDump,
+        ],
+        ctx.copyUrl,
+        {
+          benignError: /already exists/,
+          quietStderr: /already exists|Command was:|^\s*$/,
+        },
+      );
+    } finally {
+      // Raw prod data must not outlive the restore.
+      rmSync(prodDump, { force: true });
+      log("   raw prod dump deleted");
+    }
+    const prodTables = await tableColumns(prod, opts.dumpSchemas);
+    const copyTables = await tableColumns(copy, opts.dumpSchemas);
+    const missing = [...prodTables.keys()].filter((t) => !copyTables.has(t));
+    if (missing.length > 0) {
+      throw new Refusal(`restore lost table(s): ${missing.join(", ")}`);
+    }
+    log(`   ${copyTables.size} tables restored`);
+  });
+  // Nothing reads prod after this.
+  await prod.end();
+
+  await step(`4/${opts.total} obfuscate the copy, then verify it`, async () => {
+    const salt = requireEnv("OBFUSCATION_SALT");
+    const sink = opts.emailSink;
+    const obf = await runScript(
+      "obfuscate-db",
+      [
+        "--allow-db",
+        ctx.copyDb,
+        "--i-understand-this-rewrites-data",
+        ...(sink ? ["--email-sink", sink] : []),
+      ],
+      ctx.copyUrl,
+      { OBFUSCATION_SALT: salt },
+    );
+    if (obf.code !== 0) {
+      throw new Refusal(
+        "obfuscate-db failed (see above); staging was not touched.",
+      );
+    }
+    const verify = await runScript(
+      "obfuscate-db.verify-target",
+      sink ? [`--email-sink=${sink}`] : [],
+      ctx.copyUrl,
+    );
+    if (verify.code !== 0 || !/ALL \d+ CHECKS PASSED/.test(verify.stdout)) {
+      throw new Refusal(
+        "verify-target did not pass 100% (see above); staging was not touched.",
+      );
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// --snapshot-only: never reads STAGING_DATABASE_URL, never connects to staging
+// ---------------------------------------------------------------------------
+
+/** Flags that only mean something to a refresh. */
+const REFRESH_FLAGS = [
+  "--yes",
+  "--dry-run",
+  "--reuse-existing-stash",
+  "--skip-slackbot-restart",
+  "--allow-staging-db",
+];
+
+function snapshotGuards(): CopyContext & {
+  deliver: (file: string) => Promise<string>;
+} {
+  const conflicting = REFRESH_FLAGS.filter((f) =>
+    argv.some((a) => a === f || a.startsWith(`${f}=`)),
+  );
+  if (conflicting.length > 0) {
+    throw new Refusal(
+      `--snapshot-only can't be combined with ${conflicting.join(", ")}.`,
+    );
+  }
+  if (HAS_SNAPSHOT_OUT && (!SNAPSHOT_OUT || SNAPSHOT_OUT.startsWith("--"))) {
+    throw new Refusal("--snapshot-out needs a file path.");
+  }
+  const target = SNAPSHOT_OUT
+    ? writeTo(path.resolve(SNAPSHOT_OUT))
+    : process.env.CLOUD_RUN_JOB
+      ? uploadToGcs
+      : undefined;
+  if (!target) {
+    throw new Refusal(
+      "outside Cloud Run, pass --snapshot-out <file>: only the job publishes.",
+    );
+  }
+  const deliver = trackDelivery(target, (state) => {
+    delivery = state;
+  });
+  const prodUrl = requireEnv("PROD_DATABASE_URL");
+  const copyUrl = requireEnv("INTERMEDIATE_DATABASE_URL");
+  requireEnv("OBFUSCATION_SALT");
+  const prodDb = databaseNameFromUrl(prodUrl);
+  const copyDb = databaseNameFromUrl(copyUrl);
+  if (!prodDb || !copyDb) throw new Refusal("a database URL names no database");
+  if (copyDb === prodDb || looksLikeProdDbName(copyDb)) {
+    throw new Refusal(
+      `INTERMEDIATE_DATABASE_URL names "${copyDb}": it must be a throwaway database, not prod.`,
+    );
+  }
+  const work = mkdtempSync(path.join(os.tmpdir(), "dev-snapshot-"));
+  return { prodUrl, copyUrl, copyDb, work, deliver };
+}
+
+async function snapshotMain(): Promise<number> {
+  log(
+    `F3 dev snapshot (--snapshot-only: staging is never connected to) — ${new Date().toISOString()}`,
+  );
+  const ctx = snapshotGuards();
+  const prod = connect(ctx.prodUrl, { default_transaction_read_only: "on" });
+  const copy = connect(ctx.copyUrl);
+  try {
+    const preflight = await step("1/6 preflight (read-only)", async () => {
+      checkPgTools();
+      const prodDb = await checkProdAndCopy(prod, copy, ctx.copyDb);
+      log(`   prod ${prodDb} (read-only), copy ${ctx.copyDb}`);
+      // Only the image guard: the snapshot loads nowhere, so prod and
+      // staging needn't be at the same level.
+      const applied = await appliedMigrations(prod, "prod");
+      const journal = readJournal();
+      const ahead = prodAheadOfImage(applied, journal);
+      if (ahead) throw new Refusal(`migration gate: ${ahead}`);
+      const migration = latestMigration(applied, journal);
+      log(`   prod is at ${migration.tag}`);
+      return { dumpSchemas: await prodDumpSchemas(prod), migration };
+    });
+
+    await copyAndObfuscate(ctx, prod, copy, {
+      dumpSchemas: preflight.dumpSchemas,
+      total: 6,
+      emailSink: SNAPSHOT_EMAIL_SINK,
+    });
+
+    const trim = await step("5/6 trim the copy to the snapshot", async () => {
+      await assertSnapshotColumnsReviewed(copy);
+      const r = await trimSnapshot(copy);
+      log(
+        `   emptied ${r.emptied} other tables; event_instances ${r.window.from}..${r.window.to}: ` +
+          `${r.instancesKept} kept, ${r.instancesDropped} dropped (+${r.linkRowsDropped} link rows); ` +
+          `${r.privateLocationsDropped} private-only location(s) dropped`,
+      );
+      return r;
+    });
+
+    const manifest = await step("6/6 leak scan, package, publish", () =>
+      publishSnapshot({
+        sql: copy,
+        copyUrl: ctx.copyUrl,
+        work: ctx.work,
+        migration: preflight.migration,
+        window: trim.window,
+        deliver: ctx.deliver,
+      }),
+    );
+
+    log("\n================ SUMMARY ================");
+    for (const [t, { rows }] of Object.entries(manifest.tables)) {
+      log(`   ${t.padEnd(40)} ${String(rows).padStart(10)}`);
+    }
+    if (warnings.length > 0) log(`warnings:\n   - ${warnings.join("\n   - ")}`);
+    log("timings:");
+    for (const t of timings) log(`   ${minutes(t.ms).padStart(7)}  ${t.step}`);
+    log("\nDEV SNAPSHOT: OK");
+    return 0;
+  } catch (error) {
+    log(`\n!! STOPPED: ${errMsg(error)}`);
+    if (!(error instanceof Refusal) && error instanceof Error && error.stack)
+      log(error.stack);
+    log(
+      `\nDEV SNAPSHOT FAILED — ${deliveryOutcome(delivery)} Staging was not touched.`,
+    );
+    return 1;
+  } finally {
+    await Promise.all(
+      [prod.end(), copy.end()].map((p) => p.catch(() => undefined)),
+    );
+    rmSync(ctx.work, { recursive: true, force: true });
+    log(`\n(temp files removed; total ${minutes(Date.now() - startedAt)})`);
+  }
+}
+
 async function main(): Promise<number> {
   log(
     `F3 staging refresh${DRY_RUN ? " (DRY RUN: staging is not written)" : ""} — ${new Date().toISOString()}`,
@@ -789,7 +1002,6 @@ async function main(): Promise<number> {
   const copy = connect(ctx.copyUrl);
   const stg = connect(ctx.stagingUrl);
   const files = {
-    prodDump: path.join(ctx.work, "prod.dump"),
     loadDump: path.join(ctx.work, "load.dump"),
     backup: path.join(ctx.work, "staging-backup.dump"),
     toc: path.join(ctx.work, "list.toc"),
@@ -810,33 +1022,18 @@ async function main(): Promise<number> {
   try {
     // ---- 1. preflight ------------------------------------------------------
     const preflight = await step("1/12 preflight (read-only)", async () => {
-      for (const tool of ["pg_dump", "pg_restore"]) {
-        const major = pgMajor(tool);
-        if (major !== 18) {
-          throw new Refusal(
-            `${tool} must be version 18 (the servers run Postgres 18); found ${major ?? "none"}. Set PG_BIN_DIR.`,
-          );
-        }
+      checkPgTools();
+      const [row] = await stg<
+        { db: string }[]
+      >`SELECT current_database() AS db`;
+      if (row?.db !== ctx.stagingDb) {
+        throw new Refusal(
+          `staging: connected to "${row?.db}", expected "${ctx.stagingDb}".`,
+        );
       }
-      for (const [label, sql, want] of [
-        ["staging", stg, ctx.stagingDb],
-        ["copy", copy, ctx.copyDb],
-      ] as const) {
-        const [row] = await sql<
-          { db: string }[]
-        >`SELECT current_database() AS db`;
-        if (row?.db !== want) {
-          throw new Refusal(
-            `${label}: connected to "${row?.db}", expected "${want}".`,
-          );
-        }
-      }
-      const [prodRow] = await prod<{ db: string; ro: string }[]>`
-        SELECT current_database() AS db, current_setting('transaction_read_only') AS ro`;
-      if (prodRow?.ro !== "on")
-        throw new Refusal("prod session is not read-only");
+      const prodDb = await checkProdAndCopy(prod, copy, ctx.copyDb);
       log(
-        `   prod ${prodRow.db} (read-only), staging ${ctx.stagingDb}, copy ${ctx.copyDb}`,
+        `   prod ${prodDb} (read-only), staging ${ctx.stagingDb}, copy ${ctx.copyDb}`,
       );
 
       const [lock] = await stg<{ ok: boolean }[]>`
@@ -857,20 +1054,7 @@ async function main(): Promise<number> {
         }
       }
 
-      const [copyTables] = await copy<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE c.relkind IN ('r', 'p', 'm') AND n.nspname = ANY(${DUMP_SCHEMAS})`;
-      if ((copyTables?.n ?? 0) > 0) {
-        throw new Refusal(
-          `the copy database ${ctx.copyDb} is not empty; give the refresh a fresh one.`,
-        );
-      }
-
-      const journal = (
-        JSON.parse(readFileSync(JOURNAL_PATH, "utf8")) as {
-          entries: JournalEntry[];
-        }
-      ).entries;
+      const journal = readJournal();
       const gate = migrationGate(
         await appliedMigrations(prod, "prod"),
         await appliedMigrations(stg, "staging"),
@@ -886,112 +1070,13 @@ async function main(): Promise<number> {
         `   migrations: prod and staging at the same level (${journal.length} in the repo journal)`,
       );
 
-      const dumpSchemas = await schemasPresent(prod, DUMP_SCHEMAS);
-      for (const required of ["public", "auth", "drizzle"]) {
-        if (!dumpSchemas.includes(required))
-          throw new Refusal(`prod has no ${required} schema`);
-      }
-      log(`   will dump prod schemas: ${dumpSchemas.join(", ")}`);
-      return { dumpSchemas };
+      return { dumpSchemas: await prodDumpSchemas(prod) };
     });
 
-    // ---- 2. dump prod --------------------------------------------------------
-    await step("2/12 dump prod", async () => {
-      await pgTool(
-        "pg_dump",
-        [
-          "-Fc",
-          "--no-owner",
-          "--no-privileges",
-          "--no-publications",
-          "--no-subscriptions",
-          // Historical snapshots contain PII and are unnecessary for the copy.
-          "--exclude-table-data=public_history.*",
-          ...preflight.dumpSchemas.flatMap((s) => ["-n", quoteIdent(s)]),
-          "-f",
-          files.prodDump,
-        ],
-        ctx.prodUrl,
-        { pgoptions: "-c default_transaction_read_only=on" },
-      );
-    });
-
-    // ---- 3. restore into the copy --------------------------------------------
-    await step("3/12 restore into the throwaway copy", async () => {
-      const exts = await prod<{ extname: string }[]>`
-        SELECT extname FROM pg_extension WHERE extname <> 'plpgsql' ORDER BY 1`;
-      for (const { extname } of exts) {
-        try {
-          await copy.unsafe(
-            `CREATE EXTENSION IF NOT EXISTS ${quoteIdent(extname)}`,
-          );
-        } catch {
-          log(`   (extension ${extname} not available on the copy; skipped)`);
-        }
-      }
-      for (const s of preflight.dumpSchemas) {
-        await copy.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent(s)}`);
-      }
-      try {
-        await pgTool(
-          "pg_restore",
-          [
-            "--no-owner",
-            "--no-privileges",
-            "--no-publications",
-            "--no-subscriptions",
-            "-j",
-            String(Math.max(1, Math.min(8, os.availableParallelism()))),
-            "-d",
-            ctx.copyDb,
-            files.prodDump,
-          ],
-          ctx.copyUrl,
-          {
-            benignError: /already exists/,
-            quietStderr: /already exists|Command was:|^\s*$/,
-          },
-        );
-      } finally {
-        // Raw prod data must not outlive the restore.
-        rmSync(files.prodDump, { force: true });
-        log("   raw prod dump deleted");
-      }
-      const prodTables = await tableColumns(prod, preflight.dumpSchemas);
-      const copyTables = await tableColumns(copy, preflight.dumpSchemas);
-      const missing = [...prodTables.keys()].filter((t) => !copyTables.has(t));
-      if (missing.length > 0) {
-        throw new Refusal(`restore lost table(s): ${missing.join(", ")}`);
-      }
-      log(`   ${copyTables.size} tables restored`);
-    });
-    // Nothing reads prod after this.
-    await prod.end();
-
-    // ---- 4. obfuscate + verify -----------------------------------------------
-    await step("4/12 obfuscate the copy, then verify it", async () => {
-      const salt = requireEnv("OBFUSCATION_SALT");
-      const obf = await runScript(
-        "obfuscate-db",
-        ["--allow-db", ctx.copyDb, "--i-understand-this-rewrites-data"],
-        ctx.copyUrl,
-        { OBFUSCATION_SALT: salt },
-      );
-      if (obf.code !== 0) {
-        throw new Refusal(
-          "obfuscate-db failed (see above); staging was not touched.",
-        );
-      }
-      const verify = await runScript(
-        "obfuscate-db.verify-target",
-        [],
-        ctx.copyUrl,
-      );
-      if (verify.code !== 0 || !/ALL \d+ CHECKS PASSED/.test(verify.stdout)) {
-        throw new Refusal(
-          "verify-target did not pass 100% (see above); staging was not touched.",
-        );
-      }
+    // ---- 2-4. dump prod, restore into the copy, obfuscate + verify ----------
+    await copyAndObfuscate(ctx, prod, copy, {
+      dumpSchemas: preflight.dumpSchemas,
+      total: 12,
     });
 
     // ---- 5. load plan --------------------------------------------------------
@@ -1736,13 +1821,15 @@ function printSummary(s: {
 
 process.on("SIGTERM", () => {
   log(
-    "\n!!! SIGTERM (task timeout?). If this hit after step 8, staging may be half-loaded; " +
-      "re-run with --reuse-existing-stash if refresh_keep schemas are left on staging.",
+    SNAPSHOT_ONLY
+      ? `\n!!! SIGTERM (task timeout?). ${deliveryOutcome(delivery)}`
+      : "\n!!! SIGTERM (task timeout?). If this hit after step 8, staging may be half-loaded; " +
+          "re-run with --reuse-existing-stash if refresh_keep schemas are left on staging.",
   );
   process.exit(143);
 });
 
-main().then(
+(SNAPSHOT_ONLY ? snapshotMain() : main()).then(
   (code) => {
     process.exitCode = process.exitCode ?? code;
   },

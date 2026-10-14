@@ -174,6 +174,7 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
         kept.length !== picked(pickedFilters, orgType).length,
     )
   ) {
+    if (config.hierarchyFilter?.resetPageOnReconcile) resetPage();
     dispatch({ type: "reconcile", selected });
   }
   const selectedRegions = picked(pickedFilters, "region");
