@@ -433,8 +433,19 @@ export function connectionHint(
   // the fallback for errors that carry no code.
   const rawCode = (error as { code?: unknown } | null)?.code;
   const code = typeof rawCode === "string" ? rawCode : "";
+  const KNOWN_CODES = [
+    "ECONNREFUSED",
+    "ENOENT",
+    "ECONNRESET",
+    "CONNECTION_CLOSED",
+    "28P01",
+    "ETIMEDOUT",
+    "CONNECT_TIMEOUT",
+  ];
+  // A code we know decides on its own, so a message that mentions some other
+  // failure can't steer the hint; anything else falls back to the message.
   const is = (codes: string[], pattern: RegExp) =>
-    codes.includes(code) || pattern.test(msg);
+    KNOWN_CODES.includes(code) ? codes.includes(code) : pattern.test(msg);
   if (is(["ECONNREFUSED", "ENOENT"], /ECONNREFUSED|ENOENT/)) {
     return local
       ? `Nothing is listening at ${where}. Start the Cloud SQL proxy in another ` +

@@ -420,6 +420,16 @@ describe("connectionHint", () => {
     );
   });
 
+  it("trusts a known code over a message that says something else", () => {
+    const error = Object.assign(
+      new Error("connect ECONNREFUSED 127.0.0.1:5481"),
+      { code: "CONNECT_TIMEOUT" },
+    );
+    expect(
+      connectionHint(error, "postgresql://u:p@127.0.0.1:5481/f3_prod", PROD),
+    ).toMatch(/\(timed out\)\. Is the proxy running/);
+  });
+
   it("names the error code when it doesn't recognise the failure", () => {
     const hint = connectionHint(
       Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
