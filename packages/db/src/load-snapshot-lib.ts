@@ -11,6 +11,7 @@
  */
 import { sql } from "drizzle-orm/sql";
 import pgConnectionString from "pg-connection-string";
+import { z } from "zod";
 
 import type { AppDb } from "./client";
 import type { LocalTargetAction } from "./migrate-guards";
@@ -54,7 +55,7 @@ export function parseArgs(argv: string[]): LoadArgs {
   let yes = false;
   const args = argv[0] === "--" ? argv.slice(1) : argv;
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i] ?? "";
+    const arg = args[i]!;
     const [flag, inline] = arg.startsWith("--")
       ? (arg.split(/=(.*)/s, 2) as [string, string | undefined])
       : [arg, undefined];
@@ -100,12 +101,28 @@ export interface SnapshotManifest {
   tables: Record<string, { rows: number; columns: string[] }>;
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-
 /** Manifest keys are `public.<table>`. */
 const bareName = (key: string) => key.slice("public.".length);
 const tableKey = (name: string) => `public.${name}`;
+
+const ManifestSchema = z.object({
+  exportedAt: z.string().refine((v) => !Number.isNaN(Date.parse(v))),
+  migration: z.object({ tag: z.string(), createdAt: z.number().finite() }),
+  tables: z.record(z.string(), z.unknown()),
+});
+
+const TOP_LEVEL_ERRORS = {
+  exportedAt: "exportedAt is not a date",
+  migration: "migration needs a tag and a createdAt",
+  tables: "tables is missing",
+} as const;
+
+const TableSchema = z.object({
+  rows: z.number(),
+  columns: z.array(z.string().regex(COLUMN_NAME)).min(1),
+});
+
+const manifestError = (why: string) => new Error(`manifest.json: ${why}`);
 
 /** The manifest is untrusted input: every field that reaches SQL is checked. */
 export function parseManifest(raw: string): SnapshotManifest {
@@ -115,52 +132,40 @@ export function parseManifest(raw: string): SnapshotManifest {
   } catch {
     throw new Error("manifest.json is not valid JSON");
   }
-  if (!isRecord(json)) throw new Error("manifest.json is not an object");
-  if (json.formatVersion !== SUPPORTED_FORMAT_VERSION) {
+  if (typeof json !== "object" || json === null || Array.isArray(json)) {
+    throw new Error("manifest.json is not an object");
+  }
+  const { formatVersion } = json as { formatVersion?: unknown };
+  if (formatVersion !== SUPPORTED_FORMAT_VERSION) {
     throw new Error(
-      `Snapshot format ${String(json.formatVersion)} is not supported (this checkout reads format ${SUPPORTED_FORMAT_VERSION}). Update your checkout, or publish a matching snapshot.`,
+      `Snapshot format ${String(formatVersion)} is not supported (this checkout reads format ${SUPPORTED_FORMAT_VERSION}). Update your checkout, or publish a matching snapshot.`,
     );
   }
-  const { exportedAt, migration, tables } = json;
-  if (typeof exportedAt !== "string" || Number.isNaN(Date.parse(exportedAt))) {
-    throw new Error("manifest.json: exportedAt is not a date");
+  const top = ManifestSchema.safeParse(json);
+  if (!top.success) {
+    const field = top.error.issues[0]?.path[0] as keyof typeof TOP_LEVEL_ERRORS;
+    throw manifestError(TOP_LEVEL_ERRORS[field]);
   }
-  if (
-    !isRecord(migration) ||
-    typeof migration.tag !== "string" ||
-    typeof migration.createdAt !== "number" ||
-    !Number.isFinite(migration.createdAt)
-  ) {
-    throw new Error("manifest.json: migration needs a tag and a createdAt");
-  }
-  if (!isRecord(tables)) throw new Error("manifest.json: tables is missing");
+  const { exportedAt, migration, tables } = top.data;
   const names = Object.keys(tables);
   if (names.length === 0 || names.length > MAX_TABLES) {
-    throw new Error(
-      `manifest.json: expected 1-${MAX_TABLES} tables, got ${names.length}`,
-    );
+    throw manifestError(`expected 1-${MAX_TABLES} tables, got ${names.length}`);
   }
   const parsed: SnapshotManifest["tables"] = {};
   for (const name of names) {
-    const t = tables[name];
     if (!TABLE_KEY.test(name)) {
-      throw new Error(`manifest.json: "${name}" is not a public table name`);
+      throw manifestError(`"${name}" is not a public table name`);
     }
-    if (
-      !isRecord(t) ||
-      typeof t.rows !== "number" ||
-      !Array.isArray(t.columns) ||
-      t.columns.length === 0 ||
-      !t.columns.every((c) => typeof c === "string" && COLUMN_NAME.test(c))
-    ) {
-      throw new Error(`manifest.json: table ${name} is malformed`);
+    const table = TableSchema.safeParse(tables[name]);
+    if (!table.success) {
+      throw manifestError(`table ${name} is malformed`);
     }
-    parsed[name] = { rows: t.rows, columns: t.columns as string[] };
+    parsed[name] = table.data;
   }
   return {
     formatVersion: SUPPORTED_FORMAT_VERSION,
     exportedAt,
-    migration: { tag: migration.tag, createdAt: migration.createdAt },
+    migration,
     tables: parsed,
   };
 }
@@ -256,7 +261,7 @@ export function assertTarListing(listing: string): void {
   if (lines.some((l) => !l.startsWith("-"))) {
     throw new Error("The archive contains something other than regular files.");
   }
-  const names = lines.map((l) => l.trim().split(/\s+/).at(-1) ?? "");
+  const names = lines.map((l) => l.trim().split(/\s+/).pop()!);
   if (
     names.length !== TAR_MEMBERS.length ||
     !TAR_MEMBERS.every((m) => names.includes(m))

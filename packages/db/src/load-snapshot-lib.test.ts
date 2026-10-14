@@ -184,6 +184,7 @@ describe("manifestAge", () => {
   const now = new Date("2026-10-13T12:00:00.000Z");
   it.each([
     ["2026-10-13T11:30:00.000Z", 0, "less than an hour old"],
+    ["2026-10-13T11:00:00.000Z", 0, "1 hour old"],
     ["2026-10-13T09:00:00.000Z", 0, "3 hours old"],
     ["2026-10-12T11:00:00.000Z", 1, "1 day old"],
     ["2026-09-01T12:00:00.000Z", 42, "42 days old"],
@@ -203,6 +204,17 @@ describe("assertDumpMatchesManifest", () => {
       "1; 0 1 TABLE DATA public orgs f3local\n2; 0 2 TABLE DATA public attendance f3local";
     expect(() => assertDumpMatchesManifest(toc, manifest())).toThrow(
       /missing: public\.users; unexpected: public\.attendance/,
+    );
+  });
+
+  it("says none when only one side differs", () => {
+    const orgsOnly = "1; 0 1 TABLE DATA public orgs f3local";
+    expect(() => assertDumpMatchesManifest(orgsOnly, manifest())).toThrow(
+      /missing: public\.users; unexpected: none/,
+    );
+    const extra = `${TOC}\n3; 0 3 TABLE DATA public attendance f3local`;
+    expect(() => assertDumpMatchesManifest(extra, manifest())).toThrow(
+      /missing: none; unexpected: public\.attendance/,
     );
   });
 });
@@ -513,6 +525,11 @@ describe("runLoad", () => {
         /only loads the Docker "f3nation"/,
       ],
       [
+        "a URL with no database name",
+        () => ({ databaseUrl: "postgresql://u:p@localhost:5433" }),
+        /DATABASE_URL names ""/,
+      ],
+      [
         "an unmarked client database",
         (h) => {
           h.deps.db.identity = () =>
@@ -746,6 +763,15 @@ describe("runLoad", () => {
       /snapshot was loaded, but post-load setup failed.*seed exploded/,
     );
     expect((err as Error).cause).toBe(cause);
+  });
+
+  it("reports a non-Error post-restore failure as a partial load", async () => {
+    const { deps } = harness();
+    const notAnError = "seed exploded" as unknown as Error;
+    deps.seeders.seedOAuthClients = () => Promise.reject(notAnError);
+    await expect(runLoad({ ...ARGS, yes: true }, deps)).rejects.toThrow(
+      /post-load setup failed.*seed exploded/,
+    );
   });
 
   it("keeps the load's own error when the temp dir can't be removed", async () => {

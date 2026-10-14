@@ -40,7 +40,8 @@
     "esbuild-register": "catalog:",
     "pg": "catalog:",
     "pg-connection-string": "catalog:",
-    "postgres": "catalog:"
+    "postgres": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",

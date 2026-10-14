@@ -76,8 +76,9 @@ describe("fetchToFile", () => {
     if (req.url === "/ok") {
       res.setHeader("content-length", "5");
       res.end("hello");
-    } else if (req.url === "/big") {
-      res.end("x".repeat(100));
+    } else if (req.url === "/chunked") {
+      res.write("x".repeat(100));
+      setTimeout(() => res.end("x".repeat(100)), 50);
     } else if (req.url === "/redirect") {
       res.statusCode = 302;
       res.setHeader("location", "http://example.invalid/a.tar");
@@ -128,6 +129,14 @@ describe("fetchToFile", () => {
     expect((err as Error).cause).toBeInstanceOf(Error);
   });
 
+  it("describes a non-Error failure", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue("boom");
+    await expect(
+      fetchToFile(new URL(`${base}/ok`), await dest()),
+    ).rejects.toThrow(/Could not download.*: boom\./);
+    fetchSpy.mockRestore();
+  });
+
   it("reports a timeout during the download", async () => {
     await expect(
       fetchToFile(new URL(`${base}/stall`), await dest(), { timeoutMs: 200 }),
@@ -154,7 +163,7 @@ describe("fetchToFile", () => {
 
   it("stops a body that grows past the cap", async () => {
     await expect(
-      fetchToFile(new URL(`${base}/big`), await dest(), { maxBytes: 10 }),
+      fetchToFile(new URL(`${base}/chunked`), await dest(), { maxBytes: 10 }),
     ).rejects.toThrow(/larger than/);
   });
 });
@@ -196,6 +205,25 @@ describe("files and prompt", () => {
     expect(exit).toHaveBeenCalledWith(130);
     await expect(readText(path.join(dir, "x"))).rejects.toThrow();
     await expect(stat(dir)).rejects.toThrow();
+    once.mockRestore();
+    exit.mockRestore();
+  });
+
+  it("mkTmp exits 143 on SIGTERM", async () => {
+    const handlers: Record<string, (s: string) => void> = {};
+    const once = vi.spyOn(process, "once").mockImplementation(((
+      event: string,
+      fn: (s: string) => void,
+    ) => {
+      handlers[event] = fn;
+      return process;
+    }) as never);
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+    await mkTmp();
+    handlers.SIGTERM?.("SIGTERM");
+    expect(exit).toHaveBeenCalledWith(143);
     once.mockRestore();
     exit.mockRestore();
   });
