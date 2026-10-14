@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.10.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.9.0...pkg-db@0.10.0) (2026-10-14)
+
+
+### Features
+
+* **db,repo:** add db:load:snapshot to load the sanitized Prod snapshot ([#1231](https://github.com/F3-Nation/f3-nation/issues/1231)) ([95d89a8](https://github.com/F3-Nation/f3-nation/commit/95d89a8731ce52cee130ade667bc34a6cc33c770))
+* **db,shared,admin:** add password_manager and password_reader roles ([#1180](https://github.com/F3-Nation/f3-nation/issues/1180)) ([e69f45d](https://github.com/F3-Nation/f3-nation/commit/e69f45d92f88ed1248a86cdce716e05a66389b85))
+* **repo,db:** run several checkouts side by side with local:setup --slot ([#1246](https://github.com/F3-Nation/f3-nation/issues/1246)) ([7a1377f](https://github.com/F3-Nation/f3-nation/commit/7a1377f3ba83dd5eccae3b322947994f3379205e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.5.0
+
 ## [0.9.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.8.0...pkg-db@0.9.0) (2026-10-10)
 
 
