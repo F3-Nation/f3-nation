@@ -151,10 +151,14 @@ async function proxyRequest(request: NextRequest) {
   // doesn't compress (see apps/api/src/app.ts), so eventsAndLocations went out
   // as 1.5 MB on every map load. Doing it in the proxy can't break an older
   // map revision the way enabling it in the API could. Streams (e.g.
-  // text/event-stream) and non-JSON bodies pass through untouched.
+  // text/event-stream) and non-JSON bodies pass through untouched. Only
+  // PUBLIC_PATHS responses are compressed: SIGNED_IN_ONLY_PATHS carry the
+  // caller's own data, and leaving them uncompressed rules out BREACH-style
+  // length leaks for the price of a few small responses.
   let responseBody = upstreamResponse.body;
   headers.append("Vary", "Accept-Encoding");
   if (
+    isPublic &&
     responseBody &&
     method !== "HEAD" &&
     acceptsGzip(request) &&

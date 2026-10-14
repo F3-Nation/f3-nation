@@ -361,6 +361,24 @@ describe("oRPC proxy route", () => {
       expect(await gunzip(res)).toBe(json);
     });
 
+    it("never compresses a signed-in-only response", async () => {
+      upstream();
+      const { POST } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+      const res = await POST(
+        new NextRequest(
+          "http://localhost:3000/api/orpc/v1/request/canEditRegions",
+          {
+            method: "POST",
+            body: "{}",
+            headers: { "accept-encoding": "gzip" },
+          },
+        ),
+      );
+      expect(res.headers.get("content-encoding")).toBeNull();
+      expect(await res.text()).toBe(json);
+    });
+
     it("passes the body through when the caller doesn't accept gzip", async () => {
       upstream();
       const res = await call();

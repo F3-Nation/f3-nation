@@ -23,7 +23,7 @@ export default defineConfig({
         // their own (see tooling/vitest/coverage.ts) — net upward.
         autoUpdate: true,
         statements: 32.3,
-        branches: 31.23,
+        branches: 31.26,
         functions: 27.28,
         lines: 32.22,
       },
