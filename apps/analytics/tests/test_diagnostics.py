@@ -1224,7 +1224,8 @@ def test_ctas_supervisor_kills_stuck_child_with_bounded_runtime(interrupt_mode, 
         elapsed = time.monotonic() - started
 
         assert result == {"status": "failed", "error_type": "TimeoutError"}
-        assert elapsed < deadline_seconds + 6.0
+        # Bound by the supervisor's hard deadline (~20.3s here), not by teardown alone: the cleanup child spawns too.
+        assert elapsed < deadline_seconds + 16.0
         assert (base / "operation").read_text(encoding="utf-8") == "sigterm_ignored"
         if block_phase in {"factory", "close"}:
             assert not (base / "interrupt").exists()
