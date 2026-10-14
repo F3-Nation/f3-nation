@@ -4,7 +4,7 @@
   "version": "2.2.9",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3003",
+    "dev": "next dev --port ${F3_ME_PORT:-3003}",
     "build": "next build",
     "start": "next start --port 3003",
     "lint": "eslint . --max-warnings 0",

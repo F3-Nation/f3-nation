@@ -95,6 +95,9 @@ export const eventTagRouter = {
         }
       }) ?? [desc(schema.eventTags.id)];
 
+      // Break tied sort values so rows cannot repeat or vanish between pages.
+      sortedColumns.push(asc(schema.eventTags.id));
+
       const select = {
         id: schema.eventTags.id,
         name: schema.eventTags.name,

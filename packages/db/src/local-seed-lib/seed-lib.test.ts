@@ -103,12 +103,17 @@ describe("seedApiKeys", () => {
 function fakeDb(selectResults: unknown[][] = []) {
   const queue = [...selectResults];
   const inserts: unknown[] = [];
+  const conflictUpdates: unknown[] = [];
   const execute = vi.fn().mockResolvedValue([]);
   const chain = (rows: () => unknown[]) => {
     const q: Record<string, unknown> = {};
     for (const step of ["from", "where", "limit", "onConflictDoNothing"]) {
       q[step] = () => q;
     }
+    q.onConflictDoUpdate = (c: unknown) => {
+      conflictUpdates.push(c);
+      return q;
+    };
     q.values = (v: unknown) => {
       inserts.push(v);
       return q;
@@ -122,7 +127,7 @@ function fakeDb(selectResults: unknown[][] = []) {
     insert: () => chain(() => []),
     execute,
   };
-  return { db: db as never, inserts, execute };
+  return { db: db as never, inserts, conflictUpdates, execute };
 }
 
 describe("seedDevUsers", () => {
@@ -170,6 +175,18 @@ describe("seedOAuthClients", () => {
     const { db, inserts } = fakeDb();
     await seedOAuthClients(db);
     expect(inserts).toHaveLength(LOCAL_OAUTH_CLIENTS.length);
+  });
+
+  it("refreshes redirect URIs and origin when a client already exists", async () => {
+    const { db, conflictUpdates } = fakeDb();
+    await seedOAuthClients(db);
+    expect(conflictUpdates).toHaveLength(LOCAL_OAUTH_CLIENTS.length);
+    expect(conflictUpdates[0]).toMatchObject({
+      set: {
+        redirectUris: LOCAL_OAUTH_CLIENTS[0]?.redirectUris,
+        allowedOrigin: LOCAL_OAUTH_CLIENTS[0]?.allowedOrigin,
+      },
+    });
   });
 });
 
