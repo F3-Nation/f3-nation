@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
     .limit(1);
 
   const currentMeta = user?.meta ?? {};
-  // A timestamp, not `true`, so we can tell when someone last confirmed their
-  // profile. Everything that reads this flag only checks that it is set.
+  // A timestamp so we can tell when someone last confirmed their
+  // profile.
   const updatedMeta = {
     ...currentMeta,
     onboarding_completed: new Date().toISOString(),
