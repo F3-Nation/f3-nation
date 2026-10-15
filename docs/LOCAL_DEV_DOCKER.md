@@ -278,6 +278,37 @@ Use `docker:up` for normal day-to-day use — containers run in the background a
 
 The Docker containers save their data in named volumes (`postgres_data`, `gcs_data`), so your data persists between restarts.
 
+## Running several checkouts at once (git worktrees)
+
+Every checkout normally uses the same ports (apps on 3000–3005, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead:
+
+```bash
+git worktree add ../f3-nation-review some-branch
+cd ../f3-nation-review
+pnpm install
+pnpm local:setup --slot 1
+pnpm dev
+```
+
+A slot moves every port up by 100 × the slot number, and gives the checkout its own containers (`f3-wt1-postgres`, …) and its own database:
+
+| Service    | Default (slot 0) | Slot 1    | Slot N         |
+| ---------- | ---------------- | --------- | -------------- |
+| Apps       | 3000–3005        | 3100–3105 | 3000 + 100N, … |
+| Postgres   | 5433             | 5533      | 5433 + 100N    |
+| Mailpit UI | 8025             | 8125      | 8025 + 100N    |
+| SMTP       | 1025             | 1125      | 1025 + 100N    |
+| GCS        | 9023             | 9123      | 9023 + 100N    |
+| Adminer    | 8080             | 8180      | 8080 + 100N    |
+
+The slot is saved in the root `.env` (gitignored), which `docker compose`, `pnpm docker:up`, `pnpm dev`, and later `pnpm local:setup` runs all read. `local:setup` also writes the matching URLs into the checkout's per-app `.env` files and seeds the sign-in clients for Admin and Me with the slot's ports.
+
+- `pnpm dev` picks up the slot by itself. To start a single app with `pnpm --filter <app> dev`, export the slot's ports first: `set -a; . ./.env; set +a`.
+- To put a checkout back on the defaults, run `pnpm local:setup --slot 0`.
+- Homepage gets `NEXT_PUBLIC_API_URL` for the slot's API. Its landing-page app links and the status page's health targets still use the default ports.
+- Slackbot stays on 3006. To run it in two checkouts at once, set `LOCAL_HTTP_PORT` in the second checkout's `apps/slackbot/.env` by hand.
+- `pnpm docker:down` in a slotted checkout stops only that checkout's containers. Remove a worktree's data for good with `docker compose down -v` from inside it before deleting the worktree.
+
 ---
 
 ## Understanding the .env files
@@ -362,7 +393,7 @@ These tell each Next.js app where to find the other apps. Don't change these unl
 1. Open <http://localhost:8080>
 2. Fill in the login form:
    - **System**: PostgreSQL
-   - **Server**: `f3-postgres`
+   - **Server**: `postgres`
    - **Username**: `f3local`
    - **Password**: `f3local`
    - **Database**: `f3nation`
@@ -526,7 +557,7 @@ pnpm local:setup
 Check the container logs:
 
 ```bash
-docker logs f3-postgres
+docker compose logs postgres
 ```
 
 If the logs show a data directory error, try removing the volume and starting fresh:
@@ -551,8 +582,8 @@ curl -X POST http://localhost:9023/storage/v1/b \
 Make sure Docker is running and Postgres is healthy:
 
 ```bash
-docker ps                     # should show f3-postgres, f3-adminer, f3-gcs
-docker exec f3-postgres pg_isready -U f3local   # should print "accepting connections"
+docker ps                     # should show f3-postgres, f3-adminer, f3-gcs (f3-wtN-* in a slot)
+docker compose exec postgres pg_isready -U f3local   # should print "accepting connections"
 pnpm db:migrate:local
 ```
 

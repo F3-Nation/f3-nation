@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.8.0...slackbot@2.9.0) (2026-10-14)
+
+
+### Features
+
+* **slackbot:** bound the Slack bot's database connection pool ([#1120](https://github.com/F3-Nation/f3-nation/issues/1120)) ([0e553b8](https://github.com/F3-Nation/f3-nation/commit/0e553b8690638058e4e79177932b957d7796bdfe))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#1214](https://github.com/F3-Nation/f3-nation/issues/1214)) ([d2f6e95](https://github.com/F3-Nation/f3-nation/commit/d2f6e950ce1b94a573b27852eb24a83629c0ff2d))
+* **slackbot:** regenerate stale calendar images ([#1139](https://github.com/F3-Nation/f3-nation/issues/1139)) ([48f3730](https://github.com/F3-Nation/f3-nation/commit/48f37307e6f703b245c325043bb2b0aedc62696d))
+* **slackbot:** restore confirmation dialogs ([#1193](https://github.com/F3-Nation/f3-nation/issues/1193)) ([f6422d2](https://github.com/F3-Nation/f3-nation/commit/f6422d25d93957c7a2f40db5329c1c331e8e172b))
+
 ## [2.8.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.7.0...slackbot@2.8.0) (2026-10-06)
 
 

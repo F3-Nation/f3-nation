@@ -1,12 +1,12 @@
 {
   "name": "f3-auth",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "next build",
     "clean": "rm -rf .next .turbo node_modules",
-    "dev": "pnpm next dev -p 3004",
+    "dev": "pnpm next dev -p ${F3_AUTH_PORT:-3004}",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
     "lint": "eslint .",
     "start": "next start",

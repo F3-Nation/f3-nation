@@ -1,10 +1,10 @@
 {
   "name": "f3-homepage",
   "type": "module",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3005",
+    "dev": "next dev --port ${F3_HOMEPAGE_PORT:-3005}",
     "build": "next build",
     "start": "npx serve out -l 3005",
     "lint": "eslint . --max-warnings 0",
