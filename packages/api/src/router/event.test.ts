@@ -26,6 +26,7 @@ vi.mock("../lib/first-event-service", () => ({
 
 import { eq, inArray, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { waitForEventRegionNotificationTasks } from "./event";
 import {
   cleanup,
   createAdminSession,
@@ -3141,11 +3142,83 @@ describe("Event Router", () => {
         email: null,
       });
 
-      await vi.waitFor(() =>
-        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
-          expect.anything(),
-          regionB.id,
-        ),
+      await waitForEventRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        regionB.id,
+      );
+    });
+
+    it("notifies when an event moves from an AO with no parent region", async () => {
+      const adminSession = await createAdminSession();
+      const destinationRegion = await createTestRegion();
+      if (!destinationRegion) return;
+      const [sourceAo] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Unparented AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: null,
+          isActive: true,
+        })
+        .returning();
+      if (!sourceAo) return;
+      createdOrgIds.push(sourceAo.id);
+      const destinationAo = await createTestAO(destinationRegion.id);
+      const eventType = await createTestEventType();
+      if (!destinationAo || !eventType) return;
+      if (adminSession.roles && adminSession.user?.roles) {
+        for (const ao of [sourceAo, destinationAo]) {
+          const role = {
+            orgId: ao.id,
+            orgName: ao.name,
+            roleName: "editor" as const,
+          };
+          adminSession.roles.push(role);
+          adminSession.user.roles.push(role);
+        }
+      }
+      await mockAuthWithSession(adminSession);
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Unparented AO Event ${uniqueId()}`,
+          orgId: sourceAo.id,
+          dayOfWeek: "monday",
+          startDate: nextFutureMonday(1),
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+
+      await createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: destinationAo.id,
+        regionId: destinationRegion.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: null,
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      await waitForEventRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        destinationRegion.id,
       );
     });
 
@@ -3193,11 +3266,13 @@ describe("Event Router", () => {
       };
 
       await client.event.crupdate({ ...input, aoId: aoB.id });
+      await waitForEventRegionNotificationTasks();
       await client.event.crupdate({
         ...input,
         aoId: aoB.id,
         name: `${event.name} edited`,
       });
+      await waitForEventRegionNotificationTasks();
       expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
     });
 
@@ -3300,6 +3375,7 @@ describe("Event Router", () => {
         lockTransaction,
         update,
       ]);
+      await waitForEventRegionNotificationTasks();
       expect(lockResult.status).toBe("fulfilled");
       expect(isWaitingForAoLock).toBe(true);
       expect(updateResult.status).toBe("fulfilled");

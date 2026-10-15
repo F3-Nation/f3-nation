@@ -1,9 +1,10 @@
 /**
  * Sends the region-in-a-box welcome packet once a region has eligible
  * recipients. The existing region marker is claimed atomically before sending;
- * failed sends release it for a later trigger to retry. A process crash after
- * claiming but before sending can leave the marker set, so this does not provide
- * exactly-once delivery.
+ * failed sends normally release it for a later trigger to retry. If release
+ * fails, the marker stays set; repair by removing meta.firstEventNotificationSent
+ * on that region org. A crash after claiming can also leave the marker set, so
+ * this does not provide exactly-once delivery.
  */
 
 import { and, eq, exists, isNotNull, sql, schema } from "@acme/db";
@@ -146,7 +147,7 @@ async function maybeNotifyRegion(
     } catch (releaseError) {
       logError(
         "api.first_event.claim_release_failed",
-        { regionId },
+        { regionId, regionName: region.name, stuck: true },
         releaseError,
       );
     }

@@ -58,7 +58,7 @@ import {
   recordUpdateRequest,
 } from "../lib/update-request-handlers";
 import { notifyMapDataChange } from "../lib/webhook-events";
-import { logError } from "../logger";
+import { logDebug, logError } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -1295,9 +1295,10 @@ const handleRequest = async <T extends HandleableRequestInput>({
         }
 
         // Lock every existing AO whose membership participates in the request
-        // (including the event's actual source) in stable order before locking
-        // the event. Rechecking permissions only after these locks prevents a
-        // concurrent AO reparent from making the preflight authorization stale.
+        // (including the event's actual source) in stable ID order before
+        // locking the event. Rechecking permissions only after these locks
+        // prevents a concurrent AO reparent from making preflight authorization
+        // stale.
         const aoIds = [input.originalAoId, input.newAoId, eventSnapshot?.aoId]
           .filter((id): id is number => id != null)
           .filter((id, index, ids) => ids.indexOf(id) === index)
@@ -1340,13 +1341,24 @@ const handleRequest = async <T extends HandleableRequestInput>({
           input.requestType === "move_event_to_different_ao" &&
           input.originalEventId
         ) {
+          if (input.newAoId == null) {
+            throw new ORPCError("BAD_REQUEST", {
+              message: "A destination AO is required.",
+            });
+          }
           const sourceAo = lockedAos.find(
             (ao) => ao.id === eventSnapshot?.aoId,
           );
           const destinationAo = lockedAos.find((ao) => ao.id === input.newAoId);
-          if (!sourceAo || !destinationAo) {
+          if (!sourceAo) {
             throw new ORPCError("CONFLICT", {
-              message: "An AO changed while this request was being applied.",
+              message:
+                "The source AO changed while this request was being applied.",
+            });
+          }
+          if (!destinationAo) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Failed to find destination AO.",
             });
           }
           if (sourceAo.regionId !== destinationAo.regionId) {
@@ -1403,11 +1415,17 @@ const handleRequest = async <T extends HandleableRequestInput>({
     ) {
       // This side effect must run only after the transaction commits, and must
       // never make an already-committed map change fail. The destination is
-      // captured under the relevant AO lock in the transaction; detached work
-      // must not resolve it again after a possible AO reparent.
+      // captured inside the transaction (under the AO lock when an existing AO
+      // is involved); detached work must not resolve it after a possible reparent.
       const notificationTask = (async () => {
         try {
-          if (!notificationRegionId) return;
+          if (notificationRegionId == null) {
+            logDebug("api.request.region_in_a_box_no_region", {
+              requestId: updateRequest.id,
+              requestType: updateRequest.requestType,
+            });
+            return;
+          }
 
           const { maybeNotifyRegionInABox } =
             await import("../lib/first-event-service");
@@ -1415,7 +1433,11 @@ const handleRequest = async <T extends HandleableRequestInput>({
         } catch (error) {
           logError(
             "api.request.region_in_a_box_notification_failed",
-            { requestId: updateRequest.id },
+            {
+              requestId: updateRequest.id,
+              requestType: updateRequest.requestType,
+              regionId: notificationRegionId,
+            },
             error,
           );
         }

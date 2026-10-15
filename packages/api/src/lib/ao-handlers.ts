@@ -118,9 +118,8 @@ export const updateAO = async (
       .returning();
 
     if (!updatedAO) {
-      // The AO can be deleted concurrently with this update under multiple
-      // instances — the same missing-resource condition as the locked read
-      // above, not unexpected server state.
+      // Keep the missing-row outcome aligned with the locked lookup above if
+      // the update unexpectedly returns no row.
       throw new ORPCError("NOT_FOUND", {
         message: "Failed to find ao to update. Does the AO exist?",
       });
