@@ -37,10 +37,12 @@ on:
 
 permissions: {}
 
-# Serialize per PR. Don't cancel on a second event: killing a 60-minute review
-# mid-run wastes the spend. A queued second run re-checks live labels in `gate`.
+# Serialize `pr-af` events per PR. Don't cancel on a second event: killing a
+# 60-minute review mid-run wastes the spend. A queued second run re-checks live
+# labels in `gate`. Other label events get a unique group so they cannot
+# displace a queued `pr-af` run (GitHub keeps one pending run per group).
 concurrency:
-  group: pr-af-review-${{ github.event.pull_request.number }}
+  group: pr-af-review-${{ github.event.pull_request.number }}-${{ github.event.label.name == 'pr-af' && 'claim' || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -58,10 +60,16 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
+      OPENROUTER_API_KEY: ${{ secrets.PR_AF_OPENROUTER_API_KEY }}
     steps:
       - name: Claim PR (one review per PR)
         id: claim
         run: |
+          # An unset secret expands to "": refuse before spending the claim.
+          if [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "::error::PR_AF_OPENROUTER_API_KEY is not set; refusing to claim PR #${PR}."
+            exit 1
+          fi
           # Live labels, not the event payload: a queued run's payload is stale.
           labels=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/labels" \
             --jq '.[].name')
@@ -128,11 +136,11 @@ jobs:
           echo "::group::pr-af cost lines"
           docker compose logs pr-af 2>&1 | grep -E 'cost=|Budget exhausted|budget_exhausted' | tail -20 || true
           echo "::endgroup::"
-          docker compose logs --no-color --tail 200 pr-af > "${RUNNER_TEMP}/pr-af.log" 2>&1 || true
+          docker compose logs --no-color pr-af > "${RUNNER_TEMP}/pr-af.log" 2>&1 || true
           docker compose down -v || true
 
-      - name: Upload container log on failure
-        if: failure()
+      - name: Upload container log on failure or timeout
+        if: failure() || cancelled()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pr-af-log
