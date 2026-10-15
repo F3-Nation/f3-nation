@@ -8771,7 +8771,9 @@
             "name": "regionId",
             "required": true,
             "schema": {
-              "type": "number"
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
             }
           }
         ],
@@ -9245,7 +9247,7 @@
                               "type": "number"
                             },
                             "instanceOrgs": {
-                              "description": "AO and region context per visible upcoming instance, soonest first; populated only when the location has no series events",
+                              "description": "AO and region context per visible upcoming instance, soonest first, including locations with recurring workouts",
                               "items": {
                                 "properties": {
                                   "instanceId": {

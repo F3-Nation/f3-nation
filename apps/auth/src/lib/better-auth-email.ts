@@ -11,6 +11,7 @@
  */
 import { createTransport } from "nodemailer";
 
+import { recordEmailCode } from "~/lib/email-mfa";
 import { NO_TRACKING_HEADERS } from "~/lib/mail-headers";
 import { env } from "~/env";
 
@@ -40,4 +41,22 @@ export async function sendBetterAuthOtpEmail(
     `,
     headers: NO_TRACKING_HEADERS,
   });
+}
+
+/**
+ * Better Auth's sendVerificationOTP callback. Its own store burns a code on
+ * any read, so sign-in codes are also recorded in email_mfa_codes, where
+ * /api/register checks ownership without consuming them (checkEmailCode).
+ */
+export async function deliverBetterAuthOtp({
+  email,
+  otp,
+  type,
+}: {
+  email: string;
+  otp: string;
+  type: string;
+}): Promise<void> {
+  if (type === "sign-in") await recordEmailCode(email, otp);
+  await sendBetterAuthOtpEmail(email, otp);
 }

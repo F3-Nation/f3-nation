@@ -232,6 +232,15 @@ jobs:
   # ── Deploy to staging ──
   deploy-staging:
     needs: build
+    # Serialize deploys per target (project + region + service), not per
+    # release tag: two tags dispatched close together would otherwise both
+    # deploy this service at once and the slower, possibly older one would win.
+    # Unrelated services keep separate groups and still deploy in parallel.
+    # GitHub keeps at most one pending run per group (a newer one replaces it)
+    # -- see docs/RELEASE_PROCESS.md "Overlapping deploys".
+    concurrency:
+      group: cloudrun-deploy-${{ inputs.staging_project }}-${{ inputs.region }}-${{ inputs.service_name }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -285,6 +294,10 @@ jobs:
   # ── Deploy to production (requires approval) ──
   deploy-prod:
     needs: [build, deploy-staging]
+    # Same per-target serialization as deploy-staging.
+    concurrency:
+      group: cloudrun-deploy-${{ inputs.prod_project }}-${{ inputs.region }}-${{ inputs.service_name }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read

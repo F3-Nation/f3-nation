@@ -9,6 +9,7 @@ import {
   asc,
   count,
   eq,
+  exists,
   gte,
   isNotNull,
   isNull,
@@ -29,6 +30,7 @@ import {
   logIfOrgTreeExceedsMaxDepth,
   ORG_TREE_MAX_DEPTH,
 } from "../../org-tree";
+import { mapDataFor } from "../../lib/map-data-cache";
 import type { Context } from "../../shared";
 import { protectedProcedure, publicReadProcedure } from "../../shared";
 
@@ -119,9 +121,8 @@ const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
 
 /**
  * Which event instances the map surfaces as their own pin or pin status.
- * Shared by upcomingInstances and locationWorkout's instance-only fallback so
- * a pin drawn from an instance always opens a detail panel, never "no longer
- * scheduled".
+ * Shared by upcomingInstances and locationWorkout's instance context so a pin
+ * drawn from an instance opens a detail panel with its own AO and region.
  *
  * The caller's query must LEFT JOIN `schema.locations` on the instance's
  * location, `aoOrg` on its org, and `seriesEvent` on its series.
@@ -172,12 +173,12 @@ const isVisibleUpcomingInstance = ({
   );
 
 /**
- * AO and region context for each visible upcoming instance at a location whose
- * only map presence is those instances, soonest first. One location can hold
- * instances from different orgs, so the context is per instance rather than
- * per location. Each row is shaped as the `parent*` and `region*` fields
- * locationWorkout otherwise reads off a series' org, plus the `instanceId` it
- * belongs to. Empty when no instance would draw a pin here.
+ * AO and region context for each visible upcoming instance at a location,
+ * soonest first. One location can hold instances from different orgs, so the
+ * context is per instance rather than per location. Each row is shaped as the
+ * `parent*` and `region*` fields locationWorkout otherwise reads off a series'
+ * org, plus the `instanceId` it belongs to. Empty when no instance would draw a
+ * pin here.
  */
 const getInstanceOrgsAtLocation = async (
   db: Context["db"],
@@ -260,37 +261,38 @@ export const mapLocationRouter = os.router({
         .array(LowBandwidthF3MarkerSchema)
         .describe("Low-bandwidth array of events and locations"),
     )
-    .handler(async ({ context: ctx }) => {
-      void logIfOrgTreeExceedsMaxDepth(ctx.db);
+    .handler(({ context: ctx }) =>
+      mapDataFor(ctx.reqHeaders, "eventsAndLocations", async () => {
+        void logIfOrgTreeExceedsMaxDepth(ctx.db);
 
-      const aoOrg = aliasedTable(schema.orgs, "ao_org");
-      const regionOrg = aliasedTable(schema.orgs, "region_org");
-      const locationsAndEvents = await ctx.db
-        .select({
-          locations: {
-            id: schema.locations.id,
-            name: aoOrg.name,
-            logo: sql<
-              string | null
-            >`COALESCE(NULLIF(${aoOrg.logoUrl}, ''), NULLIF(${regionOrg.logoUrl}, ''))`,
-            lat: schema.locations.latitude,
-            lon: schema.locations.longitude,
-            locationAddress: schema.locations.addressStreet,
-            locationAddress2: schema.locations.addressStreet2,
-            locationCity: schema.locations.addressCity,
-            locationState: schema.locations.addressState,
-            locationCountry: schema.locations.addressCountry,
-          },
-          events: {
-            id: schema.events.id,
-            locationId: schema.events.locationId,
-            dayOfWeek: schema.events.dayOfWeek,
-            startTime: schema.events.startTime,
-            endTime: schema.events.endTime,
-            startDate: schema.events.startDate,
-            endDate: schema.events.endDate,
-            name: schema.events.name,
-            eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
+        const aoOrg = aliasedTable(schema.orgs, "ao_org");
+        const regionOrg = aliasedTable(schema.orgs, "region_org");
+        const locationsAndEvents = await ctx.db
+          .select({
+            locations: {
+              id: schema.locations.id,
+              name: aoOrg.name,
+              logo: sql<
+                string | null
+              >`COALESCE(NULLIF(${aoOrg.logoUrl}, ''), NULLIF(${regionOrg.logoUrl}, ''))`,
+              lat: schema.locations.latitude,
+              lon: schema.locations.longitude,
+              locationAddress: schema.locations.addressStreet,
+              locationAddress2: schema.locations.addressStreet2,
+              locationCity: schema.locations.addressCity,
+              locationState: schema.locations.addressState,
+              locationCountry: schema.locations.addressCountry,
+            },
+            events: {
+              id: schema.events.id,
+              locationId: schema.events.locationId,
+              dayOfWeek: schema.events.dayOfWeek,
+              startTime: schema.events.startTime,
+              endTime: schema.events.endTime,
+              startDate: schema.events.startDate,
+              endDate: schema.events.endDate,
+              name: schema.events.name,
+              eventTypes: sql<{ id: number; name: string }[]>`COALESCE(
             json_agg(
               DISTINCT jsonb_build_object(
                 'id', ${schema.eventTypes.id},
@@ -302,135 +304,136 @@ export const mapLocationRouter = os.router({
             ),
             '[]'
           )`,
+            },
+          })
+          .from(schema.locations)
+          // INNER JOIN ensures only locations with at least one active,
+          // non-private event are returned (no orphaned pins on the map).
+          .innerJoin(
+            schema.events,
+            and(
+              eq(schema.events.locationId, schema.locations.id),
+              eq(schema.events.isActive, true),
+              eq(schema.events.isPrivate, false),
+              withinCurrentEventDateWindow(),
+            ),
+          )
+          .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
+          .leftJoin(
+            regionOrg,
+            and(
+              eq(regionOrg.id, aoOrg.parentId),
+              eq(regionOrg.orgType, "region"),
+            ),
+          )
+          .leftJoin(
+            schema.eventsXEventTypes,
+            eq(schema.eventsXEventTypes.eventId, schema.events.id),
+          )
+          .leftJoin(
+            schema.eventTypes,
+            eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+          )
+          .where(
+            and(
+              eq(schema.locations.isActive, true),
+              // Deactivating an org does not cascade to child AOs or events, so
+              // the public map must hide them here: the event's own org, plus
+              // every level above it (region, area, territory, sector, nation).
+              or(isNull(aoOrg.id), eq(aoOrg.isActive, true)),
+              ancestorOrgsAreActive(schema.events.orgId),
+            ),
+          )
+          .groupBy(
+            schema.locations.id,
+            aoOrg.name,
+            aoOrg.logoUrl,
+            regionOrg.logoUrl,
+            schema.events.id,
+          );
+
+        // Reduce the results into the expected format
+        const locationEvents = locationsAndEvents.reduce(
+          (acc, item) => {
+            const location = item.locations;
+            const event = item.events;
+
+            if (
+              !acc[location.id] &&
+              location.lat != null &&
+              location.lon != null
+            ) {
+              acc[location.id] = {
+                ...location,
+                name: location.name ?? "",
+                fullAddress: getFullAddress(location),
+                lat: location.lat,
+                lon: location.lon,
+                events: [],
+              };
+            }
+
+            if (event?.id != undefined) {
+              acc[location.id]?.events.push({
+                ...omit(event, "locationId"),
+                aoName: location.name ?? null,
+                aoLogo: location.logo,
+              });
+            }
+
+            return acc;
           },
-        })
-        .from(schema.locations)
-        // INNER JOIN ensures only locations with at least one active,
-        // non-private event are returned (no orphaned pins on the map).
-        .innerJoin(
-          schema.events,
-          and(
-            eq(schema.events.locationId, schema.locations.id),
-            eq(schema.events.isActive, true),
-            eq(schema.events.isPrivate, false),
-            withinCurrentEventDateWindow(),
-          ),
-        )
-        .leftJoin(aoOrg, eq(schema.events.orgId, aoOrg.id))
-        .leftJoin(
-          regionOrg,
-          and(
-            eq(regionOrg.id, aoOrg.parentId),
-            eq(regionOrg.orgType, "region"),
-          ),
-        )
-        .leftJoin(
-          schema.eventsXEventTypes,
-          eq(schema.eventsXEventTypes.eventId, schema.events.id),
-        )
-        .leftJoin(
-          schema.eventTypes,
-          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
-        )
-        .where(
-          and(
-            eq(schema.locations.isActive, true),
-            // Deactivating an org does not cascade to child AOs or events, so
-            // the public map must hide them here: the event's own org, plus
-            // every level above it (region, area, territory, sector, nation).
-            or(isNull(aoOrg.id), eq(aoOrg.isActive, true)),
-            ancestorOrgsAreActive(schema.events.orgId),
-          ),
-        )
-        .groupBy(
-          schema.locations.id,
-          aoOrg.name,
-          aoOrg.logoUrl,
-          regionOrg.logoUrl,
-          schema.events.id,
+          {} as Record<
+            number,
+            {
+              id: number;
+              name: string;
+              logo: string | null;
+              lat: number;
+              lon: number;
+              fullAddress: string | null;
+              events: (Omit<
+                NonNullable<(typeof locationsAndEvents)[number]["events"]>,
+                "locationId"
+              > & {
+                aoName: string | null;
+                aoLogo: string | null;
+              })[];
+            }
+          >,
         );
 
-      // Reduce the results into the expected format
-      const locationEvents = locationsAndEvents.reduce(
-        (acc, item) => {
-          const location = item.locations;
-          const event = item.events;
+        const lowBandwidthLocationEvents: LowBandwidthF3Marker[] =
+          Object.values(locationEvents).map((locationEvent) => [
+            locationEvent.id,
+            locationEvent.name,
+            locationEvent.logo,
+            locationEvent.lat,
+            locationEvent.lon,
+            locationEvent.fullAddress,
+            locationEvent.events
+              .sort(
+                (a, b) =>
+                  DayOfWeek.indexOf(a.dayOfWeek ?? "sunday") -
+                  DayOfWeek.indexOf(b.dayOfWeek ?? "sunday"),
+              )
+              .map((event) => [
+                event.id,
+                event.name,
+                event.dayOfWeek,
+                event.startTime,
+                event.eventTypes,
+                event.aoName,
+                event.aoLogo,
+                event.startDate,
+                event.endDate ?? null,
+              ]),
+          ]);
 
-          if (
-            !acc[location.id] &&
-            location.lat != null &&
-            location.lon != null
-          ) {
-            acc[location.id] = {
-              ...location,
-              name: location.name ?? "",
-              fullAddress: getFullAddress(location),
-              lat: location.lat,
-              lon: location.lon,
-              events: [],
-            };
-          }
+        return lowBandwidthLocationEvents;
+      }),
+    ),
 
-          if (event?.id != undefined) {
-            acc[location.id]?.events.push({
-              ...omit(event, "locationId"),
-              aoName: location.name ?? null,
-              aoLogo: location.logo,
-            });
-          }
-
-          return acc;
-        },
-        {} as Record<
-          number,
-          {
-            id: number;
-            name: string;
-            logo: string | null;
-            lat: number;
-            lon: number;
-            fullAddress: string | null;
-            events: (Omit<
-              NonNullable<(typeof locationsAndEvents)[number]["events"]>,
-              "locationId"
-            > & {
-              aoName: string | null;
-              aoLogo: string | null;
-            })[];
-          }
-        >,
-      );
-
-      const lowBandwidthLocationEvents: LowBandwidthF3Marker[] = Object.values(
-        locationEvents,
-      ).map((locationEvent) => [
-        locationEvent.id,
-        locationEvent.name,
-        locationEvent.logo,
-        locationEvent.lat,
-        locationEvent.lon,
-        locationEvent.fullAddress,
-        locationEvent.events
-          .sort(
-            (a, b) =>
-              DayOfWeek.indexOf(a.dayOfWeek ?? "sunday") -
-              DayOfWeek.indexOf(b.dayOfWeek ?? "sunday"),
-          )
-          .map((event) => [
-            event.id,
-            event.name,
-            event.dayOfWeek,
-            event.startTime,
-            event.eventTypes,
-            event.aoName,
-            event.aoLogo,
-            event.startDate,
-            event.endDate ?? null,
-          ]),
-      ]);
-
-      return lowBandwidthLocationEvents;
-    }),
   upcomingInstances: publicReadProcedure
     .route({
       method: "GET",
@@ -682,7 +685,7 @@ export const mapLocationRouter = os.router({
                 }),
               )
               .describe(
-                "AO and region context per visible upcoming instance, soonest first; populated only when the location has no series events",
+                "AO and region context per visible upcoming instance, soonest first, including locations with recurring workouts",
               ),
             fullAddress: z
               .string()
@@ -738,7 +741,7 @@ export const mapLocationRouter = os.router({
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 
-      const results = await ctx.db
+      const locationQuery = ctx.db
         .select({
           location: {
             id: schema.locations.id,
@@ -865,6 +868,10 @@ export const mapLocationRouter = os.router({
           regionOrg.id,
         );
 
+      const [results, upcomingInstanceOrgs] = await Promise.all([
+        locationQuery,
+        getInstanceOrgsAtLocation(ctx.db, input.locationId),
+      ]);
       const location = results[0]?.location;
       const events = results
         .map((r) => r.event)
@@ -878,31 +885,27 @@ export const mapLocationRouter = os.router({
         )
         .map((e) => ({ ...e, id: e.id, name: e.name }));
 
-      // No series events can still mean a live pin: upcomingInstances draws
-      // markers for one-off instances and away-from-home occurrences, which
-      // this query's events join never sees. The client builds those events
-      // itself, so only the AO/region context — normally reached through the
-      // series' org — has to come from the instances here. Those instances can
-      // belong to different orgs, so the context is returned per instance; the
-      // soonest one's also fills the location-level fields as the default.
-      const instanceOrgs = (
-        events.length === 0 && location
-          ? await getInstanceOrgsAtLocation(ctx.db, input.locationId)
-          : []
-      ).map((orgs) => ({
-        ...orgs,
-        // Same empty-string logo handling as the location-level fields below
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        parentLogo: orgs.parentLogo || null,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        regionLogo: orgs.regionLogo || null,
-      }));
-      const soonestInstanceOrgs = instanceOrgs[0];
+      // One-off instances and away-from-home occurrences can belong to different
+      // orgs even when this location also hosts a recurring workout. Return each
+      // visible instance's AO/region context for the selected workout. Only use
+      // the soonest instance as the location-level default when no series exists.
+      const instanceOrgs = (location ? upcomingInstanceOrgs : []).map(
+        (orgs) => ({
+          ...orgs,
+          // Same empty-string logo handling as the location-level fields below
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          parentLogo: orgs.parentLogo || null,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          regionLogo: orgs.regionLogo || null,
+        }),
+      );
+      const fallbackInstanceOrgs =
+        events.length === 0 ? instanceOrgs[0] : undefined;
 
       // No events and no instances → stale link (LEFT JOIN yields a
       // null-event row when all events fall outside the date window). Return
       // a message instead of throwing so the client shows a friendly panel.
-      if (!location || (events.length === 0 && !soonestInstanceOrgs)) {
+      if (!location || (events.length === 0 && !fallbackInstanceOrgs)) {
         return {
           location: null,
           message: "This workout is no longer scheduled.",
@@ -917,8 +920,8 @@ export const mapLocationRouter = os.router({
       }
 
       const { instanceId: _instanceId, ...defaultInstanceOrgs } =
-        soonestInstanceOrgs ?? {};
-      const { parentLogo, regionLogo } = soonestInstanceOrgs ?? location;
+        fallbackInstanceOrgs ?? {};
+      const { parentLogo, regionLogo } = fallbackInstanceOrgs ?? location;
       const locationWithEvents = {
         ...location,
         ...defaultInstanceOrgs,
@@ -1003,43 +1006,59 @@ export const mapLocationRouter = os.router({
         ),
       }),
     )
-    .handler(async ({ context: ctx }) => {
-      const ao = aliasedTable(schema.orgs, "ao");
-      const region = aliasedTable(schema.orgs, "region");
-      const regionsWithLocation = await ctx.db
-        .select({
-          id: region.id,
-          name: region.name,
-          locationId: schema.locations.id,
-          lat: schema.locations.latitude,
-          lon: schema.locations.longitude,
-          logo: ao.logoUrl,
-        })
-        .from(region)
-        .innerJoin(ao, eq(ao.parentId, region.id))
-        .innerJoin(schema.locations, eq(schema.locations.orgId, region.id))
-        .where(
-          and(eq(schema.locations.isActive, true), eq(region.isActive, true)),
-        );
+    .handler(({ context: ctx }) =>
+      mapDataFor(ctx.reqHeaders, "regionsWithLocation", async () => {
+        const region = aliasedTable(schema.orgs, "region");
+        // One row per region, decided in SQL. Joining every AO and every
+        // location of a region returned (AOs x locations) rows per region
+        // (~100k rows for ~560 regions on prod data) that were then deduped in
+        // JS with an O(n^2) findIndex: 3-5s of CPU per call that blocked every
+        // other request on the API instance. Picks are deterministic: the
+        // region's lowest-id active location with coordinates, and the logo of
+        // one of its child orgs, preferring one that has a logo.
+        const aoLogo = sql<string | null>`(
+        SELECT ${schema.orgs.logoUrl} FROM ${schema.orgs}
+        WHERE ${schema.orgs.parentId} = ${region.id}
+        ORDER BY (${schema.orgs.logoUrl} IS NULL OR ${schema.orgs.logoUrl} = ''), ${schema.orgs.id}
+        LIMIT 1
+      )`;
+        const rows = await ctx.db
+          .selectDistinctOn([region.id], {
+            id: region.id,
+            name: region.name,
+            locationId: schema.locations.id,
+            lat: schema.locations.latitude,
+            lon: schema.locations.longitude,
+            logo: aoLogo,
+          })
+          .from(region)
+          .innerJoin(schema.locations, eq(schema.locations.orgId, region.id))
+          .where(
+            and(
+              eq(schema.locations.isActive, true),
+              eq(region.isActive, true),
+              eq(region.orgType, "region"),
+              isNotNull(schema.locations.latitude),
+              isNotNull(schema.locations.longitude),
+              // Same population as before: regions with at least one child org.
+              exists(
+                sql`(SELECT 1 FROM ${schema.orgs} WHERE ${schema.orgs.parentId} = ${region.id})`,
+              ),
+            ),
+          )
+          .orderBy(region.id, schema.locations.id);
 
-      const uniqueRegionsWithLocation = regionsWithLocation
-        .map((rwl) =>
-          typeof rwl.lat === "number" && typeof rwl.lon === "number"
-            ? {
-                ...rwl,
-                lat: rwl.lat,
-                lon: rwl.lon,
-              }
-            : null,
-        )
-        .filter(isTruthy)
-        .filter(
-          (region, index, self) =>
-            index ===
-            self.findIndex((t) => t.id === region.id && t.name === region.name),
-        );
-      return { regionsWithLocation: uniqueRegionsWithLocation };
-    }),
+        const regionsWithLocation = rows
+          .map((rwl) =>
+            typeof rwl.lat === "number" && typeof rwl.lon === "number"
+              ? { ...rwl, lat: rwl.lat, lon: rwl.lon }
+              : null,
+          )
+          .filter(isTruthy);
+        return { regionsWithLocation };
+      }),
+    ),
+
   workoutCount: publicReadProcedure
     .route({
       method: "GET",
@@ -1152,10 +1171,10 @@ export const mapLocationRouter = os.router({
       z.object({
         regionId: z.preprocess(
           (value) =>
-            typeof value === "string" && /^\s*-?\d+(\.\d+)?\s*$/.test(value)
+            typeof value === "string" && /^\s*-?\d+(\.0+)?\s*$/.test(value)
               ? Number(value)
               : value,
-          z.number(),
+          z.number().int().min(1).max(2_147_483_647),
         ),
       }),
     )

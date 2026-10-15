@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/F3-Nation/f3-nation/compare/analytics@1.0.0...analytics@1.1.0) (2026-10-14)
+
+
+### Features
+
+* **analytics:** adding lifetime calcs to pv_pax and new pv_attendance ([#1179](https://github.com/F3-Nation/f3-nation/issues/1179)) ([61b7528](https://github.com/F3-Nation/f3-nation/commit/61b7528a7d8b16e849eb00257260289cb68439b9))
+
+
+### Bug Fixes
+
+* **analytics:** stop CTAS supervisor test flaking on loaded runners ([#1244](https://github.com/F3-Nation/f3-nation/issues/1244)) ([8aae558](https://github.com/F3-Nation/f3-nation/commit/8aae55822fff7e82c75d848ac1d19fb713459452))
+* **deps:** update python dependencies (non-major) ([#1214](https://github.com/F3-Nation/f3-nation/issues/1214)) ([d2f6e95](https://github.com/F3-Nation/f3-nation/commit/d2f6e950ce1b94a573b27852eb24a83629c0ff2d))
+
 ## [1.0.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.4.0...analytics@1.0.0) (2026-10-06)
 
 

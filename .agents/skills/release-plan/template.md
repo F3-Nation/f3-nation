@@ -14,16 +14,17 @@
 
 ## Who's who
 
-| Role         | What they do                                                                                                                        | Person                 |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Release lead | Runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys or changes the database. | @taterhead247 (Tackle) |
-| Monitor      | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                             | @BigGillyStyle (Crash) |
+| Role          | What they do                                                                                                                                                                                                                                                                          | Person                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Release lead  | Runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys the apps or migrates the database.                                                                                                                                         | @taterhead247 (Tackle) |
+| Monitor       | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                                                                                                                                                                               | @BigGillyStyle (Crash) |
+| Refresh admin | After a Production migration, re-runs the Staging refresh setup (the refresh job and its read-only database login). An Owner of the `f3data` Google Cloud project who can read the spuds database passwords in Secret Manager (`DB_SPUDS_PASSWORD_PROD`, `DB_SPUDS_PASSWORD_STAGING`) | @dnishiyama (Spuds)    |
 
 **Slack channel:** `#monorepo`. Announce the start there.
 
 ## Stop rule
 
-If anything under **Stop if** happens, post in `#monorepo` and pause. Don't approve any Production deployment. The Release lead and Monitor decide together what to do next, and only the Release lead changes the database.
+If anything under **Stop if** happens, post in `#monorepo` and pause. Don't approve any Production deployment. The Release lead and Monitor decide together what to do next, and only the Release lead deploys or migrates.
 
 ---
 
@@ -54,6 +55,9 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 - [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `git fetch origin main && git switch --detach {{RELEASE_SHA}} && pnpm install --frozen-lockfile`. Owner: Release lead
   - **Expected:** `git rev-parse HEAD` prints `{{RELEASE_SHA}}`, and `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
   - **Stop if:** the tree isn't clean, fetch/checkout/install fails, the SHA differs, or a different file prints.
+- [ ] **Start the database proxy** in a second terminal and leave it running: `{{PROXY_COMMAND}}`. The first time on a machine, run `gcloud auth application-default login` before it. Owner: Release lead
+  - **Expected:** it prints `ready for new connections`.
+  - **Stop if:** it exits or prints an error instead. Fix the proxy before migrating; the migration can't connect without it.
 - [ ] **Run the migration** from the repository root: `pnpm db:migrate:{{staging or prod}}` (not `pnpm db:migrate:local`, which only migrates a local database). It reads the database login from Secret Manager, checks the checkout's migrations are main's and agree with the database, lists the pending migrations, and asks you to type the database name. Owner: Release lead
   - **Expected:** it lists the migration in `{{NEWEST_MIGRATION_FILE}}` (and any other migrations in this release) as pending, nothing else; lines starting `note:` are informational. Type `{{DATABASE_NAME: f3_staging or f3_prod}}` and it ends with `Done: {{DATABASE_NAME}} is at <that migration>.` If nothing is pending, the migration already ran: skip to the check query.
   - **Stop if:** it prints `REFUSED`, or lists a migration this release doesn't include. Don't work around a refusal: post it in `#monorepo` and pause.
@@ -61,6 +65,12 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Expected:** {{WHAT_ERRORS_APPEAR_BETWEEN_DEPLOY_AND_MIGRATION_OR_"none"}}
   - **Stop if:** the migration shows an error, or the check query doesn't match. Retry **once**; if it fails again, stop.
 - [ ] **Return to your branch:** `git switch -`. Owner: Release lead
+
+<!-- OPTIONAL (Production only, when there is a migration): -->
+
+- [ ] **Update the Staging refresh** for the new database, before the next refresh. From the repository root, `git status --porcelain` must print nothing; then run `git fetch origin main && git switch --detach {{RELEASE_SHA}}`, then `STAGING_REFRESH_RUNNERS="<same runners as last time>" bash tooling/scripts/staging-refresh/setup.sh` (the runner list isn't in the repo; the Refresh admin has it), then `git switch -`. No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
+  - **Expected:** it ends with `Done. Image …` and no errors. The note about restarting the slackbot that it prints every time is informational.
+  - **If it fails** (or prints `WARNING: the checkout has uncommitted changes`): this item is outside the Stop rule and doesn't hold up the release. Post it in `#monorepo` so the next Staging refresh waits until it's fixed.
 
 <!-- Production: drop the "Create the test plan" step below and renumber. -->
 

@@ -10,6 +10,8 @@ import { vi } from "vitest";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
 const mockLimit = vi.hoisted(() => vi.fn());
+const mockMaybeNotifyFirstEventForRegion = vi.hoisted(() => vi.fn());
+const mockMaybeNotifyRegionInABox = vi.hoisted(() => vi.fn());
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -17,8 +19,14 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
+vi.mock("../lib/first-event-service", () => ({
+  maybeNotifyFirstEventForRegion: mockMaybeNotifyFirstEventForRegion,
+  maybeNotifyRegionInABox: mockMaybeNotifyRegionInABox,
+}));
+
 import { eq, inArray, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { waitForEventRegionNotificationTasks } from "./event";
 import {
   cleanup,
   createAdminSession,
@@ -49,6 +57,8 @@ describe("Event Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMaybeNotifyFirstEventForRegion.mockResolvedValue(undefined);
+    mockMaybeNotifyRegionInABox.mockResolvedValue(undefined);
     // Reset rate limiter to allow requests
     mockLimit.mockResolvedValue({
       success: true,
@@ -212,6 +222,121 @@ describe("Event Router", () => {
     if (eventTag) createdEventTagIds.push(eventTag.id);
     return eventTag;
   };
+
+  it.each(["event", "map.event"] as const)(
+    "%s.all provides stable pagination for tied values and preserves sort precedence",
+    async (routerName) => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const ao = await createTestAO(region.id);
+      if (!ao) throw new Error("Failed to create test AO");
+      const prefix = `Pagination ${uniqueId()}`;
+      const events = await db
+        .insert(schema.events)
+        .values(
+          Array.from({ length: 40 }, (_, index) => ({
+            name: `${prefix} ${index % 2 ? "Alpha" : "Zulu"}`,
+            orgId: ao.id,
+            locationId: null,
+            dayOfWeek: "monday" as const,
+            startTime: "0530",
+            isActive: index % 4 < 2,
+            isPrivate: false,
+            highlight: false,
+            startDate: "2026-01-01",
+          })),
+        )
+        .returning({
+          id: schema.events.id,
+          name: schema.events.name,
+          isActive: schema.events.isActive,
+        });
+      createdEventIds.push(...events.map((event) => event.id));
+      // Move a tied tuple so physical row order cannot stand in for ID order.
+      await db
+        .update(schema.events)
+        .set({ name: sql`${schema.events.name}` })
+        .where(eq(schema.events.id, events[0]!.id));
+
+      const byId = [...events].sort((a, b) => a.id - b.id);
+      const cases: {
+        sorting: { id: string; desc: boolean }[] | undefined;
+        expected: number[];
+      }[] = [
+        { sorting: [], expected: byId.map((event) => event.id) },
+        {
+          sorting: undefined,
+          expected: byId.map((event) => event.id).reverse(),
+        },
+        {
+          sorting: [
+            { id: "parent", desc: false },
+            { id: "id", desc: true },
+          ],
+          expected: byId.map((event) => event.id).reverse(),
+        },
+      ];
+      for (const desc of [false, true]) {
+        const fields =
+          routerName === "map.event"
+            ? ["parent", "status", "name"]
+            : ["parent", "status"];
+        for (const id of fields) {
+          cases.push({
+            sorting: [{ id, desc }],
+            expected: [...byId]
+              .sort((a, b) => {
+                const primary =
+                  id === "status"
+                    ? Number(a.isActive) - Number(b.isActive)
+                    : id === "name"
+                      ? a.name < b.name
+                        ? -1
+                        : a.name > b.name
+                          ? 1
+                          : 0
+                      : 0;
+                return primary * (desc ? -1 : 1);
+              })
+              .map((event) => event.id),
+          });
+        }
+      }
+
+      const client = createTestClient();
+      const all =
+        routerName === "event" ? client.event.all : client.map.event.all;
+      for (const { sorting, expected } of cases) {
+        for (const pageSize of [5, 7]) {
+          const paged: number[] = [];
+          for (
+            let pageIndex = 0;
+            pageIndex < Math.ceil(40 / pageSize);
+            pageIndex++
+          ) {
+            const page = await all({
+              searchTerm: prefix,
+              statuses: ["active", "inactive"],
+              sorting,
+              pageIndex,
+              pageSize,
+            });
+            expect(page.totalCount).toBe(40);
+            paged.push(...page.events.map((event) => event.id));
+          }
+          const context = `${routerName}.all sorting=${JSON.stringify(sorting)}, pageSize=${pageSize}`;
+          expect
+            .soft({ context, ids: paged })
+            .toEqual({ context, ids: expected });
+          expect.soft({ context, uniqueCount: new Set(paged).size }).toEqual({
+            context,
+            uniqueCount: 40,
+          });
+        }
+      }
+    },
+  );
 
   describe("all", () => {
     it("should include events without a location (locationId null)", async () => {
@@ -2970,6 +3095,334 @@ describe("Event Router", () => {
 
       expect(result.event?.id).toBe(testEvent.id);
       expect(result.event?.name).toBe(updatedName);
+    });
+
+    it("notifies after an existing event moves across regions", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) return;
+      const aoA = await createTestAO(regionA.id);
+      const aoB = await createTestAO(regionB.id);
+      const eventType = await createTestEventType();
+      if (!aoA || !aoB || !eventType) return;
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Move Event ${uniqueId()}`,
+          orgId: aoA.id,
+          dayOfWeek: "monday",
+          startDate: nextFutureMonday(1),
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+
+      await createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: aoB.id,
+        regionId: regionB.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: null,
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      await waitForEventRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        regionB.id,
+      );
+    });
+
+    it("notifies when an event moves from an AO with no parent region", async () => {
+      const adminSession = await createAdminSession();
+      const destinationRegion = await createTestRegion();
+      if (!destinationRegion) return;
+      const [sourceAo] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Unparented AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: null,
+          isActive: true,
+        })
+        .returning();
+      if (!sourceAo) return;
+      createdOrgIds.push(sourceAo.id);
+      const destinationAo = await createTestAO(destinationRegion.id);
+      const eventType = await createTestEventType();
+      if (!destinationAo || !eventType) return;
+      if (adminSession.roles && adminSession.user?.roles) {
+        for (const ao of [sourceAo, destinationAo]) {
+          const role = {
+            orgId: ao.id,
+            orgName: ao.name,
+            roleName: "editor" as const,
+          };
+          adminSession.roles.push(role);
+          adminSession.user.roles.push(role);
+        }
+      }
+      await mockAuthWithSession(adminSession);
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Unparented AO Event ${uniqueId()}`,
+          orgId: sourceAo.id,
+          dayOfWeek: "monday",
+          startDate: nextFutureMonday(1),
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+
+      await createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: destinationAo.id,
+        regionId: destinationRegion.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: null,
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      await waitForEventRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        destinationRegion.id,
+      );
+    });
+
+    it("does not notify for same-region moves or unrelated updates", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      if (!region) return;
+      const aoA = await createTestAO(region.id);
+      const aoB = await createTestAO(region.id);
+      const eventType = await createTestEventType();
+      if (!aoA || !aoB || !eventType) return;
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Same Region Move ${uniqueId()}`,
+          orgId: aoA.id,
+          dayOfWeek: "monday",
+          startDate: nextFutureMonday(1),
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+      const client = createTestClient();
+      const input = {
+        id: event.id,
+        name: event.name,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday" as const,
+        startTime: "0530",
+        endTime: null,
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly" as const,
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      };
+
+      await client.event.crupdate({ ...input, aoId: aoB.id });
+      await waitForEventRegionNotificationTasks();
+      await client.event.crupdate({
+        ...input,
+        aoId: aoB.id,
+        name: `${event.name} edited`,
+      });
+      await waitForEventRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
+    it("classifies the destination region after waiting for a destination AO move", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const sourceRegion = await createTestRegion();
+      const initialDestinationRegion = await createTestRegion();
+      if (!sourceRegion || !initialDestinationRegion) return;
+      const sourceAo = await createTestAO(sourceRegion.id);
+      const destinationAo = await createTestAO(initialDestinationRegion.id);
+      const eventType = await createTestEventType();
+      if (!sourceAo || !destinationAo || !eventType) return;
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `Concurrent AO move ${uniqueId()}`,
+          orgId: sourceAo.id,
+          dayOfWeek: "monday",
+          startDate: nextFutureMonday(1),
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!event) return;
+      createdEventIds.push(event.id);
+
+      let signalLockHeld!: (pid: number) => void;
+      let releaseLock!: () => void;
+      const lockHeld = new Promise<number>((resolve) => {
+        signalLockHeld = resolve;
+      });
+      const waitToReleaseLock = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+      });
+      const lockTransaction = db.transaction(async (tx) => {
+        await tx
+          .update(schema.orgs)
+          .set({ parentId: sourceRegion.id })
+          .where(eq(schema.orgs.id, destinationAo.id));
+        const lockPidRow = (
+          await tx.execute<{ pid: number }>(sql`
+            SELECT pg_backend_pid() AS pid
+          `)
+        )[0];
+        if (!lockPidRow) throw new Error("Failed to identify lock holder");
+        signalLockHeld(lockPidRow.pid);
+        await waitToReleaseLock;
+      });
+
+      const blockerPid = await lockHeld;
+      const update = createTestClient().event.crupdate({
+        id: event.id,
+        name: event.name,
+        aoId: destinationAo.id,
+        regionId: sourceRegion.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: null,
+        startDate: event.startDate,
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: true,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+
+      let isWaitingForAoLock = false;
+      try {
+        for (let attempt = 0; attempt < 500 && !isWaitingForAoLock; attempt++) {
+          const activity = (await db.execute(sql`
+            SELECT wait_event_type, query
+            FROM pg_stat_activity
+            WHERE pid <> pg_backend_pid()
+              AND wait_event_type = 'Lock'
+              AND query ILIKE '%no key update%'
+              AND pg_blocking_pids(pid) @> ARRAY[${blockerPid}]::int[]
+          `)) as unknown as {
+            wait_event_type: string | null;
+            query: string;
+          }[];
+          isWaitingForAoLock = activity.some(
+            ({ wait_event_type, query }) =>
+              wait_event_type === "Lock" && /no key update/i.test(query),
+          );
+          if (!isWaitingForAoLock) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+        }
+      } finally {
+        releaseLock();
+      }
+
+      const [lockResult, updateResult] = await Promise.allSettled([
+        lockTransaction,
+        update,
+      ]);
+      await waitForEventRegionNotificationTasks();
+      expect(lockResult.status).toBe("fulfilled");
+      expect(isWaitingForAoLock).toBe(true);
+      expect(updateResult.status).toBe("fulfilled");
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+      const [updatedEvent] = await db
+        .select({ orgId: schema.events.orgId })
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      expect(updatedEvent?.orgId).toBe(destinationAo.id);
+    });
+
+    it("preserves creation notification for inactive recurring events", async () => {
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      const eventType = await createTestEventType();
+      if (!ao || !eventType) return;
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+
+      const created = await createTestClient().event.crupdate({
+        name: `Inactive Series ${uniqueId()}`,
+        aoId: ao.id,
+        regionId: region.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        endTime: null,
+        startDate: nextFutureMonday(1),
+        endDate: null,
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: null,
+        highlight: false,
+        isActive: false,
+        eventTypeIds: [eventType.id],
+        email: null,
+      });
+      if (created.event) createdEventIds.push(created.event.id);
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyFirstEventForRegion).toHaveBeenCalledWith(
+          expect.anything(),
+          ao.id,
+          region.id,
+        ),
+      );
     });
 
     it("should enforce editor permissions", async () => {
