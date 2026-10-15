@@ -84,7 +84,9 @@ function OnboardingForm() {
   }, [router, callbackUrl]);
 
   useEffect(() => {
-    fetch("/api/regions")
+    // Bounded wait: a request that never settles would otherwise hold the
+    // form on "Loading..." instead of falling back to no region picker.
+    fetch("/api/regions", { signal: AbortSignal.timeout(5000) })
       .then((res) => res.json())
       .then((data: Region[]) => setRegions(data))
       .catch(() => {
