@@ -121,7 +121,7 @@
     },
     "obfuscate-db": {
       "cache": false,
-      "env": ["OBFUSCATION_SALT"]
+      "env": ["OBFUSCATION_SALT", "OBFUSCATE_VERIFY_POSTGRES_IMAGE"]
     },
     "staging-refresh": {
       "cache": false,
