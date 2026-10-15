@@ -427,7 +427,8 @@ pnpm db:load:snapshot --file ./snap.tar   # load a snapshot you already have
 pnpm db:load:snapshot --url https://...   # load from another https URL
 ```
 
-- **It replaces data.** The kept tables are truncated and restored in one
+- **It replaces data.** The kept tables are truncated (with `CASCADE`, so
+  tables that reference them are emptied too) and restored in one
   transaction, so the seed data in them is gone. The dev logins, API keys and
   OAuth clients are re-created afterwards, so you can still sign in locally.
 - **Run it on an up-to-date local database.** Docker must be running and
@@ -439,8 +440,8 @@ pnpm db:load:snapshot --url https://...   # load from another https URL
   when it was exported, and the loader warns if it is more than 30 days old.
 - **Worktree slots.** In a `--slot N` checkout the load goes into that slot's
   own database container.
-- **Not published yet?** A 404 means no snapshot has been published, or it
-  hasn't been signed off for sharing yet; keep the seed data.
+- **Not published yet?** A 404 means no snapshot has been published yet;
+  keep the seed data.
 
 To go back to the fake data, run `pnpm db:reset`, then `pnpm db:migrate:local`
 and `pnpm db:seed:local`.

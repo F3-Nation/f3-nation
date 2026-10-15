@@ -261,20 +261,36 @@ runs production operations:
    the `dev-snapshots/` write access and the image is current.
 2. Execute the job with `--args=--snapshot-only` and confirm the last log line
    is `DEV SNAPSHOT: OK`.
-3. Confirm the access is scoped. Writing under another prefix with the job's
-   service account must be refused:
+3. Confirm the access is scoped, acting as the job's service account. This
+   needs `roles/iam.serviceAccountTokenCreator` on it (grant it to yourself
+   temporarily; without it every command below fails at the token step, which
+   looks like a refusal but proves nothing). First a positive control, which
+   must succeed and be cleaned up, then the write that must be refused:
 
    ```bash
+   SA=staging-refresh@f3data.iam.gserviceaccount.com
    echo x >/tmp/probe.txt
-   gcloud storage cp /tmp/probe.txt gs://f3-public-images/not-dev-snapshots/probe.txt \
-     --impersonate-service-account=staging-refresh@f3data.iam.gserviceaccount.com
+   gcloud storage cp /tmp/probe.txt gs://f3-public-images/dev-snapshots/probe.txt --impersonate-service-account=$SA
+   gcloud storage rm gs://f3-public-images/dev-snapshots/probe.txt --impersonate-service-account=$SA
+   gcloud storage cp /tmp/probe.txt gs://f3-public-images/not-dev-snapshots/probe.txt --impersonate-service-account=$SA
    ```
 
-   Expect a 403. Delete the probe object if it was somehow created.
+   The last command must fail with a 403 that names `storage.objects.create`
+   (or `storage.objects.delete`) on `not-dev-snapshots/probe.txt`, not a
+   token or `getAccessToken` error. If it succeeds, remove the object
+   yourself (the service account can't delete outside its prefix) and stop.
 
 4. Attach the tar's `manifest.json` and the job log's leak-scan output to the
-   tracking issue for the data-privacy reviewer's sign-off. The URL is not
-   shared with developers until they have signed off.
+   tracking issue for the data-privacy reviewer's sign-off.
+
+**Publishing is public.** The job writes straight to a world-readable
+bucket, and the URL is in this public repo, so the tar is downloadable from
+the moment step 2 finishes; sign-off happens after that, and not announcing
+the link is the only thing holding it back. If the leak scan was wrong, delete
+the object right away (`gcloud storage rm`, as a bucket admin) and fix the
+cause before publishing again. If the bucket has object versioning on,
+earlier generations stay readable by generation number until they are
+deleted.
 
 The delete permission exists only so a run can replace the previous
 snapshot. An IAM condition constrains the object name, not how the client
@@ -282,6 +298,13 @@ writes it, so the service account could delete any object under
 `dev-snapshots/` outside the job's flow. That prefix holds nothing else and
 the snapshot is regenerated on demand, so the exposure is accepted. Never
 widen the grant beyond that prefix.
+
+Anyone who can act as the service account can publish arbitrary content
+to that URL, which developers then restore into their local databases:
+members of `STAGING_REFRESH_RUNNERS` (job overrides can set the command's
+environment and arguments), whoever can push the job's image, and anyone
+with token-creator rights on the service account. The tar carries no
+signature beyond its manifest, so keep those groups small.
 
 Outside Cloud Run the snapshot is never uploaded. Pass an absolute
 `--snapshot-out <file>` to write it locally instead:
