@@ -10,8 +10,8 @@ import Image from "next/image";
 
 import { detectPhoneCountry } from "~/lib/phone";
 import { PhoneField } from "~/app/components/PhoneField";
-import { RegionPicker } from "~/app/components/RegionPicker";
-import type { Region } from "~/app/components/RegionPicker";
+import { RegionPicker } from "~/app/components/region-picker";
+import type { Region } from "~/app/components/region-picker";
 import { isValidCallbackUrl } from "~/lib/callback-url";
 import { authClient } from "~/lib/better-auth-client";
 

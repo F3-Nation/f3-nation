@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import Image from "next/image";
 
-import { RegionPicker } from "~/app/components/RegionPicker";
-import type { Region } from "~/app/components/RegionPicker";
+import { RegionPicker } from "~/app/components/region-picker";
+import type { Region } from "~/app/components/region-picker";
 import { isValidCallbackUrl } from "~/lib/callback-url";
 
 export default function OnboardingPage() {
@@ -133,7 +133,7 @@ function OnboardingForm() {
           f3Name,
           firstName,
           lastName,
-          ...(homeRegionId && { homeRegionId }),
+          ...(regions.length > 0 && homeRegionId && { homeRegionId }),
         }),
       });
 

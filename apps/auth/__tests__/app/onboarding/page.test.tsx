@@ -294,4 +294,21 @@ describe("home region", () => {
       body: JSON.stringify(profile),
     });
   });
+
+  it("doesn't send a saved region it can't show when the list can't load", async () => {
+    prefill({ ...profile, homeRegionId: 99, isExistingUser: true });
+    regionsFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+    await renderForm();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    });
+  });
 });
