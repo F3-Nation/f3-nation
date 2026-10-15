@@ -8931,7 +8931,9 @@
             "name": "regionId",
             "required": true,
             "schema": {
-              "type": "number"
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
             }
           }
         ],

@@ -48,6 +48,7 @@ import {
   checkGitState,
   checkPlan,
   confirmationMatches,
+  connectionHint,
   DEFAULT_SECRET_PROJECT,
   ENVIRONMENTS,
   isMainRepoUrl,
@@ -298,23 +299,6 @@ function readJournal(): JournalEntry[] {
   return journal.entries.map((e) => ({ tag: e.tag, when: e.when }));
 }
 
-function connectionHint(error: unknown): string {
-  const msg = error instanceof Error ? error.message : String(error);
-  if (msg.includes("ECONNREFUSED")) {
-    return (
-      "Nothing is listening at the address in the migration URL. If it " +
-      "points at 127.0.0.1, start the Cloud SQL proxy first (docs/db-migrations.md)."
-    );
-  }
-  if (msg.includes("password authentication failed")) {
-    return "The database rejected the login in the migration URL. Ask an admin to check the secret.";
-  }
-  if (/timeout|ETIMEDOUT/i.test(msg)) {
-    return "Couldn't reach the database (timed out). Is your IP allowed, or is the proxy running?";
-  }
-  return "Couldn't connect to the database.";
-}
-
 async function confirm(database: string, count: number): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
@@ -420,7 +404,7 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
       [current] = await ro<{ db: string; user: string }[]>`
         SELECT current_database() AS db, current_user AS "user"`;
     } catch (e) {
-      throw new Refusal(connectionHint(e));
+      throw new Refusal(connectionHint(e, url, env.instance));
     }
     if (current?.db !== database) {
       throw new Refusal(
