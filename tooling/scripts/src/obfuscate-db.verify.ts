@@ -176,10 +176,14 @@ async function startDockerPostgres(): Promise<() => void> {
     "postgres:18",
   ]);
   for (let i = 0; ; i++) {
+    // -h forces TCP: the image's init-time temp server answers on the socket
+    // only, then restarts, which would reset the host's first connection.
     const ready = spawnSync("docker", [
       "exec",
       CONTAINER,
       "pg_isready",
+      "-h",
+      "127.0.0.1",
       "-U",
       "f3local",
       "-d",
