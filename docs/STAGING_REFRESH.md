@@ -247,9 +247,9 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
      (`migration.tag`), the `event_instances` window, and the row count and
      column names of every table.
 
-The last line is `DEV SNAPSHOT: OK` or `DEV SNAPSHOT FAILED — nothing was
-published; staging was not touched.` As for a refresh, the logs hold
-counts, never row data.
+The run ends with `DEV SNAPSHOT: OK` or `DEV SNAPSHOT FAILED — nothing was
+published; staging was not touched.`, followed by a temp-file cleanup line.
+As for a refresh, the logs hold counts, never row data.
 
 ### Publishing the first snapshot
 
@@ -259,8 +259,8 @@ runs production operations:
 
 1. Run the full setup (not `--image-only`) so the job's service account has
    the `dev-snapshots/` write access and the image is current.
-2. Execute the job with `--args=--snapshot-only` and confirm the last log line
-   is `DEV SNAPSHOT: OK`.
+2. Execute the job with `--args=--snapshot-only` and confirm the execution's
+   logs contain `DEV SNAPSHOT: OK`.
 3. Confirm the access is scoped, acting as the job's service account. This
    needs `roles/iam.serviceAccountTokenCreator` on it (grant it to yourself
    temporarily; without it every command below fails at the token step, which

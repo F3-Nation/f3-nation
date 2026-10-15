@@ -414,7 +414,7 @@ pnpm db:load:snapshot # replace the seed data with the sanitized Prod snapshot
 ### Load the sanitized Prod snapshot
 
 The default seed is a small fake dataset. If you want real-shaped data (Prod's
-org hierarchy, events and event instances from 30 days back to 90 days ahead),
+org hierarchy and events, plus event instances from 30 days back to 90 days ahead),
 load the sanitized Prod snapshot instead. Emails, phone numbers and Slack ids
 are replaced with fakes, private events are dropped, and free-text fields such
 as backblasts and user profiles are cleared. How it is produced and checked is

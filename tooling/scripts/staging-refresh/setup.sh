@@ -69,8 +69,10 @@ SNAPSHOT_PREFIX=dev-snapshots/
 SNAPSHOT_ROLE=f3SnapshotPublisher
 SNAPSHOT_ROLE_PERMISSIONS=storage.objects.create,storage.objects.delete
 SNAPSHOT_CONDITION_TITLE=dev-snapshots-prefix
+# Changing the prefix or condition leaves the old binding in place: remove it by hand first.
 SNAPSHOT_CONDITION="resource.name.startsWith(\"projects/_/buckets/${SNAPSHOT_BUCKET}/objects/${SNAPSHOT_PREFIX}\")"
 
+SNAPSHOT_BIND_PENDING=0
 IMAGE_ONLY=0
 [ "${1:-}" = "--image-only" ] && IMAGE_ONLY=1
 if [ "$IMAGE_ONLY" = 0 ]; then
@@ -185,15 +187,15 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   say "3b. write access to gs://$SNAPSHOT_BUCKET/$SNAPSHOT_PREFIX only"
   # An IAM condition on a bucket needs uniform bucket-level access. Never flipped here:
   # it turns off object ACLs, which the apps' image uploads may rely on.
-  if ubla="$(gcloud storage buckets describe "gs://$SNAPSHOT_BUCKET" \
-    --format='value(uniform_bucket_level_access)' 2>/dev/null)"; then
-    if ! printf '%s' "$ubla" | grep -qi '^true$'; then
-      echo "gs://$SNAPSHOT_BUCKET doesn't use uniform bucket-level access, which the IAM condition needs." >&2
-      echo "Enabling it disables object ACLs: check the apps that upload images first." >&2
-      exit 1
-    fi
-  else
-    echo "can't read gs://$SNAPSHOT_BUCKET's settings; skipping the uniform bucket-level access check"
+  if ! ubla="$(gcloud storage buckets describe "gs://$SNAPSHOT_BUCKET" \
+    --format='value(uniform_bucket_level_access)')"; then
+    echo "can't read gs://$SNAPSHOT_BUCKET's settings, so the uniform bucket-level access check can't run." >&2
+    exit 1
+  fi
+  if ! printf '%s' "$ubla" | grep -qi '^true$'; then
+    echo "gs://$SNAPSHOT_BUCKET doesn't use uniform bucket-level access, which the IAM condition needs." >&2
+    echo "Enabling it disables object ACLs: check the apps that upload images first." >&2
+    exit 1
   fi
   if gcloud iam roles describe "$SNAPSHOT_ROLE" --project "$PROJECT" >/dev/null 2>&1; then
     gcloud iam roles update "$SNAPSHOT_ROLE" --project "$PROJECT" \
@@ -208,11 +210,18 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   SNAPSHOT_BIND=(gcloud storage buckets add-iam-policy-binding "gs://$SNAPSHOT_BUCKET"
     --member "serviceAccount:$SA" --role "projects/$PROJECT/roles/$SNAPSHOT_ROLE"
     --condition "expression=$SNAPSHOT_CONDITION,title=$SNAPSHOT_CONDITION_TITLE")
-  if "${SNAPSHOT_BIND[@]}" >/dev/null; then
+  if err="$("${SNAPSHOT_BIND[@]}" 2>&1 >/dev/null)"; then
     echo "$SNAPSHOT_ROLE on gs://$SNAPSHOT_BUCKET/$SNAPSHOT_PREFIX for $SA"
   else
-    echo "WARNING: couldn't bind $SNAPSHOT_ROLE on gs://$SNAPSHOT_BUCKET (needs storage.buckets.setIamPolicy)."
-    echo "The role exists; ask someone who has that permission to run:"
+    SNAPSHOT_BIND_PENDING=1
+    echo "WARNING: couldn't bind $SNAPSHOT_ROLE on gs://$SNAPSHOT_BUCKET:" >&2
+    printf '%s\n' "$err" >&2
+    case "$err" in
+      *PERMISSION_DENIED*|*setIamPolicy*)
+        echo "That needs storage.buckets.setIamPolicy; ask someone who has it to run:" ;;
+      *)
+        echo "Not obviously a permission problem (a just-created role can take a minute to propagate); re-run this script, or run:" ;;
+    esac
     echo
     printf '  %q' "${SNAPSHOT_BIND[@]}"
     echo
@@ -315,6 +324,11 @@ PY
       --project "$PROJECT" --quiet
     echo "deleted the old view $OLD_LOG_VIEW on _Default"
   fi
+fi
+
+if [ "$SNAPSHOT_BIND_PENDING" = 1 ]; then
+  echo
+  echo "WARNING: the dev-snapshot upload will fail until the bucket binding above is applied."
 fi
 
 say "7. not done here"
