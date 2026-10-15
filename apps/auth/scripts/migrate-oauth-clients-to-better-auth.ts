@@ -25,12 +25,13 @@
  * resolved in apps/auth/src/lib/better-auth.ts: give it referenceId =
  * "f3-nation" and no userId, so any current or future nation admin passes
  * oauth-provider's ownership check and can call rotateClientSecret on it —
- * see that file's F3_NATION_CLIENT_REFERENCE_ID and clientReference. Setting
- * a real userId instead would defeat that shared ownership, since
+ * see lib/oauth-client-reference.ts and clientReference in better-auth.ts.
+ * Setting a real userId instead would defeat that shared ownership, since
  * oauth-provider checks userId before referenceId — a client with a userId
- * set is pinned to that one individual, not any nation admin. Not solved by
- * this script yet: writing referenceId on migrated rows is Phase 4's
- * provisioning work, tracked separately.
+ * set is pinned to that one individual, not any nation admin. This script
+ * writes that referenceId on every row it inserts. Rows already present in
+ * better_auth_oauth_client are skipped, not updated, so a row inserted by an
+ * earlier run of this script keeps whatever referenceId it was given then.
  *
  * Usage:
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth [--env local|staging|prod]
@@ -47,6 +48,8 @@ import { eq, inArray } from "drizzle-orm";
 import postgres from "postgres";
 
 import * as _schema from "@acme/db/schema/schema";
+
+import { F3_NATION_CLIENT_REFERENCE_ID } from "../src/lib/oauth-client-reference";
 
 const { oauthClients, betterAuthOauthClient } = (
   "default" in _schema ? _schema.default : _schema
@@ -191,6 +194,9 @@ async function main() {
       disabled: !client.isPublic,
       tokenEndpointAuthMethod: client.isPublic ? "none" : "client_secret_basic",
       applicationType: client.isPublic ? ("native" as const) : ("web" as const),
+      // Every migrated client is F3-managed: this shared owner lets any nation
+      // admin read, list and rotate its secret (see the file comment).
+      referenceId: F3_NATION_CLIENT_REFERENCE_ID,
       requirePKCE: true, // matches the hand-rolled server's unconditional PKCE requirement
       redirectUris,
       scopes: scopeString.split(/\s+/),
