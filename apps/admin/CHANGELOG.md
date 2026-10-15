@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.8.0...admin@2.9.0) (2026-10-14)
+
+
+### Features
+
+* **admin:** support territory parents and region ancestry filters ([#1175](https://github.com/F3-Nation/f3-nation/issues/1175)) ([eab0386](https://github.com/F3-Nation/f3-nation/commit/eab038617f1a1804ea622f56543a70e75c1d0d68))
+* **db,shared,admin:** add password_manager and password_reader roles ([#1180](https://github.com/F3-Nation/f3-nation/issues/1180)) ([e69f45d](https://github.com/F3-Nation/f3-nation/commit/e69f45d92f88ed1248a86cdce716e05a66389b85))
+* **repo,db:** run several checkouts side by side with local:setup --slot ([#1246](https://github.com/F3-Nation/f3-nation/issues/1246)) ([7a1377f](https://github.com/F3-Nation/f3-nation/commit/7a1377f3ba83dd5eccae3b322947994f3379205e))
+
+
+### Bug Fixes
+
+* **admin:** keep org ID input controlled ([#1186](https://github.com/F3-Nation/f3-nation/issues/1186)) ([29b88ea](https://github.com/F3-Nation/f3-nation/commit/29b88ea0a48e094877f5c886bd907c72f3ad87e7))
+* **admin:** keep user dialog ID input controlled ([#1198](https://github.com/F3-Nation/f3-nation/issues/1198)) ([944e519](https://github.com/F3-Nation/f3-nation/commit/944e519353cb07b2a3750905fd3f36904001467d))
+* **admin:** let region admins assign roles when creating an API key ([#1141](https://github.com/F3-Nation/f3-nation/issues/1141)) ([1c4b461](https://github.com/F3-Nation/f3-nation/commit/1c4b461d4b8c01a590b540795684e370a335ae91))
+* **admin:** restrict API key management to admins ([#1210](https://github.com/F3-Nation/f3-nation/issues/1210)) ([dd646fc](https://github.com/F3-Nation/f3-nation/commit/dd646fc61f6f5e8d79c407004c42189daff99d60))
+* **admin:** retain inactive organization parents ([#1241](https://github.com/F3-Nation/f3-nation/issues/1241)) ([262d23b](https://github.com/F3-Nation/f3-nation/commit/262d23b2cc3d5f01dc04e285715352a55b1d1c35))
+* **scripts:** inherit series privacy when dropping private-only locations ([#1212](https://github.com/F3-Nation/f3-nation/issues/1212)) ([b105bed](https://github.com/F3-Nation/f3-nation/commit/b105bed35d23a38121bb84a0e0776c7ff34eec86))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.14.0
+    * @acme/shared bumped to 0.5.0
+    * @acme/ui bumped to 0.2.2
+    * @acme/validators bumped to 0.5.0
+
 ## [2.8.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.7.0...admin@2.8.0) (2026-10-10)
 
 

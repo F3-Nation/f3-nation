@@ -110,15 +110,6 @@ export const WorkoutDetailsContent = ({
     isUnavailable: isUpcomingInstancesError,
   } = useUpcomingInstances();
 
-  const selectedSeriesId = useMemo(() => {
-    if (providedEventId == null) return null;
-    if (providedEventId > 0) return providedEventId;
-    return (
-      upcomingInstancesData?.find((i) => i.id === -providedEventId)?.seriesId ??
-      null
-    );
-  }, [providedEventId, upcomingInstancesData]);
-
   const locationInstances = useMemo(() => {
     const currentLocation = results?.location;
     if (!upcomingInstancesData || !currentLocation) return [];
@@ -135,6 +126,14 @@ export const WorkoutDetailsContent = ({
           a.id - b.id,
       );
   }, [upcomingInstancesData, results?.location]);
+
+  const selectedSeriesId = useMemo(() => {
+    if (providedEventId == null) return null;
+    if (providedEventId > 0) return providedEventId;
+    return (
+      locationInstances.find((i) => i.id === -providedEventId)?.seriesId ?? null
+    );
+  }, [providedEventId, locationInstances]);
 
   const baseEvents = useMemo(
     () => results?.location?.events ?? [],
@@ -194,10 +193,10 @@ export const WorkoutDetailsContent = ({
 
   const selectedInstance = useMemo(() => {
     if (selectedEventId == null || selectedEventId >= 0) return undefined;
-    return upcomingInstancesData?.find(
+    return locationInstances.find(
       (instance) => instance.id === -selectedEventId,
     );
-  }, [selectedEventId, upcomingInstancesData]);
+  }, [selectedEventId, locationInstances]);
 
   const selectedEventUpdates = useMemo(() => {
     if (selectedEventId == null || !upcomingInstancesData) return [];
@@ -300,24 +299,28 @@ export const WorkoutDetailsContent = ({
     isParentEventError,
   ]);
 
-  // At an instance-only location the workouts can belong to different orgs,
-  // so the AO/region context follows the selected instance. Series-backed
-  // locations (no instanceOrgs) keep the location-level fields.
+  // Upcoming instances can belong to different orgs from each other and from
+  // recurring workouts at the same location. Follow the selected instance's
+  // AO/region context; recurring selections keep the location-level fields.
   const location = useMemo(() => {
     const baseLocation = results?.location;
     if (!baseLocation) return null;
-    if (!selectedInstance || baseLocation.instanceOrgs.length === 0) {
-      return baseLocation;
-    }
+    if (!selectedInstance) return baseLocation;
     const selectedInstanceOrgs = baseLocation.instanceOrgs.find(
       (orgs) => orgs.instanceId === selectedInstance.id,
     );
-    // The cached instance list and locationWorkout can disagree when one was
-    // refetched later. Show no AO or region rather than another workout's.
-    if (!selectedInstanceOrgs) return { ...baseLocation, ...UNKNOWN_ORGS };
+    // The queries can be cached at different times. A local series occurrence
+    // can retain its known orgs; one-offs and away occurrences cannot safely
+    // borrow another workout's AO or region.
+    if (!selectedInstanceOrgs) {
+      return selectedInstance.seriesId != null &&
+        baseEventIds.has(selectedInstance.seriesId)
+        ? baseLocation
+        : { ...baseLocation, ...UNKNOWN_ORGS };
+    }
     const { instanceId: _instanceId, ...orgs } = selectedInstanceOrgs;
     return { ...baseLocation, ...orgs };
-  }, [results, selectedInstance]);
+  }, [results, selectedInstance, baseEventIds]);
 
   // Update the search params when the panel is open
   useUpdateEventSearchParams(location?.id ?? null, selectedEventId);

@@ -121,9 +121,8 @@ const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
 
 /**
  * Which event instances the map surfaces as their own pin or pin status.
- * Shared by upcomingInstances and locationWorkout's instance-only fallback so
- * a pin drawn from an instance always opens a detail panel, never "no longer
- * scheduled".
+ * Shared by upcomingInstances and locationWorkout's instance context so a pin
+ * drawn from an instance opens a detail panel with its own AO and region.
  *
  * The caller's query must LEFT JOIN `schema.locations` on the instance's
  * location, `aoOrg` on its org, and `seriesEvent` on its series.
@@ -174,12 +173,12 @@ const isVisibleUpcomingInstance = ({
   );
 
 /**
- * AO and region context for each visible upcoming instance at a location whose
- * only map presence is those instances, soonest first. One location can hold
- * instances from different orgs, so the context is per instance rather than
- * per location. Each row is shaped as the `parent*` and `region*` fields
- * locationWorkout otherwise reads off a series' org, plus the `instanceId` it
- * belongs to. Empty when no instance would draw a pin here.
+ * AO and region context for each visible upcoming instance at a location,
+ * soonest first. One location can hold instances from different orgs, so the
+ * context is per instance rather than per location. Each row is shaped as the
+ * `parent*` and `region*` fields locationWorkout otherwise reads off a series'
+ * org, plus the `instanceId` it belongs to. Empty when no instance would draw a
+ * pin here.
  */
 const getInstanceOrgsAtLocation = async (
   db: Context["db"],
@@ -686,7 +685,7 @@ export const mapLocationRouter = os.router({
                 }),
               )
               .describe(
-                "AO and region context per visible upcoming instance, soonest first; populated only when the location has no series events",
+                "AO and region context per visible upcoming instance, soonest first, including locations with recurring workouts",
               ),
             fullAddress: z
               .string()
@@ -742,7 +741,7 @@ export const mapLocationRouter = os.router({
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const regionOrg = aliasedTable(schema.orgs, "region_org");
 
-      const results = await ctx.db
+      const locationQuery = ctx.db
         .select({
           location: {
             id: schema.locations.id,
@@ -869,6 +868,10 @@ export const mapLocationRouter = os.router({
           regionOrg.id,
         );
 
+      const [results, upcomingInstanceOrgs] = await Promise.all([
+        locationQuery,
+        getInstanceOrgsAtLocation(ctx.db, input.locationId),
+      ]);
       const location = results[0]?.location;
       const events = results
         .map((r) => r.event)
@@ -882,31 +885,27 @@ export const mapLocationRouter = os.router({
         )
         .map((e) => ({ ...e, id: e.id, name: e.name }));
 
-      // No series events can still mean a live pin: upcomingInstances draws
-      // markers for one-off instances and away-from-home occurrences, which
-      // this query's events join never sees. The client builds those events
-      // itself, so only the AO/region context — normally reached through the
-      // series' org — has to come from the instances here. Those instances can
-      // belong to different orgs, so the context is returned per instance; the
-      // soonest one's also fills the location-level fields as the default.
-      const instanceOrgs = (
-        events.length === 0 && location
-          ? await getInstanceOrgsAtLocation(ctx.db, input.locationId)
-          : []
-      ).map((orgs) => ({
-        ...orgs,
-        // Same empty-string logo handling as the location-level fields below
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        parentLogo: orgs.parentLogo || null,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        regionLogo: orgs.regionLogo || null,
-      }));
-      const soonestInstanceOrgs = instanceOrgs[0];
+      // One-off instances and away-from-home occurrences can belong to different
+      // orgs even when this location also hosts a recurring workout. Return each
+      // visible instance's AO/region context for the selected workout. Only use
+      // the soonest instance as the location-level default when no series exists.
+      const instanceOrgs = (location ? upcomingInstanceOrgs : []).map(
+        (orgs) => ({
+          ...orgs,
+          // Same empty-string logo handling as the location-level fields below
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          parentLogo: orgs.parentLogo || null,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          regionLogo: orgs.regionLogo || null,
+        }),
+      );
+      const fallbackInstanceOrgs =
+        events.length === 0 ? instanceOrgs[0] : undefined;
 
       // No events and no instances → stale link (LEFT JOIN yields a
       // null-event row when all events fall outside the date window). Return
       // a message instead of throwing so the client shows a friendly panel.
-      if (!location || (events.length === 0 && !soonestInstanceOrgs)) {
+      if (!location || (events.length === 0 && !fallbackInstanceOrgs)) {
         return {
           location: null,
           message: "This workout is no longer scheduled.",
@@ -921,8 +920,8 @@ export const mapLocationRouter = os.router({
       }
 
       const { instanceId: _instanceId, ...defaultInstanceOrgs } =
-        soonestInstanceOrgs ?? {};
-      const { parentLogo, regionLogo } = soonestInstanceOrgs ?? location;
+        fallbackInstanceOrgs ?? {};
+      const { parentLogo, regionLogo } = fallbackInstanceOrgs ?? location;
       const locationWithEvents = {
         ...location,
         ...defaultInstanceOrgs,
