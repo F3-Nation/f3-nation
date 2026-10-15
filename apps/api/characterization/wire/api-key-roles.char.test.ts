@@ -150,16 +150,64 @@ describe.runIf(target.inProcess)("API-key role response contract", () => {
   });
 
   afterAll(async () => {
-    await regionAdmin?.cleanup();
-    for (const id of orgIds.reverse()) await cleanup.org(id);
-    if (insertedRoleIds.length > 0) {
-      await db
-        .delete(schema.roles)
-        .where(inArray(schema.roles.id, insertedRoleIds));
+    const results: PromiseSettledResult<unknown>[] = [];
+    // Preserve dependency order, but attempt every cleanup even after a failure.
+    for (const teardown of [
+      () => regionAdmin?.cleanup(),
+      ...[...orgIds].reverse().map((id) => () => cleanup.org(id)),
+      async () => {
+        if (insertedRoleIds.length > 0) {
+          await db
+            .delete(schema.roles)
+            .where(inArray(schema.roles.id, insertedRoleIds));
+        }
+      },
+    ]) {
+      results.push(
+        ...(await Promise.allSettled([Promise.resolve().then(teardown)])),
+      );
     }
+    // eslint-disable-next-line vitest/no-standalone-expect -- assert fixture cleanup in the hook
+    expect(results.filter((result) => result.status === "rejected")).toEqual(
+      [],
+    );
   });
 
   describe.each(transports)("%s", (transport) => {
+    const invokeCreate = async (name: string, roleName: UserRole) => {
+      const input = {
+        name,
+        roles: [{ orgId: tree.directBranch.ao.id, roleName }],
+      };
+      const headers = {
+        cookie: nationCookie,
+        "x-forwarded-for": `10.99.0.${++requestNumber}`,
+      };
+      return transport === "REST"
+        ? target.invoke(
+            req("/v1/api-key", {
+              method: "POST",
+              headers: { ...headers, "content-type": "application/json" },
+              body: JSON.stringify(input),
+            }),
+          )
+        : rpcResponse(
+            // Probe deliberately invalid role values through the real codec.
+            (client) => client.apiKey.create(input as never),
+            headers,
+          );
+    };
+
+    const createdKeys = (name: string) =>
+      db
+        .select({ id: schema.apiKeys.id })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.name, name));
+
+    const cleanupCreatedKeys = async (name: string) => {
+      for (const key of await createdKeys(name)) await cleanup.apiKey(key.id);
+    };
+
     it.each(readCases)(
       "lists $label faithfully without secrets",
       async ({ roles }) => {
@@ -246,44 +294,27 @@ describe.runIf(target.inProcess)("API-key role response contract", () => {
     it.each(["user", "password_manager", "password_reader"] as const)(
       "does not allow granting %s when creating a key",
       async (roleName) => {
-        const input = {
-          name: `Rejected role ${uniqueId()}`,
-          roles: [{ orgId: tree.directBranch.ao.id, roleName }],
-        };
-        const headers = {
-          cookie: nationCookie,
-          "x-forwarded-for": `10.99.0.${++requestNumber}`,
-        };
+        const name = `Rejected role ${uniqueId()}`;
         try {
-          const response =
-            transport === "REST"
-              ? await target.invoke(
-                  req("/v1/api-key", {
-                    method: "POST",
-                    headers: { ...headers, "content-type": "application/json" },
-                    body: JSON.stringify(input),
-                  }),
-                )
-              : await rpcResponse(
-                  // @ts-expect-error -- probe rejected wire input through the real codec
-                  (client) => client.apiKey.create(input),
-                  headers,
-                );
+          const response = await invokeCreate(name, roleName);
           expect(response.status).toBe(400);
-          expect(
-            await db
-              .select({ id: schema.apiKeys.id })
-              .from(schema.apiKeys)
-              .where(eq(schema.apiKeys.name, input.name)),
-          ).toEqual([]);
+          expect(await createdKeys(name)).toEqual([]);
         } finally {
-          const created = await db
-            .select({ id: schema.apiKeys.id })
-            .from(schema.apiKeys)
-            .where(eq(schema.apiKeys.name, input.name));
-          for (const key of created) await cleanup.apiKey(key.id);
+          await cleanupCreatedKeys(name);
         }
       },
     );
+
+    it("allows granting editor with the same creation request", async () => {
+      const name = `Allowed role ${uniqueId()}`;
+      try {
+        const response = await invokeCreate(name, "editor");
+        expect(response.status).toBeGreaterThanOrEqual(200);
+        expect(response.status).toBeLessThan(300);
+        expect(await createdKeys(name)).toHaveLength(1);
+      } finally {
+        await cleanupCreatedKeys(name);
+      }
+    });
   });
 });

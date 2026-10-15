@@ -82,8 +82,9 @@ export const createMockDb = () => {
       fullJoin: vi.fn(() => chain),
       orderBy: vi.fn(() => chain),
       groupBy: vi.fn(() => chain),
-      limit: vi.fn(() => resolveSelectRows()),
-      where: vi.fn(() => resolveSelectRows()),
+      for: vi.fn(() => chain),
+      limit: vi.fn(() => chain),
+      where: vi.fn(() => chain),
       then: <TResult1 = unknown[], TResult2 = never>(
         onfulfilled?:
           ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,

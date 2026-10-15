@@ -42,6 +42,22 @@ const statusBadgeVariant: Record<
   expired: "outline",
 };
 
+const ROLE_STYLES = {
+  user: "bg-gray-100 text-gray-700 border-gray-200",
+  admin: "bg-purple-100 text-purple-700 border-purple-200",
+  editor: "bg-blue-100 text-blue-700 border-blue-200",
+  password_manager: "bg-gray-100 text-gray-700 border-gray-200",
+  password_reader: "bg-gray-100 text-gray-700 border-gray-200",
+} satisfies Record<UserRole, string>;
+
+const ROLE_LABELS = {
+  user: "User",
+  admin: "Admin",
+  editor: "Editor",
+  password_manager: "Password manager",
+  password_reader: "Password reader",
+} satisfies Record<UserRole, string>;
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—";
   try {
@@ -173,34 +189,14 @@ export const ApiKeysTable = () => {
                         <div className="flex flex-wrap items-center gap-2">
                           {row.roles && row.roles.length > 0 ? (
                             row.roles.map((role, index) => {
-                              const roleStyles = {
-                                user: "bg-gray-100 text-gray-700 border-gray-200",
-                                admin:
-                                  "bg-purple-100 text-purple-700 border-purple-200",
-                                editor:
-                                  "bg-blue-100 text-blue-700 border-blue-200",
-                                password_manager:
-                                  "bg-gray-100 text-gray-700 border-gray-200",
-                                password_reader:
-                                  "bg-gray-100 text-gray-700 border-gray-200",
-                              } satisfies Record<UserRole, string>;
-
-                              const roleLabels = {
-                                user: "User",
-                                admin: "Admin",
-                                editor: "Editor",
-                                password_manager: "Password manager",
-                                password_reader: "Password reader",
-                              } satisfies Record<UserRole, string>;
-
                               return (
                                 <span
                                   key={`${row.id}-${role.orgId}-${index}`}
                                   className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-                                    roleStyles[role.roleName]
+                                    ROLE_STYLES[role.roleName]
                                   }`}
                                 >
-                                  {role.orgName} ({roleLabels[role.roleName]})
+                                  {role.orgName} ({ROLE_LABELS[role.roleName]})
                                 </span>
                               );
                             })
