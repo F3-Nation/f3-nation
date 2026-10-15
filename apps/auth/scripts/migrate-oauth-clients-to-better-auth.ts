@@ -29,9 +29,9 @@
  * Setting a real userId instead would defeat that shared ownership, since
  * oauth-provider checks userId before referenceId — a client with a userId
  * set is pinned to that one individual, not any nation admin. This script
- * writes that referenceId on every row it inserts. Rows already present in
- * better_auth_oauth_client are skipped, not updated, so a row inserted by an
- * earlier run of this script keeps whatever referenceId it was given then.
+ * writes that referenceId on every row it inserts, and on rows from an
+ * earlier run that have none, unless the row is pinned to a userId (reported,
+ * left alone). Other rows already present are skipped.
  *
  * Usage:
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth [--env local|staging|prod]
@@ -212,7 +212,11 @@ async function main() {
   // --confirm will actually insert -- rows already present get skipped in
   // both modes instead of being counted as "would be inserted" here.
   const alreadyPresent = await db
-    .select({ clientId: betterAuthOauthClient.clientId })
+    .select({
+      clientId: betterAuthOauthClient.clientId,
+      referenceId: betterAuthOauthClient.referenceId,
+      userId: betterAuthOauthClient.userId,
+    })
     .from(betterAuthOauthClient)
     .where(
       inArray(
@@ -222,17 +226,30 @@ async function main() {
     );
   const alreadyPresentIds = new Set(alreadyPresent.map((row) => row.clientId));
   const newRows = rows.filter((row) => !alreadyPresentIds.has(row.clientId));
+  // A row from an earlier run of this script has no referenceId. Stamp it
+  // unless it is pinned to an individual user (userId is checked before
+  // referenceId, so setting one would change nothing and hide the pin); those
+  // are only reported.
+  const toStamp = alreadyPresent.filter(
+    (row) => !row.referenceId && !row.userId,
+  );
   for (const row of rows) {
     if (alreadyPresentIds.has(row.clientId)) {
+      const existing = alreadyPresent.find((r) => r.clientId === row.clientId);
       console.log(
-        `  Skipping ${row.clientId} — already present in better_auth_oauth_client.`,
+        existing?.userId
+          ? `  Skipping ${row.clientId} — already present and owned by a user; left as is.`
+          : existing?.referenceId
+            ? `  Skipping ${row.clientId} — already present.`
+            : `  ${row.clientId} already present without an owner — will set referenceId.`,
       );
     }
   }
 
   if (!confirmed) {
     console.log(
-      `\nDry run only — ${newRows.length} row(s) would be inserted into better_auth_oauth_client.`,
+      `\nDry run only — ${newRows.length} row(s) would be inserted into better_auth_oauth_client` +
+        ` and ${toStamp.length} existing row(s) would get referenceId.`,
     );
     console.log("Re-run with --confirm to actually write.");
     await sql.end();
@@ -242,6 +259,14 @@ async function main() {
   for (const row of newRows) {
     await db.insert(betterAuthOauthClient).values(row);
     console.log(`  Migrated ${row.clientId}.`);
+  }
+
+  for (const row of toStamp) {
+    await db
+      .update(betterAuthOauthClient)
+      .set({ referenceId: F3_NATION_CLIENT_REFERENCE_ID })
+      .where(eq(betterAuthOauthClient.clientId, row.clientId));
+    console.log(`  Set referenceId on ${row.clientId}.`);
   }
 
   console.log("\nDone.");
