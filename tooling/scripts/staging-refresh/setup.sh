@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Set up (or update) the one-command staging refresh: Cloud Run job f3-staging-refresh
 # in project f3data (F3-65, docs/STAGING_REFRESH.md). Idempotent; re-run it to rebuild
-# the image from this checkout and redeploy the job (do that after a release that adds
-# a migration, or the job refuses with "rebuild the refresh image").
+# the image from this checkout and redeploy the job. After a release that adds a
+# migration, run the full setup (not --image-only): the job refuses with "rebuild the
+# refresh image" until it's rebuilt, and a migration can undo the refresh login's grants.
 #
 #   bash tooling/scripts/staging-refresh/setup.sh               # everything
 #   bash tooling/scripts/staging-refresh/setup.sh --image-only  # rebuild + redeploy only
