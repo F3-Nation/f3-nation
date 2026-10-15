@@ -264,6 +264,7 @@ User → /login → /login/email → enters email
                          │                      │
                          │                      ▼
                          │              POST /api/register
+                         │              → checks the code (not consumed)
                          │              → creates user via F3 API
                          │              → signIn("email-mfa")
                          │              → JWT session created
@@ -338,7 +339,7 @@ Client App → GET /api/oauth/userinfo
 | `POST`     | `/api/verify-email`       | Send or verify an email MFA code. Body: `{ email, action?, code? }`. Rate-limited: 10 req/min per IP.                                      |
 | `POST`     | `/api/check-user`         | Check if an email exists in `public.users`. Body: `{ email }`. Returns `{ exists: boolean }`.                                              |
 | `GET`      | `/api/regions`            | Returns active regions (`orgType='region'`, `isActive=true`) for the registration dropdown. Returns `[{ id, name }]`.                      |
-| `POST`     | `/api/register`           | Create a new user via the F3 API. Body: `{ email, firstName, lastName, f3Name?, homeRegionId?, phone?, emergency* }`. Rate-limited: 5/min. |
+| `POST`     | `/api/register`           | Create a new user via the F3 API. Body: `{ email, code, firstName, lastName, ... }`. 401 unless `code` is the emailed sign-in code. 5/min. |
 | `POST`     | `/api/onboarding`         | Save user profile (f3Name, firstName, lastName) and mark onboarding complete. Requires active session.                                     |
 | `GET`      | `/api/session`            | Returns enriched user profile data (f3Name, firstName, lastName, email, avatarUrl, onboardingCompleted).                                   |
 | `GET`      | `/api/health`             | Returns `{ status: "ok" }`. Used as a Cloud Run liveness probe.                                                                            |

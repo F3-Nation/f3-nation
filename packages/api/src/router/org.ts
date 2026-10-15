@@ -14,6 +14,7 @@ import {
   inArray,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
@@ -30,6 +31,7 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSessionRoles } from "../get-session-roles";
 import { getSortingColumns } from "../get-sorting-columns";
+import { logError } from "../logger";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
@@ -860,11 +862,20 @@ export const orgRouter = {
           await assertValidParentType(ctx.db, input.parentId, input.orgType);
         }
 
+        const insertMeta =
+          input.orgType === "region" && input.meta != null
+            ? Object.fromEntries(
+                Object.entries(input.meta).filter(
+                  ([key]) => key !== "firstEventNotificationSent",
+                ),
+              )
+            : input.meta;
+
         const [result] = await ctx.db
           .insert(schema.orgs)
           .values({
             ...input,
-            meta: input.meta as Record<string, string>,
+            meta: insertMeta as Record<string, string> | null | undefined,
           })
           .returning();
 
@@ -946,6 +957,27 @@ export const orgRouter = {
         ...input,
         meta: input.meta,
       };
+      let orgUpdateSet: Record<string, unknown> = { ...orgToCrupdate };
+
+      // This marker is server-owned. Merge incoming metadata against the
+      // current row inside the upsert so a concurrent notification claim is
+      // not lost to the earlier `existingOrg` read.
+      if (input.orgType === "region" && input.meta !== undefined) {
+        const inputMetaJson =
+          input.meta === null ? null : JSON.stringify(input.meta);
+        orgUpdateSet = {
+          ...orgUpdateSet,
+          // Never accept the notification marker from client-supplied metadata:
+          // an old editor form must not restore a claim released after failed mail.
+          meta: sql`(
+            (CASE WHEN ${inputMetaJson}::jsonb IS NULL
+              THEN '{}'::jsonb
+              ELSE ${inputMetaJson}::jsonb END - 'firstEventNotificationSent')
+            || (CASE WHEN ${schema.orgs.meta}->'firstEventNotificationSent' = 'true'::jsonb
+              THEN '{"firstEventNotificationSent":true}'::jsonb ELSE '{}'::jsonb END)
+          )`,
+        };
+      }
 
       const result = await ctx.db.transaction(async (tx) => {
         const [lockedOrg] = await tx
@@ -1023,7 +1055,7 @@ export const orgRouter = {
           .values(orgToCrupdate)
           .onConflictDoUpdate({
             target: [schema.orgs.id],
-            set: orgToCrupdate,
+            set: orgUpdateSet,
           })
           .returning();
 
@@ -1044,6 +1076,25 @@ export const orgRouter = {
       // Notify webhooks about the org update
       if (result) {
         notifyMapDataChange({ type: "org.updated", orgId: result.id });
+      }
+
+      if (
+        result &&
+        isChangingParent &&
+        input.orgType === "ao" &&
+        destinationParentOrgId !== null
+      ) {
+        void import("../lib/first-event-service")
+          .then(({ maybeNotifyRegionInABox }) =>
+            maybeNotifyRegionInABox(ctx.db, destinationParentOrgId),
+          )
+          .catch((error: unknown) => {
+            logError(
+              "api.org.region_in_a_box_notify_failed",
+              { orgId: result.id, destinationParentOrgId },
+              error,
+            );
+          });
       }
 
       return { org: result ?? null };
