@@ -7,7 +7,8 @@ name: PR-AF Review (trial)
 # `pr-af-reviewed` label BEFORE any spend, after checking the PR's live labels
 # via the API. Re-adding `pr-af` later is a no-op. The claim is made up front
 # on purpose, so a failed run still counts and nothing silently re-bills. To
-# deliberately retry, remove `pr-af-reviewed` and re-apply `pr-af`.
+# deliberately retry, remove `pr-af-reviewed` and re-apply `pr-af`. Both labels
+# must already exist in the repo; the gate does not create them.
 #
 # We deliberately track pr-af's default branch and its default model: upstream
 # improvements and cheaper/better models are welcome, and cost changes are ours
@@ -62,8 +63,14 @@ jobs:
         id: claim
         run: |
           # Live labels, not the event payload: a queued run's payload is stale.
-          if gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/labels" \
-              --jq '.[].name' | grep -qx 'pr-af-reviewed'; then
+          labels=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/labels" \
+            --jq '.[].name')
+          if ! grep -qx 'pr-af' <<< "${labels}"; then
+            echo "pr-af label removed from PR #${PR} before the run started; skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if grep -qx 'pr-af-reviewed' <<< "${labels}"; then
             echo "PR #${PR} already reviewed by pr-af; skipping."
             echo "proceed=false" >> "$GITHUB_OUTPUT"
             exit 0
