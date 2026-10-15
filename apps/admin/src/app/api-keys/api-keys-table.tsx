@@ -3,6 +3,7 @@
 import { MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 
+import type { UserRole } from "@acme/shared/app/enums";
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@acme/ui/card";
@@ -173,16 +174,24 @@ export const ApiKeysTable = () => {
                           {row.roles && row.roles.length > 0 ? (
                             row.roles.map((role, index) => {
                               const roleStyles = {
+                                user: "bg-gray-100 text-gray-700 border-gray-200",
                                 admin:
                                   "bg-purple-100 text-purple-700 border-purple-200",
                                 editor:
                                   "bg-blue-100 text-blue-700 border-blue-200",
-                              } as const;
+                                password_manager:
+                                  "bg-gray-100 text-gray-700 border-gray-200",
+                                password_reader:
+                                  "bg-gray-100 text-gray-700 border-gray-200",
+                              } satisfies Record<UserRole, string>;
 
                               const roleLabels = {
+                                user: "User",
                                 admin: "Admin",
                                 editor: "Editor",
-                              } as const;
+                                password_manager: "Password manager",
+                                password_reader: "Password reader",
+                              } satisfies Record<UserRole, string>;
 
                               return (
                                 <span

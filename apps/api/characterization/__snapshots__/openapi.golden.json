@@ -1860,8 +1860,11 @@
                                 "roleName": {
                                   "description": "Role name",
                                   "enum": [
+                                    "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
