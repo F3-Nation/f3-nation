@@ -17,6 +17,10 @@
 #   2. DB login staging_refresh: read-only on prod (prod-login.sql), owner-level on
 #      staging's tables (staging-login.sql); passwords in Secret Manager
 #   3. the SA may read those two secrets + OBFUSCATION_SALT and connect to Cloud SQL
+#      and may create/delete objects under dev-snapshots/ in the public f3-public-images
+#      bucket (custom role + IAM condition; nothing else about the bucket changes). That
+#      binding needs storage.buckets.setIamPolicy on the bucket; without it the script
+#      prints the command for someone who has it.
 #   4. builds + pushes the image (Cloud Build -> Artifact Registry cloud-run-builds)
 #   5. deploys the job (32Gi / 8 CPU, 3h timeout, no retries)
 #   6. lets RUNNERS execute it (also with --args, e.g. --dry-run) and read its logs:
@@ -57,6 +61,15 @@ OLD_LOG_TITLE=f3-staging-refresh-logs
 RUNNERS=()
 SLACKBOT_PROJECT=f3-slackbot-staging
 SLACKBOT_SERVICE=f3-slackbot
+# The developer snapshot lands in a public bucket shared with the apps' images. The job
+# may write only under SNAPSHOT_PREFIX; create + delete is what overwriting the fixed
+# object path takes.
+SNAPSHOT_BUCKET=f3-public-images
+SNAPSHOT_PREFIX=dev-snapshots/
+SNAPSHOT_ROLE=f3SnapshotPublisher
+SNAPSHOT_ROLE_PERMISSIONS=storage.objects.create,storage.objects.delete
+SNAPSHOT_CONDITION_TITLE=dev-snapshots-prefix
+SNAPSHOT_CONDITION="resource.name.startsWith(\"projects/_/buckets/${SNAPSHOT_BUCKET}/objects/${SNAPSHOT_PREFIX}\")"
 
 IMAGE_ONLY=0
 [ "${1:-}" = "--image-only" ] && IMAGE_ONLY=1
@@ -168,6 +181,42 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   gcloud projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$SA" \
     --role roles/cloudsql.client --condition=None >/dev/null
   echo "cloudsql.client on $PROJECT"
+
+  say "3b. write access to gs://$SNAPSHOT_BUCKET/$SNAPSHOT_PREFIX only"
+  # An IAM condition on a bucket needs uniform bucket-level access. Never flipped here:
+  # it turns off object ACLs, which the apps' image uploads may rely on.
+  if ubla="$(gcloud storage buckets describe "gs://$SNAPSHOT_BUCKET" \
+    --format='value(uniform_bucket_level_access)' 2>/dev/null)"; then
+    if ! printf '%s' "$ubla" | grep -qi '^true$'; then
+      echo "gs://$SNAPSHOT_BUCKET doesn't use uniform bucket-level access, which the IAM condition needs." >&2
+      echo "Enabling it disables object ACLs: check the apps that upload images first." >&2
+      exit 1
+    fi
+  else
+    echo "can't read gs://$SNAPSHOT_BUCKET's settings; skipping the uniform bucket-level access check"
+  fi
+  if gcloud iam roles describe "$SNAPSHOT_ROLE" --project "$PROJECT" >/dev/null 2>&1; then
+    gcloud iam roles update "$SNAPSHOT_ROLE" --project "$PROJECT" \
+      --permissions "$SNAPSHOT_ROLE_PERMISSIONS" --quiet >/dev/null
+  else
+    gcloud iam roles create "$SNAPSHOT_ROLE" --project "$PROJECT" \
+      --title "F3 snapshot publisher" \
+      --description "Create and overwrite the developer snapshot object (staging refresh job)" \
+      --permissions "$SNAPSHOT_ROLE_PERMISSIONS" >/dev/null
+  fi
+  echo "role $SNAPSHOT_ROLE: $SNAPSHOT_ROLE_PERMISSIONS"
+  SNAPSHOT_BIND=(gcloud storage buckets add-iam-policy-binding "gs://$SNAPSHOT_BUCKET"
+    --member "serviceAccount:$SA" --role "projects/$PROJECT/roles/$SNAPSHOT_ROLE"
+    --condition "expression=$SNAPSHOT_CONDITION,title=$SNAPSHOT_CONDITION_TITLE")
+  if "${SNAPSHOT_BIND[@]}" >/dev/null; then
+    echo "$SNAPSHOT_ROLE on gs://$SNAPSHOT_BUCKET/$SNAPSHOT_PREFIX for $SA"
+  else
+    echo "WARNING: couldn't bind $SNAPSHOT_ROLE on gs://$SNAPSHOT_BUCKET (needs storage.buckets.setIamPolicy)."
+    echo "The role exists; ask someone who has that permission to run:"
+    echo
+    printf '  %q' "${SNAPSHOT_BIND[@]}"
+    echo
+  fi
 fi
 
 say "4. build + push the image (Cloud Build, from $REPO)"

@@ -163,7 +163,18 @@ It creates:
   `resource.type="cloud_run_job" AND resource.labels.job_name="f3-staging-refresh"`,
   and `roles/logging.viewAccessor` conditioned on that bucket's `_AllLogs`
   view. It also removes what its first version made instead: a view on
-  `_Default` that showed every Cloud Run job's logs, and its bindings.
+  `_Default` that showed every Cloud Run job's logs, and its bindings;
+- write access for the service account to `dev-snapshots/` in the public
+  `f3-public-images` bucket and nowhere else in it: the custom role
+  `f3SnapshotPublisher` (`storage.objects.create` and `storage.objects.delete`,
+  the pair that overwriting the fixed snapshot path takes), bound on the bucket
+  with the condition
+  `resource.name.startsWith("projects/_/buckets/f3-public-images/objects/dev-snapshots/")`.
+  The script stops if the bucket doesn't use uniform bucket-level access (the
+  condition needs it) and never changes the bucket's settings. The binding
+  needs `storage.buckets.setIamPolicy` on the bucket; if the person running
+  setup lacks it, the script still creates the role and prints the one
+  `gcloud storage buckets add-iam-policy-binding` command for someone who has it.
 
 Re-run the full setup after any Production release that adds a migration:
 it rebuilds the image so it knows prod's migrations and columns, and it
@@ -239,6 +250,38 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
 The last line is `DEV SNAPSHOT: OK` or `DEV SNAPSHOT FAILED — nothing was
 published; staging was not touched.` As for a refresh, the logs hold
 counts, never row data.
+
+### Publishing the first snapshot
+
+The job has no schedule: a maintainer runs the command above when a fresh
+snapshot is wanted. The first publish is a hand-run sequence for whoever
+runs production operations:
+
+1. Run the full setup (not `--image-only`) so the job's service account has
+   the `dev-snapshots/` write access and the image is current.
+2. Execute the job with `--args=--snapshot-only` and confirm the last log line
+   is `DEV SNAPSHOT: OK`.
+3. Confirm the access is scoped. Writing under another prefix with the job's
+   service account must be refused:
+
+   ```bash
+   echo x >/tmp/probe.txt
+   gcloud storage cp /tmp/probe.txt gs://f3-public-images/not-dev-snapshots/probe.txt \
+     --impersonate-service-account=staging-refresh@f3data.iam.gserviceaccount.com
+   ```
+
+   Expect a 403. Delete the probe object if it was somehow created.
+
+4. Attach the tar's `manifest.json` and the job log's leak-scan output to the
+   tracking issue for the data-privacy reviewer's sign-off. The URL is not
+   shared with developers until they have signed off.
+
+The delete permission exists only so a run can replace the previous
+snapshot. An IAM condition constrains the object name, not how the client
+writes it, so the service account could delete any object under
+`dev-snapshots/` outside the job's flow. That prefix holds nothing else and
+the snapshot is regenerated on demand, so the exposure is accepted. Never
+widen the grant beyond that prefix.
 
 Outside Cloud Run the snapshot is never uploaded. Pass an absolute
 `--snapshot-out <file>` to write it locally instead:
