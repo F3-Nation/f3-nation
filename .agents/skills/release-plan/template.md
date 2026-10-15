@@ -55,6 +55,9 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
 - [ ] **Check out this release** from the repository root. `git status --porcelain` must print nothing; then run `git fetch origin main && git switch --detach {{RELEASE_SHA}} && pnpm install --frozen-lockfile`. Owner: Release lead
   - **Expected:** `git rev-parse HEAD` prints `{{RELEASE_SHA}}`, and `ls packages/db/drizzle/*.sql | tail -n 1` prints `packages/db/drizzle/{{NEWEST_MIGRATION_FILE}}`.
   - **Stop if:** the tree isn't clean, fetch/checkout/install fails, the SHA differs, or a different file prints.
+- [ ] **Start the database proxy** in a second terminal and leave it running: `{{PROXY_COMMAND}}`. The first time on a machine, run `gcloud auth application-default login` before it. Owner: Release lead
+  - **Expected:** it prints `ready for new connections`.
+  - **Stop if:** it exits or prints an error instead. Fix the proxy before migrating; the migration can't connect without it.
 - [ ] **Run the migration** from the repository root: `pnpm db:migrate:{{staging or prod}}` (not `pnpm db:migrate:local`, which only migrates a local database). It reads the database login from Secret Manager, checks the checkout's migrations are main's and agree with the database, lists the pending migrations, and asks you to type the database name. Owner: Release lead
   - **Expected:** it lists the migration in `{{NEWEST_MIGRATION_FILE}}` (and any other migrations in this release) as pending, nothing else; lines starting `note:` are informational. Type `{{DATABASE_NAME: f3_staging or f3_prod}}` and it ends with `Done: {{DATABASE_NAME}} is at <that migration>.` If nothing is pending, the migration already ran: skip to the check query.
   - **Stop if:** it prints `REFUSED`, or lists a migration this release doesn't include. Don't work around a refusal: post it in `#monorepo` and pause.
