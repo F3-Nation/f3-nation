@@ -29,7 +29,7 @@ class ApiAttendanceRepository:
     def get_planned_for_event_instance(self, event_instance_id: int) -> list[AttendanceData]:
         result = self._client.get(
             f"/v1/attendance/event-instance/{event_instance_id}",
-            params={"isPlanned": True},
+            params={"isPlanned": "true"},
         )
         raw_list = result.get("attendance") or result.get("attendances") or result.get("results") or []
         return [_parse_attendance(raw) for raw in raw_list]
