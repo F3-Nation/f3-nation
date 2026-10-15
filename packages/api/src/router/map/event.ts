@@ -62,6 +62,7 @@ const eventAllInputSchema = eventFilterSchema
 
 // Aliased tables used across event queries
 const regionOrg = aliasedTable(schema.orgs, "region_org");
+const allRegionOrg = aliasedTable(schema.orgs, "all_region_org");
 const parentOrg = aliasedTable(schema.orgs, "parent_org");
 
 /**
@@ -300,7 +301,7 @@ export const mapEventRouter = {
           case "name":
             return direction(schema.events.name);
           case "regions":
-            return direction(regionOrg.name);
+            return direction(sql`min(${allRegionOrg.name})`);
           case "parent":
             return direction(sql`NULLIF(${parentOrg.name}, '')`);
           case "status":
@@ -361,12 +362,12 @@ export const mapEventRouter = {
         regions: sql<{ regionId: number; regionName: string }[]>`COALESCE(
           json_agg(
             DISTINCT jsonb_build_object(
-              'regionId', ${regionOrg.id}, 
-              'regionName', ${regionOrg.name}
+              'regionId', ${allRegionOrg.id},
+              'regionName', ${allRegionOrg.name}
             )
           ) 
           FILTER (
-            WHERE ${regionOrg.id} IS NOT NULL
+            WHERE ${allRegionOrg.id} IS NOT NULL
           ), 
           '[]'
         )`,
@@ -420,6 +421,18 @@ export const mapEventRouter = {
           ),
         )
         .leftJoin(
+          // Keep all associations even when regionOrg is narrowed by filters.
+          allRegionOrg,
+          and(
+            eq(allRegionOrg.orgType, "region"),
+            or(
+              eq(allRegionOrg.id, schema.locations.orgId),
+              eq(allRegionOrg.id, schema.events.orgId),
+              eq(allRegionOrg.id, parentOrg.parentId),
+            ),
+          ),
+        )
+        .leftJoin(
           schema.eventsXEventTypes,
           eq(schema.eventsXEventTypes.eventId, schema.events.id),
         )
@@ -431,7 +444,6 @@ export const mapEventRouter = {
         .groupBy(
           schema.events.id,
           parentOrg.id,
-          regionOrg.id,
           schema.locations.name,
           schema.locations.addressStreet,
           schema.locations.addressStreet2,
