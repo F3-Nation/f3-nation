@@ -460,14 +460,22 @@ describe("handleMoveAOToDifferentRegion - moves an AO to a different region", ()
   it("moves an AO to a different region and records the update request with approved status", async () => {
     const { ctx } = createMockContext();
     const request = createMoveAOToDifferentRegionRequest();
+    mockUpdateAO.mockResolvedValue({
+      oldRegionId: 1,
+      newRegionId: 2,
+    } as Awaited<ReturnType<typeof aoHandlers.updateAO>>);
 
-    await handleMoveAOToDifferentRegion(ctx, request);
+    const moved = await handleMoveAOToDifferentRegion(ctx, request);
 
     // Verify updateAO was called to move the AO to a different region
     expect(mockUpdateAO).toHaveBeenCalledTimes(1);
     expect(mockUpdateAO).toHaveBeenCalledWith(ctx, {
       id: 1,
       parentId: 2,
+    });
+    expect(moved).toEqual({
+      notificationRegionId: 2,
+      notificationSourceRegionId: 1,
     });
 
     const result = await recordUpdateRequest({
@@ -503,6 +511,9 @@ describe("handleMoveAOToDifferentLocation - moves an AO to a different location"
   it("moves an AO to a different location and records the update request with approved status", async () => {
     const { ctx, mockDb } = createMockContext();
     const request = createMoveAOToDifferentLocationRequest();
+    mockDb._database.set(String(request.originalAoId), {
+      id: request.originalAoId,
+    });
 
     await handleMoveAOToDifferentLocation(ctx, request);
 
@@ -522,6 +533,13 @@ describe("handleMoveAOToDifferentLocation - moves an AO to a different location"
       column: schema.orgs.id,
       value: 1,
     });
+    const lockQuery = mockDb._mocks.mockFrom.mock.results[0]?.value as {
+      for: ReturnType<typeof vi.fn>;
+    };
+    expect(lockQuery.for).toHaveBeenCalledWith("no key update");
+    expect(lockQuery.for.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDb._mocks.mockUpdate.mock.invocationCallOrder[0] ?? 0,
+    );
 
     const result = await recordUpdateRequest({
       ctx,
@@ -557,6 +575,9 @@ describe("handleMoveAOToNewLocation - moves an AO to a new location", () => {
   it("creates a new location and updates events to use it", async () => {
     const { ctx, mockDb } = createMockContext();
     const request = createMoveAOToNewLocationRequest();
+    mockDb._database.set(String(request.originalAoId), {
+      id: request.originalAoId,
+    });
 
     await handleMoveAOToNewLocation(ctx, request);
 
@@ -591,6 +612,13 @@ describe("handleMoveAOToNewLocation - moves an AO to a new location", () => {
       column: schema.orgs.id,
       value: 1,
     });
+    const lockQuery = mockDb._mocks.mockFrom.mock.results[0]?.value as {
+      for: ReturnType<typeof vi.fn>;
+    };
+    expect(lockQuery.for).toHaveBeenCalledWith("no key update");
+    expect(lockQuery.for.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDb._mocks.mockUpdate.mock.invocationCallOrder[0] ?? 0,
+    );
 
     const result = await recordUpdateRequest({
       ctx,
