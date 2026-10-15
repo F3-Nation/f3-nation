@@ -288,9 +288,11 @@ shared editor without treating it as a new persisted organization field.
   selected, create first to obtain the ID, upload, then update. If creation
   returns an ID but upload or the final update fails, retain that ID, entered
   values, and the selected logo so retrying finishes the same organization.
-  Explain that creation succeeded and which work remains incomplete in both
-  the recovery message and its toast. If saving completes but updating the
-  screen fails, report the completed save without replaying
+  Explain that creation succeeded, which work remains incomplete, and the
+  existing type-specific error detail in both the recovery message and its
+  toast. After acknowledged creation, describe the remaining save as an update.
+  If saving completes but updating the screen fails, report the completed
+  save in both a toast and the recovery message without replaying
   its writes. If a creation response lacks an ID, stop subsequent upload/update
   requests and further creation attempts in that editor, and direct the user
   to close the form, reload the page, and check the organization list before

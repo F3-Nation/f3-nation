@@ -1479,7 +1479,13 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
       expect(field("Name").value).toBe("New org");
       expect(field("Website").value).toBe("https://example.com/retained");
       expect(parentSelect().value).toBe("3");
-      const partialMessage = `This ${label} was created, but ${stage === "upload" ? "uploading its logo" : "saving its remaining changes"} failed.`;
+      const detail =
+        type === "ao"
+          ? stage === "upload"
+            ? "Upload failed"
+            : "Final save failed"
+          : "Failed to update region";
+      const partialMessage = `This ${label} was created, but ${stage === "upload" ? "uploading its logo" : "saving its remaining changes"} failed. ${detail}`;
       expect(mocks.error).toHaveBeenCalledExactlyOnceWith(partialMessage);
       expect(screen.getByRole("status").textContent).toBe(
         `${partialMessage} Your entries are kept. Save Changes will retry the same ${label} (ID 60).`,
@@ -1522,11 +1528,46 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
     },
   );
 
+  it("preserves the cause of an upload failure after creation", async () => {
+    mocks.upload.mockRejectedValueOnce(new Error("Invalid file type"));
+    await prepareCreation();
+    save();
+    await screen.findByRole("status");
+    const detail =
+      type === "ao" ? "Invalid file type" : "Failed to update region";
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+      `This ${label} was created, but uploading its logo failed. ${detail}`,
+    );
+    expect(screen.getByRole("status").textContent).toContain(detail);
+  });
+
+  it("preserves authorization feedback after a final update fails", async () => {
+    mocks.save
+      .mockResolvedValueOnce({ org: { ...record, id: 60 } })
+      .mockRejectedValueOnce(
+        new ORPCError("UNAUTHORIZED", { message: "Permission denied" }),
+      );
+    await prepareCreation();
+    save();
+    await screen.findByRole("status");
+    const detail =
+      type === "ao"
+        ? "Permission denied"
+        : "You are not authorized to update this region";
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+      `This ${label} was created, but saving its remaining changes failed. ${detail}`,
+    );
+    expect(screen.getByRole("status").textContent).toContain(detail);
+  });
+
   it("retries creation when the creation request fails before a confirmed ID", async () => {
     mocks.save.mockRejectedValueOnce(new Error("Creation failed"));
     const { file } = await prepareCreation();
     save();
     await waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+      type === "ao" ? "Creation failed" : "Failed to add region",
+    );
     await screen.findByRole("button", { name: "Save Changes" });
     expect(field("ID").value).toBe("");
     expect(field("Name").value).toBe("New org");
@@ -1581,11 +1622,13 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
     await waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
     await screen.findByRole("button", { name: "Save Changes" });
     expect(field("ID").value).toBe("60");
+    const detail =
+      type === "ao" ? "Final save failed" : "Failed to update region";
     expect(screen.getByRole("status").textContent).toBe(
-      `This ${label} was created, but saving its remaining changes failed. Your entries are kept. Save Changes will retry the same ${label} (ID 60).`,
+      `This ${label} was created, but saving its remaining changes failed. ${detail} Your entries are kept. Save Changes will retry the same ${label} (ID 60).`,
     );
     expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
-      `This ${label} was created, but saving its remaining changes failed.`,
+      `This ${label} was created, but saving its remaining changes failed. ${detail}`,
     );
     save();
     await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
@@ -1650,21 +1693,25 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
     expect(mocks.upload).toHaveBeenCalledTimes(1);
   });
 
-  it("clears unknown-ID recovery when the editor is closed and opened for another creation", async () => {
+  it("clears unknown-ID recovery when the mounted editor switches records", async () => {
     mocks.save.mockResolvedValueOnce({ org: null });
     const { view } = await prepareCreation();
     save();
     await screen.findByRole("status");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    view.unmount();
-    const { form } = await prepareCreation();
+    view.rerender(
+      <QueryClientProvider client={clients.at(-1)!}>
+        <AdminOrgEditModal orgType={type} id={40} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(field("Name").value).toBe(record.name));
     expect(screen.queryByRole("status")).toBeNull();
-    expect(field("ID").value).toBe("");
-    await act(async () => form.requestSubmit());
+    expect(field("ID").value).toBe("40");
+    save();
     await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
-    expect(
-      mocks.save.mock.calls.filter(([input]) => input.id == null),
-    ).toHaveLength(2);
+    expect(mocks.save.mock.calls.map(([input]) => input.id)).toEqual([
+      undefined,
+      40,
+    ]);
   });
 
   if (type === "region") {
@@ -1689,35 +1736,43 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
       );
       expect(field("ID").value).toBe("60");
     });
-
-    it("distinguishes a saved record from an unexpected UI-completion exception and prevents duplicate saving", async () => {
-      // Normal failed refetches resolve; inject an unexpected completion error.
-      mocks.invalidate.mockRejectedValueOnce(new Error("Completion failed"));
-      mocks.save.mockResolvedValue({ org: { ...record, id: 60 } });
-      const { form } = await prepareCreation();
-      save();
-      await screen.findByRole("status");
-      expect(screen.getByRole("status").textContent).toBe(
-        `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`,
-      );
-      expect(screen.getByRole("status").textContent).not.toMatch(
-        /remaining changes/,
-      );
-      expect(
-        screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
-          .disabled,
-      ).toBe(true);
-      await act(async () => form.requestSubmit());
-      expect(mocks.save.mock.calls.map(([input]) => input.id)).toEqual([
-        undefined,
-        60,
-      ]);
-      expect(mocks.upload).toHaveBeenCalledTimes(1);
-      expect(mocks.error).not.toHaveBeenCalled();
-      expect(mocks.close).not.toHaveBeenCalled();
-      expect(mocks.success).not.toHaveBeenCalled();
-    });
   }
+
+  it("distinguishes a saved record from an unexpected UI-completion exception and prevents duplicate saving", async () => {
+    // Region awaits invalidation; AO refreshes after closing the form.
+    if (type === "region") {
+      mocks.invalidate.mockRejectedValueOnce(new Error("Completion failed"));
+    } else {
+      mocks.refresh.mockImplementationOnce(() => {
+        throw new Error("Completion failed");
+      });
+    }
+    mocks.save.mockResolvedValue({ org: { ...record, id: 60 } });
+    const { form } = await prepareCreation();
+    save();
+    await screen.findByRole("status");
+    expect(screen.getByRole("status").textContent).toBe(
+      `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`,
+    );
+    expect(screen.getByRole("status").textContent).not.toMatch(
+      /remaining changes/,
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+        .disabled,
+    ).toBe(true);
+    await act(async () => form.requestSubmit());
+    expect(mocks.save.mock.calls.map(([input]) => input.id)).toEqual([
+      undefined,
+      60,
+    ]);
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+      `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`,
+    );
+    expect(mocks.close).toHaveBeenCalledTimes(type === "ao" ? 1 : 0);
+    expect(mocks.success).toHaveBeenCalledTimes(type === "ao" ? 1 : 0);
+  });
 
   it("retains edits and stops before update after an upload failure", async () => {
     mocks.upload.mockRejectedValueOnce(new Error("Upload failed"));

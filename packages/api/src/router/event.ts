@@ -199,6 +199,13 @@ async function assertEventRefsInScope({
 const regionOrg = aliasedTable(schema.orgs, "region_org");
 const parentOrg = aliasedTable(schema.orgs, "parent_org");
 
+const pendingRegionNotificationTasks = new Set<Promise<void>>();
+
+/** Wait for detached region notification work to finish (used by deterministic tests). */
+export const waitForEventRegionNotificationTasks = async () => {
+  await Promise.all([...pendingRegionNotificationTasks]);
+};
+
 /**
  * Resolves editable org IDs for "onlyMine" filter
  * Returns empty result indicator if user has no access
@@ -925,20 +932,6 @@ export const eventRouter = {
           message: "AO ID is required",
         });
       }
-      await requireEditorOnRescope({
-        ctx,
-        currentOrgId: existingEvent?.orgId,
-        targetOrgId: input.aoId,
-        entity: "Event",
-      });
-      await assertEventRefsInScope({
-        ctx,
-        aoId: input.aoId,
-        existingEvent,
-        locationId: input.locationId,
-        eventTypeIds: input.eventTypeIds,
-      });
-
       const { eventTypeIds, eventTagIds, meta, ...eventData } = input;
       const normalizedEventTagIds =
         eventTagIds === undefined ? undefined : [...new Set(eventTagIds)];
@@ -960,9 +953,27 @@ export const eventRouter = {
             }),
       };
 
-      let shouldNotifyFirstEventForRegion = false;
-      const result = await ctx.db.transaction(async (tx) => {
+      const {
+        result,
+        destinationRegionId,
+        movedAcrossRegions,
+        shouldNotifyFirstEventForRegion,
+      } = await ctx.db.transaction(async (tx) => {
         const transactionDb = tx as unknown as AppDb;
+        const transactionContext: Context = { ...ctx, db: transactionDb };
+        const lockedAoIds = [
+          ...new Set(
+            [existingEvent?.orgId, input.aoId].filter(
+              (id): id is number => id != null,
+            ),
+          ),
+        ].sort((a, b) => a - b);
+        const lockedAos = await transactionDb
+          .select({ id: schema.orgs.id, parentId: schema.orgs.parentId })
+          .from(schema.orgs)
+          .where(inArray(schema.orgs.id, lockedAoIds))
+          .orderBy(asc(schema.orgs.id))
+          .for("no key update");
         const [transactionExistingEvent] = input.id
           ? await transactionDb
               .select()
@@ -978,6 +989,32 @@ export const eventRouter = {
             message: "Event was modified concurrently; reload and retry",
           });
         }
+
+        // Authorization and scope checks use the locked event placement and AO
+        // hierarchy, so a concurrent event/AO move cannot invalidate them.
+        await requireEditorOnRescope({
+          ctx: transactionContext,
+          currentOrgId: transactionExistingEvent?.orgId,
+          targetOrgId: input.aoId,
+          entity: "Event",
+        });
+        await assertEventRefsInScope({
+          ctx: transactionContext,
+          aoId: input.aoId,
+          existingEvent: transactionExistingEvent,
+          locationId: input.locationId,
+          eventTypeIds: input.eventTypeIds,
+        });
+
+        const previousRegionId = lockedAos.find(
+          ({ id }) => id === transactionExistingEvent?.orgId,
+        )?.parentId;
+        const destinationRegionId =
+          lockedAos.find(({ id }) => id === input.aoId)?.parentId ?? undefined;
+        const movedAcrossRegions =
+          transactionExistingEvent !== undefined &&
+          destinationRegionId != null &&
+          previousRegionId !== destinationRegionId;
 
         const isDeactivationTransition =
           transactionExistingEvent?.isActive === true && !input.isActive;
@@ -1287,9 +1324,6 @@ export const eventRouter = {
               4,
               seriesData.startDate,
             );
-
-            // Run this notification only after the transaction commits.
-            shouldNotifyFirstEventForRegion = true;
           } else if (transactionExistingEvent.dayOfWeek) {
             // Existing series: check for structural changes
             const existingSeriesData = {
@@ -1338,20 +1372,53 @@ export const eventRouter = {
           }
         }
 
-        return result;
+        return {
+          result,
+          destinationRegionId,
+          movedAcrossRegions,
+          shouldNotifyFirstEventForRegion:
+            !transactionExistingEvent && Boolean(result.dayOfWeek),
+        };
       });
 
       // Notify only after the transaction commits.
       if (shouldNotifyFirstEventForRegion) {
-        const { maybeNotifyFirstEventForRegion } =
-          await import("../lib/first-event-service");
-        void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
-          (err: unknown) =>
+        const notificationTask = import("../lib/first-event-service")
+          .then(({ maybeNotifyFirstEventForRegion }) =>
+            maybeNotifyFirstEventForRegion(
+              ctx.db,
+              result.orgId,
+              destinationRegionId,
+            ),
+          )
+          .catch((err: unknown) =>
             logError(
               "api.event.first_event_notify_failed",
               { orgId: result.orgId, eventId: result.id },
               err,
             ),
+          );
+        pendingRegionNotificationTasks.add(notificationTask);
+        void notificationTask.finally(() =>
+          pendingRegionNotificationTasks.delete(notificationTask),
+        );
+      }
+      if (existingEvent && movedAcrossRegions && destinationRegionId != null) {
+        // Keep every notification-only operation detached from the committed update.
+        const notificationTask = import("../lib/first-event-service")
+          .then(({ maybeNotifyRegionInABox }) =>
+            maybeNotifyRegionInABox(ctx.db, destinationRegionId),
+          )
+          .catch((err: unknown) =>
+            logError(
+              "api.event.region_in_a_box_notify_failed",
+              { regionId: destinationRegionId, eventId: result.id },
+              err,
+            ),
+          );
+        pendingRegionNotificationTasks.add(notificationTask);
+        void notificationTask.finally(() =>
+          pendingRegionNotificationTasks.delete(notificationTask),
         );
       }
       if (result?.dayOfWeek) {

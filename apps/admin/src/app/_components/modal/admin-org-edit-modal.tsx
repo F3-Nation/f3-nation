@@ -226,7 +226,10 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
   const submittingRef = useRef(false);
   const createdOrgId = useRef<number | "unknown" | null>(null);
   const [saveRecovery, setSaveRecovery] = useState<
-    "upload" | "update" | "missing-id" | "saved" | null
+    | { step: "upload" | "update"; detail: string }
+    | "missing-id"
+    | "saved"
+    | null
   >(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
@@ -308,19 +311,18 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
     );
     router.refresh();
   };
-  const onError = (error: unknown) => {
-    toast.error(
-      config.rawErrorMessage
-        ? error instanceof Error
-          ? error.message
-          : `Failed to update ${orgType}`
-        : error instanceof ORPCError && error.code === "UNAUTHORIZED"
-          ? `You are not authorized to ${actionText} this ${orgType}`
-          : `Failed to ${actionText} ${orgType}`,
-    );
-  };
+  const errorDetail = (error: unknown, action = actionText) =>
+    config.rawErrorMessage
+      ? error instanceof Error
+        ? error.message
+        : `Failed to update ${orgType}`
+      : error instanceof ORPCError && error.code === "UNAUTHORIZED"
+        ? `You are not authorized to ${action} this ${orgType}`
+        : `Failed to ${action} ${orgType}`;
+  const onError = (error: unknown) => toast.error(errorDetail(error));
   const partialSaveMessage = (step: "upload" | "update") =>
     `This ${label} was created, but ${step === "upload" ? "uploading its logo" : "saving its remaining changes"} failed.`;
+  const savedRecoveryMessage = `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`;
   const crupdateOrg = useMutation(
     orpc.org.crupdate.mutationOptions(
       config.logoPosition ? {} : { onSuccess, onError },
@@ -489,10 +491,13 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                   }
                 } catch (error) {
                   if (config.logoPosition) {
-                    if (saved) setSaveRecovery("saved");
-                    else if (createdOrgId.current != null) {
-                      toast.error(partialSaveMessage(step));
-                      setSaveRecovery(step);
+                    if (saved) {
+                      setSaveRecovery("saved");
+                      toast.error(savedRecoveryMessage);
+                    } else if (createdOrgId.current != null) {
+                      const detail = errorDetail(error, "update");
+                      toast.error(`${partialSaveMessage(step)} ${detail}`);
+                      setSaveRecovery({ step, detail });
                     } else onError(error);
                   }
                   if (config.submitErrorToast)
@@ -877,8 +882,8 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                     {saveRecovery === "missing-id"
                       ? `This ${label} may have been created, but its ID was not returned. Close this form, reload the page, and check the organization list before trying again. Saving is disabled to avoid creating a duplicate.`
                       : saveRecovery === "saved"
-                        ? `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`
-                        : `${partialSaveMessage(saveRecovery)} Your entries are kept. Save Changes will retry the same ${label} (ID ${createdOrgId.current}).`}
+                        ? savedRecoveryMessage
+                        : `${partialSaveMessage(saveRecovery.step)} ${saveRecovery.detail} Your entries are kept. Save Changes will retry the same ${label} (ID ${createdOrgId.current}).`}
                   </p>
                 )}
                 <div
