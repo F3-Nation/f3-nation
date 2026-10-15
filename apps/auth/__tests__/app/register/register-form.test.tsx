@@ -63,6 +63,7 @@ function registrationForm() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
   for (const key of [...searchParams.keys()]) searchParams.delete(key);
   searchParams.set("email", email);
   searchParams.set("code", code);
@@ -103,7 +104,12 @@ describe("registration", () => {
       expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, firstName: "Test", lastName: "PAX" }),
+        body: JSON.stringify({
+          email,
+          code,
+          firstName: "Test",
+          lastName: "PAX",
+        }),
       });
 
       resolveRegistration(Response.json({ success: true }));
@@ -226,6 +232,7 @@ describe("registration", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email,
+        code,
         f3Name: "Test Runner",
         firstName: "Test",
         lastName: "PAX",
@@ -274,7 +281,12 @@ describe("registration", () => {
       2,
       "/api/register",
       expect.objectContaining({
-        body: JSON.stringify({ email, firstName: "Test", lastName: "PAX" }),
+        body: JSON.stringify({
+          email,
+          code,
+          firstName: "Test",
+          lastName: "PAX",
+        }),
       }),
     );
   });
@@ -398,6 +410,109 @@ describe("registration", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     },
   );
+  it.each([false, true])(
+    "offers a fresh code without resubmitting when registration rejects the code (Better Auth: %s)",
+    async (useBetterAuth) => {
+      const error =
+        "Your verification code is invalid or has expired. Please sign in again.";
+      fetchMock.mockResolvedValueOnce(
+        Response.json({ error }, { status: 401 }),
+      );
+      await fillForm(useBetterAuth);
+      submit();
+      expect(await screen.findByText(error)).toBeDefined();
+      expect(signIn).not.toHaveBeenCalled();
+      expect(emailOtp).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: "Create Account" }),
+      ).toHaveProperty("disabled", true);
+      act(() => registrationForm().requestSubmit());
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+      expect(router.push).toHaveBeenCalledExactlyOnceWith(
+        `/login/email?callbackUrl=${encodeURIComponent(callback)}`,
+      );
+    },
+  );
+
+  it("keeps the answers for a fresh code after the code is rejected", async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ error: "expired" }, { status: 401 }),
+    );
+    await fillForm();
+    change("F3 Name", "Test Runner");
+    change("Phone Number", "2025550123");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Emergency Contact Info/ }),
+    );
+    change("Emergency Contact Name", "Test Contact");
+    submit();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Sign in again" }),
+    );
+    // Phone numbers and the emergency contact are never written to storage.
+    const stored = sessionStorage.getItem("f3-register-draft") ?? "";
+    expect(stored).toContain("Test Runner");
+    expect(stored).not.toContain("5550123");
+    expect(stored).not.toContain("Test Contact");
+    cleanup();
+
+    // Back from the new code: same email, form comes back filled in.
+    fetchMock.mockResolvedValueOnce(Response.json(regions));
+    await act(async () => {
+      render(<RegisterForm useBetterAuth={false} />);
+    });
+    expect(screen.getByLabelText(/First Name/)).toHaveProperty("value", "Test");
+    expect(screen.getByLabelText("F3 Name")).toHaveProperty(
+      "value",
+      "Test Runner",
+    );
+    expect(screen.getByLabelText("Phone Number")).toHaveProperty("value", "");
+
+    // A different email gets a blank form.
+    cleanup();
+    searchParams.set("email", "someone-else@example.test");
+    fetchMock.mockResolvedValueOnce(Response.json(regions));
+    await act(async () => {
+      render(<RegisterForm useBetterAuth={false} />);
+    });
+    expect(screen.getByLabelText(/First Name/)).toHaveProperty("value", "");
+  });
+
+  it("clears a saved draft once registration succeeds", async () => {
+    sessionStorage.setItem(
+      "f3-register-draft",
+      JSON.stringify({
+        email,
+        f3Name: "",
+        firstName: "Saved",
+        lastName: "PAX",
+        homeRegionId: "",
+        regionSearch: "",
+      }),
+    );
+    await fillForm();
+    expect(screen.getByLabelText(/First Name/)).toHaveProperty("value", "Test");
+    submit();
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledExactlyOnceWith(callback),
+    );
+    expect(sessionStorage.getItem("f3-register-draft")).toBeNull();
+  });
+
+  it("shows a retryable error after a network failure", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await fillForm();
+    submit();
+    expect(
+      await screen.findByText("Something went wrong. Please try again."),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Create Account" }),
+    ).toHaveProperty("disabled", false);
+    expect(signIn).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+  });
 
   it.each([
     [

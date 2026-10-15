@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 
+import { checkEmailCode } from "~/lib/email-mfa";
 import { logError } from "~/lib/logging";
 import { env } from "~/env";
 import { rateLimit } from "~/lib/rate-limit";
 
 interface RegisterBody {
   email?: string;
+  /** The emailed sign-in code — proof the caller owns `email`. */
+  code?: string;
   f3Name?: string;
   firstName?: string;
   lastName?: string;
@@ -17,6 +21,9 @@ interface RegisterBody {
   emergencyNotes?: string;
 }
 
+/** The emailed sign-in code is always six digits. */
+const codeSchema = z.string().regex(/^\d{6}$/);
+
 /** Strip the +1 country code from US E.164 numbers — most users are US-based
  *  and the DB stores bare 10-digit numbers for domestic numbers. */
 function normalizePhone(phone: string | undefined): string | undefined {
@@ -25,7 +32,10 @@ function normalizePhone(phone: string | undefined): string | undefined {
 }
 
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  // The last hop is the one our proxy appended; earlier hops are caller-set.
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
+    "unknown";
   const { allowed } = rateLimit(`register:${ip}`, 5, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -47,8 +57,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const email = body.email.toLowerCase().trim();
+
+  // Proof of email ownership: the code we emailed to this address. Checked
+  // without consuming it, so the sign-in right after registration still
+  // works. Without this, anyone could create an account for any email.
+  const code = codeSchema.safeParse(body.code);
+  let ownsEmail = false;
+  if (code.success) {
+    try {
+      ownsEmail = await checkEmailCode(email, code.data);
+    } catch (err) {
+      logError("auth.register.code_check_failed", {}, err);
+      return NextResponse.json(
+        { error: "Unable to verify your code. Please try again." },
+        { status: 503 },
+      );
+    }
+  }
+  if (!ownsEmail) {
+    return NextResponse.json(
+      {
+        error:
+          "Your verification code is invalid or has expired. Please sign in again.",
+      },
+      { status: 401 },
+    );
+  }
+
   const payload = {
-    email: body.email.toLowerCase().trim(),
+    email,
     firstName: body.firstName.trim(),
     lastName: body.lastName.trim(),
     ...(body.f3Name?.trim() && { f3Name: body.f3Name.trim() }),
