@@ -334,6 +334,90 @@ describe("API Key Router", () => {
       expect(result.apiKey?.revokedAt).toBeNull();
     });
 
+    it.each(["false", "0"] as const)(
+      "restores a revoked API key when revoke is %s",
+      async (revoke) => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+        const client = createTestClient();
+        const created = await client.apiKey.create({
+          name: `String Restore Test ${uniqueId()}`,
+        });
+        createdApiKeyIds.push(created.id);
+        const revoked = await client.apiKey.revoke({
+          id: created.id,
+          revoke: true,
+        });
+        expect(revoked.apiKey?.revokedAt).toEqual(expect.any(String));
+
+        const restored = await client.apiKey.revoke({ id: created.id, revoke });
+
+        expect(restored.apiKey?.revokedAt).toBeNull();
+        const [row] = await db
+          .select({ revokedAt: schema.apiKeys.revokedAt })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.id, created.id));
+        expect(row).toEqual({ revokedAt: null });
+      },
+    );
+
+    it("still revokes when revoke is omitted", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+      const client = createTestClient();
+      const created = await client.apiKey.create({
+        name: `Default Revoke Test ${uniqueId()}`,
+      });
+      createdApiKeyIds.push(created.id);
+
+      const result = await client.apiKey.revoke({ id: created.id });
+
+      expect(result.apiKey?.revokedAt).toEqual(expect.any(String));
+      const [row] = await db
+        .select({ revokedAt: schema.apiKeys.revokedAt })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.id, created.id));
+      expect(row?.revokedAt).toBe(result.apiKey?.revokedAt);
+    });
+
+    it.each([false, true])(
+      "rejects invalid revoke values without changing the key (initially revoked: %s)",
+      async (initiallyRevoked) => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+        const client = createTestClient();
+        const created = await client.apiKey.create({
+          name: `Invalid Revoke Test ${uniqueId()}`,
+        });
+        createdApiKeyIds.push(created.id);
+        if (initiallyRevoked) {
+          await client.apiKey.revoke({ id: created.id, revoke: true });
+        }
+        const readState = () =>
+          db
+            .select({
+              revokedAt: schema.apiKeys.revokedAt,
+              updated: schema.apiKeys.updated,
+            })
+            .from(schema.apiKeys)
+            .where(eq(schema.apiKeys.id, created.id));
+        const before = await readState();
+
+        for (const revoke of ["invalid", "", null, 0, 1, [], ["false"]]) {
+          await expect(
+            client.apiKey.revoke({
+              id: created.id,
+              // Bypass client typing to exercise runtime validation unchanged.
+              revoke: revoke as Parameters<
+                typeof client.apiKey.revoke
+              >[0]["revoke"],
+            }),
+          ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+          expect(await readState()).toEqual(before);
+        }
+      },
+    );
+
     it("should throw for non-existent key", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -717,6 +801,32 @@ describe("API Key Router", () => {
         .where(eq(schema.apiKeys.id, ownedNationKey.id));
       expect(row?.revokedAt).not.toBeNull();
     });
+
+    it.each(["false", "0"] as const)(
+      "does not let an owner restore a wider key using revoke=%s",
+      async (revoke) => {
+        const ownedNationKey = await insertKey(regionAdminId, [
+          { orgId: tree.nation.id, roleName: "admin" },
+        ]);
+        await mockAuthWithSession(regionAdminSession());
+        const client = createTestClient();
+        const revoked = await client.apiKey.revoke({
+          id: ownedNationKey.id,
+          revoke: true,
+        });
+        expect(revoked.apiKey?.revokedAt).toEqual(expect.any(String));
+
+        await expect(
+          client.apiKey.revoke({ id: ownedNationKey.id, revoke }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+        const [row] = await db
+          .select({ revokedAt: schema.apiKeys.revokedAt })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.id, ownedNationKey.id));
+        expect(row?.revokedAt).toBe(revoked.apiKey?.revokedAt);
+      },
+    );
 
     it("rejects revoke, restore, and purge of an out-of-scope key", async () => {
       const outOfScope = [

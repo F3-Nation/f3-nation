@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { and, eq, inArray, schema, sql } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
+import { queryBooleanSchema } from "@acme/shared/app/functions";
 
 import {
   assertEditorOnEventOrg,
@@ -46,17 +47,11 @@ export const attendanceRouter = {
     .input(
       z.object({
         eventInstanceId: z.coerce.number(),
-        // Use transform to properly handle string "false" from query params
-        // z.coerce.boolean() treats any non-empty string as true
-        isPlanned: z
-          .union([z.boolean(), z.string()])
+        // Preserve Python Boolean spellings for existing attendance callers.
+        isPlanned: queryBooleanSchema
+          .or(z.enum(["True", "False"]).transform((value) => value === "True"))
           .optional()
-          .default(true)
-          .transform((val) => {
-            if (typeof val === "boolean") return val;
-            if (val === "false" || val === "0") return false;
-            return true;
-          }),
+          .default(true),
       }),
     )
     .route({
