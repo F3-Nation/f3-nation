@@ -14,6 +14,7 @@
 import pgConnectionString from "pg-connection-string";
 import postgres from "postgres";
 
+import { LOCAL_PG_CONTAINER } from "./local-docker";
 import { postgresArgs } from "./utils/functions";
 
 // ---------------------------------------------------------------------------
@@ -27,6 +28,8 @@ export interface EnvironmentConfig {
   database: string;
   /** Secret Manager secret holding the migration login's URL. */
   secret: string;
+  /** Cloud SQL instance, for the cloud-sql-proxy command in error hints. */
+  instance: string;
   /**
    * Journal entries this database is known not to have, although newer ones
    * are applied. Drizzle never runs those (it only runs entries newer than
@@ -42,11 +45,13 @@ export const ENVIRONMENTS: Record<RemoteEnvironment, EnvironmentConfig> = {
   staging: {
     database: "f3_staging",
     secret: "MIGRATE_DATABASE_URL_STAGING",
+    instance: "f3data:us-central1:f3data-nonprod",
     knownSkipped: [],
   },
   prod: {
     database: "f3_prod",
     secret: "MIGRATE_DATABASE_URL_PROD",
+    instance: "f3data:us-central1:f3data",
     // 0008_nice_leech was applied to staging but never to prod, and prod had
     // already moved past its timestamp, so Drizzle can never apply it there
     // (checked read-only 2026-10-08: prod lacks only this one).
@@ -190,7 +195,7 @@ export const isCloudSqlServer = async (serverUrl: string): Promise<boolean> => {
 export const DISPOSABLE_MARKER = "f3-disposable-local-v1";
 
 /** How to mark the local Docker database disposable, for the refusals that need it. */
-export const DISPOSABLE_REMEDY = `For the local Docker database, run pnpm local:setup, or mark it once with: docker exec f3-postgres psql -U f3local -d f3nation -c "COMMENT ON DATABASE f3nation IS '${DISPOSABLE_MARKER}'"`;
+export const DISPOSABLE_REMEDY = `For the local Docker database, run pnpm local:setup, or mark it once with: docker exec ${LOCAL_PG_CONTAINER} psql -U f3local -d f3nation -c "COMMENT ON DATABASE f3nation IS '${DISPOSABLE_MARKER}'"`;
 
 /** What a local-only command is doing, and where else to do it. */
 export interface LocalTargetAction {
@@ -321,7 +326,7 @@ export interface MigrationPlan {
  *   row would be skipped silently, forever: fatal, unless listed in the
  *   environment's knownSkipped.
  * - a row whose hash differs from the file's is only a warning: files were
- *   edited after they ran (prod's 0011 and 0015), and Drizzle never reads
+ *   edited after they ran (staging's 0011, prod's 0015), and Drizzle never reads
  *   the hash.
  */
 export function planMigrations(
@@ -391,4 +396,89 @@ export function checkPlan(
 /** Whether the typed confirmation names the target database exactly. */
 export function confirmationMatches(typed: string, database: string): boolean {
   return typed.trim() === database;
+}
+
+/**
+ * What to tell the operator when the read-only connection fails. Names the
+ * host and port (never the login) so a missing cloud-sql-proxy is obvious,
+ * with the exact command for this environment.
+ */
+export function connectionHint(
+  error: unknown,
+  databaseUrl: string,
+  instance: string,
+): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  let host = "";
+  let port = "5432";
+  try {
+    const parsed = pgConnectionString.parse(databaseUrl);
+    host = parsed.host ?? "";
+    // pg-connection-string returns "" (not undefined) for a URL with no
+    // port, so `??` would never apply the default.
+    if (parsed.port) port = parsed.port;
+  } catch {
+    // Handled below: no host means there's no address worth naming.
+  }
+  // A malformed secret (truncated, wrong scheme, plain text) isn't always
+  // rejected by the parser ("not a url" parses with host "base"). Report it as
+  // a bad secret, not a network problem, and never echo the URL.
+  if (!host || !/^postgres(ql)?:\/\//i.test(databaseUrl)) {
+    return "The migration URL couldn't be parsed. Ask an admin to check the secret.";
+  }
+  const where = host.startsWith("/") ? `socket ${host}` : `${host}:${port}`;
+  const local = LOCAL_HOSTNAMES.has(host.toLowerCase());
+  // Classify by the error's code first (node's errno codes, postgres.js's
+  // CONNECT_TIMEOUT / CONNECTION_CLOSED, Postgres SQLSTATEs); the message is
+  // the fallback for errors that carry no code.
+  const rawCode = (error as { code?: unknown } | null)?.code;
+  const code = typeof rawCode === "string" ? rawCode : "";
+  const KNOWN_CODES = [
+    "ECONNREFUSED",
+    "ENOENT",
+    "ECONNRESET",
+    "CONNECTION_CLOSED",
+    "28P01",
+    "ETIMEDOUT",
+    "CONNECT_TIMEOUT",
+  ];
+  // A code we know decides on its own, so a message that mentions some other
+  // failure can't steer the hint; anything else falls back to the message.
+  const is = (codes: string[], pattern: RegExp) =>
+    KNOWN_CODES.includes(code) ? codes.includes(code) : pattern.test(msg);
+  if (is(["ECONNREFUSED", "ENOENT"], /ECONNREFUSED|ENOENT/)) {
+    return local
+      ? `Nothing is listening at ${where}. Start the Cloud SQL proxy in another ` +
+          `terminal and leave it running, then run this again:\n` +
+          `  cloud-sql-proxy ${instance} --port ${port}`
+      : `Nothing is listening at ${where}. Check the migration URL's host, or ask an admin.`;
+  }
+  // A local proxy that accepts the connection but can't reach Cloud SQL
+  // (usually missing credentials) drops it.
+  if (
+    local &&
+    is(
+      ["ECONNRESET", "CONNECTION_CLOSED"],
+      /ECONNRESET|Connection terminated|CONNECTION_CLOSED/i,
+    )
+  ) {
+    return (
+      `The proxy at ${where} accepted the connection but couldn't reach Cloud SQL. ` +
+      `Check its output; if it can't find credentials, run ` +
+      `\`gcloud auth application-default login\` once and restart it.`
+    );
+  }
+  // 28P01: invalid_password.
+  if (is(["28P01"], /password authentication failed/)) {
+    return "The database rejected the login in the migration URL. Ask an admin to check the secret.";
+  }
+  if (is(["ETIMEDOUT", "CONNECT_TIMEOUT"], /timeout|ETIMEDOUT/i)) {
+    if (local || host.startsWith("/")) {
+      return `Couldn't reach the database at ${where} (timed out). Is the proxy running? Check its output.`;
+    }
+    return `Couldn't reach the database at ${where} (timed out). Is your IP allowed?`;
+  }
+  // Error codes (ENOTFOUND, 3D000, ...) never contain the URL, so they're
+  // safe to show and give the operator something to search for.
+  return `Couldn't connect to the database at ${where}${code ? ` (${code})` : ""}.`;
 }

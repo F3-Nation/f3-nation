@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.3.0](https://github.com/F3-Nation/f3-nation/compare/me@2.2.9...me@2.3.0) (2026-10-14)
+
+
+### Features
+
+* **db,shared,admin:** add password_manager and password_reader roles ([#1180](https://github.com/F3-Nation/f3-nation/issues/1180)) ([e69f45d](https://github.com/F3-Nation/f3-nation/commit/e69f45d92f88ed1248a86cdce716e05a66389b85))
+* **repo,db:** run several checkouts side by side with local:setup --slot ([#1246](https://github.com/F3-Nation/f3-nation/issues/1246)) ([7a1377f](https://github.com/F3-Nation/f3-nation/commit/7a1377f3ba83dd5eccae3b322947994f3379205e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.14.0
+    * @acme/shared bumped to 0.5.0
+    * @acme/ui bumped to 0.2.2
+
 ## [2.2.9](https://github.com/F3-Nation/f3-nation/compare/me@2.2.8...me@2.2.9) (2026-10-10)
 
 

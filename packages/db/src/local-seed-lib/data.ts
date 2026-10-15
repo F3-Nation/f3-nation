@@ -1,5 +1,7 @@
 import { EventTypes } from "@acme/shared/app/enums";
 
+import { localAppOrigin } from "../local-docker";
+
 // ---------------------------------------------------------------------------
 // Org hierarchy
 // ---------------------------------------------------------------------------
@@ -310,8 +312,10 @@ export const LOCAL_OAUTH_CLIENTS = [
     // SHA-256 of "local-me-client-secret" — deterministic so it can be committed
     clientSecretHash:
       "6239f25f8cff37f5ab67b37bfbb9ae94abd1805db915f010573412111a8d54fc",
-    redirectUris: JSON.stringify(["http://localhost:3003/api/auth/callback"]),
-    allowedOrigin: "http://localhost:3003",
+    redirectUris: JSON.stringify([
+      `${localAppOrigin("F3_ME_PORT", 3003)}/api/auth/callback`,
+    ]),
+    allowedOrigin: localAppOrigin("F3_ME_PORT", 3003),
     scopes: "openid profile email",
     isActive: true,
   },
@@ -321,8 +325,10 @@ export const LOCAL_OAUTH_CLIENTS = [
     // SHA-256 of "local-admin-client-secret" — deterministic so it can be committed
     clientSecretHash:
       "47c7916194a344bae65495f8eae734a58ad0f37a28449b8f7d6e14535f4246e6",
-    redirectUris: JSON.stringify(["http://localhost:3002/api/auth/callback"]),
-    allowedOrigin: "http://localhost:3002",
+    redirectUris: JSON.stringify([
+      `${localAppOrigin("F3_ADMIN_PORT", 3002)}/api/auth/callback`,
+    ]),
+    allowedOrigin: localAppOrigin("F3_ADMIN_PORT", 3002),
     scopes: "openid profile email",
     isActive: true,
   },
