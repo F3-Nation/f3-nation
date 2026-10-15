@@ -25,7 +25,11 @@ import {
   EventCategory,
   IsActiveStatus,
 } from "@acme/shared/app/enums";
-import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
+import {
+  arrayOrSingle,
+  getFullAddress,
+  queryBooleanSchema,
+} from "@acme/shared/app/functions";
 import { EventCrupdateSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -91,7 +95,7 @@ const eventAllInputSchema = eventFilterSchema
   .extend({
     ...paginationFields("events"),
     sorting: z
-      .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
+      .array(z.object({ id: z.string(), desc: queryBooleanSchema }))
       .optional()
       .describe(
         "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: regions, parent, status, dayOfWeek, created.",
