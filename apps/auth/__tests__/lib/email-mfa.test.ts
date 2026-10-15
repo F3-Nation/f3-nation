@@ -5,7 +5,7 @@ import type { Mock } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { and, eq, gt, isNull } from "@acme/db";
+import { and, eq, gt, isNull, lt } from "@acme/db";
 import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
 const { createTransport, sendMail } = vi.hoisted(() => {
@@ -26,7 +26,14 @@ interface TestMailOptions {
 // Mock db chain
 function chain<T>(result: T) {
   const obj: Record<string, unknown> = {};
-  for (const method of ["from", "where", "limit", "set", "values"]) {
+  for (const method of [
+    "from",
+    "where",
+    "limit",
+    "set",
+    "values",
+    "returning",
+  ]) {
     obj[method] = vi.fn(() => obj);
   }
   obj.then = (resolve: (v: T) => unknown, reject?: (e: unknown) => unknown) =>
@@ -34,8 +41,12 @@ function chain<T>(result: T) {
   return obj;
 }
 
+// update() resolves to one row by default, so findMatchingCode's attempt
+// claim succeeds unless a test says otherwise.
 const dbMock = {
-  update: vi.fn<(table: unknown) => ReturnType<typeof chain>>(() => chain([])),
+  update: vi.fn<(table: unknown) => ReturnType<typeof chain>>(() =>
+    chain([{ id: "code-1" }]),
+  ),
   insert: vi.fn(() => chain([])),
   select: vi.fn(() => chain([])),
 };
@@ -51,7 +62,7 @@ vi.mock("~/env", () => ({
   },
 }));
 
-const { sendEmailCode, verifyEmailCode } =
+const { checkEmailCode, recordEmailCode, sendEmailCode, verifyEmailCode } =
   await import("../../src/lib/email-mfa");
 
 function hashCode(code: string): string {
@@ -197,7 +208,7 @@ describe("verifyEmailCode", () => {
     );
   });
 
-  it("returns null if attempt count has reached max attempts", async () => {
+  it("returns null without comparing when no attempt is left to claim", async () => {
     dbMock.select.mockReturnValueOnce(
       chain([
         {
@@ -208,13 +219,20 @@ describe("verifyEmailCode", () => {
         },
       ]),
     );
+    dbMock.update.mockReturnValueOnce(chain([]));
 
     const result = await verifyEmailCode("user@example.com", "123456");
     expect(result).toBeNull();
-    expect(dbMock.update).not.toHaveBeenCalled();
+    // Only the failed claim; the right code is never consumed.
+    expect(dbMock.update).toHaveBeenCalledTimes(1);
+    expect(toQuery(updateChain(0).where.mock.calls[0]?.[0] as SQL)).toEqual(
+      toQuery(
+        and(eq(emailMfaCodes.id, "code-1"), lt(emailMfaCodes.attemptCount, 5)),
+      ),
+    );
   });
 
-  it("increments attemptCount and returns null if code does not match", async () => {
+  it("claims one attempt and returns null if code does not match", async () => {
     dbMock.select.mockReturnValueOnce(
       chain([
         {
@@ -270,17 +288,20 @@ describe("verifyEmailCode", () => {
       emailVerified: null,
       f3Name: "Ocho",
     });
-    expect(dbMock.update).toHaveBeenCalledTimes(2);
+    expect(dbMock.update).toHaveBeenCalledTimes(3);
+    expect(
+      Object.keys(updateChain(0).set.mock.calls[0]?.[0] as object),
+    ).toEqual(["attemptCount"]);
 
-    const consume = updateChain(0);
-    expect(dbMock.update.mock.calls[0]?.[0]).toBe(emailMfaCodes);
+    const consume = updateChain(1);
+    expect(dbMock.update.mock.calls[1]?.[0]).toBe(emailMfaCodes);
     expect(consume.set).toHaveBeenCalledWith({ consumedAt: NOW });
     expect(toQuery(consume.where.mock.calls[0]?.[0] as SQL)).toEqual(
       toQuery(eq(emailMfaCodes.id, "code-1")),
     );
 
-    const verify = updateChain(1);
-    expect(dbMock.update.mock.calls[1]?.[0]).toBe(users);
+    const verify = updateChain(2);
+    expect(dbMock.update.mock.calls[2]?.[0]).toBe(users);
     expect(verify.set).toHaveBeenCalledWith({ emailVerified: NOW });
     expect(toQuery(verify.where.mock.calls[0]?.[0] as SQL)).toEqual(
       toQuery(eq(users.id, 42)),
@@ -313,9 +334,9 @@ describe("verifyEmailCode", () => {
 
     const result = await verifyEmailCode("user@example.com", code);
     expect(result).toMatchObject({ id: 42 });
-    // Only the code-consumed update; no emailVerified write
-    expect(dbMock.update).toHaveBeenCalledTimes(1);
-    expect(updateChain(0).set).toHaveBeenCalledWith({ consumedAt: NOW });
+    // The attempt claim and the code-consumed update; no emailVerified write
+    expect(dbMock.update).toHaveBeenCalledTimes(2);
+    expect(updateChain(1).set).toHaveBeenCalledWith({ consumedAt: NOW });
   });
 
   it("returns null when code matches but user does not exist in users table", async () => {
@@ -335,5 +356,74 @@ describe("verifyEmailCode", () => {
 
     const result = await verifyEmailCode("newuser@example.com", code);
     expect(result).toBeNull();
+  });
+});
+
+describe("recordEmailCode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("stores a hash of an externally generated code without sending mail", async () => {
+    await recordEmailCode(" User@Example.COM", "246810");
+
+    expect(updateChain(0).set).toHaveBeenCalledWith({ consumedAt: NOW });
+    const insertChain = dbMock.insert.mock.results[0]?.value as ChainMock;
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "user@example.com",
+        codeHash: hashCode("246810"),
+        attemptCount: 0,
+      }),
+    );
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkEmailCode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const activeCode = (attemptCount = 0) =>
+    chain([
+      {
+        id: "code-1",
+        email: "user@example.com",
+        codeHash: hashCode("123456"),
+        attemptCount,
+      },
+    ]);
+
+  it("accepts a matching code, spending an attempt but not consuming it", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode());
+
+    expect(await checkEmailCode("user@example.com", "123456")).toBe(true);
+    expect(dbMock.update).toHaveBeenCalledTimes(1);
+    // The one update is the attempt claim; nothing marks the code consumed.
+    expect(
+      Object.keys(updateChain(0).set.mock.calls[0]?.[0] as object),
+    ).toEqual(["attemptCount"]);
+  });
+
+  it("counts a wrong code toward the lockout", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode(1));
+
+    expect(await checkEmailCode("user@example.com", "999999")).toBe(false);
+    expect(updateChain(0).set).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects even the right code once no attempt can be claimed", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode(5));
+    dbMock.update.mockReturnValueOnce(chain([]));
+
+    expect(await checkEmailCode("user@example.com", "123456")).toBe(false);
+  });
+
+  it("rejects when there is no active code", async () => {
+    dbMock.select.mockReturnValueOnce(chain([]));
+
+    expect(await checkEmailCode("user@example.com", "123456")).toBe(false);
+    expect(dbMock.update).not.toHaveBeenCalled();
   });
 });
