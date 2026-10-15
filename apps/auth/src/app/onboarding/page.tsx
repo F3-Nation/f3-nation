@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import Image from "next/image";
 
+import { RegionPicker } from "~/app/components/RegionPicker";
+import type { Region } from "~/app/components/RegionPicker";
 import { isValidCallbackUrl } from "~/lib/callback-url";
 
 export default function OnboardingPage() {
@@ -19,6 +21,10 @@ function OnboardingForm() {
   const [f3Name, setF3Name] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [homeRegionId, setHomeRegionId] = useState<number | "">("");
+  const [regionSearch, setRegionSearch] = useState("");
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [regionsLoaded, setRegionsLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [prefilling, setPrefilling] = useState(true);
   const [isExistingUser, setIsExistingUser] = useState(false);
@@ -55,12 +61,14 @@ function OnboardingForm() {
           f3Name?: string;
           firstName?: string;
           lastName?: string;
+          homeRegionId?: number | null;
           isExistingUser?: boolean;
         }) => {
           if (!data) return;
           if (data.f3Name) setF3Name(data.f3Name);
           if (data.firstName) setFirstName(data.firstName);
           if (data.lastName) setLastName(data.lastName);
+          if (data.homeRegionId) setHomeRegionId(data.homeRegionId);
           if (data.isExistingUser) setIsExistingUser(true);
         },
       )
@@ -75,7 +83,27 @@ function OnboardingForm() {
       });
   }, [router, callbackUrl]);
 
-  if (prefilling) {
+  useEffect(() => {
+    fetch("/api/regions")
+      .then((res) => res.json())
+      .then((data: Region[]) => setRegions(data))
+      .catch(() => {
+        // No list to pick from: the form still works without a region.
+      })
+      .finally(() => setRegionsLoaded(true));
+  }, []);
+
+  // Show the saved region's name once the list is in. A saved region that
+  // isn't on the list (a retired region, say) is dropped so the user picks
+  // a current one instead of confirming a stale id.
+  useEffect(() => {
+    if (!homeRegionId || regions.length === 0) return;
+    const saved = regions.find((r) => r.id === homeRegionId);
+    if (saved) setRegionSearch(saved.name);
+    else setHomeRegionId("");
+  }, [regions, homeRegionId]);
+
+  if (prefilling || !regionsLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
@@ -87,13 +115,26 @@ function OnboardingForm() {
     e.preventDefault();
     setLoading(true);
     setError("");
+
+    // Only ask for a region when there is a list to choose from.
+    if (regions.length > 0 && !homeRegionId) {
+      setError("Please choose your home region.");
+      setLoading(false);
+      return;
+    }
+
     let navigating = false;
 
     try {
       const res = await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ f3Name, firstName, lastName }),
+        body: JSON.stringify({
+          f3Name,
+          firstName,
+          lastName,
+          ...(homeRegionId && { homeRegionId }),
+        }),
       });
 
       if (!res.ok) {
@@ -196,6 +237,19 @@ function OnboardingForm() {
               className="w-full rounded-md border bg-background px-4 py-3 text-base outline-hidden focus:ring-2 focus:ring-ring"
             />
           </div>
+
+          {regions.length > 0 && (
+            <RegionPicker
+              regions={regions}
+              value={homeRegionId}
+              onChange={setHomeRegionId}
+              search={regionSearch}
+              onSearchChange={setRegionSearch}
+              inputClass="w-full rounded-md border bg-background px-4 py-3 text-base outline-hidden focus:ring-2 focus:ring-ring"
+              placeholder="Search for your home region"
+              required
+            />
+          )}
 
           {error && <p className="text-base text-destructive">{error}</p>}
 
