@@ -88,4 +88,40 @@ describe("createAO / updateAO parent-type validation", () => {
       updateAO(ctx, { id: aoId, parentId: TEST_SECTOR_ORG_ID }),
     ).rejects.toThrow(/AO.*Sector/);
   });
+
+  it("returns the locked source and committed destination regions for an AO move", async () => {
+    const [source, destination] = await db
+      .insert(schema.orgs)
+      .values([
+        {
+          name: `AO Move Source ${uniqueId()}`,
+          orgType: "region",
+          parentId: TEST_SECTOR_ORG_ID,
+          isActive: true,
+        },
+        {
+          name: `AO Move Destination ${uniqueId()}`,
+          orgType: "region",
+          parentId: TEST_SECTOR_ORG_ID,
+          isActive: true,
+        },
+      ])
+      .returning();
+    if (!source || !destination) throw new Error("Failed to create regions");
+    createdOrgIds.push(source.id, destination.id);
+
+    const aoId = await createAO(ctx, {
+      regionId: source.id,
+      aoName: `Moving AO ${uniqueId()}`,
+    });
+    createdOrgIds.push(aoId);
+
+    const updated = await updateAO(ctx, {
+      id: aoId,
+      parentId: destination.id,
+    });
+
+    expect(updated.oldRegionId).toBe(source.id);
+    expect(updated.newRegionId).toBe(destination.id);
+  });
 });
