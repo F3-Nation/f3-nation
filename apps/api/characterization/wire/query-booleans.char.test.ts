@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db, getOrCreateF3NationOrg, uniqueId } from "@acme/api/testing";
-import { inArray, schema } from "@acme/db";
+import { eq, inArray, schema } from "@acme/db";
 
 import type { FixtureApiKey } from "../fixtures/api-keys";
 import { createApiKey } from "../fixtures/api-keys";
+import { sessionCookie } from "../fixtures/cookies";
 import { rpcResponse } from "../rpc-client";
 import { req, target } from "../transport";
 
@@ -35,7 +36,7 @@ const booleanCases = [
 ] as const;
 
 /**
- * Real Requests traverse Hono dispatch, OpenAPI query deserialization and auth.
+ * Real Requests traverse Hono dispatch, OpenAPI input deserialization and auth.
  * The RPC cases use the actual client codec. Shared-database gating also lets
  * the built-bundle CI leg run these fixtures without touching Staging data.
  */
@@ -319,6 +320,76 @@ describe.runIf(target.sharesDatabase)("boolean query options", () => {
     const body = (await res.json()) as { json: EventList };
     expect(body.json.events.map(({ id }) => id)).toEqual(eventIds);
   });
+
+  it("defaults omitted RPC sorting desc to ascending in the shared parser", async () => {
+    const res = await rpcResponse(
+      (client) =>
+        client.eventTag.all({
+          searchTerm: prefix,
+          orgIds: [orgIds[0]!],
+          statuses: ["active"],
+          ignoreNationEventTags: true,
+          sorting: [{ id: "id" }],
+        }),
+      headers(),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { json: EventTagList };
+    expect(body.json.totalCount).toBe(2);
+    expect(body.json.eventTags.map(({ id }) => id)).toEqual(activeRegionTagIds);
+  });
+
+  it.each(["false", "0"])(
+    "restores a revoked API key with REST revoke=%s",
+    async (value) => {
+      const revokedKey = await createApiKey({
+        revoked: true,
+        roles: [{ orgId: orgIds[0]!, roleName: "editor" }],
+      });
+      try {
+        const [before] = await db
+          .select({ revokedAt: schema.apiKeys.revokedAt })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.id, revokedKey.apiKeyId));
+        expect(before?.revokedAt).toBeTypeOf("string");
+
+        const cookie = await sessionCookie({
+          id: String(revokedKey.ownerId),
+          roles: [
+            {
+              orgId: orgIds[0]!,
+              orgName: `${prefix} Mine`,
+              roleName: "admin",
+            },
+          ],
+        });
+        // Management requires a user session; POST inputs use the JSON body.
+        const res = await target.invoke(
+          req(`/v1/api-key/${revokedKey.apiKeyId}/revoke`, {
+            method: "POST",
+            headers: {
+              cookie,
+              client: "characterization",
+              "content-type": "application/json",
+              "x-forwarded-for": `10.97.0.${++requestIndex}`,
+            },
+            body: JSON.stringify({ revoke: value }),
+          }),
+        );
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({
+          apiKey: { id: revokedKey.apiKeyId, revokedAt: null },
+        });
+        const [stored] = await db
+          .select({ revokedAt: schema.apiKeys.revokedAt })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.id, revokedKey.apiKeyId));
+        expect(stored).toEqual({ revokedAt: null });
+      } finally {
+        await revokedKey.cleanup();
+      }
+    },
+  );
 
   it("preserves actual RPC false for onlyMine", async () => {
     const res = await rpcResponse(
