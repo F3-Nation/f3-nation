@@ -14,16 +14,17 @@
 
 ## Who's who
 
-| Role         | What they do                                                                                                                        | Person                 |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Release lead | Runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys or changes the database. | @taterhead247 (Tackle) |
-| Monitor      | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                             | @BigGillyStyle (Crash) |
+| Role          | What they do                                                                                                                                                                                                                                                                          | Person                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Release lead  | Runs any database migration, approves Production, and makes the go/no-go call. The only person who deploys the apps or migrates the database.                                                                                                                                         | @taterhead247 (Tackle) |
+| Monitor       | Watches logs and dashboards, runs the read-only database checks, and runs the test plan                                                                                                                                                                                               | @BigGillyStyle (Crash) |
+| Refresh admin | After a Production migration, re-runs the Staging refresh setup (the refresh job and its read-only database login). An Owner of the `f3data` Google Cloud project who can read the spuds database passwords in Secret Manager (`DB_SPUDS_PASSWORD_PROD`, `DB_SPUDS_PASSWORD_STAGING`) | @dnishiyama (Spuds)    |
 
 **Slack channel:** `#monorepo`. Announce the start there.
 
 ## Stop rule
 
-If anything under **Stop if** happens, post in `#monorepo` and pause. Don't approve any Production deployment. The Release lead and Monitor decide together what to do next, and only the Release lead changes the database.
+If anything under **Stop if** happens, post in `#monorepo` and pause. Don't approve any Production deployment. The Release lead and Monitor decide together what to do next, and only the Release lead deploys or migrates.
 
 ---
 
@@ -61,6 +62,12 @@ If anything under **Stop if** happens, post in `#monorepo` and pause. Don't appr
   - **Expected:** {{WHAT_ERRORS_APPEAR_BETWEEN_DEPLOY_AND_MIGRATION_OR_"none"}}
   - **Stop if:** the migration shows an error, or the check query doesn't match. Retry **once**; if it fails again, stop.
 - [ ] **Return to your branch:** `git switch -`. Owner: Release lead
+
+<!-- OPTIONAL (Production only, when there is a migration): -->
+
+- [ ] **Update the Staging refresh** for the new database, before the next refresh. From the repository root, `git status --porcelain` must print nothing; then run `git fetch origin main && git switch --detach {{RELEASE_SHA}}`, then `STAGING_REFRESH_RUNNERS="<same runners as last time>" bash tooling/scripts/staging-refresh/setup.sh` (the runner list isn't in the repo; the Refresh admin has it), then `git switch -`. No `pnpm install` is needed: the image builds in Cloud Build. Owner: Refresh admin
+  - **Expected:** it ends with `Done. Image …` and no errors. The note about restarting the slackbot that it prints every time is informational.
+  - **If it fails** (or prints `WARNING: the checkout has uncommitted changes`): this item is outside the Stop rule and doesn't hold up the release. Post it in `#monorepo` so the next Staging refresh waits until it's fixed.
 
 <!-- Production: drop the "Create the test plan" step below and renumber. -->
 

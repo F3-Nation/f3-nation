@@ -103,15 +103,15 @@ The logs never contain row data: counts, table and key names only.
 You don't need to clean anything up: either staging wasn't touched, or the
 job rolled it back. Common reasons it stops:
 
-| `!! STOPPED:` says                                                         | Do this                                                                                                                                          |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `migration gate: prod is at … but staging is at …`                         | Wait until prod and staging run the same release, then run it again.                                                                             |
-| `… migration(s) this build's … _journal.json doesn't know`                 | The job's image is older than prod. Ask whoever maintains it to run `tooling/scripts/staging-refresh/setup.sh --image-only` from current `main`. |
-| `obfuscate-db failed` with `column(s) nobody has reviewed for PII`         | A migration added a column without classifying it. That needs a code change (see [Review gate](#review-gate)), then a new image.                 |
-| `copy and staging tables differ`                                           | Prod and staging have different columns on a table. Usually the same fix as the migration gate: wait for both to run the same release.           |
-| `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                          |
-| `another staging refresh is running`                                       | Someone else started one. Wait for it.                                                                                                           |
-| `staging already has schema refresh_keep`                                  | An earlier run's rollback didn't finish. See below.                                                                                              |
+| `!! STOPPED:` says                                                         | Do this                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `migration gate: prod is at … but staging is at …`                         | Wait until prod and staging run the same release, then run it again.                                                                                                                                     |
+| `… migration(s) this build's … _journal.json doesn't know`                 | The job's image is older than prod. Ask whoever maintains it to run the full `tooling/scripts/staging-refresh/setup.sh` (with `STAGING_REFRESH_RUNNERS`) from a checkout of the release Production runs. |
+| `obfuscate-db failed` with `column(s) nobody has reviewed for PII`         | A migration added a column without classifying it. That needs a code change (see [Review gate](#review-gate)), then a new image.                                                                         |
+| `copy and staging tables differ`                                           | Prod and staging have different columns on a table. Usually the same fix as the migration gate: wait for both to run the same release.                                                                   |
+| `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                                                                                  |
+| `another staging refresh is running`                                       | Someone else started one. Wait for it.                                                                                                                                                                   |
+| `staging already has schema refresh_keep`                                  | An earlier run's rollback didn't finish. See below.                                                                                                                                                      |
 
 **`ROLLBACK FAILED`** means the load failed and putting staging back failed
 too (e.g. staging was unreachable), three times. Staging's loaded tables may
@@ -165,8 +165,10 @@ It creates:
   view. It also removes what its first version made instead: a view on
   `_Default` that showed every Cloud Run job's logs, and its bindings.
 
-Re-run it with `--image-only` after any release that adds a migration, so
-the image knows prod's migrations and columns. It prints the one permission
+Re-run the full setup after any Production release that adds a migration:
+it rebuilds the image so it knows prod's migrations and columns, and it
+re-applies `prod-login.sql`, whose read access a migration can undo.
+`--image-only` is only for a code-only rebuild. It prints the one permission
 it can't grant: restarting the slackbot in `f3-slackbot-staging`.
 
 The job's command is `pnpm -F @acme/scripts staging-refresh`
@@ -731,7 +733,7 @@ obfuscate-db -- --update-column-snapshot`). **Reviewers:** a new line in
    the snapshot is a PII decision; check the column's handling, not just the
    line.
 4. **The run** refuses unless prod's migrations are all in the image's
-   journal (the image is rebuilt from `main` with `setup.sh --image-only`),
+   journal (the image is rebuilt with the full `setup.sh` after each Production migration),
    then refuses unless the verify-target suite passes 100% on the copy.
 
 What this does not cover: the gate checks that a column was _reviewed_, not
