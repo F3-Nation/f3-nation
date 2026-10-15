@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { IsActiveStatus } from "@acme/shared/app/enums";
@@ -61,15 +61,19 @@ import {
   openModal,
 } from "~/utils/store/modal";
 
-export default function AdminOrgEditModal({
-  orgType,
-  id,
-  isProd = true,
-}: {
+interface AdminOrgEditModalProps {
   orgType: EditableOrgType;
   id?: number | null;
   isProd?: boolean;
-}) {
+}
+
+export default function AdminOrgEditModal(props: AdminOrgEditModalProps) {
+  return (
+    <OrgEditForm key={`${props.orgType}:${props.id ?? "new"}`} {...props} />
+  );
+}
+
+function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
   const config = orgEditorConfig[orgType];
   const label = orgTypeDisplay[orgType].label;
   const { parentTypes } = config;
@@ -218,6 +222,12 @@ export default function AdminOrgEditModal({
   );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saveCompleted, setSaveCompleted] = useState(false);
+  const submittingRef = useRef(false);
+  const createdOrgId = useRef<number | "unknown" | null>(null);
+  const [saveRecovery, setSaveRecovery] = useState<
+    "upload" | "update" | "missing-id" | "saved" | null
+  >(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
@@ -309,6 +319,8 @@ export default function AdminOrgEditModal({
           : `Failed to ${actionText} ${orgType}`,
     );
   };
+  const partialSaveMessage = (step: "upload" | "update") =>
+    `This ${label} was created, but ${step === "upload" ? "uploading its logo" : "saving its remaining changes"} failed.`;
   const crupdateOrg = useMutation(
     orpc.org.crupdate.mutationOptions(
       config.logoPosition ? {} : { onSuccess, onError },
@@ -381,6 +393,8 @@ export default function AdminOrgEditModal({
           <form
             onSubmit={form.handleSubmit(
               async (data) => {
+                if (submittingRef.current || createdOrgId.current === "unknown")
+                  return;
                 if (isRegionEditor) {
                   if (regionRecordUnavailable) {
                     toast.error(regionRecordMessage);
@@ -424,7 +438,10 @@ export default function AdminOrgEditModal({
                     }
                   }
                 }
+                submittingRef.current = true;
                 setIsSubmitting(true);
+                let saved = false;
+                let step: "upload" | "update" = "update";
                 try {
                   const payload = {
                     ...data,
@@ -432,35 +449,58 @@ export default function AdminOrgEditModal({
                     orgType,
                   };
                   if (config.logoPosition) {
-                    let orgId = data.id;
+                    let orgId = createdOrgId.current ?? data.id;
                     if (!orgId) {
                       const result = await crupdateOrg.mutateAsync(payload);
                       orgId = result.org?.id;
+                      if (
+                        typeof orgId !== "number" ||
+                        !Number.isSafeInteger(orgId) ||
+                        orgId <= 0
+                      ) {
+                        createdOrgId.current = "unknown";
+                        setSaveRecovery("missing-id");
+                        return;
+                      }
+                      createdOrgId.current = orgId;
+                      form.setValue("id", orgId);
                     }
                     let logoUrl: string | undefined;
                     if (selectedLogoFile && orgId) {
+                      step = "upload";
                       setIsUploadingLogo(true);
                       logoUrl = await uploadLogo({
                         file: selectedLogoFile,
                         orgId,
                       });
                     }
+                    step = "update";
                     await crupdateOrg.mutateAsync({
                       ...payload,
                       id: orgId,
                       ...(logoUrl ? { logoUrl } : {}),
                     });
+                    saved = true;
+                    setSaveCompleted(true);
+                    setSaveRecovery(null);
                     await onSuccess();
                   } else {
                     await crupdateOrg.mutateAsync(payload);
                   }
                 } catch (error) {
-                  if (config.logoPosition) onError(error);
+                  if (config.logoPosition) {
+                    if (saved) setSaveRecovery("saved");
+                    else if (createdOrgId.current != null) {
+                      toast.error(partialSaveMessage(step));
+                      setSaveRecovery(step);
+                    } else onError(error);
+                  }
                   if (config.submitErrorToast)
                     toast.error(`Failed to update ${orgType}`);
                 } finally {
                   setIsUploadingLogo(false);
                   setIsSubmitting(false);
+                  if (!saved) submittingRef.current = false;
                 }
               },
               () => {
@@ -832,6 +872,15 @@ export default function AdminOrgEditModal({
                     : "mb-4 w-full px-2"
                 }
               >
+                {saveRecovery && (
+                  <p role="status" className="mb-4 text-sm">
+                    {saveRecovery === "missing-id"
+                      ? `This ${label} may have been created, but its ID was not returned. Close this form, reload the page, and check the organization list before trying again. Saving is disabled to avoid creating a duplicate.`
+                      : saveRecovery === "saved"
+                        ? `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`
+                        : `${partialSaveMessage(saveRecovery)} Your entries are kept. Save Changes will retry the same ${label} (ID ${createdOrgId.current}).`}
+                  </p>
+                )}
                 <div
                   className={
                     config.compactLayout
@@ -851,8 +900,12 @@ export default function AdminOrgEditModal({
                     type="submit"
                     className="w-full"
                     disabled={
-                      isRegionEditor &&
-                      (regionRecordUnavailable || sourceAccessDenied)
+                      isSubmitting ||
+                      saveCompleted ||
+                      saveRecovery === "missing-id" ||
+                      saveRecovery === "saved" ||
+                      (isRegionEditor &&
+                        (regionRecordUnavailable || sourceAccessDenied))
                     }
                   >
                     {isSubmitting ? (
