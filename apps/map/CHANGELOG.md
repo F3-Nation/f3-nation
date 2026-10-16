@@ -1,5 +1,23 @@
 # Changelog
 
+## [7.8.1](https://github.com/F3-Nation/f3-nation/compare/map@7.8.0...map@7.8.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **api:** validate region ID integer domain ([#1236](https://github.com/F3-Nation/f3-nation/issues/1236)) ([21c87c0](https://github.com/F3-Nation/f3-nation/commit/21c87c0451695a84e42523b79e775ec8b3396a69))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.15.0
+    * @acme/auth bumped to 0.2.11
+    * @acme/shared bumped to 0.5.1
+    * @acme/ui bumped to 0.2.3
+    * @acme/validators bumped to 0.5.1
+
 ## [7.8.0](https://github.com/F3-Nation/f3-nation/compare/map@7.7.0...map@7.8.0) (2026-10-14)
 
 

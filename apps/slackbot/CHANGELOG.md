@@ -2,6 +2,18 @@
 
 <!-- version list -->
 
+## [2.9.1](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.9.0...slackbot@2.9.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+
+
+### Performance Improvements
+
+* **slackbot:** addressing high db spikes on calendar query ([#1270](https://github.com/F3-Nation/f3-nation/issues/1270)) ([1715159](https://github.com/F3-Nation/f3-nation/commit/1715159fe6c5cd9d9df8e869ed2929a51ef0f338))
+
 ## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.8.0...slackbot@2.9.0) (2026-10-14)
 
 

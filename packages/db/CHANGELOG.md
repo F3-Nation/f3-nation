@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.1](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.10.0...pkg-db@0.10.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **db:** say which proxy to start when db:migrate can't connect ([#1195](https://github.com/F3-Nation/f3-nation/issues/1195)) ([fa09a39](https://github.com/F3-Nation/f3-nation/commit/fa09a399ed3caa490f989d7305be387603aa82fa))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.5.1
+
 ## [0.10.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.9.0...pkg-db@0.10.0) (2026-10-14)
 
 
