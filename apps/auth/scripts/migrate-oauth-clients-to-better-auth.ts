@@ -21,21 +21,25 @@
  * default secret hashing is preferred over matching the hand-rolled
  * server's sha256 scheme.
  *
- * How a migrated confidential client (admin, me) gets a new secret issued,
- * resolved in apps/auth/src/lib/better-auth.ts: give it referenceId =
- * "f3-nation" and no userId, so any current or future nation admin passes
- * oauth-provider's ownership check and can call rotateClientSecret on it —
- * see lib/oauth-client-reference.ts and clientReference in better-auth.ts.
- * Setting a real userId instead would defeat that shared ownership, since
- * oauth-provider checks userId before referenceId — a client with a userId
- * set is pinned to that one individual, not any nation admin. This script
- * writes that referenceId on every row it inserts, and on rows from an
- * earlier run that have none, unless the row is pinned to a userId (reported,
- * left alone). Other rows already present are skipped.
+ * Ownership: every migrated row gets referenceId = "f3-nation" and no
+ * userId, so any current or future nation admin passes oauth-provider's
+ * ownership check and can read and list it (see lib/oauth-client-reference.ts
+ * and clientReference in better-auth.ts). Setting a real userId instead
+ * would defeat that shared ownership, since oauth-provider checks userId
+ * before referenceId — a client with a userId set is pinned to that one
+ * individual, not any nation admin. This script writes the referenceId on
+ * every row it inserts, and on already-present rows that have neither a
+ * referenceId nor a userId. Rows pinned to a userId, or holding a different
+ * referenceId, are reported and left alone.
+ *
+ * NOT solved here: a migrated confidential client (admin, me) has no secret
+ * and is disabled, and rotating a secret is refused for a client with none
+ * (see the rotate test in __tests__/lib/better-auth.test.ts). Issuing it a
+ * secret and enabling it is separate provisioning work.
  *
  * Usage:
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth [--env local|staging|prod]
- *   (dry run by default — prints what would be inserted)
+ *   (dry run by default — prints what would be inserted and which existing rows would get referenceId)
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth --confirm
  *   (actually writes)
  */
@@ -44,7 +48,7 @@ import readline from "readline";
 import { fileURLToPath } from "url";
 
 import { drizzle } from "drizzle-orm/postgres-js";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import postgres from "postgres";
 
 import * as _schema from "@acme/db/schema/schema";
@@ -195,7 +199,7 @@ async function main() {
       tokenEndpointAuthMethod: client.isPublic ? "none" : "client_secret_basic",
       applicationType: client.isPublic ? ("native" as const) : ("web" as const),
       // Every migrated client is F3-managed: this shared owner lets any nation
-      // admin read, list and rotate its secret (see the file comment).
+      // admin read and list it (see the file comment).
       referenceId: F3_NATION_CLIENT_REFERENCE_ID,
       requirePKCE: true, // matches the hand-rolled server's unconditional PKCE requirement
       redirectUris,
@@ -226,31 +230,47 @@ async function main() {
     );
   const alreadyPresentIds = new Set(alreadyPresent.map((row) => row.clientId));
   const newRows = rows.filter((row) => !alreadyPresentIds.has(row.clientId));
-  // A row from an earlier run of this script has no referenceId. Stamp it
-  // unless it is pinned to an individual user (userId is checked before
-  // referenceId, so setting one would change nothing and hide the pin); those
-  // are only reported.
+  // An already-present row without a referenceId (e.g. from an earlier run).
+  // Stamp it unless it is pinned to an individual user (userId is checked
+  // before referenceId, so setting one would change nothing and hide the
+  // pin); those are only reported.
   const toStamp = alreadyPresent.filter(
     (row) => !row.referenceId && !row.userId,
+  );
+  // Rows nation admins still can't reach after this run: pinned to a user, or
+  // holding some other referenceId. Reported, never overwritten.
+  const needsReview = alreadyPresent.filter(
+    (row) =>
+      Boolean(row.userId) ||
+      (Boolean(row.referenceId) &&
+        row.referenceId !== F3_NATION_CLIENT_REFERENCE_ID),
   );
   for (const row of rows) {
     if (alreadyPresentIds.has(row.clientId)) {
       const existing = alreadyPresent.find((r) => r.clientId === row.clientId);
       console.log(
         existing?.userId
-          ? `  Skipping ${row.clientId} — already present and owned by a user; left as is.`
-          : existing?.referenceId
-            ? `  Skipping ${row.clientId} — already present.`
-            : `  ${row.clientId} already present without an owner — will set referenceId.`,
+          ? `  Skipping ${row.clientId} — already present and owned by a user; left as is, needs manual review.`
+          : existing?.referenceId &&
+              existing.referenceId !== F3_NATION_CLIENT_REFERENCE_ID
+            ? `  Skipping ${row.clientId} — already present with referenceId "${existing.referenceId}" (not "${F3_NATION_CLIENT_REFERENCE_ID}"); left as is, needs manual review.`
+            : existing?.referenceId
+              ? `  Skipping ${row.clientId} — already present.`
+              : `  ${row.clientId} already present without an owner — will set referenceId.`,
       );
     }
   }
+  const reviewNote =
+    needsReview.length > 0
+      ? `\n${needsReview.length} existing row(s) need manual review: nation admins can't reach them.`
+      : "";
 
   if (!confirmed) {
     console.log(
       `\nDry run only — ${newRows.length} row(s) would be inserted into better_auth_oauth_client` +
         ` and ${toStamp.length} existing row(s) would get referenceId.`,
     );
+    if (reviewNote) console.log(reviewNote);
     console.log("Re-run with --confirm to actually write.");
     await sql.end();
     return;
@@ -262,13 +282,27 @@ async function main() {
   }
 
   for (const row of toStamp) {
-    await db
+    // Same condition that built toStamp, so a row changed since it was read is
+    // not overwritten and not reported as set.
+    const updated = await db
       .update(betterAuthOauthClient)
       .set({ referenceId: F3_NATION_CLIENT_REFERENCE_ID })
-      .where(eq(betterAuthOauthClient.clientId, row.clientId));
-    console.log(`  Set referenceId on ${row.clientId}.`);
+      .where(
+        and(
+          eq(betterAuthOauthClient.clientId, row.clientId),
+          isNull(betterAuthOauthClient.referenceId),
+          isNull(betterAuthOauthClient.userId),
+        ),
+      )
+      .returning({ clientId: betterAuthOauthClient.clientId });
+    console.log(
+      updated.length === 1
+        ? `  Set referenceId on ${row.clientId}.`
+        : `  WARNING: ${row.clientId} was not updated (changed since it was read).`,
+    );
   }
 
+  if (reviewNote) console.log(reviewNote);
   console.log("\nDone.");
   await sql.end();
 }
