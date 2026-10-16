@@ -46,7 +46,7 @@ def send_via_sendgrid(
         )
         sg = SendGridAPIClient(api_key)
         response = sg.send(message)
-        logger.info(f"SendGrid email sent to {to_email}, status: {response.status_code}")
+        logger.info(f"SendGrid email sent, status: {response.status_code}")
         return response.status_code in (200, 201, 202)
     except Exception as e:
         logger.error(f"Failed to send email via SendGrid: {e}")
