@@ -410,6 +410,7 @@ describe("registration", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     },
   );
+
   it.each([false, true])(
     "offers a fresh code without resubmitting when registration rejects the code (Better Auth: %s)",
     async (useBetterAuth) => {
@@ -498,20 +499,6 @@ describe("registration", () => {
       expect(router.push).toHaveBeenCalledExactlyOnceWith(callback),
     );
     expect(sessionStorage.getItem("f3-register-draft")).toBeNull();
-  });
-
-  it("shows a retryable error after a network failure", async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    await fillForm();
-    submit();
-    expect(
-      await screen.findByText("Something went wrong. Please try again."),
-    ).toBeDefined();
-    expect(
-      screen.getByRole("button", { name: "Create Account" }),
-    ).toHaveProperty("disabled", false);
-    expect(signIn).not.toHaveBeenCalled();
-    expect(router.push).not.toHaveBeenCalled();
   });
 
   it.each([

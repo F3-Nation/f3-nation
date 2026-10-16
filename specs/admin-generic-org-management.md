@@ -285,9 +285,22 @@ shared editor without treating it as a new persisted organization field.
   selected THEN the existing preview, upload, and save behavior are preserved.
   There is no editable logo-URL text field. For a successful new-record save,
   preserve create-then-update even when no file is selected. When a file is
-  selected, create first to obtain the ID, upload, then update. Preserve
-  existing upload-error feedback and failure-path behavior; test creation
-  with and without a file and an upload failure.
+  selected, create first to obtain the ID, upload, then update. If creation
+  returns an ID but upload or the final update fails, retain that ID, entered
+  values, and the selected logo so retrying finishes the same organization.
+  Explain that creation succeeded, which work remains incomplete, and the
+  existing type-specific error detail in both the recovery message and its
+  toast. After acknowledged creation, describe the remaining save as an update.
+  If saving completes but updating the screen fails, report the completed
+  save in both a toast and the recovery message without replaying
+  its writes. If a creation response lacks an ID, stop subsequent upload/update
+  requests and further creation attempts in that editor, and direct the user
+  to close the form, reload the page, and check the organization list before
+  trying again. Preserve retry after an ordinary creation
+  failure and existing-record error feedback. Test creation with and without a file,
+  partial failures, missing IDs, and recovery for both logo editor types.
+  This recovery is scoped to the open editor; it does not add server-side
+  idempotency or persistence across closing and reopening the dialog.
 - **AC-20** — GIVEN a Region WHEN its location short description is edited
   THEN it is saved under the existing metadata key without losing other
   metadata.
