@@ -2,14 +2,15 @@
 /fng: a battle buddy signs up a new PAX after his first workout.
 
 The bot creates the FNG's F3 Nation user (home region = this region, ``meta.brought_by`` = the buddy),
-emails him the region's Slack invite link, and posts a welcome in the welcome channel.
+and emails him the region's Slack invite link. The welcome post is left to the existing
+``team_join`` handler, which fires when he actually joins Slack (posting here too would welcome him twice).
 """
 
 import html
 import uuid
 from logging import Logger
 
-from f3_data_models.models import Org, Org_Type, User
+from f3_data_models.models import Org, User
 from f3_data_models.utils import DbManager
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
@@ -29,8 +30,6 @@ from utilities.slack.orm import (
     EmailInputElement,
     InputBlock,
     PlainTextInputElement,
-    StaticSelectElement,
-    as_selector_options,
 )
 
 FNG_CALLBACK_ID = "fng-form"
@@ -39,17 +38,9 @@ FNG_LAST_NAME = "fng_last_name"
 FNG_F3_NAME = "fng_f3_name"
 FNG_EMAIL = "fng_email"
 FNG_PHONE = "fng_phone"
-FNG_AO = "fng_ao"
 
 
 def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
-    aos = []
-    if region_record.org_id:
-        aos = DbManager.find_records(
-            Org, filters=[Org.parent_id == region_record.org_id, Org.org_type == Org_Type.ao, Org.is_active.is_(True)]
-        )
-        aos = sorted(aos, key=lambda ao: ao.name.lower())[:100]  # static_select caps at 100 options
-
     blocks = [
         InputBlock(label="First name", action=FNG_FIRST_NAME, optional=False, element=PlainTextInputElement()),
         InputBlock(label="Last name", action=FNG_LAST_NAME, optional=False, element=PlainTextInputElement()),
@@ -67,26 +58,13 @@ def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict,
             hint="He'll get the Slack invite here, so double-check it.",
         ),
         InputBlock(label="Cell phone", action=FNG_PHONE, element=PlainTextInputElement()),
-    ]
-    if aos:
-        blocks.append(
-            InputBlock(
-                label="AO of first post",
-                action=FNG_AO,
-                element=StaticSelectElement(
-                    placeholder="Select an AO",
-                    options=as_selector_options([ao.name for ao in aos], [str(ao.id) for ao in aos]),
-                ),
-            )
-        )
-    blocks.append(
         ContextBlock(
             element=ContextElement(
                 initial_value="This creates his F3 Nation profile, emails him the Slack invite "
-                "and lists you as the PAX who brought him."
+                "and lists you as the PAX who brought him. He's welcomed in Slack once he joins."
             )
-        )
-    )
+        ),
+    ]
 
     BlockView(blocks=blocks).update_modal(
         client=client,
@@ -108,7 +86,6 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     first_name, last_name, f3_name = text(FNG_FIRST_NAME), text(FNG_LAST_NAME), text(FNG_F3_NAME)
     email = (text(FNG_EMAIL) or "").lower()
     phone = text(FNG_PHONE)
-    ao_name = safe_get(values, FNG_AO, FNG_AO, "selected_option", "text", "text")
     display_name = f"{first_name} {(last_name or '')[:1]}."
     if f3_name:
         display_name = f"{f3_name} ({display_name})"
@@ -162,18 +139,6 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     greet = safe_get(existing, "first_name") if existing else first_name
     emailed = _send_welcome_email(email, greet, region, region_record.downrange_invite_link)
 
-    welcome_failed = False
-    if not existing and region_record.welcome_channel_enable and region_record.welcome_channel:
-        where = f"*{html.escape(ao_name, quote=False)}*" if ao_name else html.escape(region, quote=False)
-        try:
-            client.chat_postMessage(
-                channel=region_record.welcome_channel,
-                text=f":wave: Welcome FNG *{display_name}* to {where}! Brought by <@{safe_get(body, 'user', 'id')}>.",
-            )
-        except SlackApiError as exc:
-            logger.warning("fng.welcome_post_failed error=%s", exc.response.get("error"))
-            welcome_failed = True
-
     lines = [
         f"*{display_name}* already had an F3 Nation profile, so I left it as is."
         if existing
@@ -195,9 +160,7 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
             lines.append(f"I couldn't email him; please text him {region_record.downrange_invite_link}")
     else:
         lines.append("No invite link is set in /f3-nation-settings > Downrange, so no email went out.")
-    if welcome_failed:
-        lines.append("I couldn't post the welcome; check that I'm in the welcome channel.")
-    done(AlertLevel.SUCCESS if emailed and not welcome_failed else AlertLevel.WARNING, " ".join(lines))
+    done(AlertLevel.SUCCESS if emailed else AlertLevel.WARNING, " ".join(lines))
 
 
 def _send_welcome_email(email: str, first_name: str | None, region: str, invite_link: str | None) -> bool:

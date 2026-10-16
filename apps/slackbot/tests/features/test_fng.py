@@ -27,7 +27,7 @@ def region_record(**overrides):
     return SlackSettings(**fields)
 
 
-def submission(ao=True, **values):
+def submission(**values):
     fields = {
         fng.FNG_FIRST_NAME: "John",
         fng.FNG_LAST_NAME: "Smith",
@@ -37,8 +37,6 @@ def submission(ao=True, **values):
     }
     fields.update(values)
     state = {action: {action: {"value": value}} for action, value in fields.items()}
-    if ao:
-        state[fng.FNG_AO] = {fng.FNG_AO: {"selected_option": {"value": "42", "text": {"text": "The Grove"}}}}
     return {"user": {"id": "U_BUDDY"}, "view": {"id": "V1", "state": {"values": state}}, "submission_view_id": "V1"}
 
 
@@ -59,7 +57,7 @@ def patch_db(monkeypatch, existing_user=None, buddy_user_id=7):
     return db, send, view
 
 
-def test_creates_profile_emails_invite_and_posts_welcome(monkeypatch):
+def test_creates_profile_and_emails_invite_without_posting_welcome(monkeypatch):
     db, send, view = patch_db(monkeypatch)
     client = MagicMock()
 
@@ -71,11 +69,8 @@ def test_creates_profile_emails_invite_and_posts_welcome(monkeypatch):
     assert user.meta == {"brought_by": 7}
     assert send.call_args.kwargs["to_email"] == "john@example.com"
     assert INVITE_LINK in send.call_args.kwargs["html_content"]
-    client.chat_postMessage.assert_called_once()
-    post = client.chat_postMessage.call_args.kwargs
-    assert post["channel"] == "C_WELCOME"
-    assert "Chip (John S.)" in post["text"] and "*The Grove*" in post["text"] and "<@U_BUDDY>" in post["text"]
-    assert "john@example.com" not in post["text"]
+    client.chat_postMessage.assert_not_called()  # team_join welcomes him once he joins
+    assert "Chip (John S.)" in view.call_args.kwargs["text"]
     assert view.call_args.kwargs["level"] == constants.AlertLevel.SUCCESS
     assert view.call_args.kwargs["view_id"] == "V1"
 
@@ -133,7 +128,7 @@ def test_failed_email_dms_the_buddy_the_link(monkeypatch):
     send.return_value = False
     client = MagicMock()
 
-    fng.handle_fng_form(submission(ao=False), client, MagicMock(), {}, region_record(welcome_channel_enable=0))
+    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
 
     dm = client.chat_postMessage.call_args.kwargs
     assert dm["channel"] == "U_BUDDY" and INVITE_LINK in dm["text"]
@@ -147,18 +142,9 @@ def test_failed_email_and_dm_fall_back_to_the_link_in_the_result(monkeypatch):
     client = MagicMock()
     client.chat_postMessage.side_effect = SlackApiError("cannot_dm", {"error": "cannot_dm_bot"})
 
-    fng.handle_fng_form(submission(ao=False), client, MagicMock(), {}, region_record(welcome_channel_enable=0))
+    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
 
     assert INVITE_LINK in view.call_args.kwargs["text"]
-
-
-def test_welcome_post_respects_welcome_channel_setting(monkeypatch):
-    patch_db(monkeypatch)
-    client = MagicMock()
-
-    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record(welcome_channel_enable=0))
-
-    client.chat_postMessage.assert_not_called()
 
 
 def test_unlinked_workspace_creates_nothing(monkeypatch):
@@ -169,20 +155,6 @@ def test_unlinked_workspace_creates_nothing(monkeypatch):
     db.create_record.assert_not_called()
     send.assert_not_called()
     assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
-
-
-def test_form_lists_region_aos_alphabetically(monkeypatch):
-    aos = [SimpleNamespace(id=2, name="the Grove"), SimpleNamespace(id=1, name="Anvil")]
-    monkeypatch.setattr(fng.DbManager, "find_records", MagicMock(return_value=aos))
-    client = MagicMock()
-
-    fng.build_fng_form({"loading_id": "V_LOADING"}, client, MagicMock(), {}, region_record())
-
-    view = client.views_update.call_args.kwargs
-    assert view["view_id"] == "V_LOADING"
-    assert view["view"]["callback_id"] == fng.FNG_CALLBACK_ID
-    ao_block = next(b for b in view["view"]["blocks"] if b.get("block_id") == fng.FNG_AO)
-    assert [o["value"] for o in ao_block["element"]["options"]] == ["1", "2"]
 
 
 def test_failed_user_create_shows_error_and_sends_nothing(monkeypatch):
@@ -197,19 +169,6 @@ def test_failed_user_create_shows_error_and_sends_nothing(monkeypatch):
     assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
 
 
-def test_welcome_post_escapes_typed_names(monkeypatch):
-    patch_db(monkeypatch)
-    client = MagicMock()
-    body = submission(**{fng.FNG_F3_NAME: "<!channel>"})
-    body["view"]["state"]["values"][fng.FNG_AO][fng.FNG_AO]["selected_option"]["text"]["text"] = "Rock & Roll"
-
-    fng.handle_fng_form(body, client, MagicMock(), {}, region_record())
-
-    text = client.chat_postMessage.call_args.kwargs["text"]
-    assert "<!channel>" not in text and "&lt;!channel&gt;" in text
-    assert "*Rock &amp; Roll*" in text and "<@U_BUDDY>" in text
-
-
 def test_blank_names_create_nothing(monkeypatch):
     db, send, view = patch_db(monkeypatch)
 
@@ -220,12 +179,13 @@ def test_blank_names_create_nothing(monkeypatch):
     assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
 
 
-def test_failed_welcome_post_warns_the_buddy(monkeypatch):
-    _, _, view = patch_db(monkeypatch)
+def test_form_asks_only_for_the_fngs_details():
     client = MagicMock()
-    client.chat_postMessage.side_effect = SlackApiError("not_in_channel", {"error": "not_in_channel"})
 
-    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
+    fng.build_fng_form({"loading_id": "V_LOADING"}, client, MagicMock(), {}, region_record())
 
-    assert view.call_args.kwargs["level"] == constants.AlertLevel.WARNING
-    assert "couldn't post the welcome" in view.call_args.kwargs["text"]
+    view = client.views_update.call_args.kwargs
+    assert view["view_id"] == "V_LOADING"
+    assert view["view"]["callback_id"] == fng.FNG_CALLBACK_ID
+    inputs = [b["block_id"] for b in view["view"]["blocks"] if b["type"] == "input"]
+    assert inputs == [fng.FNG_FIRST_NAME, fng.FNG_LAST_NAME, fng.FNG_F3_NAME, fng.FNG_EMAIL, fng.FNG_PHONE]
