@@ -63,7 +63,12 @@ export async function POST(request: NextRequest) {
   // active region, the same set /api/regions offers.
   const homeRegionId = body.homeRegionId ?? null;
   if (homeRegionId !== null) {
-    const [region] = Number.isInteger(homeRegionId)
+    // orgs.id is a 32-bit integer; a larger id would make the query throw.
+    const validId =
+      Number.isInteger(homeRegionId) &&
+      homeRegionId > 0 &&
+      homeRegionId <= 2_147_483_647;
+    const [region] = validId
       ? await db
           .select({ id: orgs.id })
           .from(orgs)

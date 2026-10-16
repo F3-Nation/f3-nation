@@ -25,6 +25,7 @@ function OnboardingForm() {
   const [regionSearch, setRegionSearch] = useState("");
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionsLoaded, setRegionsLoaded] = useState(false);
+  const [regionsFailed, setRegionsFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [prefilling, setPrefilling] = useState(true);
   const [isExistingUser, setIsExistingUser] = useState(false);
@@ -87,23 +88,29 @@ function OnboardingForm() {
     // Bounded wait: a request that never settles would otherwise hold the
     // form on "Loading..." instead of falling back to no region picker.
     fetch("/api/regions", { signal: AbortSignal.timeout(5000) })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("regions request failed");
+        return res.json();
+      })
       .then((data: Region[]) => setRegions(data))
       .catch(() => {
-        // No list to pick from: the form still works without a region.
+        // No list to pick from: the form still works without a region, but
+        // say so rather than skipping the question silently.
+        setRegionsFailed(true);
       })
       .finally(() => setRegionsLoaded(true));
   }, []);
 
-  // Show the saved region's name once the list is in. A saved region that
-  // isn't on the list (a retired region, say) is dropped so the user picks
-  // a current one instead of confirming a stale id.
+  // A saved region that isn't on the list (a retired region, say) doesn't
+  // count, so the user picks a current one instead of confirming a stale id.
+  // Derived rather than cleared in an effect, so a submit can't race it.
+  const chosenRegion = regions.find((r) => r.id === homeRegionId);
+  const regionId: number | "" = chosenRegion ? chosenRegion.id : "";
+
+  // Show the saved region's name once the list is in.
   useEffect(() => {
-    if (!homeRegionId || regions.length === 0) return;
-    const saved = regions.find((r) => r.id === homeRegionId);
-    if (saved) setRegionSearch(saved.name);
-    else setHomeRegionId("");
-  }, [regions, homeRegionId]);
+    if (chosenRegion) setRegionSearch(chosenRegion.name);
+  }, [chosenRegion]);
 
   if (prefilling || !regionsLoaded) {
     return (
@@ -119,7 +126,7 @@ function OnboardingForm() {
     setError("");
 
     // Only ask for a region when there is a list to choose from.
-    if (regions.length > 0 && !homeRegionId) {
+    if (regions.length > 0 && !regionId) {
       setError("Please choose your home region.");
       setLoading(false);
       return;
@@ -135,12 +142,21 @@ function OnboardingForm() {
           f3Name,
           firstName,
           lastName,
-          ...(regions.length > 0 && homeRegionId && { homeRegionId }),
+          ...(regions.length > 0 && regionId && { homeRegionId: regionId }),
         }),
       });
 
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
+        if (res.status === 400 && data.error?.startsWith("homeRegionId")) {
+          // The region was retired after the page loaded.
+          setHomeRegionId("");
+          setRegionSearch("");
+          setError(
+            "That region is no longer available. Please choose another.",
+          );
+          return;
+        }
         setError(data.error ?? "Failed to complete onboarding");
         return;
       }
@@ -243,7 +259,7 @@ function OnboardingForm() {
           {regions.length > 0 && (
             <RegionPicker
               regions={regions}
-              value={homeRegionId}
+              value={regionId}
               onChange={setHomeRegionId}
               search={regionSearch}
               onSearchChange={setRegionSearch}
@@ -251,6 +267,13 @@ function OnboardingForm() {
               placeholder="Search for your home region"
               required
             />
+          )}
+
+          {regionsFailed && (
+            <p className="text-base text-muted-foreground">
+              We couldn&apos;t load the region list, so your home region
+              wasn&apos;t confirmed. You can update it later in your profile.
+            </p>
           )}
 
           {error && <p className="text-base text-destructive">{error}</p>}

@@ -163,7 +163,9 @@ describe("registration", () => {
     fireEvent.mouseDown(region);
     fireEvent.click(region);
     change("Phone Number", "2025550123");
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "GB" } });
+    fireEvent.change(document.querySelector("#phoneCountry")!, {
+      target: { value: "GB" },
+    });
     expect(screen.getByLabelText("Phone Number")).toHaveProperty("value", "");
     change("Phone Number", "02079460018");
     fireEvent.click(

@@ -261,9 +261,16 @@ describe("home region", () => {
     prefill({ ...profile, homeRegionId: null, isExistingUser: true });
     await renderForm();
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    // Submit the form directly: the native `required` check would otherwise
+    // block it before the app's own guard runs.
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Continue" }).closest("form")!,
+    );
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(
+      await screen.findByText("Please choose your home region."),
+    ).toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(assign).not.toHaveBeenCalled();
   });
 
@@ -272,9 +279,73 @@ describe("home region", () => {
     await renderForm();
 
     expect(screen.getByLabelText("Home Region")).toHaveProperty("value", "");
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Continue" }).closest("form")!,
+    );
+
+    expect(
+      await screen.findByText("Please choose your home region."),
+    ).toBeDefined();
+    // The retired saved region (99) is never sent.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("lets someone pick a region with the keyboard alone", async () => {
+    prefill({ ...profile, homeRegionId: null, isExistingUser: true });
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+    await renderForm();
+
+    const box = screen.getByLabelText("Home Region");
+    fireEvent.focus(box);
+    fireEvent.change(box, { target: { value: "test" } });
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(box).toHaveProperty("value", "Test South");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...profile, homeRegionId: 2 }),
+    });
+  });
+
+  it("clears a region that was retired after the page loaded", async () => {
+    prefill({ ...saved, isExistingUser: true });
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { error: "homeRegionId must be an active region" },
+        { status: 400 },
+      ),
+    );
+    await renderForm();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Home Region")).toHaveProperty(
+        "value",
+        "Test South",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText(
+        "That region is no longer available. Please choose another.",
+      ),
+    ).toBeDefined();
+    expect(screen.getByLabelText("Home Region")).toHaveProperty("value", "");
+  });
+
+  it("says so when the region list can't load", async () => {
+    regionsFetch.mockResolvedValue(new Response("nope", { status: 500 }));
+    await renderForm();
+
+    expect(screen.queryByLabelText("Home Region")).toBeNull();
+    expect(screen.getByText(/couldn.t load the region list/)).toBeDefined();
   });
 
   it("still saves the profile when the region list can't load", async () => {

@@ -1,11 +1,14 @@
 import type { NextRequest } from "next/server";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function chain<T>(result: T) {
   const obj: Record<string, unknown> = {};
-  for (const method of ["from", "where", "limit"]) {
+  for (const method of ["from", "limit"]) {
     obj[method] = vi.fn(() => obj);
   }
+  obj.where = vi.fn(() => obj);
   obj.then = (resolve: (v: T) => unknown, reject?: (e: unknown) => unknown) =>
     Promise.resolve(result).then(resolve, reject);
   return obj;
@@ -112,6 +115,8 @@ describe("POST /api/onboarding", () => {
     ["an unknown or retired region", 999],
     ["a region id that isn't an integer", "7"],
     ["a fractional region id", 7.5],
+    ["a region id beyond a 32-bit integer", 2 ** 31],
+    ["a negative region id", -1],
   ])("rejects %s", async (_name, homeRegionId) => {
     selects([]);
 
@@ -122,6 +127,23 @@ describe("POST /api/onboarding", () => {
       error: "homeRegionId must be an active region",
     });
     expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("only accepts an active region, checked in the query itself", async () => {
+    // Capture the region lookup's condition (the first select).
+    const first = chain([{ id: 7 }]);
+    const second = chain([{ meta: {} }]);
+    dbMock.select.mockReset();
+    dbMock.select.mockReturnValueOnce(first).mockReturnValueOnce(second);
+
+    await POST(post({ ...profile, homeRegionId: 7 }));
+
+    const where = (first.where as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as SQL;
+    const { sql, params } = new PgDialect().sqlToQuery(where);
+    expect(sql).toContain('"org_type"');
+    expect(sql).toContain('"is_active"');
+    expect(params).toEqual(expect.arrayContaining([7, "region", true]));
   });
 
   it("lets a page loaded before the region field existed finish", async () => {
