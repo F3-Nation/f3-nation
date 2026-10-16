@@ -52,11 +52,7 @@ cases, exploratory coverage — lives in `tests/e2e-advisory/`.
 
 An advisory failure never blocks a merge, but it is never ignored either:
 each one is a signal to triage — a real regression on a secondary path, a
-selector drift, or a test that should be fixed or deleted. **F3-61** auto-triage
-(`.github/workflows/e2e-triage.yml`) now runs on every preview: it consumes the
-advisory (and blocking) results, classifies each failure with a cheap model,
-and posts one comment-only summary per fingerprint on the PR — it never blocks a
-merge and never files issues. Manual triage (check the `e2e-advisory` job and
-its artifacts) remains the fallback for anything the automation can't handle. Do
-not let a permanently-red advisory test sit — a test nobody reacts to is worse
-than no test.
+selector drift, or a test that should be fixed or deleted. Triage it from the
+`e2e-advisory` job and its artifacts (the Playwright report and each failure's
+`error-context.md`). Do not let a permanently-red advisory test sit — a test
+nobody reacts to is worse than no test.

@@ -27,7 +27,7 @@ name: PR-AF Review (trial)
 # counts cost the provider reports. Keep a hard credit limit on the
 # OpenRouter key itself as the real backstop.
 #
-# SECURITY: unlike adversarial-review.yml, this runs an agent with tool access
+# SECURITY: unlike a diff-only reviewer, this runs an agent with tool access
 # against a clone of the PR's own code, with GITHUB_TOKEN (pull-requests:
 # write) inside the container. Same-repo PRs only; the label is the gate.
 
