@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.8.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.8.0...homepage@1.8.1) (2026-10-16)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.5.1
+    * @acme/ui bumped to 0.2.3
+
 ## [1.8.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.7.1...homepage@1.8.0) (2026-10-14)
 
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.9.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.9.0...admin@2.9.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **admin:** retain organization IDs after partial saves ([#1259](https://github.com/F3-Nation/f3-nation/issues/1259)) ([cb94e6f](https://github.com/F3-Nation/f3-nation/commit/cb94e6f74bd172e1a261c114d5588aea2bec5e04))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.15.0
+    * @acme/shared bumped to 0.5.1
+    * @acme/ui bumped to 0.2.3
+    * @acme/validators bumped to 0.5.1
+
 ## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.8.0...admin@2.9.0) (2026-10-14)
 
 

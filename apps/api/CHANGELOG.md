@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.12.1](https://github.com/F3-Nation/f3-nation/compare/api@6.12.0...api@6.12.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+* **api:** validate region ID integer domain ([#1236](https://github.com/F3-Nation/f3-nation/issues/1236)) ([21c87c0](https://github.com/F3-Nation/f3-nation/commit/21c87c0451695a84e42523b79e775ec8b3396a69))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.15.0
+    * @acme/shared bumped to 0.5.1
+  * devDependencies
+    * @acme/db bumped to 0.10.1
+
 ## [6.12.0](https://github.com/F3-Nation/f3-nation/compare/api@6.11.0...api@6.12.0) (2026-10-14)
 
 

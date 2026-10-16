@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/F3-Nation/f3-nation/compare/analytics@1.1.0...analytics@1.1.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **analytics:** make CTAS worker deadline test independent of runner speed ([#1255](https://github.com/F3-Nation/f3-nation/issues/1255)) ([eb00cb0](https://github.com/F3-Nation/f3-nation/commit/eb00cb065977ef283108af1923ca03a53f29e793))
+
 ## [1.1.0](https://github.com/F3-Nation/f3-nation/compare/analytics@1.0.0...analytics@1.1.0) (2026-10-14)
 
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.5.1](https://github.com/F3-Nation/f3-nation/compare/auth@2.5.0...auth@2.5.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **auth:** require the emailed code before /api/register creates a user ([#1238](https://github.com/F3-Nation/f3-nation/issues/1238)) ([5acafe8](https://github.com/F3-Nation/f3-nation/commit/5acafe8adf04f925cfea5f711f72e63f7d4bbdda))
+* **auth:** stamp the nation owner on migrated oauth clients ([#1268](https://github.com/F3-Nation/f3-nation/issues/1268)) ([5a0e7bf](https://github.com/F3-Nation/f3-nation/commit/5a0e7bfae4c18b5a1995713c7ef046a73112c1a6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.1
+    * @acme/shared bumped to 0.5.1
+
 ## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.4.1...auth@2.5.0) (2026-10-14)
 
 
