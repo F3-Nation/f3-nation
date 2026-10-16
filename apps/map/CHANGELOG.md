@@ -1,5 +1,36 @@
 # Changelog
 
+## [7.8.0](https://github.com/F3-Nation/f3-nation/compare/map@7.7.0...map@7.8.0) (2026-10-14)
+
+
+### Features
+
+* **repo,db:** run several checkouts side by side with local:setup --slot ([#1246](https://github.com/F3-Nation/f3-nation/issues/1246)) ([7a1377f](https://github.com/F3-Nation/f3-nation/commit/7a1377f3ba83dd5eccae3b322947994f3379205e))
+
+
+### Bug Fixes
+
+* **api,map:** public read tier for the map API ([#378](https://github.com/F3-Nation/f3-nation/issues/378)), plus [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3 groundwork ([#1149](https://github.com/F3-Nation/f3-nation/issues/1149)) ([f65d3d9](https://github.com/F3-Nation/f3-nation/commit/f65d3d9120131c4cbff8bcdb019bcc546b8a6464))
+* **auth:** safely resume sign-in after onboarding ([#1215](https://github.com/F3-Nation/f3-nation/issues/1215)) ([90a6ed5](https://github.com/F3-Nation/f3-nation/commit/90a6ed59228bed4912d8e4dd8f583629c5b7ad25))
+* **map,api:** use one-off organizations at shared locations ([#1243](https://github.com/F3-Nation/f3-nation/issues/1243)) ([381106a](https://github.com/F3-Nation/f3-nation/commit/381106a39f8f3f51f92916354fa8e81904cbfc21))
+* **map:** open the detail panel for instance-only map pins ([#1216](https://github.com/F3-Nation/f3-nation/issues/1216)) ([af265ea](https://github.com/F3-Nation/f3-nation/commit/af265ea940b6e83982ce8028b2cbeda81e891f0f))
+
+
+### Performance Improvements
+
+* **api,map:** fix regionsWithLocation, cache the map datasets, gzip the map proxy ([#1197](https://github.com/F3-Nation/f3-nation/issues/1197)) ([1747ec4](https://github.com/F3-Nation/f3-nation/commit/1747ec49fffa898f5ee70714a1f22244f677746a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.14.0
+    * @acme/auth bumped to 0.2.10
+    * @acme/shared bumped to 0.5.0
+    * @acme/ui bumped to 0.2.2
+    * @acme/validators bumped to 0.5.0
+
 ## [7.7.0](https://github.com/F3-Nation/f3-nation/compare/map@7.6.0...map@7.7.0) (2026-10-10)
 
 

@@ -15,7 +15,11 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
-import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import {
+  arrayOrSingle,
+  parseSorting,
+  queryBooleanSchema,
+} from "@acme/shared/app/functions";
 import { EventTagInsertSchema, EventTagSelectSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -37,7 +41,7 @@ export const eventTagRouter = {
           ...paginationFields("event tags"),
           searchTerm: z.string().optional(),
           sorting: parseSorting(),
-          ignoreNationEventTags: z.coerce.boolean().optional(),
+          ignoreNationEventTags: queryBooleanSchema.optional(),
         })
         .optional(),
     )
@@ -157,7 +161,7 @@ export const eventTagRouter = {
     .input(
       z.object({
         orgId: z.coerce.number(),
-        isActive: z.coerce.boolean().optional(),
+        isActive: queryBooleanSchema.optional(),
       }),
     )
     .route({
