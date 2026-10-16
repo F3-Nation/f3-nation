@@ -2262,7 +2262,20 @@
               "schema": {
                 "properties": {
                   "revoke": {
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ]
                   }
                 },
                 "type": "object"
@@ -2640,9 +2653,26 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "boolean"
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "enum": [
+                        "0",
+                        "1",
+                        "true",
+                        "false"
+                      ],
+                      "type": "string"
+                    }
+                  ]
                 },
                 {
+                  "enum": [
+                    "True",
+                    "False"
+                  ],
                   "type": "string"
                 }
               ],
@@ -3077,7 +3107,20 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ]
                   },
                   "id": {
                     "type": "string"
@@ -4011,7 +4054,20 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ]
                   },
                   "id": {
                     "type": "string"
@@ -4108,7 +4164,20 @@
             "in": "query",
             "name": "onlyStandalone",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
@@ -4926,8 +4995,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -4948,7 +5030,20 @@
             "in": "query",
             "name": "ignoreNationEventTags",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
@@ -5398,7 +5493,20 @@
             "in": "query",
             "name": "isActive",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
@@ -5585,8 +5693,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -6792,8 +6913,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -8356,7 +8490,20 @@
             "in": "query",
             "name": "onlyMine",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ]
             }
           },
           {
@@ -8393,7 +8540,20 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ]
                   },
                   "id": {
                     "type": "string"
@@ -11810,8 +11970,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -13359,8 +13532,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -15420,8 +15606,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -19991,8 +20190,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -21774,8 +21986,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { and, desc, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
 
 import { UserRole } from "@acme/shared/app/enums";
+import { queryBooleanSchema } from "@acme/shared/app/functions";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -30,7 +31,7 @@ const createApiKeySchema = z.object({
 
 const revokeApiKeySchema = z.object({
   id: z.coerce.number(),
-  revoke: z.coerce.boolean().optional(),
+  revoke: queryBooleanSchema.optional(),
 });
 
 const isUniqueError = (error: unknown) =>

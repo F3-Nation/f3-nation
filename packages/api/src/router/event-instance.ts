@@ -18,7 +18,11 @@ import {
   sql,
 } from "@acme/db";
 import { SeriesException } from "@acme/shared/app/enums";
-import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
+import {
+  arrayOrSingle,
+  getFullAddress,
+  queryBooleanSchema,
+} from "@acme/shared/app/functions";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { paginationFields, resolvePagination } from "../lib/pagination";
@@ -127,7 +131,7 @@ export const eventInstanceRouter = {
           searchTerm: z.string().optional(),
           statuses: arrayOrSingle(z.enum(["active", "inactive"])).optional(),
           sorting: z
-            .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
+            .array(z.object({ id: z.string(), desc: queryBooleanSchema }))
             .optional(),
           regionOrgId: z.coerce.number().optional(),
           aoOrgId: z.coerce.number().optional(),
@@ -146,7 +150,7 @@ export const eventInstanceRouter = {
               "Inclusive upper bound on the instance start date (YYYY-MM-DD). Only instances starting on or before this date are returned.",
             ),
           seriesId: z.coerce.number().optional(),
-          onlyStandalone: z.coerce.boolean().optional(), // Only instances without a series
+          onlyStandalone: queryBooleanSchema.optional(), // Only instances without a series
         })
         .optional(),
     )
