@@ -417,6 +417,47 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     expect(rotated.client_secret).not.toBe(client.client_secret);
   });
 
+  it("can't rotate a secret onto a migrated client that has none, even for a nation admin", async () => {
+    // Shaped like a row apps/auth/scripts/migrate-oauth-clients-to-better-auth.ts
+    // inserts for a confidential client: owned by the nation, but no secret.
+    const memoryDb: MemoryDB = {};
+    const options = {
+      baseURL: BASE_URL,
+      basePath: BASE_PATH,
+      secret: "test-only-not-a-real-secret",
+      issuer: ISSUER,
+      database: memoryAdapter(memoryDb),
+      sendVerificationOTP: () => Promise.resolve(),
+      findF3UserId: (email: string) =>
+        Promise.resolve(email === "admin-m@f3nation.test" ? 701 : null),
+      isNationAdmin: () => Promise.resolve(true),
+      allowClientAction: () => Promise.resolve(true),
+    };
+    const authOptions = buildBetterAuthOptions(options);
+    for (const table of Object.keys(getAuthTables(authOptions))) {
+      memoryDb[table] ??= [];
+    }
+    const auth = createAuthInstance(options);
+
+    const token = await signInAndGetToken(auth, "admin-m@f3nation.test");
+    const client = await createConfidentialClient(auth, token);
+    const row = Object.values(memoryDb)
+      .flat()
+      .find(
+        (r) => (r as Record<string, unknown>).clientId === client.client_id,
+      ) as Record<string, unknown>;
+    row.clientSecret = null;
+    row.userId = null;
+    row.referenceId = "f3-nation";
+
+    await expect(
+      auth.api.rotateClientSecret({
+        headers: { authorization: `Bearer ${token}` },
+        body: { client_id: client.client_id },
+      }),
+    ).rejects.toMatchObject({ status: "BAD_REQUEST" });
+  });
+
   it("still refuses to let one non-admin rotate another non-admin's client", async () => {
     const auth = createMultiUserTestAuth({
       "pax-a@f3nation.test": 601,
