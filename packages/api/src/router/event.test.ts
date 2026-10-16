@@ -296,6 +296,7 @@ describe("Event Router", () => {
           { orgId: charlieAO.id, locationId: null },
           { orgId: alphaAO.id, locationId: alphaLocation.id },
           { orgId: regionlessAO.id, locationId: null },
+          { orgId: regions.bravo.id, locationId: alphaLocation.id },
         ];
         events = await db
           .insert(schema.events)
@@ -314,7 +315,7 @@ describe("Event Router", () => {
           )
           .returning({ id: schema.events.id, name: schema.events.name });
         createdEventIds.push(...events.map(({ id }) => id));
-        if (events.length !== 7)
+        if (events.length !== 8)
           throw new Error("Failed to create all cross-region events");
         events.sort((a, b) => a.id - b.id);
         expectedRegions = [
@@ -325,6 +326,7 @@ describe("Event Router", () => {
           [regions.charlie],
           [regions.alpha],
           [],
+          [regions.alpha, regions.bravo],
         ].map((group) =>
           group.map(({ id, name }) => ({ regionId: id, regionName: name })),
         );
@@ -352,7 +354,7 @@ describe("Event Router", () => {
           sorting: [],
           pageSize: 50,
         });
-        expect.soft(result.totalCount).toBe(7);
+        expect.soft(result.totalCount).toBe(8);
         expect
           .soft(result.events.map(({ id }) => id))
           .toEqual(events.map(({ id }) => id));
@@ -398,7 +400,16 @@ describe("Event Router", () => {
         const cases = [
           {
             regionIds: [regions.alpha.id],
-            expected: [events[1]!.id, events[2]!.id, events[5]!.id],
+            expected: [
+              events[1]!.id,
+              events[2]!.id,
+              events[5]!.id,
+              events[7]!.id,
+            ],
+          },
+          {
+            regionIds: [regions.bravo.id],
+            expected: [events[0]!.id, events[3]!.id, events[7]!.id],
           },
           {
             regionIds: [regions.zulu.id],
@@ -411,6 +422,18 @@ describe("Event Router", () => {
               events[1]!.id,
               events[2]!.id,
               events[5]!.id,
+              events[7]!.id,
+            ],
+          },
+          {
+            regionIds: [regions.alpha.id, regions.bravo.id],
+            expected: [
+              events[0]!.id,
+              events[1]!.id,
+              events[2]!.id,
+              events[3]!.id,
+              events[5]!.id,
+              events[7]!.id,
             ],
           },
           { regionIds: [regions.unrelated.id], expected: [] },
@@ -461,18 +484,18 @@ describe("Event Router", () => {
 
       it("paginates unique events with counts and stable first-region sorting in either direction", async () => {
         const cases = [
-          { sorting: [], indexes: [0, 1, 2, 3, 4, 5, 6] },
+          { sorting: [], indexes: [0, 1, 2, 3, 4, 5, 6, 7] },
           {
             sorting: [{ id: "regions", desc: false }],
-            indexes: [1, 2, 5, 0, 3, 4, 6],
+            indexes: [1, 2, 5, 7, 0, 3, 4, 6],
           },
           {
             sorting: [{ id: "regions", desc: true }],
-            indexes: [6, 4, 0, 3, 1, 2, 5],
+            indexes: [6, 4, 0, 3, 1, 2, 5, 7],
           },
         ];
         for (const { sorting, indexes } of cases) {
-          for (const pageSize of [2, 4]) {
+          for (const pageSize of [2, 3, 4]) {
             const ids: number[] = [];
             for (
               let pageIndex = 0;
@@ -485,7 +508,7 @@ describe("Event Router", () => {
                 pageSize,
                 pageIndex,
               });
-              expect.soft(page.totalCount).toBe(7);
+              expect.soft(page.totalCount).toBe(8);
               expect
                 .soft(page.events)
                 .toHaveLength(
@@ -494,7 +517,7 @@ describe("Event Router", () => {
               ids.push(...page.events.map(({ id }) => id));
             }
             expect.soft(ids).toEqual(indexes.map((index) => events[index]!.id));
-            expect.soft(new Set(ids).size).toBe(7);
+            expect.soft(new Set(ids).size).toBe(8);
             const afterLastPage = await all({
               searchTerm: prefix,
               sorting,
@@ -502,7 +525,7 @@ describe("Event Router", () => {
               pageIndex: Math.ceil(events.length / pageSize),
             });
             expect.soft(afterLastPage.events).toEqual([]);
-            expect.soft(afterLastPage.totalCount).toBe(7);
+            expect.soft(afterLastPage.totalCount).toBe(8);
           }
         }
       });
@@ -628,7 +651,7 @@ describe("Event Router", () => {
               sorting: [],
               pageSize: 50,
             });
-            expect.soft(anonymous.totalCount).toBe(7);
+            expect.soft(anonymous.totalCount).toBe(8);
             expect
               .soft(anonymous.events.map(({ id }) => id))
               .toEqual(events.map(({ id }) => id));
@@ -657,7 +680,7 @@ describe("Event Router", () => {
               sorting: [],
               pageSize: 50,
             });
-            expect.soft(signedIn.totalCount).toBe(10);
+            expect.soft(signedIn.totalCount).toBe(11);
             expect
               .soft(signedIn.events.map(({ id }) => id))
               .toEqual(
