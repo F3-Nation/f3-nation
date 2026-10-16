@@ -1,0 +1,148 @@
+name: PR-AF Review (trial)
+
+# Trial of Agent-Field/pr-af, adapted from its README "GitHub Actions
+# Integration" recipe. Opt-in via the `pr-af` label (collaborator-only).
+#
+# ONE REVIEW PER PR: the `gate` job claims the PR by adding the
+# `pr-af-reviewed` label BEFORE any spend, after checking the PR's live labels
+# via the API. Re-adding `pr-af` later is a no-op. The claim is made up front
+# on purpose, so a failed run still counts and nothing silently re-bills. To
+# deliberately retry, remove `pr-af-reviewed` and re-apply `pr-af`. Both labels
+# must already exist in the repo; the gate does not create them.
+#
+# We deliberately track pr-af's default branch and its default model: upstream
+# improvements and cheaper/better models are welcome, and cost changes are ours
+# to deal with.
+#
+# COST CEILING: PR_AF_MAX_COST_USD below is read INSIDE the pr-af container
+# (src/pr_af/app.py `_resolve_budget_caps`); scripts/ci_runner.py does not put
+# a cap in the request payload. pr-af's docker-compose.yml forwards it with a
+# bare `- PR_AF_MAX_COST_USD` entry, which copies the value from the shell
+# that runs `docker compose up`. So it must be in that step's environment (the
+# job-level env here covers it) — setting it only on the ci_runner step would
+# silently do nothing.
+#
+# The cap is SOFT: pr-af checks it between phases and before dispatching new
+# agents, never mid-call, and parallel reviewers can overshoot. It also only
+# counts cost the provider reports. Keep a hard credit limit on the
+# OpenRouter key itself as the real backstop.
+#
+# SECURITY: unlike adversarial-review.yml, this runs an agent with tool access
+# against a clone of the PR's own code, with GITHUB_TOKEN (pull-requests:
+# write) inside the container. Same-repo PRs only; the label is the gate.
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+# Serialize `pr-af` events per PR. Don't cancel on a second event: killing a
+# 60-minute review mid-run wastes the spend. A queued second run re-checks live
+# labels in `gate`. Other label events get a unique group so they cannot
+# displace a queued `pr-af` run (GitHub keeps one pending run per group).
+concurrency:
+  group: pr-af-review-${{ github.event.pull_request.number }}-${{ github.event.label.name == 'pr-af' && 'claim' || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    # Fork PRs get no secrets and would fail partway through; skip them.
+    if: >-
+      github.event.label.name == 'pr-af' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    outputs:
+      proceed: ${{ steps.claim.outputs.proceed }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      OPENROUTER_API_KEY: ${{ secrets.PR_AF_OPENROUTER_API_KEY }}
+    steps:
+      - name: Claim PR (one review per PR)
+        id: claim
+        run: |
+          # An unset secret expands to "": refuse before spending the claim.
+          if [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "::error::PR_AF_OPENROUTER_API_KEY is not set; refusing to claim PR #${PR}."
+            exit 1
+          fi
+          # Live labels, not the event payload: a queued run's payload is stale.
+          labels=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/labels" \
+            --jq '.[].name')
+          if ! grep -qx 'pr-af' <<< "${labels}"; then
+            echo "pr-af label removed from PR #${PR} before the run started; skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if grep -qx 'pr-af-reviewed' <<< "${labels}"; then
+            echo "PR #${PR} already reviewed by pr-af; skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/labels" \
+            -f 'labels[]=pr-af-reviewed' > /dev/null
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+
+  pr-af-review:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    # pr-af's own wall-clock cap is 3600s; its README says reviews run 35-70
+    # minutes. The job timeout is the outer bound including image build.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      # Per-review ceiling in USD (see header). Read by the container.
+      PR_AF_MAX_COST_USD: "1.00"
+      PR_AF_MAX_DURATION_SECONDS: "3600"
+      OPENROUTER_API_KEY: ${{ secrets.PR_AF_OPENROUTER_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout PR-AF
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Agent-Field/pr-af
+          path: pr-af
+          persist-credentials: false
+
+      - name: Start AgentField & PR-AF
+        working-directory: ./pr-af
+        run: |
+          # --wait blocks until pr-af's /health check passes (replaces the
+          # recipe's fixed `sleep 15`). The control plane has no healthcheck,
+          # so give the node a moment to register with it afterwards.
+          docker compose up -d --build --wait --wait-timeout 600
+          sleep 15
+
+      - name: Run review
+        working-directory: ./pr-af
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: python3 scripts/ci_runner.py
+
+      # Trial instrumentation: surface what the review actually cost so we can
+      # compare it against the cap. Orchestrator logs `cost=$<usd>` at the end
+      # of a run; the posted PR comment also has a cost row.
+      - name: Report cost and tear down
+        if: always()
+        working-directory: ./pr-af
+        run: |
+          echo "::group::pr-af cost lines"
+          docker compose logs pr-af 2>&1 | grep -E 'cost=|Budget exhausted|budget_exhausted' | tail -20 || true
+          echo "::endgroup::"
+          docker compose logs --no-color pr-af > "${RUNNER_TEMP}/pr-af.log" 2>&1 || true
+          docker compose down -v || true
+
+      - name: Upload container log on failure or timeout
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-af-log
+          path: ${{ runner.temp }}/pr-af.log
+          retention-days: 7

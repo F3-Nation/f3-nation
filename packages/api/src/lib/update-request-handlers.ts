@@ -315,6 +315,8 @@ export interface CreatedEntityIds {
   eventId?: number;
   aoId?: number;
   locationId?: number;
+  notificationRegionId?: number | null;
+  notificationSourceRegionId?: number | null;
 }
 
 /**
@@ -330,6 +332,19 @@ const withTxCtx = <T>(
   ctx.db.transaction((tx) =>
     fn({ ...ctx, db: tx as unknown as Context["db"] }),
   );
+
+const lockAOForUpdate = async (ctx: Context, aoId: number) => {
+  const [ao] = await ctx.db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, aoId))
+    .for("no key update");
+  if (!ao) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Failed to find AO to update.",
+    });
+  }
+};
 
 export const handleCreateLocationAndEvent = async (
   ctx: Context,
@@ -472,10 +487,14 @@ export const handleMoveAOToDifferentRegion = async (
   ctx: Context,
   request: MoveAoToDifferentRegionType,
 ) => {
-  await updateAO(ctx, {
+  const ao = await updateAO(ctx, {
     id: request.originalAoId,
     parentId: request.newRegionId,
   });
+  return {
+    notificationRegionId: ao.newRegionId,
+    notificationSourceRegionId: ao.oldRegionId,
+  };
 };
 
 export const handleMoveAOToNewLocation = async (
@@ -483,6 +502,7 @@ export const handleMoveAOToNewLocation = async (
   request: MoveAOToNewLocationType,
 ): Promise<CreatedEntityIds> => {
   return await withTxCtx(ctx, async (txCtx) => {
+    await lockAOForUpdate(txCtx, request.originalAoId);
     const location = await insertLocation(txCtx, {
       locationLat: request.locationLat,
       locationLng: request.locationLng,
@@ -518,6 +538,7 @@ export const handleMoveAOToDifferentLocation = async (
   request: MoveAOToDifferentLocationType,
 ): Promise<CreatedEntityIds> => {
   return await withTxCtx(ctx, async (txCtx) => {
+    await lockAOForUpdate(txCtx, request.originalAoId);
     let locationId = request.newLocationId;
     let createdLocationId: number | undefined;
 
