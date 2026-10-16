@@ -70,6 +70,16 @@ SNAPSHOT_ROLE=f3SnapshotPublisher
 SNAPSHOT_ROLE_PERMISSIONS=storage.objects.create,storage.objects.delete
 SNAPSHOT_CONDITION_TITLE=dev-snapshots-prefix
 # Changing the prefix or condition leaves the old binding in place: remove it by hand first.
+# The condition is the only thing keeping the job out of the apps' images: fail closed.
+case "$SNAPSHOT_BUCKET$SNAPSHOT_PREFIX" in
+  *[\"\\[:space:]]*)
+    echo "SNAPSHOT_BUCKET/SNAPSHOT_PREFIX must not contain quotes, backslashes or whitespace." >&2
+    exit 1 ;;
+esac
+case "$SNAPSHOT_PREFIX" in
+  */) ;;
+  *) echo "SNAPSHOT_PREFIX must end in '/', or the condition also matches sibling names." >&2; exit 1 ;;
+esac
 SNAPSHOT_CONDITION="resource.name.startsWith(\"projects/_/buckets/${SNAPSHOT_BUCKET}/objects/${SNAPSHOT_PREFIX}\")"
 
 SNAPSHOT_BIND_PENDING=0
