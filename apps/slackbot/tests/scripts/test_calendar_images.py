@@ -183,7 +183,7 @@ def calendar_generation(monkeypatch):
     session = MagicMock()
     session.__enter__.return_value = session
     query = session.query.return_value
-    for method in ("select_from", "join", "outerjoin", "filter"):
+    for method in ("select_from", "join", "outerjoin", "filter", "params"):
         getattr(query, method).return_value = query
     exports = []
     pending = None
@@ -378,7 +378,7 @@ def overlapping_calendar_runs(calendar_generation, monkeypatch):
 
         def chain_query():
             query = MagicMock()
-            for method in ("select_from", "join", "outerjoin", "filter"):
+            for method in ("select_from", "join", "outerjoin", "filter", "params"):
                 getattr(query, method).return_value = query
             return query
 
@@ -624,6 +624,85 @@ def test_delayed_hourly_run_rebuilds_stale_image(calendar_generation, delay_seco
     assert settings["calendar_image_current"] == rebuilt_image
     assert image_metadata(settings, next_run)[0] == next_run.replace(tzinfo=UTC)
     assert len(run([control, event], next_run + timedelta(hours=1), force=True)) == 1
+
+
+def test_region_id_is_bound_for_initial_and_cleanup_calendar_reads(calendar_generation):
+    run, row, settings, session = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    settings["calendar_image_current"] = "1-current-abcdefghij.png"
+
+    assert len(run([row("AO", now - timedelta(days=1))], now)) == 1
+
+    query = session.query.return_value
+    assert query.params.call_count == 2
+    assert [call.kwargs for call in query.params.call_args_list] == [
+        {"calendar_region_id": 1},
+        {"calendar_region_id": 1},
+    ]
+
+
+def test_production_attendance_subqueries_are_region_bounded(calendar_generation, monkeypatch):
+    from sqlalchemy.sql.selectable import Select
+
+    run, row, _, _ = calendar_generation
+    captured = []
+    original_alias = Select.alias
+
+    def capture_alias(statement, *args, **kwargs):
+        sql = str(statement.compile())
+        if "attendance_x_attendance_types" in sql:
+            captured.append(statement)
+        return original_alias(statement, *args, **kwargs)
+
+    monkeypatch.setattr(Select, "alias", capture_alias)
+    now = datetime(2026, 9, 30, 10)
+    run([row("AO", now - timedelta(days=1))], now)
+
+    assert len(captured) == 2
+    sql_by_shape = [str(statement.compile()) for statement in captured]
+    assert any("row_number() OVER" in sql and "attendance.created" in sql for sql in sql_by_shape)
+    assert any(
+        "max(attendance.updated)" in sql and "GROUP BY attendance.event_instance_id" in sql for sql in sql_by_shape
+    )
+    for statement, sql in zip(captured, sql_by_shape, strict=True):
+        compiled = statement.compile()
+        assert "JOIN orgs ON event_instances.org_id = orgs.id" in sql
+        assert "orgs.parent_id = :calendar_region_id" in sql
+        assert compiled.binds["calendar_region_id"].type.python_type is int
+        assert "event_instances.start_date >=" in sql
+        assert "event_instances.start_date <" in sql
+        assert "attendance_x_attendance_types.attendance_type_id =" in sql
+
+
+def test_complete_production_calendar_query_compiles_with_isolated_region_bindings():
+    from sqlalchemy import create_mock_engine
+    from sqlalchemy.orm import Session
+
+    engine = create_mock_engine("postgresql+psycopg2://", lambda *args, **kwargs: None)
+    session = Session(engine)
+    week_start = date(2026, 10, 1)
+    query, region_org = calendar_images._build_calendar_query(session, week_start, week_start + timedelta(weeks=3))
+
+    for region_id in (7, 19):
+        compiled = (
+            query.filter(region_org.id == region_id)
+            .params(calendar_region_id=region_id)
+            .statement.compile(dialect=engine.dialect)
+        )
+        sql = str(compiled)
+        assert sql.count("JOIN orgs") >= 3
+        assert sql.count("parent_id = %(calendar_region_id)s") == 2
+        assert "orgs_1.id = orgs.parent_id" in sql
+        assert "orgs_1.id = %(id_1)s" in sql
+        assert compiled.params["calendar_region_id"] == region_id
+        assert compiled.params["id_1"] == region_id
+        assert "row_number() OVER (PARTITION BY attendance.event_instance_id ORDER BY attendance.created)" in sql
+        assert "attendance_x_attendance_types.attendance_type_id =" in sql
+        assert "max(attendance.updated)" in sql
+        assert "GROUP BY attendance.event_instance_id" in sql
+        assert "AND event_instances.is_active AND" in sql
+
+    session.close()
 
 
 def test_legacy_image_without_metadata_rebuilds_once(calendar_generation, monkeypatch):

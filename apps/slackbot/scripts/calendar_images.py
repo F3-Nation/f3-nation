@@ -37,7 +37,7 @@ from f3_data_models.utils import DbManager, get_session
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models import blocks
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import Integer, and_, bindparam, func, or_, select
 from sqlalchemy.orm import aliased, joinedload
 
 from utilities.constants import (
@@ -376,6 +376,95 @@ def calendar_image_is_stale(
     return max_changed > generated_at or saved_fingerprint != fingerprint
 
 
+def _build_calendar_query(session, current_week_start, overall_end):
+    calendar_region_id = bindparam("calendar_region_id", type_=Integer)
+    firstq_subquery = (
+        select(
+            Attendance.event_instance_id,
+            Attendance.user_id,
+            func.row_number().over(partition_by=Attendance.event_instance_id, order_by=Attendance.created).label("rn"),
+        )
+        .select_from(Attendance)
+        .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
+        .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
+        .join(Org, EventInstance.org_id == Org.id)
+        .filter(
+            Attendance_x_AttendanceType.attendance_type_id == 2,
+            EventInstance.start_date >= current_week_start,
+            EventInstance.start_date < overall_end,
+            Org.parent_id == calendar_region_id,
+        )
+        .alias()
+    )
+
+    attendance_subquery = (
+        select(
+            Attendance.event_instance_id,
+            func.max(Attendance.updated).label("q_last_updated"),
+        )
+        .select_from(Attendance)
+        .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
+        .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
+        .join(Org, EventInstance.org_id == Org.id)
+        .filter(
+            Attendance_x_AttendanceType.attendance_type_id == 2,
+            EventInstance.start_date >= current_week_start,
+            EventInstance.start_date < overall_end,
+            Org.parent_id == calendar_region_id,
+        )
+        .group_by(Attendance.event_instance_id)
+        .alias()
+    )
+
+    RegionOrg = aliased(Org)
+
+    query = (
+        session.query(
+            EventInstance.start_date,
+            EventInstance.start_time,
+            EventInstance.updated.label("event_updated"),
+            EventInstance.pax_count,
+            EventInstance.series_exception,
+            EventTag.name.label("event_tag"),
+            EventTag.color.label("event_tag_color"),
+            EventType.name.label("event_type"),
+            EventType.acronym.label("event_acronym"),
+            Org.name.label("ao_name"),
+            Org.description.label("ao_description"),
+            Org.parent_id.label("ao_parent_id"),
+            User.f3_name.label("q_name"),
+            Location.name.label("location_name"),
+            Location.description.label("location_description"),
+            Location.address_street.label("location_address_street"),
+            attendance_subquery.c.q_last_updated,
+            RegionOrg.name.label("region_name"),
+            RegionOrg.id.label("region_id"),
+        )
+        .select_from(EventInstance)
+        .outerjoin(EventTag_x_EventInstance, EventInstance.id == EventTag_x_EventInstance.event_instance_id)
+        .outerjoin(EventTag, EventTag_x_EventInstance.event_tag_id == EventTag.id)
+        .join(EventType_x_EventInstance, EventInstance.id == EventType_x_EventInstance.event_instance_id)
+        .join(EventType, EventType_x_EventInstance.event_type_id == EventType.id)
+        .join(Org, EventInstance.org_id == Org.id)
+        .join(RegionOrg, RegionOrg.id == Org.parent_id)
+        .outerjoin(Location, EventInstance.location_id == Location.id)
+        .outerjoin(
+            firstq_subquery,
+            and_(EventInstance.id == firstq_subquery.c.event_instance_id, firstq_subquery.c.rn == 1),
+        )
+        .outerjoin(User, User.id == firstq_subquery.c.user_id)
+        .outerjoin(attendance_subquery, EventInstance.id == attendance_subquery.c.event_instance_id)
+        .filter(
+            (EventInstance.start_date >= current_week_start),
+            (EventInstance.start_date < overall_end),
+            (EventInstance.is_active),
+            # (EventInstance.series_id.is_not(None)),
+            or_(EventTag.name.is_(None), EventTag.name != "Off-The-Books"),
+        )
+    )
+    return query, RegionOrg
+
+
 def generate_calendar_images(force: bool = False):
     import dataframe_image as dfi
     import pandas as pd
@@ -384,89 +473,7 @@ def generate_calendar_images(force: bool = False):
         tomorrow_day_of_week = (current_date_cst() + timedelta(days=1)).weekday()
         current_week_start = current_date_cst() + timedelta(days=-tomorrow_day_of_week + 1)
         overall_end = current_week_start + timedelta(weeks=MAX_CALENDAR_WEEKS)
-
-        firstq_subquery = (
-            select(
-                Attendance.event_instance_id,
-                Attendance.user_id,
-                func.row_number()
-                .over(partition_by=Attendance.event_instance_id, order_by=Attendance.created)
-                .label("rn"),
-            )
-            .select_from(Attendance)
-            .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
-            .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
-            .filter(
-                Attendance_x_AttendanceType.attendance_type_id == 2,
-                EventInstance.start_date >= current_week_start,
-                EventInstance.start_date < overall_end,
-            )
-            .alias()
-        )
-
-        attendance_subquery = (
-            select(
-                Attendance.event_instance_id,
-                func.max(Attendance.updated).label("q_last_updated"),
-            )
-            .select_from(Attendance)
-            .join(Attendance_x_AttendanceType, Attendance.id == Attendance_x_AttendanceType.attendance_id)
-            .join(EventInstance, EventInstance.id == Attendance.event_instance_id)
-            .filter(
-                Attendance_x_AttendanceType.attendance_type_id == 2,
-                EventInstance.start_date >= current_week_start,
-                EventInstance.start_date < overall_end,
-            )
-            .group_by(Attendance.event_instance_id)
-            .alias()
-        )
-
-        RegionOrg = aliased(Org)
-
-        query = (
-            session.query(
-                EventInstance.start_date,
-                EventInstance.start_time,
-                EventInstance.updated.label("event_updated"),
-                EventInstance.pax_count,
-                EventInstance.series_exception,
-                EventTag.name.label("event_tag"),
-                EventTag.color.label("event_tag_color"),
-                EventType.name.label("event_type"),
-                EventType.acronym.label("event_acronym"),
-                Org.name.label("ao_name"),
-                Org.description.label("ao_description"),
-                Org.parent_id.label("ao_parent_id"),
-                User.f3_name.label("q_name"),
-                Location.name.label("location_name"),
-                Location.description.label("location_description"),
-                Location.address_street.label("location_address_street"),
-                attendance_subquery.c.q_last_updated,
-                RegionOrg.name.label("region_name"),
-                RegionOrg.id.label("region_id"),
-            )
-            .select_from(EventInstance)
-            .outerjoin(EventTag_x_EventInstance, EventInstance.id == EventTag_x_EventInstance.event_instance_id)
-            .outerjoin(EventTag, EventTag_x_EventInstance.event_tag_id == EventTag.id)
-            .join(EventType_x_EventInstance, EventInstance.id == EventType_x_EventInstance.event_instance_id)
-            .join(EventType, EventType_x_EventInstance.event_type_id == EventType.id)
-            .join(Org, EventInstance.org_id == Org.id)
-            .join(RegionOrg, RegionOrg.id == Org.parent_id)
-            .outerjoin(Location, EventInstance.location_id == Location.id)
-            .outerjoin(
-                firstq_subquery,
-                and_(EventInstance.id == firstq_subquery.c.event_instance_id, firstq_subquery.c.rn == 1),
-            )
-            .outerjoin(User, User.id == firstq_subquery.c.user_id)
-            .outerjoin(attendance_subquery, EventInstance.id == attendance_subquery.c.event_instance_id)
-            .filter(
-                (EventInstance.start_date >= current_week_start),
-                (EventInstance.start_date < overall_end),
-                (EventInstance.is_active),
-                # (EventInstance.series_id.is_not(None)),
-                or_(EventTag.name.is_(None), EventTag.name != "Off-The-Books"),
-            )
-        )
+        query, RegionOrg = _build_calendar_query(session, current_week_start, overall_end)
 
         region_org_records = (
             session.query(Org, Org_x_SlackSpace, SlackSpace)
@@ -496,7 +503,7 @@ def generate_calendar_images(force: bool = False):
                     # Read a fresh region snapshot only after acquiring its lock.
                     # Use query start, not export completion, as the watermark.
                     generation_started_at = datetime.now(UTC)
-                    results = query.filter(RegionOrg.id == region_id).all()
+                    results = query.filter(RegionOrg.id == region_id).params(calendar_region_id=region_id).all()
                     df_full = pd.DataFrame(results, columns=[column.key for column in query.statement.selected_columns])
                     event_tags = session.query(EventTag).all()
                     slack_app_settings: dict = deepcopy(region_org_record[2].settings)
@@ -796,7 +803,7 @@ def generate_calendar_images(force: bool = False):
                         session.execute(select(func.pg_advisory_xact_lock(lock_key)))
                         session.refresh(region_org_record[2], attribute_names=["settings"])
                         cleanup_settings = region_org_record[2].settings
-                        results = query.filter(RegionOrg.id == region_id).all()
+                        results = query.filter(RegionOrg.id == region_id).params(calendar_region_id=region_id).all()
                         cleanup_df = pd.DataFrame(
                             results, columns=[column.key for column in query.statement.selected_columns]
                         )
