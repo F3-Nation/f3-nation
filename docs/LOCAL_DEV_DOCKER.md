@@ -408,7 +408,43 @@ pnpm db:migrate:local # apply any pending migrations
 pnpm db:studio        # open Drizzle Studio (interactive schema browser)
 pnpm db:seed:local    # re-run the local seed (safe to run multiple times)
 pnpm db:reset         # DANGER: wipe and recreate the database
+pnpm db:load:snapshot # replace the seed data with the sanitized Prod snapshot
 ```
+
+### Load the sanitized Prod snapshot
+
+The default seed is a small fake dataset. If you want real-shaped data (Prod's
+org hierarchy and events, plus event instances from 30 days back to 90 days ahead),
+load the sanitized Prod snapshot instead. Emails, phone numbers and Slack ids
+are replaced with fakes, private events are dropped, and free-text fields such
+as backblasts and user profiles are cleared. How it is produced and checked is
+in [Developer snapshot](STAGING_REFRESH.md#developer-snapshot---snapshot-only).
+
+```bash
+pnpm db:load:snapshot                     # download the published snapshot, ask, then load it
+pnpm db:load:snapshot --yes               # same, without the confirmation prompt
+pnpm db:load:snapshot --file ./snap.tar   # load a snapshot you already have
+pnpm db:load:snapshot --url https://...   # load from another https URL
+```
+
+- **It replaces data.** The kept tables are truncated (with `CASCADE`, so
+  tables that reference them are emptied too) and restored in one
+  transaction, so the seed data in them is gone. The dev logins, API keys and
+  OAuth clients are re-created afterwards, so you can still sign in locally.
+- **Run it on an up-to-date local database.** Docker must be running and
+  migrations applied (`pnpm db:migrate:local`); the loader refuses a database
+  whose migrations are older than the snapshot's.
+- **It only runs against a disposable local database** (the one
+  `pnpm local:setup` creates) and refuses when `CI` is set.
+- **Age.** A snapshot is cut on demand, not on a schedule. The manifest records
+  when it was exported, and the loader warns if it is more than 30 days old.
+- **Worktree slots.** In a `--slot N` checkout the load goes into that slot's
+  own database container.
+- **Not published yet?** A 404 means no snapshot has been published yet;
+  keep the seed data.
+
+To go back to the fake data, run `pnpm db:reset`, then `pnpm db:migrate:local`
+and `pnpm db:seed:local`.
 
 ### Adding your own seed data
 

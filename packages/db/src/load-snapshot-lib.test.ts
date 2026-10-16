@@ -87,6 +87,35 @@ describe("parseArgs", () => {
   });
 });
 
+describe("snapshot location", () => {
+  const read = (rel: string) =>
+    readFileSync(path.resolve(__dirname, "../../..", rel), "utf8");
+
+  it("matches the publisher's object and the IAM condition in setup.sh", () => {
+    const config = read("tooling/scripts/src/staging-refresh.config.ts");
+    const bucket = /bucket: "([^"]+)"/.exec(config)?.[1];
+    const name = /name: "(dev-snapshots\/[^"]+)"/.exec(config)?.[1];
+    expect(bucket).toBeDefined();
+    expect(name).toBeDefined();
+    expect(SNAPSHOT_URL).toBe(
+      `https://storage.googleapis.com/${bucket}/${name}`,
+    );
+
+    const setup = read("tooling/scripts/staging-refresh/setup.sh");
+    expect(/^SNAPSHOT_BUCKET=(\S+)$/m.exec(setup)?.[1]).toBe(bucket);
+    const prefix = /^SNAPSHOT_PREFIX=(\S+)$/m.exec(setup)?.[1];
+    expect(prefix?.endsWith("/")).toBe(true);
+    expect(name?.startsWith(prefix ?? "\0")).toBe(true);
+
+    expect(setup).toContain(
+      'SNAPSHOT_CONDITION="resource.name.startsWith(\\"projects/_/buckets/${SNAPSHOT_BUCKET}/objects/${SNAPSHOT_PREFIX}\\")"',
+    );
+    expect(setup).toContain(
+      '--condition "expression=$SNAPSHOT_CONDITION,title=$SNAPSHOT_CONDITION_TITLE"',
+    );
+  });
+});
+
 describe("validateSourceUrl", () => {
   it("accepts https and local http only", () => {
     expect(validateSourceUrl(SNAPSHOT_URL).host).toBe("storage.googleapis.com");
