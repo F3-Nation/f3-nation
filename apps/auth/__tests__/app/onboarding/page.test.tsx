@@ -382,4 +382,36 @@ describe("home region", () => {
       body: JSON.stringify(profile),
     });
   });
+
+  it("shows a generic message when the save fails without saying why", async () => {
+    prefill({ ...saved, isExistingUser: true });
+    fetchMock.mockResolvedValueOnce(Response.json({}, { status: 500 }));
+    await renderForm();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Home Region")).toHaveProperty(
+        "value",
+        "Test South",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText("Failed to complete onboarding"),
+    ).toBeDefined();
+  });
+
+  it("sends someone whose session expired back through sign-in", async () => {
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    render(<OnboardingPage />);
+
+    await waitFor(() => expect(router.push).toHaveBeenCalledTimes(1));
+    expect(router.push).toHaveBeenCalledWith(
+      `/login/email?callbackUrl=${encodeURIComponent(`/onboarding?callbackUrl=${encodeURIComponent(callback)}`)}`,
+    );
+    // Still on "Loading..." so an empty form can't be submitted meanwhile.
+    expect(screen.queryByLabelText("F3 Name")).toBeNull();
+  });
 });

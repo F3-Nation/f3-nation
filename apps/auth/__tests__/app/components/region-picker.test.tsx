@@ -14,6 +14,7 @@ const regions: Region[] = [
 ];
 
 const onChange = vi.fn();
+const onSearchChange = vi.fn();
 
 function Harness() {
   const [value, setValue] = useState<number | "">("");
@@ -46,6 +47,7 @@ function setup() {
 afterEach(() => {
   cleanup();
   onChange.mockClear();
+  onSearchChange.mockClear();
 });
 
 describe("RegionPicker keyboard use", () => {
@@ -119,19 +121,15 @@ describe("RegionPicker keyboard use", () => {
     expect(box.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("keeps the typed text for a click that lands after the blur", async () => {
-    vi.useFakeTimers();
-    try {
-      const box = setup();
-      fireEvent.change(box, { target: { value: "other" } });
-      fireEvent.mouseDown(screen.getByRole("option", { name: "Other" }));
-      fireEvent.blur(box);
-      await act(() => vi.advanceTimersByTimeAsync(300));
+  it("keeps focus in the input when an option is pressed", () => {
+    const box = setup();
+    fireEvent.change(box, { target: { value: "other" } });
 
-      expect(box).toHaveProperty("value", "other");
-    } finally {
-      vi.useRealTimers();
-    }
+    const notPrevented = fireEvent.mouseDown(
+      screen.getByRole("option", { name: "Other" }),
+    );
+
+    expect(notPrevented).toBe(false);
   });
 
   it("doesn't let an earlier blur wipe a region picked with the keyboard", async () => {
@@ -158,7 +156,6 @@ describe("RegionPicker keyboard use", () => {
       const box = setup();
       fireEvent.change(box, { target: { value: "other" } });
       const option = screen.getByRole("option", { name: "Other" });
-      fireEvent.mouseDown(option);
       fireEvent.blur(box);
       fireEvent.click(option);
       await act(() => vi.advanceTimersByTimeAsync(300));
@@ -183,6 +180,30 @@ describe("RegionPicker keyboard use", () => {
       await act(() => vi.advanceTimersByTimeAsync(300));
 
       expect(box).toHaveProperty("value", "Other");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves the text alone on blur when the chosen region has left the list", async () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RegionPicker
+          regions={regions}
+          value={99}
+          onChange={onChange}
+          search="Gone"
+          onSearchChange={onSearchChange}
+          inputClass=""
+          placeholder="Search"
+        />,
+      );
+      const box = screen.getByRole("combobox");
+      fireEvent.blur(box);
+      await act(() => vi.advanceTimersByTimeAsync(300));
+
+      expect(onSearchChange).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

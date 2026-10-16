@@ -33,7 +33,6 @@ export function RegionPicker({
 }: RegionPickerProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const selectedRef = useRef(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const valueRef = useRef(value);
   valueRef.current = value;
@@ -67,7 +66,6 @@ export function RegionPicker({
   function choose(r: Region) {
     // A blur still waiting to run would act on the old value.
     clearBlurTimeout();
-    selectedRef.current = false;
     onChange(r.id);
     onSearchChange(r.name);
     setDropdownOpen(false);
@@ -126,18 +124,15 @@ export function RegionPicker({
         onBlur={() => {
           blurTimeoutRef.current = setTimeout(() => {
             blurTimeoutRef.current = null;
-            if (!selectedRef.current) {
-              if (valueRef.current) {
-                // Restore the selected region name if user didn't change selection
-                const selected = regions.find((r) => r.id === valueRef.current);
-                if (selected) {
-                  onSearchChange(selected.name);
-                }
-              } else {
-                onSearchChange("");
+            if (valueRef.current) {
+              // Restore the selected region name if user didn't change selection
+              const selected = regions.find((r) => r.id === valueRef.current);
+              if (selected) {
+                onSearchChange(selected.name);
               }
+            } else {
+              onSearchChange("");
             }
-            selectedRef.current = false;
             setDropdownOpen(false);
             setActiveIndex(-1);
           }, 200);
@@ -170,9 +165,9 @@ export function RegionPicker({
               id={`homeRegion-option-${r.id}`}
               role="option"
               aria-selected={i === activeIndex}
-              onMouseDown={() => {
-                selectedRef.current = true;
-              }}
+              // Keep focus in the input so pressing an option never starts the
+              // delayed blur that would close the list before the click lands.
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => choose(r)}
               className={`cursor-pointer px-4 py-2 text-left text-base transition-colors hover:bg-accent ${
                 i === activeIndex ? "bg-accent" : ""
