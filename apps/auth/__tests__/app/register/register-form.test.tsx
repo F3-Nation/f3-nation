@@ -55,6 +55,12 @@ function submit() {
   fireEvent.click(screen.getByRole("button", { name: "Create Account" }));
 }
 
+function registrationForm() {
+  const form = screen.getByLabelText<HTMLInputElement>(/First Name/).form;
+  if (!form) throw new Error("Registration form not found");
+  return form;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
@@ -121,6 +127,46 @@ describe("registration", () => {
         });
         expect(emailOtp).not.toHaveBeenCalled();
       }
+    },
+  );
+
+  it.each([false, true])(
+    "ignores repeated form submissions while registration or sign-in is pending (Better Auth: %s)",
+    async (useBetterAuth) => {
+      let resolveRegistration!: (response: Response) => void;
+      fetchMock.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveRegistration = resolve;
+          }),
+      );
+      let resolveSignIn!: (result: { error: null }) => void;
+      const pendingSignIn = new Promise<{ error: null }>((resolve) => {
+        resolveSignIn = resolve;
+      });
+      const signInMock = useBetterAuth ? emailOtp : signIn;
+      signInMock.mockReturnValueOnce(pendingSignIn);
+      await fillForm(useBetterAuth);
+
+      act(() => {
+        registrationForm().requestSubmit();
+        registrationForm().requestSubmit();
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(signInMock).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveRegistration(Response.json({ created: true }));
+      });
+      expect(signInMock).toHaveBeenCalledTimes(1);
+      act(() => registrationForm().requestSubmit());
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(router.push).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveSignIn({ error: null });
+      });
+      expect(router.push).toHaveBeenCalledExactlyOnceWith(callback);
     },
   );
 
@@ -308,19 +354,87 @@ describe("registration", () => {
     expect(screen.queryByText(error)).toBeNull();
   });
 
-  it("offers a fresh code when registration rejects the code", async () => {
-    const error =
-      "Your verification code is invalid or has expired. Please sign in again.";
-    fetchMock.mockResolvedValueOnce(Response.json({ error }, { status: 401 }));
-    await fillForm();
-    submit();
-    expect(await screen.findByText(error)).toBeDefined();
-    expect(signIn).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
-    expect(router.push).toHaveBeenCalledExactlyOnceWith(
-      `/login/email?callbackUrl=${encodeURIComponent(callback)}`,
-    );
-  });
+  it.each([false, true])(
+    "allows retry after a network failure before creation is confirmed (Better Auth: %s)",
+    async (useBetterAuth) => {
+      fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      await fillForm(useBetterAuth);
+      submit();
+      expect(
+        await screen.findByText("Something went wrong. Please try again."),
+      ).toBeDefined();
+      expect(
+        screen.getByRole("button", { name: "Create Account" }),
+      ).toHaveProperty("disabled", false);
+      expect(signIn).not.toHaveBeenCalled();
+      expect(emailOtp).not.toHaveBeenCalled();
+      expect(router.push).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole("button", { name: "Sign in again" }),
+      ).toBeNull();
+
+      submit();
+      await waitFor(() =>
+        expect(router.push).toHaveBeenCalledExactlyOnceWith(callback),
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it.each([false, true])(
+    "offers sign-in recovery after sign-in throws without registering again (Better Auth: %s)",
+    async (useBetterAuth) => {
+      const signInMock = useBetterAuth ? emailOtp : signIn;
+      signInMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      await fillForm(useBetterAuth);
+      submit();
+
+      const error =
+        "Your account was created, but we couldn't sign you in. Please sign in again to continue.";
+      expect(await screen.findByText(error)).toBeDefined();
+      expect(router.push).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: "Create Account" }),
+      ).toHaveProperty("disabled", true);
+
+      submit();
+      act(() => registrationForm().requestSubmit());
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(signInMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(error)).toBeDefined();
+
+      fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+      expect(router.push).toHaveBeenCalledExactlyOnceWith(
+        `/login/email?callbackUrl=${encodeURIComponent(callback)}`,
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each([false, true])(
+    "offers a fresh code without resubmitting when registration rejects the code (Better Auth: %s)",
+    async (useBetterAuth) => {
+      const error =
+        "Your verification code is invalid or has expired. Please sign in again.";
+      fetchMock.mockResolvedValueOnce(
+        Response.json({ error }, { status: 401 }),
+      );
+      await fillForm(useBetterAuth);
+      submit();
+      expect(await screen.findByText(error)).toBeDefined();
+      expect(signIn).not.toHaveBeenCalled();
+      expect(emailOtp).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: "Create Account" }),
+      ).toHaveProperty("disabled", true);
+      act(() => registrationForm().requestSubmit());
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+      expect(router.push).toHaveBeenCalledExactlyOnceWith(
+        `/login/email?callbackUrl=${encodeURIComponent(callback)}`,
+      );
+    },
+  );
 
   it("keeps the answers for a fresh code after the code is rejected", async () => {
     fetchMock.mockResolvedValueOnce(
@@ -387,20 +501,6 @@ describe("registration", () => {
     expect(sessionStorage.getItem("f3-register-draft")).toBeNull();
   });
 
-  it("shows a retryable error after a network failure", async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    await fillForm();
-    submit();
-    expect(
-      await screen.findByText("Something went wrong. Please try again."),
-    ).toBeDefined();
-    expect(
-      screen.getByRole("button", { name: "Create Account" }),
-    ).toHaveProperty("disabled", false);
-    expect(signIn).not.toHaveBeenCalled();
-    expect(router.push).not.toHaveBeenCalled();
-  });
-
   it.each([
     [
       "NextAuth expired code",
@@ -429,6 +529,13 @@ describe("registration", () => {
       submit();
       expect(await screen.findByText(error)).toBeDefined();
       expect(router.push).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: "Create Account" }),
+      ).toHaveProperty("disabled", true);
+      submit();
+      act(() => registrationForm().requestSubmit());
+      expect(screen.getByText(error)).toBeDefined();
+      expect(useBetterAuth ? emailOtp : signIn).toHaveBeenCalledTimes(1);
       fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
       expect(router.push).toHaveBeenCalledExactlyOnceWith(
         `/login/email?callbackUrl=${encodeURIComponent(callback)}`,
