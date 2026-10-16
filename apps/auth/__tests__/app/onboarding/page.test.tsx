@@ -414,4 +414,39 @@ describe("home region", () => {
     // Still on "Loading..." so an empty form can't be submitted meanwhile.
     expect(screen.queryByLabelText("F3 Name")).toBeNull();
   });
+
+  it("doesn't save text that matches no region", async () => {
+    prefill({ ...profile, homeRegionId: null, isExistingUser: true });
+    await renderForm();
+
+    fireEvent.change(screen.getByLabelText("Home Region"), {
+      target: { value: "zzz" },
+    });
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Continue" }).closest("form")!,
+    );
+
+    expect(
+      await screen.findByText("Please choose your home region."),
+    ).toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips the region question when the list is empty", async () => {
+    prefill({ ...profile, homeRegionId: null, isExistingUser: true });
+    regionsFetch.mockResolvedValue(Response.json([]));
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+    await renderForm();
+
+    expect(screen.queryByLabelText("Home Region")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    });
+  });
 });

@@ -158,7 +158,7 @@ describe("registration", () => {
     await fillForm();
     change("F3 Name", "Test Runner");
     change("Home Region", "sOuTh");
-    expect(screen.queryByRole("button", { name: "Test North" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Test North" })).toBeNull();
     const region = screen.getByRole("option", { name: "Test South" });
     fireEvent.mouseDown(region);
     fireEvent.click(region);
@@ -227,7 +227,7 @@ describe("registration", () => {
     fireEvent.mouseDown(
       screen.getByRole("heading", { name: "Create Your Account" }),
     );
-    expect(screen.queryByRole("button", { name: "Test North" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Test North" })).toBeNull();
     vi.useRealTimers();
     submit();
     await waitFor(() =>

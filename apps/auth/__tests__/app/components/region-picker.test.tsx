@@ -16,9 +16,17 @@ const regions: Region[] = [
 const onChange = vi.fn();
 const onSearchChange = vi.fn();
 
-function Harness() {
-  const [value, setValue] = useState<number | "">("");
-  const [search, setSearch] = useState("");
+function Harness({
+  initialValue = "",
+  initialSearch = "",
+  required,
+}: {
+  initialValue?: number | "";
+  initialSearch?: string;
+  required?: boolean;
+}) {
+  const [value, setValue] = useState<number | "">(initialValue);
+  const [search, setSearch] = useState(initialSearch);
   return (
     <form data-testid="form" onSubmit={(e) => e.preventDefault()}>
       <RegionPicker
@@ -32,6 +40,7 @@ function Harness() {
         onSearchChange={setSearch}
         inputClass=""
         placeholder="Search"
+        required={required}
       />
     </form>
   );
@@ -207,5 +216,43 @@ describe("RegionPicker keyboard use", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("drops a preselected region once the text is edited", () => {
+    render(<Harness initialValue={3} initialSearch="Other" />);
+    const box = screen.getByRole("combobox");
+
+    fireEvent.change(box, { target: { value: "Othe" } });
+
+    expect(onChange).toHaveBeenLastCalledWith("");
+  });
+
+  it("restores a preselected region's name when focus leaves", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<Harness initialValue={3} initialSearch="Other" />);
+      const box = screen.getByRole("combobox");
+      fireEvent.focus(box);
+      fireEvent.blur(box);
+      await act(() => vi.advanceTimersByTimeAsync(300));
+
+      expect(box).toHaveProperty("value", "Other");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("passes required through to the input", () => {
+    render(<Harness required />);
+    expect(screen.getByRole("combobox")).toHaveProperty("required", true);
+  });
+
+  it("closes the list on a click outside it", () => {
+    const box = setup();
+    expect(box.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.mouseDown(document.body);
+
+    expect(box.getAttribute("aria-expanded")).toBe("false");
   });
 });

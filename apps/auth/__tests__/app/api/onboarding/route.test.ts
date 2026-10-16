@@ -49,6 +49,15 @@ beforeEach(() => {
 });
 
 describe("GET /api/onboarding", () => {
+  it("requires a session", async () => {
+    vi.mocked(getCurrentSession).mockResolvedValue(null);
+
+    const res = await GET();
+
+    expect(res.status).toBe(401);
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+
   it("returns the saved home region with the rest of the profile", async () => {
     selects([{ ...profile, homeRegionId: 7 }]);
 
@@ -111,21 +120,31 @@ describe("POST /api/onboarding", () => {
     expect(new Date(stamp as string).toISOString()).toBe(stamp);
   });
 
+  it("rejects an unknown or retired region", async () => {
+    selects([]);
+
+    const res = await POST(post({ ...profile, homeRegionId: 999 }));
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "homeRegionId must be an active region",
+    });
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
   it.each([
-    ["an unknown or retired region", 999],
     ["a region id that isn't an integer", "7"],
     ["a fractional region id", 7.5],
     ["a region id beyond a 32-bit integer", 2 ** 31],
     ["a negative region id", -1],
-  ])("rejects %s", async (_name, homeRegionId) => {
-    selects([]);
-
+  ])("rejects %s without querying", async (_name, homeRegionId) => {
     const res = await POST(post({ ...profile, homeRegionId }));
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: "homeRegionId must be an active region",
     });
+    expect(dbMock.select).not.toHaveBeenCalled();
     expect(dbMock.update).not.toHaveBeenCalled();
   });
 
