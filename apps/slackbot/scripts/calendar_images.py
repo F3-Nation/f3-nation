@@ -53,6 +53,7 @@ from utilities.helper_functions import current_date_cst, safe_convert, update_lo
 from utilities.slack import actions
 
 DB_SCHEMA = os.getenv("DATABASE_SCHEMA", "f3_staging")
+CALENDAR_REGION_BIND_PARAMETER = "calendar_region_id"
 CALENDAR_IMAGE_TIMESTAMP_FORMAT = "%Y%m%dT%H%M%S%fZ"
 CALENDAR_IMAGE_V1_PATTERN = re.compile(
     r"(?P<region_id>[1-9][0-9]*)-(?P<week>current|next|third)-v1-"
@@ -377,7 +378,7 @@ def calendar_image_is_stale(
 
 
 def _build_calendar_query(session, current_week_start, overall_end):
-    calendar_region_id = bindparam("calendar_region_id", type_=Integer)
+    calendar_region_id = bindparam(CALENDAR_REGION_BIND_PARAMETER, type_=Integer)
     firstq_subquery = (
         select(
             Attendance.event_instance_id,
@@ -503,7 +504,11 @@ def generate_calendar_images(force: bool = False):
                     # Read a fresh region snapshot only after acquiring its lock.
                     # Use query start, not export completion, as the watermark.
                     generation_started_at = datetime.now(UTC)
-                    results = query.filter(RegionOrg.id == region_id).params(calendar_region_id=region_id).all()
+                    results = (
+                        query.filter(RegionOrg.id == region_id)
+                        .params(**{CALENDAR_REGION_BIND_PARAMETER: region_id})
+                        .all()
+                    )
                     df_full = pd.DataFrame(results, columns=[column.key for column in query.statement.selected_columns])
                     event_tags = session.query(EventTag).all()
                     slack_app_settings: dict = deepcopy(region_org_record[2].settings)
@@ -803,7 +808,11 @@ def generate_calendar_images(force: bool = False):
                         session.execute(select(func.pg_advisory_xact_lock(lock_key)))
                         session.refresh(region_org_record[2], attribute_names=["settings"])
                         cleanup_settings = region_org_record[2].settings
-                        results = query.filter(RegionOrg.id == region_id).params(calendar_region_id=region_id).all()
+                        results = (
+                            query.filter(RegionOrg.id == region_id)
+                            .params(**{CALENDAR_REGION_BIND_PARAMETER: region_id})
+                            .all()
+                        )
                         cleanup_df = pd.DataFrame(
                             results, columns=[column.key for column in query.statement.selected_columns]
                         )
