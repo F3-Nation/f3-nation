@@ -5,8 +5,8 @@ Platform, security, database, analytics, and consumer owners must approve the
 actual grants and production release. No IAM commands have been executed, and
 this document does not assert that any role, binding, service account, bucket,
 schedule, or API configuration is present. See the
-[`analytics-parquet-etl` spec](../specs/analytics-parquet-etl.md),
-[`pax-vault-parquet-etl` spec](../specs/pax-vault-parquet-etl.md), and
+[`analytics-parquet-etl` spec](specs/analytics-parquet-etl.md),
+[`pax-vault-parquet-etl` spec](specs/pax-vault-parquet-etl.md), and
 [operations guide](ANALYTICS_ETL_OPERATIONS.md) for contracts and gates. Use
 [`GCP_APP_SETUP.md`](GCP_APP_SETUP.md) for shared Cloud Run and WIF setup; do
 not recreate the shared WIF pool/provider.

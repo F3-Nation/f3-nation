@@ -63,7 +63,7 @@ hard-deleting or regenerating instances.
 - **AC-8** — GIVEN an inactive one-off event with `dayOfWeek: null` WHEN an
   authorized editor reactivates it with a request supplying non-null
   `dayOfWeek` THEN its series instances are generated. See
-  [`creates instances when an inactive one-off becomes an active series`](../packages/api/src/router/event.test.ts).
+  [`creates instances when an inactive one-off becomes an active series`](../../packages/api/src/router/event.test.ts).
 - **AC-9** — GIVEN an existing event series WHEN an update clears `dayOfWeek`
   to convert it to a one-off THEN the request fails with `BAD_REQUEST` and does
   not hard-delete or regenerate its existing instances.
