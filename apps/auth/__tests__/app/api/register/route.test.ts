@@ -93,6 +93,10 @@ describe("POST /api/register", () => {
     const payload = JSON.parse(init?.body as string) as Record<string, unknown>;
     expect(payload.email).toBe("new-pax@example.test");
     expect(payload).not.toHaveProperty("code");
+    // New accounts skip onboarding, stamped the same way /api/onboarding does.
+    const stamp = (payload.meta as Record<string, unknown>)
+      .onboarding_completed;
+    expect(new Date(stamp as string).toISOString()).toBe(stamp);
   });
 
   it("reports a failed account creation without leaking the API response", async () => {
