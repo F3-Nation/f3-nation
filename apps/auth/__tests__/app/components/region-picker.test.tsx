@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { act, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Region } from "~/app/components/region-picker";
@@ -112,14 +112,79 @@ describe("RegionPicker keyboard use", () => {
     expect(box.getAttribute("aria-activedescendant")).toBeNull();
   });
 
-  it("keeps what was typed when focus moves into the list", () => {
+  it("ignores Escape when the list is already closed", () => {
     const box = setup();
-    fireEvent.change(box, { target: { value: "test" } });
-    const option = screen.getByRole("button", { name: "Test North" });
+    fireEvent.keyDown(box, { key: "Escape" });
+    fireEvent.keyDown(box, { key: "Escape" });
+    expect(box.getAttribute("aria-expanded")).toBe("false");
+  });
 
-    fireEvent.blur(box, { relatedTarget: option });
+  it("keeps the typed text for a click that lands after the blur", async () => {
+    vi.useFakeTimers();
+    try {
+      const box = setup();
+      fireEvent.change(box, { target: { value: "other" } });
+      fireEvent.mouseDown(screen.getByRole("option", { name: "Other" }));
+      fireEvent.blur(box);
+      await act(() => vi.advanceTimersByTimeAsync(300));
 
-    expect(box).toHaveProperty("value", "test");
-    expect(screen.getAllByRole("option")).toHaveLength(2);
+      expect(box).toHaveProperty("value", "other");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("doesn't let an earlier blur wipe a region picked with the keyboard", async () => {
+    vi.useFakeTimers();
+    try {
+      const box = setup();
+      fireEvent.change(box, { target: { value: "other" } });
+      // Focus leaves, then returns and picks before the blur timer fires.
+      fireEvent.blur(box);
+      fireEvent.focus(box);
+      fireEvent.keyDown(box, { key: "Enter" });
+      await act(() => vi.advanceTimersByTimeAsync(300));
+
+      expect(onChange).toHaveBeenLastCalledWith(3);
+      expect(box).toHaveProperty("value", "Other");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("picks with the mouse while a blur is still pending", async () => {
+    vi.useFakeTimers();
+    try {
+      const box = setup();
+      fireEvent.change(box, { target: { value: "other" } });
+      const option = screen.getByRole("option", { name: "Other" });
+      fireEvent.mouseDown(option);
+      fireEvent.blur(box);
+      fireEvent.click(option);
+      await act(() => vi.advanceTimersByTimeAsync(300));
+
+      expect(onChange).toHaveBeenLastCalledWith(3);
+      expect(box).toHaveProperty("value", "Other");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restores the chosen name when focus leaves without a new pick", async () => {
+    vi.useFakeTimers();
+    try {
+      const box = setup();
+      fireEvent.change(box, { target: { value: "other" } });
+      fireEvent.keyDown(box, { key: "Enter" });
+      fireEvent.change(box, { target: { value: "oth" } });
+      fireEvent.keyDown(box, { key: "Enter" });
+      fireEvent.focus(box);
+      fireEvent.blur(box);
+      await act(() => vi.advanceTimersByTimeAsync(300));
+
+      expect(box).toHaveProperty("value", "Other");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

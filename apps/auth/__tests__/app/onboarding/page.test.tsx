@@ -244,7 +244,7 @@ describe("home region", () => {
     fireEvent.change(screen.getByLabelText("Home Region"), {
       target: { value: "north" },
     });
-    const north = screen.getByRole("button", { name: "Test North" });
+    const north = screen.getByRole("option", { name: "Test North" });
     fireEvent.mouseDown(north);
     fireEvent.click(north);
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));

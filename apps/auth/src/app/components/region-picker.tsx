@@ -34,6 +34,9 @@ export function RegionPicker({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef(false);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
   const [activeIndex, setActiveIndex] = useState(-1);
 
   // Close region dropdown on outside click
@@ -54,7 +57,17 @@ export function RegionPicker({
     r.name.toLowerCase().includes(search.toLowerCase()),
   );
 
+  function clearBlurTimeout() {
+    if (blurTimeoutRef.current !== null) {
+      clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+  }
+
   function choose(r: Region) {
+    // A blur still waiting to run would act on the old value.
+    clearBlurTimeout();
+    selectedRef.current = false;
     onChange(r.id);
     onSearchChange(r.name);
     setDropdownOpen(false);
@@ -79,7 +92,10 @@ export function RegionPicker({
           setDropdownOpen(true);
           setActiveIndex(-1);
         }}
-        onFocus={() => setDropdownOpen(true)}
+        onFocus={() => {
+          clearBlurTimeout();
+          setDropdownOpen(true);
+        }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
             if (filteredRegions.length === 0) return;
@@ -107,14 +123,13 @@ export function RegionPicker({
             setActiveIndex(-1);
           }
         }}
-        onBlur={(e) => {
-          // Focus moving into the list (Tab to an option) is not leaving.
-          if (containerRef.current?.contains(e.relatedTarget)) return;
-          setTimeout(() => {
+        onBlur={() => {
+          blurTimeoutRef.current = setTimeout(() => {
+            blurTimeoutRef.current = null;
             if (!selectedRef.current) {
-              if (value) {
+              if (valueRef.current) {
                 // Restore the selected region name if user didn't change selection
-                const selected = regions.find((r) => r.id === value);
+                const selected = regions.find((r) => r.id === valueRef.current);
                 if (selected) {
                   onSearchChange(selected.name);
                 }
@@ -147,25 +162,23 @@ export function RegionPicker({
           className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-card shadow-lg"
         >
           {filteredRegions.map((r, i) => (
+            // Keyboard users pick through the input (arrow keys + Enter), the
+            // standard combobox pattern, so options aren't focusable.
+            // eslint-disable-next-line jsx-a11y/click-events-have-key-events
             <li
               key={r.id}
               id={`homeRegion-option-${r.id}`}
               role="option"
               aria-selected={i === activeIndex}
+              onMouseDown={() => {
+                selectedRef.current = true;
+              }}
+              onClick={() => choose(r)}
+              className={`cursor-pointer px-4 py-2 text-left text-base transition-colors hover:bg-accent ${
+                i === activeIndex ? "bg-accent" : ""
+              }`}
             >
-              <button
-                type="button"
-                tabIndex={-1}
-                onMouseDown={() => {
-                  selectedRef.current = true;
-                }}
-                onClick={() => choose(r)}
-                className={`w-full px-4 py-2 text-left text-base transition-colors hover:bg-accent ${
-                  i === activeIndex ? "bg-accent" : ""
-                }`}
-              >
-                {r.name}
-              </button>
+              {r.name}
             </li>
           ))}
         </ul>
