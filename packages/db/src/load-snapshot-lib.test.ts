@@ -106,6 +106,13 @@ describe("snapshot location", () => {
     const prefix = /^SNAPSHOT_PREFIX=(\S+)$/m.exec(setup)?.[1];
     expect(prefix?.endsWith("/")).toBe(true);
     expect(name?.startsWith(prefix ?? "\0")).toBe(true);
+
+    expect(setup).toContain(
+      'SNAPSHOT_CONDITION="resource.name.startsWith(\\"projects/_/buckets/${SNAPSHOT_BUCKET}/objects/${SNAPSHOT_PREFIX}\\")"',
+    );
+    expect(setup).toContain(
+      '--condition "expression=$SNAPSHOT_CONDITION,title=$SNAPSHOT_CONDITION_TITLE"',
+    );
   });
 });
 
