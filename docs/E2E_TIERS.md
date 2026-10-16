@@ -53,6 +53,7 @@ cases, exploratory coverage — lives in `tests/e2e-advisory/`.
 An advisory failure never blocks a merge, but it is never ignored either:
 each one is a signal to triage — a real regression on a secondary path, a
 selector drift, or a test that should be fixed or deleted. Triage it from the
-`e2e-advisory` job and its artifacts (the Playwright report and each failure's
-`error-context.md`). Do not let a permanently-red advisory test sit — a test
-nobody reacts to is worse than no test.
+`e2e-advisory` job and its uploaded `test-results` artifacts (each failure's
+trace, screenshot and `error-context.md` page snapshot). Do not let a
+permanently-red advisory test sit — a test nobody reacts to is worse than no
+test.

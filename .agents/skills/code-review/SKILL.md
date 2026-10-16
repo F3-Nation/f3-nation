@@ -12,8 +12,10 @@ review, without a hosted pipeline or a separate API bill.
 ## Get the diff
 
 - Your branch: `git diff origin/main...HEAD`
-- A PR: `gh pr diff <number>` (and `gh pr view <number> --comments` for what
-  CodeRabbit and others already raised)
+- A PR: `gh pr diff <number>`. For what reviewers already raised and what the
+  author answered, read both the conversation (`gh pr view <number> --comments`)
+  and the inline review threads, replies included
+  (`gh api repos/F3-Nation/f3-nation/pulls/<number>/comments --paginate`).
 
 Read the surrounding code for any hunk you are unsure about. A finding about code
 you have not read is a guess.
@@ -51,9 +53,10 @@ diff line. No relevant spec means no spec findings.
   what is wrong, the quoted lines that prove it, and a suggested fix.
 - Findings in **security, availability or scalability** (auth and validation
   changes always count) get a note on what a human must verify, not a patch.
-- Leave out style, naming and formatting, and anything CodeRabbit already raised.
-- Before reporting, check each finding against earlier review replies on the PR,
-  and drop the ones the author already answered.
+- Leave out style, naming and formatting.
+- A finding another reviewer already raised on the PR is already in front of the
+  author: point to that comment instead of repeating it. Drop findings the author
+  already answered, in either place.
 - Most good diffs produce no findings or one or two. A long list usually means
   some of it is noise: keep the ones you would defend to the author.
 
