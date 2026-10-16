@@ -14,8 +14,13 @@ review, without a hosted pipeline or a separate API bill.
 - Your branch: `git diff origin/main...HEAD`
 - A PR: `gh pr diff <number>`. For what reviewers already raised and what the
   author answered, read both the conversation (`gh pr view <number> --comments`)
-  and the inline review threads, replies included
-  (`gh api repos/F3-Nation/f3-nation/pulls/<number>/comments --paginate`).
+  and the inline review threads, replies included. This keeps every thread but
+  trims each comment, so a long review history doesn't crowd out the diff:
+
+  ```sh
+  gh api repos/F3-Nation/f3-nation/pulls/<number>/comments --paginate \
+    --jq '.[] | {id, in_reply_to_id, user: .user.login, path, line, body: .body[:600]}'
+  ```
 
 Read the surrounding code for any hunk you are unsure about. A finding about code
 you have not read is a guess.
