@@ -8,8 +8,8 @@ export { ORG_TREE_MAX_DEPTH } from "@acme/shared/app/org-hierarchy";
 
 /**
  * The org tree changes rarely, so re-running the table-wide scan on every
- * request is wasted work under concurrent map traffic. One scan per interval
- * gives the same telemetry at a fraction of the database and logging cost.
+ * request is wasted work under concurrent public API traffic. One scan per
+ * interval gives the same telemetry with fewer database scans and log events.
  */
 const DEPTH_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 let lastDepthScanAt = 0;
@@ -27,14 +27,12 @@ export const resetDepthScanThrottleForTests = (): void => {
  * `ORG_TREE_MAX_DEPTH`, logging `api.org_tree.depth_limit_reached` if one is
  * found. Unlike `checkHasRoleOnOrg` and `getDescendantOrgIds`, this isn't
  * anchored to a single org — it's the depth-limit telemetry for
- * `ancestorOrgsAreActive` (packages/api/src/router/map/location.ts), whose
- * own recursive walk is embedded per-row via `notExists(...)` inside bulk
- * selects and has no materialized JS result to inspect after the query
- * returns. A single unanchored table-wide scan gives it the same
- * observability at a fraction of the cost of checking per row.
+ * the active-organization predicates in org-activity.ts, whose recursive walk
+ * runs inside a NOT EXISTS subquery and leaves no JS result to inspect.
+ * A single unanchored table-wide scan detects chains beyond the depth limit.
  *
- * Throttled to once per `DEPTH_SCAN_INTERVAL_MS`: three hot public handlers
- * call this on every request, but the underlying data changes slowly.
+ * Throttled to once per `DEPTH_SCAN_INTERVAL_MS`: public read handlers call this
+ * for anonymous queries and cache loads; core Map reads call it for all callers.
  *
  * Never throws — errors are logged and swallowed, matching the
  * fire-and-forget contract of `notifyMapDataChange`

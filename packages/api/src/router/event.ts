@@ -38,6 +38,8 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { logError } from "../logger";
+import { orgAndAncestorsAreActive } from "../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import { requireEditorOnRescope } from "../require-editor-on-rescope";
 import type { Context } from "../shared";
 import {
@@ -255,8 +257,8 @@ function buildEventWhereClause(params: {
 }): SQL | undefined {
   const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
 
-  // publicReadProcedure lets an anonymous caller reach `all`/`count` —
-  // clamp to active-only regardless of what `statuses` it passes, since
+  // `all` is public; `count` stays protected. For anonymous list callers,
+  // clamp to active-only regardless of what `statuses` they pass, since
   // inactive events were never meant to be public. Authenticated behavior
   // (including an explicit request for inactive/both) is unchanged.
   const effectiveStatuses = isAnonymous
@@ -264,6 +266,7 @@ function buildEventWhereClause(params: {
     : input?.statuses;
 
   return and(
+    isAnonymous ? orgAndAncestorsAreActive(schema.events.orgId) : undefined,
     !effectiveStatuses?.length // no statuses provided, default to active
       ? eq(schema.events.isActive, true)
       : effectiveStatuses.length === IsActiveStatus.length
@@ -466,6 +469,7 @@ export const eventRouter = {
 
       const { editableOrgIds, isNationAdmin } = editableResult;
 
+      if (!ctx.session?.user) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const where = buildEventWhereClause({
         input,
         editableOrgIds,
@@ -746,6 +750,8 @@ export const eventRouter = {
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const isAnonymousById = !ctx.session?.user;
+      if (isAnonymousById) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const [event] = await ctx.db
         .select({
           id: schema.events.id,
@@ -838,16 +844,19 @@ export const eventRouter = {
           schema.eventTypes,
           eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
         )
-        .where(eq(schema.events.id, input.id))
+        .where(
+          and(
+            eq(schema.events.id, input.id),
+            isAnonymousById
+              ? orgAndAncestorsAreActive(schema.events.orgId)
+              : undefined,
+          ),
+        )
         .groupBy(schema.events.id, aoOrg.id, regionOrg.id, schema.locations.id);
 
-      // publicReadProcedure lets an anonymous caller reach this endpoint
-      // don't let a guessed/enumerated ID leak a private, inactive, or
-      // soft-deleted-location event's details to someone with no session at
-      // all (the `all` list endpoint and eventIdToRegionNameLookup already
-      // clamp anonymous callers the same way; byId must not be a backdoor
-      // around that).
-      const isAnonymousById = !ctx.session?.user;
+      // SQL already checks the event's org chain for anonymous callers.
+      // Also hide private, inactive, and soft-deleted-location event details
+      // from anonymous callers, matching `all` and eventIdToRegionNameLookup.
       if (
         isAnonymousById &&
         (event?.isPrivate ||
@@ -1450,6 +1459,8 @@ export const eventRouter = {
       }),
     )
     .handler(async ({ context: ctx }) => {
+      const isAnonymous = !ctx.session?.user;
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const result = await ctx.db
         .select({
           eventId: schema.events.id,
@@ -1482,10 +1493,11 @@ export const eventRouter = {
         // events untouched, so an event at a deleted location must be
         // hidden here too, same as buildEventWhereClause.
         .where(
-          !ctx.session?.user
+          isAnonymous
             ? and(
                 eq(schema.events.isPrivate, false),
                 eq(schema.events.isActive, true),
+                orgAndAncestorsAreActive(schema.events.orgId),
                 or(
                   isNull(schema.events.locationId),
                   eq(schema.locations.isActive, true),
