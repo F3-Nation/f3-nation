@@ -70,7 +70,7 @@ If multiple PRs are merged to `main` before the Release Please PR is merged, Rel
 
 The PR is purely mechanical (version + changelog). Review the changelog entries to make sure they're accurate. When ready, merge it into `main`.
 
-Before merging, have an agent create a release-plan issue with the [`release-plan`](../.agents/skills/release-plan/SKILL.md) skill. That plan's test step creates the Staging test plan with the [`staging-test-plan`](../.agents/skills/staging-test-plan/SKILL.md) skill.
+After the release PR has merged and deployed to Staging, have an agent create a release-plan issue with the [`release-plan`](../.agents/skills/release-plan/SKILL.md) skill. That plan's test step creates the Staging test plan with the [`staging-test-plan`](../.agents/skills/staging-test-plan/SKILL.md) skill. Both skills target the most recently merged release PR and confirm its number with you first; they never plan from an open release PR, which is only a running changelog.
 
 ### 4. Release Please creates the tag
 
@@ -98,6 +98,29 @@ For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 
 1. Main Slackbot Cloud Run service deploy (`f3-slackbot` in `f3-slackbot-staging` and `f3-slackbot`)
 2. Scripts Cloud Run Job deploy (`f3-slackbot-scripts` in `f3-slackbot-staging` and `f3-slackbot`)
+
+#### Overlapping deploys
+
+Each deploy job is serialized by its **target**, not by its release tag. The
+reusable workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`) put
+`deploy-staging` and `deploy-prod` in a concurrency group named after the GCP
+project, region, and Cloud Run service or job, with `cancel-in-progress: false`.
+So two tags for the same app (for example a release and a manual re-deploy of
+an older tag) can never deploy the same service at the same time, while
+unrelated services, and `f3-auth` and `f3-auth3`, still deploy in parallel.
+
+What this does not guarantee:
+
+- **Newest wins.** Serialization stops overlap, not regressions: an older tag
+  dispatched after a newer one still deploys last. Re-dispatch the newer tag
+  to fix it.
+- **Every queued run.** A group holds one running job and at most one pending
+  job. A third run arriving while one is pending replaces it, and the replaced
+  run shows as cancelled. A production job waiting for approval may hold its
+  group until it is approved or rejected.
+
+The workflow-level `concurrency` in each `deploy-*.yml` is still keyed by tag;
+it only stops the same tag from building twice at once.
 
 ---
 

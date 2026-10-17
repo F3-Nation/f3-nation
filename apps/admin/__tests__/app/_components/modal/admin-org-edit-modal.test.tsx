@@ -309,8 +309,24 @@ describe.each([
   },
 ])("$label editor", ({ type, label, parentTypes, initialName, deletion }) => {
   it("loads the record and sorted parent options with the current selection", async () => {
-    mount(type, record.id);
-    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    // Must stay the first edit-mode mount: React logs this warning once per module.
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      mount(type, record.id);
+      await waitFor(() => expect(field("Name").value).toBe(record.name));
+      expect(
+        consoleError.mock.calls.some((args) =>
+          args.some(
+            (argument) =>
+              typeof argument === "string" && argument.includes("uncontrolled"),
+          ),
+        ),
+      ).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+    }
     expect(screen.getByRole("heading").textContent).toBe(`Edit ${label}`);
     expect(field("ID").disabled).toBe(true);
     expect(field("ID").value).toBe("40");
@@ -323,6 +339,7 @@ describe.each([
     expect(mocks.byId).toHaveBeenCalledWith({ id: 40, orgType: type });
     expect(mocks.all).toHaveBeenCalledWith({
       orgTypes: parentTypes,
+      statuses: ["active", "inactive"],
       pageIndex: 0,
       pageSize: 100,
     });
@@ -468,6 +485,99 @@ describe.each([
   );
 });
 
+describe.each([
+  { type: "sector", parentType: "nation" },
+  { type: "territory", parentType: "sector" },
+  { type: "area", parentType: "sector" },
+  { type: "area", parentType: "territory" },
+  { type: "ao", parentType: "region" },
+] as const)(
+  "$type inactive $parentType parent selection",
+  ({ type, parentType }) => {
+    beforeEach(() => {
+      const choices = [
+        { id: 3, name: "Zulu Active", orgType: parentType, isActive: true },
+        { id: 2, name: "Middle Current", orgType: parentType, isActive: false },
+        {
+          id: 21,
+          name: "Other Inactive",
+          orgType: parentType,
+          isActive: false,
+        },
+        { id: 4, name: "Alpha Active", orgType: parentType, isActive: true },
+      ];
+      // Model the API's active-only default so a missing status request reproduces
+      // the empty current-parent selection instead of returning impossible data.
+      mocks.all.mockImplementation(async (input) => {
+        const query = input as {
+          orgTypes: string[];
+          statuses?: ("active" | "inactive")[];
+        };
+        const statuses = query.statuses ?? ["active"];
+        const orgs = choices.filter(
+          (parent) =>
+            query.orgTypes.includes(parent.orgType) &&
+            statuses.includes(parent.isActive ? "active" : "inactive"),
+        );
+        return { orgs, total: orgs.length };
+      });
+    });
+
+    it("displays and saves the inactive current parent, excluding unrelated inactive choices", async () => {
+      mount(type, record.id);
+      await waitFor(() => expect(field("Name").value).toBe(record.name));
+      await waitFor(() => expect(parentSelect().value).toBe("2"));
+      expect(parentSelect().selectedOptions[0]?.text).toBe(
+        "Middle Current (inactive)",
+      );
+      expect(parentOptions().map((option) => option.text)).toEqual(
+        type === "ao"
+          ? ["Zulu Active", "Middle Current (inactive)", "Alpha Active"]
+          : ["Alpha Active", "Middle Current (inactive)", "Zulu Active"],
+      );
+      fireEvent.change(field("Name"), { target: { value: "Renamed Org" } });
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+        id: record.id,
+        name: "Renamed Org",
+        orgType: type,
+        parentId: record.parentId,
+      });
+      expect(mocks.parentById).not.toHaveBeenCalled();
+      expect(mocks.canEditRegions).not.toHaveBeenCalled();
+    });
+
+    it("allows changing the inactive current parent to an active parent", async () => {
+      mount(type, record.id);
+      await waitFor(() => expect(parentSelect().value).toBe("2"));
+      fireEvent.change(parentSelect(), { target: { value: "4" } });
+      save();
+
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(mocks.save.mock.calls[0]![0]).toMatchObject({
+        id: record.id,
+        orgType: type,
+        parentId: 4,
+      });
+    });
+
+    it("offers only active parents when creating, preserving the picker order", async () => {
+      mount(type);
+
+      await waitFor(() => expect(parentOptions()).toHaveLength(2));
+      expect(parentOptions().map((option) => option.text)).toEqual(
+        type === "ao"
+          ? ["Zulu Active", "Alpha Active"]
+          : ["Alpha Active", "Zulu Active"],
+      );
+      expect(mocks.byId).not.toHaveBeenCalled();
+      expect(mocks.parentById).not.toHaveBeenCalled();
+    });
+  },
+);
+
 describe("Area parent selection", () => {
   const sectorsAndTerritories = [
     { id: 2, name: "Zulu Sector", orgType: "sector", isActive: true },
@@ -494,6 +604,7 @@ describe("Area parent selection", () => {
     expect(screen.getByText("Sector or Territory")).toBeTruthy();
     expect(mocks.all).toHaveBeenCalledWith({
       orgTypes: ["sector", "territory"],
+      statuses: ["active", "inactive"],
       pageIndex: 0,
       pageSize: 100,
     });
@@ -656,6 +767,9 @@ describe("Region Area or Territory parent selection", () => {
       await waitFor(() =>
         expect(parentSelect().value).toBe(String(current.id)),
       );
+      expect(parentSelect().selectedOptions[0]?.text).toBe(
+        "Inactive Current Parent (inactive)",
+      );
       expect(parentOptions().map((option) => option.value)).toEqual(
         expect.arrayContaining(["2", "3", "11", "12", "20"]),
       );
@@ -782,6 +896,9 @@ describe("Region Area or Territory parent selection", () => {
       mocks.all.mockResolvedValue({ orgs: [], total: 0 });
       mount("region", record.id);
       await waitFor(() => expect(parentSelect().value).toBe("20"));
+      expect(parentSelect().selectedOptions[0]?.text).toBe(
+        "Inactive Current Parent (inactive)",
+      );
       expect(parentSelect().disabled).toBe(true);
       expect(parentOptions().map((option) => option.value)).toEqual(["20"]);
       await waitFor(() =>
@@ -1324,6 +1441,339 @@ describe.each(["region", "ao"] as const)("%s logo editor", (type) => {
       );
     },
   );
+  const prepareCreation = async () => {
+    const view = mount(type);
+    fireEvent.change(field("Name"), { target: { value: "New org" } });
+    fireEvent.change(field("Website"), {
+      target: { value: "https://example.com/retained" },
+    });
+    await waitFor(() => expect(parentOptions()).toHaveLength(2));
+    fireEvent.change(parentSelect(), { target: { value: "3" } });
+    const file = new File(["synthetic"], "logo.png", { type: "image/png" });
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+      target: { files: [file] },
+    });
+    return { view, file, form: field("Name").closest("form")! };
+  };
+
+  it.each(["upload", "final update"])(
+    "retries the same created record after a %s failure and preserves entered values",
+    async (stage) => {
+      mocks.save.mockImplementation(async (input) => {
+        if (input.id == null) return { org: { ...record, id: 60 } };
+        return { org: { ...record, ...input } };
+      });
+      if (stage === "upload") {
+        mocks.upload.mockRejectedValueOnce(new Error("Upload failed"));
+      } else {
+        mocks.save
+          .mockResolvedValueOnce({ org: { ...record, id: 60 } })
+          .mockRejectedValueOnce(new Error("Final save failed"));
+      }
+      const { file } = await prepareCreation();
+      save();
+      await waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
+      await screen.findByRole("button", { name: "Save Changes" });
+
+      expect(field("ID").value).toBe("60");
+      expect(field("Name").value).toBe("New org");
+      expect(field("Website").value).toBe("https://example.com/retained");
+      expect(parentSelect().value).toBe("3");
+      const detail =
+        type === "ao"
+          ? stage === "upload"
+            ? "Upload failed"
+            : "Final save failed"
+          : "Failed to update region";
+      const partialMessage = `This ${label} was created, but ${stage === "upload" ? "uploading its logo" : "saving its remaining changes"} failed. ${detail}`;
+      expect(mocks.error).toHaveBeenCalledExactlyOnceWith(partialMessage);
+      expect(screen.getByRole("status").textContent).toBe(
+        `${partialMessage} Your entries are kept. Save Changes will retry the same ${label} (ID 60).`,
+      );
+      expect(mocks.success).not.toHaveBeenCalled();
+      expect(mocks.close).not.toHaveBeenCalled();
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+      expect(mocks.refresh).not.toHaveBeenCalled();
+      await act(async () => {
+        await clients.at(-1)!.invalidateQueries({ queryKey: [["org", "all"]] });
+      });
+      expect(field("ID").value).toBe("60");
+      expect(field("Name").value).toBe("New org");
+      fireEvent.change(field("Name"), { target: { value: "Retry name" } });
+      save();
+
+      await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
+      expect(
+        mocks.save.mock.calls.filter(([input]) => input.id == null),
+      ).toHaveLength(1);
+      expect(mocks.save.mock.calls.at(-1)![0]).toMatchObject({
+        id: 60,
+        name: "Retry name",
+        website: "https://example.com/retained",
+        parentId: 3,
+        orgType: type,
+        logoUrl: "https://example.com/new-logo.png",
+      });
+      expect(mocks.upload.mock.calls).toEqual([
+        [{ file, orgId: 60 }],
+        [{ file, orgId: 60 }],
+      ]);
+      expect(mocks.close).toHaveBeenCalledTimes(1);
+      expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith("org");
+      expect(mocks.refresh).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(mocks.success).toHaveBeenCalledWith(
+        `Successfully ${type === "ao" ? "updated" : "added"} ${type}`,
+      );
+    },
+  );
+
+  it("preserves the cause of an upload failure after creation", async () => {
+    mocks.upload.mockRejectedValueOnce(new Error("Invalid file type"));
+    await prepareCreation();
+    save();
+    await screen.findByRole("status");
+    const detail =
+      type === "ao" ? "Invalid file type" : "Failed to update region";
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+      `This ${label} was created, but uploading its logo failed. ${detail}`,
+    );
+    expect(screen.getByRole("status").textContent).toContain(detail);
+  });
+
+  it("preserves authorization feedback after a final update fails", async () => {
+    mocks.save
+      .mockResolvedValueOnce({ org: { ...record, id: 60 } })
+      .mockRejectedValueOnce(
+        new ORPCError("UNAUTHORIZED", { message: "Permission denied" }),
+      );
+    await prepareCreation();
+    save();
+    await screen.findByRole("status");
+    const detail =
+      type === "ao"
+        ? "Permission denied"
+        : "You are not authorized to update this region";
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+      `This ${label} was created, but saving its remaining changes failed. ${detail}`,
+    );
+    expect(screen.getByRole("status").textContent).toContain(detail);
+  });
+
+  it("retries creation when the creation request fails before a confirmed ID", async () => {
+    mocks.save.mockRejectedValueOnce(new Error("Creation failed"));
+    const { file } = await prepareCreation();
+    save();
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+      type === "ao" ? "Creation failed" : "Failed to add region",
+    );
+    await screen.findByRole("button", { name: "Save Changes" });
+    expect(field("ID").value).toBe("");
+    expect(field("Name").value).toBe("New org");
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).toBeNull();
+    save();
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+        .disabled,
+    ).toBe(true);
+    expect(
+      mocks.save.mock.calls.filter(([input]) => input.id == null),
+    ).toHaveLength(2);
+    expect(mocks.upload).toHaveBeenCalledExactlyOnceWith({ file, orgId: 40 });
+  });
+
+  it.each([undefined, null, 0, -1, 1.5, "60"])(
+    "stops after creation returns an unusable ID (%s), including native resubmission",
+    async (id) => {
+      mocks.save.mockResolvedValue({ org: { id } });
+      const { form } = await prepareCreation();
+      save();
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      await screen.findByRole("status");
+      expect(screen.getByRole("status").textContent).toMatch(
+        /may have been created.*ID.*Close this form, reload the page, and check the organization list/i,
+      );
+      const button = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Save Changes",
+      });
+      expect(button.disabled).toBe(true);
+      expect(field("Name").value).toBe("New org");
+      fireEvent.click(button);
+      await act(async () => form.requestSubmit());
+      expect(mocks.save).toHaveBeenCalledTimes(1);
+      expect(mocks.upload).not.toHaveBeenCalled();
+      expect(mocks.close).not.toHaveBeenCalled();
+      expect(mocks.success).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains a confirmed ID when a no-logo final update fails", async () => {
+    mocks.save
+      .mockResolvedValueOnce({ org: { ...record, id: 60 } })
+      .mockRejectedValueOnce(new Error("Final save failed"));
+    mount(type);
+    fireEvent.change(field("Name"), { target: { value: "No logo" } });
+    await waitFor(() => expect(parentOptions()).toHaveLength(2));
+    fireEvent.change(parentSelect(), { target: { value: "3" } });
+    save();
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
+    await screen.findByRole("button", { name: "Save Changes" });
+    expect(field("ID").value).toBe("60");
+    const detail =
+      type === "ao" ? "Final save failed" : "Failed to update region";
+    expect(screen.getByRole("status").textContent).toBe(
+      `This ${label} was created, but saving its remaining changes failed. ${detail} Your entries are kept. Save Changes will retry the same ${label} (ID 60).`,
+    );
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+      `This ${label} was created, but saving its remaining changes failed. ${detail}`,
+    );
+    save();
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls.map(([input]) => input.id)).toEqual([
+      undefined,
+      60,
+      60,
+    ]);
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
+  it("blocks same-tick submissions while saving and after success before unmount", async () => {
+    let finishCreate!: (value: unknown) => void;
+    mocks.save.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishCreate = resolve;
+      }),
+    );
+    const { form } = await prepareCreation();
+    await act(async () => {
+      form.requestSubmit();
+      form.requestSubmit();
+    });
+    try {
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: /^Saving/ })
+          .disabled,
+      ).toBe(true);
+      await act(async () => form.requestSubmit());
+      expect(mocks.save).toHaveBeenCalledTimes(1);
+    } finally {
+      await act(async () => finishCreate({ org: { ...record, id: 60 } }));
+    }
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
+    await act(async () => form.requestSubmit());
+    expect(mocks.save.mock.calls.map(([input]) => input.id)).toEqual([
+      undefined,
+      60,
+    ]);
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reuse a partial creation ID after switching to another record", async () => {
+    mocks.upload.mockRejectedValueOnce(new Error("Upload failed"));
+    mocks.save.mockResolvedValue({ org: { ...record, id: 60 } });
+    const { view } = await prepareCreation();
+    save();
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledTimes(1));
+    await screen.findByRole("status");
+    view.rerender(
+      <QueryClientProvider client={clients.at(-1)!}>
+        <AdminOrgEditModal orgType={type} id={40} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    expect(field("ID").value).toBe("40");
+    expect(screen.queryByRole("status")).toBeNull();
+    save();
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls.at(-1)![0].id).toBe(40);
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears unknown-ID recovery when the mounted editor switches records", async () => {
+    mocks.save.mockResolvedValueOnce({ org: null });
+    const { view } = await prepareCreation();
+    save();
+    await screen.findByRole("status");
+    view.rerender(
+      <QueryClientProvider client={clients.at(-1)!}>
+        <AdminOrgEditModal orgType={type} id={40} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(field("Name").value).toBe(record.name));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(field("ID").value).toBe("40");
+    save();
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls.map(([input]) => input.id)).toEqual([
+      undefined,
+      40,
+    ]);
+  });
+
+  if (type === "region") {
+    it("keeps destination permission checks on a partially created Region retry", async () => {
+      mocks.upload.mockRejectedValueOnce(new Error("Upload failed"));
+      mocks.save.mockResolvedValue({ org: { ...record, id: 60 } });
+      const { form } = await prepareCreation();
+      save();
+      await screen.findByRole("status");
+      mocks.all.mockResolvedValue({ orgs: [] });
+      await act(async () => {
+        await clients.at(-1)!.invalidateQueries({ queryKey: [["org", "all"]] });
+      });
+      await screen.findByText(
+        "No active editable Area or Territory is available.",
+      );
+      await act(async () => form.requestSubmit());
+      expect(mocks.save).toHaveBeenCalledTimes(1);
+      expect(mocks.upload).toHaveBeenCalledTimes(1);
+      expect(mocks.error).toHaveBeenLastCalledWith(
+        "You need editor or admin access to the selected Area or Territory",
+      );
+      expect(field("ID").value).toBe("60");
+    });
+  }
+
+  it("distinguishes a saved record from an unexpected UI-completion exception and prevents duplicate saving", async () => {
+    // Region awaits invalidation; AO refreshes after closing the form.
+    if (type === "region") {
+      mocks.invalidate.mockRejectedValueOnce(new Error("Completion failed"));
+    } else {
+      mocks.refresh.mockImplementationOnce(() => {
+        throw new Error("Completion failed");
+      });
+    }
+    mocks.save.mockResolvedValue({ org: { ...record, id: 60 } });
+    const { form } = await prepareCreation();
+    save();
+    await screen.findByRole("status");
+    expect(screen.getByRole("status").textContent).toBe(
+      `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`,
+    );
+    expect(screen.getByRole("status").textContent).not.toMatch(
+      /remaining changes/,
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" })
+        .disabled,
+    ).toBe(true);
+    await act(async () => form.requestSubmit());
+    expect(mocks.save.mock.calls.map(([input]) => input.id)).toEqual([
+      undefined,
+      60,
+    ]);
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+    expect(mocks.error).toHaveBeenCalledExactlyOnceWith(
+      `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`,
+    );
+    expect(mocks.close).toHaveBeenCalledTimes(type === "ao" ? 1 : 0);
+    expect(mocks.success).toHaveBeenCalledTimes(type === "ao" ? 1 : 0);
+  });
+
   it("retains edits and stops before update after an upload failure", async () => {
     mocks.upload.mockRejectedValueOnce(new Error("Upload failed"));
     const view = mount(type, 40);
@@ -1475,6 +1925,74 @@ it("keeps the AO fake-data action restricted to development", async () => {
   expect(field("Description").value).toBe("Fake AO description");
 });
 
+describe.each([
+  { mode: "create", id: undefined },
+  { mode: "edit", id: record.id },
+])("AO fake-data parent selection in $mode mode", ({ id }) => {
+  const inactiveParents = [
+    { id: 21, name: "Other Inactive", orgType: "region", isActive: false },
+    {
+      id: record.parentId,
+      name: "Inactive Current",
+      orgType: "region",
+      isActive: false,
+    },
+  ];
+
+  const fillFakeData = () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      fireEvent.click(screen.getByText("(DEV) Fake data"));
+    } finally {
+      random.mockRestore();
+    }
+    // The development preset's handle is invalid under the URL validator.
+    // Correct it so these tests isolate parent selection and submission.
+    fireEvent.change(field("Twitter"), {
+      target: { value: "https://x.com/fakeao" },
+    });
+  };
+
+  it("chooses an active parent instead of an inactive current or unrelated parent", async () => {
+    mocks.all.mockResolvedValue({
+      orgs: [
+        ...inactiveParents,
+        { id: 3, name: "Active Parent", orgType: "region", isActive: true },
+      ],
+      total: 3,
+    });
+    mount("ao", id, false);
+    await waitFor(() => expect(parentOptions()).toHaveLength(id ? 2 : 1));
+    if (id) expect(parentSelect().value).toBe(String(record.parentId));
+
+    fillFakeData();
+    save();
+
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(id ? 1 : 2));
+    for (const [payload] of mocks.save.mock.calls) {
+      expect(payload).toMatchObject({
+        name: "Fake AO",
+        orgType: "ao",
+        parentId: 3,
+      });
+    }
+  });
+
+  it("requires a valid selection without saving when no active parent exists", async () => {
+    mocks.all.mockResolvedValue({ orgs: inactiveParents, total: 2 });
+    mount("ao", id, false);
+    await waitFor(() => expect(mocks.all).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clients.at(-1)!.isFetching()).toBe(0));
+    expect(parentOptions()).toHaveLength(id ? 1 : 0);
+
+    fillFakeData();
+    save();
+
+    await screen.findByText("Invalid selection");
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+});
+
 describe("Territory organization integration", () => {
   it("hides Add when Territory creation is disabled in configuration", async () => {
     const original = orgAdminConfig.territory.add;
@@ -1599,6 +2117,7 @@ describe("Territory organization integration", () => {
     );
     expect(mocks.all).toHaveBeenCalledWith({
       orgTypes: ["sector"],
+      statuses: ["active", "inactive"],
       pageIndex: 0,
       pageSize: 100,
     });

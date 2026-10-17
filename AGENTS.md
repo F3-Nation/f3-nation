@@ -31,8 +31,8 @@ Code doesn't read `.agents/`, so a `SessionStart` hook in
 them into `.claude/skills/`, which is generated and gitignored — never commit
 anything under it.
 
-When asked for a **release plan** or a **Staging test plan** for a
-release-please PR, follow
+When asked for a **release plan** or a **Staging test plan** for the most
+recently merged release-please PR, follow
 [`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
 or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
@@ -52,6 +52,7 @@ or
 ## Build, Test, and Development Commands
 
 - **First-time setup:** `pnpm local:setup` — copies per-directory `.env` files, starts Docker services, runs migrations, and seeds the database. See [docs/LOCAL_DEV_DOCKER.md](docs/LOCAL_DEV_DOCKER.md) for the full guide.
+- **Second checkout or worktree:** `pnpm local:setup --slot N` (N = 1–9) gives it its own ports, containers, and database so it can run next to the main one. See [Running several checkouts at once](docs/LOCAL_DEV_DOCKER.md#running-several-checkouts-at-once-git-worktrees).
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Each app, `packages/env`, and `packages/db` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
 - Code quality: always run `pnpm lint:fix` and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
@@ -109,7 +110,7 @@ or
 
 ### Driving auth-bounded flows in local dev
 
-Apps that require sign-in (e.g. `apps/map`, `apps/me`) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved** — outbound mail is caught by Mailpit (`http://localhost:8025`, started by `pnpm docker:up`), and agents drive the full sign-in flow headlessly by reading the 6-digit code from its REST API.
+Apps that require sign-in (e.g. `apps/map`, `apps/me`) authenticate via `apps/auth`, which uses email-based MFA. **No real inbox is involved** — outbound mail is caught by Mailpit (default `http://localhost:8025`; in a slotted checkout use `F3_MAILPIT_UI_PORT` from the root `.env`; started by `pnpm docker:up`), and agents drive the full sign-in flow headlessly by reading the 6-digit code from its REST API.
 
 The full recipe lives in [`apps/auth/AGENTS.md`](apps/auth/AGENTS.md). Assistants that scan nested `AGENTS.md` files, Claude Code included, pick it up when they work under `apps/auth`.
 

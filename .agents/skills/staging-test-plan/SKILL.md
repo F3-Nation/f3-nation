@@ -1,6 +1,6 @@
 ---
 name: staging-test-plan
-description: Draft and file a short GitHub issue of manual test steps for volunteers to run on Staging after a release-please release — dependent steps grouped into stories, then 2–3 smoke checks per app. Use when someone asks for a "staging test plan" or "test plan" for a release PR.
+description: Draft and file a short GitHub issue of manual test steps for volunteers to run on Staging after a release-please release has been merged and deployed to Staging — dependent steps grouped into stories, then 2–3 smoke checks per app. Use when someone asks for a "staging test plan" or "test plan".
 ---
 
 # Staging test plan issue
@@ -9,29 +9,55 @@ Produces one GitHub issue that volunteers work through on Staging. Its only
 job is to tell a tester **what to click, in what order, and what they should
 see**. Volunteers skip long plans, so every line has to earn its place.
 
+The target is always the **most recently merged** `chore: release main` PR.
+Assume it has already been deployed to Staging successfully; do not verify or
+plan the deploy. An open release PR is only a running changelog: nothing
+reaches Staging until it merges, so never plan from one.
+
 The release plan is a separate issue made by the
 [`release-plan`](../release-plan/SKILL.md) skill. Monitoring, deploy steps,
 and database migrations belong there, not here.
 
 ## Inputs
 
-Ask for anything missing before starting:
+Both are optional. The skill finds the release PR itself.
 
-1. **Release PR number** — the `chore: release main` PR from release-please.
-2. **Release plan issue number** — optional; linked from the Reporting line.
+1. **Release PR number** — only to cross-check against the PR the skill finds.
+2. **Release plan issue number** — linked from the Reporting line.
 
 ## Steps
 
-1. **Read the release PR.**
+1. **Pick the target PR and confirm it with the user before doing anything
+   else.** Find the most recently merged release PR:
 
    ```bash
-   gh pr view <PR> --json title,body --jq '{title,body}'
+   TZ="<IANA zone>" gh pr list --state merged --base main \
+     --author app/f3-nation-release-please \
+     --search "chore: release main in:title" --limit 100 \
+     --json number,title,mergedAt \
+     --jq 'sort_by(.mergedAt) | last | "#\(.number) merged \(.mergedAt | fromdateiso8601 | strflocaltime("%a %b %-d, %-I:%M %p %Z"))"'
    ```
 
-   The body is the changelog: one `<details>` block per app with the merged
-   PRs and issues. Note which apps are releasing. Ignore version numbers.
+   Use the user's timezone: ask for it (an IANA name such as
+   `America/Chicago`) if you don't already know it, and set `TZ` to it in the
+   command. Tell the user the PR number and merge time as the command prints
+   it, never UTC, and ask them to confirm. If
+   they gave a number that is not this PR, say so and ask which one they
+   mean; do not silently follow either. If the PR they name is open or was
+   closed without merging, stop and explain that only a merged release can be
+   tested on Staging. Do not read the changelog until the user confirms.
 
-2. **Decide what each change needs.** For each changelog entry, read the PR
+2. **Read the release PR.**
+
+   ```bash
+   gh pr view <PR> --json title,body,state,mergedAt --jq '{title,state,mergedAt,body}'
+   ```
+
+   Stop unless `state` is `MERGED`. The body is the changelog: one
+   `<details>` block per app with the merged PRs and issues. Note which apps
+   are releasing. Ignore version numbers.
+
+3. **Decide what each change needs.** For each changelog entry, read the PR
    title and, if unclear, the start of its body or its linked issue. Put it
    in exactly one bucket:
    - **Story** — the change can only be checked by doing things in order,
@@ -41,7 +67,7 @@ Ask for anything missing before starting:
    - **Skip** — not visible to a tester (dependency bumps, refactors, CI,
      tests, docs, logging). Most entries are this. Do not mention them.
 
-3. **Fill in [`template.md`](template.md)** following the rules below.
+4. **Fill in [`template.md`](template.md)** following the rules below.
    - Stories go first, in the order they must run (a story that creates
      test data comes before one that uses it).
    - Then one section per releasing app: its checks from
@@ -51,15 +77,18 @@ Ask for anything missing before starting:
    - Delete every `<!-- ... -->` comment and every optional block that does
      not apply. Replace every `{{PLACEHOLDER}}`.
 
-4. **Check the size limits** below. If the draft is over, cut: drop the
+5. **Check the size limits** below. If the draft is over, cut: drop the
    least risky checks first. Never "fix" length by merging items into long
    sentences.
 
-5. **Write the draft to a local file**, e.g. `staging-test-plan-<PR>.md` in a
+6. **Write the draft to a local file**, e.g. `staging-test-plan-<PR>.md` in a
    scratch/temp directory (not in the repo). Show it to the person who asked
-   and **stop until they approve** or request changes.
+   with a short scope list above it, not part of the file: each changelog
+   entry as `PR → Story, App check, or Skip → the section covering it`. This
+   lets them see what was judged in scope before anything is filed. **Stop
+   until they approve** or request changes.
 
-6. **File the issue** only after approval, following the repo
+7. **File the issue** only after approval, following the repo
    [`github`](../github/SKILL.md) skill.
 
    ```bash
@@ -69,7 +98,7 @@ Ask for anything missing before starting:
 
    No labels, no assignees. If `gh` is not available, suggest installing the
    [GitHub CLI](https://cli.github.com/). If it still isn't available, stop
-   after step 5 and tell the person to paste the draft into a new issue.
+   after step 6 and tell the person to paste the draft into a new issue.
 
 ## Rules for the content
 
@@ -88,7 +117,8 @@ Ask for anything missing before starting:
   PR, no explanation of how the code works.
 - **Test accounts and test data are never written in the issue** (the repo
   is public). Keep the template's line telling testers to ask the Release
-  lead for one.
+  lead for one. If a story needs an account with a specific role, say which
+  role in the test-accounts line.
 - **Cleanup section** only if a story creates or changes Staging data; one
   checkbox per thing to undo.
 

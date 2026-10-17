@@ -61,6 +61,7 @@ import { eq } from "drizzle-orm";
 // own dynamic `await import("~/lib/db")` below for the actual runtime import.
 import type { db as authDbType } from "~/lib/db";
 import { logInfo, logWarn } from "~/lib/logging";
+import { F3_NATION_CLIENT_REFERENCE_ID } from "~/lib/oauth-client-reference";
 
 import { getUserRoles } from "@acme/db";
 import {
@@ -185,13 +186,6 @@ export interface CreateAuthInstanceOptions {
   ) => Promise<boolean>;
 }
 
-// The stable "owner" identity for F3-Nation-managed OAuth clients — set as a
-// client's referenceId rather than a per-user userId, so any current or
-// future nation admin can read, list, and rotate the secret for a client one
-// of them created, not just whoever happened to create it. See oauthProvider's
-// clientReference option below.
-const F3_NATION_CLIENT_REFERENCE_ID = "f3-nation";
-
 /**
  * Split out from createAuthInstance so tests can pre-seed a memoryAdapter's
  * backing object with `getAuthTables(buildBetterAuthOptions(...))` before
@@ -290,7 +284,7 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         clientRegistrationRequirePKCE: true,
         // Any nation admin can read/list/rotate a shared, F3-Nation-owned
         // client instead of it being tied to whichever individual admin
-        // happened to create it — see F3_NATION_CLIENT_REFERENCE_ID above.
+        // happened to create it — see F3_NATION_CLIENT_REFERENCE_ID in lib/oauth-client-reference.ts.
         // A session that isn't a nation admin gets `undefined` here, so
         // oauth-provider falls back to its normal per-user ownership
         // (session.user.id) for any client that admin creates for
@@ -437,7 +431,7 @@ export async function getAuth() {
 
   const { db } = await import("~/lib/db");
   const { env } = await import("~/env");
-  const { sendBetterAuthOtpEmail } = await import("~/lib/better-auth-email");
+  const { deliverBetterAuthOtp } = await import("~/lib/better-auth-email");
 
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error(
@@ -464,9 +458,7 @@ export async function getAuth() {
       schemaName: "auth",
       schema: betterAuthDrizzleSchema,
     }),
-    sendVerificationOTP: async ({ email, otp }) => {
-      await sendBetterAuthOtpEmail(email, otp);
-    },
+    sendVerificationOTP: deliverBetterAuthOtp,
     findF3UserId: async (email) => {
       const normalizedEmail = email.toLowerCase().trim();
       const [existing] = await db

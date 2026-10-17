@@ -1,3 +1,5 @@
+import type { UserRole as UserRoleName } from "@acme/shared/app/enums";
+
 /** User profile as returned by the /me/profile endpoint */
 export interface UserProfile {
   id: number;
@@ -23,7 +25,7 @@ export interface UserProfile {
 export interface UserRole {
   roleId: number;
   orgId: number;
-  roleName: "user" | "editor" | "admin";
+  roleName: UserRoleName;
   orgName: string;
 }
 

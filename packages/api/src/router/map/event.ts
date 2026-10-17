@@ -20,7 +20,11 @@ import {
   EventCategory,
   IsActiveStatus,
 } from "@acme/shared/app/enums";
-import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
+import {
+  arrayOrSingle,
+  getFullAddress,
+  queryBooleanSchema,
+} from "@acme/shared/app/functions";
 
 import { getDescendantOrgIds } from "../../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../../get-editable-org-ids";
@@ -45,7 +49,7 @@ const eventFilterSchema = z.object({
     ),
   regionIds: arrayOrSingle(z.coerce.number()).optional(),
   aoIds: arrayOrSingle(z.coerce.number()).optional(),
-  onlyMine: z.coerce.boolean().optional(),
+  onlyMine: queryBooleanSchema.optional(),
 });
 
 type EventFilterInput = z.infer<typeof eventFilterSchema>;
@@ -55,7 +59,7 @@ const eventAllInputSchema = eventFilterSchema
   .extend({
     ...paginationFields("events"),
     sorting: z
-      .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
+      .array(z.object({ id: z.string(), desc: queryBooleanSchema }))
       .optional(),
   })
   .optional();
@@ -319,6 +323,9 @@ export const mapEventRouter = {
             return direction(schema.events.id);
         }
       }) ?? [desc(schema.events.id)];
+
+      // Break tied sort values so rows cannot repeat or vanish between pages.
+      sortedColumns.push(asc(schema.events.id));
 
       const select = {
         id: schema.events.id,

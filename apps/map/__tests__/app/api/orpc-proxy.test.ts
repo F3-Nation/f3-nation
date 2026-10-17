@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
-vi.stubEnv("F3_MAP_API_KEY", "test-map-key");
 
 const fetchSpy = vi
   .fn<(url: URL, init: RequestInit) => Promise<Response>>()
@@ -35,7 +34,7 @@ describe("oRPC proxy route", () => {
     expect(headers.get("cookie")).toContain("authjs.session-token");
   });
 
-  it("sets API key as Authorization for a map-key path", async () => {
+  it("forwards a public path with no Authorization header", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
@@ -44,10 +43,10 @@ describe("oRPC proxy route", () => {
 
     const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
 
-    expect(headers.get("authorization")).toBe("Bearer test-map-key");
+    expect(headers.has("authorization")).toBe(false);
   });
 
-  it("does not attach the map API key on a signed-in-only path", async () => {
+  it("does not attach any Authorization header on a signed-in-only path", async () => {
     const { POST } =
       await import("../../../src/app/api/orpc/[[...rest]]/route");
 
@@ -99,22 +98,23 @@ describe("oRPC proxy route", () => {
     "/v1/org/all",
     "/v1/org/byId",
   ])(
-    "moved edit-mode read %s to signed-in-only, not the map key",
+    "forwards %s with no credential at all — publicReadProcedure needs none",
     async (path) => {
       const { POST } =
         await import("../../../src/app/api/orpc/[[...rest]]/route");
 
+      // No cookie, no bearer: these moved to the public read tier, so
+      // an anonymous caller must still reach the upstream API, not get a 404.
       const request = new NextRequest(`http://localhost:3000/api/orpc${path}`, {
         method: "POST",
         body: JSON.stringify({}),
-        headers: { cookie: "authjs.session-token=abc" },
       });
 
-      await POST(request);
+      const response = await POST(request);
 
+      expect(response.status).not.toBe(404);
       const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
       expect(headers.has("authorization")).toBe(false);
-      expect(headers.get("cookie")).toContain("authjs.session-token");
     },
   );
 
@@ -184,7 +184,7 @@ describe("oRPC proxy route", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("strips host, content-length, crafted authorization, and crafted x-api-key on a map-key path", async () => {
+  it("strips host, content-length, crafted authorization, and crafted x-api-key on a public path", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
@@ -203,7 +203,7 @@ describe("oRPC proxy route", () => {
     expect(headers.has("host")).toBe(false);
     expect(headers.has("content-length")).toBe(false);
     expect(headers.has("x-api-key")).toBe(false);
-    expect(headers.get("authorization")).toBe("Bearer test-map-key");
+    expect(headers.has("authorization")).toBe(false);
   });
 
   it("proxies to the correct upstream URL", async () => {
@@ -222,7 +222,7 @@ describe("oRPC proxy route", () => {
     expect(url.searchParams.get("foo")).toBe("bar");
   });
 
-  it("forwards POST requests to upstream for a map-key path", async () => {
+  it("forwards POST requests to upstream for a public path", async () => {
     const { POST } =
       await import("../../../src/app/api/orpc/[[...rest]]/route");
 
@@ -256,18 +256,25 @@ describe("oRPC proxy route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("does not force Cache-Control on a map-key response", async () => {
+  it("also sets Cache-Control: no-store on a public response", async () => {
+    // Every path here forwards the caller's own cookie, including several
+    // PUBLIC_PATHS entries whose response still varies per caller via
+    // `onlyMine` for a signed-in editor -- a shared cache keyed on URL alone
+    // can't tell that apart from the anonymous response for the same
+    // path/query, so every response is uncached, not just SIGNED_IN_ONLY_PATHS.
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
     const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping");
 
     const response = await GET(request);
 
-    expect(response.headers.has("cache-control")).toBe(false);
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   // fetch() decodes a compressed upstream body but keeps its headers; passing
-  // them on makes the browser try to decode plain bytes again.
+  // them on makes the browser try to decode plain bytes again. No
+  // accept-encoding here, so the proxy passes the body through as is and the
+  // upstream headers are the only way an encoding could appear.
   it.each(["/v1/ping", "/v1/request/canEditRegions"])(
     "drops upstream Content-Encoding and Content-Length on %s",
     async (path) => {
@@ -284,9 +291,7 @@ describe("oRPC proxy route", () => {
         await import("../../../src/app/api/orpc/[[...rest]]/route");
 
       const response = await GET(
-        new NextRequest(`http://localhost:3000/api/orpc${path}`, {
-          headers: { "accept-encoding": "gzip, br" },
-        }),
+        new NextRequest(`http://localhost:3000/api/orpc${path}`),
       );
 
       expect(response.headers.get("content-encoding")).toBeNull();
@@ -295,25 +300,111 @@ describe("oRPC proxy route", () => {
     },
   );
 
-  it("drops crafted Authorization header when F3_MAP_API_KEY is unset", async () => {
-    vi.stubEnv("F3_MAP_API_KEY", "");
-
+  it("gzips an upstream-gzipped body exactly once when the caller accepts gzip", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response('{"ok":true}', {
+        headers: {
+          "content-type": "application/json",
+          "content-encoding": "gzip",
+        },
+      }),
+    );
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
-    const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
-      headers: {
-        authorization: "Bearer crafted-token",
-      },
+    const response = await GET(
+      new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
+        headers: { "accept-encoding": "gzip" },
+      }),
+    );
+
+    expect(response.headers.get("content-encoding")).toBe("gzip");
+    const text = await new Response(
+      response.body!.pipeThrough(new DecompressionStream("gzip")),
+    ).text();
+    expect(JSON.parse(text)).toEqual({ ok: true });
+  });
+
+  describe("compression", () => {
+    const json = JSON.stringify({
+      json: Array.from({ length: 500 }, (_, i) => [i, "AO name", null]),
+    });
+    const upstream = (contentType = "application/json") =>
+      fetchSpy.mockResolvedValueOnce(
+        new Response(json, { headers: { "content-type": contentType } }),
+      );
+    const call = async (acceptEncoding?: string) => {
+      const { POST } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+      return POST(
+        new NextRequest(
+          "http://localhost:3000/api/orpc/v1/map/location/eventsAndLocations",
+          {
+            method: "POST",
+            body: "{}",
+            headers: acceptEncoding
+              ? { "accept-encoding": acceptEncoding }
+              : {},
+          },
+        ),
+      );
+    };
+    const gunzip = async (res: Response) =>
+      new Response(
+        res.body!.pipeThrough(new DecompressionStream("gzip")),
+      ).text();
+
+    it("gzips a JSON response when the caller accepts gzip", async () => {
+      upstream();
+      const res = await call("gzip, deflate, br");
+      expect(res.headers.get("content-encoding")).toBe("gzip");
+      expect(res.headers.get("vary")).toMatch(/accept-encoding/i);
+      expect(await gunzip(res)).toBe(json);
     });
 
-    await GET(request);
+    it("never compresses a signed-in-only response", async () => {
+      upstream();
+      const { POST } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+      const res = await POST(
+        new NextRequest(
+          "http://localhost:3000/api/orpc/v1/request/canEditRegions",
+          {
+            method: "POST",
+            body: "{}",
+            headers: { "accept-encoding": "gzip" },
+          },
+        ),
+      );
+      expect(res.headers.get("content-encoding")).toBeNull();
+      expect(await res.text()).toBe(json);
+    });
 
-    const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
+    it("passes the body through when the caller doesn't accept gzip", async () => {
+      upstream();
+      const res = await call();
+      expect(res.headers.get("content-encoding")).toBeNull();
+      expect(await res.text()).toBe(json);
+    });
 
-    expect(headers.has("authorization")).toBe(false);
+    it("honors an explicit gzip;q=0, even with a wildcard", async () => {
+      upstream();
+      const res = await call("gzip;q=0, br");
+      expect(res.headers.get("content-encoding")).toBeNull();
+      upstream();
+      const wild = await call("gzip;q=0, *;q=1");
+      expect(wild.headers.get("content-encoding")).toBeNull();
+    });
 
-    // Restore so this test's env stub can't leak into whatever test runs
-    // next if a test is appended after this one in the file.
-    vi.stubEnv("F3_MAP_API_KEY", "test-map-key");
+    it("accepts gzip through a wildcard when gzip isn't listed", async () => {
+      upstream();
+      const res = await call("br;q=1, *;q=0.5");
+      expect(res.headers.get("content-encoding")).toBe("gzip");
+    });
+
+    it("leaves non-JSON bodies (e.g. event streams) uncompressed", async () => {
+      upstream("text/event-stream");
+      const res = await call("gzip");
+      expect(res.headers.get("content-encoding")).toBeNull();
+    });
   });
 });

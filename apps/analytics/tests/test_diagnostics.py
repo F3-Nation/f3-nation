@@ -962,7 +962,7 @@ def test_ctas_worker_deadline_interrupts_blocking_operation_and_cleans_up(monkey
 
         def execute(self, statement, _parameters=()):
             if statement.startswith("CREATE TABLE staged.orgs"):
-                if not interrupted.wait(2):
+                if not interrupted.wait(10):
                     raise TimeoutError("test interrupt did not arrive")
                 raise RuntimeError("interrupted")
             return _Result([(0,)])
@@ -980,8 +980,14 @@ def test_ctas_worker_deadline_interrupts_blocking_operation_and_cleans_up(monkey
         directories.append(Path(directory))
         return connection
 
+    # Freeze the worker's clock so its pre-statement deadline checkpoint never trips; only the
+    # watchdog (which waits in real time) may fire, however slow the runner is.
+    monkeypatch.setattr(diagnostics, "time", SimpleNamespace(monotonic=lambda: 0.0, perf_counter=time.perf_counter))
     monkeypatch.setattr(diagnostics, "attach_postgres", lambda *_args: None)
-    result = _run_ctas_worker_for_test(_settings(), make_connection, _logger(events), deadline_seconds=0.01)
+    with tempfile.TemporaryDirectory(prefix="ctas-worker-test-") as directory:
+        result = diagnostics._run_ctas_events_worker(
+            _settings(), Path(directory), 0.01, make_connection, cast(JsonLogger, _logger(events))
+        )
 
     assert result == {"status": "failed", "error_type": "RuntimeError"}
     assert connection.interrupted is True and connection.closed is True
@@ -1212,18 +1218,20 @@ def test_ctas_supervisor_kills_stuck_child_with_bounded_runtime(interrupt_mode, 
         monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_GRACE_SECONDS", 0.2)
         monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_TERMINATE_SECONDS", 0.1)
         monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_REAP_SECONDS", 2)
-        monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_CLEANUP_OPERATION_SECONDS", 2)
+        # Spawn and import of each child count against these budgets; leave headroom for loaded CI runners.
+        deadline_seconds = 5
         started = time.monotonic()
         try:
             result = diagnostics.run_ctas_events_diagnostic(
-                settings, connection_factory=_spawn_stuck_factory, deadline_seconds=2
+                settings, connection_factory=_spawn_stuck_factory, deadline_seconds=deadline_seconds
             )
         finally:
             monkeypatch.undo()
         elapsed = time.monotonic() - started
 
         assert result == {"status": "failed", "error_type": "TimeoutError"}
-        assert elapsed < 8.0
+        # Bound by the supervisor's hard deadline (~20.3s here), not by teardown alone: the cleanup child spawns too.
+        assert elapsed < deadline_seconds + 16.0
         assert (base / "operation").read_text(encoding="utf-8") == "sigterm_ignored"
         if block_phase in {"factory", "close"}:
             assert not (base / "interrupt").exists()

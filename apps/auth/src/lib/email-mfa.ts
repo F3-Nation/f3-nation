@@ -2,7 +2,7 @@ import crypto from "crypto";
 
 import { createTransport } from "nodemailer";
 
-import { and, eq, gt, isNull, sql } from "@acme/db";
+import { and, eq, gt, isNull, lt, sql } from "@acme/db";
 import { emailMfaCodes, users } from "@acme/db/schema/schema";
 
 import { isValidCallbackUrl } from "~/lib/callback-url";
@@ -26,21 +26,10 @@ function hashCode(code: string): string {
 }
 
 /**
- * Generate a 6-digit code, hash-store it, and email it to the user.
- * Invalidates any previous active code for that email.
- *
- * @param callbackUrl - Optional URL to redirect to after sign-in via magic link.
+ * Hash-store a code for an already-normalized email, invalidating any
+ * previous active code for that email.
  */
-export async function sendEmailCode(
-  email: string,
-  callbackUrl?: string,
-): Promise<void> {
-  // Normalize early so all downstream usage (DB keys, magic link URL) is consistent.
-  const normalizedEmail = email.toLowerCase().trim();
-
-  const code = crypto.randomInt(100000, 999999).toString();
-  const codeHash = hashCode(code);
-  const id = crypto.randomUUID();
+async function storeCode(normalizedEmail: string, code: string): Promise<void> {
   const expiresAt = new Date(
     Date.now() + CODE_TTL_MINUTES * 60 * 1000,
   ).toISOString();
@@ -59,12 +48,42 @@ export async function sendEmailCode(
 
   // Insert new code
   await db.insert(emailMfaCodes).values({
-    id,
+    id: crypto.randomUUID(),
     email: normalizedEmail,
-    codeHash,
+    codeHash: hashCode(code),
     expiresAt,
     attemptCount: 0,
   });
+}
+
+/**
+ * Hash-store a code that something else generated and emailed — Better
+ * Auth's emailOTP plugin, whose own hashed store can't be checked without
+ * consuming the code. Recording it here lets /api/register prove email
+ * ownership with checkEmailCode on either auth backend.
+ */
+export async function recordEmailCode(
+  email: string,
+  code: string,
+): Promise<void> {
+  await storeCode(email.toLowerCase().trim(), code);
+}
+
+/**
+ * Generate a 6-digit code, hash-store it, and email it to the user.
+ * Invalidates any previous active code for that email.
+ *
+ * @param callbackUrl - Optional URL to redirect to after sign-in via magic link.
+ */
+export async function sendEmailCode(
+  email: string,
+  callbackUrl?: string,
+): Promise<void> {
+  // Normalize early so all downstream usage (DB keys, magic link URL) is consistent.
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const code = crypto.randomInt(100000, 999999).toString();
+  await storeCode(normalizedEmail, code);
 
   // Build the magic link — include callbackUrl so clicking the link lands
   // back in the originating app, not on the auth homepage.
@@ -112,13 +131,11 @@ export async function sendEmailCode(
 }
 
 /**
- * Verify a 6-digit code against the stored hash.
- * Returns the user if verification succeeds, null otherwise.
+ * Find the active code row for this email and compare it to `code`. A
+ * mismatch counts toward the brute-force lockout; a match is returned
+ * without being consumed.
  */
-export async function verifyEmailCode(
-  email: string,
-  code: string,
-): Promise<{ id: number; email: string; f3Name: string | null } | null> {
+async function findMatchingCode(email: string, code: string) {
   const normalizedEmail = email.toLowerCase();
   const now = new Date().toISOString();
 
@@ -137,19 +154,52 @@ export async function verifyEmailCode(
 
   if (!mfaCode) return null;
 
-  // Check brute-force lockout
-  if (mfaCode.attemptCount >= MAX_ATTEMPTS) return null;
+  // Claim an attempt before comparing, in one conditional update, so a burst
+  // of parallel guesses can't all read "0 attempts used" and each get a free
+  // try. A match spends an attempt too; a new code starts a fresh row.
+  const [claimed] = await db
+    .update(emailMfaCodes)
+    .set({ attemptCount: sql`${emailMfaCodes.attemptCount} + 1` })
+    .where(
+      and(
+        eq(emailMfaCodes.id, mfaCode.id),
+        lt(emailMfaCodes.attemptCount, MAX_ATTEMPTS),
+      ),
+    )
+    .returning({ id: emailMfaCodes.id });
+  if (!claimed) return null;
 
-  const expectedHash = hashCode(code);
+  if (!constantTimeEqual(mfaCode.codeHash, hashCode(code))) return null;
 
-  if (!constantTimeEqual(mfaCode.codeHash, expectedHash)) {
-    // Increment attempt count
-    await db
-      .update(emailMfaCodes)
-      .set({ attemptCount: sql`${emailMfaCodes.attemptCount} + 1` })
-      .where(eq(emailMfaCodes.id, mfaCode.id));
-    return null;
-  }
+  return mfaCode;
+}
+
+/**
+ * Check a code without consuming it — proof that the caller owns `email`,
+ * for steps (registration) that must run before the sign-in that consumes
+ * the code. Each check spends one of the code's attempts, the same budget
+ * sign-in draws on.
+ */
+export async function checkEmailCode(
+  email: string,
+  code: string,
+): Promise<boolean> {
+  return (await findMatchingCode(email, code)) !== null;
+}
+
+/**
+ * Verify a 6-digit code against the stored hash.
+ * Returns the user if verification succeeds, null otherwise.
+ */
+export async function verifyEmailCode(
+  email: string,
+  code: string,
+): Promise<{ id: number; email: string; f3Name: string | null } | null> {
+  const normalizedEmail = email.toLowerCase();
+  const now = new Date().toISOString();
+
+  const mfaCode = await findMatchingCode(email, code);
+  if (!mfaCode) return null;
 
   // Mark code as consumed
   await db
