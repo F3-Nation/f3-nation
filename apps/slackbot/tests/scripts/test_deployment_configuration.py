@@ -135,16 +135,22 @@ def test_cloud_run_env_updates_service_and_job_classification_with_stub_gcloud(
     script = scripts_dir / "cloud-run-env.sh"
     script.write_text(source_script.read_text())
     script.chmod(0o755)
-    (tmp_path / f".env.cloud-run.{target}").write_text("# Hermetic deployment test\n")
+    smtp_url = "smtp://smtp-user:synthetic%40smtp-pass@smtp.example.test:587"
+    sender = "F3, Nation <notifications@example.test>"
+    (tmp_path / f".env.cloud-run.{target}").write_text(
+        f'EMAIL_SERVER={smtp_url}\nEMAIL_FROM="{sender}"\nSENDGRID_API_KEY=unused-legacy-key\n'
+    )
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     log_path = tmp_path / "gcloud.log"
+    secret_input_path = tmp_path / "secret-input"
     stub_gcloud = bin_dir / "gcloud"
     stub_gcloud.write_text(
         "#!/usr/bin/env bash\n"
         'printf \'%q \' "$@" >> "$GCLOUD_LOG"\n'
         'printf "\\n" >> "$GCLOUD_LOG"\n'
+        'if [[ "$1 $2 $3" == "secrets versions add" ]]; then cat > "$GCLOUD_SECRET_INPUT"; fi\n'
         'if [[ "$1 $2 $3" == "projects describe"* ]]; then printf "123456\\n"; fi\n'
         'if [[ "$1 $2 $3 $4" == "run jobs describe f3-slackbot-scripts"* ]]; then\n'
         '  printf "f3-slackbot-scripts\\n"\n'
@@ -153,10 +159,12 @@ def test_cloud_run_env_updates_service_and_job_classification_with_stub_gcloud(
     )
     stub_gcloud.chmod(0o755)
 
-    env = os.environ.copy()
-    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
-    env["GCLOUD_LOG"] = str(log_path)
-    subprocess.run([str(script), "--env", target], check=True, capture_output=True, text=True, env=env)
+    env = {
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "GCLOUD_LOG": str(log_path),
+        "GCLOUD_SECRET_INPUT": str(secret_input_path),
+    }
+    result = subprocess.run([str(script), "--env", target], check=True, capture_output=True, text=True, env=env)
 
     calls = [shlex.split(line) for line in log_path.read_text().splitlines()]
     update_calls = [call for call in calls if call[:3] in (["run", "services", "update"], ["run", "jobs", "update"])]
@@ -167,3 +175,46 @@ def test_cloud_run_env_updates_service_and_job_classification_with_stub_gcloud(
         assert env_arg.startswith("^__F3_ENV_DELIM__^")
         env_assignments = [part.lstrip("^") for part in env_arg.split("__F3_ENV_DELIM__")]
         assert env_assignments.count(f"SLACKBOT_ENV={classification}") == 1
+        assert env_assignments.count(f"EMAIL_FROM={sender}") == 1
+        assert not any(assignment.startswith("EMAIL_SERVER=") for assignment in env_assignments)
+
+        secret_arg = call[call.index("--update-secrets") + 1]
+        assert secret_arg.startswith("^__F3_ENV_DELIM__^")
+        secret_assignments = [part.lstrip("^") for part in secret_arg.split("__F3_ENV_DELIM__")]
+        assert secret_assignments.count("EMAIL_SERVER=email-server:latest") == 1
+        assert not any(assignment.startswith("SENDGRID_API_KEY=") for assignment in secret_assignments)
+        assert "--remove-secrets" not in call
+
+    secret_pushes = [call for call in calls if call[:3] == ["secrets", "versions", "add"]]
+    assert len(secret_pushes) == 1
+    assert secret_pushes[0][3] == "email-server"
+    assert "--data-file=-" in secret_pushes[0]
+    assert secret_input_path.read_text() == smtp_url
+    assert smtp_url not in log_path.read_text()
+    assert smtp_url not in result.stdout + result.stderr
+    assert "sendgrid-api-key" not in log_path.read_text()
+
+
+@pytest.mark.parametrize("smtp_port", [1025, 1325])
+def test_local_email_defaults_follow_checkout_mailpit_port(tmp_path: Path, smtp_port: int):
+    env_file = tmp_path / ".env"
+    env_file.write_text((REPO_ROOT / "apps/slackbot/.env.example").read_text())
+    subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$1"; rewrite_env_ports "$2"',
+            "test-local-smtp",
+            str(REPO_ROOT / "scripts/lib/local-ports.sh"),
+            str(env_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={"PATH": os.environ["PATH"], "F3_MAILPIT_SMTP_PORT": str(smtp_port)},
+    )
+    assignments = dict(
+        line.split("=", maxsplit=1) for line in env_file.read_text().splitlines() if line and not line.startswith("#")
+    )
+    assert assignments["EMAIL_SERVER"] == f"smtp://localhost:{smtp_port}"
+    assert assignments["EMAIL_FROM"] == "F3 Nation <no-reply@f3local.dev>"

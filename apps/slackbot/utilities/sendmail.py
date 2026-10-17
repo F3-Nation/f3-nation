@@ -1,9 +1,11 @@
 import logging
 import os
 import smtplib
+import ssl
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Dict, List
+from urllib.parse import unquote, urlsplit
 
 logger = logging.getLogger(__name__)
 
@@ -12,44 +14,84 @@ def send_via_sendgrid(
     to_email: str,
     subject: str,
     html_content: str,
-    from_email: str = "noreply@f3nation.com",
+    from_email: str | None = None,
 ) -> bool:
-    """Send an email using SendGrid API.
+    """Send HTML mail using EMAIL_SERVER, retaining the legacy callable name.
 
     Args:
         to_email: Recipient email address
         subject: Email subject line
         html_content: HTML body content
-        from_email: Sender email address (default: noreply@f3nation.com)
+        from_email: Sender override; otherwise EMAIL_FROM or noreply@f3nation.com
 
     Returns:
         True if email was sent successfully, False otherwise
     """
-    api_key = os.getenv("SENDGRID_API_KEY")
-    if not api_key:
-        logger.warning("SENDGRID_API_KEY not configured, skipping email send")
+    server_url = os.getenv("EMAIL_SERVER")
+    if not server_url:
+        logger.warning("slackbot.email.not_configured")
         return False
 
     if not to_email:
-        logger.warning("No recipient email provided, skipping email send")
+        logger.warning("slackbot.email.recipient_missing")
         return False
 
     try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail
+        endpoint = urlsplit(server_url)
+        if (
+            endpoint.scheme not in {"smtp", "smtps"}
+            or not endpoint.hostname
+            or endpoint.path not in {"", "/"}
+            or endpoint.query
+            or endpoint.fragment
+            or any(character.isspace() or ord(character) < 32 for character in server_url)
+        ):
+            raise ValueError("Invalid SMTP endpoint")
 
-        message = Mail(
-            from_email=from_email,
-            to_emails=to_email,
-            subject=subject,
-            html_content=html_content,
-        )
-        sg = SendGridAPIClient(api_key)
-        response = sg.send(message)
-        logger.info(f"SendGrid email sent to {to_email}, status: {response.status_code}")
-        return response.status_code in (200, 201, 202)
-    except Exception as e:
-        logger.error(f"Failed to send email via SendGrid: {e}")
+        port = endpoint.port
+        if port is None:
+            port = 465 if endpoint.scheme == "smtps" else 25
+        if not 1 <= port <= 65535:
+            raise ValueError("Invalid SMTP port")
+
+        username = unquote(endpoint.username, errors="strict") if endpoint.username is not None else None
+        password = unquote(endpoint.password, errors="strict") if endpoint.password is not None else None
+        if username is not None or password is not None:
+            if (
+                not username
+                or not password
+                or any(ord(character) < 32 or ord(character) == 127 for character in username + password)
+            ):
+                raise ValueError("Invalid SMTP credentials")
+
+        message = EmailMessage()
+        message["From"] = from_email if from_email is not None else os.getenv("EMAIL_FROM") or "noreply@f3nation.com"
+        message["To"] = to_email
+        message["Subject"] = subject
+        message.set_content(html_content, subtype="html")
+
+        implicit_tls = endpoint.scheme == "smtps"
+        if implicit_tls:
+            connection = smtplib.SMTP_SSL(endpoint.hostname, port, timeout=10, context=ssl.create_default_context())
+        else:
+            connection = smtplib.SMTP(endpoint.hostname, port, timeout=10)
+        with connection as server:
+            # Only an unauthenticated loopback catcher may receive plaintext.
+            if not implicit_tls and (
+                username is not None or endpoint.hostname not in {"localhost", "127.0.0.1", "::1"}
+            ):
+                server.starttls(context=ssl.create_default_context())
+            if username is not None:
+                server.login(username, password)
+            refused = server.send_message(message)
+
+        if refused:
+            logger.warning("slackbot.email.recipient_refused")
+            return False
+        logger.info("slackbot.email.sent")
+        return True
+    except Exception:
+        logger.error("slackbot.email.send_failed")
         return False
 
 

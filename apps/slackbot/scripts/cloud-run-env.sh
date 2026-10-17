@@ -42,7 +42,7 @@ declare -A SECRET_MAP=(
   [MAP_REVALIDATION_KEY]="map-revalidation-key"
   [STRAVA_CLIENT_SECRET]="strava-client-secret"
   [ADMIN_BOT_TOKEN]="admin-bot-token"
-  [SENDGRID_API_KEY]="sendgrid-api-key"
+  [EMAIL_SERVER]="email-server"
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain Cloud Run env vars)
@@ -67,6 +67,7 @@ ENV_FILE_VARS=(
   DATABASE_POOL_SIZE
   DATABASE_MAX_OVERFLOW
   DATABASE_POOL_TIMEOUT
+  EMAIL_FROM
 )
 
 # Plain env vars (hardcoded, same across environments)
