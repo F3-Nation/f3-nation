@@ -153,8 +153,9 @@ the URL username and password. For SendGrid SMTP, use `smtp.sendgrid.net:587`,
 the literal username `apikey`, and the SendGrid API key as the percent-encoded
 password, as shown in the cloud env example.
 
-`smtp://` uses verified STARTTLS for remote servers; `smtps://` uses implicit TLS
-with certificate verification. Plain SMTP is allowed only for unauthenticated
+`smtp://` defaults to port 587 and uses verified STARTTLS for remote servers;
+`smtps://` defaults to port 465 and uses implicit TLS with certificate verification.
+Explicit ports, including port 25, are respected. Plain SMTP is allowed only for unauthenticated
 loopback endpoints such as local Mailpit. Authenticated loopback endpoints also
 require TLS. An SMTP connection has a 10-second timeout. Missing configuration
 or failed delivery returns `False`; there is no SendGrid API fallback.

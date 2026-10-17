@@ -36,6 +36,7 @@ def send_via_sendgrid(
         logger.warning("slackbot.email.recipient_missing")
         return False
 
+    stage = "validation"
     try:
         endpoint = urlsplit(server_url)
         if (
@@ -50,7 +51,7 @@ def send_via_sendgrid(
 
         port = endpoint.port
         if port is None:
-            port = 465 if endpoint.scheme == "smtps" else 25
+            port = 465 if endpoint.scheme == "smtps" else 587
         if not 1 <= port <= 65535:
             raise ValueError("Invalid SMTP port")
 
@@ -71,6 +72,7 @@ def send_via_sendgrid(
         message.set_content(html_content, subtype="html")
 
         implicit_tls = endpoint.scheme == "smtps"
+        stage = "connect"
         if implicit_tls:
             connection = smtplib.SMTP_SSL(endpoint.hostname, port, timeout=10, context=ssl.create_default_context())
         else:
@@ -80,18 +82,25 @@ def send_via_sendgrid(
             if not implicit_tls and (
                 username is not None or endpoint.hostname not in {"localhost", "127.0.0.1", "::1"}
             ):
+                stage = "tls"
                 server.starttls(context=ssl.create_default_context())
             if username is not None:
+                stage = "authentication"
                 server.login(username, password)
+            stage = "send"
             refused = server.send_message(message)
+            stage = "close"
 
         if refused:
             logger.warning("slackbot.email.recipient_refused")
             return False
         logger.info("slackbot.email.sent")
         return True
-    except Exception:
-        logger.error("slackbot.email.send_failed")
+    except Exception as error:
+        logger.error(
+            "slackbot.email.send_failed",
+            extra={"json_fields": {"stage": stage, "error_type": type(error).__name__}},
+        )
         return False
 
 
