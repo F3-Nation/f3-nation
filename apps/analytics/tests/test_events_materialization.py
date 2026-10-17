@@ -8,13 +8,17 @@ from analytics.materializations import MATERIALIZATION_REGISTRY
 from analytics.source import materialize
 
 SQL = (Path(__file__).parents[1] / "analytics" / "sql" / "pv_events.sql").read_text()
+DETAILS_SQL = (Path(__file__).parents[1] / "analytics" / "sql" / "pv_event_details.sql").read_text()
 
 
 def test_events_uses_explicit_event_and_attendance_projections():
     assert "SELECT ei.*" not in SQL
     assert "SELECT a.*" not in SQL
-    assert "preblast" in SQL
-    assert "backblast" in SQL
+    assert "e.description" not in SQL
+    assert "e.preblast" not in SQL
+    assert "e.backblast" not in SQL
+    assert "e.meta" not in SQL
+    assert "SELECT a.*" not in DETAILS_SQL
 
 
 def source():
@@ -105,6 +109,11 @@ def test_events_contract_and_materialization(tmp_path: Path):
     c = source()
     out = tmp_path / "events.parquet"
     c.execute("COPY (" + SQL + ") TO ? (FORMAT PARQUET)", [str(out), "2026-01-03T00:00:00Z", "2026-01-03"])
+    details_out = tmp_path / "event-details.parquet"
+    c.execute(
+        "COPY (" + DETAILS_SQL + ") TO ? (FORMAT PARQUET)",
+        [str(details_out), "2026-01-03T00:00:00Z", "2026-01-03"],
+    )
     columns = c.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(out)]).fetchall()
     assert [column[0] for column in columns] == [
         "refreshed_at",
@@ -113,12 +122,6 @@ def test_events_contract_and_materialization(tmp_path: Path):
         "event_name",
         "pax_count",
         "fng_count",
-        "description",
-        "preblast",
-        "preblast_rich",
-        "backblast",
-        "backblast_rich",
-        "meta",
         "ao_org_id",
         "ao_name",
         "region_org_id",
@@ -137,18 +140,12 @@ def test_events_contract_and_materialization(tmp_path: Path):
         "attendance",
     ]
     row = c.execute("SELECT * FROM read_parquet(?) WHERE event_id = 1", [str(out)]).fetchone()
-    assert row[1:25] == (
+    assert row[1:19] == (
         1,
         date(2026, 1, 1),
         "Workout",
         10,
         2,
-        "Workout description",
-        "Plan",
-        '{"blocks":[]}',
-        "Blast",
-        '{"text":"Blast"}',
-        "{}",
         5,
         "AO",
         4,
@@ -163,12 +160,12 @@ def test_events_contract_and_materialization(tmp_path: Path):
         0,
         1,
     )
-    assert row[25] == [
+    assert row[19] == [
         {"id": 2, "name": "Bible", "description": "Study", "event_category": "third_f"},
         {"id": 1, "name": "Run", "description": "Running", "event_category": "first_f"},
     ]
-    assert row[26] == [{"id": 7, "name": "Morning", "description": "Morning workout"}]
-    assert row[27] == [
+    assert row[20] == [{"id": 7, "name": "Morning", "description": "Morning workout"}]
+    assert row[21] == [
         {
             "user_id": 1,
             "f3_name": "Alpha",
@@ -190,6 +187,42 @@ def test_events_contract_and_materialization(tmp_path: Path):
             "fartsack": False,
         },
     ]
+    detail_columns = [
+        column[0] for column in c.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(details_out)]).fetchall()
+    ]
+    assert detail_columns == [
+        "event_id",
+        "description",
+        "preblast",
+        "preblast_rich",
+        "backblast",
+        "backblast_rich",
+        "meta",
+        "refreshed_at",
+    ]
+    assert not {"description", "preblast", "preblast_rich", "backblast", "backblast_rich", "meta"}.intersection(
+        column[0] for column in columns
+    )
+    assert (
+        c.execute("SELECT event_id FROM read_parquet(?) ORDER BY event_id", [str(out)]).fetchall()
+        == c.execute("SELECT event_id FROM read_parquet(?) ORDER BY event_id", [str(details_out)]).fetchall()
+    )
+    assert c.execute("SELECT event_id FROM read_parquet(?) ORDER BY event_id", [str(out)]).fetchall() == [
+        (1,),
+        (2,),
+        (3,),
+    ]
+    assert c.execute(
+        "SELECT typeof(preblast_rich), typeof(backblast_rich), typeof(meta) FROM read_parquet(?) WHERE event_id = 1",
+        [str(details_out)],
+    ).fetchone() == ("JSON", "JSON", "JSON")
+    detail = c.execute("SELECT * FROM read_parquet(?) WHERE event_id = 1", [str(details_out)]).fetchone()
+    assert detail[1:7] == ("Workout description", "Plan", '{"blocks":[]}', "Blast", '{"text":"Blast"}', "{}")
+    assert c.execute(
+        "SELECT description, preblast, preblast_rich, backblast, backblast_rich "
+        "FROM read_parquet(?) WHERE event_id = 2",
+        [str(details_out)],
+    ).fetchone() == (None, None, None, None, None)
     assert c.execute("SELECT count(*) FROM read_parquet(?) WHERE event_id = 2", [str(out)]).fetchone()[0] == 1
     assert (
         c.execute("SELECT attendance FROM read_parquet(?) WHERE event_id = 2", [str(out)]).fetchone()[0][0]["fartsack"]
@@ -206,6 +239,8 @@ def test_malformed_exclusion_flag_is_strict():
     c.execute('UPDATE pg.public.event_instances SET meta = \'{"exclude_from_pax_vault":"yes"}\' WHERE id = 1')
     with pytest.raises(Exception, match="exclude_from_pax_vault"):
         c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"])
+    with pytest.raises(Exception, match="exclude_from_pax_vault"):
+        c.execute(DETAILS_SQL, ["2026-01-03T00:00:00Z", "2026-01-03"])
 
 
 def test_events_resolve_tiers_beyond_six_and_keep_direct_area_territory_nullable():
@@ -221,9 +256,9 @@ def test_events_resolve_tiers_beyond_six_and_keep_direct_area_territory_nullable
     )
     rows = c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"]).fetchall()
     deep = next(row for row in rows if row[1] == 1)
-    assert deep[20:22] == (1, "Sector")
+    assert deep[14:16] == (1, "Sector")
     direct = next(row for row in rows if row[1] == 4)
-    assert direct[16:22] == (7, "Direct Area", None, None, 1, "Sector")
+    assert direct[10:16] == (7, "Direct Area", None, None, 1, "Sector")
 
 
 def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
@@ -250,6 +285,43 @@ def test_events_materialization_orders_unpartitioned_file(tmp_path: Path):
     ).fetchall()
     assert len(rows) == 4
     assert rows == sorted(rows, key=lambda row: (row[0], row[1]))
+
+
+def test_event_details_materialize_uses_standard_source_parameters(tmp_path: Path):
+    c = source()
+    root = tmp_path / "event-details"
+    artifacts = materialize(
+        c,
+        root,
+        MATERIALIZATION_REGISTRY["pv_event_details"],
+        "2026-01-05T00:00:00Z",
+        "2026-01-05",
+    )
+
+    assert artifacts.row_count == 3
+    assert artifacts.sorted_parquet_files == (root / "pv_event_details.parquet",)
+    output = artifacts.sorted_parquet_files[0]
+    columns = [row[0] for row in c.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(output)]).fetchall()]
+    assert columns == [
+        "event_id",
+        "description",
+        "preblast",
+        "preblast_rich",
+        "backblast",
+        "backblast_rich",
+        "meta",
+        "refreshed_at",
+    ]
+    rows = c.execute("SELECT event_id FROM read_parquet(?) ORDER BY event_id", [str(output)]).fetchall()
+    assert rows == [(1,), (2,), (3,)]
+
+
+def test_true_exclusion_flag_excludes_event_from_both_projections():
+    c = source()
+    c.execute("UPDATE pg.public.event_instances SET meta = '{\"exclude_from_pax_vault\":true}' WHERE id = 1")
+    event_ids = [row[1] for row in c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"]).fetchall()]
+    detail_ids = [row[0] for row in c.execute(DETAILS_SQL, ["2026-01-03T00:00:00Z", "2026-01-03"]).fetchall()]
+    assert event_ids == detail_ids == [2, 3]
 
 
 def test_events_aggregates_independent_lists_and_attendance_flags():
@@ -288,20 +360,20 @@ def test_events_aggregates_independent_lists_and_attendance_flags():
 
     rows = c.execute(SQL, ["2026-01-03T00:00:00Z", "2026-01-03"]).fetchall()
     many = next(row for row in rows if row[1] == 4)
-    assert len(many[25]) == 2
-    assert len(many[26]) == 2
-    assert len(many[27]) == 2
-    assert many[25] == [
+    assert len(many[19]) == 2
+    assert len(many[20]) == 2
+    assert len(many[21]) == 2
+    assert many[19] == [
         {"id": 3, "name": "Alpha", "description": "Alpha description", "event_category": "first_f"},
         {"id": 4, "name": "Zulu", "description": "Zulu description", "event_category": "second_f"},
     ]
-    assert [entry["user_id"] for entry in many[27]] == [4, 5]
-    assert many[27][0]["coq_ind"] == 0
-    assert many[27][0]["fartsack"] is True
-    assert many[27][1]["coq_ind"] == 1
-    assert many[27][1]["ghost"] is True
+    assert [entry["user_id"] for entry in many[21]] == [4, 5]
+    assert many[21][0]["coq_ind"] == 0
+    assert many[21][0]["fartsack"] is True
+    assert many[21][1]["coq_ind"] == 1
+    assert many[21][1]["ghost"] is True
 
     empty = next(row for row in rows if row[1] == 5)
-    assert empty[25] == []
-    assert empty[26] == []
-    assert empty[27] == []
+    assert empty[19] == []
+    assert empty[20] == []
+    assert empty[21] == []
