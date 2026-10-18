@@ -1,12 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   getDatabaseNameFromUri,
+  getDbUrl,
   migrationsDatabaseName,
   poolOptions,
   postgresArgs,
   splitSocketHost,
 } from "./functions";
+
+const mockEnv = vi.hoisted(() => ({
+  TEST_DATABASE_URL: undefined as string | undefined,
+  DATABASE_URL: undefined as string | undefined,
+}));
+vi.mock("@acme/env", () => ({ env: mockEnv }));
+vi.mock("@acme/shared/common/constants", () => ({ isTest: true }));
 
 const SOCKET = "/cloudsql/f3data:us-central1:f3data";
 
@@ -105,6 +113,22 @@ describe("getDatabaseNameFromUri", () => {
       "f3_prod",
     );
     expect(getDatabaseNameFromUri("not a url")).toBeUndefined();
+  });
+});
+
+describe("getDbUrl", () => {
+  it("reads the test database url under test and names the database", () => {
+    mockEnv.TEST_DATABASE_URL = "postgres://u:p@h:5433/f3_test?sslmode=disable";
+    expect(getDbUrl()).toEqual({
+      databaseUrl: "postgres://u:p@h:5433/f3_test?sslmode=disable",
+      useSsl: false,
+      databaseName: "f3_test",
+    });
+  });
+
+  it("throws when no database url is configured", () => {
+    mockEnv.TEST_DATABASE_URL = undefined;
+    expect(() => getDbUrl()).toThrow(/DATABASE_URL is not defined/);
   });
 });
 
