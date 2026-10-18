@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { eq } from "@acme/db";
-import { users } from "@acme/db/schema/schema";
+import { and, eq } from "@acme/db";
+import { orgs, users } from "@acme/db/schema/schema";
 
 import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
@@ -19,6 +19,7 @@ export async function GET() {
       f3Name: users.f3Name,
       firstName: users.firstName,
       lastName: users.lastName,
+      homeRegionId: users.homeRegionId,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -30,6 +31,7 @@ export async function GET() {
     f3Name: user?.f3Name ?? "",
     firstName: user?.firstName ?? "",
     lastName: user?.lastName ?? "",
+    homeRegionId: user?.homeRegionId ?? null,
     isExistingUser,
   });
 }
@@ -46,6 +48,7 @@ export async function POST(request: NextRequest) {
     f3Name?: string;
     firstName?: string;
     lastName?: string;
+    homeRegionId?: number | null;
   };
 
   if (!body.f3Name || !body.firstName || !body.lastName) {
@@ -53,6 +56,37 @@ export async function POST(request: NextRequest) {
       { error: "f3Name, firstName, and lastName are required" },
       { status: 400 },
     );
+  }
+
+  // The home region is optional here so a page loaded before this field
+  // existed can still finish onboarding. When one is sent it has to be an
+  // active region, the same set /api/regions offers.
+  const homeRegionId = body.homeRegionId ?? null;
+  if (homeRegionId !== null) {
+    // orgs.id is a 32-bit integer; a larger id would make the query throw.
+    const validId =
+      Number.isInteger(homeRegionId) &&
+      homeRegionId > 0 &&
+      homeRegionId <= 2_147_483_647;
+    const [region] = validId
+      ? await db
+          .select({ id: orgs.id })
+          .from(orgs)
+          .where(
+            and(
+              eq(orgs.id, homeRegionId),
+              eq(orgs.orgType, "region"),
+              eq(orgs.isActive, true),
+            ),
+          )
+          .limit(1)
+      : [];
+    if (!region) {
+      return NextResponse.json(
+        { error: "homeRegionId must be an active region" },
+        { status: 400 },
+      );
+    }
   }
 
   // Direct DB write — the F3 API's crupdate endpoint requires a `roles`
@@ -65,7 +99,12 @@ export async function POST(request: NextRequest) {
     .limit(1);
 
   const currentMeta = user?.meta ?? {};
-  const updatedMeta = { ...currentMeta, onboarding_completed: true };
+  // A timestamp so we can tell when someone last confirmed their
+  // profile.
+  const updatedMeta = {
+    ...currentMeta,
+    onboarding_completed: new Date().toISOString(),
+  };
 
   await db
     .update(users)
@@ -73,6 +112,7 @@ export async function POST(request: NextRequest) {
       f3Name: body.f3Name,
       firstName: body.firstName,
       lastName: body.lastName,
+      ...(homeRegionId !== null && { homeRegionId }),
       meta: updatedMeta,
     })
     .where(eq(users.id, userId));
