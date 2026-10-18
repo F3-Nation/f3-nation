@@ -71,7 +71,7 @@ export const isAnyFilterActive = (filters: FiltersType) => {
     ...otherFilters
   } = filters;
   return (
-    (nationalEventTypeIds?.length ?? 0) > 0 ||
+    nationalEventTypeIds.length > 0 ||
     Object.values(otherFilters).some((value) => value === true) ||
     beforeAfterTime !== TimeSelection.none
   );
@@ -114,7 +114,7 @@ export const useTodayAndTomorrowFilters = () => {
     (dayNumber === 4 && dayF) ||
     (dayNumber === 5 && daySa);
 
-  const todayVar = NUMBER_TO_DAY_KEY[dayNumber] ?? "dayM";
+  const todayVar = NUMBER_TO_DAY_KEY[dayNumber];
   const tomorrowVar = NUMBER_TO_DAY_KEY[(dayNumber + 1) % 7] ?? "dayTu";
 
   return { today, tomorrow, todayVar, tomorrowVar };

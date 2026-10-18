@@ -52,14 +52,14 @@ export const useSelectedItem = () => {
     const sw = bounds?.getSouthWest();
     if (
       typeof selectedLocation?.lat !== "number" ||
-      typeof selectedLocation?.lon !== "number" ||
+      typeof selectedLocation.lon !== "number" ||
       !ne ||
       !sw ||
       // Outside of the bounds
-      selectedLocation.lat > ne?.lat() ||
-      selectedLocation.lon > ne?.lng() ||
-      selectedLocation.lat < sw?.lat() ||
-      selectedLocation.lon < sw?.lng()
+      selectedLocation.lat > ne.lat() ||
+      selectedLocation.lon > ne.lng() ||
+      selectedLocation.lat < sw.lat() ||
+      selectedLocation.lon < sw.lng()
     ) {
       return undefined;
     }
@@ -75,7 +75,7 @@ export const useSelectedItem = () => {
 
   const selectedEvent = useMemo(() => {
     if (!selectedLocation) return undefined;
-    if (eventId === null || eventId === undefined) {
+    if (eventId === null) {
       return selectedLocation.events[0];
     }
 

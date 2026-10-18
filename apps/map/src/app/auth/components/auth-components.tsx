@@ -100,7 +100,7 @@ const AuthForm = () => {
     const data = getValues();
     const normalizedEmail = normalizeEmail(data.email);
     void signIn(ProviderId.EMAIL, {
-      callbackUrl: authStore.get("callbackUrl") ?? "/",
+      callbackUrl: authStore.get("callbackUrl"),
       email: normalizedEmail,
       redirect: false,
     }).finally(() => {
@@ -238,7 +238,7 @@ const VerifyCode = () => {
       const normalizedEmail = normalizeEmail(email);
       window.location.href = `/api/auth/callback/otp?email=${encodeURIComponent(
         normalizedEmail,
-      )}&token=${code}&callbackUrl=${encodeURIComponent(callbackUrl ?? "/")}`;
+      )}&token=${code}&callbackUrl=${encodeURIComponent(callbackUrl)}`;
     } catch (error) {
       console.error(error);
     } finally {
@@ -308,16 +308,16 @@ export const AuthContent = ({
   const content = (
     <>
       {status === "loading" ? (
-        <Loading text={text ?? "Loading..."} />
+        <Loading text={text} />
       ) : status === "idle" ? (
         <AuthForm />
       ) : status === "verify-email" ? (
         <VerifyEmail />
       ) : status === "verify-code" ? (
         <VerifyCode />
-      ) : status === "error" ? (
+      ) : (
         <ErrorCard />
-      ) : null}
+      )}
     </>
   );
 

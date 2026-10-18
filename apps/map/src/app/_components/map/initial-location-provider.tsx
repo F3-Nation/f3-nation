@@ -36,13 +36,13 @@ export const InitialLocationProvider = (params: { children: ReactNode }) => {
 
 const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
   const searchParams = useSearchParams();
-  const queryLat = safeParseFloat(searchParams?.get("lat"));
+  const queryLat = safeParseFloat(searchParams.get("lat"));
   const queryLon = safeParseFloat(
-    searchParams?.get("lon") ?? searchParams?.get("lng"),
+    searchParams.get("lon") ?? searchParams.get("lng"),
   );
-  const queryZoom = safeParseFloat(searchParams?.get("zoom"));
-  const queryLocationId = safeParseInt(searchParams?.get("locationId"));
-  const queryEventId = safeParseInt(searchParams?.get("eventId"));
+  const queryZoom = safeParseFloat(searchParams.get("zoom"));
+  const queryLocationId = safeParseInt(searchParams.get("locationId"));
+  const queryEventId = safeParseInt(searchParams.get("eventId"));
 
   const center = useRef<google.maps.LatLngLiteral | null>(null);
   const zoom = useRef<number | null>(null);
@@ -67,11 +67,7 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
           : null;
 
     didSetQueryParamLocation.current = !!queryParamCenter;
-    center.current = queryParamCenter ??
-      mapStore.get("center") ?? {
-        lat: DEFAULT_CENTER[0],
-        lng: DEFAULT_CENTER[1],
-      };
+    center.current = queryParamCenter ?? mapStore.get("center");
   }
 
   // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
@@ -81,7 +77,7 @@ const SuspendedInitialLocationProvider = (params: { children: ReactNode }) => {
       !!queryLocationId || (queryLat != null && queryLon != null)
       ? CLOSE_ZOOM
       : // Otherwise, use the stored zoom or default zoom
-        (mapStore.get("zoom") ?? DEFAULT_ZOOM);
+        mapStore.get("zoom");
 
   // Sync the derived initial state into the external stores in an effect.
   // Writing to these stores during render updates other subscribed components
