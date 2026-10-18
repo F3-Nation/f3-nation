@@ -45,8 +45,9 @@ pre-upgrade nine-dataset release whose version vector is
 `pv_regions.v1`, `pv_pax.v2`, `pv_kotter.v1`, `pv_upcoming.v1`,
 `pv_sectors.v2`, `pv_territories.v1`, `pv_areas.v2`, `pv_aos.v1`, and
 `pv_events.v2`. The historical nine-dataset rollback vector is unchanged and
-does not contain `pv_event_details`. The historical `pv_pax.v2` projection has fourteen columns and
-ends in `roles`; it does not include the `lifetime_posts` or `lifetime_qs`
+contains neither `pv_event_details` nor `pv_attendance`. The historical
+`pv_pax.v2` projection has fourteen columns and ends in `roles`; it does not
+include the `lifetime_posts` or `lifetime_qs`
 columns in current `pv_pax.v3`. Rollback eligibility requires the exact release
 identity, generation, URI, and manifest hash recorded as `retainedPrevious` by
 the current pointer, followed by full release and Parquet validation. That hash
@@ -230,7 +231,7 @@ non-null `pax_count` directly belonging to that AO. These vocabulary queries do
 not apply the `exclude_from_pax_vault` metadata predicate. Lists sort by display
 name then ID and are `[]` when empty.
 
-### `pv_events` — one row per eligible event instance
+### `pv_events` — one row per eligible event instance in this dataset read
 
 Columns, in order: `refreshed_at`, `event_id`, `event_date`, `event_name`,
 `pax_count`, `fng_count`, `ao_org_id`, `ao_name`,
@@ -250,19 +251,40 @@ contains `{user_id, f3_name, q_ind, coq_ind, avatar_url, attended, ghost,
 fartsack}`; the flags distinguish actual from planned attendance and lists sort
 by name then user ID. Missing attendance, types, or tags produce empty lists.
 
-### `pv_event_details` — one row per eligible event instance
+### `pv_event_details` — one row per eligible event instance in this dataset read
 
 Columns, in SQL projection order: `event_id`, `description`, `preblast`,
 `preblast_rich`, `backblast`, `backblast_rich`, `meta`, `refreshed_at`.
 
-This dataset uses exactly the `pv_events` eligibility rule: active event
+This dataset uses exactly the same eligibility rule as `pv_events`: active event
 instances with non-null `pax_count` and a false or null
 `meta.exclude_from_pax_vault`; a true flag excludes the event, and malformed
 non-null/non-boolean values fail the dataset. It emits one row per eligible
 event instance, including events with null detail fields. The rich preblast and
 backblast values are JSON, and `meta` is retained as JSON. `refreshed_at` is
 the dataset refresh parameter. `pv_events` retains its own `refreshed_at` and
-all other existing columns.
+all other existing columns except the six detail columns (`description`,
+`preblast`, `preblast_rich`, `backblast`, `backblast_rich`, and `meta`), which
+are removed from `pv_events.v3` and live only in this dataset. The datasets are
+materialized by independent reads, not from one shared source snapshot; using
+the same rule does not guarantee the same event IDs or a one-to-one match.
+Consumers join on `event_id` with a `LEFT JOIN` from `pv_events` and must
+tolerate missing rows on either side.
+
+### Event schema compatibility and rollout
+
+For released or consumed datasets, any incompatible projection change,
+including a column removal or rename, requires a new dataset `schemaVersion`.
+The removal of those six fields changes `pv_events.v2` to `pv_events.v3`; the
+extracted detail projection is `pv_event_details.v1`. Consumers of
+`pv_events.v2` must update to support the new split before a v3 release is
+published, and all serving and rollback-eligible revisions must pass the
+consumer-compatibility gate. Roll out consumers first, verify compatibility,
+then publish the v3 release. Keep the exact retained legacy release available
+for rollback; it has the nine-dataset version vector above, including
+`pv_pax.v2` and `pv_events.v2`, and neither `pv_attendance` nor
+`pv_event_details`. Roll back through a validated pointer update and only
+while the serving consumer revision supports that legacy dataset set.
 
 ### `pv_attendance` — one row per eligible actual attendance ID
 

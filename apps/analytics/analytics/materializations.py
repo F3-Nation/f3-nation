@@ -85,6 +85,7 @@ _SCHEMA_VERSIONS = MappingProxyType(
         "pv_events": "pv_events.v3",
     }
 )
+_SORT_BY = MappingProxyType({"pv_events": ("region_org_id", "event_date"), "pv_event_details": ("event_id",)})
 
 
 def _definition(name: str, product: str) -> Materialization:
@@ -97,7 +98,7 @@ def _definition(name: str, product: str) -> Materialization:
         sql_reference=f"sql/{name}.sql",
         product=product,
         partition_by=(),
-        sort_by=("region_org_id", "event_date") if name == "pv_events" else (),
+        sort_by=_SORT_BY.get(name, ()),
     )
 
 

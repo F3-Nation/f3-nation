@@ -127,10 +127,15 @@ contract; it does not use `pv-release.v2` or share Pax Vault publication state.
 `pv_pax.v3` includes the email and roles fields and appends `lifetime_posts`
 and `lifetime_qs` as distinct actual event counts. `pv_attendance.v1` records
 one actual attendance per attendance ID. `pv_events.v3` retains event fields
-excluding rich detail content, which is published in `pv_event_details.v1`
-(`event_id`, `description`, `preblast`, `preblast_rich`, `backblast`,
-`backblast_rich`, `meta`, `refreshed_at`); both datasets use the same
-eligible-event grain. `pv_events.v3` retains type/tag descriptions.
+except `description`, `preblast`, `preblast_rich`, `backblast`,
+`backblast_rich`, and `meta`, which are removed from `pv_events.v3` and
+published in `pv_event_details.v1` (`event_id`, `description`, `preblast`,
+`preblast_rich`, `backblast`, `backblast_rich`, `meta`, `refreshed_at`). Both
+datasets apply the same event-eligibility rule, but they are separate dataset
+reads and do not promise a shared snapshot or identical event rows. Consumers
+may join them on `event_id`; use a `LEFT JOIN` from `pv_events` and tolerate
+missing matches on either side (including detail rows without an event row).
+`pv_events.v3` retains type/tag descriptions.
 `pv_areas.v2` and `pv_sectors.v2` carry revised hierarchy outputs. These
 requirements must be reflected in schema versions, fingerprints, columns, and
 consumer compatibility checks. Each dataset must have `manifest.json`, with all
@@ -342,7 +347,12 @@ external consumer-compatibility gate and do not claim an executable check has
 run. Publishing is blocked if any serving or rollback-eligible revision cannot
 read the candidate. For released or consumed contracts, additive fields require
 consumer tolerance; renames/removals require a new contract version and
-coordinated rollout. The `pv_attendance.v1` projection is still unreleased and
+coordinated rollout. For dataset schemas, any incompatible projection change
+(including removing or renaming a column) requires a new `schemaVersion`; here,
+removing the six detail fields from `pv_events.v2` requires `pv_events.v3`, and
+the extracted detail projection is `pv_event_details.v1`. Consumers of
+`pv_events.v2` must be updated and compatibility-checked before publishing
+`pv_events.v3`. The `pv_attendance.v1` projection is still unreleased and
 unconsumed, per the product owner, so it may be revised while remaining
 unreleased and unconsumed; this does not mean the compatibility gate has passed.
 Its normative columns and ordering are in the [Pax Vault ETL
@@ -387,7 +397,8 @@ their configured maximum age; they must not fall back silently to BigQuery.
 
 Rollback selects the pointer's retained previous release after full validation.
 That release may use the current eleven-dataset format or the exact pre-upgrade
-nine-dataset format with `pv_pax.v2` and no `pv_attendance`. The legacy exception
+nine-dataset format with `pv_pax.v2` and `pv_events.v2`. That legacy release
+contains neither `pv_attendance` nor `pv_event_details`. The legacy exception
 must meet the identity and validation requirements in
 [the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
 No other nine-dataset release or arbitrary older release is eligible. Rollback
