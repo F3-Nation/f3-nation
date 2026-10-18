@@ -62,8 +62,10 @@ export async function getSessionFromHeaders(
         const session = (await authConfig.callbacks?.session?.(...args)) ?? {
           ...args[0].session,
           expires:
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth's types don't match the adapter's runtime value
             args[0].session.expires?.toISOString?.() ?? args[0].session.expires,
         };
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth passes `user` or `token` depending on session strategy
         const user = args[0].user ?? args[0].token;
         return { user, ...session };
       },

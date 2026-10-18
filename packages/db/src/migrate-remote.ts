@@ -131,9 +131,12 @@ function git(
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
+  // spawnSync leaves stdout/stderr null when git fails to start.
   return {
     status: res.status ?? 1,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above
     stdout: res.stdout ?? "",
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above
     stderr: res.stderr ?? "",
   };
 }
@@ -264,7 +267,7 @@ function migrationUrl(target: RemoteEnvironment): string {
     );
   }
   if (res.status !== 0) {
-    const err = res.stderr ?? "";
+    const err = res.stderr;
     if (err.includes("NOT_FOUND")) {
       throw new Refusal(
         `Secret ${secret} doesn't exist in project ${project}. Ask an admin to create it ` +
@@ -286,7 +289,7 @@ function migrationUrl(target: RemoteEnvironment): string {
       `Couldn't read secret ${secret} in project ${project} with gcloud.`,
     );
   }
-  const url = (res.stdout ?? "").trim();
+  const url = res.stdout.trim();
   if (!url)
     throw new Refusal(`Secret ${secret} in project ${project} is empty.`);
   return url;
