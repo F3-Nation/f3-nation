@@ -183,7 +183,7 @@ def calendar_generation(monkeypatch):
     session = MagicMock()
     session.__enter__.return_value = session
     query = session.query.return_value
-    for method in ("select_from", "join", "outerjoin", "filter"):
+    for method in ("select_from", "join", "outerjoin", "filter", "params"):
         getattr(query, method).return_value = query
     exports = []
     pending = None
@@ -378,7 +378,7 @@ def overlapping_calendar_runs(calendar_generation, monkeypatch):
 
         def chain_query():
             query = MagicMock()
-            for method in ("select_from", "join", "outerjoin", "filter"):
+            for method in ("select_from", "join", "outerjoin", "filter", "params"):
                 getattr(query, method).return_value = query
             return query
 
@@ -624,6 +624,54 @@ def test_delayed_hourly_run_rebuilds_stale_image(calendar_generation, delay_seco
     assert settings["calendar_image_current"] == rebuilt_image
     assert image_metadata(settings, next_run)[0] == next_run.replace(tzinfo=UTC)
     assert len(run([control, event], next_run + timedelta(hours=1), force=True)) == 1
+
+
+def test_region_id_is_bound_for_initial_and_cleanup_calendar_reads(calendar_generation):
+    run, row, settings, session = calendar_generation
+    now = datetime(2026, 9, 30, 10)
+    settings["calendar_image_current"] = "1-current-abcdefghij.png"
+
+    query = session.query.return_value
+    bound_regions = []
+
+    def bind_region(**params):
+        assert params == {calendar_images.CALENDAR_REGION_BIND_PARAMETER: 1}
+        bound_regions.append(params[calendar_images.CALENDAR_REGION_BIND_PARAMETER])
+        return query
+
+    query.params.side_effect = bind_region
+    assert len(run([row("AO", now - timedelta(days=1))], now)) == 1
+    # The legacy filename queues cleanup, which performs an initial locked read
+    # and a cleanup reread after reacquiring the lock.
+    assert bound_regions == [1, 1]
+
+
+def test_complete_production_calendar_query_compiles_with_isolated_region_bindings():
+    from sqlalchemy import Integer, bindparam, create_mock_engine
+    from sqlalchemy.orm import Session
+
+    engine = create_mock_engine("postgresql+psycopg2://", lambda *args, **kwargs: None)
+    week_start = date(2026, 10, 1)
+    with Session(engine) as session:
+        query, region_org = calendar_images._build_calendar_query(session, week_start, week_start + timedelta(weeks=3))
+
+        for region_id in (7, 19):
+            compiled = (
+                query.filter(region_org.id == bindparam("calendar_outer_region_id", type_=Integer))
+                .params(
+                    **{
+                        calendar_images.CALENDAR_REGION_BIND_PARAMETER: region_id,
+                        "calendar_outer_region_id": region_id,
+                    }
+                )
+                .statement.compile(dialect=engine.dialect)
+            )
+            sql = str(compiled)
+            assert sql.count("parent_id = %(calendar_region_id)s") == 2
+            assert "id = %(calendar_outer_region_id)s" in sql
+            assert compiled.params[calendar_images.CALENDAR_REGION_BIND_PARAMETER] == region_id
+            assert compiled.params["calendar_outer_region_id"] == region_id
+            assert compiled.binds[calendar_images.CALENDAR_REGION_BIND_PARAMETER].type.python_type is int
 
 
 def test_legacy_image_without_metadata_rebuilds_once(calendar_generation, monkeypatch):
