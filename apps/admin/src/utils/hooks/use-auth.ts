@@ -11,7 +11,8 @@ export const useAuth = () => {
       return { isNationAdmin: false, isEditorOrAdmin: false, isAdmin: false };
     let isEditorOrAdmin = false;
     let isAdmin = false;
-    session.roles.forEach((role) => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- /api/auth/me JSON is cast, not parsed, and may omit roles
+    session.roles?.forEach((role) => {
       if (["admin", "editor"].includes(role.roleName)) {
         isEditorOrAdmin = true;
       }
