@@ -2,6 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { UserRole } from "@acme/shared/app/enums";
+
 interface TestKey {
   id: number;
   name: string;
@@ -9,7 +11,7 @@ interface TestKey {
   keySignature: string;
   ownerName: string | null;
   ownerEmail: string | null;
-  roles: { orgId: number; orgName: string; roleName: "admin" | "editor" }[];
+  roles: { orgId: number; orgName: string; roleName: UserRole }[];
   revokedAt: string | null;
   expiresAt: string | null;
   lastUsedAt: string | null;
@@ -203,6 +205,61 @@ describe("ApiKeysTable", () => {
     expect(screen.getByText("for the bot")).toBeTruthy();
     expect(screen.getByText("Unassigned")).toBeTruthy();
     expect(screen.getByText("Read only")).toBeTruthy();
+  });
+
+  const roleLabels = {
+    user: "User",
+    editor: "Editor",
+    admin: "Admin",
+    password_manager: "Password manager",
+    password_reader: "Password reader",
+  } satisfies Record<UserRole, string>;
+
+  it.each(UserRole)(
+    "displays an existing %s role without granting management controls",
+    (roleName) => {
+      mocks.apiKeys = [
+        makeKey({
+          canManage: false,
+          roles: [{ orgId: 9, orgName: "Region Nine", roleName }],
+        }),
+      ];
+      render(<ApiKeysTable />);
+
+      expect(
+        screen.getByText(`Region Nine (${roleLabels[roleName]})`),
+      ).toBeTruthy();
+      expect(screen.queryByText("Read only")).toBeNull();
+      expect(screen.getByText("•••• abcd")).toBeTruthy();
+      expect(screen.getByText("Revoke access")).toBeTruthy();
+      expect(screen.queryByText("Delete key")).toBeNull();
+    },
+  );
+
+  it("keeps each mixed role with its organization on a revoked non-managed key", () => {
+    mocks.apiKeys = [
+      makeKey({
+        canManage: false,
+        revokedAt: "2026-02-01T00:00:00.000Z",
+        roles: [
+          { orgId: 7, orgName: "Region Seven", roleName: "user" },
+          { orgId: 8, orgName: "Region Eight", roleName: "admin" },
+          {
+            orgId: 9,
+            orgName: "Region Nine",
+            roleName: "password_reader",
+          },
+        ],
+      }),
+    ];
+    render(<ApiKeysTable />);
+
+    expect(screen.getByText("Region Seven (User)")).toBeTruthy();
+    expect(screen.getByText("Region Eight (Admin)")).toBeTruthy();
+    expect(screen.getByText("Region Nine (Password reader)")).toBeTruthy();
+    expect(screen.queryByText("Restore access")).toBeNull();
+    expect(screen.queryByText("Revoke access")).toBeNull();
+    expect(screen.queryByText("Delete key")).toBeNull();
   });
 
   it("toasts and refreshes after mutations settle", async () => {
