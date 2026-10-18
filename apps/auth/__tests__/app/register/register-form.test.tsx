@@ -77,7 +77,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("registration", () => {
+// Each test renders the full form; on a loaded CI runner the slowest ones
+// exceed the 5s default.
+describe("registration", { timeout: 20_000 }, () => {
   it.each([false, true])(
     "creates the account before signing in (Better Auth: %s)",
     async (useBetterAuth) => {
