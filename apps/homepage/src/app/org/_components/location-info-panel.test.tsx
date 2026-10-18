@@ -87,7 +87,7 @@ describe("LocationInfoPanel", () => {
       <LocationInfoPanel status="loaded" locationId={5} detail={detail} />,
     );
 
-    const text = container.textContent ?? "";
+    const text = container.textContent;
     expect(text).toContain("Bootcamp");
     expect(text).toContain("Unnamed AO");
     expect(text).toContain("2 events");
