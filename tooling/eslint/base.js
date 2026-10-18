@@ -52,6 +52,7 @@ export default defineConfig(
       ],
       "@typescript-eslint/no-deprecated": "error",
       "@typescript-eslint/no-unnecessary-type-parameters": "error",
+      "@typescript-eslint/no-unnecessary-condition": "error",
       "@typescript-eslint/no-unused-expressions": [
         "error",
         { allowShortCircuit: true, allowTernary: true },
