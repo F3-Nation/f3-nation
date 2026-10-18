@@ -103,8 +103,9 @@ export async function POST(request: NextRequest) {
     }),
     emailVerified: new Date().toISOString(),
     // Mark onboarding complete at creation time so the OAuth authorize flow
-    // never redirects a newly registered user to /onboarding.
-    meta: { onboarding_completed: true },
+    // never redirects a newly registered user to /onboarding. Same timestamp
+    // format /api/onboarding writes.
+    meta: { onboarding_completed: new Date().toISOString() },
     roles: [],
   };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isValidPhoneNumber } from "libphonenumber-js";
@@ -10,13 +10,10 @@ import Image from "next/image";
 
 import { detectPhoneCountry } from "~/lib/phone";
 import { PhoneField } from "~/app/components/PhoneField";
+import { RegionPicker } from "~/app/components/region-picker";
+import type { Region } from "~/app/components/region-picker";
 import { isValidCallbackUrl } from "~/lib/callback-url";
 import { authClient } from "~/lib/better-auth-client";
-
-interface Region {
-  id: number;
-  name: string;
-}
 
 // When the emailed code is rejected (usually because it expired while the
 // form was being filled in), the answers are kept for this tab so asking for
@@ -97,9 +94,6 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
   const [needsSignInAgain, setNeedsSignInAgain] = useState(false);
   const [showEmergency, setShowEmergency] = useState(false);
   const [regionSearch, setRegionSearch] = useState("");
-  const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
-  const regionRef = useRef<HTMLDivElement>(null);
-  const regionSelectedRef = useRef(false);
 
   useEffect(() => {
     fetch("/api/regions")
@@ -126,21 +120,6 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     setHomeRegionId(draft.homeRegionId);
     setRegionSearch(draft.regionSearch);
   }, [email]);
-
-  // Close region dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (regionRef.current && !regionRef.current.contains(e.target as Node)) {
-        setRegionDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredRegions = regions.filter((r) =>
-    r.name.toLowerCase().includes(regionSearch.toLowerCase()),
-  );
 
   // If no email or code, redirect back to login
   useEffect(() => {
@@ -345,76 +324,15 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
               />
             </div>
 
-            <div ref={regionRef} className="relative">
-              <label
-                htmlFor="homeRegion"
-                className="mb-2 block text-base font-medium"
-              >
-                Home Region
-              </label>
-              <input
-                id="homeRegion"
-                type="text"
-                value={regionSearch}
-                onChange={(e) => {
-                  setRegionSearch(e.target.value);
-                  setHomeRegionId("");
-                  setRegionDropdownOpen(true);
-                }}
-                onFocus={() => setRegionDropdownOpen(true)}
-                onBlur={() => {
-                  setTimeout(() => {
-                    if (!regionSelectedRef.current) {
-                      if (homeRegionId) {
-                        // Restore the selected region name if user didn't change selection
-                        const selected = regions.find(
-                          (r) => r.id === homeRegionId,
-                        );
-                        if (selected) {
-                          setRegionSearch(selected.name);
-                        }
-                      } else {
-                        setRegionSearch("");
-                      }
-                    }
-                    regionSelectedRef.current = false;
-                    setRegionDropdownOpen(false);
-                  }, 200);
-                }}
-                placeholder="Search for a region (optional)"
-                autoComplete="off"
-                className={inputClass}
-              />
-              {regionDropdownOpen && filteredRegions.length > 0 && (
-                <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-card shadow-lg">
-                  {filteredRegions.map((r) => (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        onMouseDown={() => {
-                          regionSelectedRef.current = true;
-                        }}
-                        onClick={() => {
-                          setHomeRegionId(r.id);
-                          setRegionSearch(r.name);
-                          setRegionDropdownOpen(false);
-                        }}
-                        className="w-full px-4 py-2 text-left text-base transition-colors hover:bg-accent"
-                      >
-                        {r.name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {regionDropdownOpen &&
-                regionSearch &&
-                filteredRegions.length === 0 && (
-                  <div className="absolute z-10 mt-1 w-full rounded-md border bg-card px-4 py-3 text-base text-muted-foreground shadow-lg">
-                    No regions found
-                  </div>
-                )}
-            </div>
+            <RegionPicker
+              regions={regions}
+              value={homeRegionId}
+              onChange={setHomeRegionId}
+              search={regionSearch}
+              onSearchChange={setRegionSearch}
+              inputClass={inputClass}
+              placeholder="Search for a region (optional)"
+            />
 
             <div>
               <PhoneField
