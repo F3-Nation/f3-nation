@@ -25,7 +25,7 @@ vi.mock("../lib/first-event-service", () => ({
 }));
 
 import { eq, inArray, schema, sql } from "@acme/db";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { waitForEventRegionNotificationTasks } from "./event";
 import {
   cleanup,
@@ -34,6 +34,7 @@ import {
   createTestClient,
   db,
   getOrCreateF3NationOrg,
+  getOrCreateRoles,
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
@@ -222,6 +223,483 @@ describe("Event Router", () => {
     if (eventTag) createdEventTagIds.push(eventTag.id);
     return eventTag;
   };
+
+  describe.each(["event", "map.event"] as const)(
+    "%s.all cross-region events",
+    (routerName) => {
+      const prefix = `Cross-region ${uniqueId()}`;
+      const client = createTestClient();
+      const all =
+        routerName === "event" ? client.event.all : client.map.event.all;
+      let regions: Record<
+        "alpha" | "bravo" | "charlie" | "zulu" | "unrelated",
+        {
+          id: number;
+          name: string;
+        }
+      >;
+      let events: {
+        id: number;
+        name: string;
+      }[];
+      let expectedRegions: { regionId: number; regionName: string }[][];
+      let eventTypeIds: number[];
+
+      beforeAll(async () => {
+        const nation = await getOrCreateF3NationOrg();
+        const insertRegion = async (name: string) => {
+          const [region] = await db
+            .insert(schema.orgs)
+            .values({
+              name,
+              orgType: "region",
+              parentId: nation.id,
+              isActive: true,
+            })
+            .returning({ id: schema.orgs.id, name: schema.orgs.name });
+          if (!region) throw new Error("Failed to create cross-region region");
+          createdOrgIds.push(region.id);
+          return region;
+        };
+        regions = {
+          alpha: await insertRegion(`${prefix} Alpha`),
+          bravo: await insertRegion(`${prefix} Bravo`),
+          charlie: await insertRegion(`${prefix} Charlie`),
+          zulu: await insertRegion(`${prefix} Zulu`),
+          unrelated: await insertRegion(`${prefix} Unrelated`),
+        };
+        const alphaAO = await createTestAO(regions.alpha.id);
+        const bravoAO = await createTestAO(regions.bravo.id);
+        const charlieAO = await createTestAO(regions.charlie.id);
+        const regionlessAO = await createTestAO(nation.id);
+        const alphaLocation = await createTestLocation(regions.alpha.id);
+        const bravoLocation = await createTestLocation(regions.bravo.id);
+        const zuluLocation = await createTestLocation(regions.zulu.id);
+        if (
+          !alphaAO ||
+          !bravoAO ||
+          !charlieAO ||
+          !regionlessAO ||
+          !alphaLocation ||
+          !bravoLocation ||
+          !zuluLocation
+        ) {
+          throw new Error("Failed to create cross-region AOs and locations");
+        }
+
+        // Direct inserts represent legacy/moved events; new cross-region placements are rejected by crupdate.
+        const placements = [
+          { orgId: bravoAO.id, locationId: zuluLocation.id },
+          { orgId: alphaAO.id, locationId: zuluLocation.id },
+          { orgId: charlieAO.id, locationId: alphaLocation.id },
+          { orgId: bravoAO.id, locationId: bravoLocation.id },
+          { orgId: charlieAO.id, locationId: null },
+          { orgId: alphaAO.id, locationId: alphaLocation.id },
+          { orgId: regionlessAO.id, locationId: null },
+          { orgId: regions.bravo.id, locationId: alphaLocation.id },
+        ];
+        events = await db
+          .insert(schema.events)
+          .values(
+            placements.map((placement, index) => ({
+              ...placement,
+              name: `${prefix} Event ${index}`,
+              dayOfWeek: "monday" as const,
+              startTime: "0530",
+              startDate: "2026-01-01",
+              isActive: true,
+              isPrivate: false,
+              highlight: false,
+              email: "cross-region-contact@example.com",
+            })),
+          )
+          .returning({ id: schema.events.id, name: schema.events.name });
+        createdEventIds.push(...events.map(({ id }) => id));
+        if (events.length !== 8)
+          throw new Error("Failed to create all cross-region events");
+        events.sort((a, b) => a.id - b.id);
+        expectedRegions = [
+          [regions.bravo, regions.zulu],
+          [regions.alpha, regions.zulu],
+          [regions.alpha, regions.charlie],
+          [regions.bravo],
+          [regions.charlie],
+          [regions.alpha],
+          [],
+          [regions.alpha, regions.bravo],
+        ].map((group) =>
+          group.map(({ id, name }) => ({ regionId: id, regionName: name })),
+        );
+
+        const firstType = await createTestEventType();
+        const secondType = await createTestEventType();
+        if (!firstType || !secondType)
+          throw new Error("Failed to create event types");
+        eventTypeIds = [firstType.id, secondType.id].sort((a, b) => a - b);
+        await db.insert(schema.eventsXEventTypes).values(
+          eventTypeIds.map((eventTypeId) => ({
+            eventId: events[1]!.id,
+            eventTypeId,
+          })),
+        );
+      });
+
+      beforeEach(async () => {
+        await mockAuthWithSession(await createAdminSession());
+      });
+
+      it("returns each event once with complete region associations and ordinary location behavior", async () => {
+        const result = await all({
+          searchTerm: prefix,
+          sorting: [],
+          pageSize: 50,
+        });
+        expect.soft(result.totalCount).toBe(8);
+        expect
+          .soft(result.events.map(({ id }) => id))
+          .toEqual(events.map(({ id }) => id));
+        for (const [index, event] of events.entries()) {
+          const matches = result.events.filter(({ id }) => id === event.id);
+          expect.soft(matches).toHaveLength(1);
+          for (const match of matches) {
+            expect
+              .soft([...match.regions].sort((a, b) => a.regionId - b.regionId))
+              .toEqual(
+                [...expectedRegions[index]!].sort(
+                  (a, b) => a.regionId - b.regionId,
+                ),
+              );
+          }
+        }
+        const crossRegion = result.events.find(
+          ({ id }) => id === events[1]!.id,
+        );
+        expect(crossRegion).toBeDefined();
+        expect(
+          crossRegion!.eventTypes
+            .map(({ eventTypeId }) => eventTypeId)
+            .sort((a, b) => a - b),
+        ).toEqual(eventTypeIds);
+        const withoutLocation = result.events.find(
+          ({ id }) => id === events[4]!.id,
+        );
+        expect(withoutLocation).toMatchObject({
+          locationId: null,
+          locationName: null,
+          location: null,
+        });
+        const aligned = result.events.find(({ id }) => id === events[3]!.id);
+        expect(aligned?.locationId).toEqual(expect.any(Number));
+        expect(aligned?.regions).toEqual(expectedRegions[3]);
+        expect(
+          result.events.find(({ id }) => id === events[6]!.id),
+        ).toMatchObject({ regions: [], locationId: null });
+      });
+
+      it("filters by either region without trimming associations or changing the region sort key", async () => {
+        const cases = [
+          {
+            regionIds: [regions.alpha.id],
+            expected: [
+              events[1]!.id,
+              events[2]!.id,
+              events[5]!.id,
+              events[7]!.id,
+            ],
+          },
+          {
+            regionIds: [regions.bravo.id],
+            expected: [events[0]!.id, events[3]!.id, events[7]!.id],
+          },
+          {
+            regionIds: [regions.zulu.id],
+            expected: [events[0]!.id, events[1]!.id],
+          },
+          {
+            regionIds: [regions.alpha.id, regions.zulu.id],
+            expected: [
+              events[0]!.id,
+              events[1]!.id,
+              events[2]!.id,
+              events[5]!.id,
+              events[7]!.id,
+            ],
+          },
+          {
+            regionIds: [regions.alpha.id, regions.bravo.id],
+            expected: [
+              events[0]!.id,
+              events[1]!.id,
+              events[2]!.id,
+              events[3]!.id,
+              events[5]!.id,
+              events[7]!.id,
+            ],
+          },
+          { regionIds: [regions.unrelated.id], expected: [] },
+        ];
+        for (const { regionIds, expected } of cases) {
+          const result = await all({
+            searchTerm: prefix,
+            regionIds,
+            sorting: [],
+            pageSize: 50,
+          });
+          expect.soft(result.totalCount).toBe(expected.length);
+          expect.soft(result.events.map(({ id }) => id)).toEqual(expected);
+          for (const event of result.events) {
+            const index = events.findIndex(({ id }) => id === event.id);
+            expect(index).toBeGreaterThanOrEqual(0);
+            expect
+              .soft([...event.regions].sort((a, b) => a.regionId - b.regionId))
+              .toEqual(
+                [...expectedRegions[index]!].sort(
+                  (a, b) => a.regionId - b.regionId,
+                ),
+              );
+          }
+          expect
+            .soft(
+              (await client.event.count({ searchTerm: prefix, regionIds }))
+                .count,
+            )
+            .toBe(expected.length);
+        }
+        for (const desc of [false, true]) {
+          const result = await all({
+            searchTerm: prefix,
+            regionIds: [regions.zulu.id],
+            sorting: [{ id: "regions", desc }],
+            pageSize: 50,
+          });
+          expect
+            .soft(result.events.map(({ id }) => id))
+            .toEqual(
+              desc
+                ? [events[0]!.id, events[1]!.id]
+                : [events[1]!.id, events[0]!.id],
+            );
+        }
+      });
+
+      it("paginates unique events with counts and stable first-region sorting in either direction", async () => {
+        const cases = [
+          { sorting: [], indexes: [0, 1, 2, 3, 4, 5, 6, 7] },
+          {
+            sorting: [{ id: "regions", desc: false }],
+            indexes: [1, 2, 5, 7, 0, 3, 4, 6],
+          },
+          {
+            sorting: [{ id: "regions", desc: true }],
+            indexes: [6, 4, 0, 3, 1, 2, 5, 7],
+          },
+        ];
+        for (const { sorting, indexes } of cases) {
+          for (const pageSize of [2, 3, 4]) {
+            const ids: number[] = [];
+            for (
+              let pageIndex = 0;
+              pageIndex < Math.ceil(events.length / pageSize);
+              pageIndex++
+            ) {
+              const page = await all({
+                searchTerm: prefix,
+                sorting,
+                pageSize,
+                pageIndex,
+              });
+              expect.soft(page.totalCount).toBe(8);
+              expect
+                .soft(page.events)
+                .toHaveLength(
+                  Math.min(pageSize, events.length - pageIndex * pageSize),
+                );
+              ids.push(...page.events.map(({ id }) => id));
+            }
+            expect.soft(ids).toEqual(indexes.map((index) => events[index]!.id));
+            expect.soft(new Set(ids).size).toBe(8);
+            const afterLastPage = await all({
+              searchTerm: prefix,
+              sorting,
+              pageSize,
+              pageIndex: Math.ceil(events.length / pageSize),
+            });
+            expect.soft(afterLastPage.events).toEqual([]);
+            expect.soft(afterLastPage.totalCount).toBe(8);
+          }
+        }
+      });
+
+      it("preserves editable scope and combined-filter eligibility while returning complete associations", async () => {
+        await getOrCreateRoles();
+        const [editorRole] = await db
+          .select({ id: schema.roles.id })
+          .from(schema.roles)
+          .where(eq(schema.roles.name, "editor"));
+        if (!editorRole) throw new Error("Editor role not found");
+        const [editor] = await db
+          .insert(schema.users)
+          .values({
+            email: `cross-region-${uniqueId()}@example.com`,
+            f3Name: "Cross Region Editor",
+          })
+          .returning();
+        if (!editor) throw new Error("Failed to create scoped editor");
+        createdUserIds.push(editor.id);
+        await db.insert(schema.rolesXUsersXOrg).values({
+          userId: editor.id,
+          orgId: regions.zulu.id,
+          roleId: editorRole.id,
+        });
+        const session = createEditorSession({
+          orgId: regions.zulu.id,
+          orgName: regions.zulu.name,
+        });
+        session.id = editor.id;
+        session.user!.id = String(editor.id);
+        await mockAuthWithSession(session);
+
+        const visible = await all({
+          searchTerm: prefix,
+          onlyMine: true,
+          sorting: [],
+          pageSize: 50,
+        });
+        expect.soft(visible.totalCount).toBe(2);
+        expect
+          .soft(visible.events.map(({ id }) => id))
+          .toEqual([events[0]!.id, events[1]!.id]);
+        for (const event of visible.events) {
+          const index = events.findIndex(({ id }) => id === event.id);
+          expect(index).toBeGreaterThanOrEqual(0);
+          expect
+            .soft([...event.regions].sort((a, b) => a.regionId - b.regionId))
+            .toEqual(
+              [...expectedRegions[index]!].sort(
+                (a, b) => a.regionId - b.regionId,
+              ),
+            );
+        }
+        const conflictingFilter = await all({
+          searchTerm: prefix,
+          onlyMine: true,
+          regionIds: [regions.alpha.id],
+          pageSize: 50,
+        });
+        expect
+          .soft(conflictingFilter)
+          .toMatchObject({ totalCount: 0, events: [] });
+        const matchingFilter = await all({
+          searchTerm: prefix,
+          onlyMine: true,
+          regionIds: [regions.zulu.id],
+          sorting: [],
+          pageSize: 50,
+        });
+        expect
+          .soft(matchingFilter.events.map(({ id }) => id))
+          .toEqual([events[0]!.id, events[1]!.id]);
+      });
+
+      if (routerName === "event") {
+        it("preserves anonymous visibility and email redaction for cross-region events", async () => {
+          const [placement] = await db
+            .select({
+              orgId: schema.events.orgId,
+              locationId: schema.events.locationId,
+            })
+            .from(schema.events)
+            .where(eq(schema.events.id, events[1]!.id));
+          if (!placement) throw new Error("Cross-region event not found");
+          const inactiveLocation = await createTestLocation(regions.zulu.id);
+          if (!inactiveLocation)
+            throw new Error("Failed to create inactive location");
+          await db
+            .update(schema.locations)
+            .set({ isActive: false })
+            .where(eq(schema.locations.id, inactiveLocation.id));
+          const base = {
+            ...placement,
+            dayOfWeek: "monday" as const,
+            startTime: "0530",
+            startDate: "2026-01-01",
+            isActive: true,
+            isPrivate: false,
+            highlight: false,
+            email: "cross-region-hidden@example.com",
+          };
+          const hiddenEvents = await db
+            .insert(schema.events)
+            .values([
+              { ...base, name: `${prefix} Private`, isPrivate: true },
+              { ...base, name: `${prefix} Inactive`, isActive: false },
+              {
+                ...base,
+                name: `${prefix} Inactive location`,
+                locationId: inactiveLocation.id,
+              },
+            ])
+            .returning({ id: schema.events.id });
+          createdEventIds.push(...hiddenEvents.map(({ id }) => id));
+          expect(hiddenEvents).toHaveLength(3);
+
+          try {
+            await mockAuthWithSession(null);
+            const anonymous = await all({
+              searchTerm: prefix,
+              statuses: ["active", "inactive"],
+              sorting: [],
+              pageSize: 50,
+            });
+            expect.soft(anonymous.totalCount).toBe(8);
+            expect
+              .soft(anonymous.events.map(({ id }) => id))
+              .toEqual(events.map(({ id }) => id));
+            for (const event of anonymous.events) {
+              const index = events.findIndex(({ id }) => id === event.id);
+              expect(index).toBeGreaterThanOrEqual(0);
+              expect.soft(event.email).toBeNull();
+              expect
+                .soft(
+                  [...event.regions].sort((a, b) => a.regionId - b.regionId),
+                )
+                .toEqual(
+                  [...expectedRegions[index]!].sort(
+                    (a, b) => a.regionId - b.regionId,
+                  ),
+                );
+            }
+            await expect(
+              client.map.event.all({ searchTerm: prefix, pageSize: 50 }),
+            ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+            await mockAuthWithSession(await createAdminSession());
+            const signedIn = await all({
+              searchTerm: prefix,
+              statuses: ["active", "inactive"],
+              sorting: [],
+              pageSize: 50,
+            });
+            expect.soft(signedIn.totalCount).toBe(11);
+            expect
+              .soft(signedIn.events.map(({ id }) => id))
+              .toEqual(
+                [...events, ...hiddenEvents]
+                  .map(({ id }) => id)
+                  .sort((a, b) => a - b),
+              );
+            expect
+              .soft(
+                signedIn.events.find(({ id }) => id === events[1]!.id)?.email,
+              )
+              .toBe("cross-region-contact@example.com");
+          } finally {
+            for (const { id } of hiddenEvents) await cleanup.event(id);
+          }
+        });
+      }
+    },
+  );
 
   it.each(["event", "map.event"] as const)(
     "%s.all provides stable pagination for tied values and preserves sort precedence",
