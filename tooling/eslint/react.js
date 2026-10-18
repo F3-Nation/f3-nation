@@ -15,7 +15,7 @@ export default [
     },
     settings: {
       react: {
-        version: "19.3",
+        version: "19.3.0",
       },
     },
     rules: {
