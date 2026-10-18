@@ -180,8 +180,10 @@ retries can duplicate messages.
 Apply the SMTP settings before deploying the new image, retaining the existing
 `SENDGRID_API_KEY` binding so the old image can continue sending during the
 transition. The env script retains that old binding and Secret Manager secret,
-but no longer manages the old secret's IAM grants; preserve access for the old
-image if runtime service accounts change during the transition. After deployment, verify delivery
+and grants both current runtime accounts access when that secret exists, without
+reading or updating its value. Projects without the legacy secret skip those
+grants; other metadata lookup errors or grant failures abort before runtime
+updates. After deployment, verify delivery
 through the configured provider in Staging and Production, then retire the old
 binding separately when rollback requirements allow. Local Mailpit delivery and
 stubbed deployment tests do not verify provider authentication, sender approval,

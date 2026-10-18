@@ -122,7 +122,7 @@ def test_flags_reject_conflicting_or_duplicate_environment_flags(flags: str):
         _flags({"with": {"staging_flags": flags}}, "staging_flags", "staging")
 
 
-def _run_cloud_run_env(tmp_path: Path, target: str, contents: str, secret_exists: bool):
+def _run_cloud_run_env(tmp_path: Path, target: str, contents: str, secret_exists: bool, legacy_state: str = "absent"):
     source_script = REPO_ROOT / "apps/slackbot/scripts/cloud-run-env.sh"
     scripts_dir = tmp_path / "scripts"
     scripts_dir.mkdir()
@@ -143,6 +143,24 @@ def _run_cloud_run_env(tmp_path: Path, target: str, contents: str, secret_exists
         "#!/usr/bin/env bash\n"
         'printf \'%q \' "$@" >> "$GCLOUD_LOG"\n'
         'printf "\\n" >> "$GCLOUD_LOG"\n'
+        'if [[ "$1 $2 $3" == "secrets describe sendgrid-api-key" ]]; then\n'
+        '  case "$GCLOUD_LEGACY_SECRET_STATE" in\n'
+        '    absent) printf "WARNING: Synthetic diagnostic before status.\\n'
+        "ERROR: (gcloud.secrets.describe) NOT_FOUND: "
+        'Secret [projects/synthetic/secrets/sendgrid-api-key] not found.\\n" >&2; exit 1 ;;\n'
+        '    lookup-denied) printf "ERROR: (gcloud.secrets.describe) PERMISSION_DENIED: '
+        'Permission denied; diagnostic mentions NOT_FOUND: only.\\n" >&2; exit 1 ;;\n'
+        '    lookup-unavailable) printf "ERROR: (gcloud.secrets.describe) UNAVAILABLE: '
+        'Retry failed; diagnostic mentions NOT_FOUND: only.\\n" >&2; exit 1 ;;\n'
+        '    *) printf "projects/synthetic/secrets/sendgrid-api-key\\n"; exit 0 ;;\n'
+        "  esac\n"
+        "fi\n"
+        'if [[ "$1 $2 $3" == "secrets add-iam-policy-binding sendgrid-api-key" ]]; then\n'
+        '  if [[ "$GCLOUD_LEGACY_SECRET_STATE" == "grant-denied" ]]; then\n'
+        '    printf "PERMISSION_DENIED: legacy grant rejected\\n" >&2; exit 1\n'
+        "  fi\n"
+        "  exit 0\n"
+        "fi\n"
         'if [[ "$1 $2 $3" == "secrets describe email-server" ]]; then\n'
         '  test -f "$GCLOUD_EMAIL_SECRET_STATE"; exit $?\n'
         "fi\n"
@@ -179,6 +197,7 @@ def _run_cloud_run_env(tmp_path: Path, target: str, contents: str, secret_exists
         "GCLOUD_LOG": str(log_path),
         "GCLOUD_SECRET_INPUT": str(secret_input_path),
         "GCLOUD_EMAIL_SECRET_STATE": str(secret_state_path),
+        "GCLOUD_LEGACY_SECRET_STATE": legacy_state,
     }
     result = subprocess.run([str(script), "--env", target], capture_output=True, text=True, env=env)
 
@@ -242,7 +261,69 @@ def test_cloud_run_env_updates_service_and_job_classification_with_stub_gcloud(
     assert (tmp_path / "secret-input").read_text() == smtp_url
     assert smtp_url not in (tmp_path / "gcloud.log").read_text()
     assert smtp_url not in result.stdout + result.stderr
-    assert "sendgrid-api-key" not in (tmp_path / "gcloud.log").read_text()
+    assert "unused-legacy-key" not in (tmp_path / "gcloud.log").read_text()
+
+
+@pytest.mark.parametrize("target,project", [("prod", "f3-slackbot"), ("staging", "f3-slackbot-staging")])
+@pytest.mark.parametrize("legacy_exists", [True, False])
+def test_legacy_secret_rollback_access_uses_metadata_and_grants_only(
+    tmp_path: Path, target: str, project: str, legacy_exists: bool
+):
+    result, calls = _run_cloud_run_env(
+        tmp_path,
+        target,
+        "EMAIL_FROM=notifications@example.test\n",
+        secret_exists=True,
+        legacy_state="exists" if legacy_exists else "absent",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    legacy_calls = [call for call in calls if any("sendgrid-api-key" in argument for argument in call)]
+    metadata_calls = [call for call in legacy_calls if call[:3] == ["secrets", "describe", "sendgrid-api-key"]]
+    assert len(metadata_calls) == 1
+    assert metadata_calls[0][metadata_calls[0].index("--project") + 1] == project
+    grants = [call for call in legacy_calls if call[:3] == ["secrets", "add-iam-policy-binding", "sendgrid-api-key"]]
+    assert len(grants) == (2 if legacy_exists else 0)
+    if legacy_exists:
+        assert {call[call.index("--member") + 1] for call in grants} == {
+            "serviceAccount:service-runtime@example.test",
+            "serviceAccount:job-runtime@example.test",
+        }
+        for call in grants:
+            assert call[call.index("--project") + 1] == project
+            assert call[call.index("--role") + 1] == "roles/secretmanager.secretAccessor"
+    assert len(legacy_calls) == len(metadata_calls) + len(grants)
+    assert not (tmp_path / "secret-input").exists()
+
+    update_calls = [call for call in calls if call[:3] in (["run", "services", "update"], ["run", "jobs", "update"])]
+    assert len(update_calls) == 2
+    for call in update_calls:
+        assert "--remove-secrets" not in call
+        assert "SENDGRID_API_KEY" not in call[call.index("--update-secrets") + 1]
+
+
+@pytest.mark.parametrize("target", ["prod", "staging"])
+@pytest.mark.parametrize("legacy_state", ["grant-denied", "lookup-denied", "lookup-unavailable"])
+def test_legacy_rollback_access_failure_aborts_before_runtime_updates(tmp_path: Path, target: str, legacy_state: str):
+    result, calls = _run_cloud_run_env(
+        tmp_path,
+        target,
+        "EMAIL_FROM=notifications@example.test\n",
+        secret_exists=True,
+        legacy_state=legacy_state,
+    )
+    assert result.returncode != 0
+    assert "sendgrid-api-key" in result.stdout
+    if legacy_state == "grant-denied":
+        assert "Failed to grant IAM access" in result.stdout
+    else:
+        assert "ERROR:" in result.stdout
+        assert "diagnostic mentions" not in result.stdout + result.stderr
+    assert not any(call[:3] in (["run", "services", "update"], ["run", "jobs", "update"]) for call in calls)
+    assert not any(
+        call[:2] == ["secrets", "versions"] and any("sendgrid-api-key" in argument for argument in call)
+        for call in calls
+    )
+    assert not (tmp_path / "secret-input").exists()
 
 
 @pytest.mark.parametrize("target", ["prod", "staging"])

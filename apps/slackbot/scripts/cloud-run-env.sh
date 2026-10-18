@@ -260,8 +260,18 @@ RUNTIME_SAS=(
   "$(get_job_sa "$SCRIPTS_JOB_NAME")"
 )
 
-for var in "${!SECRET_MAP[@]}"; do
-  secret_id="${SECRET_MAP[$var]}"
+# Preserve old-image rollback access without reading or updating its API key.
+GRANT_SECRET_IDS=("${SECRET_MAP[@]}")
+if legacy_metadata="$(gcloud secrets describe sendgrid-api-key \
+  --project "$PROJECT" --format='value(name)' 2>&1)"; then
+  GRANT_SECRET_IDS+=("sendgrid-api-key")
+elif ! grep -qE '^ERROR: \(gcloud\.secrets\.describe\) NOT_FOUND: ' <<<"$legacy_metadata"; then
+  echo "  ERROR: Failed to inspect legacy secret sendgrid-api-key — aborting."
+  exit 1
+fi
+unset legacy_metadata
+
+for secret_id in "${GRANT_SECRET_IDS[@]}"; do
   for sa_email in "${RUNTIME_SAS[@]}"; do
     echo "  Granting $sa_email access to $secret_id..."
     if ! gcloud secrets add-iam-policy-binding "$secret_id" \
