@@ -12,12 +12,6 @@ const config: KnipConfig = {
     ".claude/scripts/sync-agent-skills.mjs",
     ".github/scripts/code-scanning-issue.cjs",
     ".github/scripts/ready-for-human-review-label.cjs",
-    // AI-SDLC factory tooling (fork-only). Its entry points are CI workflows
-    // (e2e-triage / adversarial-review) invoking `tsx src/review-pr.ts` /
-    // `triage-e2e-failure.ts`, so knip can't trace usage across the workflow
-    // boundary and reports internal helpers as unused. It carries its own
-    // vitest suite; follow-up to configure knip entries properly.
-    "tooling/ci-factory/**",
   ],
   ignoreBinaries: [
     "uv",
