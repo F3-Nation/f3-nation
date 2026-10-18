@@ -55,7 +55,7 @@ describe.runIf(target.inProcess)("API key resolution", () => {
   // resurfaces as a mystery golden diff in an unrelated suite — fail here.
   afterAll(async () => {
     const results = await Promise.allSettled(
-      [adminKey, noRoleKey, expiredKey].map((f) => f?.cleanup()),
+      [adminKey, noRoleKey, expiredKey].map((f) => f.cleanup()),
     );
     const failed = results.filter((r) => r.status === "rejected");
     // eslint-disable-next-line vitest/no-standalone-expect -- intentional: asserts in afterAll, not a test block

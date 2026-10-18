@@ -74,7 +74,7 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
   // cleanup surfaces as a golden diff in an unrelated file.
   afterAll(async () => {
     const results = await Promise.allSettled(
-      [adminKey, editorKey, userKey, jwtUser].map((f) => f?.cleanup()),
+      [adminKey, editorKey, userKey, jwtUser].map((f) => f.cleanup()),
     );
     const failed = results.filter((r) => r.status === "rejected");
     // eslint-disable-next-line vitest/no-standalone-expect -- intentional: asserts in afterAll, not a test block

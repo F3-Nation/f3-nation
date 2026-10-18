@@ -153,7 +153,7 @@ describe.runIf(target.inProcess)("API-key role response contract", () => {
     const results: PromiseSettledResult<unknown>[] = [];
     // Preserve dependency order, but attempt every cleanup even after a failure.
     for (const teardown of [
-      () => regionAdmin?.cleanup(),
+      () => regionAdmin.cleanup(),
       ...[...orgIds].reverse().map((id) => () => cleanup.org(id)),
       async () => {
         if (insertedRoleIds.length > 0) {
