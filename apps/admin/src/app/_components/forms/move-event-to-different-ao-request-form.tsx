@@ -154,6 +154,7 @@ export const MoveEventToDifferentAoRequestForm = () => {
             Destination Region
           </div>
           <VirtualizedCombobox
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
             key={formRegionId?.toString()}
             options={
               regions
@@ -163,6 +164,7 @@ export const MoveEventToDifferentAoRequestForm = () => {
                 }))
                 .sort((a, b) => a.label.localeCompare(b.label)) ?? []
             }
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
             value={formRegionId?.toString()}
             onSelect={(item) => {
               const region = regions?.find(
@@ -192,6 +194,7 @@ export const MoveEventToDifferentAoRequestForm = () => {
             Destination AO
           </div>
           <VirtualizedCombobox
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
             key={`${formRegionId ?? "all"}-${formAoId ?? destinationAoValue ?? "none"}`}
             options={destinationAoOptions}
             value={destinationAoValue}

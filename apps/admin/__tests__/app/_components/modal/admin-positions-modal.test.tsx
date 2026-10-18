@@ -60,6 +60,7 @@ vi.mock("@acme/ui/select", async () => {
       return (
         <select
           aria-label={label}
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
           value={field.value ?? ""}
           onChange={field.onChange}
         >

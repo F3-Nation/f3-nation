@@ -89,14 +89,14 @@ vi.mock("@acme/ui/md-table", async (importOriginal) => {
           {props.filterComponent as ReactNode}
           <button
             onClick={() =>
-              (props.setSearchTerm as (value: string) => void)?.("needle")
+              (props.setSearchTerm as (value: string) => void)("needle")
             }
           >
             Search
           </button>
           <button
             onClick={() =>
-              (props.setSorting as (value: unknown) => void)?.([
+              (props.setSorting as (value: unknown) => void)([
                 { id: "name", desc: true },
               ])
             }
@@ -105,7 +105,7 @@ vi.mock("@acme/ui/md-table", async (importOriginal) => {
           </button>
           <button
             onClick={() =>
-              (props.setPagination as (value: unknown) => void)?.({
+              (props.setPagination as (value: unknown) => void)({
                 pageIndex: 2,
                 pageSize: 50,
               })
