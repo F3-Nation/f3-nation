@@ -416,7 +416,7 @@ export const safeParseInt = (value: unknown) => {
         ? value
         : undefined;
   const returnValue = Number.isNaN(parsedValue) ? undefined : parsedValue;
-  return returnValue; // as T extends undefined ? undefined : number - dont do this since it could be NaN
+  return returnValue;
 };
 
 export const safeParseFloat = (value: unknown) => {
@@ -427,7 +427,7 @@ export const safeParseFloat = (value: unknown) => {
         ? value
         : undefined;
   const returnValue = Number.isNaN(parsedValue) ? undefined : parsedValue;
-  return returnValue; // as T extends undefined ? undefined : number - dont do this since it could be NaN
+  return returnValue;
 };
 
 export const onlyUnique = <T>(value: T, index: number, self: T[]) => {
