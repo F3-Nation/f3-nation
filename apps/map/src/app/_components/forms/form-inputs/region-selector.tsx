@@ -29,6 +29,8 @@ interface RegionSelectorFormValues {
  * - Clears dependent AO and Event fields when region changes
  * - Optionally syncs value with another region field (for same-region moves)
  */
+// _T lets callers assert their form type includes these fields (`<X<FormType> />`).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export function RegionSelector<_T extends RegionSelectorFormValues>({
   label = "In Region:",
   fieldName = "newRegionId",

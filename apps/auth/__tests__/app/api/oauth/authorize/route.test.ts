@@ -1,13 +1,15 @@
 import type { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-function chain<T>(result: T) {
+function chain(result: unknown) {
   const obj: Record<string, unknown> = {};
   for (const method of ["from", "where", "limit"]) {
     obj[method] = vi.fn(() => obj);
   }
-  obj.then = (resolve: (v: T) => unknown, reject?: (e: unknown) => unknown) =>
-    Promise.resolve(result).then(resolve, reject);
+  obj.then = (
+    resolve: (v: unknown) => unknown,
+    reject?: (e: unknown) => unknown,
+  ) => Promise.resolve(result).then(resolve, reject);
   return obj;
 }
 

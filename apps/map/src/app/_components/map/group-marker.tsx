@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import {
   AdvancedMarker,
-  AdvancedMarkerAnchorPoint,
   useAdvancedMarkerRef,
 } from "@vis.gl/react-google-maps";
 
@@ -130,7 +129,8 @@ export const FeatureMarker = ({
       ref={markerRef}
       draggable={mode === "edit"}
       position={position}
-      anchorPoint={AdvancedMarkerAnchorPoint.BOTTOM}
+      anchorLeft="-50%"
+      anchorTop="-100%"
       className={"marker feature"}
       onDragEnd={handleDragEnd}
       onClick={(e) => {

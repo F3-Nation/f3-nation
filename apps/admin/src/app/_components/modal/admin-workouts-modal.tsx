@@ -352,7 +352,7 @@ export default function AdminWorkoutsModal({
                           }
                           searchPlaceholder="Select a region"
                           onSelect={(value) => {
-                            const orgId = safeParseInt(value as string);
+                            const orgId = safeParseInt(value);
                             if (orgId == null) {
                               toast.error("Invalid orgId");
                               return;

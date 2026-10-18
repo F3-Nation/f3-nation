@@ -34,7 +34,7 @@ export function VersionInfo({ version, channel, changelog }: VersionInfoProps) {
         <DialogTrigger asChild>
           <button
             type="button"
-            className="rounded transition-colors hover:bg-muted"
+            className="rounded-sm transition-colors hover:bg-muted"
           >
             <VersionInfoBase
               versionLabel={<span>v{version}</span>}

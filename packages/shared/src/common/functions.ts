@@ -72,12 +72,10 @@ export const camelCaseToSpacedTitleCase = (camelCase: string) =>
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (str) => str.toUpperCase());
 
-export const getJwtContent = <T extends object>(
-  token: string | undefined,
-): T | undefined => {
+export const getJwtContent = (token: string | undefined): unknown => {
   const bufferable = token?.split(".")[1];
   return bufferable
-    ? (JSON.parse(Buffer.from(bufferable, "base64").toString()) as T)
+    ? (JSON.parse(Buffer.from(bufferable, "base64").toString()) as unknown)
     : undefined;
 };
 
@@ -410,7 +408,7 @@ export const queryParamToString = (
   return result;
 };
 
-export const safeParseInt = <T>(value: T) => {
+export const safeParseInt = (value: unknown) => {
   const parsedValue =
     typeof value === "string"
       ? parseInt(value)
@@ -421,7 +419,7 @@ export const safeParseInt = <T>(value: T) => {
   return returnValue; // as T extends undefined ? undefined : number - dont do this since it could be NaN
 };
 
-export const safeParseFloat = <T>(value: T) => {
+export const safeParseFloat = (value: unknown) => {
   const parsedValue =
     typeof value === "string"
       ? parseFloat(value)

@@ -291,7 +291,7 @@ export default function AdminApiKeysModal() {
                                 searchPlaceholder="Select an org"
                                 disabled={isLoadingOrgs}
                                 onSelect={(value) => {
-                                  const orgId = safeParseInt(value as string);
+                                  const orgId = safeParseInt(value);
                                   if (orgId == undefined) {
                                     toast.error("Invalid orgId");
                                     return;

@@ -33,7 +33,7 @@ export function ExceptionNotice({
       <div
         aria-hidden
         className={cn(
-          "mt-[3px] h-3 w-3 flex-shrink-0 rounded-sm",
+          "mt-[3px] h-3 w-3 shrink-0 rounded-sm",
           getStatusSolidBg(notice.status),
         )}
       />
