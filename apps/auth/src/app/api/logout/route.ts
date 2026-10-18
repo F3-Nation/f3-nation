@@ -5,7 +5,7 @@ import { revokeAllUserTokens } from "~/lib/oauth";
 
 export async function POST() {
   const session = await getCurrentSession();
-  if (!session?.user?.id) {
+  if (!session?.user.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
