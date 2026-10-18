@@ -25,6 +25,13 @@ vi.mock("next/image", () => ({ default: () => null }));
 const fetchMock = vi.fn<typeof fetch>();
 const assign = vi.fn();
 const profile = { f3Name: "Test PAX", firstName: "Test", lastName: "User" };
+const regions = [
+  { id: 1, name: "Test North" },
+  { id: 2, name: "Test South" },
+];
+// Region ids come from /api/regions, which has its own stub below so the
+// numbered fetchMock calls stay the prefill (1) and the save (2).
+const saved = { ...profile, homeRegionId: 2 };
 const authOrigin = "https://auth.f3nation.test";
 const browserOrigin = "https://proxy.f3nation.test";
 const callback =
@@ -43,12 +50,25 @@ async function fillForm() {
   });
 }
 
+const regionsFetch = vi.fn<() => Promise<Response>>();
+
+function prefill(data: Record<string, unknown>) {
+  fetchMock.mockReset();
+  fetchMock.mockResolvedValueOnce(Response.json(data));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   searchParams.delete("callbackUrl");
-  fetchMock.mockReset();
-  fetchMock.mockResolvedValueOnce(Response.json({ isExistingUser: false }));
-  vi.stubGlobal("fetch", fetchMock);
+  prefill({ isExistingUser: false, homeRegionId: 2 });
+  regionsFetch
+    .mockReset()
+    .mockImplementation(async () => Response.json(regions));
+  vi.stubGlobal(
+    "fetch",
+    (input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+      input === "/api/regions" ? regionsFetch() : fetchMock(input, init),
+  );
   vi.stubGlobal("location", { assign, origin: browserOrigin });
   vi.stubEnv("NEXT_PUBLIC_AUTH_URL", authOrigin);
 });
@@ -87,7 +107,7 @@ describe("onboarding continuation", () => {
       expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
+        body: JSON.stringify(saved),
       });
       expect(router.push).not.toHaveBeenCalled();
     },
@@ -196,4 +216,237 @@ describe("onboarding continuation", () => {
       expect(router.push).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("home region", () => {
+  async function renderForm() {
+    render(<OnboardingPage />);
+    await screen.findByLabelText("F3 Name");
+  }
+
+  it("shows the saved home region so it can be confirmed", async () => {
+    await renderForm();
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Home Region")).toHaveProperty(
+        "value",
+        "Test South",
+      ),
+    );
+  });
+
+  it("saves the region the user picks instead", async () => {
+    prefill({ ...profile, homeRegionId: 2, isExistingUser: true });
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+    await renderForm();
+
+    fireEvent.change(screen.getByLabelText("Home Region"), {
+      target: { value: "north" },
+    });
+    const north = screen.getByRole("option", { name: "Test North" });
+    fireEvent.mouseDown(north);
+    fireEvent.click(north);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...profile, homeRegionId: 1 }),
+    });
+  });
+
+  it("does not save until a region is chosen", async () => {
+    prefill({ ...profile, homeRegionId: null, isExistingUser: true });
+    await renderForm();
+
+    // Submit the form directly: the native `required` check would otherwise
+    // block it before the app's own guard runs.
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Continue" }).closest("form")!,
+    );
+
+    expect(
+      await screen.findByText("Please choose your home region."),
+    ).toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("asks again when the saved region is no longer on the list", async () => {
+    prefill({ ...profile, homeRegionId: 99, isExistingUser: true });
+    await renderForm();
+
+    expect(screen.getByLabelText("Home Region")).toHaveProperty("value", "");
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Continue" }).closest("form")!,
+    );
+
+    expect(
+      await screen.findByText("Please choose your home region."),
+    ).toBeDefined();
+    // The retired saved region (99) is never sent.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("lets someone pick a region with the keyboard alone", async () => {
+    prefill({ ...profile, homeRegionId: null, isExistingUser: true });
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+    await renderForm();
+
+    const box = screen.getByLabelText("Home Region");
+    fireEvent.focus(box);
+    fireEvent.change(box, { target: { value: "test" } });
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(box).toHaveProperty("value", "Test South");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...profile, homeRegionId: 2 }),
+    });
+  });
+
+  it("clears a region that was retired after the page loaded", async () => {
+    prefill({ ...saved, isExistingUser: true });
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { error: "homeRegionId must be an active region" },
+        { status: 400 },
+      ),
+    );
+    await renderForm();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Home Region")).toHaveProperty(
+        "value",
+        "Test South",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText(
+        "That region is no longer available. Please choose another.",
+      ),
+    ).toBeDefined();
+    expect(screen.getByLabelText("Home Region")).toHaveProperty("value", "");
+  });
+
+  it("says so when the region list can't load", async () => {
+    regionsFetch.mockResolvedValue(new Response("nope", { status: 500 }));
+    await renderForm();
+
+    expect(screen.queryByLabelText("Home Region")).toBeNull();
+    expect(screen.getByText(/couldn.t load the region list/)).toBeDefined();
+  });
+
+  it("still saves the profile when the region list can't load", async () => {
+    prefill({ ...profile, homeRegionId: null, isExistingUser: true });
+    regionsFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+    await renderForm();
+
+    expect(screen.queryByLabelText("Home Region")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    });
+  });
+
+  it("doesn't send a saved region it can't show when the list can't load", async () => {
+    prefill({ ...profile, homeRegionId: 99, isExistingUser: true });
+    regionsFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+    await renderForm();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    });
+  });
+
+  it("shows a generic message when the save fails without saying why", async () => {
+    prefill({ ...saved, isExistingUser: true });
+    fetchMock.mockResolvedValueOnce(Response.json({}, { status: 500 }));
+    await renderForm();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Home Region")).toHaveProperty(
+        "value",
+        "Test South",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText("Failed to complete onboarding"),
+    ).toBeDefined();
+  });
+
+  it("sends someone whose session expired back through sign-in", async () => {
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    render(<OnboardingPage />);
+
+    await waitFor(() => expect(router.push).toHaveBeenCalledTimes(1));
+    expect(router.push).toHaveBeenCalledWith(
+      `/login/email?callbackUrl=${encodeURIComponent(`/onboarding?callbackUrl=${encodeURIComponent(callback)}`)}`,
+    );
+    // Still on "Loading..." so an empty form can't be submitted meanwhile.
+    expect(screen.queryByLabelText("F3 Name")).toBeNull();
+  });
+
+  it("doesn't save text that matches no region", async () => {
+    prefill({ ...profile, homeRegionId: null, isExistingUser: true });
+    await renderForm();
+
+    fireEvent.change(screen.getByLabelText("Home Region"), {
+      target: { value: "zzz" },
+    });
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Continue" }).closest("form")!,
+    );
+
+    expect(
+      await screen.findByText("Please choose your home region."),
+    ).toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips the region question when the list is empty", async () => {
+    prefill({ ...profile, homeRegionId: null, isExistingUser: true });
+    regionsFetch.mockResolvedValue(Response.json([]));
+    searchParams.set("callbackUrl", callback);
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
+    await renderForm();
+
+    expect(screen.queryByLabelText("Home Region")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    });
+  });
 });
