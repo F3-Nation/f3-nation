@@ -33,8 +33,6 @@ const MAX_TABLES = 100;
 const TABLE_KEY = /^public\.[a-z_][a-z0-9_]*$/;
 const COLUMN_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TAR_MEMBERS = ["manifest.json", "snapshot.dump"];
-/** Snapshots older than this get a warning, not a refusal. */
-const STALE_AFTER_DAYS = 30;
 
 export const LOAD_SNAPSHOT_ACTION: LocalTargetAction = {
   verb: "load a snapshot into",
@@ -547,9 +545,6 @@ export async function runLoad(
       tables: tables.length,
       rows,
     });
-    if (age.days > STALE_AFTER_DAYS) {
-      logWarn("db.snapshot.stale", { days: age.days });
-    }
 
     const toc = await deps.docker(LIST_ARGS, dumpPath);
     if (toc.code !== 0) {
