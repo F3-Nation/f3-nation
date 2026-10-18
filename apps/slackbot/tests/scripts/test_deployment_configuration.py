@@ -122,38 +122,53 @@ def test_flags_reject_conflicting_or_duplicate_environment_flags(flags: str):
         _flags({"with": {"staging_flags": flags}}, "staging_flags", "staging")
 
 
-@pytest.mark.parametrize(
-    "target,classification,project",
-    [("prod", "production", "f3-slackbot"), ("staging", "staging", "f3-slackbot-staging")],
-)
-def test_cloud_run_env_updates_service_and_job_classification_with_stub_gcloud(
-    tmp_path: Path, target: str, classification: str, project: str
-):
+def _run_cloud_run_env(tmp_path: Path, target: str, contents: str, secret_exists: bool):
     source_script = REPO_ROOT / "apps/slackbot/scripts/cloud-run-env.sh"
     scripts_dir = tmp_path / "scripts"
     scripts_dir.mkdir()
     script = scripts_dir / "cloud-run-env.sh"
     script.write_text(source_script.read_text())
     script.chmod(0o755)
-    smtp_url = "smtp://smtp-user:synthetic%40smtp-pass@smtp.example.test:587"
-    sender = "F3, Nation <notifications@example.test>"
-    (tmp_path / f".env.cloud-run.{target}").write_text(
-        f'EMAIL_SERVER={smtp_url}\nEMAIL_FROM="{sender}"\nSENDGRID_API_KEY=unused-legacy-key\n'
-    )
+    (tmp_path / f".env.cloud-run.{target}").write_text(contents)
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     log_path = tmp_path / "gcloud.log"
     secret_input_path = tmp_path / "secret-input"
+    secret_state_path = tmp_path / "email-server-secret"
+    if secret_exists:
+        secret_state_path.write_text("previous-synthetic-value")
     stub_gcloud = bin_dir / "gcloud"
     stub_gcloud.write_text(
         "#!/usr/bin/env bash\n"
         'printf \'%q \' "$@" >> "$GCLOUD_LOG"\n'
         'printf "\\n" >> "$GCLOUD_LOG"\n'
-        'if [[ "$1 $2 $3" == "secrets versions add" ]]; then cat > "$GCLOUD_SECRET_INPUT"; fi\n'
+        'if [[ "$1 $2 $3" == "secrets describe email-server" ]]; then\n'
+        '  test -f "$GCLOUD_EMAIL_SECRET_STATE"; exit $?\n'
+        "fi\n"
+        'if [[ "$1 $2 $3" == "secrets create email-server" ]]; then\n'
+        '  touch "$GCLOUD_EMAIL_SECRET_STATE"; exit 0\n'
+        "fi\n"
+        'if [[ "$1 $2 $3" == "secrets add-iam-policy-binding email-server" ]]; then\n'
+        '  test -f "$GCLOUD_EMAIL_SECRET_STATE"; exit $?\n'
+        "fi\n"
+        'if [[ "$1 $2 $3 $4 $5" == "secrets versions access latest --secret=email-server" ]]; then\n'
+        '  cat "$GCLOUD_EMAIL_SECRET_STATE"; exit $?\n'
+        "fi\n"
+        'if [[ "$1 $2 $3 $4" == "secrets versions add email-server" ]]; then\n'
+        '  cat > "$GCLOUD_SECRET_INPUT"\n'
+        '  cp "$GCLOUD_SECRET_INPUT" "$GCLOUD_EMAIL_SECRET_STATE"\n'
+        "fi\n"
         'if [[ "$1 $2 $3" == "projects describe"* ]]; then printf "123456\\n"; fi\n'
+        'if [[ "$1 $2 $3 $4" == "run services describe f3-slackbot" ]]; then\n'
+        '  printf "service-runtime@example.test\\n"\n'
+        "fi\n"
         'if [[ "$1 $2 $3 $4" == "run jobs describe f3-slackbot-scripts"* ]]; then\n'
-        '  printf "f3-slackbot-scripts\\n"\n'
+        '  if [[ "$*" == *"--format=value(name)"* ]]; then\n'
+        '    printf "f3-slackbot-scripts\\n"\n'
+        "  else\n"
+        '    printf "job-runtime@example.test\\n"\n'
+        "  fi\n"
         "fi\n"
         "exit 0\n"
     )
@@ -163,10 +178,45 @@ def test_cloud_run_env_updates_service_and_job_classification_with_stub_gcloud(
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         "GCLOUD_LOG": str(log_path),
         "GCLOUD_SECRET_INPUT": str(secret_input_path),
+        "GCLOUD_EMAIL_SECRET_STATE": str(secret_state_path),
     }
-    result = subprocess.run([str(script), "--env", target], check=True, capture_output=True, text=True, env=env)
+    result = subprocess.run([str(script), "--env", target], capture_output=True, text=True, env=env)
 
     calls = [shlex.split(line) for line in log_path.read_text().splitlines()]
+    return result, calls
+
+
+@pytest.mark.parametrize("secret_exists", [True, False])
+@pytest.mark.parametrize(
+    "target,classification,project",
+    [("prod", "production", "f3-slackbot"), ("staging", "staging", "f3-slackbot-staging")],
+)
+def test_cloud_run_env_updates_service_and_job_classification_with_stub_gcloud(
+    tmp_path: Path, target: str, classification: str, project: str, secret_exists: bool
+):
+    smtp_url = "smtp://smtp-user:synthetic%40smtp-pass@smtp.example.test:587"
+    sender = "F3, Nation <notifications@example.test>"
+    result, calls = _run_cloud_run_env(
+        tmp_path,
+        target,
+        f'EMAIL_SERVER={smtp_url}\nEMAIL_FROM="{sender}"\nSENDGRID_API_KEY=unused-legacy-key\n',
+        secret_exists,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    secret_creates = [call for call in calls if call[:3] == ["secrets", "create", "email-server"]]
+    assert len(secret_creates) == (0 if secret_exists else 1)
+    if secret_creates:
+        assert secret_creates[0][secret_creates[0].index("--project") + 1] == project
+    secret_grants = [call for call in calls if call[:3] == ["secrets", "add-iam-policy-binding", "email-server"]]
+    assert len(secret_grants) == 2
+    assert {call[call.index("--member") + 1] for call in secret_grants} == {
+        "serviceAccount:service-runtime@example.test",
+        "serviceAccount:job-runtime@example.test",
+    }
+    for call in secret_grants:
+        assert call[call.index("--project") + 1] == project
+        assert call[call.index("--role") + 1] == "roles/secretmanager.secretAccessor"
+
     update_calls = [call for call in calls if call[:3] in (["run", "services", "update"], ["run", "jobs", "update"])]
     assert len(update_calls) == 2
     for call in update_calls:
@@ -189,32 +239,66 @@ def test_cloud_run_env_updates_service_and_job_classification_with_stub_gcloud(
     assert len(secret_pushes) == 1
     assert secret_pushes[0][3] == "email-server"
     assert "--data-file=-" in secret_pushes[0]
-    assert secret_input_path.read_text() == smtp_url
-    assert smtp_url not in log_path.read_text()
+    assert (tmp_path / "secret-input").read_text() == smtp_url
+    assert smtp_url not in (tmp_path / "gcloud.log").read_text()
     assert smtp_url not in result.stdout + result.stderr
-    assert "sendgrid-api-key" not in log_path.read_text()
+    assert "sendgrid-api-key" not in (tmp_path / "gcloud.log").read_text()
 
 
-@pytest.mark.parametrize("smtp_port", [1025, 1325])
-def test_local_email_defaults_follow_checkout_mailpit_port(tmp_path: Path, smtp_port: int):
-    env_file = tmp_path / ".env"
+@pytest.mark.parametrize("target", ["prod", "staging"])
+@pytest.mark.parametrize("secret_exists", [True, False])
+def test_missing_email_server_preserves_existing_secret_or_aborts_before_runtime_updates(
+    tmp_path: Path, target: str, secret_exists: bool
+):
+    result, calls = _run_cloud_run_env(tmp_path, target, "EMAIL_FROM=notifications@example.test\n", secret_exists)
+    assert "SKIP: EMAIL_SERVER (empty)" in result.stdout
+    assert not (tmp_path / "secret-input").exists()
+    assert not any(call[:3] == ["secrets", "create", "email-server"] for call in calls)
+    assert not any(call[:3] == ["secrets", "versions", "add"] for call in calls)
+    assert any(call[:3] == ["secrets", "add-iam-policy-binding", "email-server"] for call in calls)
+
+    update_calls = [call for call in calls if call[:3] in (["run", "services", "update"], ["run", "jobs", "update"])]
+    if secret_exists:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert (tmp_path / "email-server-secret").read_text() == "previous-synthetic-value"
+        assert len(update_calls) == 2
+        for call in update_calls:
+            secret_arg = call[call.index("--update-secrets") + 1]
+            secret_assignments = [part.lstrip("^") for part in secret_arg.split("__F3_ENV_DELIM__")]
+            assert secret_assignments.count("EMAIL_SERVER=email-server:latest") == 1
+    else:
+        assert result.returncode != 0
+        assert "Failed to grant IAM access for secret email-server" in result.stdout
+        assert not update_calls
+
+
+@pytest.mark.parametrize("slot,smtp_port", [(0, 1025), (3, 1325)])
+def test_local_email_defaults_follow_checkout_mailpit_port(tmp_path: Path, slot: int, smtp_port: int):
+    env_file = tmp_path / "apps/slackbot/.env"
+    env_file.parent.mkdir(parents=True)
     env_file.write_text((REPO_ROOT / "apps/slackbot/.env.example").read_text())
+    port_script = tmp_path / "scripts/lib/local-ports.sh"
+    port_script.parent.mkdir(parents=True)
+    port_script.write_text((REPO_ROOT / "scripts/lib/local-ports.sh").read_text())
     subprocess.run(
         [
             "bash",
             "-c",
-            'source "$1"; rewrite_env_ports "$2"',
+            'source "$1"; write_local_ports "$3"; load_local_ports; rewrite_env_ports "$2"',
             "test-local-smtp",
-            str(REPO_ROOT / "scripts/lib/local-ports.sh"),
+            str(port_script),
             str(env_file),
+            str(slot),
         ],
         check=True,
         capture_output=True,
         text=True,
-        env={"PATH": os.environ["PATH"], "F3_MAILPIT_SMTP_PORT": str(smtp_port)},
+        env={"PATH": os.environ["PATH"]},
     )
     assignments = dict(
         line.split("=", maxsplit=1) for line in env_file.read_text().splitlines() if line and not line.startswith("#")
     )
     assert assignments["EMAIL_SERVER"] == f"smtp://localhost:{smtp_port}"
     assert assignments["EMAIL_FROM"] == "F3 Nation <no-reply@f3local.dev>"
+    if slot:
+        assert f"F3_MAILPIT_SMTP_PORT={smtp_port}\n" in (tmp_path / ".env").read_text()

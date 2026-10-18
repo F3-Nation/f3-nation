@@ -25,7 +25,9 @@ def send_via_sendgrid(
         from_email: Sender override; otherwise EMAIL_FROM or noreply@f3nation.com
 
     Returns:
-        True if email was sent successfully, False otherwise
+        True if SMTP submission and cleanup finish without reported errors,
+        False otherwise. SMTP acceptance does not confirm final inbox delivery.
+        Cleanup failure or partial refusal can return False after acceptance.
     """
     server_url = os.getenv("EMAIL_SERVER")
     if not server_url:
@@ -65,6 +67,7 @@ def send_via_sendgrid(
             ):
                 raise ValueError("Invalid SMTP credentials")
 
+        stage = "message"
         message = EmailMessage()
         message["From"] = from_email if from_email is not None else os.getenv("EMAIL_FROM") or "noreply@f3nation.com"
         message["To"] = to_email
@@ -98,8 +101,16 @@ def send_via_sendgrid(
         return True
     except Exception as error:
         logger.error(
-            "slackbot.email.send_failed",
-            extra={"json_fields": {"stage": stage, "error_type": type(error).__name__}},
+            "slackbot.email.send_failed stage=%s error_type=%s",
+            stage,
+            type(error).__name__,
+            extra={
+                "json_fields": {
+                    "event": "slackbot.email.send_failed",
+                    "stage": stage,
+                    "error_type": type(error).__name__,
+                }
+            },
         )
         return False
 

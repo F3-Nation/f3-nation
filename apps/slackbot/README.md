@@ -20,21 +20,30 @@ This creates `apps/slackbot/.env` from [`.env.example`](.env.example), then star
 
 Shared notification emails use `EMAIL_SERVER` and `EMAIL_FROM` from the Slackbot
 env file. The local defaults send to Mailpit at `smtp://localhost:1025`, with
-sender `F3 Nation <no-reply@f3local.dev>`. `pnpm local:setup --slot N` rewrites
+default sender `F3 Nation <no-reply@f3local.dev>` when the caller does not supply
+its own sender. `pnpm local:setup --slot N` rewrites
 the SMTP port for that checkout. Open Mailpit at `http://localhost:8025`, or at
 the checkout's `F3_MAILPIT_UI_PORT` from the root `.env`, to inspect captured
-messages. Existing checkouts should add these two variables to their local env
-file; setup recreates env files, so preserve any existing local settings before
-running it again.
+messages. Existing checkouts can add these two variables to their local env
+file; slotted checkouts must use their root `.env` value of
+`F3_MAILPIT_SMTP_PORT` in the SMTP URL instead of 1025. Setup backs up existing
+env files to `.env.bak.<timestamp>` before recreating them; restore any custom
+settings from that backup when running setup again.
 
 The compatibility helper `send_via_sendgrid` now sends through SMTP and does not
 use `SENDGRID_API_KEY`. An explicit `from_email` argument overrides `EMAIL_FROM`;
 without either, the historical sender `noreply@f3nation.com` remains the fallback.
+The emergency notification in [`features/emergency.py`](features/emergency.py)
+supplies `F3 Nation Slackbot Support <support.slackbot@f3nation.com>`, so it uses
+that sender in Mailpit too.
 Region-configured backblast email keeps its separate SMTP settings.
 
 Synthetic delivery through this helper can be tested without a Slack app.
-End-to-end `/fng` delivery also needs the pending FNG command changes; direct
-helper delivery does not verify that slash-command flow.
+To check the Slack emergency flow, use synthetic local member data with an email
+address, open `/f3-nation-settings`, choose **Emergency Info Access**, select that
+member, and inspect the access notification in Mailpit. In checkouts that include
+the `/fng` onboarding command, verify its email flow separately; direct helper
+or emergency-notification delivery does not verify that slash command.
 
 ### Create Slack app and configure Slack credentials
 
@@ -143,6 +152,9 @@ both `f3-slackbot-staging` and `f3-slackbot`. Grant the service and scripts-job
 runtime accounts access, bind that secret as `EMAIL_SERVER`, and set the plain
 `EMAIL_FROM` variable to a provider-approved sender for both runtimes. The tag
 release workflow deploys images; it does not provision these SMTP settings.
+The emergency notification overrides `EMAIL_FROM` with
+`support.slackbot@f3nation.com`; that sender must also be approved by the
+configured provider.
 
 Use [`.env.cloud-run.example`](.env.cloud-run.example) for the per-environment
 configuration. The operator-run [`scripts/cloud-run-env.sh`](scripts/cloud-run-env.sh)
@@ -156,14 +168,20 @@ password, as shown in the cloud env example.
 `smtp://` defaults to port 587 and uses verified STARTTLS for remote servers;
 `smtps://` defaults to port 465 and uses implicit TLS with certificate verification.
 Explicit ports, including port 25, are respected. Plain SMTP is allowed only for unauthenticated
-loopback endpoints such as local Mailpit. Authenticated loopback endpoints also
-require TLS. An SMTP connection has a 10-second timeout. Missing configuration
-or failed delivery returns `False`; there is no SendGrid API fallback.
+endpoints with host exactly `localhost`, `127.0.0.1` or `::1`, such as local
+Mailpit. Other host spellings and authenticated endpoints require TLS. The
+10-second socket timeout applies per blocking operation; it does not bound DNS
+resolution or the whole helper call. Missing configuration or a transport error
+returns `False`; there is no SendGrid API fallback. `True` means SMTP acceptance
+and clean connection shutdown, not final inbox delivery. `False` can also follow
+acceptance if shutdown fails, so it does not prove no message was sent; blind
+retries can duplicate messages.
 
 Apply the SMTP settings before deploying the new image, retaining the existing
 `SENDGRID_API_KEY` binding so the old image can continue sending during the
-transition. The env script stops managing that old binding but does not remove
-it or delete the old Secret Manager secret. After deployment, verify delivery
+transition. The env script retains that old binding and Secret Manager secret,
+but no longer manages the old secret's IAM grants; preserve access for the old
+image if runtime service accounts change during the transition. After deployment, verify delivery
 through the configured provider in Staging and Production, then retire the old
 binding separately when rollback requirements allow. Local Mailpit delivery and
 stubbed deployment tests do not verify provider authentication, sender approval,

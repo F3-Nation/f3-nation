@@ -20,8 +20,7 @@ def transport(monkeypatch):
     monkeypatch.setenv("EMAIL_FROM", "F3 Local <no-reply@f3local.dev>")
     monkeypatch.setenv("SENDGRID_API_KEY", "synthetic-legacy-key")
 
-    # The legacy SDK is replaced even before the regression is fixed, so a
-    # failing test cannot send mail through the former HTTP transport.
+    # Stub the removed SDK to detect reintroduction of the HTTP transport.
     legacy = MagicMock()
     legacy.return_value.send.return_value.status_code = 202
     monkeypatch.setitem(sys.modules, "sendgrid", SimpleNamespace(SendGridAPIClient=legacy))
@@ -75,8 +74,12 @@ def test_explicit_sender_takes_precedence_over_email_from(transport, keyword):
     assert transport.client.send_message.call_args.args[0]["From"] == sender
 
 
-def test_omitted_email_from_preserves_legacy_default(transport, monkeypatch):
-    monkeypatch.delenv("EMAIL_FROM")
+@pytest.mark.parametrize("configured_sender", [None, ""], ids=["missing", "empty"])
+def test_omitted_email_from_preserves_legacy_default(transport, monkeypatch, configured_sender):
+    if configured_sender is None:
+        monkeypatch.delenv("EMAIL_FROM")
+    else:
+        monkeypatch.setenv("EMAIL_FROM", configured_sender)
 
     assert sendmail.send_via_sendgrid("recipient@f3local.dev", "Synthetic", "<p>Body</p>") is True
     assert transport.client.send_message.call_args.args[0]["From"] == "noreply@f3nation.com"
@@ -108,9 +111,20 @@ def test_authenticated_smtp_requires_starttls_even_on_nonstandard_port(transport
     assert transport.client.method_calls[:2] == [call.starttls(context=ANY), call.login("user", "synthetic")]
 
 
-@pytest.mark.parametrize("port", [25, 587, 2525])
-def test_remote_smtp_requires_tls_even_without_credentials(transport, monkeypatch, port):
-    monkeypatch.setenv("EMAIL_SERVER", f"smtp://smtp.example.com:{port}")
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "smtp://smtp.example.com:25",
+        "smtp://smtp.example.com:587",
+        "smtp://smtp.example.com:2525",
+        "smtp://localhost.example.com:1025",
+        "smtp://localhost.:1025",
+        "smtp://127.0.0.2:1025",
+        "smtp://127.1:1025",
+    ],
+)
+def test_remote_smtp_requires_tls_even_without_credentials(transport, monkeypatch, endpoint):
+    monkeypatch.setenv("EMAIL_SERVER", endpoint)
 
     assert sendmail.send_via_sendgrid("recipient@f3local.dev", "Synthetic", "<p>Body</p>") is True
 
@@ -130,9 +144,16 @@ def test_unauthenticated_loopback_allows_local_plaintext_smtp(transport, monkeyp
     transport.client.login.assert_not_called()
 
 
-@pytest.mark.parametrize("port_suffix,port", [("", 465), (":2465", 2465)])
-def test_smtps_uses_verified_implicit_tls(transport, monkeypatch, port_suffix, port):
-    monkeypatch.setenv("EMAIL_SERVER", f"smtps://user:synthetic@smtp.example.com{port_suffix}")
+@pytest.mark.parametrize(
+    "endpoint,port,credentials",
+    [
+        ("smtps://user:synthetic@smtp.example.com", 465, ("user", "synthetic")),
+        ("smtps://user:synthetic@smtp.example.com:2465", 2465, ("user", "synthetic")),
+        ("smtps://smtp.example.com", 465, None),
+    ],
+)
+def test_smtps_uses_verified_implicit_tls(transport, monkeypatch, endpoint, port, credentials):
+    monkeypatch.setenv("EMAIL_SERVER", endpoint)
 
     assert sendmail.send_via_sendgrid("recipient@f3local.dev", "Synthetic", "<p>Body</p>") is True
 
@@ -142,7 +163,10 @@ def test_smtps_uses_verified_implicit_tls(transport, monkeypatch, port_suffix, p
     assert context.check_hostname is True
     assert context.verify_mode == ssl.CERT_REQUIRED
     transport.client.starttls.assert_not_called()
-    transport.client.login.assert_called_once_with("user", "synthetic")
+    if credentials:
+        transport.client.login.assert_called_once_with(*credentials)
+    else:
+        transport.client.login.assert_not_called()
 
 
 @pytest.mark.parametrize("port_suffix,port", [("", 587), (":25", 25)])
@@ -175,6 +199,8 @@ def test_smtp_uses_submission_default_or_explicit_port(transport, monkeypatch, p
         "smtp://user:@smtp.example.com:587",
         "smtp://user:synthetic%0Akey@smtp.example.com:587",
         "smtp://user%0D:synthetic@smtp.example.com:587",
+        "smtp://user:synthetic%FF@smtp.example.com:587",
+        "smtp://user:synthetic%7F@smtp.example.com:587",
         "smtp://local host:1025",
         "smtp://localhost:1025\n",
     ],
@@ -195,17 +221,27 @@ def test_missing_or_malformed_endpoint_fails_without_opening_any_transport(trans
 @pytest.mark.parametrize(
     "arguments",
     [
-        {"to_email": ""},
         {"to_email": "recipient@f3local.dev\nBcc: unexpected@f3local.dev"},
         {"subject": "Synthetic\r\nBcc: unexpected@f3local.dev"},
         {"from_email": "sender@f3local.dev\nBcc: unexpected@f3local.dev"},
     ],
 )
-def test_empty_recipient_or_invalid_headers_fail_before_connection(transport, arguments):
+def test_invalid_headers_report_message_stage_before_connection(transport, arguments, caplog):
     message = {"to_email": "recipient@f3local.dev", "subject": "Synthetic", "html_content": "<p>Body</p>"}
     message.update(arguments)
 
-    assert sendmail.send_via_sendgrid(**message) is False
+    with caplog.at_level(logging.ERROR):
+        assert sendmail.send_via_sendgrid(**message) is False
+
+    record = next(record for record in caplog.records if record.getMessage().startswith("slackbot.email.send_failed"))
+    assert record.json_fields == {
+        "event": "slackbot.email.send_failed",
+        "stage": "message",
+        "error_type": "ValueError",
+    }
+    recorded = json.dumps(record.__dict__, default=str)
+    assert "recipient@f3local.dev" not in recorded
+    assert "unexpected@f3local.dev" not in recorded
 
     transport.smtp.assert_not_called()
     transport.smtp_ssl.assert_not_called()
@@ -267,8 +303,15 @@ def test_smtp_failures_report_safe_diagnostic_metadata(transport, monkeypatch, c
         )
 
     assert result is False
-    record = next(record for record in caplog.records if record.getMessage() == "slackbot.email.send_failed")
-    assert record.json_fields == {"stage": stage, "error_type": type(error).__name__}
+    record = next(record for record in caplog.records if record.getMessage().startswith("slackbot.email.send_failed"))
+    assert record.msg == "slackbot.email.send_failed stage=%s error_type=%s"
+    assert record.json_fields == {
+        "event": "slackbot.email.send_failed",
+        "stage": stage,
+        "error_type": type(error).__name__,
+    }
+    local_output = logging.Formatter().format(record)
+    assert local_output == f"slackbot.email.send_failed stage={stage} error_type={type(error).__name__}"
     assert record.exc_info is None
     assert record.stack_info is None
     recorded = json.dumps(record.__dict__, default=str)
@@ -289,8 +332,12 @@ def test_invalid_configuration_reports_validation_stage_without_endpoint_details
     with caplog.at_level(logging.ERROR):
         assert sendmail.send_via_sendgrid("recipient@f3local.dev", "Synthetic", "<p>Body</p>") is False
 
-    record = next(record for record in caplog.records if record.getMessage() == "slackbot.email.send_failed")
-    assert record.json_fields == {"stage": "validation", "error_type": "ValueError"}
+    record = next(record for record in caplog.records if record.getMessage().startswith("slackbot.email.send_failed"))
+    assert record.json_fields == {
+        "event": "slackbot.email.send_failed",
+        "stage": "validation",
+        "error_type": "ValueError",
+    }
     recorded = json.dumps(record.__dict__, default=str)
     for private_value in ("apikey", "synthetic-password", "smtp.example.com", "recipient@f3local.dev"):
         assert private_value not in recorded
@@ -306,7 +353,7 @@ def test_production_structured_log_serializes_safe_failure_metadata(transport, c
     with caplog.at_level(logging.ERROR):
         assert sendmail.send_via_sendgrid("recipient@f3local.dev", "Synthetic", "<p>Body</p>") is False
 
-    record = next(record for record in caplog.records if record.getMessage() == "slackbot.email.send_failed")
+    record = next(record for record in caplog.records if record.getMessage().startswith("slackbot.email.send_failed"))
     handler = StructuredLogHandler()
     try:
         assert handler.filter(record)
@@ -314,16 +361,88 @@ def test_production_structured_log_serializes_safe_failure_metadata(transport, c
     finally:
         handler.close()
     payload = json.loads(serialized)
-    assert payload["message"] == "slackbot.email.send_failed"
+    assert payload["event"] == "slackbot.email.send_failed"
+    assert payload["message"] == "slackbot.email.send_failed stage=send error_type=SMTPRecipientsRefused"
     assert payload["stage"] == "send"
     assert payload["error_type"] == "SMTPRecipientsRefused"
     for private_value in ("synthetic-password", "recipient@f3local.dev", "Synthetic private"):
         assert private_value not in serialized
 
 
-def test_recipient_refusal_returns_false_and_closes_transport(transport):
-    transport.client.send_message.return_value = {"recipient@f3local.dev": (550, b"Synthetic refusal")}
+def test_remote_server_without_starttls_support_never_sends_plaintext(transport, monkeypatch, caplog):
+    monkeypatch.setenv("EMAIL_SERVER", "smtp://smtp.example.com:587")
+    transport.client.starttls.side_effect = sendmail.smtplib.SMTPNotSupportedError("Synthetic private provider reply")
 
-    assert sendmail.send_via_sendgrid("recipient@f3local.dev", "Synthetic", "<p>Body</p>") is False
+    with caplog.at_level(logging.ERROR):
+        assert sendmail.send_via_sendgrid("recipient@f3local.dev", "Synthetic", "<p>Body</p>") is False
 
+    transport.smtp.assert_called_once()
+    transport.smtp_ssl.assert_not_called()
+    transport.client.login.assert_not_called()
+    transport.client.send_message.assert_not_called()
     transport.client.__exit__.assert_called_once()
+    record = next(record for record in caplog.records if record.getMessage().startswith("slackbot.email.send_failed"))
+    assert record.json_fields["stage"] == "tls"
+    assert record.json_fields["error_type"] == "SMTPNotSupportedError"
+    assert "Synthetic private" not in json.dumps(record.__dict__, default=str)
+
+
+def test_smtps_connection_failure_does_not_fall_back_to_plaintext(transport, monkeypatch, caplog):
+    monkeypatch.setenv("EMAIL_SERVER", "smtps://smtp.example.com")
+    transport.smtp_ssl.side_effect = ssl.SSLCertVerificationError("Synthetic private provider reply")
+
+    with caplog.at_level(logging.ERROR):
+        assert sendmail.send_via_sendgrid("recipient@f3local.dev", "Synthetic", "<p>Body</p>") is False
+
+    transport.smtp_ssl.assert_called_once()
+    transport.smtp.assert_not_called()
+    transport.client.login.assert_not_called()
+    transport.client.send_message.assert_not_called()
+    transport.client.__enter__.assert_not_called()
+    record = next(record for record in caplog.records if record.getMessage().startswith("slackbot.email.send_failed"))
+    assert record.json_fields["stage"] == "connect"
+    assert record.json_fields["error_type"] == "SSLCertVerificationError"
+    assert "Synthetic private" not in json.dumps(record.__dict__, default=str)
+
+
+@pytest.mark.parametrize(
+    "failure,event",
+    [
+        ("unconfigured", "slackbot.email.not_configured"),
+        ("empty_recipient", "slackbot.email.recipient_missing"),
+        ("refusal", "slackbot.email.recipient_refused"),
+    ],
+)
+def test_skipped_or_refused_mail_warns_without_sensitive_details(transport, monkeypatch, caplog, failure, event):
+    monkeypatch.setenv("EMAIL_SERVER", "smtp://apikey:synthetic-password@smtp.example.com:587")
+    recipient = "recipient@f3local.dev"
+    if failure == "unconfigured":
+        monkeypatch.delenv("EMAIL_SERVER")
+    elif failure == "empty_recipient":
+        recipient = ""
+    else:
+        transport.client.send_message.return_value = {
+            "recipient@f3local.dev": (550, b"synthetic-password Synthetic private refusal")
+        }
+
+    with caplog.at_level(logging.WARNING):
+        assert sendmail.send_via_sendgrid(recipient, "Synthetic private subject", "Synthetic private body") is False
+
+    record = next(record for record in caplog.records if record.name == sendmail.__name__)
+    assert record.levelno == logging.WARNING
+    assert record.getMessage() == event
+    assert record.exc_info is None
+    recorded = json.dumps(record.__dict__, default=str)
+    for private_value in (
+        "apikey",
+        "synthetic-password",
+        "smtp.example.com",
+        "recipient@f3local.dev",
+        "Synthetic private",
+    ):
+        assert private_value not in recorded
+    if failure == "refusal":
+        transport.client.__exit__.assert_called_once()
+    else:
+        transport.smtp.assert_not_called()
+        transport.smtp_ssl.assert_not_called()
