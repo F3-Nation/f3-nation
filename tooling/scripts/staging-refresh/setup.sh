@@ -62,12 +62,11 @@ RUNNERS=()
 SLACKBOT_PROJECT=f3-slackbot-staging
 SLACKBOT_SERVICE=f3-slackbot
 # The developer snapshot lands in a public bucket shared with the apps' images. The job
-# may write only under SNAPSHOT_PREFIX; create + delete is what overwriting the fixed
-# object path takes.
+# may write only under SNAPSHOT_PREFIX; objectUser covers the create + delete that
+# overwriting the fixed object path takes (plus read and list, harmless on a public prefix).
 SNAPSHOT_BUCKET=f3-public-images
 SNAPSHOT_PREFIX=dev-snapshots/
-SNAPSHOT_ROLE=f3SnapshotPublisher
-SNAPSHOT_ROLE_PERMISSIONS=storage.objects.create,storage.objects.delete
+SNAPSHOT_ROLE=roles/storage.objectUser
 SNAPSHOT_CONDITION_TITLE=dev-snapshots-prefix
 # Changing the prefix or condition leaves the old binding in place: remove it by hand first.
 # The condition is the only thing keeping the job out of the apps' images: fail closed.
@@ -207,18 +206,8 @@ if [ "$IMAGE_ONLY" = 0 ]; then
     echo "Enabling it disables object ACLs: check the apps that upload images first." >&2
     exit 1
   fi
-  if gcloud iam roles describe "$SNAPSHOT_ROLE" --project "$PROJECT" >/dev/null 2>&1; then
-    gcloud iam roles update "$SNAPSHOT_ROLE" --project "$PROJECT" \
-      --permissions "$SNAPSHOT_ROLE_PERMISSIONS" --quiet >/dev/null
-  else
-    gcloud iam roles create "$SNAPSHOT_ROLE" --project "$PROJECT" \
-      --title "F3 snapshot publisher" \
-      --description "Create and overwrite the developer snapshot object (staging refresh job)" \
-      --permissions "$SNAPSHOT_ROLE_PERMISSIONS" >/dev/null
-  fi
-  echo "role $SNAPSHOT_ROLE: $SNAPSHOT_ROLE_PERMISSIONS"
   SNAPSHOT_BIND=(gcloud storage buckets add-iam-policy-binding "gs://$SNAPSHOT_BUCKET"
-    --member "serviceAccount:$SA" --role "projects/$PROJECT/roles/$SNAPSHOT_ROLE"
+    --member "serviceAccount:$SA" --role "$SNAPSHOT_ROLE"
     --condition "expression=$SNAPSHOT_CONDITION,title=$SNAPSHOT_CONDITION_TITLE")
   if err="$("${SNAPSHOT_BIND[@]}" 2>&1 >/dev/null)"; then
     echo "$SNAPSHOT_ROLE on gs://$SNAPSHOT_BUCKET/$SNAPSHOT_PREFIX for $SA"
@@ -230,7 +219,7 @@ if [ "$IMAGE_ONLY" = 0 ]; then
       *PERMISSION_DENIED*|*setIamPolicy*)
         echo "That needs storage.buckets.setIamPolicy; ask someone who has it to run:" ;;
       *)
-        echo "Not obviously a permission problem (a just-created role can take a minute to propagate); re-run this script, or run:" ;;
+        echo "Not obviously a permission problem (IAM changes can take a minute to propagate); re-run this script, or run:" ;;
     esac
     echo
     printf '  %q' "${SNAPSHOT_BIND[@]}"

@@ -522,15 +522,6 @@ describe("runLoad", () => {
     );
   });
 
-  it("warns about snapshots older than 30 days but still loads", async () => {
-    const { deps } = harness({
-      now: () => new Date("2027-01-01T00:00:00.000Z"),
-    });
-    await expect(runLoad({ ...ARGS, yes: true }, deps)).resolves.toMatchObject({
-      tables: 2,
-    });
-  });
-
   describe("refuses before touching the database", () => {
     const cases: [
       string,

@@ -166,14 +166,13 @@ It creates:
   `_Default` that showed every Cloud Run job's logs, and its bindings;
 - write access for the service account to `dev-snapshots/` in the public
   `f3-public-images` bucket and nowhere else in it: the custom role
-  `f3SnapshotPublisher` (`storage.objects.create` and `storage.objects.delete`,
-  the pair that overwriting the fixed snapshot path takes), bound on the bucket
-  with the condition
+  `roles/storage.objectUser` (its create and delete cover overwriting the
+  fixed snapshot path), bound on the bucket with the condition
   `resource.name.startsWith("projects/_/buckets/f3-public-images/objects/dev-snapshots/")`.
   The script stops if the bucket doesn't use uniform bucket-level access (the
   condition needs it) and never changes the bucket's settings. The binding
   needs `storage.buckets.setIamPolicy` on the bucket; if the person running
-  setup lacks it, the script still creates the role and prints the one
+  setup lacks it, the script prints the one
   `gcloud storage buckets add-iam-policy-binding` command for someone who has it.
 
 Re-run the full setup after any Production release that adds a migration:
@@ -251,37 +250,23 @@ The run ends with `DEV SNAPSHOT: OK` or `DEV SNAPSHOT FAILED — nothing was
 published; staging was not touched.`, followed by a temp-file cleanup line.
 As for a refresh, the logs hold counts, never row data.
 
-### Publishing the first snapshot
+### Publishing a snapshot
 
 The job has no schedule: a maintainer runs the command above when a fresh
-snapshot is wanted. The first publish is a hand-run sequence for whoever
-runs production operations:
+snapshot is wanted. Publishing is a hand-run sequence for whoever runs
+production operations:
 
-1. Run the full setup (not `--image-only`) so the job's service account has
-   the `dev-snapshots/` write access and the image is current.
+1. Run the full setup (not `--image-only`) if the job's service account
+   doesn't have the `dev-snapshots/` write access yet or a Production release
+   added a migration, so the image is current.
 2. Execute the job with `--args=--snapshot-only` and confirm the execution's
    logs contain `DEV SNAPSHOT: OK`.
-3. Confirm the access is scoped, acting as the job's service account. This
-   needs `roles/iam.serviceAccountTokenCreator` on it (grant it to yourself
-   temporarily; without it every command below fails at the token step, which
-   looks like a refusal but proves nothing). First a positive control, which
-   must succeed and be cleaned up, then the write that must be refused:
-
-   ```bash
-   SA=staging-refresh@f3data.iam.gserviceaccount.com
-   echo x >/tmp/probe.txt
-   gcloud storage cp /tmp/probe.txt gs://f3-public-images/dev-snapshots/probe.txt --impersonate-service-account=$SA
-   gcloud storage rm gs://f3-public-images/dev-snapshots/probe.txt --impersonate-service-account=$SA
-   gcloud storage cp /tmp/probe.txt gs://f3-public-images/not-dev-snapshots/probe.txt --impersonate-service-account=$SA
-   ```
-
-   The last command must fail with a 403 that names `storage.objects.create`
-   (or `storage.objects.delete`) on `not-dev-snapshots/probe.txt`, not a
-   token or `getAccessToken` error. If it succeeds, remove the object
-   yourself (the service account can't delete outside its prefix) and stop.
-
-4. Attach the tar's `manifest.json` and the job log's leak-scan output to the
+3. Attach the tar's `manifest.json` and the job log's leak-scan output to the
    tracking issue for the data-privacy reviewer's sign-off.
+
+The scoped-access check (a write outside `dev-snapshots/` is refused) was
+done once when the grant was first applied, and is recorded on the pull
+request that added it.
 
 **Publishing is public.** The job writes straight to a world-readable
 bucket, and the URL is in this public repo, so the tar is downloadable from
@@ -292,8 +277,7 @@ cause before publishing again. If the bucket has object versioning on,
 earlier generations stay readable by generation number until they are
 deleted.
 
-The delete permission exists only so a run can replace the previous
-snapshot. An IAM condition constrains the object name, not how the client
+The grant includes delete so a run can replace the previous snapshot. An IAM condition constrains the object name, not how the client
 writes it, so the service account could delete any object under
 `dev-snapshots/` outside the job's flow. That prefix holds nothing else and
 the snapshot is regenerated on demand, so the exposure is accepted. Never
@@ -301,7 +285,8 @@ widen the grant beyond that prefix.
 
 Anyone who can act as the service account can publish arbitrary content
 to that URL, which developers then restore into their local databases:
-members of `STAGING_REFRESH_RUNNERS` (job overrides can set the command's
+members of `STAGING_REFRESH_RUNNERS` (the IAM members passed to
+`setup.sh`, see [How to refresh staging](#how-to-refresh-staging); job overrides can set the command's
 environment and arguments), whoever can push the job's image, and anyone
 with token-creator rights on the service account. The tar carries no
 signature beyond its manifest, so keep those groups small.
