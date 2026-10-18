@@ -84,7 +84,7 @@ export const userRouter = {
       // Always set to false by default
       let includePii = false;
 
-      if (input?.includePii) {
+      if (input.includePii) {
         const [nation] = await ctx.db
           .select({ id: schema.orgs.id })
           .from(schema.orgs)
@@ -133,7 +133,7 @@ export const userRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      if (!input?.orgIds || input.orgIds.length === 0) {
+      if (!input.orgIds || input.orgIds.length === 0) {
         throw new ORPCError("BAD_REQUEST", {
           message: "At least one orgId is required",
         });
@@ -152,7 +152,7 @@ export const userRouter = {
       // Always set to false by default
       let includePii = false;
 
-      if (input?.includePii) {
+      if (input.includePii) {
         includePii = true;
         // Check if user is an admin for all of the specified parent orgs
         // (not all descendants, just the ones they requested)
@@ -210,7 +210,7 @@ export const userRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const includePii = input?.includePii
+      const includePii = input.includePii
         ? await checkUserPiiAccess({ ctx, userId: input.id })
         : false;
 
@@ -251,7 +251,7 @@ export const userRouter = {
     .handler(async ({ context: ctx, input }) => {
       const normalizedEmail = normalizeEmail(input.email);
       let includePii = false;
-      if (input?.includePii) {
+      if (input.includePii) {
         // First, get the user to check their orgs
         const [user] = await ctx.db
           .select({ id: schema.users.id })
@@ -419,7 +419,7 @@ export const userRouter = {
       if (existingUser) {
         const changedKeys = Object.entries(rest)
           .filter(([key, value]) => {
-            if (key === "id" || value === undefined) return false;
+            if (key === "id") return false;
             if (PII_FIELDS.has(key) && value === "") return false;
             if (key === "email" && typeof value === "string") {
               return (
@@ -458,9 +458,7 @@ export const userRouter = {
       const dbRoles = await ctx.db.select().from(schema.roles);
       const roleNameToId = dbRoles.reduce(
         (acc, role) => {
-          if (role.name) {
-            acc[role.name] = role.id;
-          }
+          acc[role.name] = role.id;
           return acc;
         },
         {} as Record<string, number>,

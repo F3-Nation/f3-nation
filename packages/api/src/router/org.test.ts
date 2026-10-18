@@ -302,7 +302,7 @@ describe("Org Router", () => {
       result.orgs.forEach((org) => {
         const searchLower = "f3".toLowerCase();
         const matches =
-          org.name?.toLowerCase().includes(searchLower) ||
+          org.name.toLowerCase().includes(searchLower) ||
           org.description?.toLowerCase().includes(searchLower);
         expect(matches).toBe(true);
       });

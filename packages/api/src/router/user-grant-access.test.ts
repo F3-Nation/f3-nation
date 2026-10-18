@@ -582,7 +582,7 @@ describe("User Router - Grant Access", () => {
       // Create admin session for Region A only
       const adminSessionA = createAdminSessionForOrg({
         orgId: regionA.id,
-        orgName: regionA.name ?? "Region A",
+        orgName: regionA.name,
       });
       await mockAuthWithSession(adminSessionA);
       const client = createTestClient();
@@ -625,7 +625,7 @@ describe("User Router - Grant Access", () => {
       // Create admin session for Region A only
       const adminSessionA = createAdminSessionForOrg({
         orgId: regionA.id,
-        orgName: regionA.name ?? "Region A",
+        orgName: regionA.name,
       });
       await mockAuthWithSession(adminSessionA);
       const client = createTestClient();

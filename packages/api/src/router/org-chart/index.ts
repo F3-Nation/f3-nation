@@ -235,7 +235,7 @@ export const orgChartRouter = {
           continue;
         }
 
-        const eventCount = Number(summary.eventCount ?? 0);
+        const eventCount = Number(summary.eventCount);
         const aoCount = aoCountMap.get(summary.locationId) ?? 0;
 
         const existing = activeLocationsByOrg.get(summary.orgId) ?? [];
