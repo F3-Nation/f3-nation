@@ -17,6 +17,8 @@ interface LocationDetailsFormValues {
   locationDescription?: string | null;
 }
 
+// _T lets callers assert their form type includes these fields (`<X<FormType> />`).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export const LocationDetailsForm = <_T extends LocationDetailsFormValues>() => {
   const form = useFormContext<LocationDetailsFormValues>();
 

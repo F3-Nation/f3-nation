@@ -317,8 +317,12 @@ function buildEventWhereClause(params: {
 /**
  * Builds the base query with all required joins for event queries
  */
-function buildEventBaseQuery(params: { db: AppDb; where: SQL | undefined }) {
-  const { db, where } = params;
+function buildEventBaseQuery(params: {
+  db: AppDb;
+  where: SQL | undefined;
+  isAnonymous: boolean;
+}) {
+  const { db, where, isAnonymous } = params;
 
   return (
     db
@@ -350,7 +354,12 @@ function buildEventBaseQuery(params: { db: AppDb; where: SQL | undefined }) {
       )
       .leftJoin(
         schema.eventTypes,
-        eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+        and(
+          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+          isAnonymous
+            ? orgAndAncestorsAreActive(schema.eventTypes.specificOrgId)
+            : undefined,
+        ),
       )
       .where(where)
   );
@@ -362,10 +371,9 @@ function buildEventBaseQuery(params: { db: AppDb; where: SQL | undefined }) {
 async function getEventCount(params: {
   db: AppDb;
   where: SQL | undefined;
+  isAnonymous: boolean;
 }): Promise<number> {
-  const { db, where } = params;
-
-  const [eventCount] = await buildEventBaseQuery({ db, where });
+  const [eventCount] = await buildEventBaseQuery(params);
 
   return eventCount?.count ?? 0;
 }
@@ -470,12 +478,13 @@ export const eventRouter = {
 
       const { editableOrgIds, isNationAdmin } = editableResult;
 
-      if (!ctx.session?.user) void logIfOrgTreeExceedsMaxDepth(ctx.db);
+      const isAnonymousAll = !ctx.session?.user;
+      if (isAnonymousAll) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const where = buildEventWhereClause({
         input,
         editableOrgIds,
         isNationAdmin,
-        isAnonymous: !ctx.session?.user,
+        isAnonymous: isAnonymousAll,
       });
 
       const sortedColumns = input?.sorting?.map((sorting) => {
@@ -571,7 +580,11 @@ export const eventRouter = {
         )`,
       };
 
-      const totalCount = await getEventCount({ db: ctx.db, where });
+      const totalCount = await getEventCount({
+        db: ctx.db,
+        where,
+        isAnonymous: isAnonymousAll,
+      });
 
       // Build the full query with select, joins, and groupBy
       const query = ctx.db
@@ -618,7 +631,12 @@ export const eventRouter = {
         )
         .leftJoin(
           schema.eventTypes,
-          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+          and(
+            eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+            isAnonymousAll
+              ? orgAndAncestorsAreActive(schema.eventTypes.specificOrgId)
+              : undefined,
+          ),
         )
         .where(where)
         .groupBy(
@@ -636,7 +654,6 @@ export const eventRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
-      const isAnonymousAll = !ctx.session?.user;
       const eventsWithLocation = events.map((event) => ({
         ...event,
         location: getFullAddress(event),
@@ -685,7 +702,11 @@ export const eventRouter = {
         isAnonymous: false,
       });
 
-      const count = await getEventCount({ db: ctx.db, where });
+      const count = await getEventCount({
+        db: ctx.db,
+        where,
+        isAnonymous: false,
+      });
 
       return { count };
     }),
@@ -854,7 +875,12 @@ export const eventRouter = {
         )
         .leftJoin(
           schema.eventTypes,
-          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+          and(
+            eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+            isAnonymousById
+              ? orgAndAncestorsAreActive(schema.eventTypes.specificOrgId)
+              : undefined,
+          ),
         )
         .where(
           and(

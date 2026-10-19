@@ -30,7 +30,7 @@ function EmailLoginFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
   const isValidEmail = (value: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");

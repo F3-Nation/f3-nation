@@ -580,7 +580,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                               }))}
                             searchPlaceholder={config.parentPlaceholder}
                             onSelect={(value) => {
-                              const orgId = safeParseInt(value as string);
+                              const orgId = safeParseInt(value);
                               if (orgId == null) {
                                 toast.error("Invalid orgId");
                                 return;

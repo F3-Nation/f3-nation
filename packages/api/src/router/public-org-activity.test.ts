@@ -25,6 +25,8 @@ describe("public reads exclude inactive organization hierarchies", () => {
   const prefix = `PUBLIC_ORG_ACTIVITY_${uniqueId()}`;
   const crossRegionName = `PUBLIC_CROSS_REGION_${uniqueId()}`;
   const aoOwnedLocationName = `PUBLIC_AO_OWNED_LOCATION_${uniqueId()}`;
+  const retiredWorkoutLocationName = `PUBLIC_RETIRED_WORKOUT_LOCATION_${uniqueId()}`;
+  const linkedTypePrefix = `PUBLIC_LINKED_TYPE_${uniqueId()}`;
   const primaryLabels = [
     "activeA",
     "activeB",
@@ -46,8 +48,18 @@ describe("public reads exclude inactive organization hierarchies", () => {
       typeId: number;
     }
   > = {};
+  const linkedTypes: Record<
+    string,
+    {
+      id: number;
+      name: string;
+      category: "first_f" | "second_f" | "third_f";
+    }
+  > = {};
+  const linkedTypeEventIds: number[] = [];
   let nationalTypeId: number;
   let aoOwnedLocationId: number;
+  let retiredWorkoutLocationId: number;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -201,6 +213,89 @@ describe("public reads exclude inactive organization hierarchies", () => {
       })
       .returning();
     eventIds.push(aoLocationEvent!.id);
+
+    const [retiredWorkoutLocation] = await db
+      .insert(schema.locations)
+      .values({
+        name: retiredWorkoutLocationName,
+        orgId: branches.activeB!.regionId,
+        isActive: true,
+        latitude: 35.5,
+        longitude: -80.5,
+      })
+      .returning();
+    retiredWorkoutLocationId = retiredWorkoutLocation!.id;
+    locationIds.push(retiredWorkoutLocationId);
+    const [retiredAncestorEvent] = await db
+      .insert(schema.events)
+      .values({
+        name: `${retiredWorkoutLocationName}_event`,
+        orgId: branches.inactiveArea!.aoId,
+        locationId: retiredWorkoutLocationId,
+        isActive: true,
+        isPrivate: false,
+        highlight: false,
+        startDate: "2026-01-01",
+      })
+      .returning();
+    eventIds.push(retiredAncestorEvent!.id);
+
+    // Sibling AOs may share event types, including a link retained after retirement.
+    const [retiredSibling] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `${linkedTypePrefix}_retired_sibling_ao`,
+        parentId: branches.activeA!.regionId,
+        orgType: "ao",
+        isActive: false,
+      })
+      .returning();
+    orgIds.push(retiredSibling!.id);
+    for (const [label, specificOrgId, category] of [
+      ["active", branches.activeA!.aoId, "first_f"],
+      ["national", null, "first_f"],
+      ["retiredSibling", retiredSibling!.id, "second_f"],
+      // Historical links can also outlive an organization being moved under a retired ancestor.
+      ["retiredAncestor", branches.inactiveArea!.aoId, "third_f"],
+    ] as const) {
+      const [type] = await db
+        .insert(schema.eventTypes)
+        .values({
+          name: `${linkedTypePrefix}_${label}`,
+          specificOrgId,
+          eventCategory: category,
+          isActive: true,
+        })
+        .returning();
+      typeIds.push(type!.id);
+      linkedTypes[label] = { id: type!.id, name: type!.name, category };
+    }
+    for (const label of ["mixed", "retired_only"]) {
+      const [event] = await db
+        .insert(schema.events)
+        .values({
+          name: `${linkedTypePrefix}_${label}_event`,
+          orgId: branches.activeA!.aoId,
+          locationId: branches.activeA!.locationId,
+          isActive: true,
+          isPrivate: false,
+          highlight: false,
+          startDate: "2026-01-01",
+        })
+        .returning();
+      eventIds.push(event!.id);
+      linkedTypeEventIds.push(event!.id);
+      const types =
+        label === "mixed"
+          ? Object.values(linkedTypes)
+          : [linkedTypes.retiredSibling!, linkedTypes.retiredAncestor!];
+      await db.insert(schema.eventsXEventTypes).values(
+        types.map((type) => ({
+          eventId: event!.id,
+          eventTypeId: type.id,
+        })),
+      );
+    }
   });
 
   afterAll(async () => {
@@ -373,6 +468,129 @@ describe("public reads exclude inactive organization hierarchies", () => {
       expect(lookup[branches[label]!.eventId]).toBeUndefined();
   });
 
+  it("scoped event-type metadata: omits retired linked types without hiding active events", async () => {
+    const client = createTestClient();
+    const pages = [];
+    for (const pageIndex of [0, 1, 2]) {
+      pages.push(
+        await client.event.all({
+          searchTerm: linkedTypePrefix,
+          sorting: [{ id: "created", desc: false }],
+          pageSize: 1,
+          pageIndex,
+        }),
+      );
+    }
+    expect(pages.map((page) => page.totalCount)).toEqual([2, 2, 2]);
+    expect(
+      pages.flatMap((page) => page.events.map((event) => event.id)),
+    ).toEqual(linkedTypeEventIds);
+    const visibleTypes = [linkedTypes.active!, linkedTypes.national!].map(
+      ({ id, name }) => ({ eventTypeId: id, eventTypeName: name }),
+    );
+    expect(pages[0]!.events[0]!.eventTypes).toHaveLength(2);
+    for (const type of visibleTypes) {
+      expect(pages[0]!.events[0]!.eventTypes).toContainEqual(
+        expect.objectContaining(type),
+      );
+    }
+    expect(pages[1]!.events[0]!.eventTypes).toEqual([]);
+  });
+
+  it("scoped event-type metadata: omits retired linked type IDs and names from anonymous details", async () => {
+    const client = createTestClient();
+    const visibleTypes = [linkedTypes.active!, linkedTypes.national!].map(
+      ({ id, name }) => ({ eventTypeId: id, eventTypeName: name }),
+    );
+    const mixed = await client.event.byId({ id: linkedTypeEventIds[0]! });
+    expect(mixed.event?.eventTypes).toHaveLength(2);
+    expect(mixed.event?.eventTypes).toEqual(
+      expect.arrayContaining(visibleTypes),
+    );
+    const retiredOnly = await client.event.byId({ id: linkedTypeEventIds[1]! });
+    expect(retiredOnly.event).toMatchObject({
+      id: linkedTypeEventIds[1],
+      eventTypes: [],
+    });
+  });
+
+  it.each([
+    ["retiredSibling", "name"],
+    ["retiredSibling", "category"],
+    ["retiredAncestor", "name"],
+    ["retiredAncestor", "category"],
+  ])(
+    "scoped event-type metadata: does not match an anonymous %s type %s filter",
+    async (label, filter) => {
+      const client = createTestClient();
+      const type = linkedTypes[label]!;
+      const filters =
+        filter === "name"
+          ? { eventTypeNames: [type.name] }
+          : { eventCategories: [type.category] };
+      expect(
+        await client.event.all({
+          searchTerm: linkedTypePrefix,
+          ...filters,
+          pageSize: 1,
+        }),
+      ).toEqual({ events: [], totalCount: 0 });
+    },
+  );
+
+  it("scoped event-type metadata: matches active and national types with consistent event totals", async () => {
+    const client = createTestClient();
+    for (const filters of [
+      { eventTypeNames: [linkedTypes.active!.name] },
+      { eventTypeNames: [linkedTypes.national!.name] },
+      { eventCategories: ["first_f" as const] },
+    ]) {
+      const result = await client.event.all({
+        searchTerm: linkedTypePrefix,
+        ...filters,
+        pageSize: 1,
+      });
+      expect(result.totalCount).toBe(1);
+      expect(result.events.map((event) => event.id)).toEqual([
+        linkedTypeEventIds[0],
+      ]);
+    }
+  });
+
+  it("scoped event-type metadata: preserves signed-in linked types and retired-owner filters", async () => {
+    await mockAuthWithSession(createNoPermissionSession());
+    const client = createTestClient();
+    const result = await client.event.all({
+      searchTerm: linkedTypePrefix,
+      sorting: [{ id: "created", desc: false }],
+    });
+    expect(result.totalCount).toBe(2);
+    const allTypes = Object.values(linkedTypes).map(({ id, name }) => ({
+      eventTypeId: id,
+      eventTypeName: name,
+    }));
+    expect(result.events[0]!.eventTypes).toHaveLength(4);
+    for (const type of allTypes) {
+      expect(result.events[0]!.eventTypes).toContainEqual(
+        expect.objectContaining(type),
+      );
+    }
+    const detail = await client.event.byId({ id: linkedTypeEventIds[0]! });
+    expect(detail.event?.eventTypes).toHaveLength(4);
+    expect(detail.event?.eventTypes).toEqual(expect.arrayContaining(allTypes));
+    for (const label of ["retiredSibling", "retiredAncestor"]) {
+      const type = linkedTypes[label]!;
+      for (const filters of [
+        { eventTypeNames: [type.name] },
+        { eventCategories: [type.category] },
+      ]) {
+        const input = { searchTerm: linkedTypePrefix, ...filters };
+        expect((await client.event.all(input)).totalCount).toBe(2);
+        expect(await client.event.count(input)).toEqual({ count: 2 });
+      }
+    }
+  });
+
   it("requires both the location owner and an eligible workout owner to be active", async () => {
     const client = createTestClient();
     const pages = [];
@@ -409,6 +627,21 @@ describe("public reads exclude inactive organization hierarchies", () => {
     expect(result.totalCount).toBe(1);
     expect(result.locations.map((location) => location.id)).toEqual([
       aoOwnedLocationId,
+    ]);
+  });
+
+  it("hides an active owner's location when its only workout has a retired ancestor", async () => {
+    const client = createTestClient();
+    expect(
+      await client.location.all({ searchTerm: retiredWorkoutLocationName }),
+    ).toEqual({ locations: [], totalCount: 0 });
+    await mockAuthWithSession(createNoPermissionSession());
+    const result = await client.location.all({
+      searchTerm: retiredWorkoutLocationName,
+    });
+    expect(result.totalCount).toBe(1);
+    expect(result.locations.map((location) => location.id)).toEqual([
+      retiredWorkoutLocationId,
     ]);
   });
 

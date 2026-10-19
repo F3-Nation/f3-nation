@@ -7,6 +7,8 @@ import { useAuth } from "~/utils/hooks/use-auth";
 interface ContactDetailsFormValues {
   submittedBy: string | null;
 }
+// _T lets callers assert their form type includes these fields (`<X<FormType> />`).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export const ContactDetailsForm = <_T extends ContactDetailsFormValues>() => {
   const form = useFormContext<ContactDetailsFormValues>();
   const { session } = useAuth();

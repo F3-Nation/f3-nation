@@ -106,7 +106,7 @@ const tableKey = (name: string) => `public.${name}`;
 
 const ManifestSchema = z.object({
   exportedAt: z.string().refine((v) => !Number.isNaN(Date.parse(v))),
-  migration: z.object({ tag: z.string(), createdAt: z.number().finite() }),
+  migration: z.object({ tag: z.string(), createdAt: z.number() }),
   tables: z.record(z.string(), z.unknown()),
 });
 

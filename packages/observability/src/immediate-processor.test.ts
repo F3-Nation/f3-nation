@@ -1,7 +1,7 @@
 import type {
   LogRecordExporter,
   ReadableLogRecord,
-  SdkLogRecord,
+  ReadWriteLogRecord,
 } from "@opentelemetry/sdk-logs";
 import { ExportResultCode } from "@opentelemetry/core";
 import { describe, expect, it, vi } from "vitest";
@@ -22,7 +22,7 @@ function deferredExporter() {
   return { exporter, callbacks, shutdownMock };
 }
 
-const record = {} as SdkLogRecord;
+const record = {} as ReadWriteLogRecord;
 
 describe("ImmediateLogRecordProcessor", () => {
   it("forceFlush resolves only after in-flight exports complete", async () => {

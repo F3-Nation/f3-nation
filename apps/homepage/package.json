@@ -43,6 +43,7 @@
     "postcss": "catalog:",
     "postcss-load-config": "catalog:",
     "prettier": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
