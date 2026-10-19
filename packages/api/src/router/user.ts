@@ -419,7 +419,8 @@ export const userRouter = {
       if (existingUser) {
         const changedKeys = Object.entries(rest)
           .filter(([key, value]) => {
-            if (key === "id") return false;
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Object.entries drops undefined from optional props
+            if (key === "id" || value === undefined) return false;
             if (PII_FIELDS.has(key) && value === "") return false;
             if (key === "email" && typeof value === "string") {
               return (

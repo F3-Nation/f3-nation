@@ -1,7 +1,13 @@
 import type { FieldPath, FieldValues } from "react-hook-form";
-import { Controller, useFormContext } from "react-hook-form";
+import { useFormContext } from "react-hook-form";
 
-import { FormControl, FormItem, FormLabel, FormMessage } from "@acme/ui/form";
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@acme/ui/form";
 import { Input } from "@acme/ui/input";
 
 interface TimeInputProps<T extends FieldValues> {
@@ -18,7 +24,7 @@ export const ControlledTimeInput = <T extends FieldValues>({
   const form = useFormContext<T>();
 
   return (
-    <Controller
+    <FormField
       control={form.control}
       name={name}
       render={({ field }) => (
