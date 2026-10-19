@@ -780,7 +780,7 @@ export default function AdminManageAccessModal({
                                   searchPlaceholder="Select an organization"
                                   disabled={isLoadingOrgs}
                                   onSelect={(value) => {
-                                    const orgId = safeParseInt(value as string);
+                                    const orgId = safeParseInt(value);
                                     if (orgId == undefined) {
                                       toast.error("Invalid orgId");
                                       return;

@@ -124,7 +124,7 @@ function VerifyEmailFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     }
   }, [prefillCode, email, handleVerify]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     await handleVerify(code);
   }

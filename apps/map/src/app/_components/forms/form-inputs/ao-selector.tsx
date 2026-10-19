@@ -24,6 +24,8 @@ interface AOSelectorFormValues {
  * Depends on region being selected first
  * Side Effects: Clears dependent Event field when AO changes
  */
+// _T lets callers assert their form type includes these fields (`<X<FormType> />`).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export function AOSelector<_T extends AOSelectorFormValues>({
   label = "From AO (optional):",
   fieldName = "newAoId",

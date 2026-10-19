@@ -40,11 +40,13 @@ const SelectedItemWrapper = () => {
       setDebouncedSelectedItem(undefined);
       return;
     } else if (typeof selectedItem.selectedLocation?.id === "number") {
-      void getQueryClient().prefetchQuery(
-        orpc.map.location.locationWorkout.queryOptions({
-          input: { locationId: selectedItem.selectedLocation?.id },
-        }),
-      );
+      void getQueryClient()
+        .query(
+          orpc.map.location.locationWorkout.queryOptions({
+            input: { locationId: selectedItem.selectedLocation?.id },
+          }),
+        )
+        .catch(() => undefined);
     }
 
     debouncedSetSelectedItem(selectedItem);

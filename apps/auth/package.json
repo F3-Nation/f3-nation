@@ -61,6 +61,7 @@
     "postcss": "catalog:",
     "postcss-load-config": "catalog:",
     "prettier": "catalog:",
+    "tailwindcss": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

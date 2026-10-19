@@ -10,7 +10,7 @@ import { isValidRedirectUri } from "../../scripts/add-client";
 // just set up `select`/`delete`/`insert` return values per call.
 // ---------------------------------------------------------------------------
 
-function chain<T>(result: T) {
+function chain(result: unknown) {
   const obj: Record<string, unknown> = {};
   for (const method of [
     "from",
@@ -23,8 +23,10 @@ function chain<T>(result: T) {
   ]) {
     obj[method] = vi.fn(() => obj);
   }
-  obj.then = (resolve: (v: T) => unknown, reject?: (e: unknown) => unknown) =>
-    Promise.resolve(result).then(resolve, reject);
+  obj.then = (
+    resolve: (v: unknown) => unknown,
+    reject?: (e: unknown) => unknown,
+  ) => Promise.resolve(result).then(resolve, reject);
   obj.catch = (reject: (e: unknown) => unknown) =>
     Promise.resolve(result).catch(reject);
   return obj;

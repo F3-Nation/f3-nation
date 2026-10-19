@@ -221,7 +221,7 @@ export default function AdminLocationsModal({
                               <TooltipTrigger type="button">
                                 <CircleQuestionMark
                                   size={14}
-                                  className="display-inline ml-2"
+                                  className="ml-2"
                                 />
                               </TooltipTrigger>
                               <TooltipContent>
@@ -260,7 +260,7 @@ export default function AdminLocationsModal({
                             }
                             searchPlaceholder="Select a region"
                             onSelect={(value) => {
-                              const orgId = safeParseInt(value as string);
+                              const orgId = safeParseInt(value);
                               if (orgId == null) {
                                 toast.error("Invalid orgId");
                                 return;

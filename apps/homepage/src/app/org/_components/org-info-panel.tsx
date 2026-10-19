@@ -62,7 +62,7 @@ function LeaderItem({ entry }: LeaderItemProps) {
         <img
           src={avatar}
           alt={name}
-          className="h-10 w-10 flex-shrink-0 rounded-lg object-cover"
+          className="h-10 w-10 shrink-0 rounded-lg object-cover"
           loading="lazy"
         />
         <div>

@@ -23,6 +23,8 @@ interface RegionAndAOSelectorFormValues {
  * Follows Open/Closed Principle: New selection combinations can be added
  * without modifying existing components
  */
+// _T lets callers assert their form type includes these fields (`<X<FormType> />`).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export function RegionAndAOSelector<_T extends RegionAndAOSelectorFormValues>({
   title = "Choose AO:",
   regionLabel = "In Region:",
