@@ -89,6 +89,7 @@ function VerifyEmailFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
             redirect: false,
           });
 
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth's signIn resolves undefined when it redirects
           if (result?.error) {
             setError("Invalid or expired code. Please try again.");
             return;
@@ -124,7 +125,7 @@ function VerifyEmailFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     }
   }, [prefillCode, email, handleVerify]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     await handleVerify(code);
   }

@@ -29,8 +29,8 @@ export const DesktopNearbyLocations = ({
   const hasMovedAwayFromLocation = useMemo(() => {
     return (
       latLngToMeters(
-        center?.lat,
-        center?.lng,
+        center.lat,
+        center.lng,
         nearbyLocationCenter?.lat,
         nearbyLocationCenter?.lng,
       ) > 1000
@@ -48,7 +48,7 @@ export const DesktopNearbyLocations = ({
     <>
       <div className="flex flex-row justify-center py-2">
         <NearbyLocationContent nearbyLocationCenter={nearbyLocationCenter} />
-        {hasMovedAwayFromLocation && center && (
+        {hasMovedAwayFromLocation && (
           <button
             className="ml-2 self-end text-sm text-foreground underline"
             onClick={() => {

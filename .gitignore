@@ -12,6 +12,7 @@ coverage
 # playwright
 test-results/
 playwright-report/
+.playwright-mcp/
 blob-report/
 
 # next.js

@@ -182,10 +182,14 @@ async function startDockerPostgres(): Promise<() => void> {
     POSTGRES_IMAGE,
   ]);
   for (let i = 0; ; i++) {
+    // -h forces TCP: the image's init-time temp server answers on the socket
+    // only, then restarts, which would reset the host's first connection.
     const ready = spawnSync("docker", [
       "exec",
       CONTAINER,
       "pg_isready",
+      "-h",
+      "127.0.0.1",
       "-U",
       "f3local",
       "-d",
@@ -2779,6 +2783,7 @@ async function main(): Promise<void> {
     restoreEnv();
     stopPostgres();
     console.log(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set inside restoreEnv()
       envRestoreFailed
         ? "Stopped throwaway postgres, but packages/env/.env restore FAILED — see above."
         : "Cleaned up throwaway postgres and packages/env/.env.",

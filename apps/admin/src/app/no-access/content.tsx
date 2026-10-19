@@ -16,7 +16,7 @@ export default function NoAccess() {
   const searchParams = useSearchParams();
   const { data: session } = useAdminSession();
   const router = useRouter();
-  const reason = searchParams?.get("reason");
+  const reason = searchParams.get("reason");
 
   const isNotAdmin = reason === "not-admin";
   const isNotEditor = reason === "not-editor";
@@ -68,7 +68,7 @@ export default function NoAccess() {
               <p className="text-gray-600">
                 {"You don't have access to the requested resource."}
               </p>
-              {session?.roles && session.roles.length > 0 && (
+              {session.roles.length > 0 && (
                 <p className="text-sm text-gray-500">
                   Your roles:{" "}
                   {session.roles.map((role, index) => (

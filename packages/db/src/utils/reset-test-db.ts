@@ -68,7 +68,7 @@ export const resetTestDb = async (params?: {
   // If we have arg `--reset` then we should reset the database
   if (shouldReset) {
     console.log("Resetting database");
-    await reset(params?.db);
+    await reset(params.db);
   }
 
   console.log("Migrating database", databaseName, {
@@ -80,6 +80,6 @@ export const resetTestDb = async (params?: {
 
   if (shouldSeed) {
     console.log("Seeding database...");
-    await testSeed(params?.db ?? getDb());
+    await testSeed(params.db ?? getDb());
   }
 };

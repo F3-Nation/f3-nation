@@ -30,7 +30,7 @@ import { SettingsButton } from "./map/settings-button";
 import { StagingWatermark } from "./map/staging-watermark";
 import { UserLocationIcon } from "./map/user-location-icon";
 
-const SHOW_DEBUG = false;
+const SHOW_DEBUG = false as boolean;
 export const MapLayoutItems = () => {
   console.log("MapLayoutItems rerender");
   const { isDesktopWidth, isMobileWidth } = useIsMobileWidth();

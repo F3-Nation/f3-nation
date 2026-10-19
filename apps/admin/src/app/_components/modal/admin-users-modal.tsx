@@ -125,7 +125,7 @@ export default function UserModal({
   const roleOrgParentQueries = useQueries({
     queries: roleOrgIdsNeedingParent({
       user,
-      editableOrgs: orgs?.orgs ?? [],
+      editableOrgs: orgs.orgs,
     }).map((id) => orpc.org.byId.queryOptions({ input: { id } })),
   });
   const roleOrgParentIds = new Map(
@@ -137,7 +137,7 @@ export default function UserModal({
   const canEditUser = canEditUserProfile({
     user,
     sessionUserId: session?.id,
-    editableOrgs: orgs?.orgs ?? [],
+    editableOrgs: orgs.orgs,
     roleOrgParentIds,
   });
 
@@ -163,15 +163,15 @@ export default function UserModal({
     if (!user) return;
 
     form.reset({
-      id: user.id ?? undefined,
-      f3Name: user?.f3Name ?? "",
-      firstName: user?.firstName ?? "",
-      lastName: user?.lastName ?? "",
-      email: user?.email ?? "",
-      roles: toGrantableRoleEntries(user?.roles),
-      homeRegionId: user?.homeRegionId ?? null,
-      status: user?.status ?? "active",
-      phone: user?.phone ?? "",
+      id: user.id,
+      f3Name: user.f3Name ?? "",
+      firstName: user.firstName ?? "",
+      lastName: user.lastName ?? "",
+      email: user.email ?? "",
+      roles: toGrantableRoleEntries(user.roles),
+      homeRegionId: user.homeRegionId ?? null,
+      status: user.status ?? "active",
+      phone: user.phone ?? "",
     });
   }, [form, user]);
 
@@ -495,7 +495,7 @@ export default function UserModal({
                   <div className="w-full border-t border-border" />
                   <div className="mb-4 w-full px-2">
                     <div className="flex flex-col gap-2 pt-4">
-                      {user.roles && user.roles.length > 0 && (
+                      {user.roles.length > 0 && (
                         <div className="flex flex-col gap-2">
                           <p className="text-sm font-medium text-foreground">
                             Current Roles

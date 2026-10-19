@@ -69,7 +69,7 @@ export const TextSearchResultsProvider = ({
   );
   const locationIdToRegionNameLookup =
     locationIdToRegionNameLookupResponse?.lookup;
-  const isMobileWidth = useIsMobileWidth();
+  const { isMobileWidth } = useIsMobileWidth();
   const { filteredLocationMarkers } = useFilteredMapResults();
 
   const [geoResults, setGeoResults] = useState<GeoMapSearchResult[]>([]);
@@ -163,23 +163,31 @@ export const TextSearchResultsProvider = ({
     // Use debounced autocomplete to reduce API calls
     const cleanup = debouncedPlacesAutocomplete(
       text,
-      mapStore.get("center") ?? { lat: 37.7937, lng: -122.3965 },
+      mapStore.get("center"),
       mapStore.get("zoom"),
       (results) => {
         setGeoResults(
-          results.map((result) => ({
-            type: "geo",
-            header: result?.placePrediction?.structuredFormat?.mainText?.text,
-            description:
-              result?.placePrediction?.structuredFormat?.secondaryText?.text,
-            destination: {
-              id: result?.placePrediction?.placeId,
-              lat: null,
-              lng: null,
-              item: null,
-              placeId: result?.placePrediction?.placeId,
-            },
-          })) ?? [],
+          // Query predictions have no place to navigate to.
+          results.flatMap(({ placePrediction }) =>
+            placePrediction
+              ? [
+                  {
+                    type: "geo" as const,
+                    header: placePrediction.structuredFormat.mainText.text,
+                    description:
+                      placePrediction.structuredFormat.secondaryText?.text ??
+                      "",
+                    destination: {
+                      id: placePrediction.placeId,
+                      lat: null,
+                      lng: null,
+                      item: null,
+                      placeId: placePrediction.placeId,
+                    },
+                  },
+                ]
+              : [],
+          ),
         );
       },
     );

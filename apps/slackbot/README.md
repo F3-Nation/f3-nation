@@ -14,7 +14,46 @@ From the repo root:
 pnpm local:setup
 ```
 
-This creates `apps/slackbot/.env` from `apps/slackbot/.env.local.example`, then starts shared Docker services and runs DB migration/seed steps.
+This creates `apps/slackbot/.env` from [`.env.example`](.env.example), then starts shared Docker services and runs DB migration/seed steps.
+
+### Local email
+
+Shared notification emails use `EMAIL_SERVER` and `EMAIL_FROM` from the Slackbot
+env file. The local defaults send to Mailpit at `smtp://localhost:1025`, with
+fallback sender `F3 Nation <no-reply@f3local.dev>` when the caller does not supply
+its own sender. `pnpm local:setup --slot N` rewrites
+the SMTP port for that checkout. Open Mailpit at `http://localhost:8025`, or at
+the checkout's `F3_MAILPIT_UI_PORT` from the root `.env`, to inspect captured
+messages. Existing checkouts can add these two variables to their local env
+file; slotted checkouts must use their root `.env` value of
+`F3_MAILPIT_SMTP_PORT` in the SMTP URL instead of 1025. Setup backs up existing
+env files to `.env.bak.<timestamp>` before recreating them; restore any custom
+settings from that backup when running setup again.
+
+The compatibility helper `send_via_sendgrid` now sends through SMTP and does not
+use `SENDGRID_API_KEY`. An explicit `from_email` argument overrides `EMAIL_FROM`;
+without either, the historical sender `noreply@f3nation.com` remains the fallback.
+Both current feature callers, the `/fng` welcome email in
+[`features/fng.py`](features/fng.py) and the emergency-access notification in
+[`features/emergency.py`](features/emergency.py), explicitly supply
+`F3 Nation Slackbot Support <support.slackbot@f3nation.com>`. Expect that sender
+for both flows in Mailpit; changing `EMAIL_FROM` does not override it.
+Region-configured backblast email keeps its separate SMTP settings.
+
+Synthetic delivery through this helper can be tested without a Slack app, but
+that does not verify either Slack flow. With the local Slack app linked to a
+synthetic region and SMTP pointed at Mailpit, test both flows separately using
+only synthetic names, contact details, and emergency information:
+
+- For emergency access, give a synthetic local member an email address, open
+  `/f3-nation-settings`, choose **Emergency Info Access**, select that member,
+  and inspect the access notification in Mailpit.
+- For `/fng`, first set the region's **Slack invite link** under
+  `/f3-nation-settings` → **Downrange** admin settings. Submit the `/fng` form
+  with synthetic details and inspect the welcome email in Mailpit. Local mode
+  replaces the recipient with a generated
+  `dev.staging-email-sink+fng-<random>@f3nation.com` address; it does not use the
+  submitted email address. Without an invite link, no welcome email is sent.
 
 ### Create Slack app and configure Slack credentials
 
@@ -114,6 +153,55 @@ One tag deploys two runtimes:
 4. Deploys staging main service and staging scripts job
 5. Waits for production environment approval
 6. Promotes images and deploys production service and production job
+
+### SMTP configuration and rollout prerequisite
+
+Before deploying an image that uses the shared SMTP helper, a release operator
+must provision the complete `EMAIL_SERVER` URL as the `email-server` secret in
+both `f3-slackbot-staging` and `f3-slackbot`. Grant the service and scripts-job
+runtime accounts access, bind that secret as `EMAIL_SERVER`, and set the plain
+`EMAIL_FROM` variable to a provider-approved sender for both runtimes. The tag
+release workflow deploys images; it does not provision these SMTP settings.
+Both current shared-helper flows, `/fng` welcome emails and emergency-access
+notifications, override `EMAIL_FROM` with
+`F3 Nation Slackbot Support <support.slackbot@f3nation.com>`; that sender must
+also be approved by the configured provider. `EMAIL_FROM` is only the fallback
+for helper calls without an explicit sender; changing it does not change the
+sender of either current flow.
+
+Use [`.env.cloud-run.example`](.env.cloud-run.example) for the per-environment
+configuration. The operator-run [`scripts/cloud-run-env.sh`](scripts/cloud-run-env.sh)
+maps `EMAIL_SERVER` to Secret Manager and applies `EMAIL_FROM` as a plain env
+variable to both the service and job. Keep SMTP URLs out of logs and command
+arguments: they can contain credentials. Percent-encode reserved characters in
+the URL username and password. For SendGrid SMTP, use `smtp.sendgrid.net:587`,
+the literal username `apikey`, and the SendGrid API key as the percent-encoded
+password, as shown in the cloud env example.
+
+`smtp://` defaults to port 587 and uses verified STARTTLS for remote servers;
+`smtps://` defaults to port 465 and uses implicit TLS with certificate verification.
+Explicit ports, including port 25, are respected. Plain SMTP is allowed only for unauthenticated
+endpoints with host exactly `localhost`, `127.0.0.1` or `::1`, such as local
+Mailpit. Other host spellings and authenticated endpoints require TLS. The
+10-second socket timeout applies per blocking operation; it does not bound DNS
+resolution or the whole helper call. Missing configuration or a transport error
+returns `False`; there is no SendGrid API fallback. `True` means SMTP acceptance
+and clean connection shutdown, not final inbox delivery. `False` can also follow
+acceptance if shutdown fails, so it does not prove no message was sent; blind
+retries can duplicate messages.
+
+Apply the SMTP settings before deploying the new image, retaining the existing
+`SENDGRID_API_KEY` binding so the old image can continue sending during the
+transition. The env script retains that old binding and Secret Manager secret,
+and grants both current runtime accounts access when that secret exists, without
+reading or updating its value. Projects without the legacy secret skip those
+grants; other metadata lookup errors or grant failures abort before runtime
+updates. After deployment, verify delivery
+through the configured provider in Staging and Production, then retire the old
+binding separately when rollback requirements allow. Local Mailpit delivery and
+stubbed deployment tests do not verify provider authentication, sender approval,
+or Cloud Run egress. These configuration and delivery checks are separate release
+actions; changing the example files does not configure live resources.
 
 ### Production profile-privacy rollout
 

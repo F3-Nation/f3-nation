@@ -413,27 +413,24 @@ export const requestRouter = {
 
       const where = and(
         input?.statuses?.length
-          ? inArray(schema.updateRequests.status, input?.statuses)
+          ? inArray(schema.updateRequests.status, input.statuses)
           : undefined,
         input?.searchTerm
           ? or(
-              ilike(
-                schema.updateRequests.submittedBy,
-                `%${input?.searchTerm}%`,
-              ),
-              ilike(schema.updateRequests.eventName, `%${input?.searchTerm}%`),
+              ilike(schema.updateRequests.submittedBy, `%${input.searchTerm}%`),
+              ilike(schema.updateRequests.eventName, `%${input.searchTerm}%`),
               ilike(
                 schema.updateRequests.eventDescription,
-                `%${input?.searchTerm}%`,
+                `%${input.searchTerm}%`,
               ),
-              ilike(schema.updateRequests.aoName, `%${input?.searchTerm}%`),
+              ilike(schema.updateRequests.aoName, `%${input.searchTerm}%`),
               ilike(
                 schema.updateRequests.locationName,
-                `%${input?.searchTerm}%`,
+                `%${input.searchTerm}%`,
               ),
               ilike(
                 schema.updateRequests.locationDescription,
-                `%${input?.searchTerm}%`,
+                `%${input.searchTerm}%`,
               ),
             )
           : undefined,
@@ -1175,20 +1172,18 @@ const notifyPendingRequest = async ({
   };
 }) => {
   // Notify admins and editors about the new request
-  if (result.status === "pending") {
-    try {
-      await notifyMapChangeRequest({
-        db: ctx.db,
-        requestId: result.updateRequest.id,
-      });
-    } catch (error) {
-      logError(
-        "api.request.notify_failed",
-        { requestId: result.updateRequest.id },
-        error,
-      );
-      // Don't fail the request if notification fails
-    }
+  try {
+    await notifyMapChangeRequest({
+      db: ctx.db,
+      requestId: result.updateRequest.id,
+    });
+  } catch (error) {
+    logError(
+      "api.request.notify_failed",
+      { requestId: result.updateRequest.id },
+      error,
+    );
+    // Don't fail the request if notification fails
   }
 };
 

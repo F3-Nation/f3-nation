@@ -273,7 +273,7 @@ export const AllUsersTable = () => {
               />
               <UserRoleFilter
                 onRoleSelect={handleRoleSelect}
-                selectedRoles={selectedRoles ?? []}
+                selectedRoles={selectedRoles}
               />
               <ResetFilter onClick={handleResetFilters} />
             </div>
@@ -310,7 +310,7 @@ export const AllUsersTable = () => {
                 <p className="mb-1 text-sm font-medium">Role</p>
                 <UserRoleFilter
                   onRoleSelect={handleRoleSelect}
-                  selectedRoles={selectedRoles ?? []}
+                  selectedRoles={selectedRoles}
                 />
               </div>
             </MobileFilterSheet>

@@ -61,7 +61,7 @@ export const LocationEditButtons = ({
         }}
       >
         <span className="inline-flex flex-wrap items-center">
-          <CirclePlus className="mr-2 h-4 w-4 flex-shrink-0" />
+          <CirclePlus className="mr-2 h-4 w-4 shrink-0" />
           <span className="leading-none break-words whitespace-normal">
             Add Workout to AO
           </span>
@@ -80,7 +80,7 @@ export const LocationEditButtons = ({
               className="w-full justify-between border-blue-500 bg-blue-500 text-white transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white"
             >
               <span className="inline-flex items-center">
-                <Edit className="mr-2 h-4 w-4 flex-shrink-0" />
+                <Edit className="mr-2 h-4 w-4 shrink-0" />
                 <span className="leading-none break-words whitespace-normal">
                   Edit Workout: {eventName}{" "}
                   {timeDisplay ? `(${timeDisplay})` : ""}
@@ -102,7 +102,7 @@ export const LocationEditButtons = ({
               }}
             >
               <span className="inline-flex items-center">
-                <Edit className="mr-2 h-4 w-4 flex-shrink-0" />
+                <Edit className="mr-2 h-4 w-4 shrink-0" />
                 <span className="leading-none break-words whitespace-normal">
                   Edit workout details
                 </span>
@@ -128,7 +128,7 @@ export const LocationEditButtons = ({
               }}
             >
               <span className="inline-flex flex-wrap items-center">
-                <ArrowRight className="mr-2 h-4 w-4 flex-shrink-0" />
+                <ArrowRight className="mr-2 h-4 w-4 shrink-0" />
                 <span className="leading-none break-words whitespace-normal">
                   Move to different AO
                 </span>
@@ -150,7 +150,7 @@ export const LocationEditButtons = ({
               }}
             >
               <span className="inline-flex flex-wrap items-center">
-                <ArrowRight className="mr-2 h-4 w-4 flex-shrink-0" />
+                <ArrowRight className="mr-2 h-4 w-4 shrink-0" />
                 <span className="leading-none break-words whitespace-normal">
                   Move to a new AO
                 </span>
@@ -171,7 +171,7 @@ export const LocationEditButtons = ({
               }}
             >
               <span className="inline-flex flex-wrap items-center">
-                <Trash className="mr-2 h-4 w-4 flex-shrink-0" />
+                <Trash className="mr-2 h-4 w-4 shrink-0" />
                 <span className="leading-none break-words whitespace-normal">
                   Delete this workout
                 </span>
@@ -192,7 +192,7 @@ export const LocationEditButtons = ({
             className="w-full justify-between border-blue-500 bg-blue-500 text-white transition-colors hover:border-blue-600 hover:bg-blue-600 hover:text-white"
           >
             <span className="inline-flex items-center">
-              <Edit className="mr-2 h-4 w-4 flex-shrink-0" />
+              <Edit className="mr-2 h-4 w-4 shrink-0" />
               <span className="leading-none break-words whitespace-normal">
                 Edit AO: {aoName} ({eventCount} workouts)
               </span>
@@ -212,7 +212,7 @@ export const LocationEditButtons = ({
             }}
           >
             <span className="inline-flex items-center">
-              <Edit className="mr-2 h-4 w-4 flex-shrink-0" />
+              <Edit className="mr-2 h-4 w-4 shrink-0" />
               <span className="leading-none break-words whitespace-normal">
                 Edit AO details
               </span>
@@ -231,7 +231,7 @@ export const LocationEditButtons = ({
             }}
           >
             <span className="inline-flex items-center">
-              <ArrowRight className="mr-2 h-4 w-4 flex-shrink-0" />
+              <ArrowRight className="mr-2 h-4 w-4 shrink-0" />
               <span className="leading-none break-words whitespace-normal">
                 Move AO to different location
               </span>
@@ -253,7 +253,7 @@ export const LocationEditButtons = ({
             }}
           >
             <span className="inline-flex items-center">
-              <ArrowRight className="mr-2 h-4 w-4 flex-shrink-0" />
+              <ArrowRight className="mr-2 h-4 w-4 shrink-0" />
               <span className="leading-none break-words whitespace-normal">
                 Move AO to different region
               </span>
@@ -269,7 +269,7 @@ export const LocationEditButtons = ({
             }}
           >
             <span className="inline-flex items-center">
-              <Trash className="mr-2 h-4 w-4 flex-shrink-0" />
+              <Trash className="mr-2 h-4 w-4 shrink-0" />
               <span className="leading-none break-words whitespace-normal">
                 Delete this AO
               </span>

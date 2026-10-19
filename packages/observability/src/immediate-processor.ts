@@ -11,7 +11,7 @@ import type { Context } from "@opentelemetry/api";
 import type {
   LogRecordExporter,
   LogRecordProcessor,
-  SdkLogRecord,
+  ReadWriteLogRecord,
 } from "@opentelemetry/sdk-logs";
 
 /**
@@ -25,7 +25,7 @@ export class ImmediateLogRecordProcessor implements LogRecordProcessor {
 
   constructor(private readonly exporter: LogRecordExporter) {}
 
-  onEmit(logRecord: SdkLogRecord, _context?: Context): void {
+  onEmit(logRecord: ReadWriteLogRecord, _context?: Context): void {
     const exportDone = new Promise<void>((resolve) => {
       this.exporter.export([logRecord], () => resolve());
     });

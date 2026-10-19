@@ -21,6 +21,8 @@ import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { paginationFields, resolvePagination } from "../lib/pagination";
+import { orgAndAncestorsAreActive } from "../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import { requireEditorOnRescope } from "../require-editor-on-rescope";
 import {
   editorProcedure,
@@ -75,7 +77,7 @@ export const eventTypeRouter = {
         .superRefine((data, ctx) => {
           if (data.nationalOnly && data.orgIds?.length) {
             ctx.addIssue({
-              code: z.ZodIssueCode.custom,
+              code: "custom",
               message: "nationalOnly cannot be combined with orgIds",
               path: ["nationalOnly"],
             });
@@ -173,7 +175,7 @@ export const eventTypeRouter = {
         : input?.orgIds?.length
           ? or(
               inArray(schema.eventTypes.specificOrgId, input.orgIds),
-              input?.ignoreNationEventTypes
+              input.ignoreNationEventTypes
                 ? undefined
                 : isNull(schema.eventTypes.specificOrgId),
             )
@@ -188,12 +190,16 @@ export const eventTypeRouter = {
       const effectiveStatuses = isAnonymous
         ? (["active"] as IsActiveStatus[])
         : input?.statuses;
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
 
       const where = and(
+        isAnonymous
+          ? orgAndAncestorsAreActive(schema.eventTypes.specificOrgId)
+          : undefined,
         input?.searchTerm
           ? or(
-              ilike(schema.eventTypes.name, `%${input?.searchTerm}%`),
-              ilike(schema.eventTypes.description, `%${input?.searchTerm}%`),
+              ilike(schema.eventTypes.name, `%${input.searchTerm}%`),
+              ilike(schema.eventTypes.description, `%${input.searchTerm}%`),
             )
           : undefined,
         orgScopeFilter,
@@ -215,7 +221,7 @@ export const eventTypeRouter = {
           message: "Event type not found",
         });
       }
-      const totalCount = eventTypeCount?.count;
+      const totalCount = eventTypeCount.count;
 
       const query = ctx.db
         .select(select)
@@ -292,7 +298,7 @@ export const eventTypeRouter = {
           ),
         );
 
-      return { eventTypes: eventTypes ?? null };
+      return { eventTypes: eventTypes };
     }),
   byId: protectedProcedure
     .input(
@@ -348,7 +354,7 @@ export const eventTypeRouter = {
         });
       }
 
-      return { eventType: result ?? null };
+      return { eventType: result };
     }),
   crupdate: editorProcedure
     .input(EventTypeInsertSchema)
@@ -447,7 +453,7 @@ export const eventTypeRouter = {
         })
         .returning();
 
-      return { eventType: result ?? null };
+      return { eventType: result };
     }),
   delete: editorProcedure
     .input(

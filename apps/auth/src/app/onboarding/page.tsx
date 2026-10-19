@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import Image from "next/image";
 
+import { RegionPicker } from "~/app/components/region-picker";
+import type { Region } from "~/app/components/region-picker";
 import { isValidCallbackUrl } from "~/lib/callback-url";
 
 export default function OnboardingPage() {
@@ -19,6 +21,11 @@ function OnboardingForm() {
   const [f3Name, setF3Name] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [homeRegionId, setHomeRegionId] = useState<number | "">("");
+  const [regionSearch, setRegionSearch] = useState("");
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [regionsLoaded, setRegionsLoaded] = useState(false);
+  const [regionsFailed, setRegionsFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [prefilling, setPrefilling] = useState(true);
   const [isExistingUser, setIsExistingUser] = useState(false);
@@ -55,12 +62,14 @@ function OnboardingForm() {
           f3Name?: string;
           firstName?: string;
           lastName?: string;
+          homeRegionId?: number | null;
           isExistingUser?: boolean;
         }) => {
           if (!data) return;
           if (data.f3Name) setF3Name(data.f3Name);
           if (data.firstName) setFirstName(data.firstName);
           if (data.lastName) setLastName(data.lastName);
+          if (data.homeRegionId) setHomeRegionId(data.homeRegionId);
           if (data.isExistingUser) setIsExistingUser(true);
         },
       )
@@ -75,7 +84,35 @@ function OnboardingForm() {
       });
   }, [router, callbackUrl]);
 
-  if (prefilling) {
+  useEffect(() => {
+    // Bounded wait: a request that never settles would otherwise hold the
+    // form on "Loading..." instead of falling back to no region picker.
+    fetch("/api/regions", { signal: AbortSignal.timeout(5000) })
+      .then((res) => {
+        if (!res.ok) throw new Error("regions request failed");
+        return res.json();
+      })
+      .then((data: Region[]) => setRegions(data))
+      .catch(() => {
+        // No list to pick from: the form still works without a region, but
+        // say so rather than skipping the question silently.
+        setRegionsFailed(true);
+      })
+      .finally(() => setRegionsLoaded(true));
+  }, []);
+
+  // A saved region that isn't on the list (a retired region, say) doesn't
+  // count, so the user picks a current one instead of confirming a stale id.
+  // Derived rather than cleared in an effect, so a submit can't race it.
+  const chosenRegion = regions.find((r) => r.id === homeRegionId);
+  const regionId: number | "" = chosenRegion ? chosenRegion.id : "";
+
+  // Show the saved region's name once the list is in.
+  useEffect(() => {
+    if (chosenRegion) setRegionSearch(chosenRegion.name);
+  }, [chosenRegion]);
+
+  if (prefilling || !regionsLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
@@ -83,21 +120,43 @@ function OnboardingForm() {
     );
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");
+
+    // Only ask for a region when there is a list to choose from.
+    if (regions.length > 0 && !regionId) {
+      setError("Please choose your home region.");
+      setLoading(false);
+      return;
+    }
+
     let navigating = false;
 
     try {
       const res = await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ f3Name, firstName, lastName }),
+        body: JSON.stringify({
+          f3Name,
+          firstName,
+          lastName,
+          ...(regions.length > 0 && regionId && { homeRegionId: regionId }),
+        }),
       });
 
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
+        if (res.status === 400 && data.error?.startsWith("homeRegionId")) {
+          // The region was retired after the page loaded.
+          setHomeRegionId("");
+          setRegionSearch("");
+          setError(
+            "That region is no longer available. Please choose another.",
+          );
+          return;
+        }
         setError(data.error ?? "Failed to complete onboarding");
         return;
       }
@@ -196,6 +255,26 @@ function OnboardingForm() {
               className="w-full rounded-md border bg-background px-4 py-3 text-base outline-hidden focus:ring-2 focus:ring-ring"
             />
           </div>
+
+          {regions.length > 0 && (
+            <RegionPicker
+              regions={regions}
+              value={regionId}
+              onChange={setHomeRegionId}
+              search={regionSearch}
+              onSearchChange={setRegionSearch}
+              inputClass="w-full rounded-md border bg-background px-4 py-3 text-base outline-hidden focus:ring-2 focus:ring-ring"
+              placeholder="Search for your home region"
+              required
+            />
+          )}
+
+          {regionsFailed && (
+            <p className="text-base text-muted-foreground">
+              We couldn&apos;t load the region list, so your home region
+              wasn&apos;t confirmed. You can update it later in your profile.
+            </p>
+          )}
 
           {error && <p className="text-base text-destructive">{error}</p>}
 

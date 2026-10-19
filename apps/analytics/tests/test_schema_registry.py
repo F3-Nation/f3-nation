@@ -58,6 +58,118 @@ def test_schema_registry_is_complete_and_ordered_for_all_registered_datasets():
     assert next(column.duckdb_type for column in SCHEMAS_BY_NAME["pv_events"].columns if column.name == "types") == (
         'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]'
     )
+    events = SCHEMAS_BY_NAME["pv_events"]
+    assert events.schema_version == "pv_events.v3"
+    assert tuple(column.name for column in events.columns) == (
+        "refreshed_at",
+        "event_id",
+        "event_date",
+        "event_name",
+        "pax_count",
+        "fng_count",
+        "ao_org_id",
+        "ao_name",
+        "region_org_id",
+        "region_name",
+        "area_org_id",
+        "area_name",
+        "territory_org_id",
+        "territory_name",
+        "sector_org_id",
+        "sector_name",
+        "first_f_ind",
+        "second_f_ind",
+        "third_f_ind",
+        "types",
+        "tags",
+        "attendance",
+    )
+    assert tuple(column.duckdb_type for column in events.columns) == (
+        "TIMESTAMP WITH TIME ZONE",
+        "INTEGER",
+        "DATE",
+        "VARCHAR",
+        "INTEGER",
+        "INTEGER",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "INTEGER",
+        "INTEGER",
+        'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]',
+        'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR)[]',
+        "STRUCT(user_id INTEGER, f3_name VARCHAR, q_ind INTEGER, coq_ind INTEGER, avatar_url VARCHAR, "
+        "attended BOOLEAN, ghost BOOLEAN, fartsack BOOLEAN)[]",
+    )
+    assert SCHEMAS_BY_VERSION[("pv_events", "pv_events.v2")].schema_version == "pv_events.v2"
+    assert "pv_events.v2" not in {schema.schema_version for schema in SCHEMAS_BY_NAME.values()}
+    legacy_events = SCHEMAS_BY_VERSION[("pv_events", "pv_events.v2")]
+    assert tuple((column.name, column.duckdb_type, column.nullable) for column in legacy_events.columns) == (
+        ("refreshed_at", "TIMESTAMP WITH TIME ZONE", True),
+        ("event_id", "INTEGER", True),
+        ("event_date", "DATE", True),
+        ("event_name", "VARCHAR", True),
+        ("pax_count", "INTEGER", True),
+        ("fng_count", "INTEGER", True),
+        ("description", "VARCHAR", True),
+        ("preblast", "VARCHAR", True),
+        ("preblast_rich", "JSON", True),
+        ("backblast", "VARCHAR", True),
+        ("backblast_rich", "JSON", True),
+        ("meta", "JSON", True),
+        ("ao_org_id", "INTEGER", True),
+        ("ao_name", "VARCHAR", True),
+        ("region_org_id", "INTEGER", True),
+        ("region_name", "VARCHAR", True),
+        ("area_org_id", "INTEGER", True),
+        ("area_name", "VARCHAR", True),
+        ("territory_org_id", "INTEGER", True),
+        ("territory_name", "VARCHAR", True),
+        ("sector_org_id", "INTEGER", True),
+        ("sector_name", "VARCHAR", True),
+        ("first_f_ind", "INTEGER", True),
+        ("second_f_ind", "INTEGER", True),
+        ("third_f_ind", "INTEGER", True),
+        ("types", 'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]', True),
+        ("tags", 'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR)[]', True),
+        (
+            "attendance",
+            "STRUCT(user_id INTEGER, f3_name VARCHAR, q_ind INTEGER, coq_ind INTEGER, avatar_url VARCHAR, "
+            "attended BOOLEAN, ghost BOOLEAN, fartsack BOOLEAN)[]",
+            True,
+        ),
+    )
+
+    event_details = SCHEMAS_BY_NAME["pv_event_details"]
+    assert event_details.schema_version == "pv_event_details.v1"
+    assert tuple(column.name for column in event_details.columns) == (
+        "event_id",
+        "description",
+        "preblast",
+        "preblast_rich",
+        "backblast",
+        "backblast_rich",
+        "meta",
+        "refreshed_at",
+    )
+    assert tuple(column.duckdb_type for column in event_details.columns) == (
+        "INTEGER",
+        "VARCHAR",
+        "VARCHAR",
+        "JSON",
+        "VARCHAR",
+        "JSON",
+        "JSON",
+        "TIMESTAMP WITH TIME ZONE",
+    )
 
     assert tuple(column.name for column in SCHEMAS_BY_NAME["pv_pax"].columns[-2:]) == (
         "lifetime_posts",
@@ -214,8 +326,8 @@ def test_parquet_partitions_with_different_physical_schemas_are_rejected(tmp_pat
 def test_rich_json_types_and_json_null_remain_distinct_from_sql_null(tmp_path: Path):
     connection = events_source()
     connection.execute("UPDATE pg.public.event_instances SET preblast_rich = 'null'::JSON WHERE id = 2")
-    definition = MATERIALIZATIONS_BY_NAME["pv_events"]
-    artifacts = materialize(connection, tmp_path / "json", definition, "2026-01-05T00:00:00Z", "2026-01-05")
+    definition = MATERIALIZATIONS_BY_NAME["pv_event_details"]
+    artifacts = materialize(connection, tmp_path / "event-details", definition, "2026-01-05T00:00:00Z", "2026-01-05")
     rows = connection.execute(
         "SELECT preblast_rich, backblast_rich FROM read_parquet(?) WHERE event_id = 2",
         [str(artifacts.sorted_parquet_files[0])],

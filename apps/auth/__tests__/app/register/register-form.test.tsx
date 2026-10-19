@@ -77,7 +77,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("registration", () => {
+// Each test renders the full form; on a loaded CI runner the slowest ones
+// exceed the 5s default.
+describe("registration", { timeout: 20_000 }, () => {
   it.each([false, true])(
     "creates the account before signing in (Better Auth: %s)",
     async (useBetterAuth) => {
@@ -158,12 +160,14 @@ describe("registration", () => {
     await fillForm();
     change("F3 Name", "Test Runner");
     change("Home Region", "sOuTh");
-    expect(screen.queryByRole("button", { name: "Test North" })).toBeNull();
-    const region = screen.getByRole("button", { name: "Test South" });
+    expect(screen.queryByRole("option", { name: "Test North" })).toBeNull();
+    const region = screen.getByRole("option", { name: "Test South" });
     fireEvent.mouseDown(region);
     fireEvent.click(region);
     change("Phone Number", "2025550123");
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "GB" } });
+    fireEvent.change(document.querySelector("#phoneCountry")!, {
+      target: { value: "GB" },
+    });
     expect(screen.getByLabelText("Phone Number")).toHaveProperty("value", "");
     change("Phone Number", "02079460018");
     fireEvent.click(
@@ -204,7 +208,7 @@ describe("registration", () => {
     vi.useFakeTimers();
     const input = screen.getByLabelText("Home Region");
     fireEvent.focus(input);
-    const region = screen.getByRole("button", { name: "Test South" });
+    const region = screen.getByRole("option", { name: "Test South" });
     fireEvent.mouseDown(region);
     fireEvent.blur(input);
     fireEvent.click(region);
@@ -221,11 +225,11 @@ describe("registration", () => {
     await act(() => vi.advanceTimersByTimeAsync(200));
     expect(input).toHaveProperty("value", "");
     fireEvent.focus(input);
-    expect(screen.getByRole("button", { name: "Test North" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Test North" })).toBeDefined();
     fireEvent.mouseDown(
       screen.getByRole("heading", { name: "Create Your Account" }),
     );
-    expect(screen.queryByRole("button", { name: "Test North" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Test North" })).toBeNull();
     vi.useRealTimers();
     submit();
     await waitFor(() =>

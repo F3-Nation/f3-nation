@@ -403,7 +403,7 @@ describe("Event Tag Router", () => {
 
       expect(result).toHaveProperty("eventTag");
       expect(result.eventTag).not.toBeNull();
-      expect(result.eventTag?.id).toBe(eventTag.id);
+      expect(result.eventTag.id).toBe(eventTag.id);
     });
 
     it("should throw NOT_FOUND for non-existent event tag", async () => {

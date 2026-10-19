@@ -1,5 +1,9 @@
 import { KnipConfig } from "knip";
 
+// @acme/eslint-config/tailwind resolves tailwindcss from each workspace at
+// lint time; no import exists for knip to trace.
+const tailwindLintDeps = ["tailwindcss"];
+
 const config: KnipConfig = {
   treatConfigHintsAsErrors: true,
   ignore: [
@@ -59,16 +63,23 @@ const config: KnipConfig = {
       // knip parses `dotenv run -q --` as a binary named `run`; `dotenv` is
       // the CLI shipped by the `dotenv` package itself.
       ignoreBinaries: ["run"],
+      ignoreDependencies: tailwindLintDeps,
     },
     "apps/admin": {
       // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's
       // internal call; no static import exists for knip to trace.
-      ignoreDependencies: ["@f3nation/sso"],
+      ignoreDependencies: ["@f3nation/sso", ...tailwindLintDeps],
     },
+    "apps/homepage": { ignoreDependencies: tailwindLintDeps },
+    "apps/map": { ignoreDependencies: tailwindLintDeps },
     "apps/me": {
       // vi.mock("@f3nation/sso") in auth-login tests intercepts handleLoginRoute's
       // internal call; no static import exists for knip to trace.
-      ignoreDependencies: ["@f3nation/sso"],
+      ignoreDependencies: ["@f3nation/sso", ...tailwindLintDeps],
+    },
+    "packages/ui": {
+      // Its Tailwind lint entry point is @acme/tailwind-config/web.css.
+      ignoreDependencies: [...tailwindLintDeps, "@acme/tailwind-config"],
     },
     "apps/slackbot": {
       // Graph-only edge mirroring apps/slackbot/pyproject.toml so Turbo can see

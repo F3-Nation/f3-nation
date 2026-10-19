@@ -24,6 +24,8 @@ interface EventDetailsFormValues {
   currentValues?: Partial<EventFieldsType>;
 }
 
+// _T lets callers assert their form type includes these fields (`<X<FormType> />`).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
   // I'd like for this to be generic, but the types don't seem to be working as expected.
   const form = useFormContext<EventDetailsFormValues>();
@@ -116,11 +118,7 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
         </div>
 
         <div className="space-y-2">
-          <ControlledTimeInput
-            name="eventStartTime"
-            id="eventStartTime"
-            label="Start Time"
-          />
+          <ControlledTimeInput name="eventStartTime" label="Start Time" />
           {currentValues?.eventStartTime &&
             currentValues.eventStartTime !== formEventStartTime && (
               <p className="text-xs text-muted-foreground line-through">
@@ -129,11 +127,7 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
             )}
         </div>
         <div className="space-y-2">
-          <ControlledTimeInput
-            name="eventEndTime"
-            id="eventEndTime"
-            label="End Time"
-          />
+          <ControlledTimeInput name="eventEndTime" label="End Time" />
           {currentValues?.eventEndTime &&
             currentValues.eventEndTime !== formEventEndTime && (
               <p className="text-xs text-muted-foreground line-through">

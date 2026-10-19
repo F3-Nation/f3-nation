@@ -33,8 +33,11 @@ async function fetchSession(): Promise<AdminSession | null> {
 
   if (!response.ok) return null;
 
-  const body = (await response.json()) as { user?: AdminSession | null };
-  return body.user ?? null;
+  const body = (await response.json()) as {
+    user?:
+      (Omit<AdminSession, "roles"> & { roles?: AdminSession["roles"] }) | null;
+  };
+  return body.user ? { ...body.user, roles: body.user.roles ?? [] } : null;
 }
 
 function getStatus(session: AdminSession | null): AdminSessionStatus {

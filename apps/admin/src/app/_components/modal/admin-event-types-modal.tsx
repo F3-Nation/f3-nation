@@ -117,7 +117,7 @@ export default function AdminEventTypesModal({
       },
       onError: (err) => {
         toast.error(
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+          err instanceof ORPCError && err.code === "UNAUTHORIZED"
             ? `You are not authorized to ${actionText} this event type`
             : `Failed to ${actionText} event type`,
         );
@@ -147,7 +147,7 @@ export default function AdminEventTypesModal({
     }
   };
 
-  const showDeleteButton = isEditing && eventType?.isActive !== false;
+  const showDeleteButton = isEditing && eventType.isActive !== false;
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -196,6 +196,7 @@ export default function AdminEventTypesModal({
                       <Input
                         placeholder="Name"
                         {...field}
+                        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                         value={field.value ?? ""}
                       />
                     </FormControl>
@@ -302,7 +303,7 @@ export default function AdminEventTypesModal({
                   onClick={() => {
                     closeModal();
                     openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                      id: eventType?.id ?? -1,
+                      id: eventType.id,
                       type: DeleteType.EVENT_TYPE,
                     });
                   }}

@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { and, desc, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
 
+import { UserRole } from "@acme/shared/app/enums";
 import { queryBooleanSchema } from "@acme/shared/app/functions";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
 
@@ -186,7 +187,7 @@ export const apiKeyRouter = {
                   z.object({
                     orgId: z.number().describe("Organization ID"),
                     orgName: z.string().describe("Organization name"),
-                    roleName: z.enum(["editor", "admin"]).describe("Role name"),
+                    roleName: z.enum(UserRole).describe("Role name"),
                   }),
                 )
                 .describe("Roles assigned to the API key"),
@@ -269,7 +270,7 @@ export const apiKeyRouter = {
               roles: roles.map((r) => ({
                 orgId: r.orgId,
                 orgName: r.orgName,
-                roleName: r.roleName as "editor" | "admin",
+                roleName: r.roleName,
               })),
               orgIds: roles.map((r) => r.orgId),
               orgNames: roles.map((r) => r.orgName),

@@ -18,7 +18,7 @@ export const DeleteEventForm = () => {
       <div className="flex flex-col gap-4">
         {/* Event Details Section */}
         <div className="mb-3 flex items-center space-x-3 border-b border-red-100 pb-3 dark:border-red-800">
-          <div className="flex-shrink-0">
+          <div className="shrink-0">
             <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-800">
               <svg
                 className="h-6 w-6 text-red-400 dark:text-red-300"
