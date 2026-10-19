@@ -34,4 +34,39 @@ describe("ControlledTimeInput", () => {
     expect(stored).toBe("0615");
     expect(input).toHaveValue("06:15");
   });
+
+  it("links each label to its own input when both are rendered", () => {
+    let values: Record<string, unknown> = {};
+    const Pair = () => {
+      const form = useForm({
+        defaultValues: { eventStartTime: "0530", eventEndTime: "0615" },
+      });
+      values = useWatch({ control: form.control });
+      return (
+        <FormProvider {...form}>
+          <ControlledTimeInput name="eventStartTime" label="Start Time" />
+          <ControlledTimeInput name="eventEndTime" label="End Time" />
+        </FormProvider>
+      );
+    };
+    render(<Pair />);
+
+    const start = screen.getByLabelText<HTMLInputElement>("Start Time");
+    const end = screen.getByLabelText<HTMLInputElement>("End Time");
+    expect(start).not.toBe(end);
+    expect(start.id).not.toBe(end.id);
+
+    fireEvent.change(end, { target: { value: "07:00" } });
+    expect(values).toEqual({ eventStartTime: "0530", eventEndTime: "0700" });
+  });
+
+  it("stores an empty string when the time is cleared", () => {
+    render(<Harness />);
+
+    const input = screen.getByLabelText<HTMLInputElement>("Start Time");
+    fireEvent.change(input, { target: { value: "" } });
+
+    expect(stored).toBe("");
+    expect(input).toHaveValue("");
+  });
 });
