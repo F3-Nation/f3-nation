@@ -2,7 +2,6 @@ import { os } from "@orpc/server";
 import omit from "lodash/omit";
 import { z } from "zod";
 
-import type { AnyColumn } from "@acme/db";
 import {
   aliasedTable,
   and,
@@ -14,7 +13,6 @@ import {
   isNotNull,
   isNull,
   ne,
-  notExists,
   lte,
   or,
   schema,
@@ -27,9 +25,10 @@ import type { LowBandwidthF3Marker } from "@acme/validators";
 import { LowBandwidthF3Marker as LowBandwidthF3MarkerSchema } from "@acme/validators";
 
 import {
-  logIfOrgTreeExceedsMaxDepth,
-  ORG_TREE_MAX_DEPTH,
-} from "../../org-tree";
+  ancestorOrgsAreActive,
+  orgAndAncestorsAreActive,
+} from "../../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../../org-tree";
 import { mapDataFor } from "../../lib/map-data-cache";
 import type { Context } from "../../shared";
 import { protectedProcedure, publicReadProcedure } from "../../shared";
@@ -48,76 +47,6 @@ const withinCurrentEventDateWindow = () =>
       gte(schema.events.endDate, sql`CURRENT_DATE`),
     ),
   );
-
-/**
- * True when every org *above* `orgIdColumn` in the hierarchy is active.
- *
- * `org.delete` only cascades to events and instances for AOs, so deactivating a
- * region, area, territory, sector, or nation leaves every descendant org, event, and
- * instance active. Public read paths therefore have to walk the chain
- * themselves or they keep serving pins, pin statuses, and workout details for a
- * retired part of the tree.
- *
- * The recursive CTE walks *down* from every inactive org rather than *up*
- * from `orgIdColumn`, and `orgIdColumn` is only compared against the result
- * afterward, never referenced inside the CTE itself. That keeps the CTE
- * decorrelated from the outer per-row `notExists(...)`: PostgreSQL cannot
- * pull a `WITH RECURSIVE` out of a correlated subquery to flatten it into a
- * join, so an ancestor-walking form anchored at `orgIdColumn` forces a
- * `SubPlan` that re-runs the full recursive union once per outer row —
- * verified ~14x slower than this form at 5k rows in local benchmarking.
- * Decorrelated, the planner computes the "tainted" (has-an-inactive-ancestor)
- * org set once and can flatten the outer `NOT EXISTS` into a join.
- *
- * It has to stay an inline SQL subquery — not a `db.execute` call like
- * `checkHasRoleOnOrg` and `getDescendantOrgIds` — because it's embedded via
- * `notExists(...)` inside bulk selects that return many rows per call; a
- * per-row round trip would be an N+1. `ORG_TREE_MAX_DEPTH` still bounds the
- * recursion so a cycle or corrupt data can't run away, and rows beyond the
- * cap are excluded from the tainted set below so this stays consistent with
- * `checkHasRoleOnOrg`/`getDescendantOrgIds`, which discard the same boundary
- * row. Because there's no materialized per-call result to inspect, callers
- * pair this with `logIfOrgTreeExceedsMaxDepth` (packages/api/src/org-tree.ts)
- * — a single unanchored scan of the whole `orgs` table — for
- * `api.org_tree.depth_limit_reached` telemetry instead of a per-row check.
- *
- * Callers keep their own predicate on the org the column points at; a null
- * `orgIdColumn`, or one with no matching org row, passes here.
- */
-const ancestorOrgsAreActive = (orgIdColumn: AnyColumn) => {
-  const orgId = sql.identifier(schema.orgs.id.name);
-  const parentId = sql.identifier(schema.orgs.parentId.name);
-
-  // notExists() splices its argument in as-is (`sql\`not exists ${subquery}\``)
-  // without adding parens the way a query-builder subquery would, so the
-  // WITH clause needs its own explicit parens to parse as a subquery.
-  return notExists(sql`(
-    SELECT 1 FROM (
-      WITH RECURSIVE tainted(id, depth, path) AS (
-        SELECT
-          ${schema.orgs.id},
-          0,
-          ARRAY[${schema.orgs.id}]
-        FROM ${schema.orgs}
-        WHERE ${schema.orgs.isActive} = false
-
-        UNION ALL
-
-        SELECT
-          child.${orgId},
-          tainted.depth + 1,
-          tainted.path || child.${orgId}
-        FROM ${schema.orgs} AS child
-        INNER JOIN tainted ON child.${parentId} = tainted.id
-        WHERE tainted.depth <= ${ORG_TREE_MAX_DEPTH}
-          AND NOT child.${orgId} = ANY(tainted.path)
-      )
-      SELECT id FROM tainted
-      WHERE depth > 0 AND depth <= ${ORG_TREE_MAX_DEPTH}
-    ) t
-    WHERE t.id = ${orgIdColumn}
-  )`);
-};
 
 /**
  * Which event instances the map surfaces as their own pin or pin status.
@@ -373,13 +302,11 @@ export const mapLocationRouter = os.router({
               };
             }
 
-            if (event?.id != undefined) {
-              acc[location.id]?.events.push({
-                ...omit(event, "locationId"),
-                aoName: location.name ?? null,
-                aoLogo: location.logo,
-              });
-            }
+            acc[location.id]?.events.push({
+              ...omit(event, "locationId"),
+              aoName: location.name ?? null,
+              aoLogo: location.logo,
+            });
 
             return acc;
           },
@@ -881,7 +808,7 @@ export const mapLocationRouter = os.router({
           ): e is NonNullable<(typeof results)[number]["event"]> & {
             id: number;
             name: string;
-          } => e?.id != null && e.name != null,
+          } => e.id != null && e.name != null,
         )
         .map((e) => ({ ...e, id: e.id, name: e.name }));
 
@@ -1007,56 +934,66 @@ export const mapLocationRouter = os.router({
       }),
     )
     .handler(({ context: ctx }) =>
-      mapDataFor(ctx.reqHeaders, "regionsWithLocation", async () => {
-        const region = aliasedTable(schema.orgs, "region");
-        // One row per region, decided in SQL. Joining every AO and every
-        // location of a region returned (AOs x locations) rows per region
-        // (~100k rows for ~560 regions on prod data) that were then deduped in
-        // JS with an O(n^2) findIndex: 3-5s of CPU per call that blocked every
-        // other request on the API instance. Picks are deterministic: the
-        // region's lowest-id active location with coordinates, and the logo of
-        // one of its child orgs, preferring one that has a logo.
-        const aoLogo = sql<string | null>`(
+      mapDataFor(
+        ctx.reqHeaders,
+        ctx.session?.user
+          ? "regionsWithLocation:signed-in"
+          : "regionsWithLocation:anonymous",
+        async () => {
+          if (!ctx.session?.user) void logIfOrgTreeExceedsMaxDepth(ctx.db);
+          const region = aliasedTable(schema.orgs, "region");
+          // One row per region, decided in SQL. Joining every AO and every
+          // location of a region returned (AOs x locations) rows per region
+          // (~100k rows for ~560 regions on prod data) that were then deduped in
+          // JS with an O(n^2) findIndex: 3-5s of CPU per call that blocked every
+          // other request on the API instance. Picks are deterministic: the
+          // region's lowest-id active location with coordinates, and the logo of
+          // one of its child orgs, preferring one that has a logo.
+          const aoLogo = sql<string | null>`(
         SELECT ${schema.orgs.logoUrl} FROM ${schema.orgs}
         WHERE ${schema.orgs.parentId} = ${region.id}
         ORDER BY (${schema.orgs.logoUrl} IS NULL OR ${schema.orgs.logoUrl} = ''), ${schema.orgs.id}
         LIMIT 1
       )`;
-        const rows = await ctx.db
-          .selectDistinctOn([region.id], {
-            id: region.id,
-            name: region.name,
-            locationId: schema.locations.id,
-            lat: schema.locations.latitude,
-            lon: schema.locations.longitude,
-            logo: aoLogo,
-          })
-          .from(region)
-          .innerJoin(schema.locations, eq(schema.locations.orgId, region.id))
-          .where(
-            and(
-              eq(schema.locations.isActive, true),
-              eq(region.isActive, true),
-              eq(region.orgType, "region"),
-              isNotNull(schema.locations.latitude),
-              isNotNull(schema.locations.longitude),
-              // Same population as before: regions with at least one child org.
-              exists(
-                sql`(SELECT 1 FROM ${schema.orgs} WHERE ${schema.orgs.parentId} = ${region.id})`,
+          const rows = await ctx.db
+            .selectDistinctOn([region.id], {
+              id: region.id,
+              name: region.name,
+              locationId: schema.locations.id,
+              lat: schema.locations.latitude,
+              lon: schema.locations.longitude,
+              logo: aoLogo,
+            })
+            .from(region)
+            .innerJoin(schema.locations, eq(schema.locations.orgId, region.id))
+            .where(
+              and(
+                eq(schema.locations.isActive, true),
+                eq(region.isActive, true),
+                !ctx.session?.user
+                  ? ancestorOrgsAreActive(region.id)
+                  : undefined,
+                eq(region.orgType, "region"),
+                isNotNull(schema.locations.latitude),
+                isNotNull(schema.locations.longitude),
+                // Only regions with at least one child org, active or inactive.
+                exists(
+                  sql`(SELECT 1 FROM ${schema.orgs} WHERE ${schema.orgs.parentId} = ${region.id})`,
+                ),
               ),
-            ),
-          )
-          .orderBy(region.id, schema.locations.id);
+            )
+            .orderBy(region.id, schema.locations.id);
 
-        const regionsWithLocation = rows
-          .map((rwl) =>
-            typeof rwl.lat === "number" && typeof rwl.lon === "number"
-              ? { ...rwl, lat: rwl.lat, lon: rwl.lon }
-              : null,
-          )
-          .filter(isTruthy);
-        return { regionsWithLocation };
-      }),
+          const regionsWithLocation = rows
+            .map((rwl) =>
+              typeof rwl.lat === "number" && typeof rwl.lon === "number"
+                ? { ...rwl, lat: rwl.lat, lon: rwl.lon }
+                : null,
+            )
+            .filter(isTruthy);
+          return { regionsWithLocation };
+        },
+      ),
     ),
 
   workoutCount: publicReadProcedure
@@ -1077,6 +1014,7 @@ export const mapLocationRouter = os.router({
       }),
     )
     .handler(async ({ context: ctx }) => {
+      if (!ctx.session?.user) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const [result] = await ctx.db
         .select({ count: count() })
         .from(schema.events)
@@ -1084,6 +1022,9 @@ export const mapLocationRouter = os.router({
           and(
             isNotNull(schema.events.locationId),
             eq(schema.events.isActive, true),
+            !ctx.session?.user
+              ? orgAndAncestorsAreActive(schema.events.orgId)
+              : undefined,
             // publicReadProcedure lets an anonymous caller reach this
             // endpoint — keep the public total consistent with the
             // map's own event listing, which excludes private events.
@@ -1129,6 +1070,7 @@ export const mapLocationRouter = os.router({
       description: "Get a mapping of location IDs to their region names",
     })
     .handler(async ({ context: ctx }) => {
+      if (!ctx.session?.user) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const parentOrg = aliasedTable(schema.orgs, "parent_org");
       const result = await ctx.db
@@ -1151,6 +1093,11 @@ export const mapLocationRouter = os.router({
               eq(regionOrg.orgType, "region"),
             ),
           ),
+        )
+        .where(
+          !ctx.session?.user
+            ? orgAndAncestorsAreActive(schema.locations.orgId)
+            : undefined,
         )
         .groupBy(schema.locations.id, regionOrg.id);
 
@@ -1197,6 +1144,7 @@ export const mapLocationRouter = os.router({
       description: "Get a list of AOs in a region",
     })
     .handler(async ({ context: ctx, input }) => {
+      if (!ctx.session?.user) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const aos = await ctx.db
         .select({
           id: schema.orgs.id,
@@ -1224,6 +1172,9 @@ export const mapLocationRouter = os.router({
             eq(schema.orgs.parentId, input.regionId),
             eq(schema.orgs.orgType, "ao"),
             eq(schema.orgs.isActive, true),
+            !ctx.session?.user
+              ? orgAndAncestorsAreActive(schema.orgs.id)
+              : undefined,
           ),
         )
         .groupBy(schema.orgs.id);

@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 
   // Revoke tokens if user is authenticated
   const session = await getCurrentSession();
-  if (session?.user?.id) {
+  if (session?.user.id) {
     const userId = Number(session.user.id);
     if (userId) {
       await revokeAllUserTokens(userId);

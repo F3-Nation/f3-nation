@@ -89,6 +89,7 @@ function VerifyEmailFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
             redirect: false,
           });
 
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth's signIn resolves undefined when it redirects
           if (result?.error) {
             setError("Invalid or expired code. Please try again.");
             return;

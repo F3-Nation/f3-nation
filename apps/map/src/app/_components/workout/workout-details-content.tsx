@@ -387,7 +387,7 @@ export const WorkoutDetailsContent = ({
                 ) : null}
               </>
             ),
-            What: event?.eventTypes.map((type) => type.name).join(", "),
+            What: event.eventTypes.map((type) => type.name).join(", "),
             Where: [
               <Link
                 key="fullAddress"
@@ -423,7 +423,7 @@ export const WorkoutDetailsContent = ({
               hasAoContact && aoContact ? (
                 <ContactLinks contact={aoContact} iconSize="sm" />
               ) : null,
-            Notes: event?.description ? textLink(event.description) : null,
+            Notes: event.description ? textLink(event.description) : null,
           }
         : {},
     [
@@ -535,16 +535,16 @@ export const WorkoutDetailsContent = ({
               event={{
                 id: locEvent.id,
                 name: locEvent.name,
-                locationId: location?.id ?? 0,
+                locationId: location.id,
                 dayOfWeek: locEvent.dayOfWeek,
                 startTime: locEvent.startTime,
                 endTime: locEvent.endTime,
                 eventTypes: locEvent.eventTypes,
               }}
               location={{
-                lat: location?.lat ?? null,
-                lon: location?.lon ?? null,
-                id: location?.id ?? 0,
+                lat: location.lat,
+                lon: location.lon,
+                id: location.id,
               }}
               size={chipSize}
               hideName={displayedEvents.length === 1}

@@ -39,11 +39,11 @@ const SelectedItemWrapper = () => {
     if (mapEvent !== "idle" || selectedItem.selectedLocation?.id == null) {
       setDebouncedSelectedItem(undefined);
       return;
-    } else if (typeof selectedItem.selectedLocation?.id === "number") {
+    } else if (typeof selectedItem.selectedLocation.id === "number") {
       void getQueryClient()
         .query(
           orpc.map.location.locationWorkout.queryOptions({
-            input: { locationId: selectedItem.selectedLocation?.id },
+            input: { locationId: selectedItem.selectedLocation.id },
           }),
         )
         .catch(() => undefined);
@@ -66,7 +66,7 @@ const SelectedItemWrapper = () => {
 
   if (
     !debouncedSelectedItem?.selectedLocation ||
-    !debouncedSelectedItem?.selectedEvent ||
+    !debouncedSelectedItem.selectedEvent ||
     mapEvent !== "idle"
   ) {
     return null;

@@ -141,7 +141,7 @@ export default function AdminRequestsModal({
         const valuesToSubmit = { ...values };
 
         if (selectedAoLogoFile) {
-          if (values.regionId == null || values.regionId <= -1) {
+          if (values.regionId <= -1) {
             form.setError("regionId", {
               message: "Please select a region before uploading an AO logo",
             });
@@ -159,10 +159,8 @@ export default function AdminRequestsModal({
         const submissionInput = {
           ...valuesToSubmit,
           ...(EVENT_TIME_REQUEST_TYPES.has(values.requestType) && {
-            eventStartTime: convertHH_mmToHHmm(
-              valuesToSubmit.eventStartTime ?? "",
-            ),
-            eventEndTime: convertHH_mmToHHmm(valuesToSubmit.eventEndTime ?? ""),
+            eventStartTime: convertHH_mmToHHmm(valuesToSubmit.eventStartTime),
+            eventEndTime: convertHH_mmToHHmm(valuesToSubmit.eventEndTime),
           }),
         } as Parameters<typeof validateSubmissionByAdmin.mutateAsync>[0];
 
@@ -305,12 +303,12 @@ export default function AdminRequestsModal({
       eventDayOfWeek: request.eventDayOfWeek ?? "monday",
       eventTypeIds: request.eventTypeIds ?? [],
       eventDescription: request.eventDescription ?? "",
-      regionId: request.regionId ?? null,
+      regionId: request.regionId,
       aoId: request.aoId ?? null,
       aoName: request.aoName ?? "",
       aoLogo: request.aoLogo ?? "",
       aoWebsite: request.aoWebsite ?? "",
-      submittedBy: request.submittedBy ?? "",
+      submittedBy: request.submittedBy,
     });
     setSelectedAoLogoFile(null);
     setSelectedAoLogoPreviewUrl(null);

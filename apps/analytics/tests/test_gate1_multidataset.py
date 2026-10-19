@@ -61,7 +61,8 @@ def test_registry_contract_matches_expected_schema_versions(definition):
         "pv_territories": "pv_territories.v1",
         "pv_areas": "pv_areas.v2",
         "pv_aos": "pv_aos.v1",
-        "pv_events": "pv_events.v2",
+        "pv_events": "pv_events.v3",
+        "pv_event_details": "pv_event_details.v1",
         "pv_attendance": "pv_attendance.v1",
     }
     assert definition.schema_version == schema_versions[definition.name]
@@ -356,7 +357,7 @@ def test_dataset_manifest_publish_times_are_captured_before_release_commit(monke
     published_times = []
     read_times = []
     observed_goldens = []
-    clock_values = iter(range(10, 33))
+    clock_values = iter(range(10, 35))
     monkeypatch.setattr(pipeline_module, "GcsPublisher", FakePublisher)
     monkeypatch.setattr(pipeline_module, "select_materializations", lambda _names, **_kwargs: MATERIALIZATIONS)
     monkeypatch.setattr(pipeline_module, "attach_postgres", lambda *_args: None)
@@ -381,10 +382,10 @@ def test_dataset_manifest_publish_times_are_captured_before_release_commit(monke
         run_id="publish-times",
     )
     assert [source for _, source, _ in published_times] == [
-        f"1970-01-01T00:00:{second:02d}+00:00" for second in (11, 13, 15, 17, 19, 21, 23, 25, 27, 29)
+        f"1970-01-01T00:00:{second:02d}+00:00" for second in (11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31)
     ]
     assert [published for _, _, published in published_times] == [
-        f"1970-01-01T00:00:{second:02d}+00:00" for second in (12, 14, 16, 18, 20, 22, 24, 26, 28, 30)
+        f"1970-01-01T00:00:{second:02d}+00:00" for second in (12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32)
     ]
     assert all(source == refreshed for (_, source, _), (_, refreshed) in zip(published_times, read_times, strict=True))
     assert all(
@@ -406,7 +407,7 @@ def test_dataset_manifest_publish_times_are_captured_before_release_commit(monke
     assert len(pointer["manifestSha256"]) == 64
     assert pointer["sourceOrder"] == "19700101T000010.000000Z"
     assert pointer["producerRevision"] == "gate2-test-revision"
-    assert pointer["createdAtUtc"] == "1970-01-01T00:00:31+00:00"
+    assert pointer["createdAtUtc"] == "1970-01-01T00:00:33+00:00"
     release = FakePublisher.uploaded_release
     assert release is not None
     assert release["producerRevision"] == "gate2-test-revision"

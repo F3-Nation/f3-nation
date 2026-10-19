@@ -3,12 +3,13 @@ import { z } from "zod";
 
 // Only override DATABASE_URL from --url flag if in non-production (i.e., development or test) environment
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- NODE_ENV is unset when scripts run outside Next/Vitest
 const nodeEnv = process.env.NODE_ENV || "development";
 if (nodeEnv !== "production") {
   const args = process.argv as string[] | undefined;
   const urlFlagIndex = args?.indexOf("--url") ?? -1;
   if (urlFlagIndex !== -1 && args?.[urlFlagIndex + 1]) {
-    process.env.DATABASE_URL = args?.[urlFlagIndex + 1];
+    process.env.DATABASE_URL = args[urlFlagIndex + 1];
   }
 }
 

@@ -20,6 +20,7 @@ type SentMessageInfo = SMTPTransport.SentMessageInfo;
  * Default recipients for each template
  */
 export const DefaultTo: Partial<Record<Templates, string | string[]>> = {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- env validation is skipped on CI/SKIP_ENV_VALIDATION builds
   [Templates.feedbackForm]: env.EMAIL_ADMIN_DESTINATIONS?.split(",") ?? [],
 };
 
@@ -36,6 +37,7 @@ type TemplateMessageParams<T extends Templates> =
 export class MailService {
   private transporter: AppTransporter | null = null;
   templates = Templates;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- env validation is skipped on CI/SKIP_ENV_VALIDATION builds
   adminDestinations: string[] = env.EMAIL_ADMIN_DESTINATIONS?.split(",") ?? [];
 
   constructor() {
@@ -119,7 +121,7 @@ export class MailService {
     const batches = messages.reduce((acc, message, i) => {
       const batchIndex = Math.floor(i / batchSize);
       acc[batchIndex] = acc[batchIndex] ?? [];
-      acc[batchIndex]?.push(message);
+      acc[batchIndex].push(message);
       return acc;
     }, [] as Mail.Options[][]);
 
@@ -130,7 +132,7 @@ export class MailService {
         batch.map((msg) => {
           const t = this.getTransporter();
           return t
-            ?.sendMail({ ...msg, headers: sendGridHeaders })
+            .sendMail({ ...msg, headers: sendGridHeaders })
             .then((info) => {
               sentInfo.push(info);
               console.log("\x1b[32m", "Message sent successfully!");

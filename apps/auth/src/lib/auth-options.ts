@@ -44,7 +44,7 @@ export const authOptions: NextAuthConfig = {
         action: { label: "Action", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.email) return null;
+        if (!credentials.email) return null;
 
         const email = (credentials.email as string).toLowerCase().trim();
 
@@ -69,7 +69,7 @@ export const authOptions: NextAuthConfig = {
 
           return {
             id: String(user.id),
-            email: user.email ?? undefined,
+            email: user.email,
             name: user.f3Name,
             roles: [],
           };
@@ -82,6 +82,7 @@ export const authOptions: NextAuthConfig = {
   ],
   callbacks: {
     async jwt({ token, user }) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth passes `user` only on sign-in, despite its type
       if (user) {
         token.userId = Number(user.id);
         token.email = user.email ?? undefined;
@@ -124,6 +125,7 @@ export const authOptions: NextAuthConfig = {
       return token;
     },
     async session({ session, token }) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unsure every next-auth strategy sets session.user
       if (session.user) {
         session.user.id = String(token.userId);
         // Not String(token.name): token.name is null when f3Name is unset,

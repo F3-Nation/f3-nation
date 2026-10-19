@@ -69,7 +69,7 @@ export const ExistingLocationPickerForm = (params: {
       locations
         ?.slice()
         .sort((a, b) => a.locationName.localeCompare(b.locationName))
-        ?.map((l) => ({
+        .map((l) => ({
           labelComponent: (
             <span>
               {`${l.locationName}${l.regionName ? ` (${l.regionName})` : ""}`}
@@ -120,7 +120,8 @@ export const ExistingLocationPickerForm = (params: {
                   value={
                     field.value === null
                       ? NEW_LOCATION_VALUE
-                      : field.value?.toString()
+                      : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until the parent form sets them
+                        field.value?.toString()
                   }
                   onSelect={(value) => {
                     if (value === NEW_LOCATION_VALUE) {

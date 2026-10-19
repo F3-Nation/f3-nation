@@ -47,7 +47,7 @@ export const numToString = (num: number) => {
 
 const addAlphaToHex = (color: string, opacity: number): string => {
   // coerce values so ti is between 0 and 1.
-  const _opacity = Math.round(bound(opacity ?? 1, 0, 1) * 255);
+  const _opacity = Math.round(bound(opacity, 0, 1) * 255);
   return color + _opacity.toString(16).toUpperCase();
 };
 
@@ -389,6 +389,7 @@ export function getValue<
   const value = get(data, path) as unknown as GetFieldType<TData, TPath>;
   // This allows the getValue function to return "null" if the value is null
   // and not return the default value. Only "undefined" gets overwritten.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- lodash get can return null whatever the path's static type
   return value === null ? value : (value ?? (defaultValue as TDefault));
 }
 

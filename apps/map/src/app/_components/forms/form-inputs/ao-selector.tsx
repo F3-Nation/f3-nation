@@ -48,7 +48,7 @@ export function AOSelector<_T extends AOSelectorFormValues>({
 
   const aoOptions =
     results?.aos
-      ?.map((ao) => ({
+      .map((ao) => ({
         label: ao.name,
         value: ao.id.toString(),
         labelComponent: (
@@ -82,9 +82,7 @@ export function AOSelector<_T extends AOSelectorFormValues>({
               options={aoOptions}
               value={field.value?.toString()}
               onSelect={(item) => {
-                const ao = results?.aos?.find(
-                  (ao) => ao.id.toString() === item,
-                );
+                const ao = results?.aos.find((ao) => ao.id.toString() === item);
                 const newValue = ao?.id ?? null;
 
                 // Set the AO

@@ -352,6 +352,7 @@ function scrubJson(value: unknown): unknown {
       if (scrubbed !== v) changed = true;
       return scrubbed;
     });
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set inside the map callback
     return changed ? next : value;
   }
   if (value !== null && typeof value === "object") {
@@ -362,6 +363,7 @@ function scrubJson(value: unknown): unknown {
       if (key !== k || scrubbed !== v) changed = true;
       return [key, scrubbed] as const;
     });
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set inside the map callback
     return changed ? Object.fromEntries(entries) : value;
   }
   return value;

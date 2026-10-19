@@ -221,6 +221,38 @@ _SCHEMAS = (
     ),
     ExpectedSchema(
         "pv_events",
+        "pv_events.v3",
+        _columns(
+            ("refreshed_at", "TIMESTAMP WITH TIME ZONE"),
+            ("event_id", "INTEGER"),
+            ("event_date", "DATE"),
+            ("event_name", "VARCHAR"),
+            ("pax_count", "INTEGER"),
+            ("fng_count", "INTEGER"),
+            ("ao_org_id", "INTEGER"),
+            ("ao_name", "VARCHAR"),
+            ("region_org_id", "INTEGER"),
+            ("region_name", "VARCHAR"),
+            ("area_org_id", "INTEGER"),
+            ("area_name", "VARCHAR"),
+            ("territory_org_id", "INTEGER"),
+            ("territory_name", "VARCHAR"),
+            ("sector_org_id", "INTEGER"),
+            ("sector_name", "VARCHAR"),
+            ("first_f_ind", "INTEGER"),
+            ("second_f_ind", "INTEGER"),
+            ("third_f_ind", "INTEGER"),
+            ("types", 'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]'),
+            ("tags", 'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR)[]'),
+            (
+                "attendance",
+                "STRUCT(user_id INTEGER, f3_name VARCHAR, q_ind INTEGER, coq_ind INTEGER, avatar_url VARCHAR, "
+                "attended BOOLEAN, ghost BOOLEAN, fartsack BOOLEAN)[]",
+            ),
+        ),
+    ),
+    ExpectedSchema(
+        "pv_events",
         "pv_events.v2",
         _columns(
             ("refreshed_at", "TIMESTAMP WITH TIME ZONE"),
@@ -255,6 +287,20 @@ _SCHEMAS = (
                 "STRUCT(user_id INTEGER, f3_name VARCHAR, q_ind INTEGER, coq_ind INTEGER, avatar_url VARCHAR, "
                 "attended BOOLEAN, ghost BOOLEAN, fartsack BOOLEAN)[]",
             ),
+        ),
+    ),
+    ExpectedSchema(
+        "pv_event_details",
+        "pv_event_details.v1",
+        _columns(
+            ("event_id", "INTEGER"),
+            ("description", "VARCHAR"),
+            ("preblast", "VARCHAR"),
+            ("preblast_rich", "JSON"),
+            ("backblast", "VARCHAR"),
+            ("backblast_rich", "JSON"),
+            ("meta", "JSON"),
+            ("refreshed_at", "TIMESTAMP WITH TIME ZONE"),
         ),
     ),
     ExpectedSchema(
@@ -428,6 +474,6 @@ _SCHEMAS = (
 
 SCHEMAS_BY_VERSION = MappingProxyType({(schema.dataset, schema.schema_version): schema for schema in _SCHEMAS})
 SCHEMAS_BY_NAME = MappingProxyType(
-    {schema.dataset: schema for schema in _SCHEMAS if schema.schema_version != "pv_pax.v2"}
+    {schema.dataset: schema for schema in _SCHEMAS if schema.schema_version not in {"pv_pax.v2", "pv_events.v2"}}
 )
 SCHEMA_REGISTRY = SCHEMAS_BY_NAME

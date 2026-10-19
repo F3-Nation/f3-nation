@@ -703,10 +703,7 @@ export default function OrgMap() {
   // ── nearest parent admin lookup (for empty-roles message) ───────────────
 
   useEffect(() => {
-    if (
-      infoState.status !== "loaded" ||
-      (infoState.detail.roles?.length ?? 0) > 0
-    ) {
+    if (infoState.status !== "loaded" || infoState.detail.roles.length > 0) {
       setNearestAdminOrg(null);
       setAdminLookupInconclusive(false);
       return;
@@ -736,6 +733,7 @@ export default function OrgMap() {
         if (!detail) {
           try {
             detail = await fetchOrgById(ancestor.id);
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the effect cleanup sets `cancelled` while this awaits
             if (!cancelled) orgInfoCacheRef.current.set(ancestor.id, detail);
           } catch {
             // Couldn't check this ancestor — distinct from "it has no admins".
@@ -744,10 +742,11 @@ export default function OrgMap() {
           }
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the effect cleanup sets `cancelled` while this awaits
         if (cancelled) return;
 
-        const admins = (detail.roles ?? []).filter(
-          (r) => r.title?.toLowerCase().includes("admin") ?? false,
+        const admins = detail.roles.filter((r) =>
+          r.title.toLowerCase().includes("admin"),
         );
         if (admins.length > 0) {
           // The guard flips synchronously on switch (before any await
