@@ -1,10 +1,11 @@
 # Analytics DuckDB/Parquet ETL
 
 The CLI publishes two independent products to the configured GCS bucket. Pax
-Vault contains exactly ten datasets (`pv_regions`, `pv_pax`, `pv_kotter`,
+Vault contains exactly eleven datasets (`pv_regions`, `pv_pax`, `pv_kotter`,
 `pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`,
-`pv_events`, `pv_attendance`) beneath `pax-vault/releases/<release-id>/` and uses only
-`pax-vault/current.json`. Analytics contains exactly four datasets
+`pv_events`, `pv_event_details`, `pv_attendance`) beneath
+`pax-vault/releases/<release-id>/` and uses only `pax-vault/current.json`.
+Analytics contains exactly four datasets
 (`event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`)
 beneath `analytics/releases/<release-id>/` and uses only
 `analytics/current.json`. Each product has its own release IDs, contract,
