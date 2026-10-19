@@ -233,6 +233,22 @@ def wrong_schema_parquet_bytes() -> bytes:
         connection.close()
 
 
+def wrong_event_details_meta_parquet_bytes() -> bytes:
+    schema = SCHEMAS_BY_NAME["pv_event_details"]
+    columns = ", ".join(
+        f'CAST(NULL AS {"VARCHAR" if column.name == "meta" else column.duckdb_type}) AS "{column.name}"'
+        for column in schema.columns
+    )
+    connection = duckdb.connect(":memory:")
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "wrong-event-details.parquet"
+            connection.execute(f"COPY (SELECT {columns}) TO '{output}' (FORMAT PARQUET)")
+            return output.read_bytes()
+    finally:
+        connection.close()
+
+
 def reset():
     Blob.objects.clear()
     Blob.next_generation = 0
@@ -830,6 +846,11 @@ def test_retained_legacy_nine_dataset_release_can_be_rolled_back(tmp_path):
     publisher = GcsPublisher(Storage(), settings(tmp_path))
     old_release, old_digest = _release(publisher, "run-1", legacy=True)
     assert hashlib.sha256(Blob.objects["pax-vault/releases/run-1/release.json"].content).hexdigest() == old_digest
+    legacy_manifest = json.loads(Blob.objects["pax-vault/releases/run-1/release.json"].content)
+    assert set(legacy_manifest["datasets"]) == set(PAX_VAULT_LEGACY_NAMES)
+    assert {name: dataset["schemaVersion"] for name, dataset in legacy_manifest["datasets"].items()} == dict(
+        PAX_VAULT_LEGACY_SCHEMA_VERSIONS
+    )
     seed_legacy_pointer(publisher, old_release)
     old_contents = {
         key: (value.content, value.generation)
@@ -887,6 +908,60 @@ def test_legacy_validation_rejects_hybrid_version_vector(tmp_path):
     Blob.objects[release_key] = Stored(canonical_json_bytes(value), stored.generation)
     with pytest.raises(ValueError, match="product validation"):
         publisher._validate_release("legacy-hybrid", release.generation, allow_legacy=True)
+
+
+def test_current_release_missing_event_details_is_rejected(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    release, _ = _release(publisher, "missing-event-details")
+    release_key = "pax-vault/releases/missing-event-details/release.json"
+    stored = Blob.objects[release_key]
+    value = json.loads(stored.content)
+    del value["datasets"]["pv_event_details"]
+    Blob.objects[release_key] = Stored(canonical_json_bytes(value), stored.generation)
+
+    with pytest.raises(ValueError, match="product validation"):
+        publisher._validate_release("missing-event-details", release.generation)
+
+
+def test_current_release_rejects_pv_events_v2_with_event_details(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    release, _ = _release(publisher, "hybrid-events-details")
+    release_key = "pax-vault/releases/hybrid-events-details/release.json"
+    stored = Blob.objects[release_key]
+    value = json.loads(stored.content)
+    value["datasets"]["pv_events"]["schemaVersion"] = "pv_events.v2"
+    Blob.objects[release_key] = Stored(canonical_json_bytes(value), stored.generation)
+
+    with pytest.raises(ValueError, match="product validation"):
+        publisher._validate_release("hybrid-events-details", release.generation)
+
+
+def test_release_validation_rejects_event_details_meta_as_varchar(tmp_path):
+    reset()
+    publisher = GcsPublisher(Storage(), settings(tmp_path))
+    release, digest = _release(publisher, "event-details-meta-type")
+    object_key = "pax-vault/releases/event-details-meta-type/pv_event_details/partitions/pv_event_details-0.parquet"
+    content = wrong_event_details_meta_parquet_bytes()
+    Blob.objects[object_key] = Stored(content, Blob.objects[object_key].generation)
+    manifest_key = "pax-vault/releases/event-details-meta-type/pv_event_details/manifest.json"
+    stored_manifest = Blob.objects[manifest_key]
+    manifest = json.loads(stored_manifest.content)
+    manifest["objects"][0]["sizeBytes"] = len(content)
+    manifest["objects"][0]["crc32c"] = Blob.objects[object_key].crc32c
+    manifest["totalSizeBytes"] = len(content)
+    Blob.objects[manifest_key] = Stored(canonical_json_bytes(manifest), stored_manifest.generation)
+
+    with pytest.raises(ValueError, match="schema mismatch"):
+        publisher.commit_pointer(
+            "event-details-meta-type",
+            release,
+            digest,
+            "event-details-meta-type",
+            "revision",
+            "2026-09-01T00:02:00Z",
+        )
 
 
 def test_forward_publication_rejects_legacy_release_without_changing_pointer(tmp_path):
@@ -957,7 +1032,7 @@ def test_rollback_rejects_v2_manifest_with_v3_parquet(tmp_path):
     )
 
 
-def test_ten_dataset_v2_hybrid_is_rejected(tmp_path):
+def test_eleven_dataset_v2_hybrid_is_rejected(tmp_path):
     reset()
     publisher = GcsPublisher(Storage(), settings(tmp_path))
     release, _ = _release(publisher, "run-2")

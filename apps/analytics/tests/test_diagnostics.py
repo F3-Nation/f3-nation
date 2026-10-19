@@ -654,6 +654,16 @@ def test_staged_events_uses_one_read_only_chunked_session_and_local_query(monkey
         statement for statement in statements if statement.startswith("CREATE TABLE staged.event_instances ")
     )
     assert "end_date" not in event_schema and "highlight" not in event_schema and "is_private" not in event_schema
+    event_table = next(table for table in diagnostics._STAGED_EVENTS_TABLES if table[0] == "event_instances")
+    source_sql, _, insert_sql = event_table[1:]
+    assert source_sql == (
+        "SELECT id, org_id, is_active, pax_count, fng_count, meta, name, start_date FROM public.event_instances"
+    )
+    assert insert_sql == "INSERT INTO staged.event_instances VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    assert all(
+        column not in event_schema
+        for column in ("description", "preblast", "preblast_rich", "backblast", "backblast_rich")
+    )
     assert len(connection.inserts) == len(diagnostics._STAGED_EVENTS_TABLES)
     phases = [context["phase"] for event, context in events if event.endswith("phase_succeeded")]
     assert phases[-2:] == ["local_full_query", "cleanup"]
@@ -740,11 +750,6 @@ def test_staged_events_actual_sql_runs_against_all_fixed_local_tables(tmp_path):
                 "{}",
                 "Workout",
                 "2026-01-01",
-                "Description",
-                "Preblast",
-                '{"html":"Preblast"}',
-                "Backblast",
-                '{"html":"Backblast"}',
             )
         ],
         "event_instances_x_event_types": [(1, 1)],
@@ -878,6 +883,16 @@ def test_ctas_events_stages_tables_detaches_then_runs_local_query(monkeypatch):
     assert all(not directory.exists() for directory in directories)
     ctas = [statement for statement in statements if statement.startswith("CREATE TABLE staged.")]
     assert len(ctas) == len(diagnostics._CTAS_EVENTS_TABLES)
+    event_ctas = next(statement for statement in ctas if statement.startswith("CREATE TABLE staged.event_instances "))
+    assert event_ctas == (
+        "CREATE TABLE staged.event_instances AS "
+        "SELECT id, org_id, is_active, pax_count, fng_count, meta, name, start_date "
+        "FROM pg.public.event_instances"
+    )
+    assert all(
+        column not in event_ctas
+        for column in ("description", "preblast", "preblast_rich", "backblast", "backblast_rich")
+    )
     assert statements.index("DETACH pg") < next(
         index
         for index, statement in enumerate(statements)
@@ -1276,11 +1291,6 @@ def test_ctas_events_real_ctas_detach_and_local_production_query(tmp_path):
                 "{}",
                 "Workout",
                 "2026-01-01",
-                "Description",
-                "Preblast",
-                '{"html":"Preblast"}',
-                "Backblast",
-                '{"html":"Backblast"}',
             )
         ],
         "event_instances_x_event_types": [(1, 1)],
