@@ -40,23 +40,27 @@ describe.runIf(target.inProcess)("API key resolution", () => {
   let adminKey: Awaited<ReturnType<typeof createApiKey>>;
   let noRoleKey: Awaited<ReturnType<typeof createApiKey>>;
   let expiredKey: Awaited<ReturnType<typeof createApiKey>>;
+  // Registered as created, so a beforeAll that fails partway cleans up only
+  // what exists.
+  const fixtures: { cleanup: () => Promise<void> }[] = [];
 
   beforeAll(async () => {
     adminKey = await createApiKey({ roles: [{ roleName: "admin" }] });
+    fixtures.push(adminKey);
     noRoleKey = await createApiKey({ roles: [] });
+    fixtures.push(noRoleKey);
     expiredKey = await createApiKey({
       roles: [{ roleName: "admin" }],
       expiresAt: new Date(Date.now() - 60_000).toISOString(),
     });
+    fixtures.push(expiredKey);
   });
 
   // Settled, not sequential: one rejected cleanup must not strand the others.
   // All files share one f3_test under fileParallelism: false, so a leaked row
   // resurfaces as a mystery golden diff in an unrelated suite — fail here.
   afterAll(async () => {
-    const results = await Promise.allSettled(
-      [adminKey, noRoleKey, expiredKey].map((f) => f.cleanup()),
-    );
+    const results = await Promise.allSettled(fixtures.map((f) => f.cleanup()));
     const failed = results.filter((r) => r.status === "rejected");
     // eslint-disable-next-line vitest/no-standalone-expect -- intentional: asserts in afterAll, not a test block
     expect(
