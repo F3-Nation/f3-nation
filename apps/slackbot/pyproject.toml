@@ -59,7 +59,6 @@ dependencies = [
     "pillow-heif>=1.8.0,<1.9.0",
     "watchfiles>=1.1.1,<2.0.0",
     "python-dotenv>=1.2.1,<2.0.0",
-    "sendgrid>=6.11.0,<7.0.0",
     "pytz>=2026.2",
 ]
 

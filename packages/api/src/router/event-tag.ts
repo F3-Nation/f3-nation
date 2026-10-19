@@ -115,14 +115,14 @@ export const eventTagRouter = {
       const where = and(
         input?.searchTerm
           ? or(
-              ilike(schema.eventTags.name, `%${input?.searchTerm}%`),
-              ilike(schema.eventTags.description, `%${input?.searchTerm}%`),
+              ilike(schema.eventTags.name, `%${input.searchTerm}%`),
+              ilike(schema.eventTags.description, `%${input.searchTerm}%`),
             )
           : undefined,
         input?.orgIds?.length
           ? or(
-              inArray(schema.eventTags.specificOrgId, input?.orgIds),
-              input?.ignoreNationEventTags
+              inArray(schema.eventTags.specificOrgId, input.orgIds),
+              input.ignoreNationEventTags
                 ? undefined
                 : isNull(schema.eventTags.specificOrgId),
             )
@@ -189,7 +189,7 @@ export const eventTagRouter = {
           ),
         );
 
-      return { eventTags: eventTags ?? null };
+      return { eventTags: eventTags };
     }),
   byId: protectedProcedure
     .input(z.object({ id: z.coerce.number() }))
@@ -217,7 +217,7 @@ export const eventTagRouter = {
         });
       }
 
-      return { eventTag: result ?? null };
+      return { eventTag: result };
     }),
   crupdate: editorProcedure
     .input(EventTagInsertSchema)
@@ -304,7 +304,7 @@ export const eventTagRouter = {
         })
         .returning();
 
-      return { eventTag: result ?? null };
+      return { eventTag: result };
     }),
   delete: editorProcedure
     .input(z.object({ id: z.coerce.number() }))

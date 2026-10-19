@@ -131,7 +131,7 @@ export default function AdminLocationsModal({
   const isEditing = !!location?.id;
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
-  const showDeleteButton = isEditing && location?.isActive !== false;
+  const showDeleteButton = isEditing && location.isActive !== false;
 
   const crupdateLocation = useMutation(
     orpc.location.crupdate.mutationOptions({
@@ -144,7 +144,7 @@ export default function AdminLocationsModal({
       },
       onError: (err) => {
         toast.error(
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+          err instanceof ORPCError && err.code === "UNAUTHORIZED"
             ? `You are not authorized to ${actionText} this location`
             : `Failed to ${actionText} location`,
         );
@@ -179,7 +179,7 @@ export default function AdminLocationsModal({
               <form
                 onSubmit={form.handleSubmit(async (data) => {
                   setIsSubmitting(true);
-                  if (!data?.regionId) {
+                  if (!data.regionId) {
                     toast.error("Region not found");
                     setIsSubmitting(false);
                     return;
@@ -233,6 +233,7 @@ export default function AdminLocationsModal({
                             <Input
                               placeholder="Name"
                               {...field}
+                              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                               value={field.value ?? ""}
                             />
                           </FormControl>
@@ -247,10 +248,12 @@ export default function AdminLocationsModal({
                       name="regionId"
                       render={({ field }) => (
                         <FormItem
+                          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                           key={`region-${String(field.value ?? "new")}`}
                         >
                           <FormLabel>Region</FormLabel>
                           <VirtualizedCombobox
+                            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                             value={field.value?.toString()}
                             options={
                               regions?.map((region) => ({
@@ -306,6 +309,7 @@ export default function AdminLocationsModal({
                             <Input
                               placeholder="Latitude"
                               {...field}
+                              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                               value={field.value ?? ""}
                               type="number"
                             />
@@ -326,6 +330,7 @@ export default function AdminLocationsModal({
                             <Input
                               placeholder="Longitude"
                               {...field}
+                              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                               value={field.value ?? ""}
                               type="number"
                             />
@@ -454,20 +459,16 @@ export default function AdminLocationsModal({
                             <FormLabel>Country</FormLabel>
                             <VirtualizedCombobox
                               value={field.value?.toString()}
-                              options={
-                                sortedCountries?.map((country) => ({
-                                  value: country.code,
-                                  label: country.name,
-                                })) ?? []
-                              }
+                              options={sortedCountries.map((country) => ({
+                                value: country.code,
+                                label: country.name,
+                              }))}
                               searchPlaceholder="Select a country"
                               onSelect={(value) => {
-                                const countryCode = value as string;
-                                if (countryCode == null) {
-                                  toast.error("Invalid country code");
-                                  return;
-                                }
-                                field.onChange(countryCode);
+                                // Clearing a single-select combobox reports [].
+                                field.onChange(
+                                  typeof value === "string" ? value : "",
+                                );
                               }}
                               isMulti={false}
                             />
@@ -557,7 +558,7 @@ export default function AdminLocationsModal({
                           onClick={() => {
                             closeModal();
                             openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                              id: location?.id ?? -1,
+                              id: location.id,
                               type: DeleteType.LOCATION,
                             });
                           }}

@@ -212,6 +212,7 @@ export const authConfig: NextAuthConfig = {
   providers,
   callbacks: {
     async jwt({ token, user, trigger, session }) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth passes `user` only on sign-in, despite its type
       if (user) {
         token.id = user.id;
         token.email = user.email ?? undefined;

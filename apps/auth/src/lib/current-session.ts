@@ -44,8 +44,8 @@ export async function getCurrentSession(): Promise<CurrentSession | null> {
     return {
       user: {
         id: result.user.id,
-        email: result.user.email ?? null,
-        name: result.user.name ?? null,
+        email: result.user.email,
+        name: result.user.name,
       },
       authTime: result.session.createdAt.toISOString(),
     };

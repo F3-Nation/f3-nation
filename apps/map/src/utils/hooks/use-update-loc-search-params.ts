@@ -15,12 +15,7 @@ export const useUpdateLocSearchParams = () => {
 
   // Update the search params when the panel is open
   useEffect(() => {
-    if (
-      center == null ||
-      zoom == null ||
-      panelLocationId != null ||
-      panelEventId != null
-    ) {
+    if (panelLocationId != null || panelEventId != null) {
       return;
     }
 
@@ -33,7 +28,7 @@ export const useUpdateLocSearchParams = () => {
     }
     lastCenter.current = center;
 
-    const params = new URLSearchParams(searchParams?.toString());
+    const params = new URLSearchParams(searchParams.toString());
 
     // Set the map position parameters
     params.set("lat", center.lat.toFixed(6));

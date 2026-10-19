@@ -38,7 +38,8 @@ export interface GroupedMapData {
 type PlaceType = "street_address" | "geocode";
 
 export interface PlaceResult {
-  placePrediction: {
+  // Absent on query predictions.
+  placePrediction?: {
     place: string; //"places/ChIJvfn0MnyAhYARNjY8LxCHdyY",
     placeId: string; //"ChIJvfn0MnyAhYARNjY8LxCHdyY",
     text: {
@@ -54,7 +55,8 @@ export interface PlaceResult {
           endOffset: number;
         }[];
       };
-      secondaryText: {
+      // Absent for some places, e.g. countries.
+      secondaryText?: {
         text: string; //"San Francisco, CA, USA";
       };
     };

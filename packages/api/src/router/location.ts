@@ -180,8 +180,8 @@ export const locationRouter = {
             : eq(schema.locations.isActive, false),
         input?.searchTerm
           ? or(
-              ilike(schema.locations.name, `%${input?.searchTerm}%`),
-              ilike(schema.locations.description, `%${input?.searchTerm}%`),
+              ilike(schema.locations.name, `%${input.searchTerm}%`),
+              ilike(schema.locations.description, `%${input.searchTerm}%`),
             )
           : undefined,
         input?.regionIds?.length

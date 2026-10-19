@@ -284,7 +284,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RoleList roles={user.roles ?? []} />
+            <RoleList roles={user.roles} />
           </CardContent>
         </Card>
 
@@ -296,7 +296,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <PositionList positions={user.positions ?? []} />
+            <PositionList positions={user.positions} />
           </CardContent>
         </Card>
       </div>

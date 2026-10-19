@@ -18,6 +18,7 @@ export const triggerMapAppRevalidation = (context?: {
   // Map data changed: this instance's cached datasets are stale now (other
   // instances catch up within MAP_DATA_TTL_MS).
   clearMapDataCache();
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- env validation is skipped on CI/SKIP_ENV_VALIDATION builds
   const mapUrl = env.NEXT_PUBLIC_MAP_URL?.endsWith("/")
     ? env.NEXT_PUBLIC_MAP_URL.slice(0, -1)
     : env.NEXT_PUBLIC_MAP_URL;

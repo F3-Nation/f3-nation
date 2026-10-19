@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { useAuth } from "~/utils/hooks/use-auth";
 
 interface MockSession {
-  roles?: { roleName: string; orgId: number; orgName: string }[];
+  roles: { roleName: string; orgId: number; orgName: string }[];
 }
 
 const { useAdminSessionMock } = vi.hoisted(() => ({
@@ -35,7 +35,7 @@ describe("useAuth", () => {
 
   it("reports no privileges for a session without roles", () => {
     useAdminSessionMock.mockReturnValue({
-      data: {},
+      data: { roles: [] },
       status: "authenticated",
     });
 

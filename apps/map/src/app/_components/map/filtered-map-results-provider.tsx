@@ -246,10 +246,10 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
     const locationMarkersWithDistances = filteredLocationMarkers.map(
       (location) => {
         const distance = latLngToDistance(
-          location.lat ?? null,
-          location.lon ?? null,
-          nearbyLocationCenter?.lat ?? null,
-          nearbyLocationCenter?.lng ?? null,
+          location.lat,
+          location.lon,
+          nearbyLocationCenter.lat,
+          nearbyLocationCenter.lng,
         );
         return { ...location, distance };
       },

@@ -4,8 +4,8 @@
  * Pure schema-level tests — no database or mail transport required. They guard
  * the narrowing of `supportedTemplateSchema` to the templates the sendTest and
  * preview handlers actually implement, preventing unsupported templates from
- * passing validation (which would let sendTest silently succeed without sending
- * and preview throw "Unknown template").
+ * passing validation (where sendTest and preview would treat them as
+ * mapChangeRequest).
  */
 
 import { describe, expect, it } from "vitest";

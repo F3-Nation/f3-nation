@@ -279,7 +279,7 @@ export default function AdminEventInstancesModal({
         instance?.endTime?.length === 4
           ? convertHHmmToHH_mm(instance.endTime)
           : null,
-      eventTypeIds: instance?.eventTypes?.map((et) => et.eventTypeId) ?? [],
+      eventTypeIds: instance?.eventTypes.map((et) => et.eventTypeId) ?? [],
       seriesId: instance?.seriesId ?? null,
       seriesException: instance?.seriesException ?? null,
       isPrivate: instance?.isPrivate ?? false,
@@ -306,14 +306,11 @@ export default function AdminEventInstancesModal({
           // Surface the server's message verbatim: it distinguishes "you can't
           // edit this instance" from "you can't move it to that organization",
           // which are different problems with different fixes for the user.
-          toast.error(
-            err.message ??
-              "You are not authorized to create or update event instances",
-          );
+          toast.error(err.message);
           return;
         }
         if (err instanceof ORPCError && err.code === "NOT_FOUND") {
-          toast.error(err.message ?? "This event instance no longer exists");
+          toast.error(err.message);
           return;
         }
         toast.error("Failed to save event instance");
@@ -406,7 +403,7 @@ export default function AdminEventInstancesModal({
                       <VirtualizedCombobox
                         value={field.value?.toString()}
                         options={
-                          regions?.orgs?.map((region) => ({
+                          regions?.orgs.map((region) => ({
                             value: region.id.toString(),
                             label: region.name,
                           })) ?? []
@@ -437,9 +434,10 @@ export default function AdminEventInstancesModal({
                 render={({ field }) => {
                   const filteredAOs = aos?.orgs
                     .filter((ao) => ao.parentId === form.watch("regionId"))
-                    ?.slice()
-                    .sort((a, b) => a.name?.localeCompare(b.name ?? "") ?? 0);
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name));
                   return (
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                     <FormItem key={`ao-${String(field.value ?? "new")}`}>
                       <FormLabel>AO</FormLabel>
                       <FormControl>
@@ -450,7 +448,7 @@ export default function AdminEventInstancesModal({
                           options={
                             filteredAOs?.map((ao) => ({
                               value: ao.id.toString(),
-                              label: ao.name ?? "",
+                              label: ao.name,
                             })) ?? []
                           }
                           searchPlaceholder="Select an AO"
@@ -499,6 +497,7 @@ export default function AdminEventInstancesModal({
                         placeholder="Start Date"
                         type="date"
                         {...field}
+                        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                         value={field.value ?? ""}
                       />
                     </FormControl>
@@ -542,11 +541,9 @@ export default function AdminEventInstancesModal({
                 render={({ field }) => {
                   const filteredLocations = locations?.locations
                     .filter((location) => location.regionId === formRegionId)
-                    ?.slice()
-                    .sort(
-                      (a, b) =>
-                        a.locationName?.localeCompare(b.locationName ?? "") ??
-                        0,
+                    .slice()
+                    .sort((a, b) =>
+                      a.locationName.localeCompare(b.locationName),
                     );
                   return (
                     <FormItem key={`location-${String(field.value ?? "none")}`}>
@@ -610,12 +607,11 @@ export default function AdminEventInstancesModal({
                   <FormItem key="eventTypeIds">
                     <FormLabel>Event types (optional)</FormLabel>
                     <VirtualizedCombobox
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                       value={field.value?.map(String)}
                       options={sortedEventTypes.map((et) => ({
                         value: et.id.toString(),
-                        label: et.eventCategory
-                          ? `${et.name} (${EVENT_CATEGORY_LABEL_MAP[et.eventCategory] ?? et.eventCategory})`
-                          : et.name,
+                        label: `${et.name} (${EVENT_CATEGORY_LABEL_MAP[et.eventCategory] ?? et.eventCategory})`,
                       }))}
                       searchPlaceholder={
                         formRegionId
@@ -653,7 +649,7 @@ export default function AdminEventInstancesModal({
                         }
                         options={events.map((event) => ({
                           value: event.id.toString(),
-                          label: event.name ?? "",
+                          label: event.name,
                         }))}
                         searchPlaceholder="Select a series"
                         onSelect={(value) => {

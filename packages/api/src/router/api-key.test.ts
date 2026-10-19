@@ -94,7 +94,7 @@ describe("API Key Router", () => {
         const key = result.apiKeys.find((k) => k.id === createResult.id);
         expect(key).toBeDefined();
         expect(key?.keySignature).toBeDefined();
-        expect(key?.keySignature?.length).toBe(4);
+        expect(key?.keySignature.length).toBe(4);
       }
     });
 
@@ -630,7 +630,7 @@ describe("API Key Router", () => {
       const roles = [
         {
           orgId: tree.directBranch.region.id,
-          orgName: tree.directBranch.region.name ?? "Region",
+          orgName: tree.directBranch.region.name,
           roleName: "admin" as const,
         },
         ...extraRoles,
@@ -878,7 +878,7 @@ describe("API Key Router", () => {
         regionAdminSession(false, [
           {
             orgId: tree.unrelatedBranch.region.id,
-            orgName: tree.unrelatedBranch.region.name ?? "Region",
+            orgName: tree.unrelatedBranch.region.name,
             roleName: "editor",
           },
         ]),
@@ -931,7 +931,7 @@ describe("API Key Router", () => {
         regionAdminSession(false, [
           {
             orgId: tree.unrelatedBranch.ao.id,
-            orgName: tree.unrelatedBranch.ao.name ?? "AO",
+            orgName: tree.unrelatedBranch.ao.name,
             roleName: "editor",
           },
         ]),

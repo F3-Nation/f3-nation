@@ -62,20 +62,25 @@ describe.runIf(target.inProcess)("role guards through real resolution", () => {
   let editorKey: Awaited<ReturnType<typeof createApiKey>>;
   let userKey: Awaited<ReturnType<typeof createApiKey>>;
   let jwtUser: Awaited<ReturnType<typeof createFixtureUser>>;
+  // Registered as created, so a beforeAll that fails partway cleans up only
+  // what exists.
+  const fixtures: { cleanup: () => Promise<void> }[] = [];
 
   beforeAll(async () => {
     adminKey = await createApiKey({ roles: [{ roleName: "admin" }] });
+    fixtures.push(adminKey);
     editorKey = await createApiKey({ roles: [{ roleName: "editor" }] });
+    fixtures.push(editorKey);
     userKey = await createApiKey({ roles: [] });
+    fixtures.push(userKey);
     jwtUser = await createFixtureUser({ roles: [{ roleName: "admin" }] });
+    fixtures.push(jwtUser);
   });
 
   // Settled, not sequential — see api-key.char.test.ts for why a stranded
   // cleanup surfaces as a golden diff in an unrelated file.
   afterAll(async () => {
-    const results = await Promise.allSettled(
-      [adminKey, editorKey, userKey, jwtUser].map((f) => f?.cleanup()),
-    );
+    const results = await Promise.allSettled(fixtures.map((f) => f.cleanup()));
     const failed = results.filter((r) => r.status === "rejected");
     // eslint-disable-next-line vitest/no-standalone-expect -- intentional: asserts in afterAll, not a test block
     expect(

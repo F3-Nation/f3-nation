@@ -107,7 +107,7 @@ export function StatusCard({
               )}
             </div>
           </>
-        ) : result.ok && result.source === "external" ? (
+        ) : result.ok ? (
           <div className="space-y-1">
             <p>
               <span className="font-medium">Provider:</span>{" "}

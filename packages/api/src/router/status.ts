@@ -394,17 +394,7 @@ async function fetchExternalStatus(
   );
   if (!poll.ok) return poll.result;
 
-  if (target.provider === "slack") {
-    return parseSlackStatusResponse(target, poll.raw);
-  }
-
-  return {
-    ok: false,
-    source: "external",
-    target,
-    status: "down",
-    reason: "invalid_monitor_config",
-  };
+  return parseSlackStatusResponse(target, poll.raw);
 }
 
 async function fetchStatus(

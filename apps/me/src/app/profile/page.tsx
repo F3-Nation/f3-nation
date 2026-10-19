@@ -46,9 +46,5 @@ export default async function ProfilePage() {
     throw err;
   }
 
-  if (!user) {
-    redirect("/?error=user_not_found");
-  }
-
   return <ProfileForm user={user} regions={regions} />;
 }

@@ -175,7 +175,7 @@ export const eventTypeRouter = {
         : input?.orgIds?.length
           ? or(
               inArray(schema.eventTypes.specificOrgId, input.orgIds),
-              input?.ignoreNationEventTypes
+              input.ignoreNationEventTypes
                 ? undefined
                 : isNull(schema.eventTypes.specificOrgId),
             )
@@ -198,8 +198,8 @@ export const eventTypeRouter = {
           : undefined,
         input?.searchTerm
           ? or(
-              ilike(schema.eventTypes.name, `%${input?.searchTerm}%`),
-              ilike(schema.eventTypes.description, `%${input?.searchTerm}%`),
+              ilike(schema.eventTypes.name, `%${input.searchTerm}%`),
+              ilike(schema.eventTypes.description, `%${input.searchTerm}%`),
             )
           : undefined,
         orgScopeFilter,
@@ -221,7 +221,7 @@ export const eventTypeRouter = {
           message: "Event type not found",
         });
       }
-      const totalCount = eventTypeCount?.count;
+      const totalCount = eventTypeCount.count;
 
       const query = ctx.db
         .select(select)
@@ -298,7 +298,7 @@ export const eventTypeRouter = {
           ),
         );
 
-      return { eventTypes: eventTypes ?? null };
+      return { eventTypes: eventTypes };
     }),
   byId: protectedProcedure
     .input(
@@ -354,7 +354,7 @@ export const eventTypeRouter = {
         });
       }
 
-      return { eventType: result ?? null };
+      return { eventType: result };
     }),
   crupdate: editorProcedure
     .input(EventTypeInsertSchema)
@@ -453,7 +453,7 @@ export const eventTypeRouter = {
         })
         .returning();
 
-      return { eventType: result ?? null };
+      return { eventType: result };
     }),
   delete: editorProcedure
     .input(

@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.13.*"
 
 [manifest]
@@ -628,7 +628,6 @@ dependencies = [
     { name = "pytz" },
     { name = "requests" },
     { name = "requests-oauthlib" },
-    { name = "sendgrid" },
     { name = "slack-bolt" },
     { name = "sqlalchemy" },
     { name = "sqlalchemy-utils" },
@@ -667,7 +666,6 @@ requires-dist = [
     { name = "pytz", specifier = ">=2026.2" },
     { name = "requests", specifier = ">=2.31.0,<3.0.0" },
     { name = "requests-oauthlib", specifier = ">=2.0.0,<2.1.0" },
-    { name = "sendgrid", specifier = ">=6.11.0,<7.0.0" },
     { name = "slack-bolt", specifier = ">=1.18.1,<2.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.28,<3.0.0" },
     { name = "sqlalchemy-utils", specifier = ">=0.42.1,<0.43.0" },
@@ -1948,15 +1946,6 @@ wheels = [
 ]
 
 [[package]]
-name = "python-http-client"
-version = "3.3.7"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/56/fa/284e52a8c6dcbe25671f02d217bf2f85660db940088faf18ae7a05e97313/python_http_client-3.3.7.tar.gz", hash = "sha256:bf841ee45262747e00dec7ee9971dfb8c7d83083f5713596488d67739170cea0", size = 9377, upload-time = "2022-03-09T20:23:56.386Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/31/9b360138f4e4035ee9dac4fe1132b6437bd05751aaf1db2a2d83dc45db5f/python_http_client-3.3.7-py3-none-any.whl", hash = "sha256:ad371d2bbedc6ea15c26179c6222a78bc9308d272435ddf1d5c84f068f249a36", size = 8352, upload-time = "2022-03-09T20:23:54.862Z" },
-]
-
-[[package]]
 name = "pytz"
 version = "2026.3.post1"
 source = { registry = "https://pypi.org/simple" }
@@ -2115,20 +2104,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/68/76/6db02f36db58a7d009e90f51e961bcc3c44a1c930a744f026e30e791989b/scramp-1.4.17.tar.gz", hash = "sha256:28970f29ebc33df47f9975c805e5e5a360effe5b31045e607d64b3b60370dba1", size = 21291, upload-time = "2026-08-07T17:19:40.827Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7f/99/0e372781210cd36b2f2727e5be3ea93066edad7edd6fa2dfdec3b3e28845/scramp-1.4.17-py3-none-any.whl", hash = "sha256:a4e3fd2e8169461a28a13777a166d3da94274454f0714a7d3023fee124474ac8", size = 16131, upload-time = "2026-08-07T17:19:39.591Z" },
-]
-
-[[package]]
-name = "sendgrid"
-version = "6.12.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "python-http-client" },
-    { name = "werkzeug" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/da/fa/f718b2b953f99c1f0085811598ac7e31ccbd4229a81ec2a5290be868187a/sendgrid-6.12.5.tar.gz", hash = "sha256:ea9aae30cd55c332e266bccd11185159482edfc07c149b6cd15cf08869fabdb7", size = 50310, upload-time = "2025-09-19T06:23:09.229Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/55/b3c3880a77082e8f7374954e0074aafafaa9bc78bdf9c8f5a92c2e7afc6a/sendgrid-6.12.5-py3-none-any.whl", hash = "sha256:96f92cc91634bf552fdb766b904bbb53968018da7ae41fdac4d1090dc0311ca8", size = 102173, upload-time = "2025-09-19T06:23:07.93Z" },
 ]
 
 [[package]]

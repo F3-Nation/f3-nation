@@ -22,9 +22,9 @@ export const DebugInfo = () => {
         `absolute top-48 right-0 h-min bg-foreground/10 p-2 lg:right-0 lg:bottom-0`,
       )}
     >
-      <div className="m-0 p-0">Zoom: {zoom?.toFixed(1)}</div>
+      <div className="m-0 p-0">Zoom: {zoom.toFixed(1)}</div>
       <div className="m-0 p-0">
-        Center: {center?.lat.toFixed(5)}, {center?.lng.toFixed(5)}
+        Center: {center.lat.toFixed(5)}, {center.lng.toFixed(5)}
       </div>
       <div className="m-0 p-0">Workouts: {workoutCount?.count}</div>
       <div className="m-0 p-0">

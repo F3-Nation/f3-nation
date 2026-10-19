@@ -396,7 +396,7 @@ const getFormValues = async (params: {
   };
 }) => {
   const req = params.review?.request
-    ? getRequestOverrides(params.review?.request)
+    ? getRequestOverrides(params.review.request)
     : null;
 
   const modifiedLocationMarker = params.locationId
@@ -419,7 +419,7 @@ const getFormValues = async (params: {
   if (!loc && req?.originalLocationId) {
     loc = (
       await client.map.location.locationWorkout({
-        locationId: req?.originalLocationId,
+        locationId: req.originalLocationId,
       })
     ).location;
   }
@@ -429,8 +429,8 @@ const getFormValues = async (params: {
     ev = loc.events.find((e) => e.id === params.eventId);
   }
 
-  if (!ev && loc && req?.originalEventId && loc) {
-    ev = loc.events.find((e) => e.id === req?.originalEventId);
+  if (!ev && loc && req?.originalEventId) {
+    ev = loc.events.find((e) => e.id === req.originalEventId);
   }
 
   const de = await openRequestModalDefaults();
@@ -456,9 +456,9 @@ const getFormValues = async (params: {
     locationCountry: loc?.locationCountry ?? de.locationCountry,
     locationDescription: loc?.locationDescription ?? de.locationDescription,
 
-    originalEventId: params?.eventId ?? undefined,
-    originalLocationId: params?.locationId ?? undefined,
-    originalAoId: params?.aoId ?? undefined,
+    originalEventId: params.eventId ?? undefined,
+    originalLocationId: params.locationId ?? undefined,
+    originalAoId: params.aoId ?? undefined,
     originalRegionId: loc?.regionId ?? undefined,
 
     submittedBy: de.submittedBy,
@@ -487,8 +487,7 @@ const getFormValues = async (params: {
     locationCity: req?.locationCity ?? cur.locationCity,
     locationState: req?.locationState ?? cur.locationState,
     locationZip: req?.locationZip ?? cur.locationZip,
-    locationCountry:
-      req?.locationCountry ?? cur.locationCountry ?? "United States",
+    locationCountry: req?.locationCountry ?? cur.locationCountry,
     locationDescription: req?.locationDescription ?? cur.locationDescription,
 
     originalEventId: req?.originalEventId ?? cur.originalEventId,

@@ -53,11 +53,15 @@ export function RuntimeConfigProvider({
     // app stuck on DEFAULT_CONFIG (an empty googleApiKey blocks map rendering).
     void (async () => {
       const MAX_DELAY = 30_000;
+      // The effect cleanup sets `cancelled` while this loop awaits, which
+      // TypeScript's narrowing can't see.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above
       for (let attempt = 0; !cancelled; attempt++) {
         try {
           const res = await fetch("/api/runtime-config");
           if (!res.ok) throw new Error(`runtime-config ${res.status}`);
           const data = (await res.json()) as RuntimeConfigData;
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above
           if (cancelled) return;
           const resolved: RuntimeConfig = { ...data, status: "ready" };
           _runtimeConfig = resolved;
@@ -69,6 +73,7 @@ export function RuntimeConfigProvider({
             console.error("Failed to load runtime config", err);
           }
           // Surface an error after enough failures so the UI stops looping on the loader.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above
           if (!cancelled && attempt + 1 >= ERROR_AFTER_ATTEMPTS) {
             setConfig((prev) => ({ ...prev, status: "error" }));
           }

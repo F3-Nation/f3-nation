@@ -2783,6 +2783,7 @@ async function main(): Promise<void> {
     restoreEnv();
     stopPostgres();
     console.log(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set inside restoreEnv()
       envRestoreFailed
         ? "Stopped throwaway postgres, but packages/env/.env restore FAILED — see above."
         : "Cleaned up throwaway postgres and packages/env/.env.",

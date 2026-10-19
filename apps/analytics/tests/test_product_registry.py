@@ -28,6 +28,7 @@ def test_registry_has_exact_ordered_product_sets():
             "pv_areas",
             "pv_aos",
             "pv_events",
+            "pv_event_details",
             "pv_attendance",
         )
     )
@@ -54,7 +55,8 @@ def test_schema_versions_are_registered_per_product():
         "pv_territories": "pv_territories.v1",
         "pv_areas": "pv_areas.v2",
         "pv_aos": "pv_aos.v1",
-        "pv_events": "pv_events.v2",
+        "pv_events": "pv_events.v3",
+        "pv_event_details": "pv_event_details.v1",
         "pv_attendance": "pv_attendance.v1",
         "event_info": "event_info.v1",
         "future_event_info": "future_event_info.v1",
