@@ -13,41 +13,17 @@ import {
 } from "@acme/ui/form";
 import { Input } from "@acme/ui/input";
 
-interface TimeInputProps {
-  label?: string;
-  id?: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}
-
-type ControlledTimeInputProps<T extends FieldValues> = Omit<
-  TimeInputProps,
-  "value" | "defaultValue" | "onChange"
-> & {
+interface ControlledTimeInputProps<T extends FieldValues> {
   control: Control<T>;
   name: Path<T>;
   label?: string;
-  placeholder?: string;
-  disabled?: boolean;
-};
+}
 
-const TimeInput = ({ label, id, value, onChange }: TimeInputProps) => {
-  return (
-    <Input
-      type="time"
-      value={value}
-      onChange={onChange}
-      id={id}
-      aria-label={label}
-      className="w-full"
-    />
-  );
-};
-
-export const ControlledTimeInput = <T extends FieldValues>(
-  props: ControlledTimeInputProps<T>,
-) => {
-  const { control, name, label, ...rest } = props;
+export const ControlledTimeInput = <T extends FieldValues>({
+  control,
+  name,
+  label,
+}: ControlledTimeInputProps<T>) => {
   return (
     <FormField
       control={control}
@@ -57,12 +33,13 @@ export const ControlledTimeInput = <T extends FieldValues>(
           <FormItem>
             <FormLabel>{label}</FormLabel>
             <FormControl>
-              <TimeInput
+              <Input
+                type="time"
                 value={field.value}
                 onChange={(value) => {
                   field.onChange(value);
                 }}
-                {...rest}
+                className="w-full"
               />
             </FormControl>
             <FormMessage />

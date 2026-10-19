@@ -209,18 +209,6 @@ const renderEditing = (overrides: Record<string, unknown> = {}) => {
 
 const field = (label: string) => screen.getByLabelText<HTMLInputElement>(label);
 
-/**
- * The time inputs are queried by id rather than by label: `ControlledTimeInput`
- * drops the `id` that `FormControl` passes down and renders its own, so the
- * `FormLabel`'s `for` points at an element that does not exist and the input
- * has no accessible name. Pre-existing, and not what these tests are for.
- */
-const timeField = (id: "startTime" | "endTime") => {
-  const el = document.querySelector<HTMLInputElement>(`#${id}`);
-  if (!el) throw new Error(`no #${id} input rendered`);
-  return el;
-};
-
 // Each combobox is addressed by its search placeholder — the only prop that
 // distinguishes them from outside the component.
 const selectOption = (placeholder: string, value: string | number) =>
@@ -385,9 +373,9 @@ describe("AdminEventInstancesModal", () => {
       renderEditing();
 
       await waitFor(() => {
-        expect(timeField("startTime").value).toBe("05:30");
+        expect(field("Start time (optional)").value).toBe("05:30");
       });
-      expect(timeField("endTime").value).toBe("06:15");
+      expect(field("End time (optional)").value).toBe("06:15");
     });
 
     // A stored time that is not four characters cannot be converted, so the
@@ -398,8 +386,8 @@ describe("AdminEventInstancesModal", () => {
       await waitFor(() => {
         expect(field("Start date").value).toBe("2026-09-01");
       });
-      expect(timeField("startTime").value).toBe("");
-      expect(timeField("endTime").value).toBe("");
+      expect(field("Start time (optional)").value).toBe("");
+      expect(field("End time (optional)").value).toBe("");
     });
 
     it("seeds the remaining fields from the loaded instance", async () => {
@@ -430,7 +418,7 @@ describe("AdminEventInstancesModal", () => {
       });
       expect(field("Start date").value).toBe("");
       expect(field("Name (optional)").value).toBe("");
-      expect(timeField("startTime").value).toBe("");
+      expect(field("Start time (optional)").value).toBe("");
     });
 
     // Region/AO/location now page through useFetchAllPages instead of one
@@ -528,7 +516,7 @@ describe("AdminEventInstancesModal", () => {
     it("converts the form's HH:mm times back to stored HHmm", async () => {
       renderEditing();
       await waitFor(() => {
-        expect(timeField("startTime").value).toBe("05:30");
+        expect(field("Start time (optional)").value).toBe("05:30");
       });
 
       save();
@@ -579,11 +567,13 @@ describe("AdminEventInstancesModal", () => {
     it("clears a time that was emptied instead of keeping the old value", async () => {
       renderEditing();
       await waitFor(() => {
-        expect(timeField("startTime").value).toBe("05:30");
+        expect(field("Start time (optional)").value).toBe("05:30");
       });
 
-      fireEvent.change(timeField("startTime"), { target: { value: "" } });
-      fireEvent.change(timeField("endTime"), { target: { value: "" } });
+      fireEvent.change(field("Start time (optional)"), {
+        target: { value: "" },
+      });
+      fireEvent.change(field("End time (optional)"), { target: { value: "" } });
       save();
 
       await waitFor(() => {
@@ -600,7 +590,7 @@ describe("AdminEventInstancesModal", () => {
     it("blocks the mutation and shows the message when the times are out of order", async () => {
       renderEditing({ startTime: "0700", endTime: "0600" });
       await waitFor(() => {
-        expect(timeField("startTime").value).toBe("07:00");
+        expect(field("Start time (optional)").value).toBe("07:00");
       });
 
       save();
@@ -610,6 +600,9 @@ describe("AdminEventInstancesModal", () => {
           screen.getByText("End time must be after start time"),
         ).toBeTruthy();
       });
+      expect(field("End time (optional)").getAttribute("aria-invalid")).toBe(
+        "true",
+      );
       expect(crupdateMutateAsync).not.toHaveBeenCalled();
     });
 

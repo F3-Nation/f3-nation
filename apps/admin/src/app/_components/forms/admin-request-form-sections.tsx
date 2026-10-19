@@ -86,7 +86,6 @@ export const EventDetailsFields = () => {
           <ControlledTimeInput
             control={form.control}
             name="eventStartTime"
-            id="eventStartTime"
             label="Start Time"
           />
         </div>
@@ -94,7 +93,6 @@ export const EventDetailsFields = () => {
           <ControlledTimeInput
             control={form.control}
             name="eventEndTime"
-            id="eventEndTime"
             label="End Time"
           />
         </div>
