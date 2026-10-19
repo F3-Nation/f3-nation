@@ -3,7 +3,8 @@
 > **Approval scope:** The 2026-08-26 approval applies to the inherited scope
 > and ordered set of nine `pv_*` materializations only. The separately
 > human-approved revised acceptance criteria defined below expand the scope to
-> ten datasets by appending `pv_attendance`; they also revise `pv_pax` as
+> eleven datasets by appending `pv_attendance` and splitting rich event details
+> into `pv_event_details`; they also revise `pv_pax` as
 > described below. Neither scope approval satisfies human security, platform,
 > scale, consumer-compatibility, or production gates.
 > This document is not evidence that database, GCS, IAM,
@@ -14,7 +15,7 @@
 
 Pax Vault is an independent product from the four analytics materializations in
 [`analytics-parquet-etl.md`](./analytics-parquet-etl.md). It publishes exactly
-these ten datasets, in this order:
+these eleven datasets, in this order:
 
 1. `pv_regions`
 2. `pv_pax`
@@ -25,25 +26,28 @@ these ten datasets, in this order:
 7. `pv_areas`
 8. `pv_aos`
 9. `pv_events`
-10. `pv_attendance`
+10. `pv_event_details`
+11. `pv_attendance`
 
 Production objects are rooted under
 `gs://BUCKET/pax-vault/releases/<releaseId>/`; nonproduction uses the
 corresponding configured nonproduction bucket and the same `pax-vault/` product
 prefix. A release has one immutable `release.json`, one dataset manifest for
-each of the ten names, and their immutable Parquet objects. The independent
+each of the eleven names, and their immutable Parquet objects. The independent
 mutable selector is `gs://BUCKET/pax-vault/current.json`. A subset can be used
-for local diagnostics, but only the exact ten-dataset set can be published.
+for local diagnostics, but only the exact eleven-dataset set can be published.
 Analytics uses its separate `analytics/releases/` root and
 `analytics/current.json` pointer.
 
-The ten-dataset set and current schema versions below are the only schemas for
+The eleven-dataset set and current schema versions below are the only schemas for
 new publication. A narrowly scoped rollback may select the exact retained
 pre-upgrade nine-dataset release whose version vector is
 `pv_regions.v1`, `pv_pax.v2`, `pv_kotter.v1`, `pv_upcoming.v1`,
 `pv_sectors.v2`, `pv_territories.v1`, `pv_areas.v2`, `pv_aos.v1`, and
-`pv_events.v2`. The historical `pv_pax.v2` projection has fourteen columns and
-ends in `roles`; it does not include the `lifetime_posts` or `lifetime_qs`
+`pv_events.v2`. The historical nine-dataset rollback vector is unchanged and
+contains neither `pv_event_details` nor `pv_attendance`. The historical
+`pv_pax.v2` projection has fourteen columns and ends in `roles`; it does not
+include the `lifetime_posts` or `lifetime_qs`
 columns in current `pv_pax.v3`. Rollback eligibility requires the exact release
 identity, generation, URI, and manifest hash recorded as `retainedPrevious` by
 the current pointer, followed by full release and Parquet validation. That hash
@@ -227,11 +231,10 @@ non-null `pax_count` directly belonging to that AO. These vocabulary queries do
 not apply the `exclude_from_pax_vault` metadata predicate. Lists sort by display
 name then ID and are `[]` when empty.
 
-### `pv_events` — one row per eligible event instance
+### `pv_events` — one row per eligible event instance in this dataset read
 
 Columns, in order: `refreshed_at`, `event_id`, `event_date`, `event_name`,
-`pax_count`, `fng_count`, `description`, `preblast`, `preblast_rich`,
-`backblast`, `backblast_rich`, `meta`, `ao_org_id`, `ao_name`,
+`pax_count`, `fng_count`, `ao_org_id`, `ao_name`,
 `region_org_id`, `region_name`, `area_org_id`, `area_name`,
 `territory_org_id`, `territory_name`, `sector_org_id`, `sector_name`,
 `first_f_ind`, `second_f_ind`, `third_f_ind`, `types`, `tags`, `attendance`.
@@ -240,7 +243,6 @@ Include active events with non-null `pax_count` and a false/null
 `meta.exclude_from_pax_vault`; invalid non-null/non-boolean flag values fail.
 The recursive organization ancestor lookup supplies AO, region, area, territory,
 and sector IDs/names (bounded to 20 ancestors and protected against cycles).
-`preblast_rich` and `backblast_rich` are JSON values; `meta` is retained as JSON.
 Type entries are `{id, name, description, event_category}`; tag entries are
 `{id, name, description}`. Both lists sort by name then ID and are `[]` if
 empty. Only attendance users with non-null email matching the practical email
@@ -248,6 +250,41 @@ syntax pattern above are included. Attendance is grouped per event and user and
 contains `{user_id, f3_name, q_ind, coq_ind, avatar_url, attended, ghost,
 fartsack}`; the flags distinguish actual from planned attendance and lists sort
 by name then user ID. Missing attendance, types, or tags produce empty lists.
+
+### `pv_event_details` — one row per eligible event instance in this dataset read
+
+Columns, in SQL projection order: `event_id`, `description`, `preblast`,
+`preblast_rich`, `backblast`, `backblast_rich`, `meta`, `refreshed_at`.
+
+This dataset uses exactly the same eligibility rule as `pv_events`: active event
+instances with non-null `pax_count` and a false or null
+`meta.exclude_from_pax_vault`; a true flag excludes the event, and malformed
+non-null/non-boolean values fail the dataset. It emits one row per eligible
+event instance, including events with null detail fields. The rich preblast and
+backblast values are JSON, and `meta` is retained as JSON. `refreshed_at` is
+the dataset refresh parameter. `pv_events` retains its own `refreshed_at` and
+all other existing columns except the six detail columns (`description`,
+`preblast`, `preblast_rich`, `backblast`, `backblast_rich`, and `meta`), which
+are removed from `pv_events.v3` and live only in this dataset. The datasets are
+materialized by independent reads, not from one shared source snapshot; using
+the same rule does not guarantee the same event IDs or a one-to-one match.
+Consumers join on `event_id` with a `LEFT JOIN` from `pv_events` and must
+tolerate missing rows on either side.
+
+### Event schema compatibility and rollout
+
+For released or consumed datasets, any incompatible projection change,
+including a column removal or rename, requires a new dataset `schemaVersion`.
+The removal of those six fields changes `pv_events.v2` to `pv_events.v3`; the
+extracted detail projection is `pv_event_details.v1`. Consumers of
+`pv_events.v2` must update to support the new split before a v3 release is
+published, and all serving and rollback-eligible revisions must pass the
+consumer-compatibility gate. Roll out consumers first, verify compatibility,
+then publish the v3 release. Keep the exact retained legacy release available
+for rollback; it has the nine-dataset version vector above, including
+`pv_pax.v2` and `pv_events.v2`, and neither `pv_attendance` nor
+`pv_event_details`. Roll back through a validated pointer update and only
+while the serving consumer revision supports that legacy dataset set.
 
 ### `pv_attendance` — one row per eligible actual attendance ID
 
@@ -284,10 +321,11 @@ still-unreleased `pv_attendance.v1` revision.
 
 ## 3. Security and operational release gates
 
-These are sensitive PAX and event datasets. The `pv_events` SQL currently has
-no `is_private` filter and no `is_private` output column, so active eligible
-events are not excluded based on privacy status. Event `meta`, private-event
-content present in source-backed fields, and rich preblast/backblast JSON must
+These are sensitive PAX and event datasets. The `pv_events` and
+`pv_event_details` SQL do not apply an `is_private` filter or project an
+`is_private` output column, so active eligible events are not excluded based on
+privacy status. Event `meta`, private-event content present in source-backed
+fields, and rich preblast/backblast JSON must
 be treated as sensitive. Security owners must explicitly sign off on that
 private-event inclusion behavior and sensitive-field exposure before
 production. This scope description is not a substitute for
@@ -306,7 +344,7 @@ evidence that the deployed permissions or identities have been verified. The
 publisher writes create-only immutable
 objects below the product's release prefix and updates only
 `pax-vault/current.json` through GCS object-generation compare-and-swap. The
-producer must validate all ten datasets and the complete release before the
+producer must validate all eleven datasets and the complete release before the
 pointer CAS; a failure leaves the prior pointer selected. Replacing pointer
 content requires the GCS content-replacement permission scoped to the exact
 `pax-vault/current.json` object. A generic metadata-update permission is not a
@@ -333,7 +371,7 @@ The exact SQL projections and materialization rules live in
 declarations are in `apps/analytics/tests/`. Registry-declared current schema
 versions are `pv_regions.v1`, `pv_pax.v3`, `pv_kotter.v1`, `pv_upcoming.v1`,
 `pv_sectors.v2`, `pv_territories.v1`, `pv_areas.v2`, `pv_aos.v1`, and
-`pv_events.v2`, and `pv_attendance.v1`. The approved schema-registry concept
+`pv_events.v3`, `pv_event_details.v1`, and `pv_attendance.v1`. The approved schema-registry concept
 does not establish that an
 external executable registry or consumer compatibility check has been
 furnished or run. The external compatibility gate must verify the exact

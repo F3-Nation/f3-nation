@@ -47,6 +47,7 @@ PAX_VAULT_NAMES = (
     "pv_areas",
     "pv_aos",
     "pv_events",
+    "pv_event_details",
     "pv_attendance",
 )
 PAX_VAULT_LEGACY_SCHEMA_VERSIONS = MappingProxyType(
@@ -81,9 +82,10 @@ _SCHEMA_VERSIONS = MappingProxyType(
         "pv_pax": "pv_pax.v3",
         "pv_sectors": "pv_sectors.v2",
         "pv_areas": "pv_areas.v2",
-        "pv_events": "pv_events.v2",
+        "pv_events": "pv_events.v3",
     }
 )
+_SORT_BY = MappingProxyType({"pv_events": ("region_org_id", "event_date"), "pv_event_details": ("event_id",)})
 
 
 def _definition(name: str, product: str) -> Materialization:
@@ -96,7 +98,7 @@ def _definition(name: str, product: str) -> Materialization:
         sql_reference=f"sql/{name}.sql",
         product=product,
         partition_by=(),
-        sort_by=("region_org_id", "event_date") if name == "pv_events" else (),
+        sort_by=_SORT_BY.get(name, ()),
     )
 
 

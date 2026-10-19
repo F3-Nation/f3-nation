@@ -57,8 +57,8 @@ The default is all four datasets in the order above. A subset may be used for
 local export or diagnostics, but a publication run rejects any selection other
 than the exact approved four-name set. Analytics has its independent
 `analytics/releases/<releaseId>/...` root and `analytics/current.json` pointer.
-Pax Vault independently publishes exactly ten `pv_*` datasets, including
-`pv_territories` and `pv_attendance`, under
+Pax Vault independently publishes exactly eleven `pv_*` datasets, including
+`pv_territories`, `pv_event_details`, and `pv_attendance`, under
 `pax-vault/releases/<releaseId>/...` and selects them through
 `pax-vault/current.json`.
 
@@ -121,7 +121,7 @@ shared source snapshot or SQL parity.
 
 ## 4. Analytics output contracts
 
-These four analytics datasets are distinct from Pax Vault's ten `pv_*`
+These four analytics datasets are distinct from Pax Vault's eleven `pv_*`
 datasets, whose inherited approved scope and detailed contracts are in
 [`pax-vault-parquet-etl.md`](./pax-vault-parquet-etl.md). The column names and order below are the exact SQL projections, also
 asserted by `tests/test_analytics_views.py`.
