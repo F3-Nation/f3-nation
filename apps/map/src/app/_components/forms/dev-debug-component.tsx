@@ -78,7 +78,7 @@ const GROUP_APPLIERS: Record<FieldGroup, typeof applyEventTestData> = {
   location: applyLocationTestData,
 };
 
-export const DevLoadTestData = <_T extends DevLoadTestDataValues>() => {
+export const DevLoadTestData = () => {
   const form = useFormContext<DevLoadTestDataValues>();
   return (
     <Button
@@ -112,7 +112,7 @@ interface FormDebugValues {
   originalRegionId?: string;
   newRegionId?: string;
 }
-export const FormDebugData = <_T extends FormDebugValues>() => {
+export const FormDebugData = () => {
   const form = useFormContext<FormDebugValues>();
   const formId = form.watch("id");
   const formOriginalEventId = form.watch("originalEventId");

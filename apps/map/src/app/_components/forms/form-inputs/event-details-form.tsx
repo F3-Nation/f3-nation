@@ -24,6 +24,8 @@ interface EventDetailsFormValues {
   currentValues?: Partial<EventFieldsType>;
 }
 
+// _T lets callers assert their form type includes these fields (`<X<FormType> />`).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
   // I'd like for this to be generic, but the types don't seem to be working as expected.
   const form = useFormContext<EventDetailsFormValues>();

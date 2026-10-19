@@ -752,6 +752,8 @@ describe("Position Router", () => {
     });
   });
 
+  // Covers the deprecated endpoint until it is removed.
+  /* eslint-disable @typescript-eslint/no-deprecated */
   describe("updateAssignments", () => {
     it("should replace assignments for specified positions", async () => {
       const region = await createTestRegion();
@@ -843,6 +845,7 @@ describe("Position Router", () => {
       ).rejects.toThrow();
     });
   });
+  /* eslint-enable @typescript-eslint/no-deprecated */
 
   describe("deleteAssignment", () => {
     it("should delete an existing assignment", async () => {

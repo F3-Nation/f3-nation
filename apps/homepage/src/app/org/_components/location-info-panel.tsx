@@ -32,7 +32,7 @@ function LeaderItem({ entry }: { entry: OrgLeaderEntry }) {
         <img
           src={avatar}
           alt={name}
-          className="h-9 w-9 flex-shrink-0 rounded-lg object-cover"
+          className="h-9 w-9 shrink-0 rounded-lg object-cover"
           loading="lazy"
         />
         <div>

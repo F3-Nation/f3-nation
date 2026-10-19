@@ -9,6 +9,7 @@ from features import (
     downrange,
     emergency,
     f3versary_announcements,
+    fng,
     help,
     paxminer_mapping,
     positions,
@@ -55,9 +56,11 @@ COMMAND_MAPPER = {
     "/tag-achievement": (achievements.build_tag_achievement_form, True, False),
     "/f3-calendar": (home.build_home_form, True, False),
     "/help": (help.build_help_menu, False, False),
+    "/fng": (fng.build_fng_form, True, False),
 }
 
 VIEW_MAPPER = {
+    fng.FNG_CALLBACK_ID: (fng.handle_fng_form, False, True),
     actions.BACKBLAST_CALLBACK_ID: (backblast.handle_backblast_post, False, False),
     actions.BACKBLAST_EDIT_CALLBACK_ID: (backblast.handle_backblast_post, False, False),
     actions.KOTTER_REPORT_CONFIG_CALLBACK_ID: (config.handle_kotter_report_config_post, False, True),

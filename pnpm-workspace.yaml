@@ -12,70 +12,70 @@ catalog:
   "@commitlint/config-conventional": ^21.2.3
   "@commitlint/cz-commitlint": ^21.2.3
   "@commitlint/types": ^21.2.3
-  "@google-cloud/storage": ^8.2.0
-  "@hono/node-server": ^2.1.3
+  "@google-cloud/storage": ^8.4.0
+  "@hono/node-server": ^2.1.4
   "@hookform/resolvers": ^5.9.1
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
-  "@next/eslint-plugin-next": ^16.3.8
+  "@next/eslint-plugin-next": ^16.4.0
   "@opentelemetry/api": ^1.9.1
-  "@opentelemetry/api-logs": ^0.222.0
-  "@opentelemetry/core": ^2.11.0
-  "@opentelemetry/resources": ^2.11.0
-  "@opentelemetry/sdk-logs": ^0.222.0
+  "@opentelemetry/api-logs": ^0.223.0
+  "@opentelemetry/core": ^2.12.0
+  "@opentelemetry/resources": ^2.12.0
+  "@opentelemetry/sdk-logs": ^0.223.0
   "@opentelemetry/semantic-conventions": ^1.43.0
-  "@orpc/client": ^1.15.4
-  "@orpc/experimental-ratelimit": ^1.15.4
-  "@orpc/openapi": ^1.15.4
-  "@orpc/server": ^1.15.4
-  "@orpc/tanstack-query": ^1.15.4
-  "@orpc/zod": ^1.15.4
-  "@playwright/test": ^1.63.0
-  "@radix-ui/react-alert-dialog": ^1.1.23
-  "@radix-ui/react-avatar": ^1.2.6
-  "@radix-ui/react-checkbox": ^1.3.11
-  "@radix-ui/react-context-menu": ^2.3.7
-  "@radix-ui/react-dialog": ^1.1.23
-  "@radix-ui/react-dropdown-menu": ^2.1.24
-  "@radix-ui/react-hover-card": ^1.1.23
+  "@orpc/client": ^1.15.6
+  "@orpc/experimental-ratelimit": ^1.15.6
+  "@orpc/openapi": ^1.15.6
+  "@orpc/server": ^1.15.6
+  "@orpc/tanstack-query": ^1.15.6
+  "@orpc/zod": ^1.15.6
+  "@playwright/test": ^1.64.0
+  "@radix-ui/react-alert-dialog": ^1.2.0
+  "@radix-ui/react-avatar": ^1.3.0
+  "@radix-ui/react-checkbox": ^1.4.0
+  "@radix-ui/react-context-menu": ^2.4.0
+  "@radix-ui/react-dialog": ^1.3.0
+  "@radix-ui/react-dropdown-menu": ^2.2.0
+  "@radix-ui/react-hover-card": ^1.2.0
   "@radix-ui/react-icons": ^1.3.2
-  "@radix-ui/react-label": ^2.1.15
-  "@radix-ui/react-navigation-menu": ^1.2.22
-  "@radix-ui/react-popover": ^1.1.23
-  "@radix-ui/react-progress": ^1.1.16
-  "@radix-ui/react-radio-group": ^1.4.7
-  "@radix-ui/react-select": ^2.3.7
-  "@radix-ui/react-separator": ^1.1.15
-  "@radix-ui/react-slider": ^1.4.7
-  "@radix-ui/react-slot": ^1.3.3
-  "@radix-ui/react-switch": ^1.3.7
-  "@radix-ui/react-tabs": ^1.1.21
-  "@radix-ui/react-tooltip": ^1.2.16
+  "@radix-ui/react-label": ^2.1.17
+  "@radix-ui/react-navigation-menu": ^1.4.0
+  "@radix-ui/react-popover": ^1.3.0
+  "@radix-ui/react-progress": ^1.2.0
+  "@radix-ui/react-radio-group": ^1.5.0
+  "@radix-ui/react-select": ^2.4.0
+  "@radix-ui/react-separator": ^1.2.0
+  "@radix-ui/react-slider": ^1.6.0
+  "@radix-ui/react-slot": ^1.5.0
+  "@radix-ui/react-switch": ^1.4.0
+  "@radix-ui/react-tabs": ^1.2.0
+  "@radix-ui/react-tooltip": ^1.4.0
   "@react-hook/window-size": ^3.1.1
-  "@scalar/hono-api-reference": ^0.12.10
+  "@scalar/hono-api-reference": ^0.12.11
   "@t3-oss/env-core": ^0.13.11
   "@t3-oss/env-nextjs": ^0.13.11
   "@tailwindcss/postcss": ^4.3.3
-  "@tanstack/react-query": 5.104.1
-  "@tanstack/react-query-devtools": 5.104.1
-  "@tanstack/react-table": ^9.2.6
-  "@tanstack/react-virtual": ^3.14.13
-  "@tanstack/table-core": ^9.2.6
+  "@tanstack/react-query": 5.104.2
+  "@tanstack/react-query-devtools": 5.104.2
+  "@tanstack/react-table": ^9.2.8
+  "@tanstack/react-virtual": ^3.14.17
+  "@tanstack/table-core": ^9.2.8
   "@testing-library/jest-dom": ^7.0.1
   "@testing-library/react": ^16.3.3
   "@testing-library/user-event": ^14.6.7
   "@turbo/gen": ^2.11.7
   "@types/geojson": ^7946.0.16
-  "@types/google.maps": ^3.66.5
+  "@types/google.maps": ^3.66.6
   "@types/leaflet": ^1.9.22
-  "@types/lodash": ^4.17.25
-  "@types/node": ^24.19.1
+  "@types/lodash": ^4.17.26
+  "@types/node": ^24.19.2
   "@types/nodemailer": ^8.0.2
   "@types/pg": ^8.23.1
   "@types/react": ^19.3.0
   "@types/react-dom": ^19.3.0
   "@vis.gl/react-google-maps": ~1.8.3
   "@vitejs/plugin-react": ^6.1.2
-  "@vitest/coverage-v8": ^5.0.3
+  "@vitest/coverage-v8": ^5.0.4
   "@vitest/eslint-plugin": ^1.6.27
   better-auth: ^1.7.7
   class-variance-authority: ^0.7.1
@@ -83,16 +83,17 @@ catalog:
   cmdk: ^1.1.1
   commitizen: ^4.3.2
   dayjs: ^1.11.23
-  dompurify: ^3.4.16
-  dotenv: ^18.0.5
+  dompurify: ^3.4.17
+  dotenv: ^18.0.7
   dotenv-cli: ^11.0.0
   drizzle-kit: ^0.31.11
-  drizzle-orm: ^0.45.3
+  drizzle-orm: ^0.45.4
   drizzle-zod: ^0.8.3
   esbuild: ^0.28.2
   esbuild-register: ^3.6.0
   eslint: ^10.12.0
   eslint-config-turbo: ^2.11.7
+  eslint-plugin-better-tailwindcss: ^4.9.1
   eslint-plugin-drizzle: ^0.2.3
   eslint-plugin-import-x: ^4.17.1
   eslint-plugin-jsx-a11y: ^6.10.2
@@ -104,30 +105,30 @@ catalog:
   jiti: ^2.7.0
   jose: ^6.2.12
   jsdom: ^30.1.2
-  knip: ^6.39.0
+  knip: ^6.41.0
   leaflet: ^1.9.4
-  lefthook: ^2.1.17
-  libphonenumber-js: ^1.13.14
+  lefthook: ^2.2.1
+  libphonenumber-js: ^1.13.15
   lodash: ^4.18.1
-  lucide-react: ^1.52.0
-  next: ^16.3.8
+  lucide-react: ^1.55.0
+  next: ^16.4.0
   next-auth: 5.0.0-beta.32
   next-themes: ^0.4.6
-  nodemailer: ^10.0.15
+  nodemailer: ^10.1.0
   pg: ^8.23.1
   pg-connection-string: ^2.14.1
   pino: ^10.4.0
   pino-pretty: ^13.2.0
   postcss: ^8.5.29
   postcss-load-config: ^6.0.1
-  posthog-js: ^1.436.0
-  posthog-node: ^5.55.0
+  posthog-js: ^1.438.8
+  posthog-node: ^5.55.2
   postgres: ^3.4.9
-  prettier: ^3.9.9
+  prettier: ^3.9.10
   prettier-plugin-tailwindcss: ^0.8.1
   react: ^19.3.0
   react-dom: ^19.3.0
-  react-hook-form: ^7.89.0
+  react-hook-form: ^7.90.0
   react-phone-number-input: ^3.4.18
   react-qr-code: ^2.2.0
   react-responsive: ^10.0.1
@@ -141,12 +142,12 @@ catalog:
   turbo: ^2.11.7
   tw-animate-css: ^1.4.0
   typescript: ^6.0.3
-  typescript-eslint: ^8.71.0
+  typescript-eslint: ^8.71.1
   # Vitest 4 requires Vite >= 6. Vite is otherwise only a transitive (auto-installed
   # peer) dep, which pnpm won't reliably bump from the locked v5; declaring it
   # explicitly in each vitest package pins a compatible Vite deterministically.
-  vite: ^8.3.2
-  vitest: ^5.0.3
+  vite: ^8.3.4
+  vitest: ^5.0.4
   vitest-canvas-mock: ^1.2.0
   zod: ^4.5.4
   zustand: ^5.0.15
@@ -177,12 +178,12 @@ overrides:
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.12" # GHSA-rgw5-rvv9-x895 (DoS)
   "fast-uri@<3.1.5": "3.1.8" # host confusion via failed backslash authority introducer
   "sharp@<0.35.5": "0.35.5" # GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889) and earlier libheif advisories; next's optional sharp dep resolved to 0.35.3, outside the old <0.35.0 range
-  "next@>=16.0.0 <16.3.8": "16.3.8" # GHSA-vcvr-r3jv-pc5j (RCE in next/og ImageResponse) / GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
+  "next@>=16.0.0 <16.3.8": "16.4.0" # GHSA-vcvr-r3jv-pc5j (RCE in next/og ImageResponse) / GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
   "postcss@<8.5.12": "^8.5.29" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
-  "nanoid@<3.3.17": "^6.0.1" # GHSA-2v37-7h3g-55p8
-  "nanoid@>=4.0.0 <5.1.16": "^6.0.1" # GHSA-28wg-ghj8-5hjv
+  "nanoid@<3.3.17": "^6.0.2" # GHSA-2v37-7h3g-55p8
+  "nanoid@>=4.0.0 <5.1.16": "^6.0.2" # GHSA-28wg-ghj8-5hjv
   "browserslist@<=4.28.6": "4.29.3" # GHSA-c83g-rgw3-j3cx (unbounded memory growth) / GHSA-73wf-gq98-2v4g (prototype write crash via browserslist-stats.json)
-  "seroval@<1.6.3": "1.6.8" # GHSA-p6vx-979v-rg4c (fromJSON thenable callable bypass) / GHSA-jp82-f5mq-hwhp (TypedArray memory exhaustion); via solid-js in @tanstack/query-devtools
+  "seroval@<1.6.3": "1.6.9" # GHSA-p6vx-979v-rg4c (fromJSON thenable callable bypass) / GHSA-jp82-f5mq-hwhp (TypedArray memory exhaustion); via solid-js in @tanstack/query-devtools
   "source-map-js@<1.2.2": "1.2.2" # GHSA-68fv-2mgg-jv7q (indexed source-map offset event-loop DoS); via next>postcss
 peerDependencyRules:
   allowedVersions:

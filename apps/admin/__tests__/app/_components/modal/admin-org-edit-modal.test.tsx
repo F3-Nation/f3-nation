@@ -764,12 +764,12 @@ describe("Region Area or Territory parent selection", () => {
       });
       mount("region", record.id);
 
-      await waitFor(() =>
-        expect(parentSelect().value).toBe(String(current.id)),
-      );
-      expect(parentSelect().selectedOptions[0]?.text).toBe(
-        "Inactive Current Parent (inactive)",
-      );
+      await waitFor(() => {
+        expect(parentSelect().value).toBe(String(current.id));
+        expect(parentSelect().selectedOptions[0]?.text).toBe(
+          "Inactive Current Parent (inactive)",
+        );
+      });
       expect(parentOptions().map((option) => option.value)).toEqual(
         expect.arrayContaining(["2", "3", "11", "12", "20"]),
       );
@@ -895,10 +895,12 @@ describe("Region Area or Territory parent selection", () => {
       mocks.parentById.mockResolvedValue({ org: current });
       mocks.all.mockResolvedValue({ orgs: [], total: 0 });
       mount("region", record.id);
-      await waitFor(() => expect(parentSelect().value).toBe("20"));
-      expect(parentSelect().selectedOptions[0]?.text).toBe(
-        "Inactive Current Parent (inactive)",
-      );
+      await waitFor(() => {
+        expect(parentSelect().value).toBe("20");
+        expect(parentSelect().selectedOptions[0]?.text).toBe(
+          "Inactive Current Parent (inactive)",
+        );
+      });
       expect(parentSelect().disabled).toBe(true);
       expect(parentOptions().map((option) => option.value)).toEqual(["20"]);
       await waitFor(() =>

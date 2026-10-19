@@ -201,6 +201,7 @@ async function assertEventRefsInScope({
 
 // Aliased tables used across event queries
 const regionOrg = aliasedTable(schema.orgs, "region_org");
+const allRegionOrg = aliasedTable(schema.orgs, "all_region_org");
 const parentOrg = aliasedTable(schema.orgs, "parent_org");
 
 const pendingRegionNotificationTasks = new Set<Promise<void>>();
@@ -477,7 +478,7 @@ export const eventRouter = {
         const direction = sorting.desc ? desc : asc;
         switch (sorting.id) {
           case "regions":
-            return direction(regionOrg.name);
+            return direction(sql`min(${allRegionOrg.name})`);
           case "parent":
             return direction(parentOrg.name);
           case "status":
@@ -530,12 +531,12 @@ export const eventRouter = {
         regions: sql<{ regionId: number; regionName: string }[]>`COALESCE(
           json_agg(
             DISTINCT jsonb_build_object(
-              'regionId', ${regionOrg.id}, 
-              'regionName', ${regionOrg.name}
+              'regionId', ${allRegionOrg.id},
+              'regionName', ${allRegionOrg.name}
             )
           ) 
           FILTER (
-            WHERE ${regionOrg.id} IS NOT NULL
+            WHERE ${allRegionOrg.id} IS NOT NULL
           ), 
           '[]'
         )`,
@@ -596,6 +597,18 @@ export const eventRouter = {
           ),
         )
         .leftJoin(
+          // Keep all associations even when regionOrg is narrowed by filters.
+          allRegionOrg,
+          and(
+            eq(allRegionOrg.orgType, "region"),
+            or(
+              eq(allRegionOrg.id, schema.locations.orgId),
+              eq(allRegionOrg.id, schema.events.orgId),
+              eq(allRegionOrg.id, parentOrg.parentId),
+            ),
+          ),
+        )
+        .leftJoin(
           schema.eventsXEventTypes,
           eq(schema.eventsXEventTypes.eventId, schema.events.id),
         )
@@ -607,7 +620,6 @@ export const eventRouter = {
         .groupBy(
           schema.events.id,
           parentOrg.id,
-          regionOrg.id,
           schema.locations.name,
           schema.locations.addressStreet,
           schema.locations.addressStreet2,

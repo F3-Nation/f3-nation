@@ -83,7 +83,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("registration", () => {
+// Each test renders the full form; on a loaded CI runner the slowest ones
+// exceed the 5s default.
+describe("registration", { timeout: 20_000 }, () => {
   it.each([false, true])(
     "creates the account before signing in (Better Auth: %s)",
     async (useBetterAuth) => {
@@ -204,12 +206,14 @@ describe("registration", () => {
     await fillForm();
     change("F3 Name", "Test Runner");
     change("Home Region", "sOuTh");
-    expect(screen.queryByRole("button", { name: "Test North" })).toBeNull();
-    const region = screen.getByRole("button", { name: "Test South" });
+    expect(screen.queryByRole("option", { name: "Test North" })).toBeNull();
+    const region = screen.getByRole("option", { name: "Test South" });
     fireEvent.mouseDown(region);
     fireEvent.click(region);
     change("Phone Number", "2025550123");
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "GB" } });
+    fireEvent.change(document.querySelector("#phoneCountry")!, {
+      target: { value: "GB" },
+    });
     expect(screen.getByLabelText("Phone Number")).toHaveProperty("value", "");
     change("Phone Number", "02079460018");
     fireEvent.click(
@@ -250,7 +254,7 @@ describe("registration", () => {
     vi.useFakeTimers();
     const input = screen.getByLabelText("Home Region");
     fireEvent.focus(input);
-    const region = screen.getByRole("button", { name: "Test South" });
+    const region = screen.getByRole("option", { name: "Test South" });
     fireEvent.mouseDown(region);
     fireEvent.blur(input);
     fireEvent.click(region);
@@ -267,11 +271,11 @@ describe("registration", () => {
     await act(() => vi.advanceTimersByTimeAsync(200));
     expect(input).toHaveProperty("value", "");
     fireEvent.focus(input);
-    expect(screen.getByRole("button", { name: "Test North" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Test North" })).toBeDefined();
     fireEvent.mouseDown(
       screen.getByRole("heading", { name: "Create Your Account" }),
     );
-    expect(screen.queryByRole("button", { name: "Test North" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Test North" })).toBeNull();
     vi.useRealTimers();
     submit();
     await waitFor(() =>
@@ -442,6 +446,10 @@ describe("registration", () => {
     );
     await fillForm();
     change("F3 Name", "Test Runner");
+    change("Home Region", "South");
+    const region = screen.getByRole("option", { name: "Test South" });
+    fireEvent.mouseDown(region);
+    fireEvent.click(region);
     change("Phone Number", "2025550123");
     fireEvent.click(
       screen.getByRole("button", { name: /Emergency Contact Info/ }),
@@ -459,6 +467,8 @@ describe("registration", () => {
     cleanup();
 
     // Back from the new code: same email, form comes back filled in.
+    const freshCode = "654321";
+    searchParams.set("code", freshCode);
     fetchMock.mockResolvedValueOnce(Response.json(regions));
     await act(async () => {
       render(<RegisterForm useBetterAuth={false} />);
@@ -469,6 +479,10 @@ describe("registration", () => {
       "Test Runner",
     );
     expect(screen.getByLabelText("Phone Number")).toHaveProperty("value", "");
+    expect(screen.getByLabelText("Home Region")).toHaveProperty(
+      "value",
+      "Test South",
+    );
 
     // A different email gets a blank form.
     cleanup();
@@ -478,6 +492,31 @@ describe("registration", () => {
       render(<RegisterForm useBetterAuth={false} />);
     });
     expect(screen.getByLabelText(/First Name/)).toHaveProperty("value", "");
+
+    // Returning to the original email preserves its selected region and uses the fresh code.
+    cleanup();
+    searchParams.set("email", email);
+    fetchMock.mockResolvedValueOnce(Response.json(regions));
+    await act(async () => {
+      render(<RegisterForm useBetterAuth={false} />);
+    });
+    submit();
+    await waitFor(() => expect(router.push).toHaveBeenLastCalledWith(callback));
+    expect(
+      fetchMock.mock.calls.filter(([url]) => url === "/api/register"),
+    ).toHaveLength(2);
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        code: freshCode,
+        f3Name: "Test Runner",
+        firstName: "Test",
+        lastName: "PAX",
+        homeRegionId: 2,
+      }),
+    });
   });
 
   it("clears a saved draft once registration succeeds", async () => {

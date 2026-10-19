@@ -8,13 +8,15 @@
     "./base.js",
     "./drizzle.js",
     "./nextjs.js",
-    "./react.js"
+    "./react.js",
+    "./tailwind.js"
   ],
   "exports": {
     "./base": "./base.js",
     "./drizzle": "./drizzle.js",
     "./react": "./react.js",
-    "./nextjs": "./nextjs.js"
+    "./nextjs": "./nextjs.js",
+    "./tailwind": "./tailwind.js"
   },
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
@@ -28,6 +30,7 @@
     "@next/eslint-plugin-next": "catalog:",
     "eslint": "catalog:",
     "eslint-config-turbo": "catalog:",
+    "eslint-plugin-better-tailwindcss": "catalog:",
     "eslint-plugin-drizzle": "catalog:",
     "eslint-plugin-import-x": "catalog:",
     "eslint-plugin-jsx-a11y": "catalog:",

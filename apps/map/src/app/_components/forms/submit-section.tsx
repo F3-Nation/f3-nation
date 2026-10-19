@@ -143,6 +143,9 @@ function useRequestStatusHandler() {
 /**
  * Hook to handle form submission with loading state and error handling
  */
+// T is needed: a caller's `(values: T) => …` is not assignable to a callback
+// typed with the base form values (parameters are contravariant).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 function useFormSubmission<T extends SubmitSectionFormValues>(params: {
   mutationFn: (values: T) => Promise<MutationResult>;
 }) {
@@ -360,7 +363,7 @@ export function SubmitSection<T extends SubmitSectionFormValues>({
   });
 
   return (
-    <div className="pb-safe sticky bottom-0 -mx-[1px] mt-4 flex flex-col items-stretch justify-end gap-2 border-t border-border bg-background p-4 shadow-lg sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+    <div className="sticky bottom-0 -mx-[1px] mt-4 flex flex-col items-stretch justify-end gap-2 border-t border-border bg-background p-4 shadow-lg sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
       {isReview ? (
         <ReviewActions
           isSubmitting={isSubmitting}

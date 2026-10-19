@@ -1,7 +1,4 @@
-import {
-  AdvancedMarker,
-  AdvancedMarkerAnchorPoint,
-} from "@vis.gl/react-google-maps";
+import { AdvancedMarker } from "@vis.gl/react-google-maps";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 import { TestId } from "@acme/shared/common/enums";
@@ -13,7 +10,8 @@ export const GeolocationMarker = () => {
   const userGpsLocationStatus = mapStore.use.userGpsLocationStatus();
   return userGpsLocationStatus !== "success" || !userGpsLocation ? null : (
     <AdvancedMarker
-      anchorPoint={AdvancedMarkerAnchorPoint.CENTER}
+      anchorLeft="-50%"
+      anchorTop="-50%"
       position={{
         lat: userGpsLocation.latitude,
         lng: userGpsLocation.longitude,
