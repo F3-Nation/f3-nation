@@ -88,7 +88,7 @@ export const notifyWebhooks = async (mapData: WebhookPayload) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-    } else if (webhook.method === "GET") {
+    } else {
       await requestWebhook("GET", webhook.url);
     }
   }

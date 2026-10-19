@@ -899,9 +899,9 @@ export const orgRouter = {
         });
       }
 
-      if (existingOrg?.orgType !== input.orgType) {
+      if (existingOrg.orgType !== input.orgType) {
         throw new ORPCError("BAD_REQUEST", {
-          message: `org to edit is not a ${input.orgType ?? "unknown"}`,
+          message: `org to edit is not a ${input.orgType}`,
         });
       }
 

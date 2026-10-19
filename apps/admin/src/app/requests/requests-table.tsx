@@ -110,7 +110,7 @@ export const RequestsTable = () => {
       onRowClick={async (row) => {
         try {
           const response = await client.request.byId({ id: row.original.id });
-          if (!response?.request) {
+          if (!response.request) {
             toast.error("Request not found");
             return;
           }

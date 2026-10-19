@@ -64,18 +64,13 @@ export const UserLocationProvider = ({ children }: { children: ReactNode }) => {
         const geoLocation = await getGeolocationPosition();
         USER_LOCATION_LOGS && console.log("geoLocationCache", geoLocation);
 
-        if (geoLocation) {
-          setPermissions("granted");
-          position ??= {
-            latitude: geoLocation.coords.latitude,
-            longitude: geoLocation.coords.longitude,
-          };
-        }
+        setPermissions("granted");
+        position ??= {
+          latitude: geoLocation.coords.latitude,
+          longitude: geoLocation.coords.longitude,
+        };
 
         USER_LOCATION_LOGS && console.log("final position", position);
-        if (!position) {
-          throw new Error("No position");
-        }
         setStatus("success");
 
         // 3. Update map
@@ -106,7 +101,6 @@ export const UserLocationProvider = ({ children }: { children: ReactNode }) => {
 
       if (!position) {
         const geoLocation = await getGeolocationPosition({ timeout: 10000 });
-        if (!geoLocation) return;
         position = {
           latitude: geoLocation.coords.latitude,
           longitude: geoLocation.coords.longitude,
@@ -114,7 +108,6 @@ export const UserLocationProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (
-        position &&
         !hasTriedInitialShowUserLocation.current &&
         mapStore.get("didSetQueryParamLocation") === false
       ) {

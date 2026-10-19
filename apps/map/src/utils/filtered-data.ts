@@ -67,7 +67,7 @@ export const filterData = <
       if (filters.beforeAfterTime !== TimeSelection.none) {
         const hour = filters.beforeAfterTime.slice(0, -2);
         const period = filters.beforeAfterTime.slice(-2);
-        let filterTime = parseInt(hour ?? "0", 10);
+        let filterTime = parseInt(hour, 10);
         const stationStartTime = parseInt(
           event.startTime?.slice(0, 2) ?? "0",
           10,

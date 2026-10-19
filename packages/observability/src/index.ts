@@ -300,6 +300,7 @@ function safeStringify(value: unknown): string {
 
 function safeJsonStringify(value: unknown): string {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- JSON.stringify returns undefined for undefined, functions and symbols
     return JSON.stringify(value) ?? safeStringify(value);
   } catch {
     return safeStringify(value);

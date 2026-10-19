@@ -130,10 +130,10 @@ export class AuthClient {
 
     if (!res.ok) {
       throw new AuthError(
-        (data.error_description as string) ??
-          (data.error as string) ??
+        (data.error_description as string | undefined) ??
+          (data.error as string | undefined) ??
           "Token exchange failed",
-        (data.error as string) ?? "unknown",
+        (data.error as string | undefined) ?? "unknown",
         res.status,
       );
     }
@@ -174,10 +174,10 @@ export class AuthClient {
 
     if (!res.ok) {
       throw new AuthError(
-        (data.error_description as string) ??
-          (data.error as string) ??
+        (data.error_description as string | undefined) ??
+          (data.error as string | undefined) ??
           "Token refresh failed",
-        (data.error as string) ?? "unknown",
+        (data.error as string | undefined) ?? "unknown",
         res.status,
       );
     }
@@ -209,8 +209,8 @@ export class AuthClient {
 
     if (!res.ok) {
       throw new AuthError(
-        (data.error as string) ?? "Failed to fetch user info",
-        (data.error as string) ?? "unknown",
+        (data.error as string | undefined) ?? "Failed to fetch user info",
+        (data.error as string | undefined) ?? "unknown",
         res.status,
       );
     }
@@ -237,8 +237,8 @@ export class AuthClient {
     if (!res.ok) {
       const data = (await res.json()) as Record<string, unknown>;
       throw new AuthError(
-        (data.error as string) ?? "Token revocation failed",
-        (data.error as string) ?? "unknown",
+        (data.error as string | undefined) ?? "Token revocation failed",
+        (data.error as string | undefined) ?? "unknown",
         res.status,
       );
     }
@@ -246,6 +246,7 @@ export class AuthClient {
 }
 
 function getCrypto(): Crypto {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- older Node runtimes and insecure browser contexts lack Web Crypto
   if (!globalThis.crypto) {
     throw new AuthError(
       "Web Crypto API is not available",

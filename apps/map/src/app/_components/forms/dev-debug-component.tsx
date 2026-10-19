@@ -47,7 +47,7 @@ function applyEventTestData(
   !values.eventEndTime && form.setValue("eventEndTime", "0615");
   !values.eventDescription &&
     form.setValue("eventDescription", "Test Description");
-  !values.eventTypeIds?.length && form.setValue("eventTypeIds", [1]);
+  !values.eventTypeIds.length && form.setValue("eventTypeIds", [1]);
 }
 
 function applyAoTestData(

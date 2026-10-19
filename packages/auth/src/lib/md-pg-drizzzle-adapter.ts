@@ -76,7 +76,7 @@ const getUser = async (
 
   return {
     ...user,
-    editingRegionIds: user.editingRegionIds.map((r) => Number(r)) ?? [],
+    editingRegionIds: user.editingRegionIds.map((r) => Number(r)),
     emailVerified: user.emailVerified
       ? dayjs(user.emailVerified).toDate()
       : null,

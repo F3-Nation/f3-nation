@@ -10,7 +10,7 @@ type Error = "default" | "Configuration" | "AccessDenied" | "Verification";
 
 export default function ErrorComponent() {
   const searchParams = useSearchParams();
-  const error = searchParams?.get("error") ?? "default";
+  const error = searchParams.get("error") ?? "default";
 
   const errors: Record<
     Error,
@@ -65,8 +65,10 @@ export default function ErrorComponent() {
     },
   };
 
-  const { heading, message, signin } =
-    errors[error as keyof typeof errors] ?? errors.default;
+  // `error` comes from the URL, so it may not be a known key.
+  const { heading, message, signin } = Object.hasOwn(errors, error)
+    ? errors[error as keyof typeof errors]
+    : errors.default;
 
   return (
     <div className="flex flex-col gap-4">

@@ -24,7 +24,7 @@ export const SecondaryEffectsProvider = () => {
       mapStore.setState({
         updateLocation: null,
       });
-    } else if (mode === "edit" && initialEditMode.current === "view") {
+    } else if (initialEditMode.current === "view") {
       toast.info("Edit mode is on. Try clicking the map or dragging a marker", {
         action: {
           label: "Learn more",

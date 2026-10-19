@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, XCircle } from "lucide-react";
 
 import {
-  DEFAULT_CENTER,
   MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS,
   SIDEBAR_WIDTH,
   Z_INDEX,
@@ -160,10 +159,7 @@ export function MapSearchBox({
                     // Use debounced autocomplete to reduce API calls
                     debouncedPlacesAutocomplete(
                       value,
-                      mapStore.get("center") ?? {
-                        lat: DEFAULT_CENTER[0] ?? 37.7937,
-                        lng: DEFAULT_CENTER[1] ?? -122.3965,
-                      },
+                      mapStore.get("center"),
                       mapStore.get("zoom"),
                       (results) => {
                         setIsLoading(false);

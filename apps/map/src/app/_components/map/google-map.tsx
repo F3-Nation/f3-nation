@@ -122,7 +122,7 @@ const ProvidedGoogleMapComponent = memo(
       ) => {
         console.log("map on click", e);
         // @vis.gl/react-google-maps wraps the event in e.detail
-        const latLng = e.detail?.latLng;
+        const latLng = e.detail.latLng;
         if (appStore.get("mode") === "edit" && latLng) {
           mapStore.setState({ updateLocation: latLng });
         } else {

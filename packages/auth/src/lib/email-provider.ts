@@ -8,7 +8,7 @@ import { env } from "@acme/env";
 import { ProviderId } from "@acme/shared/common/enums";
 import { normalizeEmail } from "@acme/shared/common/functions";
 
-const SHOW_MOBILE = false;
+const SHOW_MOBILE = false as boolean;
 
 export const sendVerificationRequest: NodemailerConfig["sendVerificationRequest"] =
   async (params) => {
@@ -49,7 +49,9 @@ export const sendVerificationRequest: NodemailerConfig["sendVerificationRequest"
 export const emailProvider = Email({
   id: ProviderId.EMAIL, // needed to allow signIn("email")
   name: "Email", // Changes text on default sign in button
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- env validation is skipped on CI/SKIP_ENV_VALIDATION builds
   server: env.EMAIL_SERVER ?? "smtp://build-placeholder:1025",
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- env validation is skipped on CI/SKIP_ENV_VALIDATION builds
   from: env.EMAIL_FROM ?? "noreply@f3nation.com",
   sendVerificationRequest,
   normalizeIdentifier: normalizeEmail,

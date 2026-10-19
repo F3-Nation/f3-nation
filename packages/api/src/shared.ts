@@ -338,11 +338,11 @@ const getSession = async ({ context }: { context: BaseContext }) => {
 
   session = {
     id: apiKeyRecord.userId,
-    email: apiKeyRecord.email ?? undefined,
+    email: apiKeyRecord.email,
     roles,
     user: {
       id: apiKeyRecord.ownerId?.toString() ?? undefined,
-      email: apiKeyRecord.email ?? undefined,
+      email: apiKeyRecord.email,
       name: apiKeyRecord.f3Name ?? undefined,
       roles,
     },

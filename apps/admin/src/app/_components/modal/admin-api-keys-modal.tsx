@@ -90,7 +90,7 @@ export default function AdminApiKeysModal() {
     if (isNationAdmin) return accessibleOrgs;
     const adminOrgIds = new Set(
       session?.roles
-        ?.filter((role) => role.roleName === "admin")
+        .filter((role) => role.roleName === "admin")
         .map((role) => role.orgId),
     );
     const byId = new Map(accessibleOrgs.map((org) => [org.id, org]));
@@ -203,7 +203,7 @@ export default function AdminApiKeysModal() {
                       // Two rows can land on the same org via the picker;
                       // a duplicate pair fails the roles insert.
                       roles: uniqBy(
-                        values.roles ?? [],
+                        values.roles,
                         (r) => `${r.orgId}:${r.roleName}`,
                       ),
                       expiresAt,
@@ -255,7 +255,7 @@ export default function AdminApiKeysModal() {
                         Assign roles to orgs for this API key.
                       </FormDescription>
                       <div className="space-y-2">
-                        {((field.value as RoleEntry[]) || []).map(
+                        {(field.value as RoleEntry[]).map(
                           (roleEntry, index) => (
                             <div
                               key={index}
@@ -355,7 +355,7 @@ export default function AdminApiKeysModal() {
                                 orgId,
                               };
                               field.onChange([
-                                ...((field.value as RoleEntry[]) ?? []),
+                                ...(field.value as RoleEntry[]),
                                 newRoleEntry,
                               ]);
                             }}

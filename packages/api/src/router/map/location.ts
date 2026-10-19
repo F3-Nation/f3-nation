@@ -302,13 +302,11 @@ export const mapLocationRouter = os.router({
               };
             }
 
-            if (event?.id != undefined) {
-              acc[location.id]?.events.push({
-                ...omit(event, "locationId"),
-                aoName: location.name ?? null,
-                aoLogo: location.logo,
-              });
-            }
+            acc[location.id]?.events.push({
+              ...omit(event, "locationId"),
+              aoName: location.name ?? null,
+              aoLogo: location.logo,
+            });
 
             return acc;
           },
@@ -810,7 +808,7 @@ export const mapLocationRouter = os.router({
           ): e is NonNullable<(typeof results)[number]["event"]> & {
             id: number;
             name: string;
-          } => e?.id != null && e.name != null,
+          } => e.id != null && e.name != null,
         )
         .map((e) => ({ ...e, id: e.id, name: e.name }));
 

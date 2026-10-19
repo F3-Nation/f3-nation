@@ -41,6 +41,7 @@ describe.runIf(target.inProcess)("API-key role response contract", () => {
   const roleIds = new Map<UserRole, number>();
   let tree: Awaited<ReturnType<typeof createMixedOrgTree>>;
   let regionAdmin: Awaited<ReturnType<typeof createFixtureUser>>;
+  const fixtureUsers: Awaited<ReturnType<typeof createFixtureUser>>[] = [];
   let nationCookie: string;
   let regionToken: string;
   let inactiveOrgId: number;
@@ -131,6 +132,7 @@ describe.runIf(target.inProcess)("API-key role response contract", () => {
     regionAdmin = await createFixtureUser({
       roles: [{ orgId: tree.directBranch.region.id, roleName: "admin" }],
     });
+    fixtureUsers.push(regionAdmin);
     nationCookie = await sessionCookie({
       roles: [
         { orgId: tree.nation.id, orgName: "F3 Nation", roleName: "admin" },
@@ -153,7 +155,7 @@ describe.runIf(target.inProcess)("API-key role response contract", () => {
     const results: PromiseSettledResult<unknown>[] = [];
     // Preserve dependency order, but attempt every cleanup even after a failure.
     for (const teardown of [
-      () => regionAdmin?.cleanup(),
+      ...fixtureUsers.splice(0).map((user) => () => user.cleanup()),
       ...[...orgIds].reverse().map((id) => () => cleanup.org(id)),
       async () => {
         if (insertedRoleIds.length > 0) {

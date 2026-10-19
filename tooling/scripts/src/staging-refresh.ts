@@ -1523,6 +1523,7 @@ async function main(): Promise<number> {
     return 0;
   } catch (error) {
     const msg = errMsg(error);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set inside the step 8 callback
     if (wiped) {
       // Only reachable if something after step 9 threw unexpectedly.
       log(`\n!! FAILED after staging was loaded: ${msg}`);

@@ -9,7 +9,7 @@ import { cn } from "@acme/ui";
 import { F3Logo } from "../_components/map/f3-logo";
 
 export const Header = () => {
-  const back = useSearchParams()?.get("back");
+  const back = useSearchParams().get("back");
 
   return (
     <div className="flex items-center gap-4">

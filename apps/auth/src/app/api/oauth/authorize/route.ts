@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
 
   // Check if user is authenticated
   const session = await getCurrentSession();
-  if (!session?.user?.id) {
+  if (!session?.user.id) {
     // Redirect to login with callback to this authorize URL
     const callbackUrl = `${publicUrl}${reqUrl.pathname}${reqUrl.search}`;
     const loginUrl = new URL("/login/email", publicUrl);
@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
     userId: userId,
     redirectUri,
     scopes: scope,
-    codeChallenge: codeChallenge ?? undefined,
+    codeChallenge,
     codeChallengeMethod: codeChallenge ? codeChallengeMethod : undefined,
     // `|| undefined`, not `?? undefined`: an empty nonce=&... provides no
     // replay protection and shouldn't get echoed into a real id_token as a

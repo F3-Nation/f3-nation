@@ -129,10 +129,10 @@ async function assertEventRefsInScope({
 
   const checkLocation =
     locationId != null &&
-    (isNewPlacement || existingEvent?.locationId !== locationId);
+    (isNewPlacement || existingEvent.locationId !== locationId);
 
   let typeIdsToCheck = eventTypeIds;
-  if (!isNewPlacement && existingEvent) {
+  if (!isNewPlacement) {
     const linked = await ctx.db
       .select({ id: schema.eventsXEventTypes.eventTypeId })
       .from(schema.eventsXEventTypes)
@@ -1073,7 +1073,7 @@ export const eventRouter = {
           transactionExistingEvent !== undefined &&
           transactionExistingEvent.isActive !== input.isActive;
 
-        if (isDeactivationTransition && transactionExistingEvent) {
+        if (isDeactivationTransition) {
           const adminRoleCheck = await checkHasRoleOnOrg({
             orgId: transactionExistingEvent.orgId,
             session: ctx.session,
@@ -1107,14 +1107,13 @@ export const eventRouter = {
             (input.indexWithinInterval !== undefined &&
               input.indexWithinInterval !==
                 transactionExistingEvent.indexWithinInterval) ||
-            (input.startDate !== undefined &&
-              input.startDate !== transactionExistingEvent.startDate) ||
+            input.startDate !== transactionExistingEvent.startDate ||
             (input.endDate !== undefined &&
               input.endDate !== transactionExistingEvent.endDate));
 
         if (
           isStatusTransition &&
-          transactionExistingEvent?.dayOfWeek &&
+          transactionExistingEvent.dayOfWeek &&
           structuralScheduleChanged
         ) {
           throw new ORPCError("BAD_REQUEST", {
@@ -1181,7 +1180,7 @@ export const eventRouter = {
             : normalizedEventTagIds;
 
         let eventTypesChanged = false;
-        if (eventTypeIds !== undefined && transactionExistingEvent) {
+        if (transactionExistingEvent) {
           const existingEventTypes = await transactionDb
             .select({ eventTypeId: schema.eventsXEventTypes.eventTypeId })
             .from(schema.eventsXEventTypes)
@@ -1211,18 +1210,16 @@ export const eventRouter = {
         }
 
         // Handle event type in join table
-        if (eventTypeIds) {
-          await transactionDb
-            .delete(schema.eventsXEventTypes)
-            .where(eq(schema.eventsXEventTypes.eventId, result.id));
+        await transactionDb
+          .delete(schema.eventsXEventTypes)
+          .where(eq(schema.eventsXEventTypes.eventId, result.id));
 
-          await transactionDb.insert(schema.eventsXEventTypes).values(
-            eventTypeIds.map((eventTypeId: number) => ({
-              eventId: result.id,
-              eventTypeId,
-            })),
-          );
-        }
+        await transactionDb.insert(schema.eventsXEventTypes).values(
+          eventTypeIds.map((eventTypeId: number) => ({
+            eventId: result.id,
+            eventTypeId,
+          })),
+        );
 
         if (normalizedEventTagIds !== undefined) {
           await transactionDb
@@ -1283,17 +1280,14 @@ export const eventRouter = {
             // a one-off. Reactivation must not revive an obsolete schedule.
             if (
               isDeactivationTransition &&
-              (transactionExistingEvent?.dayOfWeek || result.dayOfWeek)
+              (transactionExistingEvent.dayOfWeek || result.dayOfWeek)
             ) {
               await softDeleteFutureInstancesForSeries(
                 transactionDb,
                 result.id,
               );
             } else if (!isDeactivationTransition && result.dayOfWeek) {
-              if (
-                transactionExistingEvent &&
-                !transactionExistingEvent.dayOfWeek
-              ) {
+              if (!transactionExistingEvent.dayOfWeek) {
                 // An existing one-off becoming a series is a new schedule,
                 // unlike reactivating an existing series.
                 await createEventInstancesForSeries(
@@ -1310,61 +1304,59 @@ export const eventRouter = {
               }
             }
 
-            if (result.dayOfWeek && transactionExistingEvent?.dayOfWeek) {
-              if (transactionExistingEvent) {
-                const instanceUpdateFields = (
-                  [
-                    "locationId",
-                    "startTime",
-                    "endTime",
-                    "isPrivate",
-                    "meta",
-                    "description",
-                    "highlight",
-                    "name",
-                    "orgId",
-                  ] as (
-                    | "locationId"
-                    | "startTime"
-                    | "endTime"
-                    | "isPrivate"
-                    | "meta"
-                    | "description"
-                    | "highlight"
-                    | "name"
-                    | "orgId"
-                    | "eventTypeIds"
-                    | "eventTagIds"
-                  )[]
-                ).filter((field) => {
-                  const key = field as keyof typeof result;
-                  return field === "meta"
-                    ? !isDeepStrictEqual(
-                        result.meta,
-                        transactionExistingEvent.meta,
-                      )
-                    : result[key] !== transactionExistingEvent[key];
-                });
-                if (eventTypesChanged) {
-                  instanceUpdateFields.push("eventTypeIds");
-                }
-                if (eventTagsChanged) {
-                  instanceUpdateFields.push("eventTagIds");
-                }
-                if (instanceUpdateFields.length > 0) {
-                  await updateFutureInstances(
-                    transactionDb,
-                    {
-                      ...seriesData,
-                      eventTagIds:
-                        normalizedEventTagIds === undefined
-                          ? undefined
-                          : effectiveEventTagIds,
-                    },
-                    undefined,
-                    { fields: instanceUpdateFields },
-                  );
-                }
+            if (result.dayOfWeek && transactionExistingEvent.dayOfWeek) {
+              const instanceUpdateFields = (
+                [
+                  "locationId",
+                  "startTime",
+                  "endTime",
+                  "isPrivate",
+                  "meta",
+                  "description",
+                  "highlight",
+                  "name",
+                  "orgId",
+                ] as (
+                  | "locationId"
+                  | "startTime"
+                  | "endTime"
+                  | "isPrivate"
+                  | "meta"
+                  | "description"
+                  | "highlight"
+                  | "name"
+                  | "orgId"
+                  | "eventTypeIds"
+                  | "eventTagIds"
+                )[]
+              ).filter((field) => {
+                const key = field as keyof typeof result;
+                return field === "meta"
+                  ? !isDeepStrictEqual(
+                      result.meta,
+                      transactionExistingEvent.meta,
+                    )
+                  : result[key] !== transactionExistingEvent[key];
+              });
+              if (eventTypesChanged) {
+                instanceUpdateFields.push("eventTypeIds");
+              }
+              if (eventTagsChanged) {
+                instanceUpdateFields.push("eventTagIds");
+              }
+              if (instanceUpdateFields.length > 0) {
+                await updateFutureInstances(
+                  transactionDb,
+                  {
+                    ...seriesData,
+                    eventTagIds:
+                      normalizedEventTagIds === undefined
+                        ? undefined
+                        : effectiveEventTagIds,
+                  },
+                  undefined,
+                  { fields: instanceUpdateFields },
+                );
               }
             }
           } else if (!transactionExistingEvent) {
@@ -1472,14 +1464,14 @@ export const eventRouter = {
           pendingRegionNotificationTasks.delete(notificationTask),
         );
       }
-      if (result?.dayOfWeek) {
+      if (result.dayOfWeek) {
         notifyMapDataChange({
           type: input.id ? "event.updated" : "event.created",
           eventId: result.id,
         });
       }
 
-      return { event: result ?? null };
+      return { event: result };
     }),
   eventIdToRegionNameLookup: publicReadProcedure
     .route({

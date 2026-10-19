@@ -227,6 +227,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
           redirect: false,
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth's signIn resolves undefined when it redirects
         if (result?.error) {
           setError(
             "Your account was created, but your code has expired. Please sign in again to continue.",

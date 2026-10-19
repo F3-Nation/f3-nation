@@ -85,7 +85,7 @@ export const ApiKeysTable = () => {
       onSuccess: async (_result, variables) => {
         await invalidateQueries("apiKey");
         toast.success(
-          variables?.revoke === false
+          variables.revoke === false
             ? "API key reactivated"
             : "API key revoked",
         );
@@ -187,7 +187,7 @@ export const ApiKeysTable = () => {
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">
                         <div className="flex flex-wrap items-center gap-2">
-                          {row.roles && row.roles.length > 0 ? (
+                          {row.roles.length > 0 ? (
                             row.roles.map((role, index) => {
                               return (
                                 <span

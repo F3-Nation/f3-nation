@@ -602,7 +602,7 @@ describe("Event Instance Router", () => {
 
       // Results should include our created event instance
       const found = result.eventInstances.some((e) =>
-        e.name?.includes("SearchableEvent"),
+        e.name.includes("SearchableEvent"),
       );
       expect(found).toBe(true);
     });
@@ -2984,7 +2984,7 @@ describe("Event Instance Router", () => {
           roles: [
             {
               orgId: ao.id,
-              orgName: ao.name ?? "Test AO",
+              orgName: ao.name,
               roleName: "admin" as const,
             },
           ],
@@ -2992,7 +2992,7 @@ describe("Event Instance Router", () => {
         roles: [
           {
             orgId: ao.id,
-            orgName: ao.name ?? "Test AO",
+            orgName: ao.name,
             roleName: "admin" as const,
           },
         ],
@@ -3032,7 +3032,7 @@ describe("Event Instance Router", () => {
       if (!ao) throw new Error("Failed to create AO");
 
       await mockAuthWithSession(
-        createEditorSession({ orgId: ao.id, orgName: ao.name ?? "Test AO" }),
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
       );
 
       const eventInstance = await createTestEventInstance(ao.id);
@@ -3066,7 +3066,7 @@ describe("Event Instance Router", () => {
       await mockAuthWithSession(
         createEditorSession({
           orgId: otherRegion.id,
-          orgName: otherRegion.name ?? "Other Region",
+          orgName: otherRegion.name,
         }),
       );
 

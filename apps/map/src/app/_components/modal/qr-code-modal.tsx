@@ -31,7 +31,7 @@ export const QRCodeModal = ({
       ctx?.drawImage(img, 0, 0);
       const pngFile = canvas.toDataURL("image/png");
       const downloadLink = document.createElement("a");
-      downloadLink.download = data.fileName ?? "QRCode";
+      downloadLink.download = data.fileName;
       downloadLink.href = pngFile;
       downloadLink.click();
     };
@@ -55,7 +55,7 @@ export const QRCodeModal = ({
             size={256}
             style={{ height: "256", maxWidth: "100%", width: "100%" }}
             // We know that url is not null because of the check above
-            value={data.url ?? ""}
+            value={data.url}
             viewBox={`0 0 256 256`}
           />
           {/* Pretty button */}

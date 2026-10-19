@@ -21,13 +21,12 @@ export const groupMarkerClick = async ({
   const result = await orpc.map.location.locationWorkout.call({
     locationId,
   });
-  if (!result?.location) return;
+  if (!result.location) return;
 
   const modifiedLocation = mapStore.get("modifiedLocationMarkers")[locationId];
 
   const lat = modifiedLocation?.lat ?? result.location.lat;
   const lon = modifiedLocation?.lng ?? result.location.lon;
-  if (lat === null || lon === null) return;
 
   setSelectedItem({
     locationId,
