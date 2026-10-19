@@ -35,7 +35,9 @@ import { logError } from "../logger";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { orgAndAncestorsAreActive } from "../org-activity";
 import { orgAncestorName } from "../org-ancestor-name";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import type { Context } from "../shared";
 import {
   adminProcedure,
@@ -159,8 +161,8 @@ function buildOrgWhereClause(params: {
 }): SQL | undefined {
   const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
 
-  // publicReadProcedure lets an anonymous caller reach `all`/`count` —
-  // clamp to active-only regardless of what `statuses` it passes, since
+  // `all` is public; `count` stays protected. For anonymous list callers,
+  // clamp to active-only regardless of what `statuses` they pass, since
   // inactive orgs were never meant to be public. Authenticated behavior
   // (including an explicit request for inactive/both) is unchanged.
   const effectiveStatuses = isAnonymous
@@ -169,6 +171,7 @@ function buildOrgWhereClause(params: {
 
   return and(
     inArray(org.orgType, input.orgTypes),
+    isAnonymous ? orgAndAncestorsAreActive(org.id) : undefined,
     !effectiveStatuses
       ? eq(org.isActive, true)
       : !effectiveStatuses.length ||
@@ -323,6 +326,7 @@ export const orgRouter = {
 
       const { editableOrgIds, isNationAdmin } = editableResult;
 
+      if (!ctx.session?.user) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const where = buildOrgWhereClause({
         input,
         editableOrgIds,
@@ -727,6 +731,8 @@ export const orgRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      const isAnonymous = !ctx.session?.user;
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const [org] = await ctx.db
         .select()
         .from(schema.orgs)
@@ -734,15 +740,9 @@ export const orgRouter = {
           and(
             eq(schema.orgs.id, input.id),
             input.orgType ? eq(schema.orgs.orgType, input.orgType) : undefined,
+            isAnonymous ? orgAndAncestorsAreActive(schema.orgs.id) : undefined,
           ),
         );
-      const isAnonymous = !ctx.session?.user;
-      // publicReadProcedure lets an anonymous caller reach this endpoint
-      // don't let a guessed/enumerated ID return an inactive org's
-      // details to someone with no session at all.
-      if (org?.isActive === false && isAnonymous) {
-        return { org: null };
-      }
       return {
         org: org
           ? isAnonymous

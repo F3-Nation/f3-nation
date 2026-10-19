@@ -1,10 +1,11 @@
 /**
  * Short-lived, per-instance cache for the public map datasets
- * (map.location.eventsAndLocations / regionsWithLocation). They take no input
- * and are identical for every caller, yet each call rebuilt them from scratch
- * (eventsAndLocations: ~6.7k rows into a 1.5 MB response, ~650ms of API time
- * on staging). With a TTL, an instance builds each dataset at most once per
- * window, and concurrent misses share one load instead of stampeding the DB.
+ * (map.location.eventsAndLocations / regionsWithLocation). They take no input;
+ * callers with different visibility scopes use separate keys. Before caching,
+ * each call rebuilt them from scratch (eventsAndLocations: ~6.7k rows into a
+ * 1.5 MB response, ~650ms of API time on staging). With a TTL, an instance builds
+ * each cache key at most once per window, and concurrent misses share one load
+ * instead of stampeding the DB.
  *
  * Staleness: an edit reaches browsers within MAP_DATA_TTL_MS (plus the
  * client's own staleTime). The cache is also cleared whenever this instance
