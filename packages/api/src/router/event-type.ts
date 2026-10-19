@@ -21,6 +21,8 @@ import { EventTypeInsertSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { paginationFields, resolvePagination } from "../lib/pagination";
+import { orgAndAncestorsAreActive } from "../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import { requireEditorOnRescope } from "../require-editor-on-rescope";
 import {
   editorProcedure,
@@ -188,8 +190,12 @@ export const eventTypeRouter = {
       const effectiveStatuses = isAnonymous
         ? (["active"] as IsActiveStatus[])
         : input?.statuses;
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
 
       const where = and(
+        isAnonymous
+          ? orgAndAncestorsAreActive(schema.eventTypes.specificOrgId)
+          : undefined,
         input?.searchTerm
           ? or(
               ilike(schema.eventTypes.name, `%${input.searchTerm}%`),

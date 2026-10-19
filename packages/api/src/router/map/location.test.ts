@@ -7,7 +7,15 @@
  */
 
 import { eq, schema, sql } from "@acme/db";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -906,6 +914,173 @@ describe("Map Location Router", () => {
 
       expect(findRegion(result, area.id)).toEqual([]);
     });
+  });
+
+  describe("public companion organization visibility", () => {
+    const branches: {
+      state: "active" | "retired region" | "retired area" | "retired AO";
+      region: NonNullable<Awaited<ReturnType<typeof createTestRegion>>>;
+      ao: NonNullable<Awaited<ReturnType<typeof createTestAO>>>;
+      regionLocation: NonNullable<
+        Awaited<ReturnType<typeof createTestLocation>>
+      >;
+      aoLocation: NonNullable<Awaited<ReturnType<typeof createTestLocation>>>;
+      event: Awaited<ReturnType<typeof createDatedEvent>>;
+    }[] = [];
+    const baselineCounts = { anonymous: 0, signedIn: 0 };
+
+    beforeAll(async () => {
+      await mockAuthWithSession(null);
+      baselineCounts.anonymous =
+        (await createTestClient().map.location.workoutCount()).count ?? 0;
+      await mockAuthWithSession(await createAdminSession());
+      baselineCounts.signedIn =
+        (await createTestClient().map.location.workoutCount()).count ?? 0;
+
+      for (const state of [
+        "active",
+        "retired region",
+        "retired area",
+        "retired AO",
+      ] as const) {
+        const area = await createTestArea();
+        if (!area) throw new Error("Failed to create companion area");
+        const region = await createTestRegion({ parentId: area.id });
+        if (!region) throw new Error("Failed to create companion region");
+        const ao = await createTestAO(region.id);
+        if (!ao) throw new Error("Failed to create companion AO");
+        const regionLocation = await createTestLocation(region.id);
+        const aoLocation = await createTestLocation(ao.id);
+        if (!regionLocation || !aoLocation)
+          throw new Error("Failed to create companion locations");
+        const event = await createDatedEvent({
+          aoId: ao.id,
+          locationId: aoLocation.id,
+          label: `Companion ${state}`,
+          dayOfWeek: "monday",
+          startDate: "2026-01-01",
+        });
+
+        const retiredOrg =
+          state === "retired region"
+            ? region
+            : state === "retired area"
+              ? area
+              : state === "retired AO"
+                ? ao
+                : null;
+        if (retiredOrg) {
+          await db
+            .update(schema.orgs)
+            .set({ isActive: false })
+            .where(eq(schema.orgs.id, retiredOrg.id));
+        }
+        branches.push({ state, region, ao, regionLocation, aoLocation, event });
+      }
+    });
+
+    it.each([false, true])(
+      "filters region coordinates without changing signed-in results (signedIn=%s)",
+      async (signedIn) => {
+        await mockAuthWithSession(signedIn ? await createAdminSession() : null);
+        const { regionsWithLocation } =
+          await createTestClient().map.location.regionsWithLocation();
+
+        for (const { state, region, regionLocation } of branches) {
+          const visible =
+            state !== "retired region" &&
+            (signedIn || state !== "retired area");
+          expect(
+            regionsWithLocation.filter((row) => row.id === region.id),
+          ).toEqual(
+            visible
+              ? [
+                  expect.objectContaining({
+                    id: region.id,
+                    locationId: regionLocation.id,
+                  }),
+                ]
+              : [],
+          );
+        }
+      },
+    );
+
+    it.each([false, true])(
+      "counts only eligible workouts without changing signed-in totals (signedIn=%s)",
+      async (signedIn) => {
+        await mockAuthWithSession(signedIn ? await createAdminSession() : null);
+        const { count } = await createTestClient().map.location.workoutCount();
+
+        expect(count).toBe(
+          signedIn
+            ? baselineCounts.signedIn + branches.length
+            : baselineCounts.anonymous + 1,
+        );
+      },
+    );
+
+    it.each([false, true])(
+      "filters location region names without changing signed-in lookups (signedIn=%s)",
+      async (signedIn) => {
+        await mockAuthWithSession(signedIn ? await createAdminSession() : null);
+        const { lookup } =
+          await createTestClient().map.location.locationIdToRegionNameLookup();
+
+        for (const { state, region, regionLocation, aoLocation } of branches) {
+          expect(lookup[regionLocation.id]).toBe(
+            signedIn || !["retired region", "retired area"].includes(state)
+              ? region.name
+              : undefined,
+          );
+          expect(lookup[aoLocation.id]).toBe(
+            signedIn || state === "active" ? region.name : undefined,
+          );
+        }
+      },
+    );
+
+    it.each([false, true])(
+      "filters AO workout names without changing signed-in results (signedIn=%s)",
+      async (signedIn) => {
+        await mockAuthWithSession(signedIn ? await createAdminSession() : null);
+
+        for (const { state, region, ao, event } of branches) {
+          const { aos } = await createTestClient().map.location.getAOsInRegion({
+            regionId: region.id,
+          });
+          expect(aos).toEqual(
+            state !== "retired AO" && (signedIn || state === "active")
+              ? [{ id: ao.id, name: ao.name, workouts: [event.name] }]
+              : [],
+          );
+        }
+      },
+    );
+
+    it.each([false, true])(
+      "keeps cached region data separate in either caller order (signedInFirst=%s)",
+      async (signedInFirst) => {
+        const retiredAreaBranch = branches.find(
+          ({ state }) => state === "retired area",
+        );
+        if (!retiredAreaBranch)
+          throw new Error("Missing retired-area companion fixture");
+
+        for (const signedIn of [signedInFirst, !signedInFirst]) {
+          await mockAuthWithSession(
+            signedIn ? await createAdminSession() : null,
+          );
+          const { regionsWithLocation } =
+            await createTestClient().map.location.regionsWithLocation();
+          expect(
+            regionsWithLocation.some(
+              ({ id }) => id === retiredAreaBranch.region.id,
+            ),
+          ).toBe(signedIn);
+        }
+      },
+    );
   });
 
   describe("upcomingInstances", () => {

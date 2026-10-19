@@ -12,13 +12,11 @@ import { Input } from "@acme/ui/input";
 
 interface TimeInputProps<T extends FieldValues> {
   name: FieldPath<T>;
-  id?: string;
   label: string;
 }
 
 export const ControlledTimeInput = <T extends FieldValues>({
   name,
-  id,
   label,
 }: TimeInputProps<T>) => {
   const form = useFormContext<T>();
@@ -33,7 +31,6 @@ export const ControlledTimeInput = <T extends FieldValues>({
           <FormControl>
             <Input
               type="time"
-              id={id}
               value={
                 typeof field.value === "string"
                   ? // Accepts both "0530" (stored) and "05:30" (displayed)

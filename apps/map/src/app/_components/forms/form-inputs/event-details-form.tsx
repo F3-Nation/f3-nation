@@ -118,11 +118,7 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
         </div>
 
         <div className="space-y-2">
-          <ControlledTimeInput
-            name="eventStartTime"
-            id="eventStartTime"
-            label="Start Time"
-          />
+          <ControlledTimeInput name="eventStartTime" label="Start Time" />
           {currentValues?.eventStartTime &&
             currentValues.eventStartTime !== formEventStartTime && (
               <p className="text-xs text-muted-foreground line-through">
@@ -131,11 +127,7 @@ export const EventDetailsForm = <_T extends EventDetailsFormValues>() => {
             )}
         </div>
         <div className="space-y-2">
-          <ControlledTimeInput
-            name="eventEndTime"
-            id="eventEndTime"
-            label="End Time"
-          />
+          <ControlledTimeInput name="eventEndTime" label="End Time" />
           {currentValues?.eventEndTime &&
             currentValues.eventEndTime !== formEventEndTime && (
               <p className="text-xs text-muted-foreground line-through">
