@@ -603,6 +603,7 @@ describe("AdminEventInstancesModal", () => {
       expect(field("End time (optional)").getAttribute("aria-invalid")).toBe(
         "true",
       );
+      expect(document.activeElement).toBe(field("End time (optional)"));
       expect(crupdateMutateAsync).not.toHaveBeenCalled();
     });
 

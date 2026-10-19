@@ -35,10 +35,8 @@ export const ControlledTimeInput = <T extends FieldValues>({
             <FormControl>
               <Input
                 type="time"
-                value={field.value}
-                onChange={(value) => {
-                  field.onChange(value);
-                }}
+                {...field}
+                value={field.value ?? ""}
                 className="w-full"
               />
             </FormControl>
