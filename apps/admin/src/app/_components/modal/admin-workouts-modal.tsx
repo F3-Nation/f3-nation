@@ -597,7 +597,6 @@ export default function AdminWorkoutsModal({
                   <ControlledTimeInput
                     control={form.control}
                     name="startTime"
-                    id={"startTime"}
                     label={"Start Time"}
                   />
                 </div>
@@ -605,7 +604,6 @@ export default function AdminWorkoutsModal({
                   <ControlledTimeInput
                     control={form.control}
                     name="endTime"
-                    id={"endTime"}
                     label={"End Time"}
                   />
                 </div>
