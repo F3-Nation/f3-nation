@@ -122,7 +122,7 @@ export const EventInstanceFormSchema = z
     ) {
       if (data.startTime > data.endTime) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "End time must be after start time",
           path: ["endTime"],
         });
@@ -130,7 +130,7 @@ export const EventInstanceFormSchema = z
     }
     if (data.startDate && data.endDate && data.endDate < data.startDate) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "End date must be on or after start date",
         path: ["endDate"],
       });
@@ -413,7 +413,7 @@ export default function AdminEventInstancesModal({
                         }
                         searchPlaceholder="Select a region"
                         onSelect={(value) => {
-                          const orgId = safeParseInt(value as string);
+                          const orgId = safeParseInt(value);
                           if (orgId == null) {
                             toast.error("Invalid region");
                             return;
@@ -455,7 +455,7 @@ export default function AdminEventInstancesModal({
                           }
                           searchPlaceholder="Select an AO"
                           onSelect={(value) => {
-                            const aoId = safeParseInt(value as string);
+                            const aoId = safeParseInt(value);
                             field.onChange(aoId ?? 0);
 
                             const selectedAO = aos?.orgs.find(
@@ -585,7 +585,7 @@ export default function AdminEventInstancesModal({
                               field.onChange(null);
                               return;
                             }
-                            const id = safeParseInt(value as string);
+                            const id = safeParseInt(value);
                             field.onChange(id ?? null);
                             const selectedLocation = locations?.locations.find(
                               (location) => location.id === id,
@@ -666,8 +666,7 @@ export default function AdminEventInstancesModal({
                             field.onChange(null);
                             return;
                           }
-                          const seriesId =
-                            safeParseInt(value as string) ?? null;
+                          const seriesId = safeParseInt(value) ?? null;
                           field.onChange(seriesId);
                           const selectedSeries = events.find(
                             (event) => event.id === seriesId,

@@ -93,7 +93,8 @@ export function invalidateQueries(
 export function getQueryData<
   TQueryFnData = unknown,
   TTaggedQueryKey extends QueryKey = QueryKey,
-  TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
->(queryKey: TTaggedQueryKey): TInferredQueryFnData | undefined {
+>(
+  queryKey: TTaggedQueryKey,
+): InferDataFromTag<TQueryFnData, TTaggedQueryKey> | undefined {
   return getQueryClient().getQueryData(queryKey);
 }

@@ -75,7 +75,7 @@ export const eventTypeRouter = {
         .superRefine((data, ctx) => {
           if (data.nationalOnly && data.orgIds?.length) {
             ctx.addIssue({
-              code: z.ZodIssueCode.custom,
+              code: "custom",
               message: "nationalOnly cannot be combined with orgIds",
               path: ["nationalOnly"],
             });

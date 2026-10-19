@@ -80,7 +80,7 @@ export function UpdatesCallout({
                   <div
                     aria-hidden
                     className={cn(
-                      "h-3 w-3 flex-shrink-0 rounded-sm",
+                      "h-3 w-3 shrink-0 rounded-sm",
                       getStatusSolidBg(status),
                     )}
                   />

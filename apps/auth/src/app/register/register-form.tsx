@@ -128,7 +128,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     }
   }, [email, code, router]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");

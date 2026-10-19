@@ -103,9 +103,10 @@ beforeEach(() => {
  * Asserts that a recordUpdateRequest result has defined `created`/`reviewedAt`
  * timestamps and that the remaining (stable) fields match `expected`.
  */
-function expectStableRequest<
-  T extends { created?: unknown; reviewedAt?: unknown },
->(result: T, expected: Record<string, unknown>) {
+function expectStableRequest(
+  result: { created?: unknown; reviewedAt?: unknown },
+  expected: Record<string, unknown>,
+) {
   const { created, reviewedAt, ...stableResult } = result;
   expect(created).toBeDefined();
   expect(reviewedAt).toBeDefined();

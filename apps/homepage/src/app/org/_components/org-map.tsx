@@ -883,7 +883,7 @@ export default function OrgMap() {
                 key={layer}
                 type="button"
                 onClick={() => navigateViaLevelButton(layer)}
-                className={`rounded border px-4 py-2 text-xs font-medium tracking-wide uppercase transition-all ${
+                className={`rounded-sm border px-4 py-2 text-xs font-medium tracking-wide uppercase transition-all ${
                   currentLevel === layer
                     ? "border-[#B70D06] bg-[#B70D06] text-[#1a1a1a]"
                     : "border-[#2c3648] bg-[#151a24] text-[#f8f4ea] hover:border-[#3b4a62] hover:bg-[#233046]"

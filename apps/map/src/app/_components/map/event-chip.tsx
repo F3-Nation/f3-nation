@@ -137,7 +137,7 @@ export const EventChip = (props: {
       </div>
       {props.mapStatus === "closed" && (
         <Ban
-          className={cn("flex-shrink-0 text-foreground", {
+          className={cn("shrink-0 text-foreground", {
             "text-background": selected && isInteractive,
             "h-3 w-3": size === "small",
             "h-4 w-4": size === "medium",

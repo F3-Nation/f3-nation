@@ -61,10 +61,10 @@ const externalSuccessSchema = z.object({
   target: z.object({
     id: z.string(),
     label: z.string(),
-    url: z.string().url(),
+    url: z.url(),
     source: z.literal("external"),
     provider: z.literal("slack"),
-    apiUrl: z.string().url(),
+    apiUrl: z.url(),
   }),
   data: z.object({
     provider: z.literal("slack"),
@@ -82,7 +82,7 @@ const statusResultSchema = z.union([
     target: z.object({
       id: z.string(),
       label: z.string(),
-      url: z.string().url(),
+      url: z.url(),
       source: z.literal("contract"),
     }),
     data: healthResponseSchema,
@@ -94,7 +94,7 @@ const statusResultSchema = z.union([
     target: z.object({
       id: z.string(),
       label: z.string(),
-      url: z.string().url(),
+      url: z.url(),
       source: z.literal("contract"),
     }),
     reason: z.enum([
@@ -114,7 +114,7 @@ const statusResultSchema = z.union([
     target: z.object({
       id: z.string(),
       label: z.string(),
-      url: z.string().url(),
+      url: z.url(),
       source: z.literal("external"),
       provider: z.literal("slack"),
       // plain z.string() — this echoes already-validated config; an invalid

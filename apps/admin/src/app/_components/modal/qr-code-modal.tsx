@@ -60,7 +60,7 @@ export const QRCodeModal = ({
           />
           {/* Pretty button */}
           <button
-            className="bg-ht-yellow mt-4 cursor-pointer rounded-md px-4 py-2"
+            className="mt-4 cursor-pointer rounded-md px-4 py-2"
             onClick={onImageDownload}
           >
             Download
