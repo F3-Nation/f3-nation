@@ -3,14 +3,16 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-function chain<T>(result: T) {
+function chain(result: unknown) {
   const obj: Record<string, unknown> = {};
   for (const method of ["from", "limit"]) {
     obj[method] = vi.fn(() => obj);
   }
   obj.where = vi.fn(() => obj);
-  obj.then = (resolve: (v: T) => unknown, reject?: (e: unknown) => unknown) =>
-    Promise.resolve(result).then(resolve, reject);
+  obj.then = (
+    resolve: (v: unknown) => unknown,
+    reject?: (e: unknown) => unknown,
+  ) => Promise.resolve(result).then(resolve, reject);
   return obj;
 }
 

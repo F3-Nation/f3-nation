@@ -266,7 +266,12 @@ if legacy_metadata="$(gcloud secrets describe sendgrid-api-key \
   --project "$PROJECT" --format='value(name)' 2>&1)"; then
   GRANT_SECRET_IDS+=("sendgrid-api-key")
 elif ! grep -qE '^ERROR: \(gcloud\.secrets\.describe\) NOT_FOUND: ' <<<"$legacy_metadata"; then
-  echo "  ERROR: Failed to inspect legacy secret sendgrid-api-key — aborting."
+  # Surface a bounded status while keeping raw diagnostics and identities private.
+  legacy_status="$(sed -nE \
+    's/^ERROR: \(gcloud\.secrets\.describe\) (PERMISSION_DENIED|UNAUTHENTICATED|UNAVAILABLE|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|INVALID_ARGUMENT|FAILED_PRECONDITION|INTERNAL|ABORTED|CANCELLED): .*/\1/p' \
+    <<<"$legacy_metadata")"
+  legacy_status="${legacy_status%%$'\n'*}"
+  echo "  ERROR: Failed to inspect legacy secret sendgrid-api-key (status: ${legacy_status:-UNKNOWN}) — aborting."
   exit 1
 fi
 unset legacy_metadata

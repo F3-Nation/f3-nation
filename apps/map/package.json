@@ -82,6 +82,7 @@
     "postcss-load-config": "catalog:",
     "postgres": "catalog:",
     "prettier": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",

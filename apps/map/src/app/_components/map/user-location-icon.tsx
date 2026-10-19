@@ -40,7 +40,7 @@ export const UserLocationIcon = ({
               "h-10 w-10", // 40px x 40px
               "bg-background",
               "m-0 border-0 p-0",
-              "user-select-none",
+              "select-none",
               "shadow-[0_1px_4px_-1px_rgba(0,0,0,0.3)]", // Google Maps shadow
               "flex items-center justify-center",
               className,

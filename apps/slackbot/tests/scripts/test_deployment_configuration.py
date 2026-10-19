@@ -149,9 +149,13 @@ def _run_cloud_run_env(tmp_path: Path, target: str, contents: str, secret_exists
         "ERROR: (gcloud.secrets.describe) NOT_FOUND: "
         'Secret [projects/synthetic/secrets/sendgrid-api-key] not found.\\n" >&2; exit 1 ;;\n'
         '    lookup-denied) printf "ERROR: (gcloud.secrets.describe) PERMISSION_DENIED: '
-        'Permission denied; diagnostic mentions NOT_FOUND: only.\\n" >&2; exit 1 ;;\n'
+        'Permission denied; diagnostic mentions NOT_FOUND: only; synthetic-private-diagnostic.\\n" >&2; exit 1 ;;\n'
         '    lookup-unavailable) printf "ERROR: (gcloud.secrets.describe) UNAVAILABLE: '
-        'Retry failed; diagnostic mentions NOT_FOUND: only.\\n" >&2; exit 1 ;;\n'
+        'Retry failed; diagnostic mentions NOT_FOUND: only; synthetic-private-diagnostic.\\n" >&2; exit 1 ;;\n'
+        '    lookup-unknown) printf "ERROR: (gcloud.secrets.describe) SYNTHETIC_FAILURE: '
+        'synthetic-private-diagnostic.\\n" >&2; exit 1 ;;\n'
+        '    lookup-unanchored) printf "Synthetic diagnostic quotes '
+        'ERROR: (gcloud.secrets.describe) PERMISSION_DENIED: synthetic-private-diagnostic.\\n" >&2; exit 1 ;;\n'
         '    *) printf "projects/synthetic/secrets/sendgrid-api-key\\n"; exit 0 ;;\n'
         "  esac\n"
         "fi\n"
@@ -302,8 +306,19 @@ def test_legacy_secret_rollback_access_uses_metadata_and_grants_only(
 
 
 @pytest.mark.parametrize("target", ["prod", "staging"])
-@pytest.mark.parametrize("legacy_state", ["grant-denied", "lookup-denied", "lookup-unavailable"])
-def test_legacy_rollback_access_failure_aborts_before_runtime_updates(tmp_path: Path, target: str, legacy_state: str):
+@pytest.mark.parametrize(
+    "legacy_state,expected_status",
+    [
+        ("grant-denied", None),
+        ("lookup-denied", "PERMISSION_DENIED"),
+        ("lookup-unavailable", "UNAVAILABLE"),
+        ("lookup-unknown", "UNKNOWN"),
+        ("lookup-unanchored", "UNKNOWN"),
+    ],
+)
+def test_legacy_rollback_access_failure_aborts_before_runtime_updates(
+    tmp_path: Path, target: str, legacy_state: str, expected_status: str | None
+):
     result, calls = _run_cloud_run_env(
         tmp_path,
         target,
@@ -317,7 +332,9 @@ def test_legacy_rollback_access_failure_aborts_before_runtime_updates(tmp_path: 
         assert "Failed to grant IAM access" in result.stdout
     else:
         assert "ERROR:" in result.stdout
+        assert f"(status: {expected_status})" in result.stdout
         assert "diagnostic mentions" not in result.stdout + result.stderr
+        assert "synthetic-private-diagnostic" not in result.stdout + result.stderr
     assert not any(call[:3] in (["run", "services", "update"], ["run", "jobs", "update"]) for call in calls)
     assert not any(
         call[:2] == ["secrets", "versions"] and any("sendgrid-api-key" in argument for argument in call)

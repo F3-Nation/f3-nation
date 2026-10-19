@@ -20,7 +20,7 @@ This creates `apps/slackbot/.env` from [`.env.example`](.env.example), then star
 
 Shared notification emails use `EMAIL_SERVER` and `EMAIL_FROM` from the Slackbot
 env file. The local defaults send to Mailpit at `smtp://localhost:1025`, with
-default sender `F3 Nation <no-reply@f3local.dev>` when the caller does not supply
+fallback sender `F3 Nation <no-reply@f3local.dev>` when the caller does not supply
 its own sender. `pnpm local:setup --slot N` rewrites
 the SMTP port for that checkout. Open Mailpit at `http://localhost:8025`, or at
 the checkout's `F3_MAILPIT_UI_PORT` from the root `.env`, to inspect captured
@@ -33,17 +33,27 @@ settings from that backup when running setup again.
 The compatibility helper `send_via_sendgrid` now sends through SMTP and does not
 use `SENDGRID_API_KEY`. An explicit `from_email` argument overrides `EMAIL_FROM`;
 without either, the historical sender `noreply@f3nation.com` remains the fallback.
-The emergency notification in [`features/emergency.py`](features/emergency.py)
-supplies `F3 Nation Slackbot Support <support.slackbot@f3nation.com>`, so it uses
-that sender in Mailpit too.
+Both current feature callers, the `/fng` welcome email in
+[`features/fng.py`](features/fng.py) and the emergency-access notification in
+[`features/emergency.py`](features/emergency.py), explicitly supply
+`F3 Nation Slackbot Support <support.slackbot@f3nation.com>`. Expect that sender
+for both flows in Mailpit; changing `EMAIL_FROM` does not override it.
 Region-configured backblast email keeps its separate SMTP settings.
 
-Synthetic delivery through this helper can be tested without a Slack app.
-To check the Slack emergency flow, use synthetic local member data with an email
-address, open `/f3-nation-settings`, choose **Emergency Info Access**, select that
-member, and inspect the access notification in Mailpit. In checkouts that include
-the `/fng` onboarding command, verify its email flow separately; direct helper
-or emergency-notification delivery does not verify that slash command.
+Synthetic delivery through this helper can be tested without a Slack app, but
+that does not verify either Slack flow. With the local Slack app linked to a
+synthetic region and SMTP pointed at Mailpit, test both flows separately using
+only synthetic names, contact details, and emergency information:
+
+- For emergency access, give a synthetic local member an email address, open
+  `/f3-nation-settings`, choose **Emergency Info Access**, select that member,
+  and inspect the access notification in Mailpit.
+- For `/fng`, first set the region's **Slack invite link** under
+  `/f3-nation-settings` → **Downrange** admin settings. Submit the `/fng` form
+  with synthetic details and inspect the welcome email in Mailpit. Local mode
+  replaces the recipient with a generated
+  `dev.staging-email-sink+fng-<random>@f3nation.com` address; it does not use the
+  submitted email address. Without an invite link, no welcome email is sent.
 
 ### Create Slack app and configure Slack credentials
 
@@ -152,9 +162,12 @@ both `f3-slackbot-staging` and `f3-slackbot`. Grant the service and scripts-job
 runtime accounts access, bind that secret as `EMAIL_SERVER`, and set the plain
 `EMAIL_FROM` variable to a provider-approved sender for both runtimes. The tag
 release workflow deploys images; it does not provision these SMTP settings.
-The emergency notification overrides `EMAIL_FROM` with
-`support.slackbot@f3nation.com`; that sender must also be approved by the
-configured provider.
+Both current shared-helper flows, `/fng` welcome emails and emergency-access
+notifications, override `EMAIL_FROM` with
+`F3 Nation Slackbot Support <support.slackbot@f3nation.com>`; that sender must
+also be approved by the configured provider. `EMAIL_FROM` is only the fallback
+for helper calls without an explicit sender; changing it does not change the
+sender of either current flow.
 
 Use [`.env.cloud-run.example`](.env.cloud-run.example) for the per-environment
 configuration. The operator-run [`scripts/cloud-run-env.sh`](scripts/cloud-run-env.sh)

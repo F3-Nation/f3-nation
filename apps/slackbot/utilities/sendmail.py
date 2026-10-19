@@ -31,7 +31,12 @@ def send_via_sendgrid(
     """
     server_url = os.getenv("EMAIL_SERVER")
     if not server_url:
-        logger.warning("slackbot.email.not_configured")
+        level = logging.ERROR if os.getenv("SLACKBOT_ENV", "local") in {"staging", "production"} else logging.WARNING
+        logger.log(
+            level,
+            "slackbot.email.not_configured",
+            extra={"json_fields": {"event": "slackbot.email.not_configured"}},
+        )
         return False
 
     if not to_email:

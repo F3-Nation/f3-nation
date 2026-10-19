@@ -43,7 +43,7 @@ describe("createQueryClient", () => {
   it("round-trips non-JSON values (Dates) through dehydrate/hydrate", async () => {
     const server = createQueryClient();
     const when = new Date("2026-10-10T12:00:00Z");
-    await server.prefetchQuery({ queryKey: ["k"], queryFn: () => ({ when }) });
+    await server.query({ queryKey: ["k"], queryFn: () => ({ when }) });
 
     const client = createQueryClient();
     // Through JSON, as the SSR payload travels.
@@ -63,7 +63,7 @@ describe("createQueryClient", () => {
       .mockImplementation(() => undefined);
     const client: QueryClient = createQueryClient();
     await client
-      .fetchQuery({
+      .query({
         queryKey: ["fails"],
         queryFn: () => Promise.reject(new Error("nope")),
         retry: false,

@@ -16,6 +16,8 @@ interface AODetailsFormValues {
   id: string;
 }
 
+// _T lets callers assert their form type includes these fields (`<X<FormType> />`).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export const AODetailsForm = <_T extends AODetailsFormValues>() => {
   const form = useFormContext<AODetailsFormValues>();
   const aoLogo = form.watch("aoLogo");

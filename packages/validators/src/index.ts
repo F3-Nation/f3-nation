@@ -86,7 +86,7 @@ export const EventInsertSchema = createInsertSchema(events, {
   locationId: (s: z.ZodNumber) =>
     s.positive({ error: "Please select a location" }).nullable(),
   email: (s: z.ZodString) =>
-    s.email({ error: "Invalid email format" }).or(z.literal("")),
+    s.check(z.email({ error: "Invalid email format" })).or(z.literal("")),
   startTime: (s: z.ZodString) =>
     s.regex(/^\d{4}$/, {
       error: "Start time must be in 24hr format (HHmm)",
@@ -307,7 +307,10 @@ export const orgPhoneSchema = z
 export const NationInsertSchema = createInsertSchema(orgs, {
   name: (s: z.ZodString) => s.min(1, { error: "Name is required" }),
   email: (s: z.ZodString) =>
-    s.email({ error: "Invalid email format" }).or(z.literal("")).nullable(),
+    s
+      .check(z.email({ error: "Invalid email format" }))
+      .or(z.literal(""))
+      .nullable(),
   phone: orgPhoneSchema,
   description: (s: z.ZodString) => s.nullable(),
   website: websiteUrlSchema.nullable(),
@@ -326,7 +329,10 @@ const createChildOrgInsertSchema = () =>
       .number({ error: "Must have a parent" })
       .nonnegative({ error: "Invalid selection" }),
     email: (s: z.ZodString) =>
-      s.email({ error: "Invalid email format" }).or(z.literal("")).nullable(),
+      s
+        .check(z.email({ error: "Invalid email format" }))
+        .or(z.literal(""))
+        .nullable(),
     phone: orgPhoneSchema,
     description: (s: z.ZodString) => s.nullable(),
     website: websiteUrlSchema.nullable(),
@@ -358,7 +364,10 @@ export const OrgInsertSchema = createInsertSchema(orgs, {
     .nullable(),
   description: (s: z.ZodString) => s.nullable(),
   email: (s: z.ZodString) =>
-    s.email({ error: "Invalid email format" }).or(z.literal("")).nullable(),
+    s
+      .check(z.email({ error: "Invalid email format" }))
+      .or(z.literal(""))
+      .nullable(),
   phone: orgPhoneSchema,
   website: websiteUrlSchema.nullable(),
   twitter: twitterUrlSchema.nullable(),
@@ -395,7 +404,8 @@ export const RequestInsertSchema = createInsertSchema(updateRequests, {
     s.regex(/^\d{4}$/, {
       error: "End time must be in 24hr format (HHmm)",
     }),
-  submittedBy: (s: z.ZodString) => s.email({ error: "Invalid email address" }),
+  submittedBy: (s: z.ZodString) =>
+    s.check(z.email({ error: "Invalid email address" })),
 }).extend({
   id: z.string(),
   eventMeta: z.record(z.string(), z.unknown()).optional(),

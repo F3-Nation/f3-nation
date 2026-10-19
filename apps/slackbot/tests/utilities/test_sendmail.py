@@ -405,6 +405,68 @@ def test_smtps_connection_failure_does_not_fall_back_to_plaintext(transport, mon
     assert "Synthetic private" not in json.dumps(record.__dict__, default=str)
 
 
+@pytest.mark.parametrize("endpoint", [None, ""], ids=["missing", "empty"])
+@pytest.mark.parametrize(
+    "environment,expected_level",
+    [
+        pytest.param(None, logging.WARNING, id="default-local"),
+        pytest.param("local", logging.WARNING, id="local"),
+        pytest.param("test", logging.WARNING, id="test"),
+        pytest.param("staging", logging.ERROR, id="staging"),
+        pytest.param("production", logging.ERROR, id="production"),
+    ],
+)
+def test_missing_smtp_configuration_reports_environment_severity_and_structured_event(
+    transport, monkeypatch, caplog, endpoint, environment, expected_level
+):
+    if endpoint is None:
+        monkeypatch.delenv("EMAIL_SERVER")
+    else:
+        monkeypatch.setenv("EMAIL_SERVER", endpoint)
+    if environment is None:
+        monkeypatch.delenv("SLACKBOT_ENV", raising=False)
+    else:
+        monkeypatch.setenv("SLACKBOT_ENV", environment)
+
+    with caplog.at_level(logging.WARNING):
+        assert (
+            sendmail.send_via_sendgrid("recipient@f3local.dev", "Synthetic private subject", "Synthetic private body")
+            is False
+        )
+
+    records = [record for record in caplog.records if record.name == sendmail.__name__]
+    assert len(records) == 1
+    record = records[0]
+    assert record.levelno == expected_level
+    assert record.getMessage() == "slackbot.email.not_configured"
+    assert record.json_fields == {"event": "slackbot.email.not_configured"}
+    assert record.exc_info is None
+    assert record.stack_info is None
+    recorded = json.dumps(record.__dict__, default=str)
+
+    handler = StructuredLogHandler()
+    try:
+        assert handler.filter(record)
+        serialized = handler.format(record)
+    finally:
+        handler.close()
+    payload = json.loads(serialized)
+    assert payload["event"] == "slackbot.email.not_configured"
+    assert payload["message"] == "slackbot.email.not_configured"
+    assert payload["severity"] == logging.getLevelName(expected_level)
+    for private_value in (
+        "synthetic-legacy-key",
+        "no-reply@f3local.dev",
+        "recipient@f3local.dev",
+        "Synthetic private",
+    ):
+        assert private_value not in recorded
+        assert private_value not in serialized
+    transport.smtp.assert_not_called()
+    transport.smtp_ssl.assert_not_called()
+    transport.legacy.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "failure,event",
     [
@@ -415,6 +477,7 @@ def test_smtps_connection_failure_does_not_fall_back_to_plaintext(transport, mon
 )
 def test_skipped_or_refused_mail_warns_without_sensitive_details(transport, monkeypatch, caplog, failure, event):
     monkeypatch.setenv("EMAIL_SERVER", "smtp://apikey:synthetic-password@smtp.example.com:587")
+    monkeypatch.setenv("SLACKBOT_ENV", "local")
     recipient = "recipient@f3local.dev"
     if failure == "unconfigured":
         monkeypatch.delenv("EMAIL_SERVER")
