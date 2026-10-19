@@ -32,7 +32,7 @@
     "env:delete": "bash scripts/delete-env-files.sh",
     "format:fix": "turbo format --continue -- --write --cache --cache-location node_modules/.cache/.prettiercache",
     "format": "turbo format --continue",
-    "lint:fix": "turbo lint --continue -- --fix --cache --cache-location node_modules/.cache/.eslintcache",
+    "lint:fix": "turbo lint --continue -- --fix --prune-suppressions --cache --cache-location node_modules/.cache/.eslintcache",
     "lint:ws": "pnpm dlx sherif@1.1.0",
     "lint:unused": "SKIP_ENV_VALIDATION=true DATABASE_URL=placeholder knip",
     "lint": "bash scripts/lint.sh",

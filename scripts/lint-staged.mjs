@@ -3,8 +3,10 @@
 // ESLint 10 resolves config from each file's directory, so a single root
 // invocation loads one type-aware TypeScript Program per workspace at once and
 // exhausts the heap. Batching keeps peak memory at one workspace's worth.
+// Suppressions for violations the staged files no longer have are pruned and
+// the workspace's eslint-suppressions.json is staged with them.
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
@@ -25,6 +27,10 @@ function nearestConfigDir(file) {
     dir = dirname(dir);
   }
   return ROOT;
+}
+
+function readIfExists(path) {
+  return existsSync(path) ? readFileSync(path, "utf8") : null;
 }
 
 function eslintBin(dir) {
@@ -52,10 +58,13 @@ for (const [dir, bucketFiles] of buckets) {
     "node_modules/.cache/lint-staged",
     `${label.split(sep).join("-")}.eslintcache`,
   );
+  const suppressions = join(dir, "eslint-suppressions.json");
+  const suppressionsBefore = readIfExists(suppressions);
   const { status } = spawnSync(
     eslintBin(dir),
     [
       "--fix",
+      "--prune-suppressions",
       "--no-warn-ignored",
       "--cache",
       "--cache-location",
@@ -65,6 +74,15 @@ for (const [dir, bucketFiles] of buckets) {
     { cwd: dir, stdio: "inherit" },
   );
   if (status !== 0) failed.push(label);
+  if (readIfExists(suppressions) !== suppressionsBefore) {
+    spawnSync(join(ROOT, "node_modules", ".bin", "prettier"), [
+      "--write",
+      "--log-level",
+      "warn",
+      suppressions,
+    ]);
+    spawnSync("git", ["add", "--", suppressions], { stdio: "inherit" });
+  }
 }
 
 if (failed.length) {

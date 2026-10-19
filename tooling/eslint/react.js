@@ -18,20 +18,22 @@ export default [
         version: "19.3.0",
       },
     },
+    // react-hooks v7's React Compiler rules run as errors. Sites that predate
+    // them are baselined per workspace in eslint-suppressions.json; new
+    // violations fail lint. Fix a baselined site when you touch its file — the
+    // pre-commit hook and `pnpm lint:fix` prune the entry. Never grow the baseline.
     rules: {
       ...reactHooksPlugin.configs.recommended.rules,
       ...jsxA11yPlugin.configs.recommended.rules,
       "react/prop-types": "off",
       // React 17+ JSX transform doesn't require importing React
       "react/react-in-jsx-scope": "off",
-      // eslint-plugin-react-hooks v7 enables these React Compiler rules in
-      // `recommended`. They flag real anti-patterns but adopting them is a
-      // refactor tracked separately — see https://github.com/F3-Nation/f3-nation/issues/507.
-      // Opt out for now (must be "off", not "warn": lint runs --max-warnings 0).
-      "react-hooks/set-state-in-effect": "off",
-      "react-hooks/refs": "off",
-      "react-hooks/immutability": "off",
-      "react-hooks/preserve-manual-memoization": "off",
+    },
+  },
+  {
+    // Test harness components capture hook results into outer variables.
+    files: ["**/__tests__/**", "**/*.test.{ts,tsx}"],
+    rules: {
       "react-hooks/globals": "off",
     },
   },
