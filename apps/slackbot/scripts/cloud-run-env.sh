@@ -42,7 +42,7 @@ declare -A SECRET_MAP=(
   [MAP_REVALIDATION_KEY]="map-revalidation-key"
   [STRAVA_CLIENT_SECRET]="strava-client-secret"
   [ADMIN_BOT_TOKEN]="admin-bot-token"
-  [SENDGRID_API_KEY]="sendgrid-api-key"
+  [EMAIL_SERVER]="email-server"
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain Cloud Run env vars)
@@ -67,6 +67,7 @@ ENV_FILE_VARS=(
   DATABASE_POOL_SIZE
   DATABASE_MAX_OVERFLOW
   DATABASE_POOL_TIMEOUT
+  EMAIL_FROM
 )
 
 # Plain env vars (hardcoded, same across environments)
@@ -259,8 +260,23 @@ RUNTIME_SAS=(
   "$(get_job_sa "$SCRIPTS_JOB_NAME")"
 )
 
-for var in "${!SECRET_MAP[@]}"; do
-  secret_id="${SECRET_MAP[$var]}"
+# Preserve old-image rollback access without reading or updating its API key.
+GRANT_SECRET_IDS=("${SECRET_MAP[@]}")
+if legacy_metadata="$(gcloud secrets describe sendgrid-api-key \
+  --project "$PROJECT" --format='value(name)' 2>&1)"; then
+  GRANT_SECRET_IDS+=("sendgrid-api-key")
+elif ! grep -qE '^ERROR: \(gcloud\.secrets\.describe\) NOT_FOUND: ' <<<"$legacy_metadata"; then
+  # Surface a bounded status while keeping raw diagnostics and identities private.
+  legacy_status="$(sed -nE \
+    's/^ERROR: \(gcloud\.secrets\.describe\) (PERMISSION_DENIED|UNAUTHENTICATED|UNAVAILABLE|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|INVALID_ARGUMENT|FAILED_PRECONDITION|INTERNAL|ABORTED|CANCELLED): .*/\1/p' \
+    <<<"$legacy_metadata")"
+  legacy_status="${legacy_status%%$'\n'*}"
+  echo "  ERROR: Failed to inspect legacy secret sendgrid-api-key (status: ${legacy_status:-UNKNOWN}) — aborting."
+  exit 1
+fi
+unset legacy_metadata
+
+for secret_id in "${GRANT_SECRET_IDS[@]}"; do
   for sa_email in "${RUNTIME_SAS[@]}"; do
     echo "  Granting $sa_email access to $secret_id..."
     if ! gcloud secrets add-iam-policy-binding "$secret_id" \
