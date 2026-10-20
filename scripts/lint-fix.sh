@@ -22,7 +22,22 @@ if ((${#include[@]} == 0)); then
 fi
 
 turbo run lint --continue "${exclude[@]}" -- --fix "${cache[@]}" || status=$?
-turbo run lint --continue "${include[@]}" -- --fix --prune-suppressions "${cache[@]}" || status=$?
+
+# ESLint prunes even when lint fails, and a parse error drops every entry for
+# that file, so restore the baselines if any pruning workspace fails.
+backup="$(mktemp -d)"
+trap 'rm -rf "$backup"' EXIT
+for file in "${baselines[@]}"; do
+  mkdir -p "$backup/$(dirname "$file")"
+  cp "$file" "$backup/$file"
+done
+if ! turbo run lint --continue "${include[@]}" -- --fix --prune-suppressions "${cache[@]}"; then
+  for file in "${baselines[@]}"; do
+    cp "$backup/$file" "$file"
+  done
+  echo "lint:fix: lint failed; eslint-suppressions.json files left unpruned." >&2
+  exit 1
+fi
 # ESLint saves the baseline unformatted.
 prettier --write --log-level warn "${baselines[@]}" || status=$?
 exit "$status"
