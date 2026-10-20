@@ -339,8 +339,10 @@ it is, learned on the hand-run refreshes.
      definitions and source triggers. Prod also has `codex`, `regionpages`
      and `temp`; their PII is not classified here.
    - **Load data only** from `public`, `auth` and `slackbot` into staging's
-     existing tables. Its existing audit history stays there; capture triggers
-     may record the refreshed, obfuscated source rows. Its schemas belong
+     existing tables. Its existing audit history stays there; the load runs
+     with triggers disabled, so the capture triggers don't record the loaded
+     rows (one history row per loaded row took a full load past the job's 3h
+     timeout on 2026-10-20). Its schemas belong
      to several roles (`dev_generic`, `tackle`, `app_auth`) whose grants the
      other apps need; a drop-and-restore loses them. Skip any prod table
      staging doesn't have.
@@ -382,9 +384,12 @@ SET NULL` would do; the summary gives the count) and keeps the old
      ```
 
    - **Drop the foreign keys around the load** (`orgs` and `events` have
-     circular FKs, and the Cloud SQL roles can't disable triggers). Save
-     them with `pg_get_constraintdef`, truncate, `pg_restore --data-only`
-     with `PGOPTIONS='-c app.disable_ao_count_trigger=true'`, then re-add
+     circular FKs, and the Cloud SQL roles can't disable FK triggers). Save
+     them with `pg_get_constraintdef`, truncate, then `pg_restore` with
+     `--data-only`, `--disable-triggers` and
+     `PGOPTIONS='-c app.disable_ao_count_trigger=true'`. With the FKs gone, a
+     table owner may disable the remaining triggers; if a system trigger is
+     somehow left, the job loads with triggers on and warns. Then re-add
      them `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
      them validated in one transaction took over an hour and lost its
      connection. (A shell loop around `docker run -i` once validated 1 of 74:

@@ -409,6 +409,29 @@ async function dropFksAndTruncate(
 }
 
 /**
+ * pg_restore flags that keep the load's rows from firing staging's triggers.
+ * The audit triggers write a public_history row for every row loaded, which
+ * takes a full load (~6M attendance rows) past the job's 3h timeout.
+ * `--disable-triggers` disables them inside the restore's single transaction,
+ * so they are back on whether it commits or rolls back. Only a superuser may
+ * disable FK (system) triggers, and the load runs right after
+ * dropFksAndTruncate, so there should be none. If any are left, load with
+ * triggers on (slow, but not wrong) instead of failing on the ALTER TABLE.
+ */
+async function noTriggerFlags(sql: Sql, tables: string[]): Promise<string[]> {
+  const system = await sql<{ t: string }[]>`
+    SELECT DISTINCT n.nspname || '.' || c.relname AS t FROM pg_trigger tg
+    JOIN pg_class c ON c.oid = tg.tgrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE tg.tgisinternal AND n.nspname || '.' || c.relname = ANY(${tables})`;
+  if (system.length === 0) return ["--disable-triggers"];
+  warn(
+    `system triggers left on ${system.map((r) => r.t).join(", ")}; loading with triggers on (audit history fires per row, slow)`,
+  );
+  return [];
+}
+
+/**
  * Keep the dropped FKs' definitions on staging until they are back: if the
  * run dies mid-load, or a rollback fails, the in-memory copy dies with the
  * container, and a later --reuse-existing-stash run re-adds them from here.
@@ -1371,6 +1394,7 @@ async function main(): Promise<number> {
               "--no-privileges",
               "--single-transaction",
               "--exit-on-error",
+              ...(await noTriggerFlags(stg, load)),
               "-d",
               ctx.stagingDb,
               files.loadDump,
@@ -1638,6 +1662,7 @@ async function rollback(
           "--no-privileges",
           "--single-transaction",
           "--exit-on-error",
+          ...(await noTriggerFlags(sql, load)),
           "-L",
           listFile,
           "-d",
