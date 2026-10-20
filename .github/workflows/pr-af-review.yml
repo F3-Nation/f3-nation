@@ -25,16 +25,17 @@ name: PR-AF Review (trial)
 # The cap is SOFT: pr-af checks it between phases and before dispatching new
 # agents, never mid-call, and parallel reviewers can overshoot. It also only
 # counts cost the provider reports. The HARD limit is the per-run OpenRouter
-# key: minted with `limit` = PR_AF_MAX_COST_USD and a 2h expiry, deleted after
-# teardown.
+# key: minted with `limit` = PR_AF_KEY_LIMIT_USD (above the soft cap, to absorb
+# overshoot) and an expiry matching the job timeout, deleted after teardown.
 #
 # SECURITY: unlike adversarial-review.yml, this runs an agent with tool access
 # against a clone of the PR's own code. Same-repo PRs only; the label is the
 # gate. Assume prompt injection can read anything in the container:
 # - OPENROUTER_API_KEY is the per-run key, so a leak is capped and short-lived.
 # - PR_AF_OPENROUTER_MGMT_KEY can't call completions but CAN mint keys. It is
-#   step-scoped to the mint/delete steps and must never reach the container:
-#   docker compose forwards job env vars, so never set it at job level.
+#   step-scoped to the mint/delete steps so no other step (including upstream
+#   ci_runner.py) sees it. pr-af's compose forwards only an explicit env list
+#   today, but we track upstream's default branch, so never set it at job level.
 # - GH_TOKEN (contents: read, pull-requests: write) stays exposed until the
 #   job ends: pr-af puts it in the clone URL and the harness env, and posts
 #   with it.
@@ -101,15 +102,18 @@ jobs:
     if: needs.gate.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     # pr-af's own wall-clock cap is 3600s; its README says reviews run 35-70
-    # minutes. The job timeout is the outer bound including image build.
+    # minutes. The job timeout is the outer bound including image build; the
+    # per-run key's expiry matches it.
     timeout-minutes: 90
     permissions:
       contents: read
       pull-requests: write
     env:
-      # Per-review ceiling in USD (see header): pr-af's soft cap and the
-      # per-run key's hard limit.
+      # Per-review ceiling in USD (see header): pr-af's soft cap.
       PR_AF_MAX_COST_USD: "1.00"
+      # Hard limit on the per-run key; above the soft cap so in-flight
+      # parallel calls can finish and pr-af can stop gracefully.
+      PR_AF_KEY_LIMIT_USD: "2.00"
       PR_AF_MAX_DURATION_SECONDS: "3600"
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -129,25 +133,31 @@ jobs:
         run: |
           body=$(jq -n \
             --arg name "pr-af-${GITHUB_REPOSITORY#*/}-pr${PR}-run${GITHUB_RUN_ID}" \
-            --argjson limit "${PR_AF_MAX_COST_USD}" \
-            --arg expires "$(date -u -d '+2 hours' +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson limit "${PR_AF_KEY_LIMIT_USD}" \
+            --arg expires "$(date -u -d '+90 minutes' +%Y-%m-%dT%H:%M:%SZ)" \
             '{name: $name, limit: $limit, expires_at: $expires}')
-          resp=$(curl -sS --fail-with-body -X POST https://openrouter.ai/api/v1/keys \
+          # No --retry: a retried POST could mint a second, untracked key.
+          resp=$(curl -sS --fail-with-body --connect-timeout 10 --max-time 30 \
+            -X POST https://openrouter.ai/api/v1/keys \
             -H "Authorization: Bearer ${MGMT_KEY}" \
             -H "Content-Type: application/json" \
             -d "${body}") || {
             echo "::error::OpenRouter key creation failed: ${resp}"
             exit 1
           }
-          key=$(jq -r '.key // empty' <<< "${resp}")
+          # Record the hash first so the delete step can clean up even if
+          # the key itself is missing from the response.
           hash=$(jq -r '.data.hash // empty' <<< "${resp}")
+          if [ -n "${hash}" ]; then
+            echo "OR_KEY_HASH=${hash}" >> "$GITHUB_ENV"
+          fi
+          key=$(jq -r '.key // empty' <<< "${resp}")
           if [ -z "${key}" ] || [ -z "${hash}" ]; then
             echo "::error::OpenRouter key response missing .key or .data.hash."
             exit 1
           fi
           echo "::add-mask::${key}"
           echo "OPENROUTER_API_KEY=${key}" >> "$GITHUB_ENV"
-          echo "OR_KEY_HASH=${hash}" >> "$GITHUB_ENV"
 
       - name: Start AgentField & PR-AF
         working-directory: ./pr-af
@@ -182,7 +192,8 @@ jobs:
         env:
           MGMT_KEY: ${{ secrets.PR_AF_OPENROUTER_MGMT_KEY }}
         run: |
-          curl -sS --fail-with-body -o /dev/null -X DELETE \
+          curl -sS --fail-with-body --connect-timeout 10 --max-time 30 \
+            --retry 3 --retry-max-time 60 -o /dev/null -X DELETE \
             "https://openrouter.ai/api/v1/keys/${OR_KEY_HASH}" \
             -H "Authorization: Bearer ${MGMT_KEY}"
 
