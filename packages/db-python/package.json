@@ -3,6 +3,7 @@
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
+    "format": "bash ../../scripts/python-task.sh format db-python bash ./scripts/format.sh",
     "test": "bash ../../scripts/python-task.sh test db-python uv run pytest",
     "lint": "bash ../../scripts/python-task.sh lint db-python uv run ruff check ."
   }
