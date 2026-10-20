@@ -283,7 +283,7 @@ SCHEMA …` granting the same to each app login, so objects later
 
 `orgs.ao_count` is maintained by a trigger and can drift when rows change
 without it (see
-[`admin-territory-management.md`](../specs/admin-territory-management.md) for
+[`admin-territory-management.md`](specs/admin-territory-management.md) for
 the intended behavior). To list organizations whose stored count differs from
 the expected one, run this read-only query:
 
