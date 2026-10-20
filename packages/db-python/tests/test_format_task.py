@@ -22,8 +22,9 @@ def test_format_task_checks_then_fixes_python(tmp_path):
 
     # Keep the real task entrypoint and formatter, replacing only uv's environment
     # bootstrap so this synthetic project needs no downloads or dependency install.
+    # uv run pytest exposes the package's declared Ruff development dependency.
     ruff = shutil.which("ruff")
-    assert ruff is not None
+    assert ruff is not None, "Ruff must be on PATH; run the package test task (uv run pytest)."
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for executable in ("bash", "grep"):
