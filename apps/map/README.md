@@ -65,6 +65,10 @@ Required environment variables (typically provided in env.zip):
 
 ### Running Tests
 
+Deployment-helper unit tests require Bash 4 or newer first on `PATH`. Follow the
+[Bash prerequisite setup](../../docs/LOCAL_DEV_DOCKER.md#bash-for-deployment-helper-tests)
+before running the Map tests, including on macOS.
+
 ```bash
 # Run all tests for the map app
 pnpm test --filter f3-map
