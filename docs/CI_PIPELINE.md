@@ -199,7 +199,7 @@ These do not exist yet and are documented for future reference:
   close/merge plus a daily TTL reaper. Slots in as a PR job alongside the
   existing gates.
 - **`e2e-blocking`** — a deliberately small Playwright suite (the
-  critical-path cases from each feature spec in [`specs/`](../specs/), plus an
+  critical-path cases from each feature spec in [`docs/specs/`](specs/), plus an
   RBAC matrix) running against the preview environment, with traces/video on
   failure. Blocking: red means no merge. Everything beyond the critical paths
   runs as a separate **advisory** E2E tier that never blocks.

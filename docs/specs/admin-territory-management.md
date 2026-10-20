@@ -19,7 +19,7 @@ the seed all share, so a sixth (or later) tier no longer leaves counts stale.
 ## 2. Context & links
 
 - Issue #924; epic #855. Design rationale:
-  [ADR 0003](../docs/adr/0003-depth-agnostic-org-hierarchy.md).
+  [ADR 0003](../adr/0003-depth-agnostic-org-hierarchy.md).
 - Issue #1041 restores Area sorting by resolved Sector and Territory.
 - Builds on [`territory-org-type.md`](territory-org-type.md), which added the
   Territory type, basic page, and a temporary API gate rejecting an Area beneath a

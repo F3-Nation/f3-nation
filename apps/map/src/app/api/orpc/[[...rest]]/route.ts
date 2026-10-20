@@ -8,7 +8,7 @@ import { logWarn } from "~/lib/logging";
 
 const PROXY_PREFIX = "/api/orpc";
 
-// Anonymous-reachable paths the map calls — see specs/map-browse-and-search.md
+// Anonymous-reachable paths the map calls — see docs/specs/map-browse-and-search.md
 // AC-1. These back onto `publicReadProcedure` (packages/api/src/shared.ts),
 // which requires no credential, so the proxy forwards them as-is. Cookies are
 // still forwarded because these handlers read `ctx.session` to decide what to
@@ -35,7 +35,7 @@ export const PUBLIC_PATHS = new Set([
   "/v1/org/byId",
 ]);
 
-// Signed-in-only paths the map calls — see specs/map-update-request-flow.md
+// Signed-in-only paths the map calls — see docs/specs/map-update-request-flow.md
 // AC-1. Forwarded with the caller's own cookie; an anonymous caller gets
 // UNAUTHORIZED from the API itself, since these remain `protectedProcedure`.
 export const SIGNED_IN_ONLY_PATHS = new Set([
