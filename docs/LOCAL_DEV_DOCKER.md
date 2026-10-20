@@ -31,6 +31,29 @@ Install these before starting:
 
 Make sure Docker Desktop is **running** before you continue.
 
+### Bash for deployment-helper tests
+
+Deployment helpers and their unit tests require **Bash 4 or newer**, selected by
+`bash` on `PATH`. The Bash 3.2 bundled with macOS does not support their associative
+arrays. On macOS, install [Homebrew's Bash](https://formulae.brew.sh/formula/bash)
+and put it first on `PATH` before running `pnpm`:
+
+```bash
+brew install bash
+export PATH="$(brew --prefix bash)/bin:$PATH"
+```
+
+Keep that `export` in your shell startup file (for example, `~/.zshrc` for zsh),
+and reopen your terminal or IDE terminal so it uses the updated `PATH`. On Linux
+or WSL 2, use your distribution's `bash` package and check that its version is at
+least 4. On either platform, verify the executable selected in the terminal where
+you will run tests:
+
+```bash
+command -v bash
+bash --version
+```
+
 ## Detailed Prerequites Install Instructions
 
 <details>
