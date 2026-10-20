@@ -404,18 +404,35 @@ async function dropFksAndTruncate(
         `ALTER TABLE ${fk.table} DROP CONSTRAINT IF EXISTS ${fk.name}`,
       );
     }
-    // The loads that follow pass LOAD_WITHOUT_TRIGGERS, and only a superuser
-    // may disable system (FK) triggers. Refuse here, before the truncate, so
-    // nothing has changed if one is left.
-    const system = await tx<{ t: string }[]>`
-      SELECT DISTINCT n.nspname || '.' || c.relname AS t FROM pg_trigger tg
+    // The loads that follow pass LOAD_WITHOUT_TRIGGERS. Refuse here, before
+    // the truncate, so nothing has changed if either of its limits is hit:
+    // only a superuser may disable system (FK) triggers, and its closing
+    // ENABLE TRIGGER ALL would turn on a trigger someone had disabled (or set
+    // to REPLICA / ALWAYS).
+    const blockers = await tx<
+      { t: string; trigger: string; system: boolean }[]
+    >`
+      SELECT n.nspname || '.' || c.relname AS t, tg.tgname AS trigger,
+        tg.tgisinternal AS system
+      FROM pg_trigger tg
       JOIN pg_class c ON c.oid = tg.tgrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE tg.tgisinternal AND n.nspname || '.' || c.relname = ANY(${tables})`;
+      WHERE (tg.tgisinternal OR tg.tgenabled <> 'O')
+        AND n.nspname || '.' || c.relname = ANY(${tables})
+      ORDER BY 1, 2`;
+    const system = [
+      ...new Set(blockers.filter((b) => b.system).map((b) => b.t)),
+    ];
     if (system.length > 0) {
       throw new Refusal(
-        `system triggers are left on ${system.map((r) => r.t).join(", ")} after dropping the FKs, so the load ` +
+        `system triggers are left on ${system.join(", ")} after dropping the FKs, so the load ` +
           `can't disable triggers (and with them on, the audit history makes a full load overrun the timeout).`,
+      );
+    }
+    if (blockers.length > 0) {
+      throw new Refusal(
+        `trigger(s) not in the default enabled state: ${blockers.map((b) => `${b.t}.${b.trigger}`).join(", ")}. ` +
+          `The load re-enables every trigger, so set them back (ALTER TABLE … ENABLE TRIGGER …) or drop them, then run again.`,
       );
     }
     await tx.unsafe(`TRUNCATE TABLE ${tables.map(quoteTable).join(", ")}`);
@@ -427,8 +444,8 @@ async function dropFksAndTruncate(
  * its single transaction, so the triggers are back on whether the load commits
  * or rolls back. The audit triggers would otherwise write a public_history row
  * per loaded row, which took a full load past the job's 3h timeout
- * (2026-10-20). Only used right after dropFksAndTruncate, which leaves no
- * system triggers on the load set.
+ * (2026-10-20). Only used right after dropFksAndTruncate, which refuses if a
+ * system trigger is left or a trigger isn't in the default enabled state.
  */
 const LOAD_WITHOUT_TRIGGERS = "--disable-triggers";
 
