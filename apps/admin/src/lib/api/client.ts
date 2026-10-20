@@ -10,6 +10,7 @@ import type { router } from "@acme/api";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { API_REQUEST_TIMEOUT_MS } from "~/lib/api/availability";
 import { ACCESS_TOKEN_COOKIE_NAME } from "~/lib/auth/constants";
 
 function requireApiBaseUrl(): string {
@@ -43,6 +44,8 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
 
 export async function getMyProfile() {
   const client = await getApiClient();
-  const result = await client.me.profile();
+  const result = await client.me.profile(undefined, {
+    signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
+  });
   return result.user;
 }
