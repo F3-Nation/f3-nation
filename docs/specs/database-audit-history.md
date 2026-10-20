@@ -17,7 +17,7 @@ Bookkeeping-only changes can be ignored; sensitive values are masked.
 - App(s) affected: API and its database-writing consumers; no new UI.
 - Key code: `packages/db/drizzle/schema.ts`, `packages/db/src/migrate.ts`,
   `packages/db/src/utils/reset-test-db.ts`, `packages/api/src/router/request.ts`.
-- Required template: `specs/README.md`; test tiers: `docs/E2E_TIERS.md`;
+- Required template: `docs/specs/README.md`; test tiers: `docs/E2E_TIERS.md`;
   human-owned decisions: `docs/AI_GUARDRAILS.md`.
 
 - Issue: https://github.com/F3-Nation/f3-nation/issues/664
@@ -443,7 +443,7 @@ entries. History deletion, restoration, or sanitizing previously captured data
 requires a separate reviewed operation. Disposable staging-refresh copies omit
 production history data, retain audit structures, and purge history captured
 during source obfuscation before verification. Production and staging's existing
-history are preserved; see [the refresh policy](../docs/STAGING_REFRESH.md#public_history-schema).
+history are preserved; see [the refresh policy](../STAGING_REFRESH.md#public_history-schema).
 Local/test reset is intentionally
 separate: it destroys the disposable dataset and its history before rerunning
 migrations. Before any schema drop, automated resets verify that the actual

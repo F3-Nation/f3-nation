@@ -7,7 +7,7 @@ maps 1:1 to a future Playwright assertion.
 
 Rules of the road:
 
-- One spec per feature, at `specs/<feature-slug>.md`. Specs are scoped to a
+- One spec per feature, at `docs/specs/<feature-slug>.md`. Specs are scoped to a
   feature, not to an app or package — a feature often spans several apps, so
   the filename carries the grouping (`map-*`, `admin-*`). If the folder grows,
   group by product area, not by app.
@@ -24,14 +24,14 @@ Rules of the road:
 - All acceptance criteria are binding. The "Critical-path test cases" section
   only names the subset that must have end-to-end coverage first; the
   blocking-vs-advisory tier split lives in
-  [`docs/E2E_TIERS.md`](../docs/E2E_TIERS.md), not here.
+  [`docs/E2E_TIERS.md`](../E2E_TIERS.md), not here.
 - Discussions involving security, availability/reliability, and scalability
   stay human-owned and are managed in the PR associated with the spec. The
   spec is a durable document.
 
 ## Template
 
-Copy everything below into `specs/<feature-slug>.md` for a new feature, excluding triple-ticks at beginning and end of section.
+Copy everything below into `docs/specs/<feature-slug>.md` for a new feature, excluding triple-ticks at beginning and end of section.
 
 ```markdown
 # <Feature name>

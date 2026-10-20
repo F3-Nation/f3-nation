@@ -14,6 +14,8 @@ import { ControlledInput, Input } from "@acme/ui/input";
 import { Loader } from "@acme/ui/loader";
 import { toast } from "@acme/ui/toast";
 
+import { buildOtpCallbackUrl } from "~/utils/otp-callback-url";
+
 type AuthStatus = "idle" | "loading" | "verify-email" | "verify-code" | "error";
 
 const authStore = new ZustandStore({
@@ -236,9 +238,11 @@ const VerifyCode = () => {
     setIsLoading(true);
     try {
       const normalizedEmail = normalizeEmail(email);
-      window.location.href = `/api/auth/callback/otp?email=${encodeURIComponent(
-        normalizedEmail,
-      )}&token=${code}&callbackUrl=${encodeURIComponent(callbackUrl)}`;
+      window.location.href = buildOtpCallbackUrl({
+        email: normalizedEmail,
+        code,
+        callbackUrl,
+      });
     } catch (error) {
       console.error(error);
     } finally {
