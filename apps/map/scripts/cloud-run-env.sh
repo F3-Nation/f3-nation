@@ -106,7 +106,7 @@ fi
 
 # This operator-owned file is trusted shell code: sourcing can execute commands
 # and change script variables. The guard below validates only its channel.
-# Require the file to supply its own channel, rather than inheriting the shell's.
+# Require the file to supply F3_CHANNEL, rather than inheriting the shell's value.
 unset F3_CHANNEL
 set -a
 source "$ENV_FILE"

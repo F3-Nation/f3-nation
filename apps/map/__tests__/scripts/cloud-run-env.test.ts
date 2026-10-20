@@ -128,8 +128,8 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
     (target, channel) => {
       const result = runScript(target, channel);
       expect(result.error).toBeUndefined();
-      expect(result.status).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain("F3_CHANNEL");
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("F3_CHANNEL");
       expect(result.calls).toEqual([]);
     },
   );
@@ -139,8 +139,8 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
     (target) => {
       const result = runScript(target, undefined, target);
       expect(result.error).toBeUndefined();
-      expect(result.status).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain("F3_CHANNEL");
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("F3_CHANNEL");
       expect(result.calls).toEqual([]);
     },
   );
@@ -155,9 +155,13 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
       );
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(0);
-      expect(
-        result.calls.some((args) => args.includes("--update-env-vars")),
-      ).toBe(true);
+      const update = result.calls.find(
+        (args) => args.slice(0, 3).join(" ") === "run services update",
+      );
+      expect(update).toBeDefined();
+      expect(update?.[update.indexOf("--update-env-vars") + 1]).toBe(
+        `^::^NODE_ENV=production::F3_CHANNEL=${target}`,
+      );
     },
   );
 
@@ -165,8 +169,8 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
     const unexpected = "synthetic-value-that-must-not-be-printed";
     const result = runScript("prod", unexpected);
     expect(result.error).toBeUndefined();
-    expect(result.status).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain("F3_CHANNEL");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("F3_CHANNEL");
     expect(result.stdout + result.stderr).not.toContain(unexpected);
     expect(result.calls).toEqual([]);
   });
