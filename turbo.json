@@ -111,6 +111,7 @@
     },
     "test": {
       "dependsOn": ["^topo"],
+      "env": ["PATH"],
       "outputs": ["coverage/**"]
     },
     "test:characterization": {
