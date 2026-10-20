@@ -1500,8 +1500,8 @@ async function verifyLoadWithoutTriggers(): Promise<void> {
     await su.unsafe(
       `ALTER TABLE lv.child ADD CONSTRAINT child_parent_fk FOREIGN KEY (parent_id) REFERENCES lv.parent (id)`,
     );
-    // The ownership case passes no FKs: dropping child's FK would touch
-    // parent, so the refusal has to be the first thing that can fail.
+    // The ownership case makes child, which holds the FK, unowned: the
+    // refusal has to come before the FK drop's own "must be owner" error.
     const refusals: [string, string, string, string, (typeof fk)[]][] = [
       [
         "a system trigger left after the FK drop (DEFERRABLE unique)",
@@ -1519,10 +1519,10 @@ async function verifyLoadWithoutTriggers(): Promise<void> {
       ],
       [
         "a loaded table the job's login doesn't own",
-        `ALTER TABLE lv.parent OWNER TO load_verify_other`,
-        `ALTER TABLE lv.parent OWNER TO load_verify_owner`,
-        "doesn't own lv.parent",
-        [],
+        `ALTER TABLE lv.child OWNER TO load_verify_other`,
+        `ALTER TABLE lv.child OWNER TO load_verify_owner`,
+        "doesn't own lv.child",
+        [fk],
       ],
     ];
     for (const [what, setUp, undo, expected, fks] of refusals) {

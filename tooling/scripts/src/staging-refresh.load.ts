@@ -28,16 +28,9 @@ export async function dropFksAndTruncate(
     // Fail fast rather than queue behind an app's long transaction; nothing
     // has changed if this times out.
     await tx`SET LOCAL lock_timeout = '60s'`;
-    for (const fk of fks) {
-      await tx.unsafe(
-        `ALTER TABLE ${fk.table} DROP CONSTRAINT IF EXISTS ${fk.name}`,
-      );
-    }
-    // The loads that follow pass LOAD_WITHOUT_TRIGGERS. Refuse here, before
-    // the truncate, so nothing has changed if one of its limits is hit:
-    // DISABLE TRIGGER needs ownership of every loaded table, only a superuser
-    // may disable system triggers, and the closing ENABLE TRIGGER ALL would
-    // turn on a trigger someone had disabled (or set to REPLICA / ALWAYS).
+    // DISABLE TRIGGER needs ownership of every loaded table. Checked before
+    // the FK drops, which would otherwise fail first ("must be owner") on an
+    // unowned table that holds an FK.
     const notOwned = await tx<{ t: string }[]>`
       SELECT n.nspname || '.' || c.relname AS t FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -50,6 +43,16 @@ export async function dropFksAndTruncate(
           `Re-run tooling/scripts/staging-refresh/setup.sh (staging-login.sql grants the owner roles), then run again.`,
       );
     }
+    for (const fk of fks) {
+      await tx.unsafe(
+        `ALTER TABLE ${fk.table} DROP CONSTRAINT IF EXISTS ${fk.name}`,
+      );
+    }
+    // The loads that follow pass LOAD_WITHOUT_TRIGGERS. Refuse here, before
+    // the truncate, so nothing has changed if one of its limits is hit: only
+    // a superuser may disable system triggers, and the closing ENABLE TRIGGER
+    // ALL would turn on a trigger someone had disabled (or set to REPLICA /
+    // ALWAYS).
     const blockers = await tx<
       {
         t: string;
