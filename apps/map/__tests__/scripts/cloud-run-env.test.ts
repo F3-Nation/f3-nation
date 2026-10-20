@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 const SCRIPT = fileURLToPath(
   new URL("../../scripts/cloud-run-env.sh", import.meta.url),
@@ -23,10 +23,15 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+interface Channels {
+  F3_CHANNEL?: string;
+  NEXT_PUBLIC_CHANNEL?: string;
+}
+
 function runScript(
   target: "prod" | "staging",
-  channel: string | undefined,
-  parentChannel?: string,
+  channels: Channels,
+  parentChannels: Channels = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "map-cloud-run-env-"));
   try {
@@ -42,7 +47,10 @@ function runScript(
       join(app, `.env.cloud-run.${target}`),
       [
         "API_KEY='synthetic-test-value'",
-        ...(channel === undefined ? [] : [`F3_CHANNEL=${shellQuote(channel)}`]),
+        ...(["F3_CHANNEL", "NEXT_PUBLIC_CHANNEL"] as const).flatMap((name) => {
+          const value = channels[name];
+          return value === undefined ? [] : [`${name}=${shellQuote(value)}`];
+        }),
         "",
       ].join("\n"),
     );
@@ -72,7 +80,7 @@ if (args.slice(0, 3).join(" ") === "run services describe") {
         HOME: root,
         PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
         LC_ALL: "C",
-        ...(parentChannel === undefined ? {} : { F3_CHANNEL: parentChannel }),
+        ...parentChannels,
       },
       encoding: "utf8",
       timeout: 10_000,
@@ -89,11 +97,35 @@ if (args.slice(0, 3).join(" ") === "run services describe") {
   }
 }
 
-describe("cloud-run-env F3_CHANNEL guard", () => {
+describe("cloud-run-env channel guards", () => {
+  beforeAll(() => {
+    const probe = spawnSync("bash", ["-c", "echo ${BASH_VERSINFO[0]}"], {
+      encoding: "utf8",
+      timeout: 5_000,
+    });
+    const version = probe.error ? "" : probe.stdout.trim();
+    const major = Number(version);
+    if (
+      probe.error ||
+      probe.status !== 0 ||
+      probe.signal !== null ||
+      !Number.isInteger(major) ||
+      major < 4
+    ) {
+      const found = Number.isInteger(major) && major > 0 ? major : "none";
+      throw new Error(
+        `cloud-run-env tests need Bash 4+ first on PATH (found ${found}); see docs/LOCAL_DEV_DOCKER.md#bash-for-deployment-helper-tests`,
+      );
+    }
+  });
+
   it.each(["prod", "staging"] as const)(
     "allows matching %s configuration to update the intended service",
     (target) => {
-      const result = runScript(target, target);
+      const result = runScript(target, {
+        F3_CHANNEL: target,
+        NEXT_PUBLIC_CHANNEL: target,
+      });
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(0);
       const update = result.calls.find(
@@ -105,7 +137,7 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
         target === "prod" ? "f3-map-app" : "f3-map-app-staging",
       );
       expect(update?.[update.indexOf("--update-env-vars") + 1]).toBe(
-        `^::^NODE_ENV=production::F3_CHANNEL=${target}`,
+        `^::^NODE_ENV=production::F3_CHANNEL=${target}::NEXT_PUBLIC_CHANNEL=${target}`,
       );
     },
   );
@@ -126,7 +158,10 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
   ] as const)(
     "rejects target %s with channel %s before any cloud command",
     (target, channel) => {
-      const result = runScript(target, channel);
+      const result = runScript(target, {
+        F3_CHANNEL: channel,
+        NEXT_PUBLIC_CHANNEL: channel,
+      });
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("F3_CHANNEL");
@@ -137,7 +172,11 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
   it.each(["prod", "staging"] as const)(
     "requires %s in the file even when the parent environment matches",
     (target) => {
-      const result = runScript(target, undefined, target);
+      const result = runScript(
+        target,
+        {},
+        { F3_CHANNEL: target, NEXT_PUBLIC_CHANNEL: target },
+      );
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("F3_CHANNEL");
@@ -148,10 +187,11 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
   it.each(["prod", "staging"] as const)(
     "uses the %s file instead of an inherited channel",
     (target) => {
+      const inherited = target === "prod" ? "staging" : "prod";
       const result = runScript(
         target,
-        target,
-        target === "prod" ? "staging" : "prod",
+        { F3_CHANNEL: target, NEXT_PUBLIC_CHANNEL: target },
+        { F3_CHANNEL: inherited, NEXT_PUBLIC_CHANNEL: inherited },
       );
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(0);
@@ -160,14 +200,72 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
       );
       expect(update).toBeDefined();
       expect(update?.[update.indexOf("--update-env-vars") + 1]).toBe(
-        `^::^NODE_ENV=production::F3_CHANNEL=${target}`,
+        `^::^NODE_ENV=production::F3_CHANNEL=${target}::NEXT_PUBLIC_CHANNEL=${target}`,
       );
     },
   );
 
+  it.each([
+    ["prod", "staging"],
+    ["staging", "prod"],
+    ["prod", undefined],
+    ["staging", undefined],
+    ["prod", ""],
+    ["staging", ""],
+    ["prod", "development"],
+    ["staging", "development"],
+    ["prod", " prod "],
+    ["staging", " staging "],
+    ["prod", "PROD"],
+    ["staging", "STAGING"],
+  ] as const)(
+    "rejects target %s with NEXT_PUBLIC_CHANNEL %s before any cloud command",
+    (target, channel) => {
+      const result = runScript(target, {
+        F3_CHANNEL: target,
+        NEXT_PUBLIC_CHANNEL: channel,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("NEXT_PUBLIC_CHANNEL");
+      expect(result.calls).toEqual([]);
+    },
+  );
+
+  it.each(["prod", "staging"] as const)(
+    "requires NEXT_PUBLIC_CHANNEL=%s in the file even when the parent matches",
+    (target) => {
+      const result = runScript(
+        target,
+        { F3_CHANNEL: target },
+        { NEXT_PUBLIC_CHANNEL: target },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("NEXT_PUBLIC_CHANNEL");
+      expect(result.calls).toEqual([]);
+    },
+  );
+
+  it("does not echo an unexpected public channel value in rejection output", () => {
+    const unexpected = "synthetic-public-value-that-must-not-be-printed";
+    const result = runScript("prod", {
+      F3_CHANNEL: "prod",
+      NEXT_PUBLIC_CHANNEL: unexpected,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("NEXT_PUBLIC_CHANNEL");
+    expect(result.stdout + result.stderr).not.toContain(unexpected);
+    expect(result.calls).toEqual([]);
+  });
+
   it("does not echo an unexpected channel value in rejection output", () => {
     const unexpected = "synthetic-value-that-must-not-be-printed";
-    const result = runScript("prod", unexpected);
+    const result = runScript("prod", {
+      F3_CHANNEL: unexpected,
+      NEXT_PUBLIC_CHANNEL: "prod",
+    });
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("F3_CHANNEL");
