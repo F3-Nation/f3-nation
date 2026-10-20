@@ -21,7 +21,8 @@ export default [
     // react-hooks v7's React Compiler rules run as errors. Sites that predate
     // them are baselined per workspace in eslint-suppressions.json; new
     // violations fail lint. Fix a baselined site when you touch its file — the
-    // pre-commit hook and `pnpm lint:fix` prune the entry. Never grow the baseline.
+    // pre-commit hook and `pnpm lint:fix` prune the entry. `pnpm lint` fails if
+    // a baseline grows (scripts/check-eslint-suppressions.mjs).
     rules: {
       ...reactHooksPlugin.configs.recommended.rules,
       ...jsxA11yPlugin.configs.recommended.rules,

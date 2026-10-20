@@ -66,7 +66,7 @@ or
 - Use Prettier (`@acme/prettier-config`) and ESLint (`@acme/eslint-config` base/next/react) as the source of truth.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
-- Existing `react-hooks/refs` and `react-hooks/set-state-in-effect` violations are baselined in each workspace's `eslint-suppressions.json`. Fix them when you touch the file; never add entries (no `--suppress-rule`/`--suppress-all`). A stale entry fails `pnpm lint`; `pnpm lint:fix` and the pre-commit hook prune it.
+- Existing `react-hooks/refs` and `react-hooks/set-state-in-effect` violations are baselined in each workspace's `eslint-suppressions.json`. Fix them when you touch the file; never add entries (no `--suppress-rule`/`--suppress-all`); `pnpm lint` fails when a baseline grows. A stale entry fails `pnpm lint`; `pnpm lint:fix` and the pre-commit hook prune it.
 
 ## Logging
 

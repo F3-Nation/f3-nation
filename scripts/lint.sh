@@ -4,6 +4,7 @@ set -uo pipefail
 turbo_status=0
 ws_status=0
 vitest_thresholds_status=0
+eslint_suppressions_status=0
 python_task_status=0
 turbo_scope_status=0
 mirror_postgres_image_status=0
@@ -11,6 +12,7 @@ mirror_postgres_image_status=0
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
 pnpm run lint:ws || ws_status=$?
 node scripts/check-vitest-thresholds.mjs || vitest_thresholds_status=$?
+node scripts/check-eslint-suppressions.mjs || eslint_suppressions_status=$?
 bash scripts/python-task.test.sh || python_task_status=$?
 bash scripts/select-turbo-scope.test.sh || turbo_scope_status=$?
 bash scripts/mirror-postgres-image.test.sh || mirror_postgres_image_status=$?
@@ -25,6 +27,10 @@ fi
 
 if [ "$vitest_thresholds_status" -ne 0 ]; then
   exit "$vitest_thresholds_status"
+fi
+
+if [ "$eslint_suppressions_status" -ne 0 ]; then
+  exit "$eslint_suppressions_status"
 fi
 
 if [ "$python_task_status" -ne 0 ]; then
