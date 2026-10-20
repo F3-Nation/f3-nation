@@ -527,11 +527,10 @@ jobs:
         if: failure()
         run: cat /tmp/bundle.log || true
 
-  # Builds each deploy image with its release Dockerfile, including Slackbot's
-  # separate scheduled-job image. The `build` job above is
-  # affected-scoped on PRs; it cannot catch breakage that is specific to the
-  # pruned Docker context (e.g. catalog mismatches or deps that resolve
-  # transitively in the workspace install but not under the isolated linker).
+  # Builds release Dockerfiles to catch container-specific failures that the
+  # affected-scoped workspace build cannot: pruned Node dependencies, Python
+  # dependencies installed by uv, and the Slackbot scripts image's system
+  # packages and Playwright/Chromium installation.
   # This surfaces those at PR time instead of at release. No image push —
   # building the image is the validation. PRs import the per-app GHCR layer
   # cache read-only; docker-cache-refresh updates it only from main.
