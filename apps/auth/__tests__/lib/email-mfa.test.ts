@@ -145,6 +145,17 @@ describe("sendEmailCode", () => {
     });
   });
 
+  it("draws the code from the full 100000–999999 range", async () => {
+    const randomInt = vi.spyOn(crypto, "randomInt");
+    try {
+      await sendEmailCode("user@example.com");
+
+      expect(randomInt).toHaveBeenCalledWith(100000, 1000000);
+    } finally {
+      randomInt.mockRestore();
+    }
+  });
+
   it("embeds callbackUrl in magic link when callbackUrl is valid same-origin", async () => {
     await sendEmailCode(
       "user@example.com",
