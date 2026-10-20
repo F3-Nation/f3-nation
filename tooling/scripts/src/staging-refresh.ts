@@ -93,6 +93,13 @@ import {
   STAGING_API_KEYS_TO_KEEP,
   STAGING_SLACKBOT,
 } from "./staging-refresh.config";
+import type { ForeignKey } from "./staging-refresh.load";
+import {
+  dropFksAndTruncate,
+  LOAD_PGOPTIONS,
+  LOAD_WITHOUT_TRIGGERS,
+  Refusal,
+} from "./staging-refresh.load";
 import {
   log,
   metadataToken,
@@ -193,9 +200,6 @@ const fixupColumns = (fixups: FkFixup[], table: string): string[] =>
 const listOrNone = (items: string[]): string =>
   items.length > 0 ? items.join(", ") : "none";
 
-/** Refused before staging was written: nothing to roll back. */
-class Refusal extends Error {}
-
 // ---------------------------------------------------------------------------
 // Catalog reads
 // ---------------------------------------------------------------------------
@@ -254,13 +258,6 @@ async function appliedMigrations(
   const rows = await sql<{ created_at: string; hash: string }[]>`
     SELECT created_at::text AS created_at, hash FROM ${sql(`drizzle.${table}`)}`;
   return rows.map((r) => ({ createdAt: Number(r.created_at), hash: r.hash }));
-}
-
-interface ForeignKey {
-  table: string; // quoted "schema"."table"
-  name: string; // quoted
-  def: string; // pg_get_constraintdef, without any trailing NOT VALID
-  validated: boolean;
 }
 
 /** Every FK on, or pointing at, a table in the load schemas. */
@@ -389,65 +386,6 @@ async function hasSchema(sql: Sql, schema: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 // Staging writes
 // ---------------------------------------------------------------------------
-
-async function dropFksAndTruncate(
-  sql: Sql,
-  fks: ForeignKey[],
-  tables: string[],
-): Promise<void> {
-  await sql.begin(async (tx) => {
-    // Fail fast rather than queue behind an app's long transaction; nothing
-    // has changed if this times out.
-    await tx`SET LOCAL lock_timeout = '60s'`;
-    for (const fk of fks) {
-      await tx.unsafe(
-        `ALTER TABLE ${fk.table} DROP CONSTRAINT IF EXISTS ${fk.name}`,
-      );
-    }
-    // The loads that follow pass LOAD_WITHOUT_TRIGGERS. Refuse here, before
-    // the truncate, so nothing has changed if either of its limits is hit:
-    // only a superuser may disable system (FK) triggers, and its closing
-    // ENABLE TRIGGER ALL would turn on a trigger someone had disabled (or set
-    // to REPLICA / ALWAYS).
-    const blockers = await tx<
-      { t: string; trigger: string; system: boolean }[]
-    >`
-      SELECT n.nspname || '.' || c.relname AS t, tg.tgname AS trigger,
-        tg.tgisinternal AS system
-      FROM pg_trigger tg
-      JOIN pg_class c ON c.oid = tg.tgrelid
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE (tg.tgisinternal OR tg.tgenabled <> 'O')
-        AND n.nspname || '.' || c.relname = ANY(${tables})
-      ORDER BY 1, 2`;
-    const system = [
-      ...new Set(blockers.filter((b) => b.system).map((b) => b.t)),
-    ];
-    if (system.length > 0) {
-      throw new Refusal(
-        `system triggers are left on ${system.join(", ")} after dropping the FKs, so the load ` +
-          `can't disable triggers (and with them on, the audit history makes a full load overrun the timeout).`,
-      );
-    }
-    if (blockers.length > 0) {
-      throw new Refusal(
-        `trigger(s) not in the default enabled state: ${blockers.map((b) => `${b.t}.${b.trigger}`).join(", ")}. ` +
-          `The load re-enables every trigger, so set them back (ALTER TABLE … ENABLE TRIGGER …) or drop them, then run again.`,
-      );
-    }
-    await tx.unsafe(`TRUNCATE TABLE ${tables.map(quoteTable).join(", ")}`);
-  });
-}
-
-/**
- * pg_restore runs `ALTER TABLE … DISABLE TRIGGER ALL` around each table, inside
- * its single transaction, so the triggers are back on whether the load commits
- * or rolls back. The audit triggers would otherwise write a public_history row
- * per loaded row, which took a full load past the job's 3h timeout
- * (2026-10-20). Only used right after dropFksAndTruncate, which refuses if a
- * system trigger is left or a trigger isn't in the default enabled state.
- */
-const LOAD_WITHOUT_TRIGGERS = "--disable-triggers";
 
 /**
  * Keep the dropped FKs' definitions on staging until they are back: if the
@@ -1418,7 +1356,7 @@ async function main(): Promise<number> {
               files.loadDump,
             ],
             ctx.stagingUrl,
-            { pgoptions: "-c app.disable_ao_count_trigger=true" },
+            { pgoptions: LOAD_PGOPTIONS },
           );
           const loaded = await rowCounts(stg, load);
           const off = load.filter((t) => loaded.get(t) !== counts.get(t));
@@ -1688,7 +1626,7 @@ async function rollback(
           backup,
         ],
         ctx.stagingUrl,
-        { pgoptions: "-c app.disable_ao_count_trigger=true" },
+        { pgoptions: LOAD_PGOPTIONS },
       );
       log(`   ${load.length} tables restored from the backup`);
       const reverted = await revertFixups(sql);

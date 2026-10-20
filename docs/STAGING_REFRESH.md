@@ -112,6 +112,9 @@ job rolled it back. Common reasons it stops:
 | `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                                                                                  |
 | `another staging refresh is running`                                       | Someone else started one. Wait for it.                                                                                                                                                                   |
 | `staging already has schema refresh_keep`                                  | An earlier run's rollback didn't finish. See below.                                                                                                                                                      |
+| `the job's login doesn't own …`                                            | A migration added a table owned by a role the job's login isn't in. Re-run `setup.sh` so `staging-login.sql` grants the new owner role, then run again.                                                  |
+| `system triggers are left on …`                                            | A `DEFERRABLE` unique/exclusion constraint leaves a system trigger the job can't disable. Make it `NOT DEFERRABLE` on staging, or have `dropFksAndTruncate` drop and re-add it, then run again.          |
+| `trigger(s) not in the default enabled state`                              | Someone disabled a trigger on staging (or set it to `REPLICA` / `ALWAYS`). Set it back or drop it, then run again.                                                                                       |
 
 **`ROLLBACK FAILED`** means the load failed and putting staging back failed
 too (e.g. staging was unreachable), three times. Staging's loaded tables may
@@ -387,11 +390,15 @@ SET NULL` would do; the summary gives the count) and keeps the old
      circular FKs, and the Cloud SQL roles can't disable FK triggers). Save
      them with `pg_get_constraintdef`, truncate, then `pg_restore` with
      `--data-only`, `--disable-triggers` and
-     `PGOPTIONS='-c app.disable_ao_count_trigger=true'`. With the FKs gone, a
-     table owner may disable the remaining triggers; if a system trigger is
-     somehow left, or a trigger isn't in the default enabled state (the load
-     re-enables all of them), the job refuses before the truncate. Then re-add
-     them `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
+     `PGOPTIONS='-c app.disable_ao_count_trigger=true'`. Disabling triggers
+     needs the job's login to own, through a role, every loaded table, and
+     with the FKs gone there must be no system triggers left. The job refuses
+     before the truncate if either isn't true, or if a trigger isn't in the
+     default enabled state (the load re-enables all of them). App writes to
+     the loaded tables block until the load commits. A `lock_timeout` can't
+     guard that: every pg_restore archive starts with `SET lock_timeout = 0`,
+     which overrides `PGOPTIONS`. Then re-add
+     the FKs `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
      them validated in one transaction took over an hour and lost its
      connection. (A shell loop around `docker run -i` once validated 1 of 74:
      the container ate the loop's input. The job checks validated == total.)
