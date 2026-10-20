@@ -34,4 +34,18 @@ describe("buildOtpCallbackUrl", () => {
     expect(searchParams.getAll("callbackUrl")).toEqual(["/map"]);
     expect(searchParams.getAll("email")).toEqual(["user@example.com"]);
   });
+
+  it("round-trips a plus-addressed email and a callbackUrl with its own query", () => {
+    const { searchParams } = parse(
+      buildOtpCallbackUrl({
+        email: "a+b@example.com",
+        code: "123456",
+        callbackUrl: "/map?lat=1&lng=2#z",
+      }),
+    );
+
+    expect(searchParams.get("email")).toBe("a+b@example.com");
+    expect(searchParams.get("callbackUrl")).toBe("/map?lat=1&lng=2#z");
+    expect([...searchParams.keys()]).toEqual(["email", "token", "callbackUrl"]);
+  });
 });
