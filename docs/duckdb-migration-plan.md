@@ -106,7 +106,7 @@ product owner; its projection can be revised while it remains unreleased and
 unconsumed. The general schema-version bump rule applies to released or
 consumed contracts, and this revision does not mean its compatibility gate has
 passed. Its normative columns, ordering, and row semantics are in the
-[Pax Vault ETL specification](../specs/pax-vault-parquet-etl.md#pv_attendance--one-row-per-eligible-actual-attendance-id).
+[Pax Vault ETL specification](specs/pax-vault-parquet-etl.md#pv_attendance--one-row-per-eligible-actual-attendance-id).
 DuckDB types/nullability are determined by the approved registry and remain a
 compatibility verification gate; do not infer nullable properties
 from these summaries. The consumer verifies the

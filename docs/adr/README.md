@@ -13,7 +13,7 @@ implementation choices don't need one.
 
 **ADRs vs. specs:** if you're documenting _how the system is built_, it's
 an ADR (this folder). If you're documenting _what a feature does and how
-it's verified_, that belongs in [`/specs`](../../specs) instead.
+it's verified_, that belongs in [`docs/specs/`](../specs/) instead.
 
 ## Writing one
 

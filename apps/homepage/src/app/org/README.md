@@ -5,7 +5,7 @@ regions → AOs). It is a single client-rendered route inside the otherwise-stat
 homepage export: the page shell is prerendered at build time, and all data is
 fetched in the browser from the public API.
 
-See [`specs/org-directory-map.md`](../../../../../specs/org-directory-map.md) for
+See [`docs/specs/org-directory-map.md`](../../../../../docs/specs/org-directory-map.md) for
 the product spec (what it does, who may do it, how it's verified).
 
 ## How it fits the static export
