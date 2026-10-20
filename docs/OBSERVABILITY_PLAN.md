@@ -400,14 +400,15 @@ blockAllMedia: false` in `apps/map/src/instrumentation-client.ts` means
 
 ## 6. The `console.error` carve-out
 
-[`AGENTS.md`](../AGENTS.md) says never `console.*`. Three sites in this
+[`AGENTS.md`](../AGENTS.md) says never `console.*`. Four sites in this
 workstream break that rule on purpose:
 
-| Site                                                                    | Why                                                                                                                                               |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/observability/src/index.ts` (`captureException` catch)        | This function _is_ the logger's `errorReporter` target. `logError` here re-enters it — infinite recursion.                                        |
-| `packages/observability/src/posthog-exporter.ts` (export-failure catch) | Same pipeline, one layer down: the exporter's own failure cannot be reported through the exporter.                                                |
-| `apps/map/src/app/global-error.tsx` (report-failure catch)              | Browser-only, last-resort UI with no error boundary above it. `@acme/logger` is pino — it does not run here, so there is no approved alternative. |
+| Site                                                                    | Why                                                                                                                                                                           |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/observability/src/index.ts` (`captureException` catch)        | This function _is_ the logger's `errorReporter` target. `logError` here re-enters it — infinite recursion.                                                                    |
+| `packages/observability/src/posthog-exporter.ts` (export-failure catch) | Same pipeline, one layer down: the exporter's own failure cannot be reported through the exporter.                                                                            |
+| `apps/map/src/app/global-error.tsx` (report-failure catch)              | Browser-only, last-resort UI with no error boundary above it. `@acme/logger` is pino — it does not run here, so there is no approved alternative.                             |
+| `packages/observability/src/browser.ts` (`captureException` catch)      | The admin/auth/me/homepage browser reporter, called from error boundaries. Same reason as the map's: no browser logger, and the failure must not escape into the fallback UI. |
 
 Each is wrapped so the secondary failure can never escape, and each carries a
 comment naming this section.
@@ -423,5 +424,5 @@ Why no ESLint exemption? There is no `no-console` rule in
 not lint. Adding a disable directive would trip `reportUnusedDisableDirectives`
 and fail the lint job.
 
-**This list is exhaustive.** A new `console.*` outside these three files is a
+**This list is exhaustive.** A new `console.*` outside these four files is a
 review reject, not a precedent.

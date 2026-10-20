@@ -18,6 +18,7 @@
   "dependencies": {
     "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/observability": "workspace:*",
     "@acme/mail": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/storage": "workspace:*",

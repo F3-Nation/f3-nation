@@ -37,10 +37,13 @@ export const env = createEnv({
   client: {
     NEXT_PUBLIC_API_URL: z.url(),
     NEXT_PUBLIC_AUTH_URL: z.url(),
+    // Build-time (NEXT_PUBLIC_* is inlined); unset means no error reporting.
+    NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
   },
   experimental__runtimeEnv: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_AUTH_URL: process.env.NEXT_PUBLIC_AUTH_URL,
+    NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
   },
   skipValidation: !!process.env.CI || !!process.env.SKIP_ENV_VALIDATION,
 });

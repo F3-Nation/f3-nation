@@ -22,11 +22,15 @@ export const env = createEnv({
     GCS_CREDENTIALS: z.string().min(1),
     GCS_EMULATOR_HOST: z.string().optional(),
   },
-  client: {},
+  client: {
+    // Build-time (NEXT_PUBLIC_* is inlined); unset means no error reporting.
+    NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
+  },
   // With experimental__runtimeEnv (Next >= 13.4.4) only client + shared vars
   // need destructuring; server vars resolve from process.env automatically.
   experimental__runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
+    NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
   },
   skipValidation:
     !!process.env.CI ||
