@@ -404,32 +404,33 @@ async function dropFksAndTruncate(
         `ALTER TABLE ${fk.table} DROP CONSTRAINT IF EXISTS ${fk.name}`,
       );
     }
+    // The loads that follow pass LOAD_WITHOUT_TRIGGERS, and only a superuser
+    // may disable system (FK) triggers. Refuse here, before the truncate, so
+    // nothing has changed if one is left.
+    const system = await tx<{ t: string }[]>`
+      SELECT DISTINCT n.nspname || '.' || c.relname AS t FROM pg_trigger tg
+      JOIN pg_class c ON c.oid = tg.tgrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE tg.tgisinternal AND n.nspname || '.' || c.relname = ANY(${tables})`;
+    if (system.length > 0) {
+      throw new Refusal(
+        `system triggers are left on ${system.map((r) => r.t).join(", ")} after dropping the FKs, so the load ` +
+          `can't disable triggers (and with them on, the audit history makes a full load overrun the timeout).`,
+      );
+    }
     await tx.unsafe(`TRUNCATE TABLE ${tables.map(quoteTable).join(", ")}`);
   });
 }
 
 /**
- * pg_restore flags that keep the load's rows from firing staging's triggers.
- * The audit triggers write a public_history row for every row loaded, which
- * takes a full load (~6M attendance rows) past the job's 3h timeout.
- * `--disable-triggers` disables them inside the restore's single transaction,
- * so they are back on whether it commits or rolls back. Only a superuser may
- * disable FK (system) triggers, and the load runs right after
- * dropFksAndTruncate, so there should be none. If any are left, load with
- * triggers on (slow, but not wrong) instead of failing on the ALTER TABLE.
+ * pg_restore runs `ALTER TABLE … DISABLE TRIGGER ALL` around each table, inside
+ * its single transaction, so the triggers are back on whether the load commits
+ * or rolls back. The audit triggers would otherwise write a public_history row
+ * per loaded row, which took a full load past the job's 3h timeout
+ * (2026-10-20). Only used right after dropFksAndTruncate, which leaves no
+ * system triggers on the load set.
  */
-async function noTriggerFlags(sql: Sql, tables: string[]): Promise<string[]> {
-  const system = await sql<{ t: string }[]>`
-    SELECT DISTINCT n.nspname || '.' || c.relname AS t FROM pg_trigger tg
-    JOIN pg_class c ON c.oid = tg.tgrelid
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE tg.tgisinternal AND n.nspname || '.' || c.relname = ANY(${tables})`;
-  if (system.length === 0) return ["--disable-triggers"];
-  warn(
-    `system triggers left on ${system.map((r) => r.t).join(", ")}; loading with triggers on (audit history fires per row, slow)`,
-  );
-  return [];
-}
+const LOAD_WITHOUT_TRIGGERS = "--disable-triggers";
 
 /**
  * Keep the dropped FKs' definitions on staging until they are back: if the
@@ -1394,7 +1395,7 @@ async function main(): Promise<number> {
               "--no-privileges",
               "--single-transaction",
               "--exit-on-error",
-              ...(await noTriggerFlags(stg, load)),
+              LOAD_WITHOUT_TRIGGERS,
               "-d",
               ctx.stagingDb,
               files.loadDump,
@@ -1662,7 +1663,7 @@ async function rollback(
           "--no-privileges",
           "--single-transaction",
           "--exit-on-error",
-          ...(await noTriggerFlags(sql, load)),
+          LOAD_WITHOUT_TRIGGERS,
           "-L",
           listFile,
           "-d",

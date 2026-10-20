@@ -389,7 +389,7 @@ SET NULL` would do; the summary gives the count) and keeps the old
      `--data-only`, `--disable-triggers` and
      `PGOPTIONS='-c app.disable_ao_count_trigger=true'`. With the FKs gone, a
      table owner may disable the remaining triggers; if a system trigger is
-     somehow left, the job loads with triggers on and warns. Then re-add
+     somehow left, the job refuses before the truncate. Then re-add
      them `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
      them validated in one transaction took over an hour and lost its
      connection. (A shell loop around `docker run -i` once validated 1 of 74:
