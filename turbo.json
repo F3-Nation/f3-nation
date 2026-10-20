@@ -7,6 +7,7 @@
     ".nvmrc",
     ".prettierignore",
     ".python-version",
+    "apps/*/Dockerfile",
     "pyproject.toml",
     "uv.lock",
     "scripts/python-task.sh"

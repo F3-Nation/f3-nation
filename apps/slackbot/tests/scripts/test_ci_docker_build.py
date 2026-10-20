@@ -124,6 +124,9 @@ def test_cache_writer_remains_main_only_with_uncached_validation_fallback(workfl
     for step in exporters:
         assert step["continue-on-error"] is True
         assert step["with"]["cache-to"].startswith("type=registry,ref=${{ steps.cache.outputs.ref }},")
+    for step in builds:
+        if step not in exporters:
+            assert not step.get("continue-on-error", False)
     final = next(step for step in builds if "steps.repair.outcome == 'failure'" in step["if"])
     assert not final.get("continue-on-error", False)
     assert "cache-from" not in final["with"]

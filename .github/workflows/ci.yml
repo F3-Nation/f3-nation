@@ -571,9 +571,9 @@ jobs:
         env:
           APP: ${{ matrix.app }}
         run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
           repository_name="${GITHUB_REPOSITORY#*/}"
-          repository_name="${repository_name,,}"
+          repository_name="$(printf '%s' "$repository_name" | tr '[:upper:]' '[:lower:]')"
           echo "ref=ghcr.io/${owner}/${repository_name}-ci-cache-${APP}" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         id: login
@@ -659,9 +659,9 @@ jobs:
         env:
           APP: ${{ matrix.app }}
         run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
           repository_name="${GITHUB_REPOSITORY#*/}"
-          repository_name="${repository_name,,}"
+          repository_name="$(printf '%s' "$repository_name" | tr '[:upper:]' '[:lower:]')"
           echo "ref=ghcr.io/${owner}/${repository_name}-ci-cache-${APP}" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         id: login

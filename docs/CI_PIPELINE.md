@@ -106,14 +106,19 @@ blocklist of its own:
   workspace, and a change touching both Python and TypeScript would schedule
   the TypeScript gates while silently dropping ruff, mypy, pytest, and the
   Python formatter.
-- `globalDependencies` in `turbo.json` lists the root files Turbo cannot
-  attribute to any package (`.github/workflows/ci.yml`, `.gitignore`, `.nvmrc`,
-  `.prettierignore`, `.python-version`, `pyproject.toml`, `uv.lock`, and
-  `scripts/python-task.sh`). It feeds affected selection as well as cache
-  hashing, so changing any of them marks every workspace affected — `.nvmrc`
-  is included because every affected job takes its Node version from it. The
-  CI workflow is included because Slackbot's Docker contract tests read it;
-  workflow edits must select those tests and invalidate their cached results.
+- `globalDependencies` in `turbo.json` declares shared task inputs
+  (`.github/workflows/ci.yml`, `.gitignore`, `.nvmrc`, `.prettierignore`,
+  `.python-version`, `apps/*/Dockerfile`, `pyproject.toml`, `uv.lock`, and
+  `scripts/python-task.sh`). These shared dependencies contribute to cache
+  hashing and affected selection. `.nvmrc` is included because every affected
+  job takes its Node version from it. The CI workflow is included because
+  Slackbot's Docker contract tests read it; workflow edits must select those
+  tests and invalidate their cached results.
+  The app Dockerfiles cover the same tests' cross-app file-existence checks.
+  These conservative inputs invalidate every task's cache when they change.
+  Deleted app Dockerfiles additionally force full-workspace test selection:
+  Turbo's package-level affected plan can otherwise omit the cross-app tests
+  even though their cache key changes.
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces
 selected by Turbo's declared dependency graph, not every workspace in the

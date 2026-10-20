@@ -3,7 +3,8 @@
 # fallback for every detection failure (missing SHAs, missing task, a failing
 # Turbo dry run, malformed JSON, an empty or non-runnable task plan), and exact
 # SHA/task passthrough on success. It also exercises the repository's real
-# Turbo graph for Python-only lint/build changes and workflow-dependent tests.
+# Turbo graph for Python-only lint/build changes and the Slackbot tests'
+# external workflow and Dockerfile inputs.
 # Run directly: bash scripts/select-turbo-scope.test.sh
 set -uo pipefail
 
@@ -219,6 +220,57 @@ if [[ -x "$real_turbo" ]]; then
   assert_eq "updated plan contains a runnable Slackbot test and hash" "0" "$?"
   assert_eq "workflow-only changes invalidate the Slackbot test hash" "changed" \
     "$(if [[ -n "$baseline_test_hash" && -n "$workflow_test_hash" && "$baseline_test_hash" != "$workflow_test_hash" ]]; then echo changed; else echo unchanged; fi)"
+
+  # A deleted global Dockerfile changes the hash, but Turbo's package-level
+  # affected plan can still omit Slackbot. Exercise the actual selector too.
+  git -C "$integration_repo" rm --quiet apps/admin/Dockerfile || exit 1
+  git -C "$integration_repo" \
+    -c user.email=test@example.com \
+    -c user.name="Turbo scope test" \
+    -c commit.gpgsign=false \
+    -c core.hooksPath=/dev/null \
+    commit --quiet -m "test: external Dockerfile deletion fixture" || exit 1
+  dockerfile_base="$(git -C "$integration_repo" rev-parse HEAD^)"
+  dockerfile_head="$(git -C "$integration_repo" rev-parse HEAD)"
+  (
+    cd "$integration_repo" || exit 1
+    TURBO_SCM_BASE="$dockerfile_base" \
+      TURBO_SCM_HEAD="$dockerfile_head" \
+      "$real_turbo" run test --affected --dry-run=json \
+      >"${tmp_dir}/dockerfile-affected-plan.json"
+  )
+  assert_eq "real Turbo calculates the Dockerfile-deletion affected test plan" "0" "$?"
+  node -e 'const plan = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    if (!plan.tasks.some((task) => task.taskId === "f3-admin#test" &&
+        typeof task.command === "string" && task.command !== "<NONEXISTENT>")) process.exit(1);' \
+    "${tmp_dir}/dockerfile-affected-plan.json"
+  assert_eq "Dockerfile deletion has a runnable Admin task rather than an empty plan" "0" "$?"
+
+  : >"${tmp_dir}/real-github-env"
+  (
+    cd "$integration_repo" || exit 1
+    GITHUB_ENV="${tmp_dir}/real-github-env" \
+      TURBO_SCM_BASE="$dockerfile_base" \
+      TURBO_SCM_HEAD="$dockerfile_head" \
+      TURBO_SCOPE_TASK=test \
+      TURBO_SCOPE_TURBO_BIN="$real_turbo" \
+      bash "$scope_script" >"${tmp_dir}/real-dockerfile-output" 2>&1
+  )
+  assert_eq "selector handles external Dockerfile deletion successfully" "0" "$?"
+  assert_eq "external Dockerfile deletion selects the full test workspace" \
+    "TURBO_RUN_ARGS=" \
+    "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/real-github-env")"
+
+  (
+    cd "$integration_repo" || exit 1
+    "$real_turbo" run test --filter=f3-slackbot --dry-run=json \
+      >"${tmp_dir}/dockerfile-current-plan.json"
+  )
+  assert_eq "real Turbo calculates the Dockerfile-deletion Slackbot test plan" "0" "$?"
+  dockerfile_test_hash="$(slackbot_test_hash "${tmp_dir}/dockerfile-current-plan.json")"
+  assert_eq "Dockerfile-deletion plan contains a runnable Slackbot test and hash" "0" "$?"
+  assert_eq "external Dockerfile deletion invalidates the Slackbot test hash" "changed" \
+    "$(if [[ -n "$workflow_test_hash" && -n "$dockerfile_test_hash" && "$workflow_test_hash" != "$dockerfile_test_hash" ]]; then echo changed; else echo unchanged; fi)"
 elif [[ -n "${CI:-}" ]]; then
   echo "FAIL: real Turbo integration checks require installed dependencies in CI"
   failures=$((failures + 1))
