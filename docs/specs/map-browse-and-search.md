@@ -109,7 +109,7 @@ defense-in-depth (they stop the map's own proxy from being used to reach
 endpoints the map doesn't call), not the authorization boundary — the API's
 procedure tier is. `request.submit*` and the edit-mode reads it depends on
 stay `protectedProcedure`/cookie-forwarded; see
-`specs/map-update-request-flow.md` §5 for that half.
+`docs/specs/map-update-request-flow.md` §5 for that half.
 
 Public read endpoints: `map.location.eventsAndLocations`, `getAOsInRegion`,
 `locationIdToRegionNameLookup`, `locationWorkout`, `regionsWithLocation`,

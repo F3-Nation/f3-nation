@@ -9,7 +9,7 @@ advanced `current.json`.
 The normative Pax Vault migration requirements are in
 [`duckdb-migration-plan.md`](./duckdb-migration-plan.md), and the eleven approved
 dataset projections and eligibility semantics are in
-[`../specs/pax-vault-parquet-etl.md`](../specs/pax-vault-parquet-etl.md). This
+[`docs/specs/pax-vault-parquet-etl.md`](specs/pax-vault-parquet-etl.md). This
 document turns those requirements into an implementable producer interface.
 Analytics is a separate product with its own four-dataset release and independent pointer; it
 does not share a release or source-snapshot guarantee with Pax Vault.
@@ -33,7 +33,7 @@ already demonstrates:
   datasets, including `pv_event_details` and `pv_attendance`. The only nine-dataset serving exception
   is rollback to the exact retained pre-upgrade release with `pv_pax.v2` and no
   `pv_attendance`, as specified in
-  [the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
+  [the release boundary](specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
 
 It is **not yet a serving-contract release**. In particular, the sample has
 no fixed `pax-vault/current.json`, no contract metadata or monotonic
@@ -80,7 +80,7 @@ The required Pax Vault dataset allowlist is exactly:
 published release must contain exactly all eleven, not merely a subset. The only
 rollback exception is the exact retained pre-upgrade nine-dataset release with
 `pv_pax.v2` and no `pv_attendance`, as defined in
-[the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
+[the release boundary](specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
 Analytics independently requires exactly
 `event_info`, `future_event_info`, `attendance_info`, and
 `missing_backblasts` in its analytics release; these are not Pax Vault datasets.
@@ -356,7 +356,7 @@ the extracted detail projection is `pv_event_details.v1`. Consumers of
 unconsumed, per the product owner, so it may be revised while remaining
 unreleased and unconsumed; this does not mean the compatibility gate has passed.
 Its normative columns and ordering are in the [Pax Vault ETL
-specification](../specs/pax-vault-parquet-etl.md#pv_attendance--one-row-per-eligible-actual-attendance-id).
+specification](specs/pax-vault-parquet-etl.md#pv_attendance--one-row-per-eligible-actual-attendance-id).
 
 The eleven Pax Vault datasets and four analytics datasets are read sequentially,
 with independent per-dataset read boundaries; they are not one PostgreSQL or
@@ -400,7 +400,7 @@ That release may use the current eleven-dataset format or the exact pre-upgrade
 nine-dataset format with `pv_pax.v2` and `pv_events.v2`. That legacy release
 contains neither `pv_attendance` nor `pv_event_details`. The legacy exception
 must meet the identity and validation requirements in
-[the release boundary](../specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
+[the release boundary](specs/pax-vault-parquet-etl.md#1-product-and-release-boundary).
 No other nine-dataset release or arbitrary older release is eligible. Rollback
 uses the same generation/hash checks and ordering as forward publication. Never
 mutate the rolled-back prefix.
