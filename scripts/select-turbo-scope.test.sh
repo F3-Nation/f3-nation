@@ -3,7 +3,7 @@
 # fallback for every detection failure (missing SHAs, missing task, a failing
 # Turbo dry run, malformed JSON, an empty or non-runnable task plan), and exact
 # SHA/task passthrough on success. It also exercises the repository's real
-# Turbo graph for Python-only lint and build changes.
+# Turbo graph for Python-only lint/build changes and workflow-dependent tests.
 # Run directly: bash scripts/select-turbo-scope.test.sh
 set -uo pipefail
 
@@ -119,6 +119,16 @@ real_turbo="${SELECT_TURBO_SCOPE_REAL_TURBO_BIN:-${repo_root}/node_modules/.bin/
 if [[ -x "$real_turbo" ]]; then
   integration_repo="${tmp_dir}/integration-repo"
   git clone --quiet --shared "$repo_root" "$integration_repo"
+  # A shared clone checks out HEAD, so copy the configuration being tested even
+  # when it has not been committed yet. Keep it out of the change comparisons.
+  cp "${repo_root}/turbo.json" "${integration_repo}/turbo.json" || exit 1
+  git -C "$integration_repo" add turbo.json || exit 1
+  git -C "$integration_repo" \
+    -c user.email=test@example.com \
+    -c user.name="Turbo scope test" \
+    -c commit.gpgsign=false \
+    -c core.hooksPath=/dev/null \
+    commit --quiet --allow-empty -m "test: current Turbo configuration fixture" || exit 1
   printf '\n# affected-selection integration fixture\n' \
     >>"${integration_repo}/packages/db-python/f3_data_models/utils.py"
   git -C "$integration_repo" add packages/db-python/f3_data_models/utils.py
@@ -157,6 +167,58 @@ if [[ -x "$real_turbo" ]]; then
   assert_eq "real Turbo falls back when Python-only build tasks are non-runnable" \
     "TURBO_RUN_ARGS=" \
     "$(grep '^TURBO_RUN_ARGS=' "${tmp_dir}/real-github-env")"
+
+  slackbot_test_hash() {
+    node -e 'const plan = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+      const task = plan.tasks.find((task) => task.taskId === "f3-slackbot#test");
+      if (typeof task?.command !== "string" || task.command === "<NONEXISTENT>" ||
+          typeof task.hash !== "string" || task.hash.length === 0) process.exit(1);
+      process.stdout.write(task.hash);' "$1"
+  }
+
+  (
+    cd "$integration_repo" || exit 1
+    "$real_turbo" run test --filter=f3-slackbot --dry-run=json \
+      >"${tmp_dir}/workflow-baseline-plan.json"
+  )
+  assert_eq "real Turbo calculates the baseline Slackbot test plan" "0" "$?"
+  baseline_test_hash="$(slackbot_test_hash "${tmp_dir}/workflow-baseline-plan.json")"
+  assert_eq "baseline plan contains a runnable Slackbot test and hash" "0" "$?"
+
+  # The Slackbot contract tests read this root workflow outside their package.
+  # Its contents must affect both task selection and the test's cache key.
+  printf '\n# workflow-input integration fixture\n' \
+    >>"${integration_repo}/.github/workflows/ci.yml"
+  git -C "$integration_repo" add .github/workflows/ci.yml || exit 1
+  git -C "$integration_repo" \
+    -c user.email=test@example.com \
+    -c user.name="Turbo scope test" \
+    -c commit.gpgsign=false \
+    -c core.hooksPath=/dev/null \
+    commit --quiet -m "test: workflow-only affected fixture" || exit 1
+  workflow_base="$(git -C "$integration_repo" rev-parse HEAD^)"
+  workflow_head="$(git -C "$integration_repo" rev-parse HEAD)"
+  (
+    cd "$integration_repo" || exit 1
+    TURBO_SCM_BASE="$workflow_base" \
+      TURBO_SCM_HEAD="$workflow_head" \
+      "$real_turbo" run test --affected --dry-run=json \
+      >"${tmp_dir}/workflow-affected-plan.json"
+  )
+  assert_eq "real Turbo calculates the workflow-only affected test plan" "0" "$?"
+  slackbot_test_hash "${tmp_dir}/workflow-affected-plan.json" >/dev/null
+  assert_eq "workflow-only changes select the runnable Slackbot test" "0" "$?"
+
+  (
+    cd "$integration_repo" || exit 1
+    "$real_turbo" run test --filter=f3-slackbot --dry-run=json \
+      >"${tmp_dir}/workflow-current-plan.json"
+  )
+  assert_eq "real Turbo calculates the updated Slackbot test plan" "0" "$?"
+  workflow_test_hash="$(slackbot_test_hash "${tmp_dir}/workflow-current-plan.json")"
+  assert_eq "updated plan contains a runnable Slackbot test and hash" "0" "$?"
+  assert_eq "workflow-only changes invalidate the Slackbot test hash" "changed" \
+    "$(if [[ -n "$baseline_test_hash" && -n "$workflow_test_hash" && "$baseline_test_hash" != "$workflow_test_hash" ]]; then echo changed; else echo unchanged; fi)"
 elif [[ -n "${CI:-}" ]]; then
   echo "FAIL: real Turbo integration checks require installed dependencies in CI"
   failures=$((failures + 1))

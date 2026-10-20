@@ -107,11 +107,13 @@ blocklist of its own:
   the TypeScript gates while silently dropping ruff, mypy, pytest, and the
   Python formatter.
 - `globalDependencies` in `turbo.json` lists the root files Turbo cannot
-  attribute to any package (`.gitignore`, `.nvmrc`, `.prettierignore`,
-  `.python-version`, `pyproject.toml`, `uv.lock`, and
+  attribute to any package (`.github/workflows/ci.yml`, `.gitignore`, `.nvmrc`,
+  `.prettierignore`, `.python-version`, `pyproject.toml`, `uv.lock`, and
   `scripts/python-task.sh`). It feeds affected selection as well as cache
   hashing, so changing any of them marks every workspace affected — `.nvmrc`
-  is included because every affected job takes its Node version from it.
+  is included because every affected job takes its Node version from it. The
+  CI workflow is included because Slackbot's Docker contract tests read it;
+  workflow edits must select those tests and invalidate their cached results.
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces
 selected by Turbo's declared dependency graph, not every workspace in the
