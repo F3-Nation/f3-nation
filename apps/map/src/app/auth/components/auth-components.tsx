@@ -238,7 +238,7 @@ const VerifyCode = () => {
       const normalizedEmail = normalizeEmail(email);
       window.location.href = `/api/auth/callback/otp?email=${encodeURIComponent(
         normalizedEmail,
-      )}&token=${code}&callbackUrl=${encodeURIComponent(callbackUrl)}`;
+      )}&token=${encodeURIComponent(code)}&callbackUrl=${encodeURIComponent(callbackUrl)}`;
     } catch (error) {
       console.error(error);
     } finally {
