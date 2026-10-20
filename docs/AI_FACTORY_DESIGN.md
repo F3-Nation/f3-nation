@@ -56,7 +56,7 @@ phase 2). Complements CodeRabbit, which stays for code smells.
 **Pipeline:**
 
 1. **Reviewer A (Anthropic, top tier, spec-anchored):** loads the relevant
-   `specs/*.md`, `AI_GUARDRAILS.md`, and the diff. Hunts violations of
+   `docs/specs/*.md`, `AI_GUARDRAILS.md`, and the diff. Hunts violations of
    acceptance criteria, the Never-Do list, and RBAC expectations from the
    spec's authorization table.
 2. **Reviewer B (OpenAI, top tier, code-anchored):** sees only the diff +
