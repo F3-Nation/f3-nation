@@ -1,3 +1,4 @@
+import type * as NodeCrypto from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import OtpProvider from "@acme/auth/lib/otp-provider";
@@ -9,7 +10,7 @@ const { randomInt } = vi.hoisted(() => ({
 }));
 
 vi.mock("node:crypto", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("node:crypto")>()),
+  ...(await importOriginal<typeof NodeCrypto>()),
   randomInt,
 }));
 
