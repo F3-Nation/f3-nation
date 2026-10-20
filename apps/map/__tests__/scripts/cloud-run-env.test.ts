@@ -104,8 +104,8 @@ describe("cloud-run-env F3_CHANNEL guard", () => {
       expect(update?.[update.indexOf("--project") + 1]).toBe(
         target === "prod" ? "f3-map-app" : "f3-map-app-staging",
       );
-      expect(update?.[update.indexOf("--update-env-vars") + 1]).toContain(
-        `F3_CHANNEL=${target}`,
+      expect(update?.[update.indexOf("--update-env-vars") + 1]).toBe(
+        `^::^NODE_ENV=production::F3_CHANNEL=${target}`,
       );
     },
   );

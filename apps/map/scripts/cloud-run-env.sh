@@ -104,6 +104,8 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+# This operator-owned file is trusted shell code: sourcing can execute commands
+# and change script variables. The guard below validates only its channel.
 # Require the file to supply its own channel, rather than inheriting the shell's.
 unset F3_CHANNEL
 set -a
