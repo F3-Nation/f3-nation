@@ -434,6 +434,70 @@ describe("Cascade Service", () => {
       expect(count).toBe(12);
     });
 
+    it("should create the last weekday of each month when indexWithinInterval is 0", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 1,
+        indexWithinInterval: 0,
+        startDate: "2026-01-01",
+        endDate: "2026-04-30",
+      });
+
+      const count = await createEventInstancesForSeries(
+        db,
+        series,
+        4,
+        "2026-01-01",
+      );
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(count).toBe(4);
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2026-01-26",
+        "2026-02-23",
+        "2026-03-30",
+        "2026-04-27",
+      ]);
+    });
+
+    it("should preserve monthly interval stepping for last-weekday instances", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 2,
+        indexWithinInterval: 0,
+        startDate: "2026-01-01",
+        endDate: "2026-04-30",
+      });
+
+      const count = await createEventInstancesForSeries(
+        db,
+        series,
+        4,
+        "2026-01-01",
+      );
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(count).toBe(2);
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2026-01-26",
+        "2026-03-30",
+      ]);
+    });
+
     it("should return 0 for series without recurrence", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);
