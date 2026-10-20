@@ -17,6 +17,7 @@ set -euo pipefail
 # Requires:
 #   - gcloud CLI authenticated (`gcloud auth login`)
 #   - apps/map/.env.cloud-run.prod / apps/map/.env.cloud-run.staging populated
+#   - F3_CHANNEL in the env file must match --env exactly
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -103,10 +104,16 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Source the env file.
+# Require the file to supply its own channel, rather than inheriting the shell's.
+unset F3_CHANNEL
 set -a
 source "$ENV_FILE"
 set +a
+
+if [[ "${F3_CHANNEL:-}" != "$ENV_NAME" ]]; then
+  echo "Error: F3_CHANNEL in $ENV_FILE must be '$ENV_NAME' for --env $ENV_NAME." >&2
+  exit 1
+fi
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
