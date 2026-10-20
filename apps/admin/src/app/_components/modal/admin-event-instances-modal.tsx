@@ -527,13 +527,11 @@ export default function AdminEventInstancesModal({
                 <ControlledTimeInput
                   control={form.control}
                   name="startTime"
-                  id="startTime"
                   label="Start time (optional)"
                 />
                 <ControlledTimeInput
                   control={form.control}
                   name="endTime"
-                  id="endTime"
                   label="End time (optional)"
                 />
               </div>
