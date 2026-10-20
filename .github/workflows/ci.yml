@@ -527,8 +527,8 @@ jobs:
         if: failure()
         run: cat /tmp/bundle.log || true
 
-  # Builds each app's deploy image the same way the release pipeline does
-  # (turbo prune -> frozen install -> turbo build). The `build` job above is
+  # Builds each deploy image with its release Dockerfile, including Slackbot's
+  # separate scheduled-job image. The `build` job above is
   # affected-scoped on PRs; it cannot catch breakage that is specific to the
   # pruned Docker context (e.g. catalog mismatches or deps that resolve
   # transitively in the workspace install but not under the isolated linker).
@@ -544,7 +544,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [admin, analytics, api, auth, map, me, slackbot]
+        include:
+          - app: admin
+            dockerfile: apps/admin/Dockerfile
+          - app: analytics
+            dockerfile: apps/analytics/Dockerfile
+          - app: api
+            dockerfile: apps/api/Dockerfile
+          - app: auth
+            dockerfile: apps/auth/Dockerfile
+          - app: map
+            dockerfile: apps/map/Dockerfile
+          - app: me
+            dockerfile: apps/me/Dockerfile
+          - app: slackbot
+            dockerfile: apps/slackbot/Dockerfile
+          - app: slackbot-scripts
+            dockerfile: apps/slackbot/scripts/Dockerfile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -576,7 +592,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           # Cloud Run only runs linux/amd64. The Dockerfile FROM lines no longer
           # pin --platform (BuildKit lint), so the target arch is set here.
           platforms: linux/amd64
@@ -592,7 +608,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
       # A cache import failure must not prevent an otherwise valid image build.
@@ -601,7 +617,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
 
@@ -618,7 +634,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [admin, api, auth, map, me, slackbot]
+        include:
+          - app: admin
+            dockerfile: apps/admin/Dockerfile
+          - app: api
+            dockerfile: apps/api/Dockerfile
+          - app: auth
+            dockerfile: apps/auth/Dockerfile
+          - app: map
+            dockerfile: apps/map/Dockerfile
+          - app: me
+            dockerfile: apps/me/Dockerfile
+          - app: slackbot
+            dockerfile: apps/slackbot/Dockerfile
+          - app: slackbot-scripts
+            dockerfile: apps/slackbot/scripts/Dockerfile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -650,7 +680,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
           cache-from: type=registry,ref=${{ steps.cache.outputs.ref }}
@@ -662,7 +692,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
       # A cached build or export failure must not prevent image validation.
@@ -676,7 +706,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
           cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true
@@ -688,6 +718,6 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
