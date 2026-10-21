@@ -71,12 +71,12 @@ All variables are `NEXT_PUBLIC_*`, so they are **inlined into the static bundle
 at build time** (there is no server to read them at runtime) and are visible in
 the browser. See [`.env.example`](.env.example).
 
-| Variable                      | Purpose                                                                                                |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_API_URL`         | Base URL of the API the `/org` route fetches from. Defaults to `https://api.f3nation.com`.             |
-| `NEXT_PUBLIC_ORG_MAP_API_KEY` | Read-only Bearer key for the public org-chart endpoints. Grants nothing beyond public directory reads. |
-| `NEXT_PUBLIC_LOCAL_DEV`       | `"true"` redirects app cards to localhost ports and enables `localHref` links.                         |
-| `NEXT_PUBLIC_CHANNEL`         | `"staging"` builds the staging directory (see [Staging](#staging)). Unset or any other value = prod.   |
+| Variable                      | Purpose                                                                                                                                                            |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_API_URL`         | Base URL of the API the `/org` route fetches from. Defaults to `https://api.f3nation.com` (`https://staging.api.f3nation.com` when `NEXT_PUBLIC_CHANNEL=staging`). |
+| `NEXT_PUBLIC_ORG_MAP_API_KEY` | Read-only Bearer key for the public org-chart endpoints. Grants nothing beyond public directory reads.                                                             |
+| `NEXT_PUBLIC_LOCAL_DEV`       | `"true"` redirects app cards to localhost ports and enables `localHref` links.                                                                                     |
+| `NEXT_PUBLIC_CHANNEL`         | `"staging"` builds the staging directory (see [Staging](#staging)). Unset or any other value = prod.                                                               |
 
 In CI, `NEXT_PUBLIC_ORG_MAP_API_KEY` is set on the `github-pages` environment
 and passed to the build step in [`.github/workflows/deploy-homepage.yml`](../../.github/workflows/deploy-homepage.yml).
@@ -195,8 +195,8 @@ STAGING_DOMAIN="staging.apps.f3nation.com"
 4. **GitHub environment `map-staging`** (Settings → Environments):
    - add variable `HOMEPAGE_ORG_MAP_API_KEY` = a read-only org-chart API key
      valid on the **staging** API (as `NEXT_PUBLIC_ORG_MAP_API_KEY` on
-     `github-pages` is for prod). Without it the directory and `/status` work
-     but `/org` requests are unauthenticated;
+     `github-pages` is for prod). The staging deploy fails without it, so
+     `/org` is never shipped unauthenticated;
    - if the environment restricts deployment branches/tags, allow
      `homepage@*` alongside `map@*`.
 

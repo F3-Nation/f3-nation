@@ -63,8 +63,14 @@ jobs:
             echo "::error::ref '${REF}' does not start with expected tag prefix '${TAG_PREFIX}'"
             exit 1
           fi
-          if ! gh api "repos/${{ github.repository }}/git/refs/tags/${REF}" >/dev/null 2>&1; then
-            echo "::error::ref '${REF}' is not an existing release tag"
+          # The singular /git/ref/ endpoint matches exactly; the plural
+          # /git/refs/ one matches by prefix, so "homepage@1" would pass.
+          if ! out=$(gh api "repos/${{ github.repository }}/git/ref/tags/${REF}" 2>&1); then
+            if grep -q 'HTTP 404' <<<"${out}"; then
+              echo "::error::ref '${REF}' is not an existing release tag"
+            else
+              echo "::error::could not verify ref '${REF}': ${out}"
+            fi
             exit 1
           fi
 
@@ -119,9 +125,13 @@ jobs:
         working-directory: apps/homepage/out
         run: |
           grep -q 'href="https://staging.map.f3nation.com"' index.html
-          if grep -oE 'href="https://[a-z.-]*f3nation\.com[^"]*"' index.html \
-              | grep -v -e 'href="https://staging\.' -e 'href="https://f3nation\.com"'; then
-            echo "::error::staging export links a production host (above)"
+          # Every exported page, any host casing or digits; capture the hits
+          # so a failing scan can't read as clean.
+          hits=$(grep -rhoiE 'href="https://[A-Za-z0-9.-]*f3nation\.com[^"]*"' --include='*.html' . \
+            | grep -v -e 'href="https://staging\.' -e 'href="https://f3nation\.com"' || true)
+          if [ -n "${hits}" ]; then
+            echo "::error::staging export links a production host:"
+            echo "${hits}"
             exit 1
           fi
 

@@ -153,11 +153,12 @@ describe("getApiBase (via fetch URL)", () => {
   it("falls back to api.f3nation.com when the env vars are unset", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", undefined);
     vi.stubEnv("NEXT_PUBLIC_LOCAL_DEV", undefined);
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", undefined);
     mockFetch(200, { orgs: [] });
     await fetchOrgChart();
     const url = (fetch as ReturnType<typeof vi.fn>).mock
       .calls[0]?.[0] as string;
-    expect(url).toContain("api.f3nation.com");
+    expect(url).toBe("https://api.f3nation.com/v1/org-chart");
   });
 
   it("falls back to the staging API in the staging build", async () => {
@@ -175,6 +176,7 @@ describe("getApiBase (via fetch URL)", () => {
 describe("auth headers", () => {
   it("sends the client header and a bearer token when the API key is set", async () => {
     vi.stubEnv("NEXT_PUBLIC_ORG_MAP_API_KEY", "test-key");
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", undefined);
     mockFetch(200, { orgs: [] });
     await fetchOrgChart();
     const init = (fetch as ReturnType<typeof vi.fn>).mock
@@ -186,6 +188,7 @@ describe("auth headers", () => {
 
   it("omits the Authorization header when no API key is configured", async () => {
     vi.stubEnv("NEXT_PUBLIC_ORG_MAP_API_KEY", undefined);
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", undefined);
     mockFetch(200, { orgs: [] });
     await fetchOrgChart();
     const init = (fetch as ReturnType<typeof vi.fn>).mock
