@@ -79,6 +79,9 @@ interface Discovery {
   code_challenge_methods_supported?: string[];
 }
 
+/** Per-request budget for a setup hook: authFetch's 15s timeout plus slack. */
+const SETUP_TIMEOUT_MS = 20_000;
+
 /** RFC 7517 private-key members; a published JWKS must carry none of them. */
 const PRIVATE_JWK_MEMBERS = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"];
 
@@ -102,7 +105,7 @@ function useProvider(live: AuthLiveTarget) {
       `${live.issuer}/.well-known/openid-configuration`,
     );
     ctx.jwks = await getJson<{ keys: JWK[] }>(ctx.discovery.jwks_uri);
-  });
+  }, SETUP_TIMEOUT_MS * 2);
   return ctx;
 }
 
@@ -216,8 +219,14 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
       const conventional = await getJson<{ keys: JWK[] }>(
         ssoJwksUrl(live.issuer),
       );
-      expect(conventional.keys.map((k) => k.kid).sort()).toEqual(
-        provider.jwks.keys.map((k) => k.kid).sort(),
+      // The key material too, not just the kid: a reused kid with a
+      // different key would still break verification.
+      const publicParts = (keys: JWK[]) =>
+        keys
+          .map(({ kid, n, e }) => ({ kid, n, e }))
+          .sort((a, b) => (a.kid ?? "").localeCompare(b.kid ?? ""));
+      expect(publicParts(conventional.keys)).toEqual(
+        publicParts(provider.jwks.keys),
       );
     });
   });
@@ -320,7 +329,7 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
         throw new Error(`unexpected token_type: ${body.token_type}`);
       }
       token = body.access_token;
-    });
+    }, SETUP_TIMEOUT_MS);
 
     it("is an RS256 JWT signed by a published key", () => {
       expect(token.split(".")).toHaveLength(3);
