@@ -2,7 +2,7 @@ import type { HomepageChannel } from "./channel";
 import { CHANNEL_HOSTS, getChannel } from "./channel";
 
 /** App with a production URL — renders as a clickable card. */
-export interface NavigableApp {
+interface NavigableApp {
   name: string;
   description: string;
   href: string;
@@ -18,7 +18,7 @@ export interface NavigableApp {
 }
 
 /** App with no link — renders as a non-clickable informational card in every build. */
-export interface InformationalApp {
+interface InformationalApp {
   name: string;
   description: string;
   href?: never;
