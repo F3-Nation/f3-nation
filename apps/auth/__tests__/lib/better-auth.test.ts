@@ -644,6 +644,23 @@ describe("shared OTP attempt budget", () => {
     ]);
   });
 
+  it("keeps the sign-in when the code can no longer be used up", async () => {
+    let otp = "";
+    const claim = vi.fn(
+      (_email: string, _otp: string, opts: { consume: boolean }) =>
+        Promise.resolve(!opts.consume),
+    );
+    const auth = createTestAuth(4242, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(signIn.token).toBeTruthy();
+    expect(claim).toHaveBeenLastCalledWith(email, otp, { consume: true });
+  });
+
   it("leaves the code valid for registration when sign-in fails", async () => {
     let otp = "";
     const claim = sharedBudget(() => otp);

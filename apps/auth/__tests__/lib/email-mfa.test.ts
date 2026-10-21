@@ -478,34 +478,66 @@ describe("claimEmailCode", () => {
       },
     ]);
 
-  it("uses a matching code up so it can't be checked again", async () => {
+  it("uses a verified code up without spending an attempt", async () => {
     dbMock.select.mockReturnValueOnce(activeCode());
 
     expect(
       await claimEmailCode("user@example.com", "123456", { consume: true }),
     ).toBe(true);
-    expect(updateChain(1).set).toHaveBeenCalledWith(
-      expect.objectContaining({ consumedAt: NOW }),
+    expect(dbMock.update).toHaveBeenCalledTimes(1);
+    expect(updateChain(0).set).toHaveBeenCalledWith({ consumedAt: NOW });
+    expect(toQuery(updateChain(0).where.mock.calls[0]?.[0] as SQL)).toEqual(
+      toQuery(
+        and(eq(emailMfaCodes.id, "code-1"), isNull(emailMfaCodes.consumedAt)),
+      ),
     );
+  });
+
+  it("uses a code up even when a parallel check has filled the budget", async () => {
+    dbMock.select.mockReturnValueOnce(
+      chain([
+        {
+          id: "code-1",
+          email: "user@example.com",
+          codeHash: hashCode("123456"),
+          attemptCount: 5,
+        },
+      ]),
+    );
+
+    expect(
+      await claimEmailCode("user@example.com", "123456", { consume: true }),
+    ).toBe(true);
+    expect(updateChain(0).set).toHaveBeenCalledWith({ consumedAt: NOW });
   });
 
   it("refuses a code a parallel request used up first", async () => {
     dbMock.select.mockReturnValueOnce(activeCode());
-    dbMock.update
-      .mockReturnValueOnce(chain([{ id: "code-1" }]))
-      .mockReturnValueOnce(chain([]));
+    dbMock.update.mockReturnValueOnce(chain([]));
 
     expect(
       await claimEmailCode("user@example.com", "123456", { consume: true }),
     ).toBe(false);
   });
 
-  it("only spends an attempt on a wrong code", async () => {
+  it("leaves a code that doesn't match alone", async () => {
     dbMock.select.mockReturnValueOnce(activeCode());
 
     expect(
       await claimEmailCode("user@example.com", "999999", { consume: true }),
     ).toBe(false);
-    expect(dbMock.update).toHaveBeenCalledTimes(1);
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("checks without consuming when consume is off", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode());
+
+    expect(
+      await claimEmailCode("user@example.com", "123456", { consume: false }),
+    ).toBe(true);
+    // The refund only gives the attempt back.
+    expect(
+      Object.keys(updateChain(1).set.mock.calls[0]?.[0] as object),
+    ).toEqual(["attemptCount"]);
   });
 });

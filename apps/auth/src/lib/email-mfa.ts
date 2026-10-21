@@ -212,17 +212,53 @@ export async function checkEmailCode(
 }
 
 /**
- * Better Auth's claimOtpAttempt: checkEmailCode, except that with `consume`
- * a matching code is used up. Sign-in passes it, since Better Auth verifies
- * against its own store and the email_mfa_codes copy shouldn't stay
- * replayable at /api/register afterwards.
+ * Use up a code that has already been verified, without touching its
+ * attempt budget. Claiming an attempt here could fail on a budget a parallel
+ * check has momentarily filled, and leave the code unconsumed. Conditional
+ * on the code still being unused, so it redeems at most once.
+ */
+async function redeemVerifiedCode(email: string, code: string) {
+  const normalizedEmail = email.toLowerCase().trim();
+  const now = new Date().toISOString();
+
+  const [mfaCode] = await db
+    .select()
+    .from(emailMfaCodes)
+    .where(
+      and(
+        eq(emailMfaCodes.email, normalizedEmail),
+        isNull(emailMfaCodes.consumedAt),
+        gt(emailMfaCodes.expiresAt, now),
+      ),
+    )
+    .limit(1);
+  if (!mfaCode || !constantTimeEqual(mfaCode.codeHash, hashCode(code))) {
+    return false;
+  }
+
+  const [consumed] = await db
+    .update(emailMfaCodes)
+    .set({ consumedAt: now })
+    .where(
+      and(eq(emailMfaCodes.id, mfaCode.id), isNull(emailMfaCodes.consumedAt)),
+    )
+    .returning({ id: emailMfaCodes.id });
+  return Boolean(consumed);
+}
+
+/**
+ * Better Auth's claimOtpAttempt. Without `consume` it is checkEmailCode.
+ * With `consume`, which only the after-sign-in hook passes once Better Auth
+ * has verified the code, it uses the code up without spending an attempt,
+ * so the email_mfa_codes copy can't be replayed at /api/register afterwards.
  */
 export async function claimEmailCode(
   email: string,
   code: string,
   options: { consume: boolean },
 ): Promise<boolean> {
-  return (await findMatchingCode(email, code, options)) !== null;
+  if (options.consume) return redeemVerifiedCode(email, code);
+  return (await findMatchingCode(email, code)) !== null;
 }
 
 /**

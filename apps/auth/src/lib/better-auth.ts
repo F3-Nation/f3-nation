@@ -156,8 +156,9 @@ export interface CreateAuthInstanceOptions {
   findF3UserId: (email: string) => Promise<number | null>;
   /**
    * Checks `otp` against the code's shared guess budget, where a wrong code
-   * spends an attempt, and reports whether it matches; with `consume`, a
-   * match is also used up. Production wires this to email-mfa.ts's
+   * spends an attempt, and reports whether it matches. With `consume`, called
+   * only after Better Auth has verified the code, it uses the code up
+   * without spending an attempt. Production wires this to email-mfa.ts's
    * claimEmailCode, the budget /api/register draws on:
    * every sign-in code is also recorded in email_mfa_codes (see
    * better-auth-email.ts's deliverBetterAuthOtp). Without it, emailOTP's
@@ -276,7 +277,17 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
           return;
         }
         const body = ctx.body as { email: string; otp: string };
-        await options.claimOtpAttempt(body.email, body.otp, { consume: true });
+        // The session already exists, so a failed consume can't undo the
+        // sign-in; it only means the code was already used or has expired.
+        if (
+          !(await options.claimOtpAttempt(body.email, body.otp, {
+            consume: true,
+          }))
+        ) {
+          logWarn("auth.better_auth.otp_consume_failed", {
+            path: ctx.path,
+          });
+        }
       }),
     },
     databaseHooks: {
