@@ -202,6 +202,13 @@ describe("JWT verification across trusted issuers", () => {
         code: "UNAUTHORIZED",
       });
       expect(mocks.fetched).toEqual([]);
+      const { logWarn } = await import("./logger");
+      expect(logWarn).toHaveBeenCalledWith("api.auth.issuer_not_trusted", {
+        issuer: "https://evil.example.test",
+      });
+      expect(logWarn).toHaveBeenCalledWith("api.auth.issuer_not_trusted", {
+        issuer: null,
+      });
     });
 
     it("rejects a token signed by one issuer's key but claiming another issuer", async () => {

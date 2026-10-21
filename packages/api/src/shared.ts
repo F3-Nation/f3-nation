@@ -392,7 +392,15 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
   }
   const authJwks =
     typeof issuer === "string" ? authJwksByIssuer.get(issuer) : undefined;
-  if (!issuer || !authJwks) return null;
+  if (!issuer || !authJwks) {
+    // A well-formed JWT from an issuer that isn't trusted. During an issuer
+    // cutover this usually means the trusted list is misconfigured, so it is
+    // logged rather than disappearing into the API-key fallback's 401.
+    logWarn("api.auth.issuer_not_trusted", {
+      issuer: issuer?.slice(0, 200) ?? null,
+    });
+    return null;
+  }
 
   let payload;
   try {

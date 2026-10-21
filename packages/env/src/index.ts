@@ -40,8 +40,9 @@ export const env = createEnv({
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
     GCS_EMULATOR_HOST: z.string().optional(),
     // Comma-separated auth server origins whose JWTs packages/api accepts in
-    // addition to NEXT_PUBLIC_AUTH_URL's. Parsed and validated (fails loudly)
-    // in packages/api/src/trusted-issuers.ts.
+    // addition to NEXT_PUBLIC_AUTH_URL's. Only declared here; the format is
+    // checked by packages/api/src/trusted-issuers.ts, which throws at startup
+    // on a malformed entry. Unset and empty both mean "none".
     AUTH_ADDITIONAL_ISSUERS: z.string().optional(),
   },
   client: {
