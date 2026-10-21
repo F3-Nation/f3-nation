@@ -383,15 +383,16 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
   // against; jwtVerify below then requires that same issuer. An issuer that
   // isn't on the list is rejected here, before any key set is fetched, so a
   // token can't make this service fetch keys from a URL it chose.
-  let issuer: string | undefined;
+  let claimedIssuer: unknown;
   try {
-    issuer = decodeJwt(token).iss;
+    claimedIssuer = decodeJwt(token).iss;
   } catch {
     // Not a JWT (e.g. an API key, which is tried here first) — expected.
     return null;
   }
-  const authJwks =
-    typeof issuer === "string" ? authJwksByIssuer.get(issuer) : undefined;
+  // decodeJwt doesn't check claim types, so a non-string `iss` is possible.
+  const issuer = typeof claimedIssuer === "string" ? claimedIssuer : undefined;
+  const authJwks = issuer ? authJwksByIssuer.get(issuer) : undefined;
   if (!issuer || !authJwks) {
     // A well-formed JWT from an issuer that isn't trusted. During an issuer
     // cutover this usually means the trusted list is misconfigured, so it is

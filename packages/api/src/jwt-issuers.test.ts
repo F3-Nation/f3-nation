@@ -201,6 +201,21 @@ describe("JWT verification across trusted issuers", () => {
       await expect(call(noIssuer)).rejects.toMatchObject({
         code: "UNAUTHORIZED",
       });
+      // decodeJwt doesn't type-check claims; a non-string iss must still be
+      // a plain rejection, not a thrown error (500).
+      for (const iss of [123, { url: AUTH3 }]) {
+        const oddIssuer = await new SignJWT({
+          token_use: "access",
+          iss: iss as unknown as string,
+        })
+          .setProtectedHeader({ alg: "RS256" })
+          .setSubject(String(userId))
+          .setExpirationTime("1h")
+          .sign(auth3Key);
+        await expect(call(oddIssuer)).rejects.toMatchObject({
+          code: "UNAUTHORIZED",
+        });
+      }
       expect(mocks.fetched).toEqual([]);
       const { logWarn } = await import("./logger");
       expect(logWarn).toHaveBeenCalledWith("api.auth.issuer_not_trusted", {
