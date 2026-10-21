@@ -246,7 +246,11 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
       expect(await res.json()).toMatchObject({ error: "invalid_request" });
     });
 
-    it("rejects an unknown client with an RFC 6749 error", async () => {
+    // Where client_credentials is advertised this is a real unknown-client
+    // check. Otherwise only authorization_code is available, and with no real
+    // code to send, the hand-rolled server answers invalid_grant before it
+    // looks the client up; there the case only pins the error envelope.
+    it("rejects an unknown client or bad grant with an RFC 6749 error", async () => {
       const grants = provider.discovery.grant_types_supported ?? [];
       const body: Record<string, string> = grants.includes("client_credentials")
         ? { grant_type: "client_credentials" }
