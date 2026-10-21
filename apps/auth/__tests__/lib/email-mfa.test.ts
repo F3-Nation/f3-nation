@@ -307,7 +307,9 @@ describe("verifyEmailCode", () => {
       expect.objectContaining({ consumedAt: NOW }),
     );
     expect(toQuery(consume.where.mock.calls[0]?.[0] as SQL)).toEqual(
-      toQuery(eq(emailMfaCodes.id, "code-1")),
+      toQuery(
+        and(eq(emailMfaCodes.id, "code-1"), isNull(emailMfaCodes.consumedAt)),
+      ),
     );
 
     const verify = updateChain(2);
@@ -485,6 +487,17 @@ describe("claimEmailCode", () => {
     expect(updateChain(1).set).toHaveBeenCalledWith(
       expect.objectContaining({ consumedAt: NOW }),
     );
+  });
+
+  it("refuses a code a parallel request used up first", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode());
+    dbMock.update
+      .mockReturnValueOnce(chain([{ id: "code-1" }]))
+      .mockReturnValueOnce(chain([]));
+
+    expect(
+      await claimEmailCode("user@example.com", "123456", { consume: true }),
+    ).toBe(false);
   });
 
   it("only spends an attempt on a wrong code", async () => {

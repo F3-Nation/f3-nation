@@ -177,14 +177,23 @@ async function findMatchingCode(
   if (!constantTimeEqual(mfaCode.codeHash, hashCode(code))) return null;
 
   // Only wrong guesses count, so the owner's registration check and the
-  // sign-in after it don't eat into their 5 tries.
-  await db
+  // sign-in after it don't eat into their 5 tries. Consuming is conditional
+  // on the code still being unused, so two parallel redemptions of the same
+  // code can't both succeed.
+  const [refunded] = await db
     .update(emailMfaCodes)
     .set({
       attemptCount: sql`${emailMfaCodes.attemptCount} - 1`,
       ...(consume && { consumedAt: now }),
     })
-    .where(eq(emailMfaCodes.id, mfaCode.id));
+    .where(
+      and(
+        eq(emailMfaCodes.id, mfaCode.id),
+        consume ? isNull(emailMfaCodes.consumedAt) : undefined,
+      ),
+    )
+    .returning({ id: emailMfaCodes.id });
+  if (consume && !refunded) return null;
 
   return mfaCode;
 }
@@ -224,7 +233,7 @@ export async function verifyEmailCode(
   email: string,
   code: string,
 ): Promise<{ id: number; email: string; f3Name: string | null } | null> {
-  const normalizedEmail = email.toLowerCase();
+  const normalizedEmail = email.toLowerCase().trim();
   const now = new Date().toISOString();
 
   const mfaCode = await findMatchingCode(email, code, { consume: true });
