@@ -4,7 +4,7 @@
  * re-imports the module under `vi.resetModules()` so its `enabled` flag starts
  * fresh.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { init, register, captureException } = vi.hoisted(() => ({
   init: vi.fn(),
@@ -16,7 +16,13 @@ vi.mock("posthog-js", () => ({
   default: { init, register, captureException },
 }));
 
-import { environmentFromHostname } from "./browser";
+import { environmentFromHostname, scrubUrls } from "./browser";
+
+// Cleanup that runs even when an assertion fails partway through a test.
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 async function load() {
   vi.resetModules();
@@ -39,11 +45,53 @@ describe("environmentFromHostname", () => {
   });
 });
 
+describe("scrubUrls", () => {
+  it("strips the query and fragment from every page URL property", () => {
+    const scrubbed = scrubUrls({
+      uuid: "u",
+      event: "$exception",
+      properties: {
+        $current_url:
+          "https://auth.f3nation.com/login/email/verify?email=a%40b.com&code=123456",
+        $referrer: "https://auth.f3nation.com/register?email=a%40b.com#step",
+        $initial_current_url: "https://auth.f3nation.com/?code=1",
+        $pathname: "/login/email/verify",
+        $exception_list: [],
+      },
+      $set_once: { $initial_referrer: "https://me.f3nation.com/x?code=9" },
+    });
+
+    expect(scrubbed?.properties).toMatchObject({
+      $current_url: "https://auth.f3nation.com/login/email/verify",
+      $referrer: "https://auth.f3nation.com/register",
+      $initial_current_url: "https://auth.f3nation.com/",
+      $pathname: "/login/email/verify",
+    });
+    expect(scrubbed?.$set_once).toEqual({
+      $initial_referrer: "https://me.f3nation.com/x",
+    });
+  });
+
+  it("leaves URLs without a query, non-string values and null events alone", () => {
+    expect(
+      scrubUrls({
+        uuid: "u",
+        event: "$exception",
+        properties: {
+          $current_url: "https://admin.f3nation.com/a",
+          $referrer: 3,
+        },
+      })?.properties,
+    ).toEqual({ $current_url: "https://admin.f3nation.com/a", $referrer: 3 });
+    expect(scrubUrls(null)).toBeNull();
+  });
+});
+
 describe("initErrorReporting", () => {
   beforeEach(() => {
-    init.mockClear();
-    register.mockClear();
-    captureException.mockClear();
+    init.mockReset();
+    register.mockReset();
+    captureException.mockReset();
   });
 
   it("does nothing without a key", async () => {
@@ -85,8 +133,18 @@ describe("initErrorReporting", () => {
       rageclick: false,
       disable_session_recording: true,
       disable_surveys: true,
+      advanced_disable_feature_flags: true,
       persistence: "memory",
     });
+    // The hook it was given is the URL scrubber.
+    const beforeSend = options.before_send as typeof scrubUrls;
+    expect(
+      beforeSend({
+        uuid: "u",
+        event: "$exception",
+        properties: { $current_url: "https://auth.f3nation.com/v?code=1" },
+      })?.properties.$current_url,
+    ).toBe("https://auth.f3nation.com/v");
   });
 
   it("tags every event with the app and environment", async () => {
@@ -125,14 +183,12 @@ describe("initErrorReporting", () => {
     );
     browser.captureException(new Error("boom"));
     expect(captureException).not.toHaveBeenCalled();
-    consoleError.mockRestore();
   });
 
   it("reads the hostname from the page when none is passed", async () => {
     vi.stubGlobal("window", { location: { hostname: "admin.f3nation.com" } });
     const browser = await load();
     browser.initErrorReporting({ key: "phc_test", app: "admin" });
-    vi.unstubAllGlobals();
 
     expect(register).toHaveBeenCalledWith({
       app: "admin",
@@ -180,6 +236,5 @@ describe("captureException", () => {
       "posthog.capture_exception_failed",
       expect.any(Error),
     );
-    consoleError.mockRestore();
   });
 });

@@ -13,6 +13,7 @@
  * event (autocapture, pageviews, page leaves, web vitals, heatmaps, dead
  * clicks, session recording, surveys) is switched off here. See #1223.
  */
+import type { CaptureResult } from "posthog-js";
 import posthog from "posthog-js";
 
 export type BrowserEnvironment = "prod" | "staging" | "local" | "dev";
@@ -31,13 +32,46 @@ export function environmentFromHostname(hostname: string): BrowserEnvironment {
   return "dev";
 }
 
+/** Event properties that hold a page URL; posthog-js adds them to every event. */
+const URL_PROPERTIES = [
+  "$current_url",
+  "$referrer",
+  "$initial_current_url",
+  "$initial_referrer",
+];
+
+/**
+ * `url` without its query string and fragment. auth's sign-in pages carry the
+ * one-time code and the email there (`/login/email/verify?email=…&code=…`).
+ */
+function withoutQuery(url: unknown): unknown {
+  if (typeof url !== "string") return url;
+  const cut = url.search(/[?#]/);
+  return cut === -1 ? url : url.slice(0, cut);
+}
+
+/**
+ * `before_send` hook: strip queries and fragments from every URL property
+ * before an event leaves the browser, so a sign-in code can't reach PostHog.
+ */
+export function scrubUrls(event: CaptureResult | null): CaptureResult | null {
+  if (!event) return event;
+  for (const bag of [event.properties, event.$set, event.$set_once]) {
+    if (!bag) continue;
+    for (const key of URL_PROPERTIES) {
+      if (key in bag) bag[key] = withoutQuery(bag[key]);
+    }
+  }
+  return event;
+}
+
 let enabled = false;
 
 /**
  * Start capturing unhandled exceptions and promise rejections. A silent no-op
  * without a key (local dev, previews, keyless builds). Errors a React error
- * boundary catches are handled, so they never reach this; boundaries report
- * them with `captureException`.
+ * boundary catches are handled, so they never reach this; report those with
+ * `captureException`.
  */
 export function initErrorReporting(options: {
   key: string | undefined;
@@ -70,6 +104,12 @@ function initPostHog(key: string, app: string, hostname?: string): void {
     rageclick: false,
     disable_session_recording: true,
     disable_surveys: true,
+    // Skip the /flags call on every page load (billed on its own quota). Not
+    // advanced_disable_flags, which also skips the remote config that carries
+    // PostHog's server-side error-tracking suppression rules.
+    advanced_disable_feature_flags: true,
+    // Query strings and fragments never leave the browser (see scrubUrls).
+    before_send: scrubUrls,
     // No cookies or localStorage: an error-only reporter has no use for a
     // persistent distinct_id, and auth is a sign-in surface.
     persistence: "memory",
@@ -88,8 +128,8 @@ export function captureException(
   properties?: Record<string, unknown>,
 ): void {
   if (!enabled) return;
-  // Called from error boundaries: a reporting failure (e.g. an ad-blocker
-  // blocking the ingest host) must never escape into the fallback UI.
+  // Meant for error boundaries: guards against the SDK ever throwing, so a
+  // reporting failure can't escape into the fallback UI.
   try {
     posthog.captureException(error, properties);
   } catch (reportErr) {

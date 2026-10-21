@@ -1,7 +1,7 @@
 /**
- * The app's only job here is to hand its build-time key (through the real
- * env.ts) and its name to the shared reporter; the reporter's config (errors
- * only, no analytics) is pinned in packages/observability/src/browser.test.ts.
+ * The app's only job here is to hand its build-time key (read straight from process.env, never ~/env) and its
+ * name to the shared reporter; the reporter's config (errors only, no
+ * analytics) is pinned in packages/observability/src/browser.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,8 +15,6 @@ describe("instrumentation-client", () => {
   beforeEach(() => {
     vi.resetModules();
     initErrorReporting.mockClear();
-    // Load the real env.ts without its unrelated required server vars.
-    vi.stubEnv("SKIP_ENV_VALIDATION", "1");
   });
 
   afterEach(() => {

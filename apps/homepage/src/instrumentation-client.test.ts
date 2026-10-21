@@ -1,7 +1,7 @@
 /**
- * The app's only job here is to hand its build-time key (inlined from
- * process.env; homepage has no env.ts) and its name to the shared reporter; the reporter's config (errors
- * only, no analytics) is pinned in packages/observability/src/browser.test.ts.
+ * The app's only job here is to hand its build-time key (inlined from process.env) and its
+ * name to the shared reporter; the reporter's config (errors only, no
+ * analytics) is pinned in packages/observability/src/browser.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
