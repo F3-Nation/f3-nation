@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   keys: new Map<string, CryptoKey>(),
   created: [] as string[],
   fetched: [] as string[],
+  failures: new Map<string, Error>(),
   limit: vi.fn(),
 }));
 
@@ -41,6 +42,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./logger", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiLogger>()),
   logWarn: vi.fn(),
+  logError: vi.fn(),
 }));
 vi.mock("jose", async (importOriginal) => ({
   ...(await importOriginal<typeof Jose>()),
@@ -48,6 +50,8 @@ vi.mock("jose", async (importOriginal) => ({
     mocks.created.push(url.href);
     return () => {
       mocks.fetched.push(url.href);
+      const failure = mocks.failures.get(url.href);
+      if (failure) return Promise.reject(failure);
       const key = mocks.keys.get(url.href);
       return key
         ? Promise.resolve(key)
@@ -116,6 +120,7 @@ describe("JWT verification across trusted issuers", () => {
   beforeEach(() => {
     mocks.created.length = 0;
     mocks.fetched.length = 0;
+    mocks.failures.clear();
     mocks.limit.mockResolvedValue({ success: true });
   });
 
@@ -184,6 +189,7 @@ describe("JWT verification across trusted issuers", () => {
     });
 
     it("rejects an issuer that isn't allowlisted without fetching any keys", async () => {
+      const { logWarn } = await import("./logger");
       for (const issuer of [
         "https://evil.example.test",
         `${AUTH3}/`,
@@ -201,8 +207,16 @@ describe("JWT verification across trusted issuers", () => {
       await expect(call(noIssuer)).rejects.toMatchObject({
         code: "UNAUTHORIZED",
       });
+      expect(logWarn).toHaveBeenCalledWith("api.auth.issuer_not_trusted", {
+        issuer: "https://evil.example.test",
+      });
+      expect(logWarn).toHaveBeenCalledWith("api.auth.issuer_not_trusted", {
+        issuer: null,
+      });
+
       // decodeJwt doesn't type-check claims; a non-string iss must still be
-      // a plain rejection, not a thrown error (500).
+      // a plain rejection, not a thrown error (500), and is logged as null.
+      vi.mocked(logWarn).mockClear();
       for (const iss of [123, { url: AUTH3 }]) {
         const oddIssuer = await new SignJWT({
           token_use: "access",
@@ -216,13 +230,36 @@ describe("JWT verification across trusted issuers", () => {
           code: "UNAUTHORIZED",
         });
       }
+      // Each token also warns from the API-key fallback, so count only the
+      // issuer warnings: one per odd token.
+      const issuerWarnings = vi
+        .mocked(logWarn)
+        .mock.calls.filter(
+          ([event]) => event === "api.auth.issuer_not_trusted",
+        );
+      expect(issuerWarnings).toEqual([
+        ["api.auth.issuer_not_trusted", { issuer: null }],
+        ["api.auth.issuer_not_trusted", { issuer: null }],
+      ]);
       expect(mocks.fetched).toEqual([]);
-      const { logWarn } = await import("./logger");
-      expect(logWarn).toHaveBeenCalledWith("api.auth.issuer_not_trusted", {
-        issuer: "https://evil.example.test",
+    });
+
+    it("reports one issuer's key outage and keeps accepting the other issuer", async () => {
+      const { logError } = await import("./logger");
+      const down = new TypeError("fetch failed", {
+        cause: { code: "ECONNREFUSED" },
       });
-      expect(logWarn).toHaveBeenCalledWith("api.auth.issuer_not_trusted", {
-        issuer: null,
+      mocks.failures.set(jwksUrl(AUTH3), down);
+      await expect(call(await sign(AUTH3, auth3Key))).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+      expect(logError).toHaveBeenCalledWith(
+        "api.auth.jwks_unavailable",
+        { issuer: AUTH3, reason: "ECONNREFUSED" },
+        down,
+      );
+      await expect(call(await sign(PRIMARY, primaryKey))).resolves.toEqual({
+        id: userId,
       });
     });
 

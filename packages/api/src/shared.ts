@@ -420,7 +420,7 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
     // reported rather than disappearing into 401s.
     const reason = jwksFetchFailure(err);
     if (reason) {
-      logError("api.auth.jwks_unavailable", { reason }, err);
+      logError("api.auth.jwks_unavailable", { issuer, reason }, err);
     }
     return null;
   }
