@@ -932,6 +932,9 @@ importers:
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@acme/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@auth/core':
         specifier: 0.41.3
         version: 0.41.3(nodemailer@10.1.7)
