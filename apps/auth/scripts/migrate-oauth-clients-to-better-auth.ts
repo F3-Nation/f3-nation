@@ -71,6 +71,7 @@ import postgres from "postgres";
 
 import * as _schema from "@acme/db/schema/schema";
 
+import { logError, logInfo, logWarn } from "../src/lib/logging";
 import { F3_NATION_CLIENT_REFERENCE_ID } from "../src/lib/oauth-client-reference";
 
 const {
@@ -136,7 +137,7 @@ async function main() {
       ? args[resourceIndex + 1]
       : process.env.NEXT_PUBLIC_AUTH_URL;
   if (!resource || !URL.canParse(resource)) {
-    console.error(
+    logError(
       "No issuer resource: pass --resource <issuer URL> or set NEXT_PUBLIC_AUTH_URL in the env file.",
     );
     process.exit(1);
@@ -176,16 +177,16 @@ async function main() {
   const db = drizzle(sql);
 
   console.log(
-    `\nConnected to ${targetEnv} database at ${databaseHost}/${databaseName}.` +
-      `\nLinking clients to resource ${resource}.\n`,
+    `\nConnected to ${targetEnv} database at ${databaseHost}/${databaseName}.\n`,
   );
+  logInfo(`Linking clients to resource ${resource}.`);
 
   const [resourceRow] = await db
     .select({ identifier: betterAuthOauthResource.identifier })
     .from(betterAuthOauthResource)
     .where(eq(betterAuthOauthResource.identifier, resource));
   if (!resourceRow) {
-    console.error(
+    logError(
       `Resource ${resource} is not in better_auth_oauth_resource yet. Start the auth server once with AUTH_USE_BETTER_AUTH on (Better Auth seeds it), or check --resource.`,
     );
     await sql.end();
@@ -324,8 +325,8 @@ async function main() {
         existing.tokenEndpointAuthMethod !== row.tokenEndpointAuthMethod ||
         !existing.scopes?.includes("offline_access"))
     ) {
-      console.log(
-        `  WARNING: ${existing.clientId} is already present without skipConsent, offline_access or ${row.tokenEndpointAuthMethod}; update it by hand (see file comment).`,
+      logWarn(
+        `${existing.clientId} is already present without skipConsent, offline_access or ${row.tokenEndpointAuthMethod}; update it by hand (see file comment).`,
       );
     }
   }
@@ -397,7 +398,7 @@ async function main() {
       resourceId: resource,
       createdAt: now,
     });
-    console.log(`  Linked ${row.clientId} to ${resource}.`);
+    logInfo(`Linked ${row.clientId} to ${resource}.`);
   }
 
   if (reviewNote) console.log(reviewNote);

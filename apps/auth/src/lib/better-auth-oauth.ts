@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
+import { constantTimeEqual, makeSignature } from "better-auth/crypto";
 
 import { BETTER_AUTH_BASE_PATH, getAuth } from "~/lib/better-auth";
 import { env } from "~/env";
@@ -40,7 +41,10 @@ export async function forwardToBetterAuth(
     `${BETTER_AUTH_BASE_PATH}/oauth2/${endpoint}`,
     env.NEXT_PUBLIC_AUTH_URL,
   );
-  target.search = new URL(request.url).search;
+  target.search =
+    endpoint === "authorize"
+      ? await resolveLoginMarker(auth, request)
+      : new URL(request.url).search;
 
   const headers = new Headers(request.headers);
   if (options.dropCookies) headers.delete("cookie");
@@ -56,20 +60,70 @@ export async function forwardToBetterAuth(
   );
 }
 
-// The plugin's own signing parameters, plus max_age: the user is about to
-// sign in afresh (or already has, for onboarding), and a short max_age would
-// otherwise send them straight back to the login page.
-const STRIPPED_PARAMS = [
-  "sig",
-  "exp",
-  "ba_iat",
-  "ba_pl",
-  "ba_param",
-  "max_age",
-];
+// The plugin's own signing parameters.
+const STRIPPED_PARAMS = ["sig", "exp", "ba_iat", "ba_pl", "ba_param"];
 // Already satisfied by the page the user is sent to. Left in, the plugin
 // would redirect to that page again on every pass.
 const SATISFIED_PROMPTS = new Set(["login", "create"]);
+
+// Added to the authorize callbackUrl when the request forced a fresh login
+// (prompt=login or max_age), whose parameters are stripped so the sign-in
+// doesn't loop. Its value is `<issued-at ms>.<signature>`: when authorize
+// comes back, a session created before that moment doesn't count as the
+// login that was asked for, so someone who opens the callback URL with an
+// older session is sent to log in again instead of skipping it.
+const LOGIN_MARKER_PARAM = "f3_login_after";
+// How long after the redirect a session still counts as that login.
+const LOGIN_MARKER_TTL_MS = 60 * 60 * 1000;
+
+type OAuthAuth = Awaited<ReturnType<typeof getAuth>>;
+
+async function signLoginMarker(auth: OAuthAuth, issuedAt: number) {
+  const { secret } = await auth.$context;
+  return `${issuedAt}.${await makeSignature(`${LOGIN_MARKER_PARAM}:${issuedAt}`, secret)}`;
+}
+
+async function loginMarkerIssuedAt(auth: OAuthAuth, marker: string) {
+  const [issuedAtText, signature] = marker.split(".");
+  const issuedAt = Number(issuedAtText);
+  if (!signature || !Number.isInteger(issuedAt)) return null;
+  const expected = await signLoginMarker(auth, issuedAt);
+  if (!constantTimeEqual(expected, marker)) return null;
+  if (Date.now() - issuedAt > LOGIN_MARKER_TTL_MS || issuedAt > Date.now()) {
+    return null;
+  }
+  return issuedAt;
+}
+
+/**
+ * The query string authorize is forwarded with. A request without the login
+ * marker is untouched. With it, the marker is removed and checked: if the
+ * browser's session wasn't created after the marker was issued (or the
+ * marker is forged or expired), prompt=login is put back so Better Auth
+ * sends the user to sign in again.
+ */
+async function resolveLoginMarker(auth: OAuthAuth, request: Request) {
+  const url = new URL(request.url);
+  const marker = url.searchParams.get(LOGIN_MARKER_PARAM);
+  if (marker === null) return url.search;
+  url.searchParams.delete(LOGIN_MARKER_PARAM);
+
+  const issuedAt = await loginMarkerIssuedAt(auth, marker);
+  const session = issuedAt
+    ? await auth.api.getSession({ headers: request.headers })
+    : null;
+  const freshLogin =
+    issuedAt !== null &&
+    session !== null &&
+    session.session.createdAt.getTime() >= issuedAt;
+  if (!freshLogin) {
+    const prompts = new Set((url.searchParams.get("prompt") ?? "").split(" "));
+    prompts.delete("");
+    prompts.add("login");
+    url.searchParams.set("prompt", [...prompts].join(" "));
+  }
+  return url.search;
+}
 
 /**
  * The plugin's loginPage and signup.page targets (app/oauth/login,
@@ -106,12 +160,19 @@ export async function redirectToPageWithAuthorizeCallback(
 
   const params = new URLSearchParams(query);
   for (const name of STRIPPED_PARAMS) params.delete(name);
-  const prompt = (params.get("prompt") ?? "")
-    .split(" ")
-    .filter((value) => value && !SATISFIED_PROMPTS.has(value))
-    .join(" ");
-  if (prompt) params.set("prompt", prompt);
+  const prompts = (params.get("prompt") ?? "").split(" ").filter(Boolean);
+  const prompt = prompts.filter((value) => !SATISFIED_PROMPTS.has(value));
+  if (prompt.length > 0) params.set("prompt", prompt.join(" "));
   else params.delete("prompt");
+  // A forced fresh login is replaced by the marker, so the sign-in doesn't
+  // loop on max_age/prompt=login but still has to be a new one.
+  if (
+    page === "/login/email" &&
+    (prompts.includes("login") || params.has("max_age"))
+  ) {
+    params.delete("max_age");
+    params.set(LOGIN_MARKER_PARAM, await signLoginMarker(auth, Date.now()));
+  }
 
   const publicUrl = env.NEXT_PUBLIC_AUTH_URL;
   const target = new URL(page, publicUrl);

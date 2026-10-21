@@ -52,6 +52,7 @@ describe("/.well-known/openid-configuration", () => {
       issuer: "https://auth.test.invalid",
       authorization_endpoint:
         "https://auth.test.invalid/api/auth2/oauth2/authorize",
+      token_endpoint: "https://auth.test.invalid/api/auth2/oauth2/token",
       jwks_uri: "https://auth.test.invalid/api/auth2/jwks",
       end_session_endpoint:
         "https://auth.test.invalid/api/auth2/oauth2/end-session",
@@ -66,6 +67,7 @@ describe("/.well-known/openid-configuration", () => {
       issuer: "https://auth.test.invalid",
       authorization_endpoint:
         "https://auth.test.invalid/api/auth2/oauth2/authorize",
+      token_endpoint: "https://auth.test.invalid/api/oauth/token",
       jwks_uri: "https://auth.test.invalid/.well-known/jwks.json",
       end_session_endpoint: "https://auth.test.invalid/api/oauth/logout",
     });

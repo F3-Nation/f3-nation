@@ -478,11 +478,86 @@ describe("login and onboarding round-trip through /api/oauth/authorize", () => {
     for (const name of ["sig", "exp", "ba_iat", "ba_pl", "ba_param"]) {
       expect(callback.searchParams.has(name)).toBe(false);
     }
-    // Satisfied by signing in; left in they'd loop back to the login page.
+    // Left in they'd loop back to the login page; a marker that the session
+    // must be newer than this redirect stands in for them.
     expect(callback.searchParams.has("prompt")).toBe(false);
     expect(callback.searchParams.has("max_age")).toBe(false);
+    expect(callback.searchParams.get("f3_login_after")).toMatch(/^\d+\./);
     expect(callback.searchParams.get("client_id")).toBe(client.clientId);
     expect(callback.searchParams.get("state")).toBe("rp-state");
+  });
+
+  describe("a forced fresh login (prompt=login or max_age)", () => {
+    /** The callback the login page gets for a signed-in user forced to log in. */
+    async function forcedLoginCallback(extra: Record<string, string>) {
+      const res = await authorize(
+        get(
+          `/api/oauth/authorize?${authorizeParams(client.clientId, pkcePair().challenge, extra).toString()}`,
+          { authorization: `Bearer ${sessionToken}` },
+        ),
+      );
+      const pageUrl = res.headers.get("location")!;
+      expect(pageUrl.startsWith("/oauth/login?")).toBe(true);
+      const login = await oauthLogin(get(pageUrl));
+      return callbackFrom(login.headers.get("location")!);
+    }
+
+    const forcedCases: Record<string, string>[] = [
+      { prompt: "login" },
+      { max_age: "1" },
+    ];
+    for (const extra of forcedCases) {
+      it(`doesn't let an older session skip it by opening the callback (${Object.keys(extra)[0]})`, async () => {
+        // max_age=1 is stale for the beforeAll session by now.
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        const callback = await forcedLoginCallback(extra);
+
+        const next = await authorizeAs(callback.searchParams);
+
+        expect(next.pathname).toBe("/oauth/login");
+        expect(next.searchParams.get("prompt")).toBe("login");
+        expect(next.searchParams.has("code")).toBe(false);
+        expect(next.searchParams.has("f3_login_after")).toBe(false);
+      });
+    }
+
+    it("accepts a session created after the redirect", async () => {
+      const callback = await forcedLoginCallback({ prompt: "login" });
+      const freshSession = await signIn(auth, EMAIL);
+
+      const done = await authorizeAs(callback.searchParams, freshSession);
+
+      expect(done.origin + done.pathname).toBe(REDIRECT_URI);
+      expect(done.searchParams.get("code")).toBeTruthy();
+    });
+
+    it("treats a forged or expired marker as no fresh login", async () => {
+      const callback = await forcedLoginCallback({ prompt: "login" });
+      const freshSession = await signIn(auth, EMAIL);
+      const marker = callback.searchParams.get("f3_login_after")!;
+      const [issuedAt] = marker.split(".");
+
+      for (const forged of [
+        `${Number(issuedAt) - 1000}.${marker.split(".")[1]}`,
+        `${issuedAt}.bogus`,
+        "garbage",
+      ]) {
+        const params = new URLSearchParams(callback.searchParams);
+        params.set("f3_login_after", forged);
+        const next = await authorizeAs(params, freshSession);
+        expect(next.pathname).toBe("/oauth/login");
+        expect(next.searchParams.get("prompt")).toBe("login");
+      }
+
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(Date.now() + 2 * 60 * 60 * 1000);
+      try {
+        const next = await authorizeAs(callback.searchParams, freshSession);
+        expect(next.pathname).toBe("/oauth/login");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it("gates a user who hasn't onboarded, then issues a code once they have", async () => {
@@ -603,7 +678,7 @@ describe("/.well-known/openid-configuration with the flag on", () => {
       issuer: ISSUER,
       jwks_uri: `${BASE_URL}/.well-known/jwks.json`,
       authorization_endpoint: `${ENDPOINT}/oauth2/authorize`,
-      token_endpoint: `${ENDPOINT}/oauth2/token`,
+      token_endpoint: `${BASE_URL}/api/oauth/token`,
       userinfo_endpoint: `${ENDPOINT}/oauth2/userinfo`,
       revocation_endpoint: `${ENDPOINT}/oauth2/revoke`,
       end_session_endpoint: `${BASE_URL}/api/oauth/logout`,
