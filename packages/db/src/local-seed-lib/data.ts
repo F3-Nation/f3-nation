@@ -285,6 +285,13 @@ export const LOCAL_API_KEYS: LocalApiKeySeed[] = [
     role: null,
   },
   {
+    key: "f3-org-map",
+    name: "Homepage org map (local dev)",
+    description:
+      "Used by apps/homepage org chart for read-only API access in local dev",
+    role: null,
+  },
+  {
     key: "local-slackbot-key",
     name: "Slackbot (local dev)",
     description: "Used by apps/slackbot for full Admin access",
