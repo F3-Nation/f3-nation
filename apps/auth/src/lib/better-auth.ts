@@ -633,6 +633,12 @@ export async function getAuth() {
   // instance's keys while the flag is on (see that route). The flag is only
   // turned on for f3-auth3, which has its own origin (see
   // scripts/cloud-run-env-auth3.sh), so no other service claims this issuer.
+  // Better Auth's own discovery metadata is NOT reachable at the origin: its
+  // hook only matches paths under the issuer's path, and root-level requests
+  // never reach the /api/auth2 mount. Until cutover, discovery is the
+  // hand-written /.well-known/openid-configuration; it must point at the
+  // /api/auth2/oauth2/* endpoints (or serve oauthProviderOpenIdConfigMetadata)
+  // before relying parties move.
   const issuer = env.NEXT_PUBLIC_AUTH_URL;
 
   _auth = createAuthInstance({
