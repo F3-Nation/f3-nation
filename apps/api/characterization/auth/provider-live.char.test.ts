@@ -42,7 +42,8 @@ import {
  *     (`<issuer>/.well-known/jwks.json`, not discovery's jwks_uri) and checked
  *     against the frozen claim contract (access-token-contract.ts);
  *   - with a user token supplied: the same, plus the call apps/admin and
- *     apps/me make (`verifyAccessToken(token, issuer, clientId, true)`).
+ *     apps/me make (`verifyAccessToken(token, AUTH_PROVIDER_URL, clientId,
+ *     true)`), with CHAR_TEST_AUTH_PROVIDER_URL standing in for their env.
  *
  * Not covered, and why (the gap):
  *   - The authorization_code + email-OTP sign-in flow. It needs the emailed
@@ -52,9 +53,10 @@ import {
  *     apps/me or apps/admin session holds). Locally the flow is drivable via
  *     apps/auth/AGENTS.md's Mailpit recipe.
  *   - client_credentials on the hand-rolled server (auth2's /api/oauth/*):
- *     it only implements authorization_code and refresh_token. The
- *     client-token cases skip themselves when discovery does not advertise
- *     the grant. On Better Auth, a client allowed the grant has to be
+ *     it only implements authorization_code and refresh_token. With a
+ *     client configured, the client-token cases fail when discovery does not
+ *     advertise the grant, so leave CHAR_TEST_AUTH_CLIENT_ID unset there. On
+ *     Better Auth, a client allowed the grant has to be
  *     provisioned in the database: production's clientPrivileges denies
  *     configure-client-credentials-scopes.
  *   - refresh_token rotation, PKCE enforcement, id_token claims, userinfo,
@@ -62,6 +64,12 @@ import {
  *   - Writes: no case creates users, clients or sessions on the target.
  *   - The claim contract with only CHAR_TEST_AUTH_ISSUER set: there is no
  *     real token to check without a client or a user token.
+ *   - Known gap, not a test bug: the apps pass AUTH_PROVIDER_URL (the bare
+ *     origin, which AuthClient also builds /api/oauth/* from) as the expected
+ *     `iss`. Better Auth's issuer is `<origin>/api/auth2`, so against it the
+ *     apps' call fails with issuer_mismatch until the apps or packages/sso
+ *     take an explicit issuer. Like the JWKS location, this has to be fixed
+ *     before the cutover, not here.
  *   - @f3nation/sso-next's re-export of verifyAccessToken, which apps/admin
  *     and apps/me import: it pulls in next/server, which apps/api doesn't
  *     have. The calls here use @f3nation/sso directly, so a future wrapper in
@@ -120,7 +128,9 @@ async function verifyLikeRelyingParties(token: string, issuer: string) {
     issuer,
   });
   if (!result.ok) {
-    throw new Error(`packages/sso rejected the token: ${result.code}`);
+    throw new Error(
+      `packages/sso rejected the token: ${result.code}: ${result.message}`,
+    );
   }
   return result.payload;
 }
@@ -252,7 +262,8 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
     // looks the client up; there the case only pins the error envelope.
     it("rejects an unknown client or bad grant with an RFC 6749 error", async () => {
       const grants = provider.discovery.grant_types_supported ?? [];
-      const body: Record<string, string> = grants.includes("client_credentials")
+      const unknownClientCheck = grants.includes("client_credentials");
+      const body: Record<string, string> = unknownClientCheck
         ? { grant_type: "client_credentials" }
         : {
             grant_type: "authorization_code",
@@ -266,7 +277,11 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
       });
       expect([400, 401]).toContain(res.status);
       const json = (await res.json()) as { error?: unknown };
-      expect(["invalid_client", "invalid_grant"]).toContain(json.error);
+      expect(
+        unknownClientCheck
+          ? ["invalid_client"]
+          : ["invalid_client", "invalid_grant"],
+      ).toContain(json.error);
     });
   });
 
@@ -368,7 +383,7 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
     it("verifies the way apps/admin and apps/me call packages/sso", async () => {
       const result = await verifyAccessToken(
         user.token,
-        live.issuer,
+        live.authProviderUrl,
         user.clientId,
         true,
       );

@@ -11,8 +11,13 @@
  *                                 https://auth3.example.com/api/auth2 for the
  *                                 Better Auth instance). Discovery is read
  *                                 from `<issuer>/.well-known/openid-configuration`.
+ *   CHAR_TEST_AUTH_PROVIDER_URL   optional: the relying parties'
+ *                                 AUTH_PROVIDER_URL, which apps/admin and
+ *                                 apps/me pass as the expected `iss`. Defaults
+ *                                 to the issuer's origin.
  *   CHAR_TEST_AUTH_CLIENT_ID      a confidential client allowed the
- *   CHAR_TEST_AUTH_CLIENT_SECRET  client_credentials grant (both or neither).
+ *   CHAR_TEST_AUTH_CLIENT_SECRET  client_credentials grant (both or neither;
+ *                                 Better Auth only).
  *   CHAR_TEST_AUTH_USER_TOKEN     an access token a real sign-in minted, and
  *   CHAR_TEST_AUTH_USER_CLIENT_ID the client it was issued to (both or neither).
  */
@@ -20,6 +25,8 @@
 export interface AuthLiveTarget {
   /** Issuer without a trailing slash, as discovery and `iss` must state it. */
   issuer: string;
+  /** What the relying parties pass to verifyAccessToken as AUTH_PROVIDER_URL. */
+  authProviderUrl: string;
   clientCredentials?: { clientId: string; clientSecret: string };
   userToken?: { token: string; clientId: string };
 }
@@ -49,8 +56,14 @@ function resolveAuthTarget(): AuthLiveTarget | undefined {
     "CHAR_TEST_AUTH_USER_CLIENT_ID",
   );
 
+  const providerRaw = process.env.CHAR_TEST_AUTH_PROVIDER_URL;
+  const authProviderUrl = providerRaw
+    ? new URL(providerRaw).toString().replace(/\/$/, "")
+    : new URL(issuer).origin;
+
   return {
     issuer,
+    authProviderUrl,
     clientCredentials: credentials && {
       clientId: credentials[0],
       clientSecret: credentials[1],

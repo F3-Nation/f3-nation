@@ -127,11 +127,12 @@ It is configured separately from `CHAR_TEST_TARGET`, and the whole file is
 skipped unless `CHAR_TEST_AUTH_ISSUER` is set, so default and CI runs skip it.
 Verify each relying party's cutover against it.
 
-| Variable                                                      | Enables                                                                        |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `CHAR_TEST_AUTH_ISSUER`                                       | discovery, JWKS shape and location, token-endpoint errors, forged-token reject |
-| `CHAR_TEST_AUTH_CLIENT_ID` + `CHAR_TEST_AUTH_CLIENT_SECRET`   | a `client_credentials` token (Better Auth only), verified and claim-checked    |
-| `CHAR_TEST_AUTH_USER_TOKEN` + `CHAR_TEST_AUTH_USER_CLIENT_ID` | a user access token from a real sign-in, verified and claim-checked            |
+| Variable                                                      | Enables                                                                                      |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `CHAR_TEST_AUTH_ISSUER`                                       | discovery, JWKS shape and location, token-endpoint errors, forged-token reject               |
+| `CHAR_TEST_AUTH_CLIENT_ID` + `CHAR_TEST_AUTH_CLIENT_SECRET`   | a `client_credentials` token (Better Auth only), verified and claim-checked                  |
+| `CHAR_TEST_AUTH_USER_TOKEN` + `CHAR_TEST_AUTH_USER_CLIENT_ID` | a user access token from a real sign-in, verified and claim-checked                          |
+| `CHAR_TEST_AUTH_PROVIDER_URL` (optional)                      | the relying parties' `AUTH_PROVIDER_URL` for the apps' call; defaults to the issuer's origin |
 
 `CHAR_TEST_AUTH_ISSUER` is the issuer exactly as tokens state it in `iss`: the
 origin for the hand-rolled server, `<origin>/api/auth2` for the Better Auth

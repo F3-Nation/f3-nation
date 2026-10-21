@@ -34,11 +34,18 @@ export const CLIENT_ACCESS_TOKEN_CLAIMS = USER_ACCESS_TOKEN_CLAIMS.filter(
 );
 
 /**
- * Registered JWT claims (RFC 7519/9068) an engine may add on top of the
- * contract. No consumer reads them, so the live check tolerates exactly these
- * and nothing else: any other added claim fails it as a contract change.
+ * Registered JWT claims (RFC 7519/9068, plus the IANA-registered OIDC `sid`,
+ * which Better Auth adds to tokens from a sign-in) an engine may add on top of
+ * the contract. No consumer reads them, so the live check tolerates exactly
+ * these and nothing else: any other added claim fails it as a contract change.
  */
-export const TOLERATED_EXTRA_CLAIMS = ["aud", "azp", "jti", "nbf"] as const;
+export const TOLERATED_EXTRA_CLAIMS = [
+  "aud",
+  "azp",
+  "jti",
+  "nbf",
+  "sid",
+] as const;
 
 /** The only signing algorithm packages/sso and packages/api accept. */
 export const ACCESS_TOKEN_ALG = "RS256";
