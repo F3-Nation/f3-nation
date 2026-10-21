@@ -39,6 +39,10 @@ export const env = createEnv({
     SUPER_ADMIN_API_KEY: z.string().min(1).optional(),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
     GCS_EMULATOR_HOST: z.string().optional(),
+    // Comma-separated auth server origins whose JWTs packages/api accepts in
+    // addition to NEXT_PUBLIC_AUTH_URL's. Parsed and validated (fails loudly)
+    // in packages/api/src/trusted-issuers.ts.
+    AUTH_ADDITIONAL_ISSUERS: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_ADMIN_URL: z.string().min(1).optional(),

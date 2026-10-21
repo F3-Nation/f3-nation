@@ -44,7 +44,10 @@ for every session hop:
    `packages/api/src/shared.ts` verifies `Authorization: Bearer <jwt>` as an
    RS256 token against `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json` with an
    issuer check (`shared.ts:57-63`, `:200-204`, `:303-363`), then loads roles
-   from the DB. Headers don't care about cookie domains.
+   from the DB. Headers don't care about cookie domains. Outside previews,
+   `AUTH_ADDITIONAL_ISSUERS` can add more trusted issuers (e.g. auth3 during
+   the Better Auth cutover); each token is checked against the JWKS of the
+   allowlisted issuer its `iss` names (`packages/api/src/trusted-issuers.ts`).
 
 4. **The admin app (not yet in previews) also needs no shared cookie.** It
    runs an OAuth authorization-code flow against `AUTH_PROVIDER_URL`, stores

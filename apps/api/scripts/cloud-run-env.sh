@@ -42,8 +42,11 @@ declare -A SECRET_MAP=(
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
-# Cloud Run env vars).
+# Cloud Run env vars). An empty value is skipped, not cleared: to stop trusting
+# AUTH_ADDITIONAL_ISSUERS later, remove it with
+# `gcloud run services update f3-api --remove-env-vars AUTH_ADDITIONAL_ISSUERS`.
 ENV_FILE_VARS=(
+  AUTH_ADDITIONAL_ISSUERS
   EMAIL_ADMIN_DESTINATIONS
   EMAIL_FROM
   NEXT_PUBLIC_ADMIN_URL
