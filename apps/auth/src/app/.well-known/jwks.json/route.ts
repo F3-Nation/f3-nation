@@ -18,17 +18,23 @@ export async function GET() {
   const legacy = await getJWKS();
   if (!env.AUTH_USE_BETTER_AUTH) return jwksResponse(legacy.keys, true);
 
+  // Better Auth's keys live in the database. If they can't be served, still
+  // serve the legacy key so /api/oauth/* tokens keep verifying, but don't let
+  // a cache hold on to the partial set. A failure to construct the instance
+  // (e.g. BETTER_AUTH_SECRET unset) is a misconfiguration, not a read blip,
+  // so it gets its own event.
+  let auth: Awaited<ReturnType<typeof getAuth>>;
   try {
-    const auth = await getAuth();
+    auth = await getAuth();
+  } catch (err) {
+    logError("auth.jwks.better_auth_instance_failed", {}, err);
+    return jwksResponse(legacy.keys, false);
+  }
+  try {
     const betterAuth = await auth.api.getJwks();
     return jwksResponse([...legacy.keys, ...betterAuth.keys], true);
   } catch (err) {
-    // Better Auth's keys live in the database. If it can't be read, still
-    // serve the legacy key so /api/oauth/* tokens keep verifying, but don't
-    // let a cache hold on to the partial set.
-    logError("auth.jwks.better_auth_keys_failed", {
-      errorName: err instanceof Error ? err.name : typeof err,
-    });
+    logError("auth.jwks.better_auth_keys_failed", {}, err);
     return jwksResponse(legacy.keys, false);
   }
 }
