@@ -668,8 +668,11 @@ describe("shared OTP attempt budget", () => {
       (_email: string, _otp: string, opts: { consume: boolean }) =>
         opts.consume
           ? Promise.reject(
-              Object.assign(new Error(`Failed query: params: ${email}`), {
-                code: "57P01",
+              // Shaped like DrizzleQueryError: the driver error is the cause.
+              new Error(`Failed query: params: ${email}`, {
+                cause: Object.assign(new Error("terminating connection"), {
+                  code: "57P01",
+                }),
               }),
             )
           : Promise.resolve(true),
@@ -694,6 +697,11 @@ describe("shared OTP attempt budget", () => {
 
   it.each([
     ["an error without a code", new Error("boom"), "Error"],
+    [
+      "an error with a codeless cause",
+      new Error("boom", { cause: new Error("driver") }),
+      "Error",
+    ],
     ["a non-error", "boom", "string"],
   ])(
     "logs only the kind of failure when using the code up throws %s",

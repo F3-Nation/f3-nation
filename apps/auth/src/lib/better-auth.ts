@@ -224,6 +224,19 @@ const OTP_VERIFYING_PATHS = new Set([
 ]);
 
 /**
+ * The SQLSTATE of a database error, if any. DrizzleQueryError carries the
+ * driver's error (with `code`) as its `cause`, so look there first.
+ */
+function sqlState(err: unknown): string | undefined {
+  for (const e of [err instanceof Error ? err.cause : undefined, err]) {
+    if (e instanceof Error && "code" in e && typeof e.code === "string") {
+      return e.code;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Split out from createAuthInstance so tests can pre-seed a memoryAdapter's
  * backing object with `getAuthTables(buildBetterAuthOptions(...))` before
  * constructing the instance: memoryAdapter throws on any findOne() against
@@ -292,12 +305,7 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
           // Not the error itself: Drizzle puts the bound email in its message.
           logError("auth.better_auth.otp_consume_failed", {
             errorName: err instanceof Error ? err.name : typeof err,
-            code:
-              err instanceof Error &&
-              "code" in err &&
-              typeof err.code === "string"
-                ? err.code
-                : undefined,
+            code: sqlState(err),
           });
         }
       }),
