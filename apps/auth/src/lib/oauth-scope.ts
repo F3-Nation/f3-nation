@@ -13,14 +13,26 @@ export function idTokenScopeOrNull(
 }
 
 /**
- * Drops `offline_access` from a requested scope string. The hand-rolled
- * server always issues a refresh token, so the scope means nothing here, but
- * relying parties send it for auth3 (Better Auth issues refresh tokens only
- * when it's granted). Stripping it before validation lets one client config
- * work against both servers without registering the scope on every legacy
- * client. Any other scope string is returned unchanged.
+ * Drops `offline_access` from a requested scope string unless the client
+ * registered it. The hand-rolled server always issues a refresh token, so
+ * the scope means nothing here, but relying parties send it for auth3
+ * (Better Auth issues refresh tokens only when it's granted). Stripping it
+ * before validation lets one client config work against both servers
+ * without registering the scope on every legacy client. A client that did
+ * register it keeps it, so its granted scope matches its registration.
+ *
+ * Only the `offline_access` tokens are removed; the rest of the string,
+ * spacing included, is kept as is, so `validateScopes` judges it exactly as
+ * before. A request for `offline_access` alone becomes `""`, which
+ * `validateScopes` rejects: there's no real scope left to grant.
  */
-export function withoutOfflineAccess(requestedScopes: string): string {
+export function withoutOfflineAccess(
+  requestedScopes: string,
+  registeredScopes: string | null | undefined,
+): string {
+  // Same fallback as validateScopes in oauth.ts.
+  const registered = (registeredScopes ?? "openid profile email").split(" ");
+  if (registered.includes("offline_access")) return requestedScopes;
   const scopes = requestedScopes.split(" ");
   if (!scopes.includes("offline_access")) return requestedScopes;
   return scopes.filter((s) => s !== "offline_access").join(" ");

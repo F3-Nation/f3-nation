@@ -555,12 +555,12 @@ const config = auth.getOAuthConfig();
 
 Builds the URL to redirect users to for login.
 
-| Parameter                    | Type     | Required | Description                                                              |
-| ---------------------------- | -------- | -------- | ------------------------------------------------------------------------ |
-| `params.scope`               | `string` | No       | Space-separated scopes. Default: `"openid profile email offline_access"` |
-| `params.state`               | `string` | No       | CSRF protection token. Echoed back in the callback.                      |
-| `params.codeChallenge`       | `string` | No       | PKCE code challenge                                                      |
-| `params.codeChallengeMethod` | `string` | No       | `"S256"` or `"plain"`. Default: `"S256"`                                 |
+| Parameter                    | Type     | Required | Description                                               |
+| ---------------------------- | -------- | -------- | --------------------------------------------------------- |
+| `params.scope`               | `string` | No       | Space-separated scopes. Default: `"openid profile email"` |
+| `params.state`               | `string` | No       | CSRF protection token. Echoed back in the callback.       |
+| `params.codeChallenge`       | `string` | No       | PKCE code challenge                                       |
+| `params.codeChallengeMethod` | `string` | No       | `"S256"` or `"plain"`. Default: `"S256"`                  |
 
 **Returns:** `string` — the full authorization URL
 
@@ -575,14 +575,11 @@ const url = auth.getAuthorizationUrl({
 
 **Available scopes:**
 
-| Scope            | Claims Returned                      |
-| ---------------- | ------------------------------------ |
-| `openid`         | `sub` (user ID)                      |
-| `profile`        | `name`, `picture`                    |
-| `email`          | `email`, `email_verified`            |
-| `offline_access` | none; asks auth3 for a refresh token |
-
-auth3 (Better Auth) issues a refresh token only when `offline_access` is granted, so it's in the default scope. The current auth server ignores it and always issues one. If you pass your own `scope`, include `offline_access` or your users will have to sign in again every hour on auth3.
+| Scope     | Claims Returned           |
+| --------- | ------------------------- |
+| `openid`  | `sub` (user ID)           |
+| `profile` | `name`, `picture`         |
+| `email`   | `email`, `email_verified` |
 
 ---
 

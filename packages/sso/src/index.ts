@@ -65,13 +65,6 @@ export class AuthError extends Error {
 // AuthClient
 // ---------------------------------------------------------------------------
 
-/**
- * `offline_access` is what makes Better Auth (auth3) issue a refresh token;
- * without it, sessions end when the 1-hour access token expires. The
- * hand-rolled auth server ignores it and always issues one.
- */
-export const DEFAULT_SCOPE = "openid profile email offline_access";
-
 export class AuthClient {
   private config: AuthClientConfig;
 
@@ -99,7 +92,7 @@ export class AuthClient {
     url.searchParams.set("response_type", "code");
     url.searchParams.set("client_id", this.config.clientId);
     url.searchParams.set("redirect_uri", this.config.redirectUri);
-    url.searchParams.set("scope", params?.scope ?? DEFAULT_SCOPE);
+    url.searchParams.set("scope", params?.scope ?? "openid profile email");
     if (params?.state) url.searchParams.set("state", params.state);
     if (params?.codeChallenge) {
       url.searchParams.set("code_challenge", params.codeChallenge);

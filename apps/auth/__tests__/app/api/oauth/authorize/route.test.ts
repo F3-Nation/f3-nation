@@ -126,4 +126,29 @@ describe("GET /authorize — offline_access", () => {
 
     expect(validateScopes).toHaveBeenCalledWith(CLIENT, "openid");
   });
+
+  it("validates an empty scope for offline_access alone, so it is rejected", async () => {
+    vi.mocked(validateScopes).mockReturnValue(false);
+    const res = await GET(makeRequest(`${baseUrl}&scope=offline_access`));
+
+    expect(validateScopes).toHaveBeenCalledWith(CLIENT, "");
+    expect(res.status).toBe(400);
+    expect(createAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it("keeps offline_access for a client that registered it", async () => {
+    const optedIn = {
+      ...CLIENT,
+      scopes: "openid profile email offline_access",
+    };
+    vi.mocked(getClient).mockResolvedValue(optedIn as never);
+    const scope = "openid profile email offline_access";
+
+    await GET(makeRequest(`${baseUrl}&scope=${encodeURIComponent(scope)}`));
+
+    expect(validateScopes).toHaveBeenCalledWith(optedIn, scope);
+    expect(createAuthorizationCode).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: scope }),
+    );
+  });
 });

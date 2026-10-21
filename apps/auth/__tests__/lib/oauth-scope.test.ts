@@ -39,17 +39,48 @@ describe("idTokenScopeOrNull", () => {
 });
 
 describe("withoutOfflineAccess", () => {
+  const LEGACY = "openid profile email";
+
   it("drops offline_access and keeps the other scopes in order", () => {
-    expect(withoutOfflineAccess("openid profile email offline_access")).toBe(
-      "openid profile email",
+    expect(
+      withoutOfflineAccess("openid profile email offline_access", LEGACY),
+    ).toBe("openid profile email");
+    expect(withoutOfflineAccess("offline_access openid", LEGACY)).toBe(
+      "openid",
     );
-    expect(withoutOfflineAccess("offline_access openid")).toBe("openid");
   });
 
   it("returns a scope string without offline_access unchanged", () => {
-    expect(withoutOfflineAccess("openid profile email")).toBe(
+    expect(withoutOfflineAccess("openid profile email", LEGACY)).toBe(
       "openid profile email",
     );
-    expect(withoutOfflineAccess("openid  profile")).toBe("openid  profile");
+    expect(withoutOfflineAccess("openid  profile", LEGACY)).toBe(
+      "openid  profile",
+    );
+  });
+
+  it("removes only the offline_access token, keeping irregular spacing", () => {
+    // validateScopes rejects the empty entries either way, so the outcome
+    // for a malformed request doesn't change.
+    expect(withoutOfflineAccess("openid  profile offline_access", LEGACY)).toBe(
+      "openid  profile",
+    );
+  });
+
+  it("leaves nothing to grant for offline_access alone", () => {
+    expect(withoutOfflineAccess("offline_access", LEGACY)).toBe("");
+  });
+
+  it("keeps offline_access for a client that registered it", () => {
+    expect(
+      withoutOfflineAccess(
+        "openid profile email offline_access",
+        "openid profile email offline_access",
+      ),
+    ).toBe("openid profile email offline_access");
+  });
+
+  it("uses the same default registration as validateScopes", () => {
+    expect(withoutOfflineAccess("openid offline_access", null)).toBe("openid");
   });
 });
