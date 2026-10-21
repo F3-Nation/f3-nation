@@ -242,6 +242,18 @@ describe("JWT verification across trusted issuers", () => {
         call(await sign(AUTH3, auth3Key, "id")),
       ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
+
+    it("rejects a trusted issuer's token that has no exp", async () => {
+      const noExp = await new SignJWT({ token_use: "access" })
+        .setProtectedHeader({ alg: "RS256" })
+        .setIssuer(AUTH3)
+        .setSubject(String(userId))
+        .setIssuedAt()
+        .sign(auth3Key);
+      await expect(call(noExp)).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+    });
   });
 
   it("fails at import when an additional issuer is malformed", async () => {

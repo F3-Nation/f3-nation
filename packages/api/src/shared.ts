@@ -408,6 +408,9 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
     const result = await jwtVerify(token, authJwks, {
       issuer,
       algorithms: ["RS256"],
+      // jose only checks exp when it's present; both auth servers always set
+      // it, so a token without one is never legitimate.
+      requiredClaims: ["exp"],
     });
     payload = result.payload;
   } catch (err) {
