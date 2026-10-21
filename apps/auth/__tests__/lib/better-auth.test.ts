@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { getAuthTables } from "@better-auth/core/db";
 import { isAccessTokenPayload } from "@f3nation/sso";
@@ -44,7 +44,11 @@ function pkcePair() {
 // databaseHooks.user.create.before allow the sign-in through at all (see
 // apps/auth/src/lib/better-auth.ts's comment on why this can't be
 // emailOTP's own disableSignUp).
-function createTestAuth(f3UserId: number | null) {
+function createTestAuth(
+  f3UserId: number | null,
+  claimOtpAttempt: CreateAuthInstanceOptions["claimOtpAttempt"] = () =>
+    Promise.resolve(true),
+) {
   const memoryDb: MemoryDB = {};
   const options = {
     baseURL: BASE_URL,
@@ -54,6 +58,7 @@ function createTestAuth(f3UserId: number | null) {
     database: memoryAdapter(memoryDb),
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(f3UserId),
+    claimOtpAttempt,
     isNationAdmin: () => Promise.resolve(false),
     // Permissive — unlike production, these tests need to exercise client
     // creation directly. See "denies client creation..." below for
@@ -85,6 +90,7 @@ function createMultiUserTestAuth(
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: (email: string) =>
       Promise.resolve(emailToF3UserId[email] ?? null),
+    claimOtpAttempt: () => Promise.resolve(true),
     isNationAdmin: (f3UserId: number) =>
       Promise.resolve(adminF3UserIds.has(f3UserId)),
     allowClientAction: () => Promise.resolve(true),
@@ -321,6 +327,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       database: memoryAdapter(memoryDb),
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(false),
       allowClientAction: () => Promise.resolve(true),
     };
@@ -371,6 +378,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       database: memoryAdapter(memoryDb),
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(false),
       allowClientAction: () => Promise.resolve(true),
     };
@@ -430,6 +438,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: (email: string) =>
         Promise.resolve(email === "admin-m@f3nation.test" ? 701 : null),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(true),
       allowClientAction: () => Promise.resolve(true),
     };
@@ -492,6 +501,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       database: memoryAdapter(memoryDb),
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(701),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(true),
       allowClientAction: allowProductionClientAction,
     };
@@ -531,6 +541,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: (email: string) =>
         Promise.resolve(emailToF3UserId[email] ?? null),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(true),
       allowClientAction: (
         action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
@@ -598,5 +609,65 @@ describe("allowProductionClientAction", () => {
     for (const action of ["read", "list", "rotate"] as const) {
       await expect(allowProductionClientAction(action)).resolves.toBe(true);
     }
+  });
+});
+
+describe("shared OTP attempt budget", () => {
+  const email = "budget@f3nation.test";
+
+  // Models email_mfa_codes: one code, five attempts, every check spends one,
+  // whichever endpoint (registration or sign-in) makes it.
+  function sharedBudget(code: () => string, maxAttempts = 5) {
+    let attempts = 0;
+    return vi.fn((_email: string, otp: string) => {
+      if (attempts >= maxAttempts) return Promise.resolve(false);
+      attempts += 1;
+      return Promise.resolve(otp === code());
+    });
+  }
+
+  it("spends an attempt from the shared budget before signing in", async () => {
+    let otp = "";
+    const claim = sharedBudget(() => otp);
+    const auth = createTestAuth(4242, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(signIn.token).toBeTruthy();
+    expect(claim).toHaveBeenCalledExactlyOnceWith(email, otp);
+  });
+
+  it("refuses the right code once registration has used up the budget", async () => {
+    let otp = "";
+    const claim = sharedBudget(() => otp);
+    const auth = createTestAuth(4242, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    const wrong = otp === "000000" ? "111111" : "000000";
+    // Five wrong guesses at /api/register (checkEmailCode in production).
+    for (let i = 0; i < 5; i++) {
+      expect(await claim(email, wrong)).toBe(false);
+    }
+
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp } }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_OTP" } });
+  });
+
+  it("gates Better Auth's check-only endpoint on the same budget", async () => {
+    const claim = vi.fn(() => Promise.resolve(false));
+    const auth = createTestAuth(4242, claim);
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    await expect(
+      auth.api.checkVerificationOTP({ body: { email, otp, type: "sign-in" } }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_OTP" } });
+    expect(claim).toHaveBeenCalledExactlyOnceWith(email, otp);
   });
 });
