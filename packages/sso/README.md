@@ -607,7 +607,7 @@ const tokens = await auth.exchangeCodeForToken({
 // tokens.refreshToken  → opaque string (30 day TTL)
 // tokens.expiresIn     → 3600 (seconds)
 // tokens.tokenType     → "Bearer"
-// tokens.scope         → "openid profile email"
+// tokens.scope         → "openid profile email" ("… offline_access" on auth3)
 ```
 
 **Throws:** `AuthError` with codes:

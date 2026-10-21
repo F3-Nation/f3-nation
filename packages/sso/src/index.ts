@@ -70,7 +70,7 @@ export class AuthError extends Error {
  * without it, sessions end when the 1-hour access token expires. The
  * hand-rolled auth server ignores it and always issues one.
  */
-export const DEFAULT_SCOPE = "openid profile email offline_access";
+const DEFAULT_SCOPE = "openid profile email offline_access";
 
 export class AuthClient {
   private config: AuthClientConfig;
