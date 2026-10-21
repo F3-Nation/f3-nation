@@ -64,7 +64,7 @@ import { eq } from "drizzle-orm";
 // its DATABASE_* env requirement) as a module-load side effect. See getAuth's
 // own dynamic `await import("~/lib/db")` below for the actual runtime import.
 import type { db as authDbType } from "~/lib/db";
-import { logInfo, logWarn } from "~/lib/logging";
+import { logError, logInfo, logWarn } from "~/lib/logging";
 import { F3_NATION_CLIENT_REFERENCE_ID } from "~/lib/oauth-client-reference";
 
 import { getUserRoles } from "@acme/db";
@@ -207,12 +207,13 @@ export interface CreateAuthInstanceOptions {
 }
 
 /**
- * Every emailOTP endpoint that checks a submitted code. Each one spends an
- * attempt from the shared budget (claimOtpAttempt) before Better Auth's own
- * check runs. Only sign-in codes are recorded in that budget, so the other
- * code types, which nothing in this app sends, are refused here as well. A
- * flow that starts sending them has to record its codes there too
- * (deliverBetterAuthOtp), or every one of its codes will be refused.
+ * Every emailOTP endpoint that checks a submitted code. Each is checked
+ * against the shared budget (claimOtpAttempt), where a wrong code spends an
+ * attempt, before Better Auth's own check runs. Only sign-in codes are
+ * recorded in that budget, so the other code types, which nothing in this app
+ * sends, are refused here as well. A flow that starts sending them has to
+ * record its codes there too (deliverBetterAuthOtp), or every one of its
+ * codes will be refused.
  */
 const OTP_VERIFYING_PATHS = new Set([
   "/sign-in/email-otp",
@@ -277,16 +278,18 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
           return;
         }
         const body = ctx.body as { email: string; otp: string };
-        // The session already exists, so a failed consume can't undo the
-        // sign-in; it only means the code was already used or has expired.
-        if (
-          !(await options.claimOtpAttempt(body.email, body.otp, {
+        // The sign-in has already worked: Better Auth deleted its copy of
+        // the code and wrote the session. Failing here would drop the cookie
+        // and strand the user, so log and let it stand. The cost is that the
+        // email_mfa_codes row stays usable at /api/register until it expires,
+        // only by someone who holds the code.
+        try {
+          const consumed = await options.claimOtpAttempt(body.email, body.otp, {
             consume: true,
-          }))
-        ) {
-          logWarn("auth.better_auth.otp_consume_failed", {
-            path: ctx.path,
           });
+          if (!consumed) logWarn("auth.better_auth.otp_consume_skipped", {});
+        } catch (err) {
+          logError("auth.better_auth.otp_consume_failed", {}, err);
         }
       }),
     },

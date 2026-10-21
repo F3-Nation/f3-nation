@@ -421,6 +421,10 @@ describe("checkEmailCode", () => {
     expect(toQuery(claim?.attemptCount).sql).toContain("+ 1");
     expect(Object.keys(refund ?? {})).toEqual(["attemptCount"]);
     expect(toQuery(refund?.attemptCount).sql).toContain("- 1");
+    // Only this code's row, and whether or not it was used.
+    expect(toQuery(updateChain(1).where.mock.calls[0]?.[0] as SQL)).toEqual(
+      toQuery(eq(emailMfaCodes.id, "code-1")),
+    );
   });
 
   it("looks the code up under the trimmed, lowercased email it was stored under", async () => {

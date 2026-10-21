@@ -661,6 +661,24 @@ describe("shared OTP attempt budget", () => {
     expect(claim).toHaveBeenLastCalledWith(email, otp, { consume: true });
   });
 
+  it("keeps the sign-in when using the code up throws", async () => {
+    let otp = "";
+    const claim = vi.fn(
+      (_email: string, _otp: string, opts: { consume: boolean }) =>
+        opts.consume
+          ? Promise.reject(new Error("db unavailable"))
+          : Promise.resolve(true),
+    );
+    const auth = createTestAuth(4242, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(signIn.token).toBeTruthy();
+  });
+
   it("leaves the code valid for registration when sign-in fails", async () => {
     let otp = "";
     const claim = sharedBudget(() => otp);
