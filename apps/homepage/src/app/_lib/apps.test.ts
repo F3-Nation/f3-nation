@@ -50,12 +50,29 @@ describe("getChannel", () => {
     expect(getChannel()).toBe("staging");
   });
 
-  it.each(["prod", "ci", "local", "dev", "branch", "", "STAGING"])(
+  it.each(["prod", "ci", "local", "dev", "branch", ""])(
     "treats %j as prod",
     (value) => {
       expect(getChannel(value)).toBe("prod");
     },
   );
+});
+
+describe("getChannel normalization", () => {
+  it.each(["STAGING", " staging", "Staging\n"])("treats %j as staging", (v) => {
+    expect(getChannel(v)).toBe("staging");
+  });
+});
+
+describe("APP_GROUPS", () => {
+  it("has unique group titles and unique app names per group", () => {
+    const titles = APP_GROUPS.map((g) => g.title);
+    expect(new Set(titles).size).toBe(titles.length);
+    for (const g of APP_GROUPS) {
+      const names = g.apps.map((a) => a.name);
+      expect(new Set(names).size).toBe(names.length);
+    }
+  });
 });
 
 describe("channel hosts", () => {

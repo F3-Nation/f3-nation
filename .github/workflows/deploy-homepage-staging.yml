@@ -100,11 +100,18 @@ jobs:
       - name: Build static export (staging channel)
         env:
           NEXT_PUBLIC_CHANNEL: staging
+          # An API override would beat the channel default and point /org and
+          # /status at another API; keep it empty so staging.api is used.
+          NEXT_PUBLIC_API_URL: ""
           # Read-only org-chart key accepted by the staging API; set it on the
           # map-staging environment (README "Staging" step 4). Unset, /org
           # requests go out without a Bearer token.
           NEXT_PUBLIC_ORG_MAP_API_KEY: ${{ vars.HOMEPAGE_ORG_MAP_API_KEY }}
-        run: pnpm build --filter f3-homepage
+        run: |
+          if [ -z "${NEXT_PUBLIC_ORG_MAP_API_KEY}" ]; then
+            echo "::warning::HOMEPAGE_ORG_MAP_API_KEY is not set on map-staging; /org requests will be unauthenticated"
+          fi
+          pnpm build --filter f3-homepage
 
       # Fail before shipping if the export still links production apps.
       - name: Assert the export links staging hosts only

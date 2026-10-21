@@ -5,7 +5,7 @@
  * apps/api/src/env.ts). Because the site is a static export, Next.js inlines
  * the value into the bundle at build time — there is no runtime to read it.
  *
- * Only `"staging"` changes anything. Every other value — unset, `"prod"`, and
+ * Only `"staging"` (any case, surrounding whitespace ignored) changes anything. Every other value — unset, `"prod"`, and
  * also `"ci"`/`"local"`/... (CI sets `NEXT_PUBLIC_CHANNEL=ci` globally) — keeps
  * the production build exactly as it was, so the GitHub Pages deploy, which
  * never sets the variable, is unaffected.
@@ -15,7 +15,7 @@ export type HomepageChannel = "prod" | "staging";
 export function getChannel(
   value: string | undefined = process.env.NEXT_PUBLIC_CHANNEL,
 ): HomepageChannel {
-  return value === "staging" ? "staging" : "prod";
+  return value?.trim().toLowerCase() === "staging" ? "staging" : "prod";
 }
 
 interface ChannelHosts {
