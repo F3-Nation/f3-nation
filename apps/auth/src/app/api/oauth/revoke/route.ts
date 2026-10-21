@@ -15,8 +15,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  // Unlike the hand-rolled route, Better Auth requires client
-  // authentication here (RFC 7009 §2.1).
+  // Unlike the hand-rolled route (unauthenticated, refresh tokens only),
+  // Better Auth requires client authentication (RFC 7009 §2.1): relying
+  // parties must send client_id and client_secret, in the body or as Basic.
+  // A request without them is rejected.
   if (env.AUTH_USE_BETTER_AUTH) {
     return forwardToBetterAuth(request, "revoke", { dropCookies: true });
   }

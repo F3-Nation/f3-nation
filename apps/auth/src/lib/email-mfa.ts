@@ -136,7 +136,7 @@ export async function sendEmailCode(
  * without being consumed.
  */
 async function findMatchingCode(email: string, code: string) {
-  const normalizedEmail = email.toLowerCase();
+  const normalizedEmail = email.toLowerCase().trim();
   const now = new Date().toISOString();
 
   // Find the active code for this email
@@ -195,7 +195,7 @@ export async function verifyEmailCode(
   email: string,
   code: string,
 ): Promise<{ id: number; email: string; f3Name: string | null } | null> {
-  const normalizedEmail = email.toLowerCase();
+  const normalizedEmail = email.toLowerCase().trim();
   const now = new Date().toISOString();
 
   const mfaCode = await findMatchingCode(email, code);

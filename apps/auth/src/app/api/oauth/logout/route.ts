@@ -80,12 +80,19 @@ export async function GET(request: NextRequest) {
     if (userId) {
       await revokeAllUserTokens(userId);
     }
-    // Signing out below only deletes the Better Auth session, which leaves
-    // offline_access refresh tokens alive (by the plugin's design). Not
-    // caught, like revokeAllUserTokens: a logout that can't revoke them
-    // shouldn't report success.
-    if (env.AUTH_USE_BETTER_AUTH) {
+  }
+
+  // Signing out below only deletes the Better Auth session, which leaves
+  // offline_access refresh tokens alive (by the plugin's design), so they are
+  // deleted here too. A failure doesn't skip the sign-out and cookie clearing
+  // below, which would strand the browser half-logged-out: it is reported as
+  // a 500 once those are done, so the logout never looks successful.
+  let tokenDeletionError: unknown;
+  if (env.AUTH_USE_BETTER_AUTH && session?.user.id) {
+    try {
       await deleteBetterAuthOAuthTokens(await getAuth(), session.user.id);
+    } catch (err) {
+      tokenDeletionError = err;
     }
   }
 
@@ -140,6 +147,22 @@ export async function GET(request: NextRequest) {
           cookie.name.startsWith("__Secure-") || cookie.name === "__session",
       });
     }
+  }
+
+  if (tokenDeletionError) {
+    logError(
+      "auth.oauth_logout.better_auth_token_deletion_failed",
+      {},
+      tokenDeletionError,
+    );
+    const failure = NextResponse.json(
+      { error: "server_error" },
+      { status: 500 },
+    );
+    for (const setCookie of response.headers.getSetCookie()) {
+      failure.headers.append("set-cookie", setCookie);
+    }
+    return failure;
   }
 
   return response;

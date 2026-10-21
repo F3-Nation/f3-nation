@@ -183,11 +183,14 @@ describe("GET /api/oauth/logout", () => {
     ).toBeLessThan(betterAuth.api.signOut.mock.invocationCallOrder[0]!);
   });
 
-  it("fails rather than reporting a logout whose Better Auth tokens survived", async () => {
+  it("still signs out and clears cookies, then fails, when deleting Better Auth tokens fails", async () => {
     envMock.AUTH_USE_BETTER_AUTH = true;
-    vi.mocked(getAuth).mockResolvedValue({
-      api: { signOut: vi.fn() },
-    } as never);
+    const signOut = vi.fn().mockResolvedValue(
+      new Response(null, {
+        headers: { "set-cookie": "better-auth.session_token=; Max-Age=0" },
+      }),
+    );
+    vi.mocked(getAuth).mockResolvedValue({ api: { signOut } } as never);
     vi.mocked(getCurrentSession).mockResolvedValue({
       user: { id: "42", email: null, name: null },
     });
@@ -195,9 +198,21 @@ describe("GET /api/oauth/logout", () => {
       new Error("db down"),
     );
 
-    await expect(
-      GET(makeRequest("https://auth.test.invalid/api/oauth/logout")),
-    ).rejects.toThrow("db down");
-    expect(cookieStoreMock.delete).not.toHaveBeenCalled();
+    const res = await GET(
+      makeRequest("https://auth.test.invalid/api/oauth/logout"),
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "server_error" });
+    expect(signOut).toHaveBeenCalled();
+    expect(res.headers.get("set-cookie")).toContain(
+      "better-auth.session_token=",
+    );
+    expect(cookieStoreMock.delete).toHaveBeenCalled();
+    expect(logError).toHaveBeenCalledWith(
+      "auth.oauth_logout.better_auth_token_deletion_failed",
+      {},
+      expect.any(Error),
+    );
   });
 });

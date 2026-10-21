@@ -14,6 +14,7 @@ import {
   allowProductionClientAction,
   buildBetterAuthOptions,
   createAuthInstance,
+  deleteBetterAuthOAuthTokens,
   memoryAdapter,
 } from "../../src/lib/better-auth";
 import { findOnboardedProfile } from "./better-auth-fixture";
@@ -677,5 +678,43 @@ describe("allowProductionClientAction", () => {
     for (const action of ["read", "list", "rotate"] as const) {
       await expect(allowProductionClientAction(action)).resolves.toBe(true);
     }
+  });
+});
+
+describe("deleteBetterAuthOAuthTokens", () => {
+  function fakeAuth(deleteMany: (args: { model: string }) => Promise<unknown>) {
+    return {
+      $context: Promise.resolve({ adapter: { deleteMany } }),
+    } as unknown as Parameters<typeof deleteBetterAuthOAuthTokens>[0];
+  }
+
+  it("still deletes refresh tokens when deleting access tokens fails, then throws", async () => {
+    const deleteMany = vi.fn((args: { model: string }) =>
+      args.model === "oauthAccessToken"
+        ? Promise.reject(new Error("access table down"))
+        : Promise.resolve(0),
+    );
+
+    await expect(
+      deleteBetterAuthOAuthTokens(fakeAuth(deleteMany), "42"),
+    ).rejects.toThrow("access table down");
+
+    expect(deleteMany.mock.calls.map(([args]) => args.model)).toEqual([
+      "oauthAccessToken",
+      "oauthRefreshToken",
+    ]);
+  });
+
+  it("still deletes access tokens when deleting refresh tokens fails, then throws", async () => {
+    const deleteMany = vi.fn((args: { model: string }) =>
+      args.model === "oauthRefreshToken"
+        ? Promise.reject(new Error("refresh table down"))
+        : Promise.resolve(0),
+    );
+
+    await expect(
+      deleteBetterAuthOAuthTokens(fakeAuth(deleteMany), "42"),
+    ).rejects.toThrow("refresh table down");
+    expect(deleteMany).toHaveBeenCalledTimes(2);
   });
 });

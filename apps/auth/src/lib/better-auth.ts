@@ -380,7 +380,15 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         // Merged over Better Auth's own claims, which read better_auth_user.
         customUserInfoClaims: async ({ user, scopes }) => {
           const profile = await findProfileForUser(options, user.id);
-          return profile ? f3ProfileClaims(profile, scopes) : {};
+          // No users row (e.g. after a DB wipe): reject like the hand-rolled
+          // userinfo route instead of answering with a bare sub.
+          if (!profile) {
+            throw new APIError("UNAUTHORIZED", {
+              error: "invalid_token",
+              error_description: "user not found",
+            });
+          }
+          return f3ProfileClaims(profile, scopes);
         },
         // Better Auth puts no profile claims in the id_token. signIdToken
         // does, omitting null ones, and marks the token token_use "id" so a
@@ -489,8 +497,17 @@ export async function deleteBetterAuthOAuthTokens(
 ) {
   const { adapter } = await auth.$context;
   const where = [{ field: "userId", value: userId }];
-  await adapter.deleteMany({ model: "oauthAccessToken", where });
-  await adapter.deleteMany({ model: "oauthRefreshToken", where });
+  // Both are attempted even if the first fails, so one bad table doesn't
+  // leave the other's tokens alive; the first failure is then thrown.
+  const failures: unknown[] = [];
+  for (const model of ["oauthAccessToken", "oauthRefreshToken"]) {
+    try {
+      await adapter.deleteMany({ model, where });
+    } catch (err) {
+      failures.push(err);
+    }
+  }
+  if (failures.length > 0) throw failures[0];
 }
 
 // ---------------------------------------------------------------------------

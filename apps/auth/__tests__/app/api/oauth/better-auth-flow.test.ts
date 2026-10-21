@@ -325,6 +325,56 @@ describe("/api/oauth/* through Better Auth", () => {
     expect(oauth.validateAccessToken).not.toHaveBeenCalled();
   });
 
+  it("returns 401 invalid_token from userinfo when the users row is gone", async () => {
+    const body = await tokens();
+    profiles.delete(USER_ID);
+
+    const res = await userinfo(
+      get("/api/oauth/userinfo", {
+        authorization: `Bearer ${body.access_token}`,
+      }),
+    );
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: "invalid_token" });
+  });
+
+  it("authenticates a token request whose credentials are only in a Basic header", async () => {
+    const { code, verifier } = await codeFor();
+    const basic = Buffer.from(
+      `${client.clientId}:${client.clientSecret}`,
+    ).toString("base64");
+
+    const res = await token(
+      postForm(
+        "/api/oauth/token",
+        {
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: REDIRECT_URI,
+          code_verifier: verifier,
+        },
+        { authorization: `Basic ${basic}` },
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      access_token: expect.any(String) as string,
+    });
+  });
+
+  it("rejects a revoke with no client credentials", async () => {
+    const body = await tokens();
+
+    const res = await revoke(
+      postForm("/api/oauth/revoke", { token: body.refresh_token! }),
+    );
+
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(oauth.revokeToken).not.toHaveBeenCalled();
+  });
+
   it("revokes a refresh token for an authenticated client", async () => {
     const body = await tokens();
 
@@ -339,6 +389,17 @@ describe("/api/oauth/* through Better Auth", () => {
 
     expect(res.status).toBe(200);
     expect(oauth.revokeToken).not.toHaveBeenCalled();
+
+    // The revoked token can't be refreshed.
+    const refresh = await token(
+      postForm("/api/oauth/token", {
+        grant_type: "refresh_token",
+        refresh_token: body.refresh_token!,
+        client_id: client.clientId,
+        client_secret: client.clientSecret,
+      }),
+    );
+    expect(refresh.status).toBe(400);
   });
 
   it("logout's token cleanup leaves no refresh token to use", async () => {
@@ -366,6 +427,35 @@ describe("login and onboarding round-trip through /api/oauth/authorize", () => {
     const url = new URL(location, BASE_URL);
     return new URL(url.searchParams.get("callbackUrl")!);
   }
+
+  it("authorizes a browser by its session cookie alone, with no bearer header", async () => {
+    const signInResponse = await auth.api.signInEmailOTP({
+      body: {
+        email: EMAIL,
+        otp: await auth.api.createVerificationOTP({
+          body: { email: EMAIL, type: "sign-in" },
+        }),
+      },
+      asResponse: true,
+    });
+    const cookie = signInResponse.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    expect(cookie).toContain("session_token");
+
+    const res = await authorize(
+      get(
+        `/api/oauth/authorize?${authorizeParams(client.clientId, pkcePair().challenge).toString()}`,
+        { cookie },
+      ),
+    );
+
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location")!, BASE_URL);
+    expect(location.origin + location.pathname).toBe(REDIRECT_URI);
+    expect(location.searchParams.get("code")).toBeTruthy();
+  });
 
   it("sends a signed-out user to /login/email with the authorize URL as callbackUrl", async () => {
     const pkce = pkcePair();
@@ -520,6 +610,8 @@ describe("/.well-known/openid-configuration with the flag on", () => {
       code_challenge_methods_supported: ["S256"],
     });
     expect(metadata.scopes_supported).toContain("offline_access");
-    expect(res.headers.get("cache-control")).toContain("max-age");
+    expect(res.headers.get("cache-control")).toBe(
+      "public, max-age=15, stale-while-revalidate=15, stale-if-error=86400",
+    );
   });
 });

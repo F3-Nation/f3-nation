@@ -14,10 +14,16 @@ const { rateLimit } = await import("~/lib/rate-limit");
 const { forwardToBetterAuth } = await import("~/lib/better-auth-oauth");
 const { POST } = await import("../../../../../src/app/api/oauth/revoke/route");
 
-function makeRequest(fields: Record<string, string>) {
+function makeRequest(
+  fields: Record<string, string>,
+  headers: Record<string, string> = {},
+) {
   return new Request("https://auth.test.invalid/api/oauth/revoke", {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      ...headers,
+    },
     body: new URLSearchParams(fields).toString(),
   }) as unknown as NextRequest;
 }
@@ -34,6 +40,22 @@ describe("POST /api/oauth/revoke", () => {
     expect(await res.json()).toEqual({ revoked: true });
     expect(revokeToken).toHaveBeenCalledWith("rt");
     expect(forwardToBetterAuth).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 while the flag is off when rate limited", async () => {
+    vi.mocked(rateLimit).mockReturnValueOnce({ allowed: false, remaining: 0 });
+
+    const res = await POST(makeRequest({ token: "rt" }));
+
+    expect(res.status).toBe(429);
+    expect(revokeToken).not.toHaveBeenCalled();
+  });
+
+  it("keys the rate limit on the last x-forwarded-for entry", async () => {
+    await POST(
+      makeRequest({ token: "rt" }, { "x-forwarded-for": "1.2.3.4, 5.6.7.8" }),
+    );
+    expect(rateLimit).toHaveBeenCalledWith("revoke:5.6.7.8", 30, 60000);
   });
 
   it("rejects a request with no token while the flag is off", async () => {

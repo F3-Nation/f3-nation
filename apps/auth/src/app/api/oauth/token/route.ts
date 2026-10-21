@@ -19,15 +19,28 @@ export async function OPTIONS(request: NextRequest) {
  * no CORS headers of its own).
  */
 async function postToBetterAuth(request: NextRequest) {
-  const body = await request.text();
-  const form = new URLSearchParams(body);
+  const form = new URLSearchParams(await request.text());
   const grantType = form.get("grant_type");
-  let clientId = form.get("client_id");
+
+  // Credentials sent only in a Basic header are merged into the body, as the
+  // hand-rolled route does, and the header is dropped so Better Auth sees one
+  // authentication method for the client the limits and CORS are keyed on.
+  let dropAuthorization = false;
   const authHeader = request.headers.get("authorization");
-  if (!clientId && authHeader?.startsWith("Basic ")) {
+  if (authHeader?.startsWith("Basic ")) {
     const decoded = Buffer.from(authHeader.slice(6), "base64").toString();
-    clientId = decoded.split(":")[0] ?? null;
+    const separator = decoded.indexOf(":");
+    const id = decoded.slice(0, separator);
+    const secret = decoded.slice(separator + 1);
+    if (separator > 0 && secret) {
+      if (!form.has("client_id")) form.set("client_id", id);
+      if (!form.has("client_secret")) form.set("client_secret", secret);
+      dropAuthorization = true;
+    }
   }
+  const body = form.toString();
+  const clientId = form.get("client_id");
+
   // Better Auth rejects a request with no client_id itself.
   if (clientId) {
     const { allowed } = rateLimit(`token:${clientId}`, 60, 60 * 1000);
@@ -45,6 +58,7 @@ async function postToBetterAuth(request: NextRequest) {
     const response = await forwardToBetterAuth(request, "token", {
       body,
       dropCookies: true,
+      dropAuthorization,
     });
     const withCors = new Response(response.body, response);
     for (const [name, value] of Object.entries(corsHeaders)) {

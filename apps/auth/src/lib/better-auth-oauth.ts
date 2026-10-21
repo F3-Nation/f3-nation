@@ -29,7 +29,11 @@ export type BetterAuthOAuthEndpoint =
 export async function forwardToBetterAuth(
   request: Request,
   endpoint: BetterAuthOAuthEndpoint,
-  options: { dropCookies?: boolean; body?: string } = {},
+  options: {
+    dropCookies?: boolean;
+    dropAuthorization?: boolean;
+    body?: string;
+  } = {},
 ): Promise<Response> {
   const auth = await getAuth();
   const target = new URL(
@@ -40,6 +44,7 @@ export async function forwardToBetterAuth(
 
   const headers = new Headers(request.headers);
   if (options.dropCookies) headers.delete("cookie");
+  if (options.dropAuthorization) headers.delete("authorization");
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   return auth.handler(

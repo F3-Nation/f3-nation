@@ -326,10 +326,68 @@ describe("POST with AUTH_USE_BETTER_AUTH on", () => {
     expect(forwardToBetterAuth).toHaveBeenCalledWith(req, "token", {
       body: new URLSearchParams(fields).toString(),
       dropCookies: true,
+      dropAuthorization: false,
     });
     expect(getCorsHeaders).toHaveBeenCalledWith(req, "some-client");
     expect(rateLimit).toHaveBeenCalledWith("token:some-client", 60, 60000);
     expect(exchangeAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it("merges Basic credentials into the forwarded body and drops the header", async () => {
+    const basic = Buffer.from("basic-client:basic:secret").toString("base64");
+    const req = formRequest(
+      { grant_type: "authorization_code", code: "abc" },
+      { authorization: `Basic ${basic}` },
+    );
+
+    await POST(req);
+
+    expect(forwardToBetterAuth).toHaveBeenCalledWith(req, "token", {
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: "abc",
+        client_id: "basic-client",
+        client_secret: "basic:secret",
+      }).toString(),
+      dropCookies: true,
+      dropAuthorization: true,
+    });
+    expect(rateLimit).toHaveBeenCalledWith("token:basic-client", 60, 60000);
+    expect(getCorsHeaders).toHaveBeenCalledWith(req, "basic-client");
+  });
+
+  it("keeps body credentials over a Basic header's, filling in only what the body lacks", async () => {
+    const basic = Buffer.from("header-client:header-secret").toString("base64");
+    const req = formRequest(
+      { grant_type: "refresh_token", client_id: "body-client" },
+      { authorization: `Basic ${basic}` },
+    );
+
+    await POST(req);
+
+    const options = vi.mocked(forwardToBetterAuth).mock.calls[0]?.[2];
+    expect(new URLSearchParams(options?.body).get("client_id")).toBe(
+      "body-client",
+    );
+    expect(new URLSearchParams(options?.body).get("client_secret")).toBe(
+      "header-secret",
+    );
+  });
+
+  it("leaves a Basic header with no secret alone", async () => {
+    const basic = Buffer.from("public-client:").toString("base64");
+    const req = formRequest(
+      { grant_type: "authorization_code" },
+      { authorization: `Basic ${basic}` },
+    );
+
+    await POST(req);
+
+    expect(forwardToBetterAuth).toHaveBeenCalledWith(req, "token", {
+      body: "grant_type=authorization_code",
+      dropCookies: true,
+      dropAuthorization: false,
+    });
   });
 
   it("rate limits by the client_id in a Basic auth header", async () => {

@@ -60,6 +60,8 @@ describe("/.well-known/openid-configuration", () => {
 
     const res = await GET(request);
 
+    expect(res.headers.get("cache-control")).toContain("max-age=15");
+
     expect(await res.json()).toEqual({
       issuer: "https://auth.test.invalid",
       authorization_endpoint:

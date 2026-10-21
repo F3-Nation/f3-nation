@@ -20,7 +20,14 @@ export async function GET(request: NextRequest) {
   const ip =
     request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
     "unknown";
-  const { allowed } = rateLimit(`authorize:${ip}`, 30, 60 * 1000);
+  // With the flag on, each login or onboarding round trip re-enters this
+  // route (about three passes per sign-in), so the limit is three times
+  // higher; Better Auth's own authorize limiter still applies behind it.
+  const { allowed } = rateLimit(
+    `authorize:${ip}`,
+    env.AUTH_USE_BETTER_AUTH ? 90 : 30,
+    60 * 1000,
+  );
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }

@@ -34,8 +34,10 @@ export async function GET(request: Request) {
 /**
  * Better Auth's own metadata, which advertises its native
  * /api/auth2/oauth2/* endpoints: clients that read discovery go straight
- * there, and only callers that hardcode /api/oauth/* use the adapters. Two
- * fields are replaced:
+ * there, and only callers that hardcode /api/oauth/* use the adapters. That
+ * bypasses the adapters' per-IP/per-client rate limits, token CORS headers
+ * and 500 backstop (an accepted trade-off; Better Auth's own limiter and
+ * hooks still apply). Two fields are replaced:
  *   - jwks_uri: Better Auth's would be /api/auth2/jwks, but relying parties
  *     fetch the origin-root document, which also serves the hand-rolled key.
  *   - end_session_endpoint: Better Auth's /oauth2/end-session needs an
@@ -53,10 +55,7 @@ async function betterAuthMetadata(request: Request, issuer: string) {
       jwks_uri: `${issuer}/.well-known/jwks.json`,
       end_session_endpoint: `${issuer}/api/oauth/logout`,
     },
-    {
-      headers: {
-        "Cache-Control": response.headers.get("Cache-Control") ?? "no-store",
-      },
-    },
+    // The plugin's own caching headers.
+    { headers: response.headers },
   );
 }
