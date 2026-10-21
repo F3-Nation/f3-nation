@@ -45,7 +45,20 @@ export function initErrorReporting(options: {
   hostname?: string;
 }): void {
   if (!options.key) return;
-  posthog.init(options.key, {
+  // Runs at module load in each app's instrumentation-client.ts: a PostHog
+  // failure must leave reporting off, never break the page.
+  try {
+    initPostHog(options.key, options.app, options.hostname);
+  } catch (initErr) {
+    // Same carve-out as captureException below; docs/OBSERVABILITY_PLAN.md §6.
+    console.error("posthog.init_failed", initErr);
+    return;
+  }
+  enabled = true;
+}
+
+function initPostHog(key: string, app: string, hostname?: string): void {
+  posthog.init(key, {
     api_host: "https://us.i.posthog.com",
     capture_exceptions: true,
     autocapture: false,
@@ -64,12 +77,9 @@ export function initErrorReporting(options: {
   // `app` splits the shared project per app; `environment` splits prod from
   // staging and previews.
   posthog.register({
-    app: options.app,
-    environment: environmentFromHostname(
-      options.hostname ?? window.location.hostname,
-    ),
+    app,
+    environment: environmentFromHostname(hostname ?? window.location.hostname),
   });
-  enabled = true;
 }
 
 /** Report an error a boundary (or other code) caught. No-op when disabled. */

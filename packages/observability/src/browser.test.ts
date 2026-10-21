@@ -103,6 +103,31 @@ describe("initErrorReporting", () => {
     });
   });
 
+  it("leaves reporting off, without throwing, when PostHog fails to init", async () => {
+    const browser = await load();
+    init.mockImplementationOnce(() => {
+      throw new Error("bad config");
+    });
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    expect(() =>
+      browser.initErrorReporting({
+        key: "phc_test",
+        app: "auth",
+        hostname: "auth.f3nation.com",
+      }),
+    ).not.toThrow();
+    expect(consoleError).toHaveBeenCalledWith(
+      "posthog.init_failed",
+      expect.any(Error),
+    );
+    browser.captureException(new Error("boom"));
+    expect(captureException).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it("reads the hostname from the page when none is passed", async () => {
     vi.stubGlobal("window", { location: { hostname: "admin.f3nation.com" } });
     const browser = await load();
