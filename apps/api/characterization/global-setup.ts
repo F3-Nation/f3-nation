@@ -61,9 +61,15 @@ export async function setup(): Promise<void> {
   const kind = process.env.CHAR_TEST_TARGET ?? "hono";
   // Origin only — a configured base URL can carry credentials or a query token.
   const base = URL.parse(process.env.CHAR_TEST_BASE_URL ?? CHAR_BASE)?.origin;
+  // The auth-provider live target (targets/auth-live.ts) is configured
+  // separately; log its origin too so a stray value is just as visible.
+  const authIssuer = process.env.CHAR_TEST_AUTH_ISSUER;
   logInfo("characterization.setup.target_selected", {
     kind,
     base: base ?? "<invalid>",
+    authIssuer: authIssuer
+      ? (URL.parse(authIssuer)?.origin ?? "<invalid>")
+      : "<unset>",
   });
 }
 

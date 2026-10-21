@@ -119,6 +119,32 @@ see use `target.sharesDatabase` instead: CI's bundle leg sets
 `f3_test`, which lets it exercise `cascade-service`'s dynamic import. Staging
 leaves it unset and skips those cases.
 
+### The auth-provider live target
+
+`auth/provider-live.char.test.ts` points at the token **producer**, a deployed
+`apps/auth` (auth2 today, auth3 at the #876 cutover), rather than at apps/api.
+It is configured separately from `CHAR_TEST_TARGET`, and the whole file is
+skipped unless `CHAR_TEST_AUTH_ISSUER` is set, so default and CI runs skip it.
+Verify each relying party's cutover against it.
+
+| Variable                                                      | Enables                                                                        |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `CHAR_TEST_AUTH_ISSUER`                                       | discovery, JWKS shape and location, token-endpoint errors, forged-token reject |
+| `CHAR_TEST_AUTH_CLIENT_ID` + `CHAR_TEST_AUTH_CLIENT_SECRET`   | a `client_credentials` token (Better Auth only), verified and claim-checked    |
+| `CHAR_TEST_AUTH_USER_TOKEN` + `CHAR_TEST_AUTH_USER_CLIENT_ID` | a user access token from a real sign-in, verified and claim-checked            |
+
+`CHAR_TEST_AUTH_ISSUER` is the issuer exactly as tokens state it in `iss`: the
+origin for the hand-rolled server, `<origin>/api/auth2` for the Better Auth
+instance. A user token expires after an hour, so mint it just before the run.
+The file's header comment lists what it can't cover headlessly (the
+email-OTP sign-in itself, among others). Claim checks read the frozen lists in
+`auth/access-token-contract.ts`, which the in-process fixture test also pins.
+
+```bash
+CHAR_TEST_AUTH_ISSUER=https://auth2.example.com \
+  pnpm -C apps/api test:characterization auth/provider-live
+```
+
 ### Golden files are frozen
 
 `characterization/__snapshots__/` holds one committed golden per case. **They are
