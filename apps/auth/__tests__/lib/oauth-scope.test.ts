@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { idTokenScopeOrNull } from "../../src/lib/oauth-scope";
+import {
+  idTokenScopeOrNull,
+  withoutOfflineAccess,
+} from "../../src/lib/oauth-scope";
 
 // This is the security-critical gate deciding whether either grant handler
 // in oauth.ts issues an ID Token at all. Extracted as a pure predicate so
@@ -32,5 +35,21 @@ describe("idTokenScopeOrNull", () => {
 
   it("returns null for an empty scope string", () => {
     expect(idTokenScopeOrNull("")).toBeNull();
+  });
+});
+
+describe("withoutOfflineAccess", () => {
+  it("drops offline_access and keeps the other scopes in order", () => {
+    expect(withoutOfflineAccess("openid profile email offline_access")).toBe(
+      "openid profile email",
+    );
+    expect(withoutOfflineAccess("offline_access openid")).toBe("openid");
+  });
+
+  it("returns a scope string without offline_access unchanged", () => {
+    expect(withoutOfflineAccess("openid profile email")).toBe(
+      "openid profile email",
+    );
+    expect(withoutOfflineAccess("openid  profile")).toBe("openid  profile");
   });
 });

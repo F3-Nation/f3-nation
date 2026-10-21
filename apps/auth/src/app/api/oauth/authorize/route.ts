@@ -12,6 +12,7 @@ import {
   validateRedirectUri,
   validateScopes,
 } from "~/lib/oauth";
+import { withoutOfflineAccess } from "~/lib/oauth-scope";
 import { rateLimit } from "~/lib/rate-limit";
 import { env } from "~/env";
 
@@ -30,7 +31,9 @@ export async function GET(request: NextRequest) {
   const responseType = searchParams.get("response_type");
   const clientId = searchParams.get("client_id");
   const redirectUri = searchParams.get("redirect_uri");
-  const scope = searchParams.get("scope") ?? "openid profile email";
+  const scope = withoutOfflineAccess(
+    searchParams.get("scope") ?? "openid profile email",
+  );
   const state = searchParams.get("state");
   const nonce = searchParams.get("nonce");
   const codeChallenge = searchParams.get("code_challenge");

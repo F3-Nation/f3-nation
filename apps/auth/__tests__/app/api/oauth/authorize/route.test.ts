@@ -99,3 +99,31 @@ describe("GET /authorize — nonce/authTime wiring", () => {
     );
   });
 });
+
+describe("GET /authorize — offline_access", () => {
+  const baseUrl =
+    "https://auth.test.invalid/api/oauth/authorize" +
+    "?response_type=code&client_id=some-client" +
+    "&redirect_uri=https://example.com/callback" +
+    "&code_challenge=abc&code_challenge_method=S256";
+
+  it("ignores offline_access: it isn't validated against the client or stored on the code", async () => {
+    const res = await GET(
+      makeRequest(
+        `${baseUrl}&scope=${encodeURIComponent("openid profile email offline_access")}`,
+      ),
+    );
+
+    expect(res.status).toBe(307);
+    expect(validateScopes).toHaveBeenCalledWith(CLIENT, "openid profile email");
+    expect(createAuthorizationCode).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: "openid profile email" }),
+    );
+  });
+
+  it("passes a scope without offline_access through unchanged", async () => {
+    await GET(makeRequest(`${baseUrl}&scope=openid`));
+
+    expect(validateScopes).toHaveBeenCalledWith(CLIENT, "openid");
+  });
+});

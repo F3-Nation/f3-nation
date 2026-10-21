@@ -166,3 +166,73 @@ describe("AuthClient.refreshToken", () => {
     ).rejects.toMatchObject({ code: "invalid_response" });
   });
 });
+
+describe("AuthClient.getAuthorizationUrl", () => {
+  const client = new AuthClient({
+    clientId: "cid",
+    clientSecret: "secret",
+    redirectUri: "https://app.test/callback",
+    authServerUrl: "https://auth.test",
+  });
+
+  it("requests offline_access by default so auth3 issues a refresh token", () => {
+    const url = new URL(client.getAuthorizationUrl());
+    expect(url.searchParams.get("scope")).toBe(
+      "openid profile email offline_access",
+    );
+  });
+
+  it("uses an explicit scope as given", () => {
+    const url = new URL(client.getAuthorizationUrl({ scope: "openid" }));
+    expect(url.searchParams.get("scope")).toBe("openid");
+  });
+});
+
+describe("AuthClient.revokeToken", () => {
+  const client = new AuthClient({
+    clientId: "cid",
+    clientSecret: "secret",
+    redirectUri: "https://app.test/callback",
+    authServerUrl: "https://auth.test",
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends the token with client credentials in the form body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await client.revokeToken("rt");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://auth.test/api/oauth/revoke");
+    expect(init.method).toBe("POST");
+    const body = new URLSearchParams(init.body as string);
+    expect(body.get("token")).toBe("rt");
+    expect(body.get("client_id")).toBe("cid");
+    expect(body.get("client_secret")).toBe("secret");
+  });
+
+  it("throws AuthError when the server rejects the revoke", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: "invalid_client" }),
+      }),
+    );
+
+    await expect(client.revokeToken("rt")).rejects.toMatchObject({
+      code: "invalid_client",
+      statusCode: 401,
+    });
+  });
+});
