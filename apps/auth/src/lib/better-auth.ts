@@ -256,10 +256,9 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         if (typeof email !== "string" || typeof body.otp !== "string") {
           return;
         }
-        // A sign-in uses the code up, so it can't be replayed at
-        // /api/register afterwards.
-        const consume = ctx.path === "/sign-in/email-otp";
-        if (!(await options.claimOtpAttempt(email, body.otp, { consume }))) {
+        if (
+          !(await options.claimOtpAttempt(email, body.otp, { consume: false }))
+        ) {
           // Same error emailOTP gives for a wrong code, so a caller can't
           // tell which budget refused it.
           throw new APIError("BAD_REQUEST", {
@@ -267,6 +266,17 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
             message: "Invalid OTP",
           });
         }
+      }),
+      // A successful sign-in uses the code up, so it can't be replayed at
+      // /api/register afterwards. Only once a session exists: a sign-in that
+      // fails later (NO_F3_ACCOUNT, say) leaves the code valid for
+      // registration.
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/sign-in/email-otp" || !ctx.context.newSession) {
+          return;
+        }
+        const body = ctx.body as { email: string; otp: string };
+        await options.claimOtpAttempt(body.email, body.otp, { consume: true });
       }),
     },
     databaseHooks: {

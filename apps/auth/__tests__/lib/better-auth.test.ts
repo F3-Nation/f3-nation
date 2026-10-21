@@ -627,7 +627,7 @@ describe("shared OTP attempt budget", () => {
     });
   }
 
-  it("checks the shared budget and uses the code up before signing in", async () => {
+  it("checks the shared budget, then uses the code up once signed in", async () => {
     let otp = "";
     const claim = sharedBudget(() => otp);
     const auth = createTestAuth(4242, claim);
@@ -638,8 +638,25 @@ describe("shared OTP attempt budget", () => {
     const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
 
     expect(signIn.token).toBeTruthy();
+    expect(claim.mock.calls).toEqual([
+      [email, otp, { consume: false }],
+      [email, otp, { consume: true }],
+    ]);
+  });
+
+  it("leaves the code valid for registration when sign-in fails", async () => {
+    let otp = "";
+    const claim = sharedBudget(() => otp);
+    const auth = createTestAuth(null, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp } }),
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
     expect(claim).toHaveBeenCalledExactlyOnceWith(email, otp, {
-      consume: true,
+      consume: false,
     });
   });
 
