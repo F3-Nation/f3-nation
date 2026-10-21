@@ -1,7 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
-import { decodeJwt, decodeProtectedHeader } from "jose";
+import {
+  decodeJwt,
+  decodeProtectedHeader,
+  exportJWK,
+  generateKeyPair,
+} from "jose";
 import { getAuthTables } from "@better-auth/core/db";
 import { isAccessTokenPayload, verifyAccessToken } from "@f3nation/sso";
 
@@ -273,13 +278,21 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       scope: "openid profile email",
     });
 
-    // packages/sso fetches <origin>/.well-known/jwks.json, which serves
-    // Better Auth's keys while the flag is on (app/.well-known/jwks.json).
-    const jwks = await auth.api.getJwks();
+    // packages/sso fetches <origin>/.well-known/jwks.json, which with the
+    // flag on serves the hand-rolled f3-auth-1 key followed by Better Auth's
+    // (app/.well-known/jwks.json). Serve that same shape here.
+    const { publicKey } = await generateKeyPair("RS256");
+    const legacyKey = {
+      ...(await exportJWK(publicKey)),
+      alg: "RS256",
+      use: "sig",
+      kid: "f3-auth-1",
+    };
+    const jwks = { keys: [legacyKey, ...(await auth.api.getJwks()).keys] };
+    const jwksUrl = `${BASE_URL}/.well-known/jwks.json`;
     const fetchMock = vi.fn((input: string | URL | Request) =>
       Promise.resolve(
-        String(input instanceof Request ? input.url : input) ===
-          `${BASE_URL}/.well-known/jwks.json`
+        String(input instanceof Request ? input.url : input) === jwksUrl
           ? Response.json(jwks)
           : new Response(null, { status: 404 }),
       ),
@@ -294,7 +307,11 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
         true,
       );
       expect(result).toMatchObject({ ok: true });
-      expect(fetchMock).toHaveBeenCalled();
+      expect(
+        fetchMock.mock.calls.map(([input]) =>
+          String(input instanceof Request ? input.url : input),
+        ),
+      ).toContain(jwksUrl);
     } finally {
       vi.unstubAllGlobals();
     }
