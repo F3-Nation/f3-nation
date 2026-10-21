@@ -63,7 +63,7 @@
  */
 import path from "path";
 import readline from "readline";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -92,6 +92,105 @@ function ask(question: string): Promise<string> {
       resolve(answer);
     }),
   );
+}
+
+type OAuthClientRow = typeof oauthClients.$inferSelect;
+interface ExistingRow {
+  clientId: string;
+  referenceId: string | null;
+  userId: string | null;
+  skipConsent: boolean | null;
+  tokenEndpointAuthMethod: string | null;
+  scopes: string[] | null;
+}
+
+/** The better_auth_oauth_client row a legacy client migrates to. */
+export function buildClientRow(client: OAuthClientRow, now: Date) {
+  let redirectUris: string[];
+  try {
+    const parsed: unknown = JSON.parse(client.redirectUris);
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every((uri): uri is string => typeof uri === "string")
+    ) {
+      throw new Error("not a string array");
+    }
+    redirectUris = parsed;
+  } catch {
+    throw new Error(
+      `oauth_clients.redirect_uris for "${client.id}" is not a valid JSON string array — fix that row before migrating.`,
+    );
+  }
+
+  const trimmedScopes = client.scopes?.trim();
+  const scopeString =
+    trimmedScopes && trimmedScopes.length > 0
+      ? trimmedScopes
+      : "openid profile email";
+  const scopes = scopeString.split(/\s+/);
+  // See the file comment: no refresh token without it.
+  if (!scopes.includes("offline_access")) scopes.push("offline_access");
+
+  return {
+    id: crypto.randomUUID(),
+    clientId: client.id, // preserved exactly — see file comment
+    // No secret at all yet for confidential clients — see the file
+    // comment. Migrated disabled so it can't be mistaken for a usable client
+    // until one is actually issued; public clients need no secret, so they
+    // migrate active.
+    clientSecret: null,
+    disabled: !client.isPublic,
+    // packages/sso sends the secret in the form body.
+    tokenEndpointAuthMethod: client.isPublic ? "none" : "client_secret_post",
+    applicationType: client.isPublic ? ("native" as const) : ("web" as const),
+    // Every migrated client is F3-managed: this shared owner lets any nation
+    // admin read and list it (see the file comment).
+    referenceId: F3_NATION_CLIENT_REFERENCE_ID,
+    requirePKCE: true, // matches the hand-rolled server's unconditional PKCE requirement
+    // No consent page exists; the hand-rolled server never asked either.
+    skipConsent: true,
+    redirectUris,
+    scopes,
+    name: client.name,
+    grantTypes: ["authorization_code", "refresh_token"],
+    responseTypes: ["code" as const],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** What a run inserts, stamps, reports and links, given what is already there. */
+export function planMigration({
+  rows,
+  alreadyPresent,
+  linkedClientIds,
+}: {
+  rows: ReturnType<typeof buildClientRow>[];
+  alreadyPresent: ExistingRow[];
+  linkedClientIds: Set<string>;
+}) {
+  const alreadyPresentIds = new Set(alreadyPresent.map((row) => row.clientId));
+  const newRows = rows.filter((row) => !alreadyPresentIds.has(row.clientId));
+  // An already-present row without a referenceId (e.g. from an earlier run).
+  // Stamp it unless it is pinned to an individual user (userId is checked
+  // before referenceId, so setting one would change nothing and hide the
+  // pin); those are only reported.
+  const toStamp = alreadyPresent.filter(
+    (row) => !row.referenceId && !row.userId,
+  );
+  // Rows nation admins still can't reach after this run: pinned to a user, or
+  // holding some other referenceId. Reported, never overwritten.
+  const needsReview = alreadyPresent.filter(
+    (row) =>
+      Boolean(row.userId) ||
+      (Boolean(row.referenceId) &&
+        row.referenceId !== F3_NATION_CLIENT_REFERENCE_ID),
+  );
+  const reviewIds = new Set(needsReview.map((row) => row.clientId));
+  const toLink = rows.filter(
+    (row) => !linkedClientIds.has(row.clientId) && !reviewIds.has(row.clientId),
+  );
+  return { newRows, toStamp, needsReview, toLink };
 }
 
 async function main() {
@@ -209,61 +308,11 @@ async function main() {
 
   const now = new Date();
   const rows = clients.map((client) => {
-    let redirectUris: string[];
-    try {
-      const parsed: unknown = JSON.parse(client.redirectUris);
-      if (
-        !Array.isArray(parsed) ||
-        !parsed.every((uri): uri is string => typeof uri === "string")
-      ) {
-        throw new Error("not a string array");
-      }
-      redirectUris = parsed;
-    } catch {
-      throw new Error(
-        `oauth_clients.redirect_uris for "${client.id}" is not a valid JSON string array — fix that row before migrating.`,
-      );
-    }
-
+    const row = buildClientRow(client, now);
     console.log(
       `  ${client.id} (${client.name}) — ${client.isPublic ? "public" : "confidential, migrating DISABLED — needs a secret issued before use, see file comment"}`,
     );
-
-    const trimmedScopes = client.scopes?.trim();
-    const scopeString =
-      trimmedScopes && trimmedScopes.length > 0
-        ? trimmedScopes
-        : "openid profile email";
-    const scopes = scopeString.split(/\s+/);
-    // See the file comment: no refresh token without it.
-    if (!scopes.includes("offline_access")) scopes.push("offline_access");
-
-    return {
-      id: crypto.randomUUID(),
-      clientId: client.id, // preserved exactly — see file comment
-      // No secret at all yet for confidential clients — see the file
-      // comment's "OPEN QUESTION for Phase 4". Migrated disabled so it
-      // can't be mistaken for a usable client until one is actually
-      // issued; public clients need no secret, so they migrate active.
-      clientSecret: null,
-      disabled: !client.isPublic,
-      // packages/sso sends the secret in the form body.
-      tokenEndpointAuthMethod: client.isPublic ? "none" : "client_secret_post",
-      applicationType: client.isPublic ? ("native" as const) : ("web" as const),
-      // Every migrated client is F3-managed: this shared owner lets any nation
-      // admin read and list it (see the file comment).
-      referenceId: F3_NATION_CLIENT_REFERENCE_ID,
-      requirePKCE: true, // matches the hand-rolled server's unconditional PKCE requirement
-      // No consent page exists; the hand-rolled server never asked either.
-      skipConsent: true,
-      redirectUris,
-      scopes,
-      name: client.name,
-      grantTypes: ["authorization_code", "refresh_token"],
-      responseTypes: ["code" as const],
-      createdAt: now,
-      updatedAt: now,
-    };
+    return row;
   });
 
   // Computed once, ahead of both branches, so the dry-run count matches what
@@ -286,22 +335,6 @@ async function main() {
       ),
     );
   const alreadyPresentIds = new Set(alreadyPresent.map((row) => row.clientId));
-  const newRows = rows.filter((row) => !alreadyPresentIds.has(row.clientId));
-  // An already-present row without a referenceId (e.g. from an earlier run).
-  // Stamp it unless it is pinned to an individual user (userId is checked
-  // before referenceId, so setting one would change nothing and hide the
-  // pin); those are only reported.
-  const toStamp = alreadyPresent.filter(
-    (row) => !row.referenceId && !row.userId,
-  );
-  // Rows nation admins still can't reach after this run: pinned to a user, or
-  // holding some other referenceId. Reported, never overwritten.
-  const needsReview = alreadyPresent.filter(
-    (row) =>
-      Boolean(row.userId) ||
-      (Boolean(row.referenceId) &&
-        row.referenceId !== F3_NATION_CLIENT_REFERENCE_ID),
-  );
   for (const row of rows) {
     if (alreadyPresentIds.has(row.clientId)) {
       const existing = alreadyPresent.find((r) => r.clientId === row.clientId);
@@ -346,11 +379,11 @@ async function main() {
         ),
       ),
     );
-  const linkedIds = new Set(linked.map((row) => row.clientId));
-  const reviewIds = new Set(needsReview.map((row) => row.clientId));
-  const toLink = rows.filter(
-    (row) => !linkedIds.has(row.clientId) && !reviewIds.has(row.clientId),
-  );
+  const { newRows, toStamp, needsReview, toLink } = planMigration({
+    rows,
+    alreadyPresent,
+    linkedClientIds: new Set(linked.map((row) => row.clientId)),
+  });
   const reviewNote =
     needsReview.length > 0
       ? `\n${needsReview.length} existing row(s) need manual review: nation admins can't reach them.`
@@ -412,7 +445,13 @@ async function main() {
   await sql.end();
 }
 
-main().catch((err: unknown) => {
-  console.error(err);
-  process.exit(1);
-});
+// Not when imported: the tests import buildClientRow and planMigration.
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

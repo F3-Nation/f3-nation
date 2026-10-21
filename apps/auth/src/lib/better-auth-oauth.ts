@@ -165,10 +165,13 @@ export async function redirectToPageWithAuthorizeCallback(
   if (prompt.length > 0) params.set("prompt", prompt.join(" "));
   else params.delete("prompt");
   // A forced fresh login is replaced by the marker, so the sign-in doesn't
-  // loop on max_age/prompt=login but still has to be a new one.
+  // loop on max_age/prompt=login but still has to be a new one. prompt=login
+  // counts on either page: "login create" for a user with a session lands on
+  // /onboarding, and the marker keeps the next pass from issuing a code on
+  // the old session. max_age only matters where a session is created.
   if (
-    page === "/login/email" &&
-    (prompts.includes("login") || params.has("max_age"))
+    prompts.includes("login") ||
+    (page === "/login/email" && params.has("max_age"))
   ) {
     params.delete("max_age");
     params.set(LOGIN_MARKER_PARAM, await signLoginMarker(auth, Date.now()));

@@ -590,6 +590,38 @@ describe("login and onboarding round-trip through /api/oauth/authorize", () => {
     expect(done.searchParams.get("state")).toBe("rp-state");
   });
 
+  it("still demands a fresh login after onboarding when prompt=login create sent the user there", async () => {
+    profiles.set(USER_ID, {
+      ...onboardedProfile(EMAIL),
+      onboardingCompleted: false,
+    });
+    const res = await authorize(
+      get(
+        `/api/oauth/authorize?${authorizeParams(client.clientId, pkcePair().challenge, { prompt: "login create" }).toString()}`,
+        { authorization: `Bearer ${sessionToken}` },
+      ),
+    );
+    const pageUrl = res.headers.get("location")!;
+    expect(pageUrl.startsWith("/oauth/onboarding?")).toBe(true);
+    const onboarding = await oauthOnboarding(get(pageUrl));
+    const callback = callbackFrom(onboarding.headers.get("location")!);
+    expect(callback.searchParams.has("prompt")).toBe(false);
+    expect(callback.searchParams.get("f3_login_after")).toMatch(/^\d+\./);
+
+    profiles.set(USER_ID, onboardedProfile(EMAIL));
+    // The old session alone doesn't get a code...
+    const stale = await authorizeAs(callback.searchParams);
+    expect(stale.pathname).toBe("/oauth/login");
+    expect(stale.searchParams.has("code")).toBe(false);
+    // ...a session created after the redirect does.
+    const done = await authorizeAs(
+      callback.searchParams,
+      await signIn(auth, EMAIL),
+    );
+    expect(done.origin + done.pathname).toBe(REDIRECT_URI);
+    expect(done.searchParams.get("code")).toBeTruthy();
+  });
+
   it("treats a user with no users row as not onboarded", async () => {
     profiles.delete(USER_ID);
     const location = await authorizeAs(

@@ -42,10 +42,11 @@ export async function GET(request: Request) {
  *     headers browser-based clients need (Better Auth sends none).
  *   - jwks_uri: Better Auth's would be /api/auth2/jwks, but relying parties
  *     fetch the origin-root document, which also serves the hand-rolled key.
- *   - end_session_endpoint: Better Auth's /oauth2/end-session needs an
- *     id_token_hint and a client with enableEndSession, which no migrated
- *     client has. /api/oauth/logout signs the user out and revokes their
- *     Better Auth OAuth tokens.
+ *   - end_session_endpoint: Better Auth's /oauth2/end-session only signs out
+ *     for an id_token_hint from a client with enableEndSession (no migrated
+ *     client has it), and otherwise stops at a confirmation step.
+ *     /api/oauth/logout signs the user out and revokes their Better Auth
+ *     OAuth tokens.
  */
 async function betterAuthMetadata(request: Request, issuer: string) {
   const auth = await getAuth();
