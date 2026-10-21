@@ -33,8 +33,10 @@ import {
  *   - discovery (`<issuer>/.well-known/openid-configuration`): issuer echo,
  *     the endpoints relying parties use, RS256 and S256 PKCE advertised;
  *   - the JWKS shape at discovery's jwks_uri (public RSA keys with a kid);
- *   - that packages/sso finds those keys where it looks for them: it never
- *     reads discovery, it fetches `<issuer>/.well-known/jwks.json`;
+ *   - that packages/sso and packages/api find those keys where they look
+ *     for them: neither reads discovery. packages/sso fetches
+ *     `<origin>/.well-known/jwks.json`, packages/api
+ *     `<issuer>/.well-known/jwks.json`;
  *   - the token endpoint's error envelope for a missing and an unknown client;
  *   - packages/sso rejecting a token forged under a live kid and issuer;
  *   - with a client_credentials client configured: a real token, verified by
@@ -219,16 +221,20 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
     });
 
     // packages/sso (and so apps/admin and apps/me) and packages/api never
-    // read discovery: they build `<issuer>/.well-known/jwks.json` themselves.
-    // A server whose discovery points elsewhere still breaks every one of
-    // them unless the conventional path serves the same keys. As of this
-    // writing this fails against the Better Auth instance (issuer
-    // <origin>/api/auth2): its keys are at /api/auth2/jwks, and
-    // <origin>/.well-known/jwks.json serves the hand-rolled server's key.
-    it("serves the same keys where packages/sso looks for them", async () => {
-      const conventional = await getJson<{ keys: JWK[] }>(
-        ssoJwksUrl(live.issuer),
-      );
+    // read discovery: they build a JWKS URL themselves, each its own way.
+    // A server whose discovery points elsewhere still breaks them unless that
+    // URL serves the same keys. As of this writing the packages/sso case fails
+    // against the Better Auth instance (issuer <origin>/api/auth2): its keys
+    // are at /api/auth2/jwks, and <origin>/.well-known/jwks.json serves the
+    // hand-rolled server's key.
+    it.each([
+      // new URL("/.well-known/jwks.json", issuer): drops the issuer's path.
+      ["packages/sso", () => ssoJwksUrl(live.issuer)],
+      // `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json`, where that same value
+      // is the expected `iss`, so it has to be the issuer: keeps the path.
+      ["packages/api", () => `${live.issuer}/.well-known/jwks.json`],
+    ])("serves the same keys where %s looks for them", async (_, jwksUrl) => {
+      const conventional = await getJson<{ keys: JWK[] }>(jwksUrl());
       // The key material too, not just the kid: a reused kid with a
       // different key would still break verification.
       const publicParts = (keys: JWK[]) =>
@@ -286,7 +292,7 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
   });
 
   // Uses discovery's JWKS on purpose: this checks signature rejection, and the
-  // JWKS location test above already covers the conventional path.
+  // JWKS location tests above already cover the relying parties' paths.
   it("is rejected by packages/sso when forged under a live kid", async () => {
     const { privateKey } = await generateKeyPair(ACCESS_TOKEN_ALG);
     const kid = provider.jwks.keys[0]?.kid;
