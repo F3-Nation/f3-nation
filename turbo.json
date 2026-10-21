@@ -2,10 +2,12 @@
   "$schema": "https://turborepo.org/schema.json",
   "globalDependencies": [
     "**/.env",
+    ".github/workflows/ci.yml",
     ".gitignore",
     ".nvmrc",
     ".prettierignore",
     ".python-version",
+    "apps/*/Dockerfile",
     "pyproject.toml",
     "uv.lock",
     "scripts/python-task.sh"
