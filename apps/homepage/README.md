@@ -123,10 +123,13 @@ Codex, Region Pages, F3 Near Me, Slack Bot, SyncBot) are **hidden** so testers
 never land on production. Informational cards (Auth) stay. The `/org` and
 `/status` pages call the staging API unless `NEXT_PUBLIC_API_URL` overrides it.
 
-Build it locally:
+Build it locally. Clear `NEXT_PUBLIC_LOCAL_DEV` and `NEXT_PUBLIC_API_URL` too:
+a `.env` created by local setup sets them, and they would point the cards and
+the API at localhost instead of staging.
 
 ```bash
-NEXT_PUBLIC_CHANNEL=staging pnpm build --filter f3-homepage
+NEXT_PUBLIC_CHANNEL=staging NEXT_PUBLIC_LOCAL_DEV= NEXT_PUBLIC_API_URL= \
+  pnpm build --filter f3-homepage
 ```
 
 ### Staging deploy

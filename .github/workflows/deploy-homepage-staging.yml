@@ -104,12 +104,13 @@ jobs:
           # /status at another API; keep it empty so staging.api is used.
           NEXT_PUBLIC_API_URL: ""
           # Read-only org-chart key accepted by the staging API; set it on the
-          # map-staging environment (README "Staging" step 4). Unset, /org
-          # requests go out without a Bearer token.
+          # map-staging environment (README "Staging" step 4). The build
+          # fails without it, since /org would ship unauthenticated.
           NEXT_PUBLIC_ORG_MAP_API_KEY: ${{ vars.HOMEPAGE_ORG_MAP_API_KEY }}
         run: |
           if [ -z "${NEXT_PUBLIC_ORG_MAP_API_KEY}" ]; then
-            echo "::warning::HOMEPAGE_ORG_MAP_API_KEY is not set on map-staging; /org requests will be unauthenticated"
+            echo "::error::HOMEPAGE_ORG_MAP_API_KEY is not set on map-staging; /org requests would be unauthenticated"
+            exit 1
           fi
           pnpm build --filter f3-homepage
 
