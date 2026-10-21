@@ -172,7 +172,8 @@ if [[ -x "$real_turbo" ]]; then
   slackbot_test_hash() {
     node -e 'const plan = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
       const task = plan.tasks.find((task) => task.taskId === "f3-slackbot#test");
-      if (typeof task?.command !== "string" || task.command === "<NONEXISTENT>" ||
+      if (typeof task?.command !== "string" || task.command.trim().length === 0 ||
+          task.command === "<NONEXISTENT>" ||
           typeof task.hash !== "string" || task.hash.length === 0) process.exit(1);
       process.stdout.write(task.hash);' "$1"
   }
@@ -242,7 +243,8 @@ if [[ -x "$real_turbo" ]]; then
   assert_eq "real Turbo calculates the Dockerfile-deletion affected test plan" "0" "$?"
   node -e 'const plan = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
     if (!plan.tasks.some((task) => task.taskId === "f3-admin#test" &&
-        typeof task.command === "string" && task.command !== "<NONEXISTENT>")) process.exit(1);' \
+        typeof task.command === "string" && task.command.trim().length > 0 &&
+        task.command !== "<NONEXISTENT>")) process.exit(1);' \
     "${tmp_dir}/dockerfile-affected-plan.json"
   assert_eq "Dockerfile deletion has a runnable Admin task rather than an empty plan" "0" "$?"
 
