@@ -56,10 +56,11 @@ function resolveAuthTarget(): AuthLiveTarget | undefined {
     "CHAR_TEST_AUTH_USER_CLIENT_ID",
   );
 
+  // Passed through as given: the apps use their AUTH_PROVIDER_URL verbatim as
+  // the expected `iss`, so a trailing slash must fail here as it does there.
   const providerRaw = process.env.CHAR_TEST_AUTH_PROVIDER_URL;
-  const authProviderUrl = providerRaw
-    ? new URL(providerRaw).toString().replace(/\/$/, "")
-    : new URL(issuer).origin;
+  if (providerRaw) new URL(providerRaw); // throws on a malformed URL
+  const authProviderUrl = providerRaw ?? new URL(issuer).origin;
 
   return {
     issuer,
