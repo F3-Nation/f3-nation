@@ -37,8 +37,26 @@
  * (see the rotate test in __tests__/lib/better-auth.test.ts). Issuing it a
  * secret and enabling it is separate provisioning work.
  *
+ * Settings each new row gets, matching what relying parties do today:
+ *   - offline_access is added to the client's scopes, since Better Auth only
+ *     issues refresh tokens when it is granted (the hand-rolled server
+ *     always issued one);
+ *   - skipConsent, because there is no consent page (see consentPage in
+ *     better-auth.ts) and the hand-rolled server never asked;
+ *   - confidential clients authenticate with client_secret_post, which is
+ *     what packages/sso sends; Better Auth rejects any other method than
+ *     the one registered;
+ *   - a link to the issuer resource (--resource, default NEXT_PUBLIC_AUTH_URL
+ *     from the env file). Better Auth defaults every authorize and token
+ *     request to that resource so access tokens are JWTs, and refuses a
+ *     resource the client isn't linked to. Better Auth seeds the resource row
+ *     itself on first start with AUTH_USE_BETTER_AUTH on; the script stops if
+ *     it isn't there yet.
+ * Rows already present from an earlier run keep their settings apart from
+ * referenceId and the resource link; the script names any that differ.
+ *
  * Usage:
- *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth [--env local|staging|prod]
+ *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth [--env local|staging|prod] [--resource <issuer>]
  *   (dry run by default — prints what would be inserted and which existing rows would get referenceId)
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth --confirm
  *   (actually writes)
@@ -55,9 +73,12 @@ import * as _schema from "@acme/db/schema/schema";
 
 import { F3_NATION_CLIENT_REFERENCE_ID } from "../src/lib/oauth-client-reference";
 
-const { oauthClients, betterAuthOauthClient } = (
-  "default" in _schema ? _schema.default : _schema
-) as typeof _schema;
+const {
+  oauthClients,
+  betterAuthOauthClient,
+  betterAuthOauthClientResource,
+  betterAuthOauthResource,
+} = ("default" in _schema ? _schema.default : _schema) as typeof _schema;
 
 function ask(question: string): Promise<string> {
   const rl = readline.createInterface({
@@ -109,6 +130,18 @@ async function main() {
     process.exit(1);
   }
 
+  const resourceIndex = args.indexOf("--resource");
+  const resource =
+    resourceIndex !== -1
+      ? args[resourceIndex + 1]
+      : process.env.NEXT_PUBLIC_AUTH_URL;
+  if (!resource || !URL.canParse(resource)) {
+    console.error(
+      "No issuer resource: pass --resource <issuer URL> or set NEXT_PUBLIC_AUTH_URL in the env file.",
+    );
+    process.exit(1);
+  }
+
   const databaseHost = process.env.DATABASE_HOST;
   const databasePort = parseInt(process.env.DATABASE_PORT ?? "5432", 10);
   const databaseUser = process.env.DATABASE_USER;
@@ -143,8 +176,21 @@ async function main() {
   const db = drizzle(sql);
 
   console.log(
-    `\nConnected to ${targetEnv} database at ${databaseHost}/${databaseName}.\n`,
+    `\nConnected to ${targetEnv} database at ${databaseHost}/${databaseName}.` +
+      `\nLinking clients to resource ${resource}.\n`,
   );
+
+  const [resourceRow] = await db
+    .select({ identifier: betterAuthOauthResource.identifier })
+    .from(betterAuthOauthResource)
+    .where(eq(betterAuthOauthResource.identifier, resource));
+  if (!resourceRow) {
+    console.error(
+      `Resource ${resource} is not in better_auth_oauth_resource yet. Start the auth server once with AUTH_USE_BETTER_AUTH on (Better Auth seeds it), or check --resource.`,
+    );
+    await sql.end();
+    process.exit(1);
+  }
 
   const clients = await db
     .select()
@@ -186,6 +232,9 @@ async function main() {
       trimmedScopes && trimmedScopes.length > 0
         ? trimmedScopes
         : "openid profile email";
+    const scopes = scopeString.split(/\s+/);
+    // See the file comment: no refresh token without it.
+    if (!scopes.includes("offline_access")) scopes.push("offline_access");
 
     return {
       id: crypto.randomUUID(),
@@ -196,14 +245,17 @@ async function main() {
       // issued; public clients need no secret, so they migrate active.
       clientSecret: null,
       disabled: !client.isPublic,
-      tokenEndpointAuthMethod: client.isPublic ? "none" : "client_secret_basic",
+      // packages/sso sends the secret in the form body.
+      tokenEndpointAuthMethod: client.isPublic ? "none" : "client_secret_post",
       applicationType: client.isPublic ? ("native" as const) : ("web" as const),
       // Every migrated client is F3-managed: this shared owner lets any nation
       // admin read and list it (see the file comment).
       referenceId: F3_NATION_CLIENT_REFERENCE_ID,
       requirePKCE: true, // matches the hand-rolled server's unconditional PKCE requirement
+      // No consent page exists; the hand-rolled server never asked either.
+      skipConsent: true,
       redirectUris,
-      scopes: scopeString.split(/\s+/),
+      scopes,
       name: client.name,
       grantTypes: ["authorization_code", "refresh_token"],
       responseTypes: ["code" as const],
@@ -220,6 +272,9 @@ async function main() {
       clientId: betterAuthOauthClient.clientId,
       referenceId: betterAuthOauthClient.referenceId,
       userId: betterAuthOauthClient.userId,
+      skipConsent: betterAuthOauthClient.skipConsent,
+      tokenEndpointAuthMethod: betterAuthOauthClient.tokenEndpointAuthMethod,
+      scopes: betterAuthOauthClient.scopes,
     })
     .from(betterAuthOauthClient)
     .where(
@@ -260,6 +315,38 @@ async function main() {
       );
     }
   }
+  // Rows from an earlier run of this script, which used other settings.
+  for (const existing of alreadyPresent) {
+    const row = rows.find((r) => r.clientId === existing.clientId);
+    if (
+      row &&
+      (existing.skipConsent !== true ||
+        existing.tokenEndpointAuthMethod !== row.tokenEndpointAuthMethod ||
+        !existing.scopes?.includes("offline_access"))
+    ) {
+      console.log(
+        `  WARNING: ${existing.clientId} is already present without skipConsent, offline_access or ${row.tokenEndpointAuthMethod}; update it by hand (see file comment).`,
+      );
+    }
+  }
+
+  const linked = await db
+    .select({ clientId: betterAuthOauthClientResource.clientId })
+    .from(betterAuthOauthClientResource)
+    .where(
+      and(
+        eq(betterAuthOauthClientResource.resourceId, resource),
+        inArray(
+          betterAuthOauthClientResource.clientId,
+          rows.map((row) => row.clientId),
+        ),
+      ),
+    );
+  const linkedIds = new Set(linked.map((row) => row.clientId));
+  const reviewIds = new Set(needsReview.map((row) => row.clientId));
+  const toLink = rows.filter(
+    (row) => !linkedIds.has(row.clientId) && !reviewIds.has(row.clientId),
+  );
   const reviewNote =
     needsReview.length > 0
       ? `\n${needsReview.length} existing row(s) need manual review: nation admins can't reach them.`
@@ -268,7 +355,8 @@ async function main() {
   if (!confirmed) {
     console.log(
       `\nDry run only — ${newRows.length} row(s) would be inserted into better_auth_oauth_client` +
-        ` and ${toStamp.length} existing row(s) would get referenceId.`,
+        ` and ${toStamp.length} existing row(s) would get referenceId;` +
+        ` ${toLink.length} client(s) would be linked to ${resource}.`,
     );
     if (reviewNote) console.log(reviewNote);
     console.log("Re-run with --confirm to actually write.");
@@ -300,6 +388,16 @@ async function main() {
         ? `  Set referenceId on ${row.clientId}.`
         : `  WARNING: ${row.clientId} was not updated (changed since it was read).`,
     );
+  }
+
+  for (const row of toLink) {
+    await db.insert(betterAuthOauthClientResource).values({
+      id: crypto.randomUUID(),
+      clientId: row.clientId,
+      resourceId: resource,
+      createdAt: now,
+    });
+    console.log(`  Linked ${row.clientId} to ${resource}.`);
   }
 
   if (reviewNote) console.log(reviewNote);
