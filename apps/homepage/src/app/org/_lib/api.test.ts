@@ -159,6 +159,17 @@ describe("getApiBase (via fetch URL)", () => {
       .calls[0]?.[0] as string;
     expect(url).toContain("api.f3nation.com");
   });
+
+  it("falls back to the staging API in the staging build", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", undefined);
+    vi.stubEnv("NEXT_PUBLIC_LOCAL_DEV", undefined);
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "staging");
+    mockFetch(200, { orgs: [] });
+    await fetchOrgChart();
+    const url = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string;
+    expect(url).toBe("https://staging.api.f3nation.com/v1/org-chart");
+  });
 });
 
 describe("auth headers", () => {
@@ -182,5 +193,15 @@ describe("auth headers", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBeUndefined();
     expect(headers.client).toBe("https://apps.f3nation.com");
+  });
+
+  it("names the staging site in the client header in the staging build", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "staging");
+    mockFetch(200, { orgs: [] });
+    await fetchOrgChart();
+    const init = (fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers.client).toBe("https://staging.apps.f3nation.com");
   });
 });

@@ -4,20 +4,22 @@ import type {
   OrgChartItem,
   OrgDetail,
 } from "./types";
+import { getDefaultApiBase, getSiteOrigin } from "@/app/_lib/channel";
 
 function getApiBase(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL;
   if (configured) return configured.replace(/\/$/, "");
   if (process.env.NEXT_PUBLIC_LOCAL_DEV === "true")
     return "http://localhost:3001";
-  return "https://api.f3nation.com";
+  return getDefaultApiBase();
 }
 
 // The org-chart endpoints are protectedProcedure, so requests carry a
 // read-only API key sourced from an env var (like apps/map). Because this is a
 // static export the key is a NEXT_PUBLIC var baked into the bundle and visible
 // in devtools — it grants nothing beyond the public org-chart directory reads.
-const ORG_MAP_CLIENT = "https://apps.f3nation.com";
+// The `client` header names this site's origin (apps.f3nation.com in prod,
+// staging.apps.f3nation.com in the staging build).
 
 async function orgMapFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
   const url = `${getApiBase()}/v1${path}`;
@@ -31,7 +33,7 @@ async function orgMapFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
     else signal.addEventListener("abort", onAbort, { once: true });
   }
   try {
-    const headers: Record<string, string> = { client: ORG_MAP_CLIENT };
+    const headers: Record<string, string> = { client: getSiteOrigin() };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     const res = await fetch(url, { signal: controller.signal, headers });
     if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
