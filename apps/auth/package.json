@@ -20,6 +20,7 @@
     "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/shared": "workspace:*",
+    "@acme/ui": "workspace:*",
     "@auth/core": "catalog:",
     "@better-auth/core": "catalog:",
     "@better-auth/drizzle-adapter": "catalog:",

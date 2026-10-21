@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 
+import { TableSkeleton } from "@acme/ui/page-skeleton";
+
 import Layout from "../admin-layout";
 import { AddLocationButton } from "./[id]/add-location-button";
 import { LocationsTable } from "./locations-table";
@@ -14,7 +16,7 @@ const LocationsPage = async () => {
             <AddLocationButton />
           </div>
         </div>
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<TableSkeleton />}>
           <div className="flex w-full flex-col overflow-hidden">
             <LocationsTable />
           </div>

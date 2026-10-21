@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+
+import { TableSkeleton } from "@acme/ui/page-skeleton";
 import { notFound } from "next/navigation";
 import { orgTypeDisplay } from "@acme/shared/app/org-hierarchy";
 import Layout from "../admin-layout";
@@ -34,7 +36,7 @@ export default async function OrgPage({
             </div>
           )}
         </div>
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<TableSkeleton />}>
           <div className="flex w-full flex-col overflow-hidden">
             <OrgTable key={orgType} orgType={orgType} />
           </div>
