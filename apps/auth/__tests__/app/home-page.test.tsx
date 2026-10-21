@@ -55,4 +55,13 @@ describe("signed-in home page apps directory link", () => {
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.queryByText(/explore the F3 Nation ecosystem/)).toBeNull();
   });
+
+  it("hides the link instead of erroring on a bad value", async () => {
+    envMock.APPS_DIRECTORY_URL = "javascript:alert(1)";
+
+    await renderHome();
+
+    expect(screen.getByText("F3 Nation Auth")).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
 });
