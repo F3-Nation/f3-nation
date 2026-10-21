@@ -53,6 +53,7 @@ ENV_FILE_VARS=(
   NEXT_PUBLIC_AUTH_URL
   NEXT_PUBLIC_API_URL
   EMAIL_FROM
+  APPS_DIRECTORY_URL
 )
 
 # Plain env vars (hardcoded, same across environments)
