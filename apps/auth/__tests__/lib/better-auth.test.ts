@@ -246,12 +246,17 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     // the real DB, is where sub becomes the real numeric-string id again").
     expect(payload.sub).toBe("4242");
     expect(payload.email).toBe(email);
+    // The bare origin on every token: relying parties compare iss to their
+    // auth URL, and the resource indicator sets aud.
+    expect(payload.iss).toBe(ISSUER);
+    expect([payload.aud].flat()).toContain(ISSUER);
     expect(typeof payload.client_id).toBe("string");
     expect(header.alg).toBe("RS256");
 
     // id_token issuance, matching apps/auth/src/lib/oauth.ts's
     // idTokenScopeOrNull gate (only issued when openid was granted).
     expect(tokenBody.id_token).toBeTruthy();
+    expect(decodeJwt(tokenBody.id_token!).iss).toBe(ISSUER);
   });
 
   it("issues access tokens a relying party verifies with keys from the origin-root JWKS", async () => {
@@ -292,7 +297,9 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     const jwksUrl = `${BASE_URL}/.well-known/jwks.json`;
     const fetchMock = vi.fn((input: string | URL | Request) =>
       Promise.resolve(
-        String(input instanceof Request ? input.url : input) === jwksUrl
+        String(input instanceof Request ? input.url : input).endsWith(
+          "/.well-known/jwks.json",
+        )
           ? Response.json(jwks)
           : new Response(null, { status: 404 }),
       ),
@@ -307,6 +314,15 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
         true,
       );
       expect(result).toMatchObject({ ok: true });
+      // Proves the issuer check actually runs: the same token, a different
+      // auth URL, same keys.
+      const wrongIssuer = await verifyAccessToken(
+        tokenBody.access_token,
+        "https://other-auth.example.test",
+        client.client_id,
+        true,
+      );
+      expect(wrongIssuer).toMatchObject({ ok: false });
       expect(
         fetchMock.mock.calls.map(([input]) =>
           String(input instanceof Request ? input.url : input),

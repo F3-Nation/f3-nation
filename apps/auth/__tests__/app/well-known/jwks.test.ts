@@ -21,6 +21,7 @@ vi.mock("~/lib/better-auth", () => ({ getAuth: getAuthMock }));
 const logErrorMock = vi.fn();
 vi.mock("~/lib/logging", () => ({ logError: logErrorMock }));
 
+const { getJWKS } = await import("~/lib/jwt");
 const { GET } = await import("../../../src/app/.well-known/jwks.json/route");
 
 const betterAuthKey = {
@@ -83,6 +84,23 @@ describe("/.well-known/jwks.json", () => {
     expect(getJwksMock).not.toHaveBeenCalled();
     expect(logErrorMock).toHaveBeenCalledWith(
       "auth.jwks.better_auth_instance_failed",
+      {},
+      err,
+    );
+  });
+
+  it("answers 503, uncached and logged, when the hand-rolled key can't be read", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    const err = new Error("AUTH_JWT_PRIVATE_KEY is not a valid key");
+    vi.mocked(getJWKS).mockRejectedValueOnce(err);
+
+    const res = await GET();
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(getAuthMock).not.toHaveBeenCalled();
+    expect(logErrorMock).toHaveBeenCalledWith(
+      "auth.jwks.legacy_key_failed",
       {},
       err,
     );

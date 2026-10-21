@@ -15,7 +15,20 @@ import { env } from "~/env";
  * generated ids.
  */
 export async function GET() {
-  const legacy = await getJWKS();
+  // A bad or missing AUTH_JWT_PRIVATE_KEY fails the whole endpoint on
+  // purpose: serving only Better Auth's keys would make every /api/oauth/*
+  // token look invalid to relying parties. A 5xx is the right signal, it
+  // just needs an event.
+  let legacy: Awaited<ReturnType<typeof getJWKS>>;
+  try {
+    legacy = await getJWKS();
+  } catch (err) {
+    logError("auth.jwks.legacy_key_failed", {}, err);
+    return NextResponse.json(
+      { error: "jwks_unavailable" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   if (!env.AUTH_USE_BETTER_AUTH) return jwksResponse(legacy.keys, true);
 
   // Better Auth's keys live in the database. If they can't be served, still
