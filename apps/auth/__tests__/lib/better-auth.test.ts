@@ -11,6 +11,7 @@ import {
   createAuthInstance,
   memoryAdapter,
 } from "../../src/lib/better-auth";
+import * as logging from "../../src/lib/logging";
 import type {
   CreateAuthInstanceOptions,
   MemoryDB,
@@ -666,9 +667,14 @@ describe("shared OTP attempt budget", () => {
     const claim = vi.fn(
       (_email: string, _otp: string, opts: { consume: boolean }) =>
         opts.consume
-          ? Promise.reject(new Error("db unavailable"))
+          ? Promise.reject(
+              Object.assign(new Error(`Failed query: params: ${email}`), {
+                code: "57P01",
+              }),
+            )
           : Promise.resolve(true),
     );
+    const logError = vi.spyOn(logging, "logError");
     const auth = createTestAuth(4242, claim);
     otp = await auth.api.createVerificationOTP({
       body: { email, type: "sign-in" },
@@ -677,7 +683,41 @@ describe("shared OTP attempt budget", () => {
     const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
 
     expect(signIn.token).toBeTruthy();
+    // Drizzle's message carries the bound email, so only its name and code
+    // are logged.
+    expect(logError).toHaveBeenCalledExactlyOnceWith(
+      "auth.better_auth.otp_consume_failed",
+      { errorName: "Error", code: "57P01" },
+    );
+    logError.mockRestore();
   });
+
+  it.each([
+    ["an error without a code", new Error("boom"), "Error"],
+    ["a non-error", "boom", "string"],
+  ])(
+    "logs only the kind of failure when using the code up throws %s",
+    async (_label, failure, errorName) => {
+      const claim = vi.fn(
+        (_email: string, _otp: string, opts: { consume: boolean }) =>
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the non-error case is the point
+          opts.consume ? Promise.reject(failure) : Promise.resolve(true),
+      );
+      const logError = vi.spyOn(logging, "logError");
+      const auth = createTestAuth(4242, claim);
+      const otp = await auth.api.createVerificationOTP({
+        body: { email, type: "sign-in" },
+      });
+
+      await auth.api.signInEmailOTP({ body: { email, otp } });
+
+      expect(logError).toHaveBeenCalledExactlyOnceWith(
+        "auth.better_auth.otp_consume_failed",
+        { errorName, code: undefined },
+      );
+      logError.mockRestore();
+    },
+  );
 
   it("leaves the code valid for registration when sign-in fails", async () => {
     let otp = "";

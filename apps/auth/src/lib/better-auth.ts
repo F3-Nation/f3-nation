@@ -289,7 +289,16 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
           });
           if (!consumed) logWarn("auth.better_auth.otp_consume_skipped", {});
         } catch (err) {
-          logError("auth.better_auth.otp_consume_failed", {}, err);
+          // Not the error itself: Drizzle puts the bound email in its message.
+          logError("auth.better_auth.otp_consume_failed", {
+            errorName: err instanceof Error ? err.name : typeof err,
+            code:
+              err instanceof Error &&
+              "code" in err &&
+              typeof err.code === "string"
+                ? err.code
+                : undefined,
+          });
         }
       }),
     },
