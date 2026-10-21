@@ -11,6 +11,7 @@ import {
   createAuthInstance,
   memoryAdapter,
 } from "../../src/lib/better-auth";
+import { findOnboardedProfile } from "./better-auth-fixture";
 import type {
   CreateAuthInstanceOptions,
   MemoryDB,
@@ -58,6 +59,7 @@ function createTestAuth(f3UserId: number | null) {
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(f3UserId),
     isNationAdmin: () => Promise.resolve(false),
+    findF3Profile: findOnboardedProfile,
     // Permissive — unlike production, these tests need to exercise client
     // creation directly. See "denies client creation..." below for
     // coverage of production's actual (stricter) policy.
@@ -90,6 +92,7 @@ function createMultiUserTestAuth(
       Promise.resolve(emailToF3UserId[email] ?? null),
     isNationAdmin: (f3UserId: number) =>
       Promise.resolve(adminF3UserIds.has(f3UserId)),
+    findF3Profile: findOnboardedProfile,
     allowClientAction: () => Promise.resolve(true),
   };
   const authOptions = buildBetterAuthOptions(options);
@@ -376,6 +379,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
       isNationAdmin: () => Promise.resolve(false),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -426,6 +430,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
       isNationAdmin: () => Promise.resolve(false),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -485,6 +490,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       findF3UserId: (email: string) =>
         Promise.resolve(email === "admin-m@f3nation.test" ? 701 : null),
       isNationAdmin: () => Promise.resolve(true),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -547,6 +553,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(701),
       isNationAdmin: () => Promise.resolve(true),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: allowProductionClientAction,
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -586,6 +593,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       findF3UserId: (email: string) =>
         Promise.resolve(emailToF3UserId[email] ?? null),
       isNationAdmin: () => Promise.resolve(true),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: (
         action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
       ) => currentPolicy(action),
