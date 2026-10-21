@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { forwardToBetterAuth } from "~/lib/better-auth-oauth";
 import { revokeToken } from "~/lib/oauth";
 import { rateLimit } from "~/lib/rate-limit";
+import { env } from "~/env";
 
 export async function POST(request: NextRequest) {
   const ip =
@@ -11,6 +13,12 @@ export async function POST(request: NextRequest) {
   const { allowed } = rateLimit(`revoke:${ip}`, 30, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  // Unlike the hand-rolled route, Better Auth requires client
+  // authentication here (RFC 7009 §2.1).
+  if (env.AUTH_USE_BETTER_AUTH) {
+    return forwardToBetterAuth(request, "revoke", { dropCookies: true });
   }
 
   const formData = await request.formData();

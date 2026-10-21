@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { oauthProviderOpenIdConfigMetadata } from "@better-auth/oauth-provider";
+
+import { getAuth } from "~/lib/better-auth";
 import { env } from "~/env";
 
-export async function GET() {
+export async function GET(request: Request) {
   const issuer = env.NEXT_PUBLIC_AUTH_URL;
+
+  if (env.AUTH_USE_BETTER_AUTH) return betterAuthMetadata(request, issuer);
 
   return NextResponse.json({
     issuer,
@@ -24,4 +29,34 @@ export async function GET() {
     claims_supported: ["sub", "name", "email", "email_verified", "picture"],
     code_challenge_methods_supported: ["S256"],
   });
+}
+
+/**
+ * Better Auth's own metadata, which advertises its native
+ * /api/auth2/oauth2/* endpoints: clients that read discovery go straight
+ * there, and only callers that hardcode /api/oauth/* use the adapters. Two
+ * fields are replaced:
+ *   - jwks_uri: Better Auth's would be /api/auth2/jwks, but relying parties
+ *     fetch the origin-root document, which also serves the hand-rolled key.
+ *   - end_session_endpoint: Better Auth's /oauth2/end-session needs an
+ *     id_token_hint and a client with enableEndSession, which no migrated
+ *     client has. /api/oauth/logout signs the user out and revokes their
+ *     Better Auth OAuth tokens.
+ */
+async function betterAuthMetadata(request: Request, issuer: string) {
+  const auth = await getAuth();
+  const response = await oauthProviderOpenIdConfigMetadata(auth)(request);
+  const metadata = (await response.json()) as Record<string, unknown>;
+  return NextResponse.json(
+    {
+      ...metadata,
+      jwks_uri: `${issuer}/.well-known/jwks.json`,
+      end_session_endpoint: `${issuer}/api/oauth/logout`,
+    },
+    {
+      headers: {
+        "Cache-Control": response.headers.get("Cache-Control") ?? "no-store",
+      },
+    },
+  );
 }

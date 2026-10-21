@@ -32,7 +32,10 @@ const envMock = {
 
 vi.mock("~/lib/db", () => ({ db: dbMock }));
 vi.mock("~/lib/current-session", () => ({ getCurrentSession: vi.fn() }));
-vi.mock("~/lib/better-auth", () => ({ getAuth: vi.fn() }));
+vi.mock("~/lib/better-auth", () => ({
+  getAuth: vi.fn(),
+  deleteBetterAuthOAuthTokens: vi.fn(),
+}));
 vi.mock("~/lib/logging", () => ({ logError: vi.fn() }));
 vi.mock("~/lib/oauth", () => ({ revokeAllUserTokens: vi.fn() }));
 vi.mock("~/env", () => ({ env: envMock }));
@@ -42,7 +45,8 @@ vi.mock("next/headers", () => ({
 }));
 
 const { getCurrentSession } = await import("~/lib/current-session");
-const { getAuth } = await import("~/lib/better-auth");
+const { deleteBetterAuthOAuthTokens, getAuth } =
+  await import("~/lib/better-auth");
 const { logError } = await import("~/lib/logging");
 const { revokeAllUserTokens } = await import("~/lib/oauth");
 const { GET } = await import("../../../../../src/app/api/oauth/logout/route");
@@ -153,5 +157,47 @@ describe("GET /api/oauth/logout", () => {
     await GET(makeRequest("https://auth.test.invalid/api/oauth/logout"));
 
     expect(revokeAllUserTokens).toHaveBeenCalledWith(42);
+    expect(deleteBetterAuthOAuthTokens).not.toHaveBeenCalled();
+  });
+
+  it("also deletes the user's Better Auth OAuth tokens when AUTH_USE_BETTER_AUTH is on", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    const betterAuth = {
+      api: { signOut: vi.fn().mockResolvedValue(new Response(null)) },
+    };
+    vi.mocked(getAuth).mockResolvedValue(betterAuth as never);
+    vi.mocked(getCurrentSession).mockResolvedValue({
+      user: { id: "42", email: null, name: null },
+    });
+
+    const res = await GET(
+      makeRequest("https://auth.test.invalid/api/oauth/logout"),
+    );
+
+    expect(res.status).toBe(307);
+    expect(revokeAllUserTokens).toHaveBeenCalledWith(42);
+    expect(deleteBetterAuthOAuthTokens).toHaveBeenCalledWith(betterAuth, "42");
+    // Before the session is gone, while the user is still known.
+    expect(
+      vi.mocked(deleteBetterAuthOAuthTokens).mock.invocationCallOrder[0],
+    ).toBeLessThan(betterAuth.api.signOut.mock.invocationCallOrder[0]!);
+  });
+
+  it("fails rather than reporting a logout whose Better Auth tokens survived", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    vi.mocked(getAuth).mockResolvedValue({
+      api: { signOut: vi.fn() },
+    } as never);
+    vi.mocked(getCurrentSession).mockResolvedValue({
+      user: { id: "42", email: null, name: null },
+    });
+    vi.mocked(deleteBetterAuthOAuthTokens).mockRejectedValue(
+      new Error("db down"),
+    );
+
+    await expect(
+      GET(makeRequest("https://auth.test.invalid/api/oauth/logout")),
+    ).rejects.toThrow("db down");
+    expect(cookieStoreMock.delete).not.toHaveBeenCalled();
   });
 });

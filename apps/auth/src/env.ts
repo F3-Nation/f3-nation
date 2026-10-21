@@ -16,9 +16,9 @@ export const env = createEnv({
     // Kill switch. Off by default: switches first-party sign-in,
     // registration, sign-out, and session reads over to the Better Auth
     // instance (apps/auth/src/lib/better-auth.ts) at the isolated
-    // /api/auth2/* path. Does not move OAuth client token issuance — see
-    // apps/auth/src/lib/better-auth.ts's file-level comment for what this
-    // flag does and does not do yet.
+    // /api/auth2/* path, and routes /api/oauth/{authorize,token,userinfo,
+    // revoke} and /.well-known/* through it — see that file's file-level
+    // comment.
     AUTH_USE_BETTER_AUTH: z
       .string()
       .optional()

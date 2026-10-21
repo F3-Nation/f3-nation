@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
 
+import { forwardToBetterAuth } from "~/lib/better-auth-oauth";
 import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
 import {
@@ -22,6 +23,12 @@ export async function GET(request: NextRequest) {
   const { allowed } = rateLimit(`authorize:${ip}`, 30, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  // Better Auth runs the same checks (PKCE S256, client, redirect_uri,
+  // scopes, session, onboarding gate, empty nonce) — see lib/better-auth.ts.
+  if (env.AUTH_USE_BETTER_AUTH) {
+    return forwardToBetterAuth(request, "authorize");
   }
 
   const publicUrl = env.NEXT_PUBLIC_AUTH_URL;

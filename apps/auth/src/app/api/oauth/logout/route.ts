@@ -5,7 +5,7 @@ import { cookies, headers } from "next/headers";
 import { eq } from "@acme/db";
 import { oauthClients } from "@acme/db/schema/schema";
 
-import { getAuth } from "~/lib/better-auth";
+import { deleteBetterAuthOAuthTokens, getAuth } from "~/lib/better-auth";
 import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
 import { logError } from "~/lib/logging";
@@ -79,6 +79,13 @@ export async function GET(request: NextRequest) {
     const userId = Number(session.user.id);
     if (userId) {
       await revokeAllUserTokens(userId);
+    }
+    // Signing out below only deletes the Better Auth session, which leaves
+    // offline_access refresh tokens alive (by the plugin's design). Not
+    // caught, like revokeAllUserTokens: a logout that can't revoke them
+    // shouldn't report success.
+    if (env.AUTH_USE_BETTER_AUTH) {
+      await deleteBetterAuthOAuthTokens(await getAuth(), session.user.id);
     }
   }
 
