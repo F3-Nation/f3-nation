@@ -1,9 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { getAuthTables } from "@better-auth/core/db";
-import { isAccessTokenPayload } from "@f3nation/sso";
+import { isAccessTokenPayload, verifyAccessToken } from "@f3nation/sso";
 
 import {
   allowProductionClientAction,
@@ -18,7 +18,10 @@ import type {
 
 const BASE_URL = "http://localhost:3999";
 const BASE_PATH = "/api/auth2";
-const ISSUER = `${BASE_URL}${BASE_PATH}`;
+// Better Auth's endpoints live under BASE_PATH, but tokens carry the bare
+// origin as iss, matching getAuth() and what relying parties expect.
+const ENDPOINT = `${BASE_URL}${BASE_PATH}`;
+const ISSUER = BASE_URL;
 const REDIRECT_URI = "https://phase3-client.example.com/callback";
 const PUBLIC_REDIRECT_URI = "com.f3nation.phase3test:/oauth2redirect";
 
@@ -137,7 +140,7 @@ async function authorizeAndExchange(
   const authHeaders = { authorization: `Bearer ${params.sessionToken}` };
   const pkce = pkcePair();
 
-  const authorizeUrl = new URL(`${ISSUER}/oauth2/authorize`);
+  const authorizeUrl = new URL(`${ENDPOINT}/oauth2/authorize`);
   authorizeUrl.searchParams.set("response_type", "code");
   authorizeUrl.searchParams.set("client_id", params.clientId);
   authorizeUrl.searchParams.set("redirect_uri", params.redirectUri);
@@ -155,7 +158,7 @@ async function authorizeAndExchange(
   const oauthQuery = authorizeLocation!.split("?")[1]!;
 
   const consent = await auth.handler(
-    new Request(`${ISSUER}/oauth2/consent`, {
+    new Request(`${ENDPOINT}/oauth2/consent`, {
       method: "POST",
       headers: { ...authHeaders, "content-type": "application/json" },
       body: JSON.stringify({ accept: true, oauth_query: oauthQuery }),
@@ -185,7 +188,7 @@ async function authorizeAndExchange(
   }
 
   const tokenResponse = await auth.handler(
-    new Request(`${ISSUER}/oauth2/token`, {
+    new Request(`${ENDPOINT}/oauth2/token`, {
       method: "POST",
       headers: tokenHeaders,
       body: tokenParams.toString(),
@@ -244,6 +247,57 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     // id_token issuance, matching apps/auth/src/lib/oauth.ts's
     // idTokenScopeOrNull gate (only issued when openid was granted).
     expect(tokenBody.id_token).toBeTruthy();
+  });
+
+  it("issues access tokens a relying party verifies with keys from the origin-root JWKS", async () => {
+    const auth = createTestAuth(4243);
+    const sessionToken = await signInAndGetToken(
+      auth,
+      "phase3-rp-verify@f3nation.test",
+    );
+    const client = await auth.api.createOAuthClient({
+      headers: { authorization: `Bearer ${sessionToken}` },
+      body: {
+        redirect_uris: [REDIRECT_URI],
+        grant_types: ["authorization_code"],
+        response_types: ["code"],
+        application_type: "web",
+        scope: "openid profile email",
+      },
+    });
+    const tokenBody = await authorizeAndExchange(auth, {
+      sessionToken,
+      clientId: client.client_id,
+      clientSecret: client.client_secret,
+      redirectUri: REDIRECT_URI,
+      scope: "openid profile email",
+    });
+
+    // packages/sso fetches <origin>/.well-known/jwks.json, which serves
+    // Better Auth's keys while the flag is on (app/.well-known/jwks.json).
+    const jwks = await auth.api.getJwks();
+    const fetchMock = vi.fn((input: string | URL | Request) =>
+      Promise.resolve(
+        String(input instanceof Request ? input.url : input) ===
+          `${BASE_URL}/.well-known/jwks.json`
+          ? Response.json(jwks)
+          : new Response(null, { status: 404 }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      // The same call admin and me make (allowClientIdClaimFallback=true).
+      const result = await verifyAccessToken(
+        tokenBody.access_token,
+        BASE_URL,
+        client.client_id,
+        true,
+      );
+      expect(result).toMatchObject({ ok: true });
+      expect(fetchMock).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("issues a public/PKCE-only client's access token with no client_secret exchanged — the case the Phase 1 spike didn't cover", async () => {

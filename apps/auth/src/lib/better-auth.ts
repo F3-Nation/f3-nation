@@ -440,11 +440,13 @@ export async function getAuth() {
   }
 
   const basePath = "/api/auth2";
-  // Distinct from NEXT_PUBLIC_AUTH_URL alone (the legacy issuer) so a token
-  // from this isolated, pre-cutover instance can never be mistaken for one
-  // the hand-rolled server signed, even though both currently share a
-  // baseURL origin.
-  const issuer = `${env.NEXT_PUBLIC_AUTH_URL}${basePath}`;
+  // The bare origin, same as the hand-rolled server's issuer. Relying
+  // parties (packages/sso, packages/api) expect iss === their auth URL and
+  // fetch keys from <origin>/.well-known/jwks.json, which also serves this
+  // instance's keys while the flag is on (see that route). The flag is only
+  // turned on for f3-auth3, which has its own origin (see
+  // scripts/cloud-run-env-auth3.sh), so no other service claims this issuer.
+  const issuer = env.NEXT_PUBLIC_AUTH_URL;
 
   _auth = createAuthInstance({
     baseURL: env.NEXT_PUBLIC_AUTH_URL,
