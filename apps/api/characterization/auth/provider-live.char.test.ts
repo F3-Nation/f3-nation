@@ -18,6 +18,7 @@ import { authFetch, authTarget } from "../targets/auth-live";
 import {
   ACCESS_TOKEN_ALG,
   CLIENT_ACCESS_TOKEN_CLAIMS,
+  TOLERATED_EXTRA_CLAIMS,
   USER_ACCESS_TOKEN_CLAIMS,
 } from "./access-token-contract";
 
@@ -37,8 +38,9 @@ import {
  *   - the token endpoint's error envelope for a missing and an unknown client;
  *   - packages/sso rejecting a token forged under a live kid and issuer;
  *   - with a client_credentials client configured: a real token, verified by
- *     packages/sso's verifier and checked against the frozen claim contract
- *     (access-token-contract.ts);
+ *     packages/sso's verifier at the JWKS path it uses in production
+ *     (`<issuer>/.well-known/jwks.json`, not discovery's jwks_uri) and checked
+ *     against the frozen claim contract (access-token-contract.ts);
  *   - with a user token supplied: the same, plus the call apps/admin and
  *     apps/me make (`verifyAccessToken(token, issuer, clientId, true)`).
  *
@@ -58,6 +60,12 @@ import {
  *   - refresh_token rotation, PKCE enforcement, id_token claims, userinfo,
  *     revocation and logout: each needs a fresh authorization code.
  *   - Writes: no case creates users, clients or sessions on the target.
+ *   - The claim contract with only CHAR_TEST_AUTH_ISSUER set: there is no
+ *     real token to check without a client or a user token.
+ *   - @f3nation/sso-next's re-export of verifyAccessToken, which apps/admin
+ *     and apps/me import: it pulls in next/server, which apps/api doesn't
+ *     have. The calls here use @f3nation/sso directly, so a future wrapper in
+ *     sso-next would not be caught.
  */
 
 interface Discovery {
@@ -98,16 +106,15 @@ function useProvider(live: AuthLiveTarget) {
   return ctx;
 }
 
-/** Exactly the checks verifyAccessToken composes, but against discovery's JWKS. */
-async function verifyAgainstDiscovery(
-  token: string,
-  issuer: string,
-  discovery: Discovery,
-) {
+/**
+ * The checks verifyAccessToken composes, with no jwksPath: packages/sso then
+ * fetches `<issuer>/.well-known/jwks.json`, the production path, so this fails
+ * wherever relying parties would.
+ */
+async function verifyLikeRelyingParties(token: string, issuer: string) {
   const result = await verifyJwtWithJwks(token, {
     authServerUrl: issuer,
     issuer,
-    jwksPath: discovery.jwks_uri,
   });
   if (!result.ok) {
     throw new Error(`packages/sso rejected the token: ${result.code}`);
@@ -126,9 +133,14 @@ function expectContractClaims(
   contract: readonly string[],
   issuer: string,
 ) {
-  // The frozen claims must all be there; registered extras a newer engine
-  // adds (aud, azp, jti, ...) are tolerated because no consumer reads them.
-  expect(Object.keys(claims)).toEqual(expect.arrayContaining([...contract]));
+  // Exactly the frozen claims, apart from the registered extras an engine may
+  // add; any other claim is a contract change.
+  const tolerated: readonly string[] = TOLERATED_EXTRA_CLAIMS;
+  expect(
+    Object.keys(claims)
+      .filter((claim) => !tolerated.includes(claim))
+      .sort(),
+  ).toEqual([...contract].sort());
   expect(claims.token_use).toBe("access");
   expect(claims.iss).toBe(issuer);
   for (const claim of ["sub", "scope", "client_id"]) {
@@ -245,6 +257,8 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
     });
   });
 
+  // Uses discovery's JWKS on purpose: this checks signature rejection, and the
+  // JWKS location test above already covers the conventional path.
   it("is rejected by packages/sso when forged under a live kid", async () => {
     const { privateKey } = await generateKeyPair(ACCESS_TOKEN_ALG);
     const kid = provider.jwks.keys[0]?.kid;
@@ -314,11 +328,7 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
     });
 
     it("verifies with packages/sso's verifier", async () => {
-      const payload = await verifyAgainstDiscovery(
-        token,
-        live.issuer,
-        provider.discovery,
-      );
+      const payload = await verifyLikeRelyingParties(token, live.issuer);
       expect(isAccessTokenPayload(payload)).toBe(true);
     });
 
@@ -338,11 +348,7 @@ describe.runIf(authTarget)("apps/auth provider contract (live)", () => {
     });
 
     it("verifies with packages/sso's verifier", async () => {
-      const payload = await verifyAgainstDiscovery(
-        user.token,
-        live.issuer,
-        provider.discovery,
-      );
+      const payload = await verifyLikeRelyingParties(user.token, live.issuer);
       expect(isAccessTokenPayload(payload)).toBe(true);
     });
 
