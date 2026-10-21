@@ -137,9 +137,9 @@ async function main() {
       ? args[resourceIndex + 1]
       : process.env.NEXT_PUBLIC_AUTH_URL;
   if (!resource || !URL.canParse(resource)) {
-    logError(
-      "No issuer resource: pass --resource <issuer URL> or set NEXT_PUBLIC_AUTH_URL in the env file.",
-    );
+    logError("auth.migrate_oauth_clients.resource_not_given", {
+      hint: "pass --resource <issuer URL> or set NEXT_PUBLIC_AUTH_URL in the env file",
+    });
     process.exit(1);
   }
 
@@ -179,16 +179,17 @@ async function main() {
   console.log(
     `\nConnected to ${targetEnv} database at ${databaseHost}/${databaseName}.\n`,
   );
-  logInfo(`Linking clients to resource ${resource}.`);
+  logInfo("auth.migrate_oauth_clients.linking_to_resource", { resource });
 
   const [resourceRow] = await db
     .select({ identifier: betterAuthOauthResource.identifier })
     .from(betterAuthOauthResource)
     .where(eq(betterAuthOauthResource.identifier, resource));
   if (!resourceRow) {
-    logError(
-      `Resource ${resource} is not in better_auth_oauth_resource yet. Start the auth server once with AUTH_USE_BETTER_AUTH on (Better Auth seeds it), or check --resource.`,
-    );
+    logError("auth.migrate_oauth_clients.resource_missing", {
+      resource,
+      hint: "start the auth server once with AUTH_USE_BETTER_AUTH on (Better Auth seeds the resource), or check --resource",
+    });
     await sql.end();
     process.exit(1);
   }
@@ -325,9 +326,11 @@ async function main() {
         existing.tokenEndpointAuthMethod !== row.tokenEndpointAuthMethod ||
         !existing.scopes?.includes("offline_access"))
     ) {
-      logWarn(
-        `${existing.clientId} is already present without skipConsent, offline_access or ${row.tokenEndpointAuthMethod}; update it by hand (see file comment).`,
-      );
+      logWarn("auth.migrate_oauth_clients.settings_incompatible", {
+        clientId: existing.clientId,
+        expectedAuthMethod: row.tokenEndpointAuthMethod,
+        hint: "present without skipConsent, offline_access or the expected auth method; update it by hand (see file comment)",
+      });
     }
   }
 
@@ -398,7 +401,10 @@ async function main() {
       resourceId: resource,
       createdAt: now,
     });
-    logInfo(`Linked ${row.clientId} to ${resource}.`);
+    logInfo("auth.migrate_oauth_clients.resource_link_created", {
+      clientId: row.clientId,
+      resource,
+    });
   }
 
   if (reviewNote) console.log(reviewNote);
