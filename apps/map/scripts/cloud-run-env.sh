@@ -17,6 +17,7 @@ set -euo pipefail
 # Requires:
 #   - gcloud CLI authenticated (`gcloud auth login`)
 #   - apps/map/.env.cloud-run.prod / apps/map/.env.cloud-run.staging populated
+#   - F3_CHANNEL and NEXT_PUBLIC_CHANNEL in the env file must match --env exactly
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -103,10 +104,20 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Source the env file.
+# This operator-owned file is trusted shell code: sourcing can execute commands
+# and change script variables. The guard below validates only its channels.
+# Require both channels from the file, rather than inheriting the shell's values.
+unset F3_CHANNEL NEXT_PUBLIC_CHANNEL
 set -a
 source "$ENV_FILE"
 set +a
+
+for channel_var in F3_CHANNEL NEXT_PUBLIC_CHANNEL; do
+  if [[ "${!channel_var:-}" != "$ENV_NAME" ]]; then
+    echo "Error: $channel_var in $ENV_FILE must be '$ENV_NAME' for --env $ENV_NAME." >&2
+    exit 1
+  fi
+done
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"

@@ -2,8 +2,8 @@
 # Select --affected for PRs when Turbo finds a task to run. Any detection
 # failure, including malformed output, fails open to the full workspace so an
 # optimization can never block or silently empty a required CI check. Files
-# Turbo cannot attribute to a package are handled upstream by turbo.json's
-# globalDependencies, which marks every workspace affected.
+# Turbo cannot attribute to a package are declared in turbo.json's global
+# dependencies; deleted cross-app Dockerfiles additionally use the guard below.
 set -uo pipefail
 
 turbo_bin="${TURBO_SCOPE_TURBO_BIN:-./node_modules/.bin/turbo}"
@@ -28,6 +28,19 @@ fi
 if [[ -z "${TURBO_SCOPE_TASK:-}" ]]; then
   echo "::warning::No Turbo task was supplied for affected-scope validation."
   use_full_workspace "No Turbo task was supplied"
+fi
+
+# Turbo's package-level selection can omit cross-app tests when a global
+# Dockerfile input is deleted. Its cache hash changes, but selection must also
+# include the Slackbot contract that checks every matrix Dockerfile exists.
+if [[ "$TURBO_SCOPE_TASK" == "test" ]]; then
+  if ! deleted_dockerfiles="$(git diff --no-renames --diff-filter=D --name-only \
+    "$TURBO_SCM_BASE" "$TURBO_SCM_HEAD" -- ':(glob)apps/*/Dockerfile')"; then
+    use_full_workspace "Unable to check deleted Dockerfile test inputs"
+  fi
+  if [[ -n "$deleted_dockerfiles" ]]; then
+    use_full_workspace "An app Dockerfile read by cross-app tests was removed"
+  fi
 fi
 
 if ! task_json="$("$turbo_bin" run "$TURBO_SCOPE_TASK" --affected --dry-run=json)"; then
