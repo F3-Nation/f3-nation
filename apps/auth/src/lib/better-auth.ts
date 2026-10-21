@@ -155,15 +155,20 @@ export interface CreateAuthInstanceOptions {
    */
   findF3UserId: (email: string) => Promise<number | null>;
   /**
-   * Spends one attempt from the code's shared guess budget and reports
-   * whether `otp` matches. Production wires this to email-mfa.ts's
-   * checkEmailCode, the same budget /api/register draws on: every sign-in
-   * code is also recorded in email_mfa_codes (see better-auth-email.ts's
-   * deliverBetterAuthOtp). Without it, emailOTP's own attempt counter is a
-   * second, separate budget, so a code would get 5 guesses at registration
-   * plus 5 more here. See OTP_VERIFYING_PATHS below.
+   * Checks `otp` against the code's shared guess budget, where a wrong code
+   * spends an attempt, and reports whether it matches; with `consume`, a
+   * match is also used up. Production wires this to email-mfa.ts's
+   * claimEmailCode, the budget /api/register draws on:
+   * every sign-in code is also recorded in email_mfa_codes (see
+   * better-auth-email.ts's deliverBetterAuthOtp). Without it, emailOTP's
+   * own attempt counter is a second, separate budget, so a code would get 5
+   * guesses at registration plus 5 more here. See OTP_VERIFYING_PATHS below.
    */
-  claimOtpAttempt: (email: string, otp: string) => Promise<boolean>;
+  claimOtpAttempt: (
+    email: string,
+    otp: string,
+    options: { consume: boolean },
+  ) => Promise<boolean>;
   /**
    * Returns whether the given F3 `users.id` currently holds the nation-admin
    * role — the same check `nationAdminProcedure` uses (packages/api/src/
@@ -204,7 +209,9 @@ export interface CreateAuthInstanceOptions {
  * Every emailOTP endpoint that checks a submitted code. Each one spends an
  * attempt from the shared budget (claimOtpAttempt) before Better Auth's own
  * check runs. Only sign-in codes are recorded in that budget, so the other
- * code types, which nothing in this app sends, are refused here as well.
+ * code types, which nothing in this app sends, are refused here as well. A
+ * flow that starts sending them has to record its codes there too
+ * (deliverBetterAuthOtp), or every one of its codes will be refused.
  */
 const OTP_VERIFYING_PATHS = new Set([
   "/sign-in/email-otp",
@@ -238,12 +245,21 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         if (!OTP_VERIFYING_PATHS.has(ctx.path)) return;
-        const body = (ctx.body ?? {}) as { email?: unknown; otp?: unknown };
+        const body = (ctx.body ?? {}) as {
+          email?: unknown;
+          newEmail?: unknown;
+          otp?: unknown;
+        };
+        // change-email names its address newEmail.
+        const email = body.email ?? body.newEmail;
         // Malformed bodies fall through to the endpoint's own validation.
-        if (typeof body.email !== "string" || typeof body.otp !== "string") {
+        if (typeof email !== "string" || typeof body.otp !== "string") {
           return;
         }
-        if (!(await options.claimOtpAttempt(body.email, body.otp))) {
+        // A sign-in uses the code up, so it can't be replayed at
+        // /api/register afterwards.
+        const consume = ctx.path === "/sign-in/email-otp";
+        if (!(await options.claimOtpAttempt(email, body.otp, { consume }))) {
           // Same error emailOTP gives for a wrong code, so a caller can't
           // tell which budget refused it.
           throw new APIError("BAD_REQUEST", {
@@ -298,7 +314,7 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         expiresIn: 600, // 10 minutes, matches CODE_TTL_MINUTES in email-mfa.ts
         // Matches MAX_ATTEMPTS in email-mfa.ts. The binding limit is the
         // shared budget in hooks.before above; this one only ever sees
-        // codes that already passed it.
+        // codes that already matched there.
         allowedAttempts: 5,
         storeOTP: "hashed", // never store the plaintext code, matches hashCode() in email-mfa.ts
         // NOT disableSignUp: true — see findF3UserId's doc comment above
@@ -481,7 +497,7 @@ export async function getAuth() {
   const { db } = await import("~/lib/db");
   const { env } = await import("~/env");
   const { deliverBetterAuthOtp } = await import("~/lib/better-auth-email");
-  const { checkEmailCode } = await import("~/lib/email-mfa");
+  const { claimEmailCode } = await import("~/lib/email-mfa");
 
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error(
@@ -518,7 +534,7 @@ export async function getAuth() {
         .limit(1);
       return existing ? existing.id : null;
     },
-    claimOtpAttempt: checkEmailCode,
+    claimOtpAttempt: claimEmailCode,
     isNationAdmin: (f3UserId) => isNationAdminForUser(db, f3UserId),
     allowClientAction: allowProductionClientAction,
   });

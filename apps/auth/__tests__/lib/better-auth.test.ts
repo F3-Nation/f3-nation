@@ -615,18 +615,19 @@ describe("allowProductionClientAction", () => {
 describe("shared OTP attempt budget", () => {
   const email = "budget@f3nation.test";
 
-  // Models email_mfa_codes: one code, five attempts, every check spends one,
-  // whichever endpoint (registration or sign-in) makes it.
+  // Models email_mfa_codes: one code, five wrong guesses, whichever endpoint
+  // (registration or sign-in) makes them. A match costs nothing.
   function sharedBudget(code: () => string, maxAttempts = 5) {
-    let attempts = 0;
-    return vi.fn((_email: string, otp: string) => {
-      if (attempts >= maxAttempts) return Promise.resolve(false);
-      attempts += 1;
-      return Promise.resolve(otp === code());
+    let wrong = 0;
+    return vi.fn((_email: string, otp: string, _opts: { consume: boolean }) => {
+      if (wrong >= maxAttempts) return Promise.resolve(false);
+      if (otp === code()) return Promise.resolve(true);
+      wrong += 1;
+      return Promise.resolve(false);
     });
   }
 
-  it("spends an attempt from the shared budget before signing in", async () => {
+  it("checks the shared budget and uses the code up before signing in", async () => {
     let otp = "";
     const claim = sharedBudget(() => otp);
     const auth = createTestAuth(4242, claim);
@@ -637,7 +638,9 @@ describe("shared OTP attempt budget", () => {
     const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
 
     expect(signIn.token).toBeTruthy();
-    expect(claim).toHaveBeenCalledExactlyOnceWith(email, otp);
+    expect(claim).toHaveBeenCalledExactlyOnceWith(email, otp, {
+      consume: true,
+    });
   });
 
   it("refuses the right code once registration has used up the budget", async () => {
@@ -650,7 +653,7 @@ describe("shared OTP attempt budget", () => {
     const wrong = otp === "000000" ? "111111" : "000000";
     // Five wrong guesses at /api/register (checkEmailCode in production).
     for (let i = 0; i < 5; i++) {
-      expect(await claim(email, wrong)).toBe(false);
+      expect(await claim(email, wrong, { consume: false })).toBe(false);
     }
 
     await expect(
@@ -658,7 +661,7 @@ describe("shared OTP attempt budget", () => {
     ).rejects.toMatchObject({ body: { code: "INVALID_OTP" } });
   });
 
-  it("gates Better Auth's check-only endpoint on the same budget", async () => {
+  it("gates Better Auth's check-only endpoint without using the code up", async () => {
     const claim = vi.fn(() => Promise.resolve(false));
     const auth = createTestAuth(4242, claim);
     const otp = await auth.api.createVerificationOTP({
@@ -668,6 +671,50 @@ describe("shared OTP attempt budget", () => {
     await expect(
       auth.api.checkVerificationOTP({ body: { email, otp, type: "sign-in" } }),
     ).rejects.toMatchObject({ body: { code: "INVALID_OTP" } });
-    expect(claim).toHaveBeenCalledExactlyOnceWith(email, otp);
+    expect(claim).toHaveBeenCalledExactlyOnceWith(email, otp, {
+      consume: false,
+    });
+  });
+
+  it.each([
+    ["/email-otp/verify-email", { email, otp: "123456" }],
+    [
+      "/email-otp/reset-password",
+      { email, otp: "123456", password: "not-used-here" },
+    ],
+    ["/email-otp/change-email", { newEmail: email, otp: "123456" }],
+  ])("gates %s on the same budget", async (path, body) => {
+    const claim = vi.fn(() => Promise.resolve(false));
+    const auth = createTestAuth(4242, claim);
+
+    const res = await auth.handler(
+      new Request(`${ISSUER}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: BASE_URL },
+        body: JSON.stringify(body),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: "INVALID_OTP" });
+    expect(claim).toHaveBeenCalledExactlyOnceWith(email, "123456", {
+      consume: false,
+    });
+  });
+
+  it("leaves a malformed body to the endpoint's own validation", async () => {
+    const claim = vi.fn(() => Promise.resolve(true));
+    const auth = createTestAuth(4242, claim);
+
+    const res = await auth.handler(
+      new Request(`${ISSUER}/sign-in/email-otp`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: BASE_URL },
+        body: JSON.stringify({ email, otp: 123456 }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(claim).not.toHaveBeenCalled();
   });
 });

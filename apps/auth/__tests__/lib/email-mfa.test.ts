@@ -64,8 +64,13 @@ vi.mock("~/env", () => ({
   },
 }));
 
-const { checkEmailCode, recordEmailCode, sendEmailCode, verifyEmailCode } =
-  await import("../../src/lib/email-mfa");
+const {
+  checkEmailCode,
+  claimEmailCode,
+  recordEmailCode,
+  sendEmailCode,
+  verifyEmailCode,
+} = await import("../../src/lib/email-mfa");
 
 function hashCode(code: string): string {
   return crypto.createHash("sha256").update(code).digest("hex");
@@ -295,9 +300,12 @@ describe("verifyEmailCode", () => {
       Object.keys(updateChain(0).set.mock.calls[0]?.[0] as object),
     ).toEqual(["attemptCount"]);
 
+    // One update gives the attempt back and marks the code consumed.
     const consume = updateChain(1);
     expect(dbMock.update.mock.calls[1]?.[0]).toBe(emailMfaCodes);
-    expect(consume.set).toHaveBeenCalledWith({ consumedAt: NOW });
+    expect(consume.set).toHaveBeenCalledWith(
+      expect.objectContaining({ consumedAt: NOW }),
+    );
     expect(toQuery(consume.where.mock.calls[0]?.[0] as SQL)).toEqual(
       toQuery(eq(emailMfaCodes.id, "code-1")),
     );
@@ -338,7 +346,9 @@ describe("verifyEmailCode", () => {
     expect(result).toMatchObject({ id: 42 });
     // The attempt claim and the code-consumed update; no emailVerified write
     expect(dbMock.update).toHaveBeenCalledTimes(2);
-    expect(updateChain(1).set).toHaveBeenCalledWith({ consumedAt: NOW });
+    expect(updateChain(1).set).toHaveBeenCalledWith(
+      expect.objectContaining({ consumedAt: NOW }),
+    );
   });
 
   it("returns null when code matches but user does not exist in users table", async () => {
@@ -397,15 +407,36 @@ describe("checkEmailCode", () => {
       },
     ]);
 
-  it("accepts a matching code, spending an attempt but not consuming it", async () => {
+  it("accepts a matching code, giving its attempt back without consuming it", async () => {
     dbMock.select.mockReturnValueOnce(activeCode());
 
     expect(await checkEmailCode("user@example.com", "123456")).toBe(true);
-    expect(dbMock.update).toHaveBeenCalledTimes(1);
-    // The one update is the attempt claim; nothing marks the code consumed.
+    // The attempt claim, then the refund; nothing marks the code consumed.
+    expect(dbMock.update).toHaveBeenCalledTimes(2);
+    const [claim, refund] = [0, 1].map(
+      (i) => updateChain(i).set.mock.calls[0]?.[0] as { attemptCount: SQL },
+    );
+    expect(toQuery(claim?.attemptCount).sql).toContain("+ 1");
+    expect(Object.keys(refund ?? {})).toEqual(["attemptCount"]);
+    expect(toQuery(refund?.attemptCount).sql).toContain("- 1");
+  });
+
+  it("looks the code up under the trimmed, lowercased email it was stored under", async () => {
+    const selectChain = activeCode();
+    dbMock.select.mockReturnValueOnce(selectChain);
+
+    expect(await checkEmailCode("  User@Example.com ", "123456")).toBe(true);
     expect(
-      Object.keys(updateChain(0).set.mock.calls[0]?.[0] as object),
-    ).toEqual(["attemptCount"]);
+      toQuery((selectChain.where as Mock).mock.calls[0]?.[0] as SQL),
+    ).toEqual(
+      toQuery(
+        and(
+          eq(emailMfaCodes.email, "user@example.com"),
+          isNull(emailMfaCodes.consumedAt),
+          gt(emailMfaCodes.expiresAt, NOW),
+        ),
+      ),
+    );
   });
 
   it("counts a wrong code toward the lockout", async () => {
@@ -427,5 +458,41 @@ describe("checkEmailCode", () => {
 
     expect(await checkEmailCode("user@example.com", "123456")).toBe(false);
     expect(dbMock.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("claimEmailCode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const activeCode = () =>
+    chain([
+      {
+        id: "code-1",
+        email: "user@example.com",
+        codeHash: hashCode("123456"),
+        attemptCount: 0,
+      },
+    ]);
+
+  it("uses a matching code up so it can't be checked again", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode());
+
+    expect(
+      await claimEmailCode("user@example.com", "123456", { consume: true }),
+    ).toBe(true);
+    expect(updateChain(1).set).toHaveBeenCalledWith(
+      expect.objectContaining({ consumedAt: NOW }),
+    );
+  });
+
+  it("only spends an attempt on a wrong code", async () => {
+    dbMock.select.mockReturnValueOnce(activeCode());
+
+    expect(
+      await claimEmailCode("user@example.com", "999999", { consume: true }),
+    ).toBe(false);
+    expect(dbMock.update).toHaveBeenCalledTimes(1);
   });
 });
