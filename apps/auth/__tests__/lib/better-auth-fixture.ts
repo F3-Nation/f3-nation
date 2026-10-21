@@ -14,14 +14,13 @@ import {
 import type { F3Profile, MemoryDB } from "../../src/lib/better-auth";
 
 export const BASE_URL = "http://localhost:3999";
-export const BASE_PATH = "/api/auth2";
+const BASE_PATH = "/api/auth2";
 // Better Auth's endpoints live under BASE_PATH, but tokens carry the bare
-// origin as iss, matching getAuth() and what relying parties expect.
+// origin (BASE_URL) as iss, matching getAuth() and what relying parties expect.
 export const ENDPOINT = `${BASE_URL}${BASE_PATH}`;
-export const ISSUER = BASE_URL;
 export const REDIRECT_URI = "https://phase3-client.example.com/callback";
 
-export function base64url(input: Buffer): string {
+function base64url(input: Buffer): string {
   return input
     .toString("base64")
     .replace(/\+/g, "-")
@@ -64,7 +63,7 @@ export function createFlowAuth(emails: Record<string, number>) {
     baseURL: BASE_URL,
     basePath: BASE_PATH,
     secret: "test-only-not-a-real-secret",
-    issuer: ISSUER,
+    issuer: BASE_URL,
     database: memoryAdapter(memoryDb),
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: (email: string) => Promise.resolve(emails[email] ?? null),

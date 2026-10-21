@@ -15,12 +15,14 @@ import {
   createFlowAuth,
   createMigratedClient,
   ENDPOINT,
-  ISSUER,
   onboardedProfile,
   pkcePair,
   REDIRECT_URI,
   signIn,
 } from "../../../lib/better-auth-fixture";
+
+// Tokens carry the bare origin as iss.
+const ISSUER = BASE_URL;
 
 const envMock = {
   NEXT_PUBLIC_AUTH_URL: BASE_URL,
