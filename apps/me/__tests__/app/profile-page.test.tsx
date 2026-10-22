@@ -19,8 +19,12 @@ vi.mock("@/lib/auth/server", () => ({ requireAuth: requireAuthMock }));
 vi.mock("@/lib/api/client", () => ({
   getMyProfile: getMyProfileMock,
   getRegions: getRegionsMock,
+  // Mirrors the real check in @/lib/api/client (code or status, by shape).
   isNotFoundApiError: (err: unknown) =>
-    err instanceof ORPCError && err.status === 404,
+    typeof err === "object" &&
+    err !== null &&
+    ((err as { code?: unknown }).code === "NOT_FOUND" ||
+      (err as { status?: unknown }).status === 404),
 }));
 vi.mock("@/lib/logging", () => ({ logWarn: vi.fn(), logError: vi.fn() }));
 vi.mock("@/components/profile-form", () => ({ ProfileForm: () => null }));
@@ -47,20 +51,34 @@ describe("ProfilePage", () => {
     expect(typeOf(await renderPage())).toBe(ProfileForm);
   });
 
-  it.each([
+  const outages = [
     ["is unreachable", new TypeError("fetch failed")],
-    ["times out", new DOMException("aborted", "AbortError")],
+    ["times out", new DOMException("timed out", "TimeoutError")],
     ["returns a 5xx", new ORPCError("SERVICE_UNAVAILABLE", { status: 503 })],
-  ])("shows the outage screen when the profile request %s", async (_l, err) => {
-    getMyProfileMock.mockRejectedValue(err);
+  ] as const;
 
-    expect(typeOf(await renderPage())).toBe(ApiUnavailable);
-  });
+  it.each(outages)(
+    "shows the outage screen when the profile request %s",
+    async (_l, err) => {
+      getMyProfileMock.mockRejectedValue(err);
 
-  it("shows the outage screen when only the regions request fails", async () => {
-    getRegionsMock.mockRejectedValue(new TypeError("fetch failed"));
+      expect(typeOf(await renderPage())).toBe(ApiUnavailable);
+    },
+  );
 
-    expect(typeOf(await renderPage())).toBe(ApiUnavailable);
+  it.each(outages)(
+    "shows the outage screen when only the regions request %s",
+    async (_l, err) => {
+      getRegionsMock.mockRejectedValue(err);
+
+      expect(typeOf(await renderPage())).toBe(ApiUnavailable);
+    },
+  );
+
+  it("does not show the outage screen for a caller-cancelled request", async () => {
+    getMyProfileMock.mockRejectedValue(new DOMException("x", "AbortError"));
+
+    await expect(renderPage()).rejects.toThrow();
   });
 
   it("still redirects when the user is not found", async () => {

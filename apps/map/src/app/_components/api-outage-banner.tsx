@@ -36,6 +36,10 @@ function retryFailedQueries(queryClient: QueryClient) {
  * already loaded keep working, and the data fills in once the API recovers.
  * The outage is read off the query cache, so every query (not only the map
  * datasets) feeds it without each caller handling the error.
+ *
+ * It refetches the failed active queries instead of calling
+ * `window.location.reload()` (as the me and admin outage screens do): a reload
+ * would re-download the ~1.5 MB map datasets that are already on screen.
  */
 export function ApiOutageBanner() {
   const queryClient = useQueryClient();

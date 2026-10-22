@@ -1,11 +1,14 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { API_RETRY_BASE_MS } from "@acme/shared/app/api-availability";
+import { apiRetryDelayMs } from "@acme/shared/app/api-availability";
 import { ApiUnavailable } from "@/components/api-unavailable";
 
 vi.mock("next/image", () => ({
   default: (props: { alt: string }) => <span>{props.alt}</span>,
 }));
+
+// The delay with Math.random pinned to 0.5 below, from the real function.
+const RETRY_MS = apiRetryDelayMs(() => 0.5);
 
 describe("ApiUnavailable", () => {
   const reload = vi.fn();
@@ -40,7 +43,7 @@ describe("ApiUnavailable", () => {
   it("reloads after the retry delay while visible", () => {
     render(<ApiUnavailable />);
 
-    vi.advanceTimersByTime(API_RETRY_BASE_MS - 1);
+    vi.advanceTimersByTime(RETRY_MS - 1);
     expect(reload).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(reload).toHaveBeenCalledTimes(1);
@@ -50,11 +53,11 @@ describe("ApiUnavailable", () => {
     visibility = "hidden";
     render(<ApiUnavailable />);
 
-    vi.advanceTimersByTime(API_RETRY_BASE_MS * 3);
+    vi.advanceTimersByTime(RETRY_MS * 3);
     expect(reload).not.toHaveBeenCalled();
 
     visibility = "visible";
-    vi.advanceTimersByTime(API_RETRY_BASE_MS);
+    vi.advanceTimersByTime(RETRY_MS);
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
@@ -62,7 +65,7 @@ describe("ApiUnavailable", () => {
     const { unmount } = render(<ApiUnavailable />);
     unmount();
 
-    vi.advanceTimersByTime(API_RETRY_BASE_MS * 2);
+    vi.advanceTimersByTime(RETRY_MS * 2);
     expect(reload).not.toHaveBeenCalled();
   });
 

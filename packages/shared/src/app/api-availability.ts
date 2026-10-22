@@ -42,7 +42,10 @@ export function isApiUnavailableError(error: unknown, depth = 0): boolean {
   // Matched by name, not `instanceof DOMException`: the abort reasons Node
   // and the browser create can come from a different realm than the global
   // DOMException (a test's jsdom, an iframe), so `instanceof` can miss them.
-  if (name === "TimeoutError" || name === "AbortError") return true;
+  // A bare `AbortError` is deliberately NOT an outage: it is what the caller
+  // cancelling a request (unmount, navigation) produces. Clients that bound
+  // their own wait abort with a `TimeoutError` reason instead.
+  if (name === "TimeoutError") return true;
   if (!(error instanceof Error)) return false;
   if (isOrpcErrorLike(error)) return error.status >= 500;
   // Node's fetch (undici) rejects with "fetch failed" on DNS, refused, or

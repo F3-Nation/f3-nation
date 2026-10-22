@@ -132,6 +132,11 @@ async function proxyRequest(request: NextRequest) {
   const hasBody = method !== "GET" && method !== "HEAD";
   const body = hasBody ? await request.arrayBuffer() : undefined;
 
+  // Built outside the try below: a missing F3_API_BASE_URL is a misconfiguration
+  // and must surface as the 500 it is, not be reported as an API outage.
+  const targetUrl = getTargetUrl(request, proxiedPath);
+  const forwardedHeaders = getForwardedHeaders(request);
+
   // Cleared once headers arrive, so a large body can still stream afterwards.
   const upstreamTimeout = new AbortController();
   const upstreamTimer = setTimeout(() => {
@@ -141,9 +146,9 @@ async function proxyRequest(request: NextRequest) {
   }, UPSTREAM_TIMEOUT_MS);
   let upstreamResponse: Response;
   try {
-    upstreamResponse = await fetch(getTargetUrl(request, proxiedPath), {
+    upstreamResponse = await fetch(targetUrl, {
       method,
-      headers: getForwardedHeaders(request),
+      headers: forwardedHeaders,
       body,
       signal: upstreamTimeout.signal,
     });

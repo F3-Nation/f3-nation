@@ -40,13 +40,21 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
       const controller = new AbortController();
       const startedAt = Date.now();
       const endpointPath = new URL(input.url).pathname;
-      const timeout = setTimeout(() => controller.abort(), getApiTimeoutMs());
+      // A TimeoutError reason (not a bare abort) so the outage classifier can
+      // tell our own timeout from the caller cancelling the request.
+      const timeout = setTimeout(
+        () =>
+          controller.abort(
+            new DOMException("API did not respond", "TimeoutError"),
+          ),
+        getApiTimeoutMs(),
+      );
       const upstreamSignal = (init as RequestInit | undefined)?.signal;
-      const onAbort = () => controller.abort();
+      const onAbort = () => controller.abort(upstreamSignal?.reason);
 
       if (upstreamSignal) {
         if (upstreamSignal.aborted) {
-          controller.abort();
+          onAbort();
         } else {
           upstreamSignal.addEventListener("abort", onAbort, { once: true });
         }

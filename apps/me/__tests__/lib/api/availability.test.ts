@@ -15,7 +15,6 @@ describe("isApiUnavailableError", () => {
       new ORPCError("SERVICE_UNAVAILABLE", { status: 503 }),
     ],
     ["a request timeout", new DOMException("timed out", "TimeoutError")],
-    ["an aborted request", new DOMException("aborted", "AbortError")],
     // What Node's fetch rejects with on DNS, refused, or reset connections.
     ["a connection failure", new TypeError("fetch failed")],
     ["a connection dropped mid-body", new TypeError("terminated")],
@@ -47,6 +46,8 @@ describe("isApiUnavailableError", () => {
       new TypeError("Cannot read properties of undefined"),
     ],
     ["an unrelated DOMException", new DOMException("bad", "SyntaxError")],
+    // The caller cancelling a request (unmount, navigation) is not an outage.
+    ["a caller-cancelled request", new DOMException("aborted", "AbortError")],
     ["a plain Error", new Error("boom")],
     [
       "an Error with a numeric status only",

@@ -64,6 +64,26 @@ describe("ApiOutageBanner", () => {
     expect(banner()).toBeNull();
   });
 
+  it("stays hidden when a query was cancelled by the caller", async () => {
+    setup(() =>
+      Promise.reject(
+        Object.assign(new Error("aborted"), { name: "AbortError" }),
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(banner()).toBeNull();
+  });
+
+  it("appears when the API did not respond in time", async () => {
+    setup(() =>
+      Promise.reject(new DOMException("API did not respond", "TimeoutError")),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(banner()?.textContent).toMatch(/trouble loading data/i);
+  });
+
   it("appears when a query fails because the API is down", async () => {
     setup(() => Promise.reject(outage()));
     await vi.advanceTimersByTimeAsync(0);

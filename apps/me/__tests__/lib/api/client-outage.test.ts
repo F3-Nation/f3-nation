@@ -38,6 +38,7 @@ describe("getMyProfile during an API outage", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -71,6 +72,7 @@ describe("getMyProfile during an API outage", () => {
   });
 
   it("classifies an API that never answers as unavailable", async () => {
+    vi.useFakeTimers();
     vi.stubEnv("F3_API_TIMEOUT_MS", "20");
     // Never settles on its own; only the client's own timeout ends it.
     fetchMock.mockImplementation(
@@ -83,7 +85,14 @@ describe("getMyProfile during an API outage", () => {
         }),
     );
 
-    expect(isApiUnavailableError(await profileError())).toBe(true);
+    const pending = profileError();
+    await vi.advanceTimersByTimeAsync(20);
+    const error = await pending;
+
+    // The client's own timeout carries a TimeoutError reason, so it can be told
+    // apart from the caller cancelling the request.
+    expect((error as Error).name).toBe("TimeoutError");
+    expect(isApiUnavailableError(error)).toBe(true);
   });
 
   it("does not classify a 403 oRPC error as unavailable", async () => {
