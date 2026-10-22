@@ -16,7 +16,8 @@ format, and posting.
 Conventions:
 
 - **Inline, one comment per finding.** Each finding is its own line-level comment, so the author
-  sees how many things need fixing and exactly where. No top-level or review-summary comment.
+  sees how many things need fixing and exactly where. No review-summary comment; the one
+  top-level comment is the short "no issues" note a clean review posts (Step 9).
 - **Every comment serves two readers.** A plain-language explanation for a human who may not
   read the code, then a `## For the coding agent` section with a self-contained spec an AI agent
   can execute without any other context.
@@ -115,11 +116,12 @@ fetches the PR title and body, so the summary is derived from the diff alone.
 
 **`--rereview` first:** find the last commit this skill reviewed. Run Step 5's inline-comment
 fetch now and take the newest `original_commit_id` among comments whose body contains
-`<!-- pr-review-inline -->`. A clean review posts no comment, so if `PR_TRIAGE_LEDGER` is set,
-also take this PR's newest `pr-review-inline` line there; use whichever of the two is newer. If
-it is still an ancestor of `HEAD_SHA`, it replaces `MERGE_BASE` as `DIFF_BASE` for this step and
-Step 6; say so in the report. Otherwise (force-push, or none found) review the whole PR, and if
-there is no ledger, say that a clean earlier review can't be detected without one.
+`<!-- pr-review-inline -->`. A clean review instead left one conversation comment with that
+marker and the reviewed SHA (Step 9), so also check Step 5's conversation-comment fetch, and,
+if `PR_TRIAGE_LEDGER` is set, this PR's newest `pr-review-inline` line there; use whichever is
+newest. If it is still an ancestor of `HEAD_SHA`, it replaces `MERGE_BASE` as `DIFF_BASE` for
+this step and Step 6; say so in the report. Otherwise (force-push, or none found) review the
+whole PR.
 
 Read the diff from the pinned commits, not `gh pr diff`, which shows whatever the PR is now and
 may be newer than `HEAD_SHA`. `DIFF_BASE` is `MERGE_BASE` unless `--rereview` set it:
@@ -297,8 +299,24 @@ GitHub pre-flight and compare `gh pr view <n> --json headRefOid` with `HEAD_SHA`
 has pushed since, say so: the comments still attach to `HEAD_SHA`, and a line may have moved or
 been fixed, so offer a `--rereview` instead.
 
-Post **one comment per finding**, each attached to its own file and line. Never post a top-level
-or review-summary comment, and do not use `POST .../reviews` with a body.
+Post **one comment per finding**, each attached to its own file and line. Never post a
+review-summary comment, and do not use `POST .../reviews` with a body.
+
+**Clean review:** if no finding survives, post exactly one conversation comment instead, so
+the author and `scripts/pr-triage.sh` can see the review happened. Use this body, with the
+`github` skill's signature as the last line (`--dry-run`: show it as a draft instead):
+
+```markdown
+**pr-review-inline found no issues** at commit `<HEAD_SHA>`.
+
+<!-- pr-review-inline -->
+
+_written by <model name>_
+```
+
+```bash
+gh api repos/{owner}/{name}/issues/{n}/comments -F body=@bodies/clean.md
+```
 
 Write each body to its own file first, then pass it with `-F body=@<file>`:
 
@@ -432,7 +450,7 @@ even when zero comments were posted:
 2. **Description accuracy** — the Step 4 block: unsupported claims, undocumented changes,
    contradictions.
 3. **Comments posted** — count by severity, with links from each API response's `html_url`
-   (or, for `--dry-run`, the drafts).
+   (or, for `--dry-run`, the drafts). For a clean review, the link to the "no issues" comment.
 4. **Skipped** — duplicates (and which existing comment each matched), findings dropped or
    downgraded in verification, and any dropped for line-not-in-diff.
 5. **Review engine** — which brief and how many reviewer seats ran, and the reviewer's
