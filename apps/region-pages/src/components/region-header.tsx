@@ -25,18 +25,18 @@ export function RegionHeader({
     {
       name: "Email",
       url: email ? `mailto:${email}` : undefined,
-      icon: <Mail className="size-5" />,
+      icon: <Mail className="size-4" />,
     },
     {
       name: "Facebook",
       url: facebook,
-      icon: <FacebookSvgComponent className="size-5" />,
+      icon: <FacebookSvgComponent className="size-4" />,
     },
-    { name: "X", url: twitter, icon: <XSvgComponent className="size-5" /> },
+    { name: "X", url: twitter, icon: <XSvgComponent className="size-4" /> },
     {
       name: "Instagram",
       url: instagram,
-      icon: <InstagramSvgComponent className="size-5" />,
+      icon: <InstagramSvgComponent className="size-4" />,
     },
   ].filter((link) => link.url);
 

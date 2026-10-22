@@ -5,13 +5,13 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ALL_LETTERS } from "@/lib/letters";
-import type { Region } from "@/types/region";
+import type { RegionSummary } from "@/types/region";
 import { calculateHaversineDistance } from "@/lib/map-utils";
 
 interface Props {
-  regions: Region[];
+  regions: RegionSummary[];
   currentLetter: string;
-  regionsByLetter: Record<string, Region[]>;
+  regionsByLetter: Record<string, RegionSummary[]>;
 }
 
 const KM_TO_MILES = 0.621371;
@@ -21,7 +21,7 @@ interface UserLocation {
   longitude: number;
 }
 
-interface RegionWithDistance extends Region {
+interface RegionWithDistance extends RegionSummary {
   distance: number;
 }
 

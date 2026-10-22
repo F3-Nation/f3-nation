@@ -11,7 +11,7 @@ import {
   toRegionPageRegion,
   toRegionPageWorkout,
 } from "../lib/region-pages";
-import { mapDataFor } from "../lib/map-data-cache";
+import { cachedMapData } from "../lib/map-data-cache";
 import { ancestorOrgsAreActive } from "../org-activity";
 import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import { publicReadProcedure } from "../shared";
@@ -172,7 +172,10 @@ export const regionPagesRouter = os.router({
     })
     .output(z.array(regionSchema))
     .handler(({ context: ctx }) =>
-      mapDataFor(ctx.reqHeaders, "regionPages.regions", async () => {
+      // Always cached (not mapDataFor): honoring the spoofable orpc-ssg
+      // client header here would let any caller force this nationwide
+      // aggregation on every request.
+      cachedMapData("regionPages.regions", async () => {
         void logIfOrgTreeExceedsMaxDepth(ctx.db);
         const [regions, workouts] = await Promise.all([
           selectActiveRegions(ctx.db),
@@ -213,8 +216,12 @@ export const regionPagesRouter = os.router({
       void logIfOrgTreeExceedsMaxDepth(ctx.db);
       // Slugs are derived in JS (lodash kebabCase), so resolve them against
       // the region list (~600 rows) rather than in SQL. Lowest id wins when
-      // two regions share a slug.
-      const regions = await selectActiveRegions(ctx.db);
+      // two regions share a slug. The list sits under one fixed cache key, so
+      // a flood of made-up slugs neither reaches the database nor grows the
+      // cache; only a real slug costs a (bounded, per-region) query.
+      const regions = await cachedMapData("regionPages.activeRegions", () =>
+        selectActiveRegions(ctx.db),
+      );
       const org = regions.find((r) => regionSlug(r.name) === input.slug);
       if (!org) return null;
 

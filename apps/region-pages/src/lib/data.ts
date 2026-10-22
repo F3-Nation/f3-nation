@@ -17,6 +17,17 @@ export const getRegions = unstable_cache(
   },
 );
 
-export const getRegion = unstable_cache(fetchRegion, ["region-pages:region"], {
+const getCachedRegion = unstable_cache(fetchRegion, ["region-pages:region"], {
   revalidate: REVALIDATE_SECONDS,
 });
+
+/**
+ * A region and its workouts, or null. Unknown slugs are rejected against the
+ * cached region list first, so made-up URLs never reach the API and never add
+ * per-slug cache entries.
+ */
+export async function getRegion(slug: string) {
+  const regions = await getRegions();
+  if (!regions.some((region) => region.slug === slug)) return null;
+  return getCachedRegion(slug);
+}

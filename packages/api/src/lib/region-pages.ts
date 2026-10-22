@@ -89,6 +89,20 @@ export const DEFAULT_REGION_CENTER = {
   zoom: 4,
 } as const;
 
+/**
+ * The URL itself when it is http(s), else null. Region links are edited by
+ * region admins and rendered as hrefs, so never pass other schemes through.
+ */
+export function httpUrlOrNull(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const { protocol } = new URL(url.trim());
+    return protocol === "http:" || protocol === "https:" ? url.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 /** URL slug for a region, unchanged from the legacy app so links keep working. */
 export const regionSlug = (name: string): string => kebabCase(name);
 
@@ -127,7 +141,7 @@ export function normalizeFacebookUrl(facebook: string | null): string | null {
   const handle = profile?.[1];
   if (!handle) return null;
   // Numeric-ID profile URLs only work in their original form.
-  if (handle.startsWith("profile.php")) return facebook;
+  if (handle.startsWith("profile.php")) return httpUrlOrNull(facebook);
   return /^[a-zA-Z0-9._-]+$/.test(handle)
     ? `https://facebook.com/${handle}`
     : null;
@@ -308,7 +322,7 @@ export function toRegionPageRegion(
     name: org.name,
     slug: regionSlug(org.name),
     description: org.description,
-    website: org.website,
+    website: httpUrlOrNull(org.website),
     image: org.logoUrl,
     email: normalizeEmail(org.email),
     facebook: normalizeFacebookUrl(org.facebook),

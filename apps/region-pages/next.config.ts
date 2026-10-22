@@ -1,7 +1,20 @@
 import type { NextConfig } from "next";
 
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Frame-Options", value: "DENY" },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains",
+  },
+];
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
+  headers: () =>
+    Promise.resolve([{ source: "/:path*", headers: securityHeaders }]),
   transpilePackages: ["@acme/logger"],
   // pino-pretty relies on worker threads (thread-stream); keep pino external so
   // Next.js does not try to bundle it.

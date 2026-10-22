@@ -6,6 +6,7 @@ import {
   dedupeWorkouts,
   formatClockTime,
   formatTimeRange,
+  httpUrlOrNull,
   normalizeEmail,
   normalizeFacebookUrl,
   normalizeInstagramUrl,
@@ -92,6 +93,25 @@ describe("social and contact normalization", () => {
     ["not a handle!", null],
   ])("instagram %s -> %s", (input, expected) => {
     expect(normalizeInstagramUrl(input)).toBe(expected);
+  });
+});
+
+describe("httpUrlOrNull", () => {
+  it.each([
+    ["https://f3abq.com/", "https://f3abq.com/"],
+    [" http://f3abq.com ", "http://f3abq.com"],
+    ["javascript:alert(1)", null],
+    ["data:text/html,hi", null],
+    ["f3abq.com", null],
+    [null, null],
+  ])("%s -> %s", (input, expected) => {
+    expect(httpUrlOrNull(input)).toBe(expected);
+  });
+
+  it("drops a javascript: URL dressed up as a Facebook profile", () => {
+    expect(
+      normalizeFacebookUrl("javascript:alert(1)//facebook.com/profile.php"),
+    ).toBeNull();
   });
 });
 

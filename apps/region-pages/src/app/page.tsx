@@ -3,7 +3,7 @@ import { Suspense } from "react";
 
 import { RegionsClient } from "@/components/regions-client";
 import { getRegions } from "@/lib/data";
-import { groupRegionsByLetter } from "@/lib/letters";
+import { toRegionSummary } from "@/types/region";
 
 export const metadata: Metadata = {
   title: "All Regions",
@@ -15,8 +15,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const regions = await getRegions();
-  const regionsByLetter = groupRegionsByLetter(regions);
+  const regions = (await getRegions()).map(toRegionSummary);
 
   return (
     <div className="min-h-screen p-8 font-(family-name:--font-geist-sans)">
@@ -58,7 +57,7 @@ export default async function HomePage() {
           Found {regions.length} regions
         </div>
         <Suspense fallback={<div>Loading regions...</div>}>
-          <RegionsClient regions={regions} regionsByLetter={regionsByLetter} />
+          <RegionsClient regions={regions} />
         </Suspense>
       </main>
     </div>
