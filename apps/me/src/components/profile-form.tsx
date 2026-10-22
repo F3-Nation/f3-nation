@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@acme/ui";
 import { Input } from "@acme/ui/input";
 import { Textarea } from "@acme/ui/textarea";
 import { Label } from "@acme/ui/label";

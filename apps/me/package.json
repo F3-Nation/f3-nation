@@ -27,12 +27,10 @@
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
-    "clsx": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "server-only": "catalog:",
-    "tailwind-merge": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
