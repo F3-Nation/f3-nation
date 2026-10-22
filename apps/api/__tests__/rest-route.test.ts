@@ -211,15 +211,17 @@ describe("handleRequest", () => {
     });
   });
 
-  it("reflects the request origin in CORS (credentialed requests forbid *)", async () => {
+  it("allows any origin in CORS but never with credentials", async () => {
     await importHandler();
 
     const { origin, credentials } = corsCtor.mock.calls[0]![0] as {
-      origin: (origin: string) => string;
+      origin: unknown;
       credentials: boolean;
     };
-    expect(credentials).toBe(true);
-    expect(origin("https://map.f3nation.com")).toBe("https://map.f3nation.com");
+    // Echoing the request origin with credentials allowed would let any web
+    // page make cookie-authenticated calls and read the response.
+    expect(credentials).toBe(false);
+    expect(origin).toBe("*");
   });
 
   describe("error interceptors log via logError", () => {
