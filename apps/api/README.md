@@ -64,6 +64,13 @@ pnpm dev
 
 Open [http://localhost:3001/docs](http://localhost:3001/docs) to browse the interactive API reference.
 
+### Dev mock session
+
+`pnpm dev` lets requests with no credential through endpoints that only need a signed-in user, as a mock "Dev User" (`dev@localhost`). It applies only when all three hold: `NODE_ENV=development`, `NEXT_PUBLIC_CHANNEL=local` (from `.env.example`), and `ALLOW_DEV_MOCK_SESSION=true` (the `dev` script's default; deployed services never set it). Each use logs `api.auth.dev_mock_session_issued`.
+
+- The mock user has **no roles**, so editor, admin and nation-admin endpoints (e.g. `GET /v1/user`) still return 401. For those, send a credential, such as a seeded local API key: `-H "Authorization: Bearer local-slackbot-key" -H "Client: local"` (admin on F3 Nation; see `LOCAL_API_KEYS` in `packages/db/src/local-seed-lib/data.ts`).
+- To exercise unauthenticated behavior locally, turn the mock off: `ALLOW_DEV_MOCK_SESSION=false pnpm dev`.
+
 See [docs/LOCAL_DEV_DOCKER.md](../../docs/LOCAL_DEV_DOCKER.md) for the full local Docker setup (Postgres, GCS emulator, Mailpit).
 
 ## Testing

@@ -13,12 +13,12 @@ export default defineConfig({
     // DB pool) on its first request through the seam, so each file's
     // first test pays a full cold start against the 5s default.
     testTimeout: 20_000,
-    // Load-bearing: under NODE_ENV=development, getSession() (shared.ts) returns
-    // getDevMockSession() — an authenticated but role-LESS session — for any
-    // request with no session and no bearer token, instead of null. That makes
+    // Load-bearing: under NODE_ENV=development (with NEXT_PUBLIC_CHANNEL=local
+    // and ALLOW_DEV_MOCK_SESSION=true), protectedProcedure (shared.ts) falls
+    // back to getDevMockSession() — an authenticated but role-LESS session —
+    // for any request with no session and no bearer token. That would make
     // every "unauthenticated -> 401" case on a protectedProcedure vacuous
-    // (admin/editor cases still reject the role-less session). NODE_ENV=test
-    // disables it.
+    // (admin/editor cases still reject). NODE_ENV=test disables it.
     env: { NODE_ENV: "test" },
     include: ["characterization/**/*.char.test.ts"],
     globalSetup: ["./characterization/global-setup.ts"],

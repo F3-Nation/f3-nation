@@ -24,6 +24,7 @@
     "SNAPSHOT_CALLER_CWD"
   ],
   "globalEnv": [
+    "ALLOW_DEV_MOCK_SESSION",
     "CI",
     "NODE_ENV",
     "LOG_LEVEL",
