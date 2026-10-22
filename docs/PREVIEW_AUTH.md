@@ -49,6 +49,9 @@ for every session hop:
    `AUTH_ADDITIONAL_ISSUERS` can add more trusted issuers (e.g. auth3 during
    the Better Auth cutover); each token is checked against the JWKS of the
    allowlisted issuer its `iss` names (`packages/api/src/trusted-issuers.ts`).
+   Deploy #1320 to auth3 before setting it: until then auth3 signs `iss` as
+   `<origin>/api/auth2`, which never matches a bare-origin entry, so every
+   auth3 token the api sees is a 401.
 
 4. **The admin app (not yet in previews) also needs no shared cookie.** It
    runs an OAuth authorization-code flow against `AUTH_PROVIDER_URL`, stores
