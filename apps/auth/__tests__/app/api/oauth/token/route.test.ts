@@ -20,12 +20,16 @@ vi.mock("~/lib/logging", () => ({
 vi.mock("~/lib/rate-limit", () => ({
   rateLimit: vi.fn(() => ({ allowed: true, remaining: 59 })),
 }));
+const envMock = { AUTH_USE_BETTER_AUTH: false };
+vi.mock("~/env", () => ({ env: envMock }));
+vi.mock("~/lib/better-auth-oauth", () => ({ forwardToBetterAuth: vi.fn() }));
 
 const { exchangeAuthorizationCode, exchangeRefreshToken } =
   await import("~/lib/oauth");
 const { getCorsHeaders, handlePreflight } = await import("~/lib/cors");
 const { logError } = await import("~/lib/logging");
 const { rateLimit } = await import("~/lib/rate-limit");
+const { forwardToBetterAuth } = await import("~/lib/better-auth-oauth");
 const { OPTIONS, POST } =
   await import("../../../../../src/app/api/oauth/token/route");
 
@@ -48,6 +52,7 @@ function makeRequest(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  envMock.AUTH_USE_BETTER_AUTH = false;
   vi.mocked(getCorsHeaders).mockResolvedValue({
     "Access-Control-Allow-Origin": "https://example.com",
   });
@@ -67,6 +72,22 @@ describe("OPTIONS", () => {
 });
 
 describe("POST", () => {
+  it("never reaches Better Auth while the flag is off", async () => {
+    vi.mocked(exchangeAuthorizationCode).mockResolvedValue({
+      error: "invalid_grant",
+    });
+    await POST(
+      makeRequest({
+        grant_type: "authorization_code",
+        client_id: "some-client",
+        code: "abc",
+        redirect_uri: "https://example.com/callback",
+      }),
+    );
+    expect(exchangeAuthorizationCode).toHaveBeenCalled();
+    expect(forwardToBetterAuth).not.toHaveBeenCalled();
+  });
+
   it("rejects a request with no client_id and no Basic auth header", async () => {
     const req = makeRequest({ grant_type: "authorization_code" });
     const res = await POST(req);
@@ -254,6 +275,162 @@ describe("POST", () => {
     expect(logError).toHaveBeenCalledWith(
       "auth.oauth.token_endpoint_error",
       { grantType: "authorization_code", clientId: "some-client" },
+      expect.any(Error),
+    );
+  });
+});
+
+describe("POST with AUTH_USE_BETTER_AUTH on", () => {
+  // Better Auth's path reads the raw body, so these are real Requests.
+  function formRequest(
+    fields: Record<string, string>,
+    headers: Record<string, string> = {},
+  ) {
+    return new Request("https://auth.test.invalid/api/oauth/token", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        ...headers,
+      },
+      body: new URLSearchParams(fields).toString(),
+    }) as unknown as NextRequest;
+  }
+
+  beforeEach(() => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    vi.mocked(forwardToBetterAuth).mockResolvedValue(
+      Response.json(
+        { access_token: "ba-at" },
+        { headers: { "cache-control": "no-store" } },
+      ),
+    );
+  });
+
+  it("forwards the body unchanged, without cookies, and adds the client's CORS headers", async () => {
+    const fields = {
+      grant_type: "authorization_code",
+      client_id: "some-client",
+      client_secret: "some-secret",
+      code: "abc",
+    };
+    const req = formRequest(fields, { cookie: "better-auth.session_token=s" });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ access_token: "ba-at" });
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://example.com",
+    );
+    expect(forwardToBetterAuth).toHaveBeenCalledWith(req, "token", {
+      body: new URLSearchParams(fields).toString(),
+      dropCookies: true,
+      dropAuthorization: false,
+    });
+    expect(getCorsHeaders).toHaveBeenCalledWith(req, "some-client");
+    expect(rateLimit).toHaveBeenCalledWith("token:some-client", 60, 60000);
+    expect(exchangeAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it("merges Basic credentials into the forwarded body and drops the header", async () => {
+    const basic = Buffer.from("basic-client:basic:secret").toString("base64");
+    const req = formRequest(
+      { grant_type: "authorization_code", code: "abc" },
+      { authorization: `Basic ${basic}` },
+    );
+
+    await POST(req);
+
+    expect(forwardToBetterAuth).toHaveBeenCalledWith(req, "token", {
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: "abc",
+        client_id: "basic-client",
+        client_secret: "basic:secret",
+      }).toString(),
+      dropCookies: true,
+      dropAuthorization: true,
+    });
+    expect(rateLimit).toHaveBeenCalledWith("token:basic-client", 60, 60000);
+    expect(getCorsHeaders).toHaveBeenCalledWith(req, "basic-client");
+  });
+
+  it("keeps body credentials over a Basic header's, filling in only what the body lacks", async () => {
+    const basic = Buffer.from("header-client:header-secret").toString("base64");
+    const req = formRequest(
+      { grant_type: "refresh_token", client_id: "body-client" },
+      { authorization: `Basic ${basic}` },
+    );
+
+    await POST(req);
+
+    const options = vi.mocked(forwardToBetterAuth).mock.calls[0]?.[2];
+    expect(new URLSearchParams(options?.body).get("client_id")).toBe(
+      "body-client",
+    );
+    expect(new URLSearchParams(options?.body).get("client_secret")).toBe(
+      "header-secret",
+    );
+  });
+
+  it("leaves a Basic header with no secret alone", async () => {
+    const basic = Buffer.from("public-client:").toString("base64");
+    const req = formRequest(
+      { grant_type: "authorization_code" },
+      { authorization: `Basic ${basic}` },
+    );
+
+    await POST(req);
+
+    expect(forwardToBetterAuth).toHaveBeenCalledWith(req, "token", {
+      body: "grant_type=authorization_code",
+      dropCookies: true,
+      dropAuthorization: false,
+    });
+  });
+
+  it("rate limits by the client_id in a Basic auth header", async () => {
+    const basic = Buffer.from("basic-client:basic-secret").toString("base64");
+    vi.mocked(rateLimit).mockReturnValue({ allowed: false, remaining: 0 });
+
+    const res = await POST(
+      formRequest(
+        { grant_type: "refresh_token", refresh_token: "rt" },
+        { authorization: `Basic ${basic}` },
+      ),
+    );
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "rate_limit_exceeded" });
+    expect(rateLimit).toHaveBeenCalledWith("token:basic-client", 60, 60000);
+    expect(forwardToBetterAuth).not.toHaveBeenCalled();
+  });
+
+  it("leaves a request with no client_id to Better Auth, with no CORS headers", async () => {
+    const res = await POST(formRequest({ grant_type: "authorization_code" }));
+
+    expect(res.status).toBe(200);
+    expect(rateLimit).not.toHaveBeenCalled();
+    expect(getCorsHeaders).not.toHaveBeenCalled();
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+
+  it("returns a 500 server_error with CORS headers and logs when Better Auth throws", async () => {
+    vi.mocked(forwardToBetterAuth).mockRejectedValue(new Error("db down"));
+
+    const res = await POST(
+      formRequest({ grant_type: "refresh_token", client_id: "some-client" }),
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "server_error" });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://example.com",
+    );
+    expect(logError).toHaveBeenCalledWith(
+      "auth.oauth.token_endpoint_error",
+      { grantType: "refresh_token", clientId: "some-client" },
       expect.any(Error),
     );
   });

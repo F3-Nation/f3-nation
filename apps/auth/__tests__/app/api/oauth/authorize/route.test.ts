@@ -26,9 +26,12 @@ vi.mock("~/lib/oauth", () => ({
 vi.mock("~/lib/rate-limit", () => ({
   rateLimit: vi.fn(() => ({ allowed: true, remaining: 29 })),
 }));
-vi.mock("~/env", () => ({
-  env: { NEXT_PUBLIC_AUTH_URL: "https://auth.test.invalid" },
-}));
+const envMock = {
+  NEXT_PUBLIC_AUTH_URL: "https://auth.test.invalid",
+  AUTH_USE_BETTER_AUTH: false,
+};
+vi.mock("~/env", () => ({ env: envMock }));
+vi.mock("~/lib/better-auth-oauth", () => ({ forwardToBetterAuth: vi.fn() }));
 
 const { auth } = await import("~/lib/auth");
 const {
@@ -37,6 +40,8 @@ const {
   validateRedirectUri,
   validateScopes,
 } = await import("~/lib/oauth");
+const { forwardToBetterAuth } = await import("~/lib/better-auth-oauth");
+const { rateLimit } = await import("~/lib/rate-limit");
 const { GET } =
   await import("../../../../../src/app/api/oauth/authorize/route");
 
@@ -51,6 +56,8 @@ const AUTH_TIME = "2026-01-01T00:00:00.000Z";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(forwardToBetterAuth).mockReset();
+  envMock.AUTH_USE_BETTER_AUTH = false;
   vi.mocked(getClient).mockResolvedValue(CLIENT as never);
   vi.mocked(validateRedirectUri).mockReturnValue(true);
   vi.mocked(validateScopes).mockReturnValue(true);
@@ -97,5 +104,66 @@ describe("GET /authorize — nonce/authTime wiring", () => {
     expect(createAuthorizationCode).toHaveBeenCalledWith(
       expect.objectContaining({ nonce: undefined }),
     );
+  });
+});
+
+describe("GET /authorize — AUTH_USE_BETTER_AUTH", () => {
+  const url =
+    "https://auth.test.invalid/api/oauth/authorize?response_type=code&client_id=some-client";
+
+  it("runs the hand-rolled flow, never Better Auth, while the flag is off", async () => {
+    await GET(
+      makeRequest(
+        `${url}&redirect_uri=https://example.com/callback&code_challenge=abc&code_challenge_method=S256`,
+      ),
+    );
+
+    expect(forwardToBetterAuth).not.toHaveBeenCalled();
+    expect(createAuthorizationCode).toHaveBeenCalled();
+  });
+
+  it("hands the request to Better Auth's authorize endpoint while the flag is on", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    const response = new Response(null, { status: 302 });
+    vi.mocked(forwardToBetterAuth).mockResolvedValue(response);
+    const request = makeRequest(url);
+
+    await expect(GET(request)).resolves.toBe(response);
+
+    expect(forwardToBetterAuth).toHaveBeenCalledWith(request, "authorize");
+    expect(getClient).not.toHaveBeenCalled();
+    expect(createAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it("forwards a bare URL verbatim, leaving validation to Better Auth", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    vi.mocked(forwardToBetterAuth).mockResolvedValue(new Response(null));
+    const request = makeRequest(
+      "https://auth.test.invalid/api/oauth/authorize?client_id=c&nonce=",
+    );
+
+    await GET(request);
+
+    expect(forwardToBetterAuth).toHaveBeenCalledWith(request, "authorize");
+    expect(request.url).toBe(
+      "https://auth.test.invalid/api/oauth/authorize?client_id=c&nonce=",
+    );
+    expect(getClient).not.toHaveBeenCalled();
+  });
+
+  it("keeps a per-IP rate limit in front of Better Auth, three times the hand-rolled one", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    vi.mocked(rateLimit).mockReturnValueOnce({ allowed: false, remaining: 0 });
+
+    const res = await GET(makeRequest(url));
+
+    expect(res.status).toBe(429);
+    expect(rateLimit).toHaveBeenCalledWith("authorize:unknown", 90, 60000);
+    expect(forwardToBetterAuth).not.toHaveBeenCalled();
+  });
+
+  it("keeps the hand-rolled limit of 30 while the flag is off", async () => {
+    await GET(makeRequest(url));
+    expect(rateLimit).toHaveBeenCalledWith("authorize:unknown", 30, 60000);
   });
 });

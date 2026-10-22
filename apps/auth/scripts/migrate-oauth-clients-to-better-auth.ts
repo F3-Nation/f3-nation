@@ -37,15 +37,33 @@
  * (see the rotate test in __tests__/lib/better-auth.test.ts). Issuing it a
  * secret and enabling it is separate provisioning work.
  *
+ * Settings each new row gets, matching what relying parties do today:
+ *   - offline_access is added to the client's scopes, since Better Auth only
+ *     issues refresh tokens when it is granted (the hand-rolled server
+ *     always issued one);
+ *   - skipConsent, because there is no consent page (see consentPage in
+ *     better-auth.ts) and the hand-rolled server never asked;
+ *   - confidential clients authenticate with client_secret_post, which is
+ *     what packages/sso sends; Better Auth rejects any other method than
+ *     the one registered;
+ *   - a link to the issuer resource (--resource, default NEXT_PUBLIC_AUTH_URL
+ *     from the env file). Better Auth defaults every authorize and token
+ *     request to that resource so access tokens are JWTs, and refuses a
+ *     resource the client isn't linked to. Better Auth seeds the resource row
+ *     itself on first start with AUTH_USE_BETTER_AUTH on; the script stops if
+ *     it isn't there yet.
+ * Rows already present from an earlier run keep their settings apart from
+ * referenceId and the resource link; the script names any that differ.
+ *
  * Usage:
- *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth [--env local|staging|prod]
+ *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth [--env local|staging|prod] [--resource <issuer>]
  *   (dry run by default — prints what would be inserted and which existing rows would get referenceId)
  *   pnpm -C apps/auth migrate-oauth-clients-to-better-auth --confirm
  *   (actually writes)
  */
 import path from "path";
 import readline from "readline";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -53,11 +71,15 @@ import postgres from "postgres";
 
 import * as _schema from "@acme/db/schema/schema";
 
+import { logError, logInfo, logWarn } from "../src/lib/logging";
 import { F3_NATION_CLIENT_REFERENCE_ID } from "../src/lib/oauth-client-reference";
 
-const { oauthClients, betterAuthOauthClient } = (
-  "default" in _schema ? _schema.default : _schema
-) as typeof _schema;
+const {
+  oauthClients,
+  betterAuthOauthClient,
+  betterAuthOauthClientResource,
+  betterAuthOauthResource,
+} = ("default" in _schema ? _schema.default : _schema) as typeof _schema;
 
 function ask(question: string): Promise<string> {
   const rl = readline.createInterface({
@@ -70,6 +92,105 @@ function ask(question: string): Promise<string> {
       resolve(answer);
     }),
   );
+}
+
+type OAuthClientRow = typeof oauthClients.$inferSelect;
+interface ExistingRow {
+  clientId: string;
+  referenceId: string | null;
+  userId: string | null;
+  skipConsent: boolean | null;
+  tokenEndpointAuthMethod: string | null;
+  scopes: string[] | null;
+}
+
+/** The better_auth_oauth_client row a legacy client migrates to. */
+export function buildClientRow(client: OAuthClientRow, now: Date) {
+  let redirectUris: string[];
+  try {
+    const parsed: unknown = JSON.parse(client.redirectUris);
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every((uri): uri is string => typeof uri === "string")
+    ) {
+      throw new Error("not a string array");
+    }
+    redirectUris = parsed;
+  } catch {
+    throw new Error(
+      `oauth_clients.redirect_uris for "${client.id}" is not a valid JSON string array — fix that row before migrating.`,
+    );
+  }
+
+  const trimmedScopes = client.scopes?.trim();
+  const scopeString =
+    trimmedScopes && trimmedScopes.length > 0
+      ? trimmedScopes
+      : "openid profile email";
+  const scopes = scopeString.split(/\s+/);
+  // See the file comment: no refresh token without it.
+  if (!scopes.includes("offline_access")) scopes.push("offline_access");
+
+  return {
+    id: crypto.randomUUID(),
+    clientId: client.id, // preserved exactly — see file comment
+    // No secret at all yet for confidential clients — see the file
+    // comment. Migrated disabled so it can't be mistaken for a usable client
+    // until one is actually issued; public clients need no secret, so they
+    // migrate active.
+    clientSecret: null,
+    disabled: !client.isPublic,
+    // packages/sso sends the secret in the form body.
+    tokenEndpointAuthMethod: client.isPublic ? "none" : "client_secret_post",
+    applicationType: client.isPublic ? ("native" as const) : ("web" as const),
+    // Every migrated client is F3-managed: this shared owner lets any nation
+    // admin read and list it (see the file comment).
+    referenceId: F3_NATION_CLIENT_REFERENCE_ID,
+    requirePKCE: true, // matches the hand-rolled server's unconditional PKCE requirement
+    // No consent page exists; the hand-rolled server never asked either.
+    skipConsent: true,
+    redirectUris,
+    scopes,
+    name: client.name,
+    grantTypes: ["authorization_code", "refresh_token"],
+    responseTypes: ["code" as const],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** What a run inserts, stamps, reports and links, given what is already there. */
+export function planMigration({
+  rows,
+  alreadyPresent,
+  linkedClientIds,
+}: {
+  rows: ReturnType<typeof buildClientRow>[];
+  alreadyPresent: ExistingRow[];
+  linkedClientIds: Set<string>;
+}) {
+  const alreadyPresentIds = new Set(alreadyPresent.map((row) => row.clientId));
+  const newRows = rows.filter((row) => !alreadyPresentIds.has(row.clientId));
+  // An already-present row without a referenceId (e.g. from an earlier run).
+  // Stamp it unless it is pinned to an individual user (userId is checked
+  // before referenceId, so setting one would change nothing and hide the
+  // pin); those are only reported.
+  const toStamp = alreadyPresent.filter(
+    (row) => !row.referenceId && !row.userId,
+  );
+  // Rows nation admins still can't reach after this run: pinned to a user, or
+  // holding some other referenceId. Reported, never overwritten.
+  const needsReview = alreadyPresent.filter(
+    (row) =>
+      Boolean(row.userId) ||
+      (Boolean(row.referenceId) &&
+        row.referenceId !== F3_NATION_CLIENT_REFERENCE_ID),
+  );
+  const reviewIds = new Set(needsReview.map((row) => row.clientId));
+  const toLink = rows.filter(
+    (row) => !linkedClientIds.has(row.clientId) && !reviewIds.has(row.clientId),
+  );
+  return { newRows, toStamp, needsReview, toLink };
 }
 
 async function main() {
@@ -109,6 +230,18 @@ async function main() {
     process.exit(1);
   }
 
+  const resourceIndex = args.indexOf("--resource");
+  const resource =
+    resourceIndex !== -1
+      ? args[resourceIndex + 1]
+      : process.env.NEXT_PUBLIC_AUTH_URL;
+  if (!resource || !URL.canParse(resource)) {
+    logError("auth.migrate_oauth_clients.resource_not_given", {
+      hint: "pass --resource <issuer URL> or set NEXT_PUBLIC_AUTH_URL in the env file",
+    });
+    process.exit(1);
+  }
+
   const databaseHost = process.env.DATABASE_HOST;
   const databasePort = parseInt(process.env.DATABASE_PORT ?? "5432", 10);
   const databaseUser = process.env.DATABASE_USER;
@@ -145,6 +278,20 @@ async function main() {
   console.log(
     `\nConnected to ${targetEnv} database at ${databaseHost}/${databaseName}.\n`,
   );
+  logInfo("auth.migrate_oauth_clients.linking_to_resource", { resource });
+
+  const [resourceRow] = await db
+    .select({ identifier: betterAuthOauthResource.identifier })
+    .from(betterAuthOauthResource)
+    .where(eq(betterAuthOauthResource.identifier, resource));
+  if (!resourceRow) {
+    logError("auth.migrate_oauth_clients.resource_missing", {
+      resource,
+      hint: "start the auth server once with AUTH_USE_BETTER_AUTH on (Better Auth seeds the resource), or check --resource",
+    });
+    await sql.end();
+    process.exit(1);
+  }
 
   const clients = await db
     .select()
@@ -161,55 +308,11 @@ async function main() {
 
   const now = new Date();
   const rows = clients.map((client) => {
-    let redirectUris: string[];
-    try {
-      const parsed: unknown = JSON.parse(client.redirectUris);
-      if (
-        !Array.isArray(parsed) ||
-        !parsed.every((uri): uri is string => typeof uri === "string")
-      ) {
-        throw new Error("not a string array");
-      }
-      redirectUris = parsed;
-    } catch {
-      throw new Error(
-        `oauth_clients.redirect_uris for "${client.id}" is not a valid JSON string array — fix that row before migrating.`,
-      );
-    }
-
+    const row = buildClientRow(client, now);
     console.log(
       `  ${client.id} (${client.name}) — ${client.isPublic ? "public" : "confidential, migrating DISABLED — needs a secret issued before use, see file comment"}`,
     );
-
-    const trimmedScopes = client.scopes?.trim();
-    const scopeString =
-      trimmedScopes && trimmedScopes.length > 0
-        ? trimmedScopes
-        : "openid profile email";
-
-    return {
-      id: crypto.randomUUID(),
-      clientId: client.id, // preserved exactly — see file comment
-      // No secret at all yet for confidential clients — see the file
-      // comment's "OPEN QUESTION for Phase 4". Migrated disabled so it
-      // can't be mistaken for a usable client until one is actually
-      // issued; public clients need no secret, so they migrate active.
-      clientSecret: null,
-      disabled: !client.isPublic,
-      tokenEndpointAuthMethod: client.isPublic ? "none" : "client_secret_basic",
-      applicationType: client.isPublic ? ("native" as const) : ("web" as const),
-      // Every migrated client is F3-managed: this shared owner lets any nation
-      // admin read and list it (see the file comment).
-      referenceId: F3_NATION_CLIENT_REFERENCE_ID,
-      requirePKCE: true, // matches the hand-rolled server's unconditional PKCE requirement
-      redirectUris,
-      scopes: scopeString.split(/\s+/),
-      name: client.name,
-      grantTypes: ["authorization_code", "refresh_token"],
-      responseTypes: ["code" as const],
-      createdAt: now,
-      updatedAt: now,
-    };
+    return row;
   });
 
   // Computed once, ahead of both branches, so the dry-run count matches what
@@ -220,6 +323,9 @@ async function main() {
       clientId: betterAuthOauthClient.clientId,
       referenceId: betterAuthOauthClient.referenceId,
       userId: betterAuthOauthClient.userId,
+      skipConsent: betterAuthOauthClient.skipConsent,
+      tokenEndpointAuthMethod: betterAuthOauthClient.tokenEndpointAuthMethod,
+      scopes: betterAuthOauthClient.scopes,
     })
     .from(betterAuthOauthClient)
     .where(
@@ -229,22 +335,6 @@ async function main() {
       ),
     );
   const alreadyPresentIds = new Set(alreadyPresent.map((row) => row.clientId));
-  const newRows = rows.filter((row) => !alreadyPresentIds.has(row.clientId));
-  // An already-present row without a referenceId (e.g. from an earlier run).
-  // Stamp it unless it is pinned to an individual user (userId is checked
-  // before referenceId, so setting one would change nothing and hide the
-  // pin); those are only reported.
-  const toStamp = alreadyPresent.filter(
-    (row) => !row.referenceId && !row.userId,
-  );
-  // Rows nation admins still can't reach after this run: pinned to a user, or
-  // holding some other referenceId. Reported, never overwritten.
-  const needsReview = alreadyPresent.filter(
-    (row) =>
-      Boolean(row.userId) ||
-      (Boolean(row.referenceId) &&
-        row.referenceId !== F3_NATION_CLIENT_REFERENCE_ID),
-  );
   for (const row of rows) {
     if (alreadyPresentIds.has(row.clientId)) {
       const existing = alreadyPresent.find((r) => r.clientId === row.clientId);
@@ -260,6 +350,40 @@ async function main() {
       );
     }
   }
+  // Rows from an earlier run of this script, which used other settings.
+  for (const existing of alreadyPresent) {
+    const row = rows.find((r) => r.clientId === existing.clientId);
+    if (
+      row &&
+      (existing.skipConsent !== true ||
+        existing.tokenEndpointAuthMethod !== row.tokenEndpointAuthMethod ||
+        !existing.scopes?.includes("offline_access"))
+    ) {
+      logWarn("auth.migrate_oauth_clients.settings_incompatible", {
+        clientId: existing.clientId,
+        expectedAuthMethod: row.tokenEndpointAuthMethod,
+        hint: "present without skipConsent, offline_access or the expected auth method; update it by hand (see file comment)",
+      });
+    }
+  }
+
+  const linked = await db
+    .select({ clientId: betterAuthOauthClientResource.clientId })
+    .from(betterAuthOauthClientResource)
+    .where(
+      and(
+        eq(betterAuthOauthClientResource.resourceId, resource),
+        inArray(
+          betterAuthOauthClientResource.clientId,
+          rows.map((row) => row.clientId),
+        ),
+      ),
+    );
+  const { newRows, toStamp, needsReview, toLink } = planMigration({
+    rows,
+    alreadyPresent,
+    linkedClientIds: new Set(linked.map((row) => row.clientId)),
+  });
   const reviewNote =
     needsReview.length > 0
       ? `\n${needsReview.length} existing row(s) need manual review: nation admins can't reach them.`
@@ -268,7 +392,8 @@ async function main() {
   if (!confirmed) {
     console.log(
       `\nDry run only — ${newRows.length} row(s) would be inserted into better_auth_oauth_client` +
-        ` and ${toStamp.length} existing row(s) would get referenceId.`,
+        ` and ${toStamp.length} existing row(s) would get referenceId;` +
+        ` ${toLink.length} client(s) would be linked to ${resource}.`,
     );
     if (reviewNote) console.log(reviewNote);
     console.log("Re-run with --confirm to actually write.");
@@ -302,12 +427,31 @@ async function main() {
     );
   }
 
+  for (const row of toLink) {
+    await db.insert(betterAuthOauthClientResource).values({
+      id: crypto.randomUUID(),
+      clientId: row.clientId,
+      resourceId: resource,
+      createdAt: now,
+    });
+    logInfo("auth.migrate_oauth_clients.resource_link_created", {
+      clientId: row.clientId,
+      resource,
+    });
+  }
+
   if (reviewNote) console.log(reviewNote);
   console.log("\nDone.");
   await sql.end();
 }
 
-main().catch((err: unknown) => {
-  console.error(err);
-  process.exit(1);
-});
+// Not when imported: the tests import buildClientRow and planMigration.
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

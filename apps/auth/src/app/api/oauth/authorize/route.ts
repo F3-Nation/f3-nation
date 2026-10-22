@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
 
+import { forwardToBetterAuth } from "~/lib/better-auth-oauth";
 import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
 import {
@@ -19,9 +20,22 @@ export async function GET(request: NextRequest) {
   const ip =
     request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
     "unknown";
-  const { allowed } = rateLimit(`authorize:${ip}`, 30, 60 * 1000);
+  // With the flag on, each login or onboarding round trip re-enters this
+  // route (about three passes per sign-in), so the limit is three times
+  // higher; Better Auth's own authorize limiter still applies behind it.
+  const { allowed } = rateLimit(
+    `authorize:${ip}`,
+    env.AUTH_USE_BETTER_AUTH ? 90 : 30,
+    60 * 1000,
+  );
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  // Better Auth runs the same checks (PKCE S256, client, redirect_uri,
+  // scopes, session, onboarding gate, empty nonce) — see lib/better-auth.ts.
+  if (env.AUTH_USE_BETTER_AUTH) {
+    return forwardToBetterAuth(request, "authorize");
   }
 
   const publicUrl = env.NEXT_PUBLIC_AUTH_URL;

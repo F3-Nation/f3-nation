@@ -14,8 +14,10 @@ import {
   allowProductionClientAction,
   buildBetterAuthOptions,
   createAuthInstance,
+  deleteBetterAuthOAuthTokens,
   memoryAdapter,
 } from "../../src/lib/better-auth";
+import { findOnboardedProfile } from "./better-auth-fixture";
 import type {
   CreateAuthInstanceOptions,
   MemoryDB,
@@ -63,6 +65,7 @@ function createTestAuth(f3UserId: number | null) {
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(f3UserId),
     isNationAdmin: () => Promise.resolve(false),
+    findF3Profile: findOnboardedProfile,
     // Permissive — unlike production, these tests need to exercise client
     // creation directly. See "denies client creation..." below for
     // coverage of production's actual (stricter) policy.
@@ -95,6 +98,7 @@ function createMultiUserTestAuth(
       Promise.resolve(emailToF3UserId[email] ?? null),
     isNationAdmin: (f3UserId: number) =>
       Promise.resolve(adminF3UserIds.has(f3UserId)),
+    findF3Profile: findOnboardedProfile,
     allowClientAction: () => Promise.resolve(true),
   };
   const authOptions = buildBetterAuthOptions(options);
@@ -409,6 +413,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
       isNationAdmin: () => Promise.resolve(false),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -459,6 +464,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
       isNationAdmin: () => Promise.resolve(false),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -518,6 +524,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       findF3UserId: (email: string) =>
         Promise.resolve(email === "admin-m@f3nation.test" ? 701 : null),
       isNationAdmin: () => Promise.resolve(true),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -580,6 +587,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(701),
       isNationAdmin: () => Promise.resolve(true),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: allowProductionClientAction,
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -619,6 +627,7 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       findF3UserId: (email: string) =>
         Promise.resolve(emailToF3UserId[email] ?? null),
       isNationAdmin: () => Promise.resolve(true),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: (
         action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
       ) => currentPolicy(action),
@@ -685,5 +694,43 @@ describe("allowProductionClientAction", () => {
     for (const action of ["read", "list", "rotate"] as const) {
       await expect(allowProductionClientAction(action)).resolves.toBe(true);
     }
+  });
+});
+
+describe("deleteBetterAuthOAuthTokens", () => {
+  function fakeAuth(deleteMany: (args: { model: string }) => Promise<unknown>) {
+    return {
+      $context: Promise.resolve({ adapter: { deleteMany } }),
+    } as unknown as Parameters<typeof deleteBetterAuthOAuthTokens>[0];
+  }
+
+  it("still deletes refresh tokens when deleting access tokens fails, then throws", async () => {
+    const deleteMany = vi.fn((args: { model: string }) =>
+      args.model === "oauthAccessToken"
+        ? Promise.reject(new Error("access table down"))
+        : Promise.resolve(0),
+    );
+
+    await expect(
+      deleteBetterAuthOAuthTokens(fakeAuth(deleteMany), "42"),
+    ).rejects.toThrow("access table down");
+
+    expect(deleteMany.mock.calls.map(([args]) => args.model)).toEqual([
+      "oauthAccessToken",
+      "oauthRefreshToken",
+    ]);
+  });
+
+  it("still deletes access tokens when deleting refresh tokens fails, then throws", async () => {
+    const deleteMany = vi.fn((args: { model: string }) =>
+      args.model === "oauthRefreshToken"
+        ? Promise.reject(new Error("refresh table down"))
+        : Promise.resolve(0),
+    );
+
+    await expect(
+      deleteBetterAuthOAuthTokens(fakeAuth(deleteMany), "42"),
+    ).rejects.toThrow("refresh table down");
+    expect(deleteMany).toHaveBeenCalledTimes(2);
   });
 });
