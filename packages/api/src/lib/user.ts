@@ -20,7 +20,7 @@ import { UserSelectSchema } from "@acme/validators";
 import type { UserSelectType } from "@acme/validators";
 import { z } from "zod";
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { checkHasRoleOnAnyOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
 import type { Context } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -513,22 +513,18 @@ export const buildSingleUserQuery = async (
   };
 };
 
-export const hasRoleOnAny = async (
+/** `checkHasRoleOnAnyOrg` for the caller in `ctx`: one hierarchy query in total. */
+export const hasRoleOnAny = (
   ctx: Context,
   orgIds: number[],
   roleName: "editor" | "admin",
-): Promise<boolean> => {
-  for (const orgId of new Set(orgIds)) {
-    const { success } = await checkHasRoleOnOrg({
-      orgId,
-      session: ctx.session,
-      db: ctx.db,
-      roleName,
-    });
-    if (success) return true;
-  }
-  return false;
-};
+): Promise<boolean> =>
+  checkHasRoleOnAnyOrg({
+    session: ctx.session,
+    db: ctx.db,
+    orgIds,
+    roleName,
+  });
 
 /**
  * Orgs whose editors may edit a user's profile: the home region, else any org
