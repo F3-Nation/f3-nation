@@ -67,6 +67,7 @@ export function createFlowAuth(emails: Record<string, number>) {
     database: memoryAdapter(memoryDb),
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: (email: string) => Promise.resolve(emails[email] ?? null),
+    claimOtpAttempt: () => Promise.resolve(true),
     isNationAdmin: () => Promise.resolve(false),
     allowClientAction: () => Promise.resolve(true),
     findF3Profile: vi.fn((f3UserId: number) =>

@@ -110,15 +110,12 @@ export const MobileSearchResultsAndNearbyLocations = () => {
             })
             .map((result, index) =>
               isF3LocationMapSearchResult(result) ? (
-                <PlaceRowF3Location
-                  key={result.destination.id}
-                  result={result}
-                />
+                <PlaceRowF3Location key={result.key} result={result} />
               ) : isF3RegionMapSearchResult(result) ? (
-                <PlaceRowF3Region key={result.destination.id} result={result} />
+                <PlaceRowF3Region key={result.key} result={result} />
               ) : (
                 <PlaceRowMap
-                  key={result.destination.id}
+                  key={result.key}
                   result={result}
                   focused={index === 0}
                 />
