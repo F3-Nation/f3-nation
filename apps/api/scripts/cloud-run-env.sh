@@ -42,9 +42,9 @@ declare -A SECRET_MAP=(
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
-# Cloud Run env vars). An empty value is skipped, not cleared: to stop trusting
-# AUTH_ADDITIONAL_ISSUERS later, remove it with
-# `gcloud run services update f3-api --remove-env-vars AUTH_ADDITIONAL_ISSUERS`.
+# Cloud Run env vars). An empty value is skipped, not cleared, except
+# AUTH_ADDITIONAL_ISSUERS: leaving it unset removes it from the service, so the
+# API stops trusting any issuer it listed before.
 ENV_FILE_VARS=(
   AUTH_ADDITIONAL_ISSUERS
   EMAIL_ADMIN_DESTINATIONS
@@ -191,6 +191,7 @@ echo ""
 echo "Updating Cloud Run service env vars and secret references..."
 
 UPDATE_ARGS=()
+REMOVE_ARGS=()
 
 # Plain env vars (hardcoded).
 for var in "${!PLAIN_VARS[@]}"; do
@@ -201,8 +202,17 @@ done
 # Per-environment env vars (from env file, not secrets).
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
-  echo " [$var] Setting to $value"
-  [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
+  if [[ -n "$value" ]]; then
+    echo " [$var] Setting to $value"
+    UPDATE_ARGS+=("${var}=${value}")
+  elif [[ "$var" == "AUTH_ADDITIONAL_ISSUERS" ]]; then
+    # Cloud Run keeps a variable left out of --update-env-vars, so remove it
+    # explicitly or a previously trusted issuer would stay trusted.
+    echo " [$var] Unset, removing from the service"
+    REMOVE_ARGS+=("$var")
+  else
+    echo " [$var] Unset, leaving the service's value as is"
+  fi
 done
 
 # Secret-backed env vars.
@@ -219,10 +229,15 @@ done
 
 echo ""
 echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
+REMOVE_FLAGS=()
+if [[ ${#REMOVE_ARGS[@]} -gt 0 ]]; then
+  REMOVE_FLAGS=(--remove-env-vars "$(IFS=,; echo "${REMOVE_ARGS[*]}")")
+fi
 gcloud run services update "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
   --update-env-vars "^::^$(printf '%s::' "${UPDATE_ARGS[@]}" | sed 's/::$//')" \
+  ${REMOVE_FLAGS[@]+"${REMOVE_FLAGS[@]}"} \
   --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
   --quiet
 
