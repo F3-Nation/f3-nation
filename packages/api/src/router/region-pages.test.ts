@@ -243,6 +243,84 @@ describe("Region Pages Router", () => {
 
       expect(result?.workouts.map((w) => w.id)).toEqual([String(newer.id)]);
     });
+    it("returns one workout per series with every event type, ordered by id", async () => {
+      const { region, ao, location, eventType } = await createRegionFixture();
+      const second = await createEventType();
+      const event = await createEvent(ao.id, location.id, [
+        second.id,
+        eventType.id,
+      ]);
+
+      const client = createTestClient();
+      const result = await client.regionPages.region({
+        slug: kebabCase(region.name),
+      });
+
+      expect(result?.workouts).toHaveLength(1);
+      expect(result?.workouts[0]).toMatchObject({
+        id: String(event.id),
+        type: eventType.name,
+        types: [eventType.name, second.name],
+      });
+      expect(result?.region.workoutCount).toBe(1);
+    });
+
+    it("hides series that start after the current window", async () => {
+      const { region, ao, location, eventType } = await createRegionFixture();
+      const current = await createEvent(ao.id, location.id, [eventType.id]);
+      await createEvent(ao.id, location.id, [eventType.id], {
+        startDate: "2999-01-01",
+      });
+
+      const client = createTestClient();
+      const result = await client.regionPages.region({
+        slug: kebabCase(region.name),
+      });
+
+      expect(result?.workouts.map((w) => w.id)).toEqual([String(current.id)]);
+    });
+
+    it("only counts AOs whose parent is the region itself", async () => {
+      const { region, location, eventType } = await createRegionFixture();
+      const area = await createOrg({ orgType: "area", parentId: region.id });
+      const nestedAo = await createOrg({ orgType: "ao", parentId: area.id });
+      await createEvent(nestedAo.id, location.id, [eventType.id]);
+
+      const client = createTestClient();
+      const result = await client.regionPages.region({
+        slug: kebabCase(region.name),
+      });
+
+      expect(result?.workouts).toEqual([]);
+    });
+  });
+
+  describe("slug collisions", () => {
+    it("lists and resolves only the lowest-id region for a shared slug", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const base = `RP Collide ${uniqueId()}`;
+      const first = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+        name: base,
+      });
+      const second = await createOrg({
+        orgType: "region",
+        parentId: nation.id,
+        name: `${base}!`,
+      });
+      const slug = kebabCase(base);
+      expect(kebabCase(second.name)).toBe(slug);
+
+      const client = createTestClient();
+      const listed = (await client.regionPages.regions()).filter(
+        (r) => r.slug === slug,
+      );
+      const resolved = await client.regionPages.region({ slug });
+
+      expect(listed.map((r) => r.id)).toEqual([String(first.id)]);
+      expect(resolved?.region.id).toBe(String(first.id));
+    });
   });
 
   describe("regions", () => {

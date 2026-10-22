@@ -1,15 +1,34 @@
 import type { ReactNode } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 const ALLOWED_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 const TEXT_NODE_TYPE = 3;
 const ELEMENT_NODE_TYPE = 1;
 
+const ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&nbsp;": " ",
+};
+
 const stripHtml = (value: string): string =>
   value
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]*>/g, "")
+    .replace(
+      /&(?:amp|lt|gt|quot|#39|nbsp);/g,
+      (entity) => ENTITIES[entity] ?? entity,
+    )
     .trim();
+
+/** Plain-text rendering of `html`; what the server (no DOMParser) shows. */
+const htmlToPlainText = (html: string | null | undefined): string =>
+  html ? stripHtml(html) : "";
 
 const sanitizeChildNodes = (
   nodes: NodeListOf<ChildNode> | ChildNode[],
@@ -99,3 +118,25 @@ export const sanitizeHtmlToReactNodes = (
 
   return sanitizeChildNodes(doc.body.childNodes, "safe-html");
 };
+
+const subscribeNoop = () => () => undefined;
+
+/**
+ * Sanitized nodes for `html`, safe to use in server-rendered client
+ * components. The server and the hydration pass both render plain text (the
+ * DOMParser path only exists in the browser), then the client swaps in links
+ * and line breaks. Calling sanitizeHtmlToReactNodes directly in render would
+ * produce different trees on server and client and break hydration.
+ */
+export function useSanitizedHtml(html: string | null | undefined): ReactNode[] {
+  const isClient = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
+  return useMemo(() => {
+    if (isClient) return sanitizeHtmlToReactNodes(html);
+    const text = htmlToPlainText(html);
+    return text ? [text] : [];
+  }, [html, isClient]);
+}

@@ -158,6 +158,9 @@ export const formatEventDate = (date: string, locale = "en-US"): string => {
     month: "long",
     day: "numeric",
     year: "numeric",
+    // Dates are calendar days; format the noon-UTC instant in UTC so no
+    // viewer timezone (e.g. UTC+13) shifts it to a neighbouring day.
+    timeZone: "UTC",
   });
 
   return formatter.format(new Date(`${date}T12:00:00Z`));

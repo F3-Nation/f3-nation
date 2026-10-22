@@ -40,17 +40,15 @@ describe("WorkoutCard", () => {
   it("renders the day group and the time", () => {
     render(<WorkoutCard workout={makeWorkout()} />);
 
-    expect(screen.getByText("thursday").textContent).toBe("thursday");
-    expect(screen.getByText("5:30 AM - 6:15 AM").textContent).toBe(
-      "5:30 AM - 6:15 AM",
-    );
+    expect(screen.getByText("thursday")).toBeInTheDocument();
+    expect(screen.getByText("5:30 AM - 6:15 AM")).toBeInTheDocument();
   });
 
   it("renders each workout type as a badge", () => {
     render(<WorkoutCard workout={makeWorkout()} />);
 
-    expect(screen.getByText("Bootcamp").textContent).toBe("Bootcamp");
-    expect(screen.getByText("Running").textContent).toBe("Running");
+    expect(screen.getByText("Bootcamp")).toBeInTheDocument();
+    expect(screen.getByText("Running")).toBeInTheDocument();
   });
 
   it("falls back to the single type when the types list is empty", () => {

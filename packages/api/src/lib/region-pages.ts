@@ -106,6 +106,21 @@ export function httpUrlOrNull(url: string | null): string | null {
 /** URL slug for a region, unchanged from the legacy app so links keep working. */
 export const regionSlug = (name: string): string => kebabCase(name);
 
+/**
+ * One region per slug: when two names kebab-case alike, the lowest id wins
+ * (the one `regionPages.region` resolves), so the directory never lists a
+ * region its link can't reach. Input must be ordered by id.
+ */
+export function uniqueBySlug<T extends { name: string }>(orgsById: T[]): T[] {
+  const seen = new Set<string>();
+  return orgsById.filter((org) => {
+    const slug = regionSlug(org.name);
+    if (seen.has(slug)) return false;
+    seen.add(slug);
+    return true;
+  });
+}
+
 export const normalizeEmail = (email: string | null): string | null =>
   email?.includes("@") ? email.trim() : null;
 

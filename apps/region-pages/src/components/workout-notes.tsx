@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { sanitizeHtmlToReactNodes } from "@/lib/safe-html";
+import { useSanitizedHtml } from "@/lib/safe-html";
 
 const EMAIL_SPLIT_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
 const EMAIL_MATCH_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i;
@@ -12,9 +12,9 @@ const EMAIL_MATCH_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i;
  * @todo "Click here for detailed AO maps"
  **/
 export const WorkoutNotes = ({ notes }: { notes: string | null }) => {
+  const sanitizedNotes = useSanitizedHtml(notes);
   if (!notes) return null;
 
-  const sanitizedNotes = sanitizeHtmlToReactNodes(notes);
   const enrichedNotes = enrichEmails(sanitizedNotes);
 
   if (enrichedNotes.length === 0) {

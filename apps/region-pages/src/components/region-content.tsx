@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useState } from "react";
 import { RegionHeader } from "@/components/region-header";
 import { WorkoutList } from "@/components/workout-list";
 import { WorkoutFilters } from "@/components/workout-filters";
@@ -15,7 +15,7 @@ import {
   formatEventDate,
   formatEventTimeRange,
 } from "@/lib/region-events";
-import { sanitizeHtmlToReactNodes } from "@/lib/safe-html";
+import { useSanitizedHtml } from "@/lib/safe-html";
 
 interface RegionContentProps {
   regionSlug: string;
@@ -71,10 +71,7 @@ export function OrphanedRegionContent({ region }: OrphanedRegionContentProps) {
     region.description && region.description.trim().length > 0
       ? region.description
       : defaultRegionDescription;
-  const sanitizedDescription = useMemo(
-    () => sanitizeHtmlToReactNodes(descriptionSource),
-    [descriptionSource],
-  );
+  const sanitizedDescription = useSanitizedHtml(descriptionSource);
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -211,10 +208,7 @@ export function RegionContent({
       : defaultRegionDescription;
   const [logoError, setLogoError] = useState(false);
   const isFallbackLogo = !image || logoError;
-  const sanitizedDescription = useMemo(
-    () => sanitizeHtmlToReactNodes(descriptionSource),
-    [descriptionSource],
-  );
+  const sanitizedDescription = useSanitizedHtml(descriptionSource);
 
   return (
     <div className="mx-auto max-w-4xl p-6">

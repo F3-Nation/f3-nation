@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render } from "@testing-library/react";
-import { sanitizeHtmlToReactNodes } from "@/lib/safe-html";
+import { renderToString } from "react-dom/server";
+import { sanitizeHtmlToReactNodes, useSanitizedHtml } from "@/lib/safe-html";
 
 const renderHtml = (html: string | null | undefined) =>
   render(<>{sanitizeHtmlToReactNodes(html)}</>);
@@ -93,6 +94,31 @@ describe("sanitizeHtmlToReactNodes", () => {
 
     expect(container.querySelector("a")?.textContent).toBe(
       "https://example.com",
+    );
+  });
+});
+
+describe("useSanitizedHtml", () => {
+  function Description({ html }: { html: string }) {
+    return <p>{useSanitizedHtml(html)}</p>;
+  }
+
+  it("server-renders decoded plain text (the hydration pass matches it)", () => {
+    const html = renderToString(
+      <Description
+        html={'A &amp; B<br>Go <a href="https://f3.com">here</a>'}
+      />,
+    );
+    expect(html).toBe("<p>A &amp; B\nGo here</p>");
+  });
+
+  it("swaps in sanitized links once mounted in the browser", () => {
+    const { container } = render(
+      <Description html={'Go <a href="https://f3.com">here</a>'} />,
+    );
+    expect(container.querySelector("a")).toHaveAttribute(
+      "href",
+      "https://f3.com",
     );
   });
 });

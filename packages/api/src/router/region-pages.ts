@@ -10,6 +10,7 @@ import {
   regionSlug,
   toRegionPageRegion,
   toRegionPageWorkout,
+  uniqueBySlug,
 } from "../lib/region-pages";
 import { cachedMapData } from "../lib/map-data-cache";
 import { ancestorOrgsAreActive } from "../org-activity";
@@ -189,7 +190,7 @@ export const regionPagesRouter = os.router({
           workoutsByRegion.set(workout.regionId, list);
         }
 
-        return regions
+        return uniqueBySlug(regions)
           .map((org) =>
             toRegionPageRegion(org, workoutsByRegion.get(String(org.id)) ?? []),
           )

@@ -15,6 +15,7 @@ import {
   summarizeRegionArea,
   toRegionPageRegion,
   toRegionPageWorkout,
+  uniqueBySlug,
 } from "./region-pages";
 
 const row = (
@@ -52,6 +53,17 @@ describe("regionSlug", () => {
     expect(regionSlug("Albany, GA")).toBe("albany-ga");
     expect(regionSlug("ARCO")).toBe("arco");
     expect(regionSlug("Albuquerque")).toBe("albuquerque");
+  });
+});
+
+describe("uniqueBySlug", () => {
+  it("keeps the lowest-id region when names share a slug", () => {
+    const result = uniqueBySlug([
+      { id: 1, name: "Albany, GA" },
+      { id: 2, name: "Albany GA" },
+      { id: 3, name: "Boone" },
+    ]);
+    expect(result.map((r) => r.id)).toEqual([1, 3]);
   });
 });
 
@@ -177,6 +189,15 @@ describe("dedupeWorkouts", () => {
 
     expect(result.map((w) => w.id)).toEqual(["1", "3", "9"]);
   });
+
+  it("keeps same-named workouts at different times or places", () => {
+    const result = dedupeWorkouts([
+      workout({ id: "1" }),
+      workout({ id: "2", time: "6:00 AM - 7:00 AM" }),
+      workout({ id: "3", location: "Somewhere else" }),
+    ]);
+    expect(result).toHaveLength(3);
+  });
 });
 
 describe("summarizeRegionArea", () => {
@@ -216,8 +237,8 @@ describe("summarizeRegionArea", () => {
     expect(area.zip).toBe("87111");
     expect(area.latitude).toBeCloseTo(35.1);
     expect(area.longitude).toBeCloseTo(-106.75);
-    expect(area.zoom).toBeGreaterThanOrEqual(4);
-    expect(area.zoom).toBeLessThanOrEqual(13);
+    // Legacy enrich-regions.ts: floor(15.5 - log2(0.5° * 1.4 padding * 111 km)).
+    expect(area.zoom).toBe(9);
   });
 
   it("clamps a single pin to the closest zoom", () => {
