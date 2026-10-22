@@ -211,15 +211,24 @@ finding postable.
 
 **Size the review** by Step 3's changed-line count, ignoring mechanical changes:
 
-| Size                     | Reviewer seats                                                                                                                        |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Under ~400 changed lines | One reviewer for the whole diff                                                                                                       |
-| ~400 lines or more       | 2–3 reviewers, each given one group of related files from the change inventory (and told the others exist)                            |
-| `--deep`                 | `pr-review-toolkit:review-pr` if installed (pass through any aspects the user named); otherwise one seat per inventory group, up to 4 |
+| Size                     | Reviewer seats                                                                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Under ~150 changed lines | Run the brief yourself, in this session                                                                                                         |
+| ~150–400 changed lines   | One sub-agent reviewer for the whole diff                                                                                                       |
+| ~400 lines or more       | 2–3 sub-agent reviewers, each given one group of related files from the change inventory (and told the others exist)                            |
+| `--deep`                 | `pr-review-toolkit:review-pr` if installed (pass through any aspects the user named); otherwise one sub-agent seat per inventory group, up to 4 |
 
-Give each seat its own fresh sub-agent (a general-purpose sub-agent in Claude Code, a fresh
-worker in Codex) with only the filled brief, never this session's history. If the agent has no
-sub-agent tool, run the brief yourself, one group at a time, and say so in the report.
+**Small PRs run here.** A sub-agent's fixed context costs tens of thousands of tokens before it
+reads a line, and this session has already read the whole diff in Step 3, so on a small PR a
+separate reviewer adds cost without adding much. Work through the filled brief as written: its
+checks, its rules, and its output format, with your findings in that format before Step 7. Judge
+the code against the brief's requirements and the code itself, not the PR's title or body, which
+you have read by now. The user can pass `--deep` to get separate reviewers anyway.
+
+For larger PRs, give each seat its own fresh sub-agent (a general-purpose sub-agent in Claude
+Code, a fresh worker in Codex) with only the filled brief, never this session's history. If the
+agent has no sub-agent tool, run the brief yourself, one group at a time, and say so in the
+report.
 
 ## Step 7 — Parse findings
 

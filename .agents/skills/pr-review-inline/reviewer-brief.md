@@ -3,7 +3,8 @@
 Used by pr-review-inline Step 6 when the Superpowers `requesting-code-review` skill isn't
 installed. Adapted from Superpowers' `code-reviewer.md` (MIT, © Jesse Vincent,
 https://github.com/obra/superpowers). Fill the placeholders, append the PR additions from
-Step 6, and give the result to a fresh sub-agent as its whole prompt.
+Step 6, and either follow it yourself (small PRs) or give it to a fresh sub-agent as its
+whole prompt.
 
 ```text
 You are a senior code reviewer. Review the changes below against their requirements and find
