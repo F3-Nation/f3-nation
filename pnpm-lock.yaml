@@ -667,6 +667,9 @@ importers:
       '@acme/mail':
         specifier: workspace:*
         version: link:../../packages/mail
+      '@acme/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -932,6 +935,9 @@ importers:
       '@acme/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@acme/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1071,6 +1077,9 @@ importers:
 
   apps/homepage:
     dependencies:
+      '@acme/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1370,6 +1379,9 @@ importers:
       '@acme/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@acme/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1887,6 +1899,9 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: 'catalog:'
         version: 1.43.0
+      posthog-js:
+        specifier: 'catalog:'
+        version: 1.438.12(@types/react@19.3.0)(preact-render-to-string@6.5.11)(react@19.3.0)
       posthog-node:
         specifier: 'catalog:'
         version: 5.56.2(@opentelemetry/api@1.9.1)(rxjs@7.8.2)
