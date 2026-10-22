@@ -26,6 +26,12 @@ All the apps in this monorepo can be developed and tested locally. See [LOCAL_DE
    - Don't have `write` access, or forgot to add it? A scheduled workflow ([`ready-for-human-review-label.yml`](../.github/workflows/ready-for-human-review-label.yml)) applies the label automatically once your PR is out of draft, has no merge conflicts with `main`, all required checks are green, and the AI review bots' threads are resolved — it runs daily, so there can be up to a day's delay. The same workflow also removes the label if any of those stop being true (e.g. a new commit resets checks to pending, or `main` moves ahead and your branch now has merge conflicts), even if you added it by hand. Only actual merge conflicts count: a branch that is merely behind `main`, or unresolved threads from human reviewers, won't remove the label. A maintainer can trigger it manually for a fresher check.
    - Small, self-evident PRs (a one-line fix, a doc correction) are sometimes approved and merged by a codeowner before the label is ever applied. That's fine — the label is a review-queue signal, not a required check.
 
+## For codeowners: finding PRs to review
+
+Run `pnpm pr:triage` to see every open PR sorted by what it needs next: waiting on the AI bots, needs the `pr-review-inline` skill, waiting on the author's unresolved threads, needs the `pr-local-test` skill, needs a codeowner's approval, or approved and waiting to merge. Your own PRs get their own section, since someone else has to approve them. Add `--html` (`pnpm pr:triage --html`) to open the same thing as a board in your browser; run it again to refresh.
+
+It needs the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login`) and `jq`, and works on macOS, Linux and WSL. Drafts and Renovate and release-please PRs are left out. `scripts/pr-triage.sh --help` lists the options.
+
 ## Use of AI
 
 AI tools are welcome for writing code, tests, and PR descriptions. You're responsible for understanding, testing, and reviewing anything AI-generated before you submit it. See [AI_DEVELOPMENT_GUIDE.md](AI_DEVELOPMENT_GUIDE.md) and [AI_GUARDRAILS.md](AI_GUARDRAILS.md) for the guardrails our own AI agents follow.
