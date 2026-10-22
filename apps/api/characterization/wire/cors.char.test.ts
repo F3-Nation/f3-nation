@@ -66,6 +66,24 @@ describe("CORS", () => {
     expect(res.headers.get("access-control-allow-credentials")).toBeNull();
   });
 
+  it("treats an opaque Origin: null the same, even with a cookie", async () => {
+    // Sandboxed iframes and file: pages send `Origin: null`. It must get `*`
+    // without credentials like any other origin, never an echoed `null`.
+    const res = await target.invoke(
+      req("/v1/ping", {
+        method: "OPTIONS",
+        headers: {
+          origin: "null",
+          cookie: "session=ignored",
+          "access-control-request-method": "GET",
+          "x-forwarded-for": "10.91.0.4",
+        },
+      }),
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(res.headers.get("access-control-allow-credentials")).toBeNull();
+  });
+
   it("carries CORS headers on a handler-produced error response", async () => {
     const res = await target.invoke(
       req("/v1/event-tag/org/1", {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as OrpcServer from "@orpc/server";
+import type { CORSOptions } from "@orpc/server/plugins";
 import type { StandardHandlerInterceptorOptions } from "@orpc/server/standard";
 
 import { Client, Header } from "@acme/shared/common/enums";
@@ -214,10 +215,10 @@ describe("handleRequest", () => {
   it("allows any origin in CORS but never with credentials", async () => {
     await importHandler();
 
-    const { origin, credentials } = corsCtor.mock.calls[0]![0] as {
-      origin: unknown;
-      credentials: boolean;
-    };
+    // One plugin instance is shared by the RPC and OpenAPI handlers.
+    expect(corsCtor).toHaveBeenCalledTimes(1);
+    const { origin, credentials } = corsCtor.mock
+      .calls[0]![0] as CORSOptions<never>;
     // Echoing the request origin with credentials allowed would let any web
     // page make cookie-authenticated calls and read the response.
     expect(credentials).toBe(false);
