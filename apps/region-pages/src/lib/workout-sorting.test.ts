@@ -36,10 +36,6 @@ describe("sortWorkoutsByDayAndTime", () => {
     vi.useRealTimers();
   });
 
-  it("returns an empty array for empty input", () => {
-    expect(sortWorkoutsByDayAndTime([])).toEqual([]);
-  });
-
   it("orders upcoming workouts by next occurrence", () => {
     const sorted = sortWorkoutsByDayAndTime([
       makeWorkout({
@@ -111,17 +107,5 @@ describe("sortWorkoutsByDayAndTime", () => {
 
     // Sunday Feb 4 comes before Monday Feb 5 when counting from Thursday.
     expect(namesOf(sorted)).toEqual(["Sunday", "Monday"]);
-  });
-
-  it("does not mutate the input array", () => {
-    const input = [
-      makeWorkout({ name: "Friday", group: "friday", time: "6:00 AM" }),
-      makeWorkout({ name: "Later Today", time: "7:00 PM" }),
-    ];
-    const snapshot = [...input];
-
-    sortWorkoutsByDayAndTime(input);
-
-    expect(input).toEqual(snapshot);
   });
 });

@@ -23,6 +23,8 @@ live F3 database through the public API instead.
   `apps/region-pages/src/app/page.tsx`,
   `apps/region-pages/src/app/[regionSlug]/page.tsx`,
   `apps/region-pages/src/app/[regionSlug]/events/[eventSlug]/page.tsx`,
+  `apps/region-pages/src/lib/api.ts` (API client),
+  `apps/region-pages/src/lib/data.ts` (caching + slug guard),
   `apps/region-pages/src/data/region-events.json`.
 
 ## 3. User stories
@@ -38,9 +40,10 @@ live F3 database through the public API instead.
 
 ### Directory (`/`)
 
-- **AC-1** — GIVEN an anonymous visitor WHEN `/` loads THEN it lists active
-  regions whose names start with "A", with "Found N regions" equal to the
-  number of active regions, and no sign-in prompt.
+- **AC-1** — GIVEN an anonymous visitor WHEN `/` loads THEN the server-rendered
+  HTML links every listed region whose name starts with "A", "Found N regions"
+  equals the number of distinct active-region slugs, and no sign-in prompt
+  appears.
 - **AC-2** — GIVEN `/` WHEN the visitor picks a letter THEN the URL becomes
   `/?letter=<letter>` and only regions starting with that letter are listed.
 - **AC-3** — GIVEN `/` WHEN the visitor types in the search box THEN
@@ -57,6 +60,8 @@ live F3 database through the public API instead.
 - **AC-6** — GIVEN an active region named "Albany, GA" WHEN
   `/albany-ga` loads THEN the page shows that region (the slug is the
   lodash kebab-case of the name, unchanged from the legacy app).
+- **AC-6a** — GIVEN two active regions whose names kebab-case to the same slug
+  THEN only the lower org id is listed, and the slug resolves to it.
 - **AC-7** — GIVEN a region page THEN each listed workout is an active,
   non-private series whose date window is current (starts within 6 days, not
   ended), at an active location, owned by an active AO directly under the
@@ -102,7 +107,8 @@ fields and public workout schedules. No write paths.
 
 ## 7. Critical-path test cases
 
-- AC-1, AC-6, AC-7, AC-11.
+- AC-1, AC-6, AC-7, AC-11. Implementation rules are in
+  [`apps/region-pages/AGENTS.md`](../../apps/region-pages/AGENTS.md).
 
 ## 8. Observability
 

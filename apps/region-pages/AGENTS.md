@@ -8,27 +8,58 @@ Before any Next.js work, find and read the relevant doc in `node_modules/next/di
 
 # F3 Region Pages — Agent Guide
 
-Public directory of F3 regions and their weekly workouts
-(`regions.f3nation.com`). Spec: [`docs/specs/region-pages-directory.md`](../../docs/specs/region-pages-directory.md).
+Public, anonymous directory of F3 regions and their weekly workouts at
+`regions.f3nation.com`. **Spec (source of truth for behavior):**
+[`docs/specs/region-pages-directory.md`](../../docs/specs/region-pages-directory.md).
 
-## Architecture
+## How it works
 
-- **No database access.** All data comes from the public `regionPages.*`
-  oRPC procedures on apps/api (`packages/api/src/router/region-pages.ts`) via
-  `src/lib/api.ts`, identified by the `f3-region-pages` client header.
-  Shaping (slugs, social URLs, time format, dedup, region area) lives in
-  `packages/api/src/lib/region-pages.ts`.
-- **Caching.** `src/lib/data.ts` wraps API reads in `unstable_cache` for
-  `REVALIDATE_SECONDS` (1 h). Region pages are on-demand ISR
-  (`generateStaticParams` returns `[]`); `/` and `/sitemap.xml` render per
-  request from the cached data. Nothing fetches at image build time.
-- **Env.** `SITE_URL` and `GA_MEASUREMENT_ID` are deliberately server-only
-  (not `NEXT_PUBLIC_*`): Next inlines `NEXT_PUBLIC_*` at build, and one image
-  serves both staging and prod.
-- **Styling.** Plain Tailwind v4 with OS-driven (media) dark mode, carried
-  over from the legacy app; it does not use `@acme/ui` or
-  `@acme/tailwind-config`'s class-based dark mode.
-- **Curated events.** `src/data/region-events.json` is hand-maintained.
+- **No database.** Data comes from the public `regionPages.regions` /
+  `regionPages.region` procedures on apps/api over HTTP (`src/lib/api.ts`,
+  client header `f3-region-pages`). Router:
+  `packages/api/src/router/region-pages.ts`. Shaping (slugs, social URLs,
+  time format, dedup, region area/zoom): `packages/api/src/lib/region-pages.ts`.
+- **Caching.** `src/lib/data.ts` caches API reads for `REVALIDATE_SECONDS`
+  (1 h). Region pages are on-demand ISR; `/` and `/sitemap.xml` render per
+  request from the cached data.
+- **Env** (`.env.example`): `F3_API_BASE_URL`, `F3_CHANNEL`, `SITE_URL`,
+  `GA_MEASUREMENT_ID`. No secrets.
+
+## Rules
+
+1. **Slugs are public URLs.** A slug is lodash `kebabCase(region.name)`, the
+   same as the legacy app. Never change how slugs are built. When two names
+   produce one slug, the lowest org id wins everywhere.
+2. **Visibility rules live in the API and match the map** (active, non-private,
+   current series, at an active location, under an active AO directly beneath
+   an active region with active ancestors). Change them only in the router,
+   and update spec AC-7 and the router tests in the same PR.
+3. **The endpoints are anonymous.** Return nothing beyond what
+   `map.location.eventsAndLocations` already exposes. No user PII.
+4. **Never key a cache or API call on unvalidated input.** `getRegion` checks
+   the slug against the cached region list first, and the API resolves slugs
+   against a fixed-key cache. Keep both checks, so made-up URLs never reach the
+   database or grow a cache.
+5. **Render database HTML only through `useSanitizedHtml`**
+   (`src/lib/safe-html.tsx`). Calling `sanitizeHtmlToReactNodes` during render
+   breaks hydration. Never use `dangerouslySetInnerHTML`. Links must be
+   http(s); see `httpUrlOrNull` in the API lib.
+6. **Nothing fetches at build time.** The Docker build has no API access.
+   `generateStaticParams` returns `[]`, and `/` is `force-dynamic`.
+7. **Route segment config must be a literal**, e.g. `revalidate = 3600`. A
+   constant fails the build. Keep it equal to `REVALIDATE_SECONDS`.
+8. **No `NEXT_PUBLIC_*` variables.** Next inlines them at build, and one image
+   serves both staging and prod. Read env with `nonEmpty()` (`src/lib/site.ts`)
+   so an empty value counts as unset.
+9. **Tailwind v4 with OS (media) dark mode.** This app does not use `@acme/ui`
+   or the shared class-based dark mode. v4 generates numeric utilities
+   (`w-150` is 600px), and v3's `shadow-sm` / `outline-none` are now
+   `shadow-xs` / `outline-hidden`. Check visually against production.
+10. **Keep the directory payload small.** `/` sends `RegionSummary`
+    (`src/types/region.ts`), not the full region. Add fields there only if the
+    list renders them.
+11. **Release order:** ship the `api` release containing any `regionPages`
+    change before the `region-pages` release that relies on it.
 
 ## Local dev
 
@@ -36,5 +67,7 @@ Public directory of F3 regions and their weekly workouts
 pnpm -F f3-region-pages dev
 ```
 
-Needs apps/api running (`F3_API_BASE_URL` in `.env`, default
-`http://localhost:3001/v1`). Port: `F3_REGION_PAGES_PORT` (default 3006).
+Needs apps/api running, with `F3_API_BASE_URL` pointing at it (default
+`http://localhost:3001/v1`). Port: `F3_REGION_PAGES_PORT`, default 3006. Slotted
+checkouts (`local:setup --slot N`) don't assign this port yet. The curated
+events in `src/data/region-events.json` are edited by hand.

@@ -6,7 +6,6 @@ import {
   RegionContent,
 } from "@/components/region-content";
 import { getRegion } from "@/lib/data";
-import { calculateMapParameters } from "@/lib/map-utils";
 import { formatEventDate, getUpcomingRegionEvents } from "@/lib/region-events";
 import { SITE_TITLE } from "@/lib/site";
 import { sortWorkoutsByDayAndTime } from "@/lib/workout-sorting";
@@ -109,7 +108,10 @@ export default async function RegionPage({ params }: RegionPageProps) {
       instagram={region.instagram ?? undefined}
       image={region.image ?? undefined}
       sortedWorkouts={sortWorkoutsByDayAndTime(workouts)}
-      mapParams={calculateMapParameters(workouts)}
+      mapParams={{
+        center: { lat: region.latitude, lng: region.longitude },
+        zoom: region.zoom,
+      }}
       upcomingEvents={getUpcomingRegionEvents(regionSlug, { limit: 3 })}
     />
   );

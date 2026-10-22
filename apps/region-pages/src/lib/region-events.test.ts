@@ -61,26 +61,13 @@ const makeEvent = (overrides: Partial<RegionEvent> = {}): RegionEvent => ({
 const REFERENCE = new Date("2024-02-01T10:30:00");
 
 describe("buildEventSlug", () => {
-  it("combines the id with the kebab-cased slug suffix", () => {
-    expect(buildEventSlug(makeEvent({ slugSuffix: "Holiday Hike" }))).toBe(
-      "abc123-holiday-hike",
-    );
-  });
-
-  it("falls back to the title when there is no slug suffix", () => {
-    expect(buildEventSlug(makeEvent({ title: "Turkey Trot" }))).toBe(
-      "abc123-turkey-trot",
-    );
-  });
-
-  it("falls back to the title when the slug suffix is blank", () => {
-    expect(
-      buildEventSlug(makeEvent({ slugSuffix: "   ", title: "Turkey Trot" })),
-    ).toBe("abc123-turkey-trot");
-  });
-
-  it("returns only the id when neither suffix nor title is usable", () => {
-    expect(buildEventSlug(makeEvent({ title: "  " }))).toBe("abc123");
+  it.each([
+    [{ slugSuffix: "Holiday Hike" }, "abc123-holiday-hike"],
+    [{ title: "Turkey Trot" }, "abc123-turkey-trot"],
+    [{ slugSuffix: "   ", title: "Turkey Trot" }, "abc123-turkey-trot"],
+    [{ title: "  " }, "abc123"],
+  ])("%j -> %s", (overrides, expected) => {
+    expect(buildEventSlug(makeEvent(overrides))).toBe(expected);
   });
 });
 
@@ -91,104 +78,52 @@ describe("formatEventDate", () => {
 });
 
 describe("formatEventTime", () => {
-  it("returns undefined when no time is given", () => {
-    expect(formatEventTime(undefined)).toBeUndefined();
-    expect(formatEventTime("")).toBeUndefined();
-  });
-
-  it("formats morning times as AM", () => {
-    expect(formatEventTime("09:00")).toBe("9:00 AM");
-  });
-
-  it("formats afternoon times as PM", () => {
-    expect(formatEventTime("13:05")).toBe("1:05 PM");
-  });
-
-  it("maps midnight to 12:00 AM", () => {
-    expect(formatEventTime("00:30")).toBe("12:30 AM");
-  });
-
-  it("maps noon to 12:00 PM", () => {
-    expect(formatEventTime("12:00")).toBe("12:00 PM");
-  });
-
-  it("treats a missing minutes part as :00", () => {
-    expect(formatEventTime("9")).toBe("9:00 AM");
-  });
-
-  it("returns the input unchanged when the hour is out of range", () => {
-    expect(formatEventTime("25:00")).toBe("25:00");
-  });
-
-  it("returns the input unchanged when the minutes are out of range", () => {
-    expect(formatEventTime("10:75")).toBe("10:75");
-  });
-
-  it("returns the input unchanged when it is not a time", () => {
-    expect(formatEventTime("abc")).toBe("abc");
+  it.each([
+    [undefined, undefined],
+    ["", undefined],
+    ["09:00", "9:00 AM"],
+    ["13:05", "1:05 PM"],
+    ["00:30", "12:30 AM"],
+    ["12:00", "12:00 PM"],
+    ["9", "9:00 AM"],
+    ["25:00", "25:00"],
+    ["10:75", "10:75"],
+    ["abc", "abc"],
+  ])("%j -> %j", (input, expected) => {
+    expect(formatEventTime(input)).toBe(expected);
   });
 });
 
 describe("formatEventTimeRange", () => {
-  it("joins start and end with an en dash", () => {
-    expect(formatEventTimeRange("09:00", "11:00")).toBe("9:00 AM – 11:00 AM");
-    expect(formatEventTimeRange(undefined, "11:00")).toBe("11:00 AM");
-  });
-
-  it("shows only the start when there is no end time", () => {
-    expect(formatEventTimeRange("09:00", undefined)).toBe("9:00 AM");
-  });
-
-  it("returns undefined when neither time is given", () => {
-    expect(formatEventTimeRange(undefined, undefined)).toBeUndefined();
-    expect(formatEventTimeRange("", "")).toBeUndefined();
+  it.each([
+    ["09:00", "11:00", "9:00 AM – 11:00 AM"],
+    ["09:00", undefined, "9:00 AM"],
+    [undefined, "11:00", "11:00 AM"],
+    [undefined, undefined, undefined],
+    ["", "", undefined],
+  ])("%j, %j -> %j", (start, end, expected) => {
+    expect(formatEventTimeRange(start, end)).toBe(expected);
   });
 });
 
 describe("hasEventEnded", () => {
-  it("returns true for an event on an earlier day", () => {
-    const event = makeEvent({ date: "2024-01-31", startTime: "23:00" });
-
-    expect(hasEventEnded(event, new Date("2024-02-01T00:30:00"))).toBe(true);
-  });
-
-  it("returns false for an event later today", () => {
-    const event = makeEvent({ date: "2024-02-01", startTime: "06:00" });
-
-    expect(hasEventEnded(event, new Date("2024-02-01T23:59:00"))).toBe(false);
-  });
-
-  it("returns false for a future event", () => {
-    const event = makeEvent({ date: "2024-03-01" });
-
-    expect(hasEventEnded(event, REFERENCE)).toBe(false);
-  });
-
-  it("returns false when the event has no date", () => {
-    expect(hasEventEnded(makeEvent({ date: "" }), REFERENCE)).toBe(false);
+  it.each([
+    ["an earlier day", { date: "2024-01-31", startTime: "23:00" }, true],
+    ["later today", { date: "2024-02-01", startTime: "06:00" }, false],
+    ["a future day", { date: "2024-03-01" }, false],
+    ["no date", { date: "" }, false],
+  ])("%s -> %s", (_label, overrides, expected) => {
+    expect(hasEventEnded(makeEvent(overrides), REFERENCE)).toBe(expected);
   });
 });
 
 describe("getUpcomingRegionEvents", () => {
-  it("returns today and later dated events in chronological order", () => {
-    const upcoming = getUpcomingRegionEvents("atlanta", {
-      referenceDate: REFERENCE,
-    });
-
-    expect(upcoming.map((event) => event.id)).toEqual([
-      "dddddd",
-      "cccccc",
-      "bbbbbb",
-    ]);
-  });
-
-  it("excludes past and undated events", () => {
+  it("returns today-and-later dated events in order, skipping past and undated", () => {
     const ids = getUpcomingRegionEvents("atlanta", {
       referenceDate: REFERENCE,
     }).map((event) => event.id);
 
-    expect(ids).not.toContain("aaaaaa");
-    expect(ids).not.toContain("eeeeee");
+    expect(ids).toEqual(["dddddd", "cccccc", "bbbbbb"]);
   });
 
   it("applies the limit", () => {
