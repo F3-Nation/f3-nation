@@ -10,10 +10,11 @@ import { TooltipProvider } from "@acme/ui/tooltip";
 
 import "~/app/globals.css";
 
+import { ApiUnavailable } from "~/app/_components/api-unavailable";
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
 import { env } from "~/env";
 import { AdminSessionProvider } from "~/lib/auth/client";
-import { getSessionUser, requireAdminPortalAccess } from "~/lib/auth/server";
+import { getSessionLookup, requireAdminPortalAccess } from "~/lib/auth/server";
 import { OrpcReactProvider } from "~/orpc/react";
 
 export const metadata: Metadata = {
@@ -31,25 +32,35 @@ export const viewport: Viewport = {
 export default async function RootLayout(props: { children: React.ReactNode }) {
   const requestHeaders = await headers();
   const protectedPathname = requestHeaders.get("x-admin-pathname");
-  const initialSession = await getSessionUser();
+  const { session: initialSession, apiUnavailable } = await getSessionLookup();
   const runtimeConfig = {
     googleApiKey: env.F3_GOOGLE_API_KEY,
     isProd: env.F3_CHANNEL === "prod",
   };
+  const bodyClassName = cn(
+    "min-h-dvh bg-background font-sans text-foreground antialiased",
+    GeistSans.variable,
+    GeistMono.variable,
+  );
 
   if (protectedPathname) {
+    // Roles could not be loaded, so the access check below would wrongly send
+    // a real admin to "no access". Say what is actually wrong instead.
+    if (apiUnavailable) {
+      return (
+        <html lang="en">
+          <body className={bodyClassName}>
+            <ApiUnavailable />
+          </body>
+        </html>
+      );
+    }
     await requireAdminPortalAccess(initialSession);
   }
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={cn(
-          "min-h-dvh bg-background font-sans text-foreground antialiased",
-          GeistSans.variable,
-          GeistMono.variable,
-        )}
-      >
+      <body className={bodyClassName}>
         <AdminSessionProvider initialSession={initialSession}>
           <OrpcReactProvider>
             <ThemeProvider
