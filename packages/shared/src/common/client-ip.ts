@@ -21,10 +21,19 @@ export const TRUSTED_PROXY_HOPS = 1;
  * `trustedHops` from the right of `X-Forwarded-For`, which our proxies wrote
  * and the caller cannot forge.
  *
+ * Parsing rules (pinned by tests):
+ * - Entries are trimmed and empty ones dropped, so this returns the rightmost
+ *   non-empty entry, not the literal last comma-separated token. A header with
+ *   no usable entry (`""`, `", "`) is treated like an absent one.
+ * - `trustedHops` is floored at 1: 0 or a negative count still reads the
+ *   rightmost entry. There is no "trust nothing" mode; a caller that does not
+ *   sit behind a proxy should not call this.
+ * - A header shorter than `trustedHops` means the request skipped some of the
+ *   expected proxies; every entry in it was still appended by one of them, so
+ *   the leftmost is used.
+ *
  * Returns null when there is no usable `X-Forwarded-For` (local dev, tests),
- * so each caller picks its own fallback. A header shorter than `trustedHops`
- * means the request skipped some of the expected proxies; every entry in it
- * was still appended by one of them, so the leftmost is used.
+ * so each caller picks its own fallback.
  */
 export function getTrustedClientIp(
   headers: Pick<Headers, "get"> | null | undefined,

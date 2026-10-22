@@ -33,6 +33,19 @@ describe("getTrustedClientIp", () => {
     expect(getTrustedClientIp(xff("198.51.100.7"), 2)).toBe("198.51.100.7");
   });
 
+  it("floors trustedHops at 1, so 0 still reads the rightmost entry", () => {
+    expect(getTrustedClientIp(xff("9.9.9.9, 198.51.100.7"), 0)).toBe(
+      "198.51.100.7",
+    );
+    expect(getTrustedClientIp(xff("9.9.9.9, 198.51.100.7"), -3)).toBe(
+      "198.51.100.7",
+    );
+  });
+
+  it("returns the rightmost non-empty entry when the header ends in a comma", () => {
+    expect(getTrustedClientIp(xff("198.51.100.7, "))).toBe("198.51.100.7");
+  });
+
   it("trims whitespace and skips empty entries", () => {
     expect(getTrustedClientIp(xff(" 9.9.9.9 ,, 198.51.100.7 , "))).toBe(
       "198.51.100.7",
@@ -42,6 +55,7 @@ describe("getTrustedClientIp", () => {
   it("returns null when there is no usable x-forwarded-for (local dev)", () => {
     expect(getTrustedClientIp(new Headers())).toBeNull();
     expect(getTrustedClientIp(xff(" , "))).toBeNull();
+    expect(getTrustedClientIp(xff(","))).toBeNull();
     expect(getTrustedClientIp(null)).toBeNull();
     expect(getTrustedClientIp(undefined)).toBeNull();
   });

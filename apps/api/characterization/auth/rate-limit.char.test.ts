@@ -48,5 +48,12 @@ describe.runIf(target.inProcess)("rate limiting", () => {
 
     const leading = await ping(`${EXHAUSTED}, 10.0.0.2, 10.70.3.1`);
     expect(leading.status).toBe(200);
+
+    // The two-entry shape Cloud Run actually produces: `<caller-set>, <client>`.
+    const forgedPrefix = await ping(`10.0.0.3, ${EXHAUSTED}`);
+    expect(forgedPrefix.status).toBe(429);
+
+    const forgedExhausted = await ping(`${EXHAUSTED}, 10.70.4.1`);
+    expect(forgedExhausted.status).toBe(200);
   });
 });
