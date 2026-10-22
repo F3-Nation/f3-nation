@@ -35,7 +35,8 @@ mode** below, which runs only on an explicit request.
 
   ```ts
   // Not durable — a history book. Meaningful only to people who remember June
-  // and can find #1482: "Came out of the 6/12 Akamai outage, see #1482."
+  // and can find the issue: "Came out of the 6/12 Akamai outage, see issue
+  // #<n>."
   const retries = 2;
 
   // Durable — what + standing why, complete in itself: "Two attempts max: the
@@ -54,11 +55,11 @@ Each of these is a form of the same failure: meaning that exists only outside
 the file, or meaning that won't be true later.
 
 - **Change narrative** — "Added in May…", "Updated to handle…", "Previously X
-  now Y", dated entries, version tables, "temporary until PR #123". Git
+  now Y", dated entries, version tables, "temporary until PR #<n>". Git
   history and the release changelog already record what changed; a file that
   narrates its own edits forces every future reader to reconstruct history to
   understand the present.
-- **GitHub issue/PR links or numbers** — `#123`, `…/pull/891`. Issues and PRs
+- **GitHub issue/PR links or numbers** — `#<n>`, `…/pull/<n>`. Issues and PRs
   are edited, closed, and deleted; the reader may not even have permission to
   open them. The reference direction is fixed: **issues and PRs point at code,
   never code at issues.** If a fact from a discussion is worth keeping, put
@@ -126,6 +127,10 @@ When a PR adds or edits comments or markdown, review the text like code:
   fails the test — each with a one-line reason and a rewrite you've actually
   written. A suggested rewrite beats a rule citation; the author should be
   able to paste it.
+- **Instructional examples are not violations.** A phrase quoted inside a
+  rule that bans it — this skill's own ban list included — illustrates the
+  pattern; its numeric examples use `#<n>` placeholders, so neither this
+  skill's examples nor any file's quoted rule text count as real references.
 - Mechanical follow-ups (draft PRs, reply etiquette, attribution) belong to
   the [github](../github/SKILL.md) skill.
 
@@ -151,21 +156,27 @@ without their say-so.
 
 3. **Find failures, then show the list before touching anything.** Read the
    files in scope; seed the search with the smell patterns below and add any
-   you notice in passing. Matches are candidates, not verdicts — read the
-   context before changing anything, and never rewrite a literal value
-   (hex colors and other literals can match the `#` pattern). Present the
-   findings as `file → line → why it fails` and rewrite only the files they
-   confirm; the rest go to the summary as-is.
+   you notice in passing. `git grep` searches every **tracked** file —
+   Python, shell, YAML, JSON, and root-level docs included — so no source or
+   doc format escapes the scan and untracked build output is never searched;
+   the pathspecs exclude generated history (`CHANGELOG.md`), the lockfile,
+   and `*.sql` migration history, all already out of scope. Matches are
+   candidates, not verdicts — read the context before changing anything, and
+   never rewrite a literal value (hex colors, in-repo anchor links, and
+   other literals can match the `#` pattern). Present the findings as
+   `file → line → why it fails` and rewrite only the files they confirm; the
+   rest go to the summary as-is.
 
    ```bash
-   grep -rn -E 'github\.com/[^ )]+/(pull|issues)/' --include='*.ts' --include='*.tsx' --include='*.md' --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.claude --exclude-dir=dist --exclude-dir=coverage .
-   grep -rn -E '(^|[^a-zA-Z0-9_])#[0-9]{3,5}\b' --include='*.ts' --include='*.tsx' --include='*.md' --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.claude --exclude-dir=dist --exclude-dir=coverage .
-   grep -rni -E 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' --include='*.ts' --include='*.tsx' --include='*.md' --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.claude --exclude-dir=dist --exclude-dir=coverage .
+   git grep -nE 'github\.com/[^ )]+/(pull|issues)/' -- ':(exclude)*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   git grep -nE '(^|[^a-zA-Z0-9_])#[0-9]+\b' -- ':(exclude)*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   git grep -niE 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' -- ':(exclude)*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
    ```
 
-   Narrow `.` to the confirmed scope from step 1 when it is smaller than the
-   whole repo. Also flag files whose names declare them one-offs
-   (`*one-off*`, `*onetime*`, `fix-*`, `tmp-*`).
+   Narrow to the confirmed scope from step 1 by appending its paths (e.g.
+   `… -- apps docs`), keeping the `:(exclude)` pathspecs. Also flag files
+   whose names declare them one-offs (`*one-off*`, `*onetime*`, `fix-*`,
+   `tmp-*`).
 
 4. **Rewrite each finding** to present-tense what + standing why, or delete
    it outright when nothing durable is left — never when it is a
@@ -188,10 +199,12 @@ without their say-so.
    hunk: every hunk that removes a why must show where its standing why went
    — replacement text, an explicit "pure narrative, nothing durable" reason,
    or it gets reverted. Then format only what you touched:
-   `pnpm exec prettier --write <files>`. Commit per `AGENTS.md` Conventional
-   Commits with the scope of the files touched (e.g.
-   `docs(repo): make docs and comments durable`, `docs(auth): …`). Verify
-   `git diff --stat` shows exactly the audit scope.
+   `pnpm exec prettier --write <files>`, and **before committing** verify
+   `git diff --stat` shows exactly the audit scope — once committed, that
+   command is empty. Commit per `AGENTS.md` Conventional Commits with the
+   scope of the files touched (e.g.
+   `docs(repo): make docs and comments durable`, `docs(auth): …`);
+   afterwards `git show --stat HEAD` should list the same files.
 8. **Stop and hand over**: a summary table (file → finding → what you did),
    plus a drafted PR title and body (with the excised-narrative section from
    step 6). Push and open a **draft** PR only if they ask.
@@ -202,8 +215,9 @@ without their say-so.
 - Dead _external_ links: outside-repo link rot is a different problem.
 - Generated or vendored files: `CHANGELOG.md`, `.claude/skills/` (copied from
   `.agents/skills/`), `node_modules/`.
-- This skill's own `SKILL.md` during an audit — the `#123`/`#1482` examples
-  are illustrations, and the audit greps will find them.
+- This skill's own `SKILL.md` during an audit — its `#<n>` placeholders and
+  quoted ban-list phrases are illustrations, and the audit greps will find
+  them.
 - Merged ADRs, and the `Date`/`Author(s)` header of any ADR — records keep
   their identity.
 - Deleting `packages/db/drizzle/*.sql` migration history — never.
