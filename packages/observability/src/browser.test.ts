@@ -72,6 +72,25 @@ describe("scrubUrls", () => {
     });
   });
 
+  it("strips the query from the session entry URL and referrer", () => {
+    const scrubbed = scrubUrls({
+      uuid: "u",
+      event: "$exception",
+      properties: {
+        $session_entry_url:
+          "https://auth.f3nation.com/login/email/verify?email=a%40b.com&code=123456",
+        $session_entry_referrer: "https://me.f3nation.com/profile?code=9#x",
+        $session_entry_pathname: "/login/email/verify",
+      },
+    });
+
+    expect(scrubbed?.properties).toEqual({
+      $session_entry_url: "https://auth.f3nation.com/login/email/verify",
+      $session_entry_referrer: "https://me.f3nation.com/profile",
+      $session_entry_pathname: "/login/email/verify",
+    });
+  });
+
   it("leaves URLs without a query, non-string values and null events alone", () => {
     expect(
       scrubUrls({

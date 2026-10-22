@@ -38,6 +38,10 @@ const URL_PROPERTIES = [
   "$referrer",
   "$initial_current_url",
   "$initial_referrer",
+  // Session props: posthog-js copies the session's first full URL and
+  // referrer into every event under these keys.
+  "$session_entry_url",
+  "$session_entry_referrer",
 ];
 
 /**
