@@ -145,7 +145,9 @@ run_sql() { # instance port database spuds-secret sql-file password password-is-
       -X -q -t -c 'SELECT 1' >/dev/null 2>&1 \
       || { echo "staging_refresh still can't log in on $1" >&2; exit 1; }
   fi
-  kill "$PROXY_PID"; wait "$PROXY_PID" 2>/dev/null || true; PROXY_PID=""
+  kill "$PROXY_PID" 2>/dev/null || true
+  wait "$PROXY_PID" 2>/dev/null || true
+  PROXY_PID=""
 }
 
 # Sets LOGIN_PW to the login's password from its secret, or to a new one it stores there;
