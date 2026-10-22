@@ -99,3 +99,56 @@ describe("GET /authorize — nonce/authTime wiring", () => {
     );
   });
 });
+
+describe("GET /authorize — offline_access", () => {
+  const baseUrl =
+    "https://auth.test.invalid/api/oauth/authorize" +
+    "?response_type=code&client_id=some-client" +
+    "&redirect_uri=https://example.com/callback" +
+    "&code_challenge=abc&code_challenge_method=S256";
+
+  it("ignores offline_access: it isn't validated against the client or stored on the code", async () => {
+    const res = await GET(
+      makeRequest(
+        `${baseUrl}&scope=${encodeURIComponent("openid profile email offline_access")}`,
+      ),
+    );
+
+    expect(res.status).toBe(307);
+    expect(validateScopes).toHaveBeenCalledWith(CLIENT, "openid profile email");
+    expect(createAuthorizationCode).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: "openid profile email" }),
+    );
+  });
+
+  it("passes a scope without offline_access through unchanged", async () => {
+    await GET(makeRequest(`${baseUrl}&scope=openid`));
+
+    expect(validateScopes).toHaveBeenCalledWith(CLIENT, "openid");
+  });
+
+  it("validates an empty scope for offline_access alone, so it is rejected", async () => {
+    vi.mocked(validateScopes).mockReturnValue(false);
+    const res = await GET(makeRequest(`${baseUrl}&scope=offline_access`));
+
+    expect(validateScopes).toHaveBeenCalledWith(CLIENT, "");
+    expect(res.status).toBe(400);
+    expect(createAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it("keeps offline_access for a client that registered it", async () => {
+    const optedIn = {
+      ...CLIENT,
+      scopes: "openid profile email offline_access",
+    };
+    vi.mocked(getClient).mockResolvedValue(optedIn as never);
+    const scope = "openid profile email offline_access";
+
+    await GET(makeRequest(`${baseUrl}&scope=${encodeURIComponent(scope)}`));
+
+    expect(validateScopes).toHaveBeenCalledWith(optedIn, scope);
+    expect(createAuthorizationCode).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: scope }),
+    );
+  });
+});
