@@ -1,3 +1,15 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-config", "--strict-markers"]
+
+[tool.coverage.run]
+source = ["application", "infrastructure", "utilities", "features"]
+data_file = "coverage/.coverage"
+
+[tool.coverage.report]
+fail_under = 62.19
+precision = 2
+
 [tool.ruff]
 line-length = 120
 
@@ -70,6 +82,7 @@ dev = [
     "debugpy>=1.8.17,<2.0.0",
     "ruff>=0.14.0,<1.0.0",
     "mypy>=2.4.0,<2.5.0",
+    "pytest-cov>=7.0.0,<8.0.0",
 ]
 scripts = [
     "mplcyberpunk>=0.7.6,<0.8.0",
