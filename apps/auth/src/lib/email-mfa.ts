@@ -132,11 +132,16 @@ export async function sendEmailCode(
 
 /**
  * Find the active code row for this email and compare it to `code`. A
- * mismatch counts toward the brute-force lockout; a match is returned
- * without being consumed.
+ * mismatch counts toward the brute-force lockout; a match gives its attempt
+ * back, and is marked consumed when `consume` is set.
  */
-async function findMatchingCode(email: string, code: string) {
-  const normalizedEmail = email.toLowerCase();
+async function findMatchingCode(
+  email: string,
+  code: string,
+  { consume = false }: { consume?: boolean } = {},
+) {
+  // Same normalization storeCode's callers use.
+  const normalizedEmail = email.toLowerCase().trim();
   const now = new Date().toISOString();
 
   // Find the active code for this email
@@ -156,7 +161,7 @@ async function findMatchingCode(email: string, code: string) {
 
   // Claim an attempt before comparing, in one conditional update, so a burst
   // of parallel guesses can't all read "0 attempts used" and each get a free
-  // try. A match spends an attempt too; a new code starts a fresh row.
+  // try. A new code starts a fresh row.
   const [claimed] = await db
     .update(emailMfaCodes)
     .set({ attemptCount: sql`${emailMfaCodes.attemptCount} + 1` })
@@ -171,19 +176,88 @@ async function findMatchingCode(email: string, code: string) {
 
   if (!constantTimeEqual(mfaCode.codeHash, hashCode(code))) return null;
 
+  // Only wrong guesses count, so the owner's registration check and the
+  // sign-in after it don't eat into their 5 tries. Consuming is conditional
+  // on the code still being unused, so two parallel redemptions of the same
+  // code can't both succeed.
+  const [refunded] = await db
+    .update(emailMfaCodes)
+    .set({
+      attemptCount: sql`${emailMfaCodes.attemptCount} - 1`,
+      ...(consume && { consumedAt: now }),
+    })
+    .where(
+      and(
+        eq(emailMfaCodes.id, mfaCode.id),
+        consume ? isNull(emailMfaCodes.consumedAt) : undefined,
+      ),
+    )
+    .returning({ id: emailMfaCodes.id });
+  if (consume && !refunded) return null;
+
   return mfaCode;
 }
 
 /**
  * Check a code without consuming it — proof that the caller owns `email`,
  * for steps (registration) that must run before the sign-in that consumes
- * the code. Each check spends one of the code's attempts, the same budget
+ * the code. A wrong code spends one of the code's attempts, the same budget
  * sign-in draws on.
  */
 export async function checkEmailCode(
   email: string,
   code: string,
 ): Promise<boolean> {
+  return (await findMatchingCode(email, code)) !== null;
+}
+
+/**
+ * Use up a code that has already been verified, without touching its
+ * attempt budget. Claiming an attempt here could fail on a budget a parallel
+ * check has momentarily filled, and leave the code unconsumed. Conditional
+ * on the code still being unused, so it redeems at most once.
+ */
+async function redeemVerifiedCode(email: string, code: string) {
+  const normalizedEmail = email.toLowerCase().trim();
+  const now = new Date().toISOString();
+
+  const [mfaCode] = await db
+    .select()
+    .from(emailMfaCodes)
+    .where(
+      and(
+        eq(emailMfaCodes.email, normalizedEmail),
+        isNull(emailMfaCodes.consumedAt),
+        gt(emailMfaCodes.expiresAt, now),
+      ),
+    )
+    .limit(1);
+  if (!mfaCode || !constantTimeEqual(mfaCode.codeHash, hashCode(code))) {
+    return false;
+  }
+
+  const [consumed] = await db
+    .update(emailMfaCodes)
+    .set({ consumedAt: now })
+    .where(
+      and(eq(emailMfaCodes.id, mfaCode.id), isNull(emailMfaCodes.consumedAt)),
+    )
+    .returning({ id: emailMfaCodes.id });
+  return Boolean(consumed);
+}
+
+/**
+ * Better Auth's claimOtpAttempt. Without `consume` it is checkEmailCode.
+ * With `consume`, which only the after-sign-in hook passes once Better Auth
+ * has verified the code, it uses the code up without spending an attempt,
+ * so the email_mfa_codes copy can't be replayed at /api/register afterwards.
+ */
+export async function claimEmailCode(
+  email: string,
+  code: string,
+  options: { consume: boolean },
+): Promise<boolean> {
+  if (options.consume) return redeemVerifiedCode(email, code);
   return (await findMatchingCode(email, code)) !== null;
 }
 
@@ -195,17 +269,11 @@ export async function verifyEmailCode(
   email: string,
   code: string,
 ): Promise<{ id: number; email: string; f3Name: string | null } | null> {
-  const normalizedEmail = email.toLowerCase();
+  const normalizedEmail = email.toLowerCase().trim();
   const now = new Date().toISOString();
 
-  const mfaCode = await findMatchingCode(email, code);
+  const mfaCode = await findMatchingCode(email, code, { consume: true });
   if (!mfaCode) return null;
-
-  // Mark code as consumed
-  await db
-    .update(emailMfaCodes)
-    .set({ consumedAt: now })
-    .where(eq(emailMfaCodes.id, mfaCode.id));
 
   // Find or signal user creation
   const [user] = await db
