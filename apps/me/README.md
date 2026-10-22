@@ -62,7 +62,6 @@ apps/me/
 │   │       ├── auth/             # SSO auth routes
 │   │       └── profile/          # Profile CRUD routes
 │   ├── components/
-│   │   ├── ui/                   # shadcn/ui primitives
 │   │   ├── profile-form.tsx      # Main profile form
 │   │   ├── avatar-upload.tsx     # File upload component
 │   │   ├── region-select.tsx     # Searchable region picker
