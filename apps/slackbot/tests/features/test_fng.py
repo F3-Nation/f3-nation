@@ -27,7 +27,7 @@ def region_record(**overrides):
     return SlackSettings(**fields)
 
 
-def submission(**values):
+def submission(brought_by=None, **values):
     fields = {
         fng.FNG_FIRST_NAME: "John",
         fng.FNG_LAST_NAME: "Smith",
@@ -37,6 +37,8 @@ def submission(**values):
     }
     fields.update(values)
     state = {action: {action: {"value": value}} for action, value in fields.items()}
+    if brought_by:
+        state[fng.USER_FORM_BROUGHT_BY] = {fng.USER_FORM_BROUGHT_BY: {"selected_option": {"value": str(brought_by)}}}
     return {"user": {"id": "U_BUDDY"}, "view": {"id": "V1", "state": {"values": state}}, "submission_view_id": "V1"}
 
 
@@ -66,13 +68,21 @@ def test_creates_profile_and_emails_invite_without_posting_welcome(monkeypatch):
     user = db.create_record.call_args.args[0]
     assert (user.email, user.first_name, user.last_name, user.f3_name) == ("john@example.com", "John", "Smith", "Chip")
     assert user.home_region_id == 8 and user.phone == "828-555-0100"
-    assert user.meta == {"brought_by": 7}
+    assert user.meta == {"battle_buddy": 7}  # running /fng doesn't mean he EH'd him
     assert send.call_args.kwargs["to_email"] == "john@example.com"
     assert INVITE_LINK in send.call_args.kwargs["html_content"]
     client.chat_postMessage.assert_not_called()  # team_join welcomes him once he joins
     assert "Chip (John S.)" in view.call_args.kwargs["text"]
     assert view.call_args.kwargs["level"] == constants.AlertLevel.SUCCESS
     assert view.call_args.kwargs["view_id"] == "V1"
+
+
+def test_brought_by_is_whoever_was_picked(monkeypatch):
+    db, _, _ = patch_db(monkeypatch)
+
+    fng.handle_fng_form(submission(brought_by=42), MagicMock(), MagicMock(), {}, region_record())
+
+    assert db.create_record.call_args.args[0].meta == {"battle_buddy": 7, "brought_by": 42}
 
 
 def test_existing_user_is_left_alone(monkeypatch):
@@ -188,4 +198,11 @@ def test_form_asks_only_for_the_fngs_details():
     assert view["view_id"] == "V_LOADING"
     assert view["view"]["callback_id"] == fng.FNG_CALLBACK_ID
     inputs = [b["block_id"] for b in view["view"]["blocks"] if b["type"] == "input"]
-    assert inputs == [fng.FNG_FIRST_NAME, fng.FNG_LAST_NAME, fng.FNG_F3_NAME, fng.FNG_EMAIL, fng.FNG_PHONE]
+    assert inputs == [
+        fng.FNG_FIRST_NAME,
+        fng.FNG_LAST_NAME,
+        fng.FNG_F3_NAME,
+        fng.FNG_EMAIL,
+        fng.FNG_PHONE,
+        fng.USER_FORM_BROUGHT_BY,
+    ]

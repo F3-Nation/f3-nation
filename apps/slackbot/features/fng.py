@@ -1,9 +1,10 @@
 """
 /fng: a battle buddy signs up a new PAX after his first workout.
 
-The bot creates the FNG's F3 Nation user (home region = this region, ``meta.brought_by`` = the buddy),
-and emails him the region's Slack invite link. The welcome post is left to the existing
-``team_join`` handler, which fires when he actually joins Slack (posting here too would welcome him twice).
+The bot creates the FNG's F3 Nation user (home region = this region, ``meta.battle_buddy`` = the PAX running
+/fng, ``meta.brought_by`` = whoever EH'd him, if given) and emails him the region's Slack invite link. The welcome
+post is left to the existing ``team_join`` handler, which fires when he actually joins Slack (posting here too would
+welcome him twice).
 """
 
 import html
@@ -15,12 +16,12 @@ from f3_data_models.utils import DbManager
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
-from features.user import USER_META_BROUGHT_BY
+from features.user import USER_FORM_BROUGHT_BY, USER_META_BROUGHT_BY
 from utilities import constants
 from utilities.builders import update_submission_wait_view
 from utilities.constants import AlertLevel
 from utilities.database.orm import SlackSettings
-from utilities.helper_functions import get_user, safe_get
+from utilities.helper_functions import get_user, safe_convert, safe_get
 from utilities.sendmail import send_via_sendgrid
 from utilities.slack import actions
 from utilities.slack.orm import (
@@ -28,6 +29,7 @@ from utilities.slack.orm import (
     ContextBlock,
     ContextElement,
     EmailInputElement,
+    ExternalSelectElement,
     InputBlock,
     PlainTextInputElement,
 )
@@ -38,6 +40,7 @@ FNG_LAST_NAME = "fng_last_name"
 FNG_F3_NAME = "fng_f3_name"
 FNG_EMAIL = "fng_email"
 FNG_PHONE = "fng_phone"
+FNG_META_BATTLE_BUDDY = "battle_buddy"
 
 
 def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
@@ -58,10 +61,16 @@ def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict,
             hint="He'll get the Slack invite here, so double-check it.",
         ),
         InputBlock(label="Cell phone", action=FNG_PHONE, element=PlainTextInputElement()),
+        InputBlock(
+            label="Who brought him to F3?",
+            action=USER_FORM_BROUGHT_BY,  # reuses the profile form's user search
+            element=ExternalSelectElement(placeholder="Type to search..."),
+            hint="The PAX who EH'd him, if you know. It may be you or someone else.",
+        ),
         ContextBlock(
             element=ContextElement(
                 initial_value="This creates his F3 Nation profile, emails him the Slack invite "
-                "and lists you as the PAX who brought him. He's welcomed in Slack once he joins."
+                "and lists you as his battle buddy. He's welcomed in Slack once he joins."
             )
         ),
     ]
@@ -86,6 +95,9 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
     first_name, last_name, f3_name = text(FNG_FIRST_NAME), text(FNG_LAST_NAME), text(FNG_F3_NAME)
     email = (text(FNG_EMAIL) or "").lower()
     phone = text(FNG_PHONE)
+    brought_by = safe_convert(
+        safe_get(values, USER_FORM_BROUGHT_BY, USER_FORM_BROUGHT_BY, "selected_option", "value"), int
+    )
     display_name = f"{first_name} {(last_name or '')[:1]}."
     if f3_name:
         display_name = f"{f3_name} ({display_name})"
@@ -126,7 +138,11 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
                     f3_name=f3_name,
                     phone=phone,
                     home_region_id=region_record.org_id,
-                    meta={USER_META_BROUGHT_BY: buddy_user_id} if buddy_user_id else {},
+                    meta={
+                        k: v
+                        for k, v in {FNG_META_BATTLE_BUDDY: buddy_user_id, USER_META_BROUGHT_BY: brought_by}.items()
+                        if v
+                    },
                 )
             )
         except Exception as exc:
