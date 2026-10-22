@@ -98,7 +98,10 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Source the env file
+# Source the env file. APPS_DIRECTORY_URL is removed from the service when
+# the file leaves it out, so drop any value the calling shell exported first:
+# otherwise that value, not the file's, would be applied.
+unset APPS_DIRECTORY_URL
 set -a
 source "$ENV_FILE"
 set +a
