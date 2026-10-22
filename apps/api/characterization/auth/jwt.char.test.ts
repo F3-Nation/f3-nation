@@ -9,6 +9,7 @@ import {
 } from "../fixtures/jwt";
 import { createFixtureUser } from "../fixtures/users";
 import { req, target } from "../transport";
+import { USER_ACCESS_TOKEN_CLAIMS } from "./access-token-contract";
 import { expectAuthorized, expectUnauthorized } from "./verdict";
 
 /**
@@ -107,14 +108,7 @@ describe("fixture token shape", () => {
     const token = await signFixtureJwt({ sub: 4242 });
 
     expect(Object.keys(decodeJwt(token)).sort()).toEqual([
-      "client_id",
-      "email",
-      "exp",
-      "iat",
-      "iss",
-      "scope",
-      "sub",
-      "token_use",
+      ...USER_ACCESS_TOKEN_CLAIMS,
     ]);
   });
 
