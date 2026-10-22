@@ -206,6 +206,49 @@ describe("oRPC proxy route", () => {
     expect(headers.has("authorization")).toBe(false);
   });
 
+  it("answers 503 when the upstream API is unreachable", async () => {
+    fetchSpy.mockRejectedValueOnce(new TypeError("fetch failed"));
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const response = await GET(
+      new NextRequest(
+        "http://localhost:3000/api/orpc/v1/map/location/regionsWithLocation",
+      ),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    // Not JSON, so the client's outage guard (not oRPC's decoder) handles it.
+    expect(response.headers.get("content-type")).toBe("text/plain");
+  });
+
+  it("answers 503 when the upstream API never responds", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchSpy.mockImplementationOnce(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () => {
+              reject(init.signal?.reason as Error);
+            });
+          }),
+      );
+      const { GET } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+      const pending = GET(
+        new NextRequest(
+          "http://localhost:3000/api/orpc/v1/map/location/regionsWithLocation",
+        ),
+      );
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect((await pending).status).toBe(503);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("proxies to the correct upstream URL", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
