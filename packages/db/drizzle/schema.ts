@@ -1049,6 +1049,8 @@ export const rolesXUsersXOrg = pgTable(
       table.userId.asc().nullsLast().op("int4_ops"),
       table.orgId.asc().nullsLast().op("int4_ops"),
     ),
+    // Keep: org_id-only lookups (e.g. map-request-notification) cannot use the
+    // (user_id, org_id) index above because it leads with user_id.
     index("idx_roles_x_users_x_org_org_id").using(
       "btree",
       table.orgId.asc().nullsLast().op("int4_ops"),
