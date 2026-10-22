@@ -18,8 +18,14 @@ export default defineConfig({
     // back to getDevMockSession() — an authenticated but role-LESS session —
     // for any request with no session and no bearer token. That would make
     // every "unauthenticated -> 401" case on a protectedProcedure vacuous
-    // (admin/editor cases still reject). NODE_ENV=test disables it.
-    env: { NODE_ENV: "test" },
+    // (admin/editor cases still reject). NODE_ENV=test disables it, and the
+    // channel and flag are pinned fail-closed too so a shell that exports
+    // them cannot turn the gate back on. dev-mock.char.test.ts re-stubs them.
+    env: {
+      NODE_ENV: "test",
+      NEXT_PUBLIC_CHANNEL: "ci",
+      ALLOW_DEV_MOCK_SESSION: "false",
+    },
     include: ["characterization/**/*.char.test.ts"],
     globalSetup: ["./characterization/global-setup.ts"],
     // next-auth's ESM graph imports `next/server` without the `.js` extension,

@@ -32,8 +32,10 @@ export interface Context extends BaseContext {
  * or a dev-mode sign-in). `publicReadProcedure` never receives it either, so
  * its anonymous branches run locally exactly as in production.
  */
+const DEV_MOCK_SESSION_ID = 0;
+
 const getDevMockSession = (): Session => ({
-  id: 0,
+  id: DEV_MOCK_SESSION_ID,
   email: "dev@localhost",
   roles: [],
   user: {
@@ -49,10 +51,14 @@ const getDevMockSession = (): Session => ({
  * Whether an unauthenticated request may fall back to the dev mock session.
  * Every condition must hold, so a single mis-set variable on a deployed
  * service cannot turn anonymous requests into authenticated ones:
- * - `NODE_ENV` is exactly "development";
- * - `NEXT_PUBLIC_CHANNEL` is exactly "local" (an allowlist, so an unset or
- *   unknown channel fails closed; deployed channels, staging included, never
- *   match, even where the value is frozen into a build);
+ * - `NODE_ENV` is exactly "development". This is `isDevelopment`, fixed when
+ *   the module loads: nothing flips `NODE_ENV` at runtime, and a value fixed at
+ *   boot cannot be changed into "development" later;
+ * - `NEXT_PUBLIC_CHANNEL` is exactly "local". This is a strict `===` on the
+ *   raw `process.env` value, not `@acme/env` validation (which is skipped under
+ *   CI / `SKIP_ENV_VALIDATION`), so an unset or unknown channel fails closed.
+ *   Deployed channels, staging included, never match, even where the value is
+ *   frozen into a build;
  * - `ALLOW_DEV_MOCK_SESSION` is exactly "true". Only apps/api's `dev` script
  *   sets it; the Dockerfile and Cloud Run env never do. Run `pnpm dev` with
  *   `ALLOW_DEV_MOCK_SESSION=false` to exercise unauthenticated calls locally.
@@ -169,6 +175,13 @@ export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
 /** Personal self-service requires a user session or Auth access token. */
 export const personalUserProcedure = protectedProcedure.use(
   ({ context, next }) => {
+    // The dev mock session is not a person: `/me` handlers act on
+    // `ctx.session.id`, so never let it reach them.
+    if (context.session!.id === DEV_MOCK_SESSION_ID) {
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "Sign in with your user account to access this endpoint.",
+      });
+    }
     // `apiKey` is only set on the result of `getSession` when auth fell
     // through session/JWT resolution to an API-key lookup — never for a
     // real user session or Auth access token.

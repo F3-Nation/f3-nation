@@ -266,6 +266,20 @@ describe("Development mock session", () => {
     await expect(callProtected()).resolves.toEqual({ userId: "0" });
   });
 
+  it("personalUserProcedure refuses the dev mock session", async () => {
+    stubLocalDev();
+    const { personalUserProcedure } = await import("./shared");
+
+    const client = createRouterClient(
+      { test: personalUserProcedure.handler(() => ({ ok: true })) },
+      { context: () => ({ reqHeaders: new Headers() }) },
+    );
+
+    await expect(client.test()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
   it("refuses the dev mock session without the explicit opt-in flag", async () => {
     stubLocalDev();
     vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "");
