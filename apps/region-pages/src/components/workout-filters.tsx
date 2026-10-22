@@ -9,13 +9,9 @@ import type { Workout } from "@/types/region";
 
 interface WorkoutFiltersProps {
   workouts: Workout[];
-  onFilteredWorkouts: (workouts: Workout[]) => void;
 }
 
-export function WorkoutFilters({
-  workouts,
-  onFilteredWorkouts,
-}: WorkoutFiltersProps) {
+export function WorkoutFilters({ workouts }: WorkoutFiltersProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const searchParams = useSearchParams();
   const selectedDay = searchParams.get("day");
@@ -80,14 +76,8 @@ export function WorkoutFilters({
 
       {/* Filters Content */}
       <div className={`space-y-4 ${!isExpanded ? "hidden sm:block" : "mt-4"}`}>
-        <DayFilter
-          workouts={workouts}
-          onFilteredWorkouts={onFilteredWorkouts}
-        />
-        <WorkoutTypeFilter
-          workouts={workouts}
-          onFilteredWorkouts={onFilteredWorkouts}
-        />
+        <DayFilter />
+        <WorkoutTypeFilter workouts={workouts} />
         <div className="sm:hidden">
           <ClearFiltersButton />
         </div>

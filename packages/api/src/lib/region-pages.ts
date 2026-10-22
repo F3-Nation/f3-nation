@@ -63,9 +63,10 @@ export interface RegionArea {
   state: string | null;
   zip: string | null;
   country: string | null;
-  latitude: number;
-  longitude: number;
-  zoom: number;
+  /** Null when none of the region's workouts has coordinates. */
+  latitude: number | null;
+  longitude: number | null;
+  zoom: number | null;
 }
 
 export interface RegionPageRegion extends RegionArea {
@@ -81,13 +82,6 @@ export interface RegionPageRegion extends RegionArea {
   instagram: string | null;
   workoutCount: number;
 }
-
-/** Center of the contiguous US; used when a region has no mapped workouts. */
-export const DEFAULT_REGION_CENTER = {
-  latitude: 39.8283,
-  longitude: -98.5795,
-  zoom: 4,
-} as const;
 
 /**
  * The URL itself when it is http(s), else null. Region links are edited by
@@ -134,32 +128,45 @@ export function normalizeTwitterUrl(twitter: string | null): string | null {
   return handle ? `https://x.com/${handle}` : null;
 }
 
-export function normalizeFacebookUrl(facebook: string | null): string | null {
-  if (!facebook) return null;
+const FACEBOOK_HOSTS = new Set([
+  "facebook.com",
+  "www.facebook.com",
+  "m.facebook.com",
+]);
 
-  // Groups first: the profile pattern would otherwise read "groups" as a handle.
-  const group =
-    /(?:https?:\/\/)?(?:www\.)?facebook\.com\/groups\/([^/?]+)(?:\/|$|\?)/i.exec(
-      facebook,
-    );
-  const groupName = group?.[1];
-  if (groupName) {
-    return /^[a-zA-Z0-9._-]+$/.test(groupName)
-      ? `https://facebook.com/groups/${groupName}`
+/**
+ * A canonical https://facebook.com link built from the parsed URL, never
+ * the raw input. Anything not on a Facebook host (e.g.
+ * `https://evil.example/facebook.com/...`) is rejected.
+ */
+export function normalizeFacebookUrl(facebook: string | null): string | null {
+  const raw = facebook?.trim();
+  if (!raw) return null;
+
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return null;
+  }
+  if (!FACEBOOK_HOSTS.has(url.hostname.toLowerCase())) return null;
+
+  const [first, second] = url.pathname.split("/").filter(Boolean);
+  const safe = (part?: string) =>
+    part && /^[a-zA-Z0-9._-]+$/.test(part) ? part : null;
+
+  if (first === "groups") {
+    const group = safe(second);
+    return group ? `https://facebook.com/groups/${group}` : null;
+  }
+  if (first === "profile.php") {
+    const id = url.searchParams.get("id");
+    return id && /^\d+$/.test(id)
+      ? `https://facebook.com/profile.php?id=${id}`
       : null;
   }
-
-  const profile =
-    /(?:https?:\/\/)?(?:www\.)?facebook\.com\/([^/?]+)(?:\/|$|\?)/i.exec(
-      facebook,
-    );
-  const handle = profile?.[1];
-  if (!handle) return null;
-  // Numeric-ID profile URLs only work in their original form.
-  if (handle.startsWith("profile.php")) return httpUrlOrNull(facebook);
-  return /^[a-zA-Z0-9._-]+$/.test(handle)
-    ? `https://facebook.com/${handle}`
-    : null;
+  const handle = safe(first);
+  return handle ? `https://facebook.com/${handle}` : null;
 }
 
 export function normalizeInstagramUrl(instagram: string | null): string | null {
@@ -302,7 +309,11 @@ export function summarizeRegionArea(workouts: RegionPageWorkout[]): RegionArea {
     country: addressSource?.country ?? null,
   };
 
-  if (!coords.length) return { ...area, ...DEFAULT_REGION_CENTER };
+  // Unknown, not a placeholder: a made-up center would put the region "near"
+  // anyone close to it.
+  if (!coords.length) {
+    return { ...area, latitude: null, longitude: null, zoom: null };
+  }
 
   const lats = coords.map((w) => w.latitude);
   const lngs = coords.map((w) => w.longitude);

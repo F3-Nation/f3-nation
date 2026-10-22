@@ -15671,12 +15671,26 @@
                               ]
                             },
                             "latitude": {
-                              "description": "Map center latitude",
-                              "type": "number"
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Map center latitude; null when no workout has coordinates"
                             },
                             "longitude": {
-                              "description": "Map center longitude",
-                              "type": "number"
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Map center longitude"
                             },
                             "name": {
                               "type": "string"
@@ -15730,8 +15744,15 @@
                               ]
                             },
                             "zoom": {
-                              "description": "Map zoom that frames every workout",
-                              "type": "number"
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Map zoom that frames every workout"
                             }
                           },
                           "required": [
@@ -16003,12 +16024,26 @@
                         ]
                       },
                       "latitude": {
-                        "description": "Map center latitude",
-                        "type": "number"
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Map center latitude; null when no workout has coordinates"
                       },
                       "longitude": {
-                        "description": "Map center longitude",
-                        "type": "number"
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Map center longitude"
                       },
                       "name": {
                         "type": "string"
@@ -16062,8 +16097,15 @@
                         ]
                       },
                       "zoom": {
-                        "description": "Map zoom that frames every workout",
-                        "type": "number"
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Map zoom that frames every workout"
                       }
                     },
                     "required": [

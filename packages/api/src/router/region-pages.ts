@@ -51,9 +51,12 @@ const regionSchema = z.object({
   state: z.string().nullable(),
   zip: z.string().nullable(),
   country: z.string().nullable(),
-  latitude: z.number().describe("Map center latitude"),
-  longitude: z.number().describe("Map center longitude"),
-  zoom: z.number().describe("Map zoom that frames every workout"),
+  latitude: z
+    .number()
+    .nullable()
+    .describe("Map center latitude; null when no workout has coordinates"),
+  longitude: z.number().nullable().describe("Map center longitude"),
+  zoom: z.number().nullable().describe("Map zoom that frames every workout"),
   workoutCount: z.number().describe("Public workouts in the region"),
 });
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildHealthResponse, runChecks } from "@f3nation/health";
 import type { CheckRunnerResult } from "@f3nation/health";
+import { env } from "@/env";
 import { logError } from "@/lib/logging";
 
 const SERVICE_NAME = "f3-region-pages";
@@ -11,11 +12,11 @@ const CHECK_TIMEOUT_MS = 1_500;
 const FETCH_ABORT_MS = CHECK_TIMEOUT_MS - 200;
 
 function getServiceVersion(): string {
-  return process.env.NODE_ENV === "production" ? "production" : "dev";
+  return env.NODE_ENV === "production" ? "production" : "dev";
 }
 
 async function checkUpstreamApi(): Promise<CheckRunnerResult> {
-  const apiBaseUrl = process.env.F3_API_BASE_URL;
+  const apiBaseUrl = env.F3_API_BASE_URL;
 
   if (!apiBaseUrl) {
     return {
@@ -100,7 +101,7 @@ export async function GET() {
   } catch (err) {
     logError(
       "region_pages.health.endpoint_failed",
-      { hasApiBaseUrl: Boolean(process.env.F3_API_BASE_URL) },
+      { hasApiBaseUrl: Boolean(env.F3_API_BASE_URL) },
       err,
     );
 

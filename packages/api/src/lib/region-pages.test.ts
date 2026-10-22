@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import type { RegionPageWorkout, RegionPageWorkoutRow } from "./region-pages";
 import {
-  DEFAULT_REGION_CENTER,
   dedupeWorkouts,
   formatClockTime,
   formatTimeRange,
@@ -95,6 +94,9 @@ describe("social and contact normalization", () => {
       "https://facebook.com/groups/f3abq",
     ],
     ["f3abq", null],
+    ["facebook.com/f3abq", "https://facebook.com/f3abq"],
+    ["https://evil.example/facebook.com/profile.php?id=123", null],
+    ["https://facebook.com/profile.php?id=abc", null],
   ])("facebook %s -> %s", (input, expected) => {
     expect(normalizeFacebookUrl(input)).toBe(expected);
   });
@@ -201,13 +203,18 @@ describe("dedupeWorkouts", () => {
 });
 
 describe("summarizeRegionArea", () => {
-  it("falls back to the center of the US with no workouts", () => {
+  it("reports no location when no workout has coordinates", () => {
+    expect(
+      summarizeRegionArea([workout({ latitude: null, longitude: null })]),
+    ).toMatchObject({ latitude: null, longitude: null, zoom: null });
     expect(summarizeRegionArea([])).toEqual({
       city: null,
       state: null,
       zip: null,
       country: null,
-      ...DEFAULT_REGION_CENTER,
+      latitude: null,
+      longitude: null,
+      zoom: null,
     });
   });
 

@@ -122,3 +122,15 @@ describe("useSanitizedHtml", () => {
     );
   });
 });
+
+describe("server text decoding", () => {
+  function Text({ html }: { html: string }) {
+    return <p>{useSanitizedHtml(html)}</p>;
+  }
+
+  it("decodes numeric and common named entities, leaving unknown ones", () => {
+    expect(
+      renderToString(<Text html="It&#8217;s 5&mdash;6 &#x2764; &bogus;" />),
+    ).toBe("<p>It’s 5—6 ❤ &amp;bogus;</p>");
+  });
+});

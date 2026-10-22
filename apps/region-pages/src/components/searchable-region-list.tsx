@@ -16,6 +16,11 @@ interface Props {
 
 const KM_TO_MILES = 0.621371;
 
+// A–G, H–N, O–U, V–Z: four centered rows, as in the legacy layout.
+const LETTER_ROWS = [0, 7, 14, 21].map((start) =>
+  ALL_LETTERS.slice(start, start + 7),
+);
+
 interface UserLocation {
   latitude: number;
   longitude: number;
@@ -46,6 +51,7 @@ export default function SearchableRegionList({
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- absent in some browsers/webviews despite the DOM typings
     if (!navigator.geolocation) {
       setLocationError("Geolocation is not supported by this browser.");
+      setIsGpsMode(false);
       return;
     }
 
@@ -123,10 +129,13 @@ export default function SearchableRegionList({
   const nearbyRegions = useMemo((): RegionWithDistance[] => {
     if (!isGpsMode || !userLocation) return [];
 
-    // Regions without workouts sit at the default US-center fallback, so
-    // they'd otherwise all show up as "near" anyone in Kansas.
+    // Regions with no mapped workout have no location (null), so they can't
+    // appear "near" anyone.
     const regionsWithCoords = regions.filter(
-      (region) => region.workoutCount > 0,
+      (
+        region,
+      ): region is RegionSummary & { latitude: number; longitude: number } =>
+        region.latitude != null && region.longitude != null,
     );
 
     const regionsWithDistance = regionsWithCoords
@@ -370,86 +379,30 @@ export default function SearchableRegionList({
       {!searchQuery && !isGpsMode && (
         <nav className="mb-8" aria-label="Alphabetical navigation">
           <div className="flex flex-col items-center gap-2">
-            {/* First row: A-G */}
-            <div className="flex gap-2">
-              {ALL_LETTERS.slice(0, 7).map((letter) => {
-                const hasRegions = (regionsByLetter[letter]?.length ?? 0) > 0;
-                return (
-                  <button
-                    key={letter}
-                    onClick={() => handleLetterChange(letter)}
-                    disabled={letter === currentLetter}
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg border ${
-                      letter === currentLetter
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-gray-200 bg-white text-gray-900 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:hover:border-gray-600"
-                    } ${!hasRegions ? "opacity-50" : ""} transition-colors`}
-                  >
-                    {letter}
-                  </button>
-                );
-              })}
-            </div>
-            {/* Second row: H-N */}
-            <div className="flex gap-2">
-              {ALL_LETTERS.slice(7, 14).map((letter) => {
-                const hasRegions = (regionsByLetter[letter]?.length ?? 0) > 0;
-                return (
-                  <button
-                    key={letter}
-                    onClick={() => handleLetterChange(letter)}
-                    disabled={letter === currentLetter}
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg border ${
-                      letter === currentLetter
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-gray-200 bg-white text-gray-900 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:hover:border-gray-600"
-                    } ${!hasRegions ? "opacity-50" : ""} transition-colors`}
-                  >
-                    {letter}
-                  </button>
-                );
-              })}
-            </div>
-            {/* Third row: O-U */}
-            <div className="flex gap-2">
-              {ALL_LETTERS.slice(14, 21).map((letter) => {
-                const hasRegions = (regionsByLetter[letter]?.length ?? 0) > 0;
-                return (
-                  <button
-                    key={letter}
-                    onClick={() => handleLetterChange(letter)}
-                    disabled={letter === currentLetter}
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg border ${
-                      letter === currentLetter
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-gray-200 bg-white text-gray-900 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:hover:border-gray-600"
-                    } ${!hasRegions ? "opacity-50" : ""} transition-colors`}
-                  >
-                    {letter}
-                  </button>
-                );
-              })}
-            </div>
-            {/* Fourth row: V-Z */}
-            <div className="flex gap-2">
-              {ALL_LETTERS.slice(21).map((letter) => {
-                const hasRegions = (regionsByLetter[letter]?.length ?? 0) > 0;
-                return (
-                  <button
-                    key={letter}
-                    onClick={() => handleLetterChange(letter)}
-                    disabled={letter === currentLetter}
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg border ${
-                      letter === currentLetter
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-gray-200 bg-white text-gray-900 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:hover:border-gray-600"
-                    } ${!hasRegions ? "opacity-50" : ""} transition-colors`}
-                  >
-                    {letter}
-                  </button>
-                );
-              })}
-            </div>
+            {LETTER_ROWS.map((row) => (
+              <div key={row.join("")} className="flex gap-2">
+                {row.map((letter) => {
+                  const hasRegions = (regionsByLetter[letter]?.length ?? 0) > 0;
+                  return (
+                    <button
+                      key={letter}
+                      onClick={() => handleLetterChange(letter)}
+                      disabled={letter === currentLetter}
+                      aria-current={
+                        letter === currentLetter ? "page" : undefined
+                      }
+                      className={`flex h-10 w-10 items-center justify-center rounded-lg border ${
+                        letter === currentLetter
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "border-gray-200 bg-white text-gray-900 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:hover:border-gray-600"
+                      } ${!hasRegions ? "opacity-50" : ""} transition-colors`}
+                    >
+                      {letter}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </nav>
       )}

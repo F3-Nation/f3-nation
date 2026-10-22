@@ -9,7 +9,7 @@ interface WorkoutCardProps {
 
 function getGoogleMapsUrl(workout: Workout): string {
   const { latitude, longitude } = workout;
-  if (latitude && longitude) {
+  if (latitude != null && longitude != null) {
     return `https://www.google.com/maps?q=${latitude},${longitude}`;
   }
   // Fallback to location search if coordinates not available

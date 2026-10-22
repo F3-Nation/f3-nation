@@ -16,6 +16,8 @@ interface EventPageParams {
 }
 
 export const dynamicParams = true;
+// Re-render hourly so the CTA disappears once the event has passed.
+export const revalidate = 3600;
 
 export const generateStaticParams = async () => getAllEventStaticParams();
 

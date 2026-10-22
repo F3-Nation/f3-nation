@@ -1,35 +1,26 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+
 import type { Workout } from "@/types/region";
+import { workoutTypesOf } from "@/lib/workout-filters";
 
 interface WorkoutTypeFilterProps {
+  /** Used only to list the type options. */
   workouts: Workout[];
-  onFilteredWorkouts: (workouts: Workout[]) => void;
 }
 
-export function WorkoutTypeFilter({
-  workouts,
-  onFilteredWorkouts,
-}: WorkoutTypeFilterProps) {
+/** Sets `?type=`; WorkoutList derives the visible workouts from the URL. */
+export function WorkoutTypeFilter({ workouts }: WorkoutTypeFilterProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [selectedType, setSelectedType] = useState<string | null>(
-    searchParams.get("type")?.toLowerCase() ?? null,
-  );
+  const selectedType = searchParams.get("type")?.toLowerCase() ?? null;
 
   const normalizedTypeOptions = useMemo(() => {
     const entries = new Map<string, string>();
     workouts.forEach((workout) => {
-      const types =
-        Array.isArray(workout.types) && workout.types.length > 0
-          ? workout.types
-          : workout.type
-            ? [workout.type]
-            : [];
-
-      types.forEach((type) => {
+      workoutTypesOf(workout).forEach((type) => {
         const trimmed = type.trim();
         if (!trimmed) return;
         const key = trimmed.toLowerCase();
@@ -45,27 +36,6 @@ export function WorkoutTypeFilter({
 
   // Get unique workout types from the data
   const workoutTypes = normalizedTypeOptions;
-
-  // Apply filter based on URL param on mount and when URL changes
-  useEffect(() => {
-    const typeParam = searchParams.get("type")?.toLowerCase() ?? null;
-    setSelectedType(typeParam);
-
-    if (typeParam) {
-      const filtered = workouts.filter((workout) => {
-        const types =
-          Array.isArray(workout.types) && workout.types.length > 0
-            ? workout.types
-            : workout.type
-              ? [workout.type]
-              : [];
-        return types.some((type) => type.toLowerCase() === typeParam);
-      });
-      onFilteredWorkouts(filtered);
-    } else {
-      onFilteredWorkouts(workouts);
-    }
-  }, [searchParams, workouts, onFilteredWorkouts]);
 
   const handleTypeClick = (typeKey: string) => {
     const newType = selectedType === typeKey ? null : typeKey;
@@ -98,9 +68,10 @@ export function WorkoutTypeFilter({
       {/* Mobile: Select Dropdown */}
       <div className="sm:hidden">
         <select
+          aria-label="Filter by workout type"
           value={selectedType ?? ""}
           onChange={handleSelectChange}
-          className="w-full rounded-lg border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:focus:ring-blue-400"
+          className="w-full rounded-lg border-gray-200 bg-gray-50 px-3 py-2 text-base font-medium text-gray-700 focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:focus:ring-blue-400"
         >
           <option value="">All Types</option>
           {workoutTypes.map((type) => (
@@ -119,6 +90,7 @@ export function WorkoutTypeFilter({
             <button
               key={type.key}
               onClick={() => handleTypeClick(type.key)}
+              aria-pressed={isSelected}
               className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${
                 isSelected
                   ? "bg-blue-600 text-white shadow-lg ring-2 ring-blue-600 ring-offset-2 dark:ring-offset-gray-800"

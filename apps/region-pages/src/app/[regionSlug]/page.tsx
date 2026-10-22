@@ -6,6 +6,7 @@ import {
   RegionContent,
 } from "@/components/region-content";
 import { getRegion } from "@/lib/data";
+import { regionMapParameters } from "@/lib/map-utils";
 import { formatEventDate, getUpcomingRegionEvents } from "@/lib/region-events";
 import { SITE_TITLE } from "@/lib/site";
 import { sortWorkoutsByDayAndTime } from "@/lib/workout-sorting";
@@ -14,8 +15,9 @@ interface RegionPageProps {
   params: Promise<{ regionSlug: string }>;
 }
 
-// Segment config must be a literal; keep in step with REVALIDATE_SECONDS.
-export const revalidate = 3600;
+// Must be a literal. 50 min: with DATA_TTL_SECONDS and the API's 60 s cache,
+// edits show within an hour (see src/lib/site.ts).
+export const revalidate = 3000;
 export const dynamicParams = true;
 
 // Rendered on first request and then served from the ISR cache, so neither
@@ -108,10 +110,7 @@ export default async function RegionPage({ params }: RegionPageProps) {
       instagram={region.instagram ?? undefined}
       image={region.image ?? undefined}
       sortedWorkouts={sortWorkoutsByDayAndTime(workouts)}
-      mapParams={{
-        center: { lat: region.latitude, lng: region.longitude },
-        zoom: region.zoom,
-      }}
+      mapParams={regionMapParameters(region)}
       upcomingEvents={getUpcomingRegionEvents(regionSlug, { limit: 3 })}
     />
   );

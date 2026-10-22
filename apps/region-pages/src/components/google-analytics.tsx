@@ -1,5 +1,6 @@
 import Script from "next/script";
 
+import { env } from "@/env";
 import { nonEmpty } from "@/lib/site";
 
 // The legacy app hard-coded this property; keep reporting to it from prod.
@@ -7,8 +8,8 @@ const LEGACY_PROD_GA_ID = "G-44DEXNRMCP";
 
 export function GoogleAnalytics() {
   const gaId =
-    nonEmpty(process.env.GA_MEASUREMENT_ID) ??
-    (process.env.F3_CHANNEL === "prod" ? LEGACY_PROD_GA_ID : undefined);
+    nonEmpty(env.GA_MEASUREMENT_ID) ??
+    (env.F3_CHANNEL === "prod" ? LEGACY_PROD_GA_ID : undefined);
   if (!gaId) return null;
 
   return (

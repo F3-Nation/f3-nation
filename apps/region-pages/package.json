@@ -19,12 +19,14 @@
     "@acme/shared": "workspace:*",
     "@f3nation/health": "workspace:*",
     "@orpc/client": "catalog:",
+    "@t3-oss/env-nextjs": "catalog:",
     "lodash": "catalog:",
     "lucide-react": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "server-only": "catalog:"
+    "server-only": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@acme/api": "workspace:*",

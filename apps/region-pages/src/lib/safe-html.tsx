@@ -5,13 +5,40 @@ const ALLOWED_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 const TEXT_NODE_TYPE = 3;
 const ELEMENT_NODE_TYPE = 1;
 
-const ENTITIES: Record<string, string> = {
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-  "&quot;": '"',
-  "&#39;": "'",
-  "&nbsp;": " ",
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  ndash: "–",
+  mdash: "—",
+  lsquo: "‘",
+  rsquo: "’",
+  ldquo: "“",
+  rdquo: "”",
+  hellip: "…",
+  bull: "•",
+  middot: "·",
+  copy: "©",
+  reg: "®",
+  trade: "™",
+  deg: "°",
+};
+
+/**
+ * Decodes a numeric entity or one of the named ones that show up in region
+ * text. This is for the server render; the browser path decodes everything via
+ * DOMParser. Unknown names stay as written.
+ */
+const decodeEntity = (entity: string, body: string): string => {
+  if (body.startsWith("#")) {
+    const hex = body[1]?.toLowerCase() === "x";
+    const code = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : entity;
+  }
+  return NAMED_ENTITIES[body.toLowerCase()] ?? entity;
 };
 
 const stripHtml = (value: string): string =>
@@ -20,10 +47,7 @@ const stripHtml = (value: string): string =>
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]*>/g, "")
-    .replace(
-      /&(?:amp|lt|gt|quot|#39|nbsp);/g,
-      (entity) => ENTITIES[entity] ?? entity,
-    )
+    .replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, decodeEntity)
     .trim();
 
 /** Plain-text rendering of `html`; what the server (no DOMParser) shows. */

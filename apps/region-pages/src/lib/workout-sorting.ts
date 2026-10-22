@@ -1,7 +1,7 @@
 import type { Workout } from "@/types/region";
 
 // Calendar constants
-export const DAYS_ORDER = [
+const DAYS_ORDER = [
   "Monday",
   "Tuesday",
   "Wednesday",

@@ -33,24 +33,18 @@ interface RegionContentProps {
 }
 
 function FilteredContent({ sortedWorkouts }: { sortedWorkouts: Workout[] }) {
-  const [filteredWorkouts, setFilteredWorkouts] =
-    useState<Workout[]>(sortedWorkouts);
-
   return (
     <>
       <div className="sticky top-4 z-20 mb-8 rounded-lg border border-gray-100 bg-white px-4 py-3 shadow-lg backdrop-blur-xs dark:border-gray-700/50 dark:bg-gray-800/95">
         <Suspense fallback={<div>Loading filters...</div>}>
-          <WorkoutFilters
-            workouts={sortedWorkouts}
-            onFilteredWorkouts={setFilteredWorkouts}
-          />
+          <WorkoutFilters workouts={sortedWorkouts} />
         </Suspense>
       </div>
 
       <div className="mb-8">
         <h2 className="mb-4 text-2xl font-semibold">Workouts</h2>
         <Suspense fallback={<div>Loading workouts...</div>}>
-          <WorkoutList workouts={filteredWorkouts} />
+          <WorkoutList workouts={sortedWorkouts} />
         </Suspense>
       </div>
     </>
@@ -109,6 +103,15 @@ export function OrphanedRegionContent({ region }: OrphanedRegionContentProps) {
             : descriptionSource}
         </p>
       </div>
+
+      <RegionHeader
+        regionName={region.name}
+        website={region.website ?? undefined}
+        email={region.email ?? undefined}
+        facebook={region.facebook ?? undefined}
+        twitter={region.twitter ?? undefined}
+        instagram={region.instagram ?? undefined}
+      />
 
       {/* No workouts yet card */}
       <div className="mb-8 rounded-lg border border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 p-6 dark:border-yellow-700 dark:from-yellow-900/20 dark:to-amber-900/20">

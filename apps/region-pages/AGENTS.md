@@ -19,8 +19,9 @@ Public, anonymous directory of F3 regions and their weekly workouts at
   client header `f3-region-pages`). Router:
   `packages/api/src/router/region-pages.ts`. Shaping (slugs, social URLs,
   time format, dedup, region area/zoom): `packages/api/src/lib/region-pages.ts`.
-- **Caching.** `src/lib/data.ts` caches API reads for `REVALIDATE_SECONDS`
-  (1 h). Region pages are on-demand ISR; `/` and `/sitemap.xml` render per
+- **Caching.** `src/lib/data.ts` caches API reads for `DATA_TTL_SECONDS`
+  (5 min); region pages use ISR with a 50 min window. Together with the API's
+  60 s cache, edits show within an hour (spec AC-13). Region pages are on-demand ISR; `/` and `/sitemap.xml` render per
   request from the cached data.
 - **Env** (`.env.example`): `F3_API_BASE_URL`, `F3_CHANNEL`, `SITE_URL`,
   `GA_MEASUREMENT_ID`. No secrets.
@@ -46,11 +47,12 @@ Public, anonymous directory of F3 regions and their weekly workouts at
    http(s); see `httpUrlOrNull` in the API lib.
 6. **Nothing fetches at build time.** The Docker build has no API access.
    `generateStaticParams` returns `[]`, and `/` is `force-dynamic`.
-7. **Route segment config must be a literal**, e.g. `revalidate = 3600`. A
-   constant fails the build. Keep it equal to `REVALIDATE_SECONDS`.
-8. **No `NEXT_PUBLIC_*` variables.** Next inlines them at build, and one image
-   serves both staging and prod. Read env with `nonEmpty()` (`src/lib/site.ts`)
-   so an empty value counts as unset.
+7. **Route segment config must be a literal**, e.g. `revalidate = 3000`. A
+   constant fails the build. If you change any cache TTL, keep the total
+   under 1 h (see the budget in `src/lib/site.ts`).
+8. **Config goes through `src/env.ts`** (validated), never raw `process.env`.
+   No `NEXT_PUBLIC_*` variables: Next inlines them at build, and one image
+   serves both staging and prod.
 9. **Tailwind v4 with OS (media) dark mode.** This app does not use `@acme/ui`
    or the shared class-based dark mode. v4 generates numeric utilities
    (`w-150` is 600px), and v3's `shadow-sm` / `outline-none` are now
@@ -58,7 +60,10 @@ Public, anonymous directory of F3 regions and their weekly workouts at
 10. **Keep the directory payload small.** `/` sends `RegionSummary`
     (`src/types/region.ts`), not the full region. Add fields there only if the
     list renders them.
-11. **Release order:** ship the `api` release containing any `regionPages`
+11. **Tests pin behavior.** Coverage uses a buffered ratchet that trails
+    measured coverage by 5 points (`vitest.config.ts`). Never add a test just to
+    move the number; untested declarative files are excluded instead.
+12. **Release order:** ship the `api` release containing any `regionPages`
     change before the `region-pages` release that relies on it.
 
 ## Local dev

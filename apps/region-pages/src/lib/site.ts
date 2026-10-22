@@ -1,3 +1,5 @@
+import { env } from "@/env";
+
 export const SITE_TITLE = "F3 Region Workouts";
 export const SITE_DESCRIPTION =
   "Find F3 workout locations and schedules in your region";
@@ -11,10 +13,13 @@ export const nonEmpty = (value: string | undefined): string | undefined =>
  * an unrelated domain when this was unset; fall back to production instead.
  */
 export const getSiteUrl = (): string =>
-  (nonEmpty(process.env.SITE_URL) ?? "https://regions.f3nation.com").replace(
+  (nonEmpty(env.SITE_URL) ?? "https://regions.f3nation.com").replace(
     /\/+$/,
     "",
   );
 
-/** Region list/page ISR window, in seconds. */
-export const REVALIDATE_SECONDS = 3600;
+/**
+ * Freshness budget (spec AC-13: edits visible within 1 h). Worst case is
+ * API cache (60 s) + DATA_TTL_SECONDS + region page ISR (3000 s) = 56 min.
+ */
+export const DATA_TTL_SECONDS = 300;

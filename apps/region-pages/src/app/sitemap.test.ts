@@ -1,7 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import sitemap from "@/app/sitemap";
 
+vi.mock("@/env", () => ({
+  env: { SITE_URL: "https://staging.regions.f3nation.com" },
+}));
 vi.mock("@/lib/data", () => ({
   getRegions: vi
     .fn()
@@ -13,14 +16,8 @@ vi.mock("@/lib/region-events", () => ({
   ],
 }));
 
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
-
 describe("sitemap", () => {
   it("lists home, every region and every curated event on SITE_URL", async () => {
-    vi.stubEnv("SITE_URL", "https://staging.regions.f3nation.com");
-
     const urls = (await sitemap()).map((entry) => entry.url);
 
     expect(urls).toEqual([

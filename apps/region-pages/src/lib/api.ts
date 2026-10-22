@@ -7,6 +7,7 @@ import { RPCLink } from "@orpc/client/fetch";
 import type { router } from "@acme/api";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { env } from "@/env";
 import { logError, logWarn } from "@/lib/logging";
 
 type ApiClient = RouterClient<typeof router>;
@@ -22,9 +23,11 @@ let client: ApiClient | undefined;
  */
 function getApiClient(): ApiClient {
   if (client) return client;
-  const url = process.env.F3_API_BASE_URL;
-  if (!url)
+  const url = env.F3_API_BASE_URL;
+
+  if (!url) {
     throw new Error("Missing required environment variable: F3_API_BASE_URL");
+  }
 
   const link = new RPCLink({
     url,

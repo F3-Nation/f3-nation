@@ -9,6 +9,26 @@ export interface MapParameters {
   zoom: number;
 }
 
+/** Center of the contiguous US; for regions with no mapped workouts. */
+const US_CENTER: MapParameters = {
+  center: { lat: 39.8283, lng: -98.5795 },
+  zoom: 4,
+};
+
+/** Map view for a region, falling back to the whole US when it has none. */
+export function regionMapParameters(region: {
+  latitude: number | null;
+  longitude: number | null;
+  zoom: number | null;
+}): MapParameters {
+  return region.latitude != null && region.longitude != null
+    ? {
+        center: { lat: region.latitude, lng: region.longitude },
+        zoom: region.zoom ?? US_CENTER.zoom,
+      }
+    : US_CENTER;
+}
+
 /** Great-circle distance between two points, in kilometers. */
 export function calculateHaversineDistance(
   lat1: number,

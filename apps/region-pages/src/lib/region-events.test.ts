@@ -74,6 +74,8 @@ describe("buildEventSlug", () => {
 describe("formatEventDate", () => {
   it("formats an ISO date as a long English date", () => {
     expect(formatEventDate("2024-03-15")).toBe("Friday, March 15, 2024");
+    expect(formatEventDate("")).toBe("Date TBD");
+    expect(formatEventDate("not-a-date")).toBe("Date TBD");
   });
 });
 

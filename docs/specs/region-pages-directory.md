@@ -50,8 +50,9 @@ live F3 database through the public API instead.
   regions whose name, city, state, zip or country contains the text are
   listed, and Enter on a highlighted suggestion opens that region's page.
 - **AC-4** — GIVEN the visitor grants location access WHEN "Find regions
-  near me" is on THEN only regions with at least one workout within 200 miles
-  are listed, nearest first, each with its distance in miles.
+  near me" is on THEN regions whose map center (the middle of their workouts'
+  bounds) is within 200 miles are listed, nearest first, each with its
+  distance in miles; regions with no mapped workout are never listed.
 - **AC-5** — GIVEN an inactive region, or a region under an inactive
   ancestor org WHEN `/` loads THEN that region is not listed.
 
@@ -71,7 +72,8 @@ live F3 database through the public API instead.
 - **AC-9** — GIVEN a workout with start `0530` and end `0615` THEN its time
   renders as `5:30 AM - 6:15 AM`, and workouts are ordered by next occurrence.
 - **AC-10** — GIVEN an active region with no qualifying workouts THEN the
-  page shows the "just getting started" state instead of a workout list.
+  page shows the "just getting started" state instead of a workout list,
+  with the region's website and contact links.
 - **AC-11** — GIVEN a slug that matches no active region THEN the response
   is HTTP 404 with a "Region not found" page linking to `/` (the legacy app
   redirected to `/`; a real 404 keeps retired regions out of search indexes).

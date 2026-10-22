@@ -153,6 +153,9 @@ export const hasEventEnded = (
 };
 
 export const formatEventDate = (date: string, locale = "en-US"): string => {
+  const instant = new Date(`${date}T12:00:00Z`);
+  // An empty or malformed date would make Intl throw a RangeError.
+  if (!date || Number.isNaN(instant.valueOf())) return "Date TBD";
   const formatter = new Intl.DateTimeFormat(locale, {
     weekday: "long",
     month: "long",
@@ -163,7 +166,7 @@ export const formatEventDate = (date: string, locale = "en-US"): string => {
     timeZone: "UTC",
   });
 
-  return formatter.format(new Date(`${date}T12:00:00Z`));
+  return formatter.format(instant);
 };
 
 export const formatEventTime = (time?: string): string | undefined => {

@@ -2,8 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getSiteUrl, nonEmpty } from "@/lib/site";
 
+const mockEnv = vi.hoisted(() => ({
+  SITE_URL: undefined as string | undefined,
+}));
+vi.mock("@/env", () => ({ env: mockEnv }));
+
 afterEach(() => {
-  vi.unstubAllEnvs();
+  mockEnv.SITE_URL = undefined;
 });
 
 describe("nonEmpty", () => {
@@ -18,18 +23,14 @@ describe("nonEmpty", () => {
 });
 
 describe("getSiteUrl", () => {
-  it("falls back to production when SITE_URL is unset", () => {
-    vi.stubEnv("SITE_URL", undefined);
+  it("falls back to production when SITE_URL is unset or empty", () => {
     expect(getSiteUrl()).toBe("https://regions.f3nation.com");
-  });
-
-  it("falls back to production when SITE_URL is empty (would crash new URL)", () => {
-    vi.stubEnv("SITE_URL", "");
+    mockEnv.SITE_URL = "";
     expect(getSiteUrl()).toBe("https://regions.f3nation.com");
   });
 
   it("returns SITE_URL without trailing slashes", () => {
-    vi.stubEnv("SITE_URL", "https://staging.example.com//");
+    mockEnv.SITE_URL = "https://staging.example.com//";
     expect(getSiteUrl()).toBe("https://staging.example.com");
   });
 });
