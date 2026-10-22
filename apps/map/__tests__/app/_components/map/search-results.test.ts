@@ -45,4 +45,35 @@ describe("buildF3LocationSearchResults", () => {
       results.length,
     );
   });
+
+  it("keys each AO at a shared location uniquely and collapses repeated AO names", () => {
+    const baseEvent = locationMarker.events[0]!;
+    const sharedLocation: SparseF3Marker = {
+      ...locationMarker,
+      id: 7,
+      events: [
+        { ...baseEvent, id: 70, name: "Tower Mon", aoName: "The Dark Tower" },
+        { ...baseEvent, id: 71, name: "Tower Wed", aoName: "The Dark Tower" },
+        {
+          ...baseEvent,
+          id: 72,
+          name: "Gunslinger Run",
+          aoName: "The Gunslinger",
+        },
+      ],
+    };
+
+    const results = buildF3LocationSearchResults({
+      locationMarkers: [sharedLocation],
+      text: "the",
+    });
+
+    expect(results.map((result) => result.header)).toEqual([
+      "The Dark Tower",
+      "The Gunslinger",
+    ]);
+    expect(results.map((result) => result.destination.id)).toEqual([7, 7]);
+    const keys = results.map((result) => result.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
 });
