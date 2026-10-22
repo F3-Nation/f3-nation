@@ -11,6 +11,8 @@ vi.mock("~/lib/current-session", () => ({
     user: { name: "PermVac", email: "permvac@example.com" },
   })),
 }));
+const logWarn = vi.fn();
+vi.mock("~/lib/logging", () => ({ logWarn }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("~/app/components/SignOutButton", () => ({ default: () => null }));
@@ -23,6 +25,7 @@ async function renderHome() {
 
 beforeEach(() => {
   delete envMock.APPS_DIRECTORY_URL;
+  logWarn.mockClear();
 });
 afterEach(cleanup);
 
@@ -63,5 +66,9 @@ describe("signed-in home page apps directory link", () => {
 
     expect(screen.getByText("F3 Nation Auth")).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
+    expect(logWarn).toHaveBeenCalledWith("auth.apps_directory.invalid_url", {
+      reason:
+        'APPS_DIRECTORY_URL must be an http(s) URL or "off", got "javascript:alert(1)"',
+    });
   });
 });

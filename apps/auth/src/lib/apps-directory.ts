@@ -1,3 +1,5 @@
+import { logWarn } from "~/lib/logging";
+
 /**
  * Where the signed-in home page points people to explore the other F3 apps.
  *
@@ -7,9 +9,8 @@
  * exist and they're asked to sign in again. So each deployment says where
  * its directory is: unset keeps the production default, "off" hides the
  * link (staging, until there's a staging directory), anything else must be
- * an http(s) URL. A bad value
- * fails env validation at startup; if one ever slips past, the home page hides
- * the link rather than erroring.
+ * an http(s) URL. A bad value hides the link and logs a warning, so a typo
+ * can't take down sign-in.
  */
 const DEFAULT_APPS_DIRECTORY_URL = "https://apps.f3nation.com";
 
@@ -29,7 +30,11 @@ export function parseAppsDirectoryUrl(raw: string | undefined): URL | null {
 export function appsDirectoryUrl(raw: string | undefined): URL | null {
   try {
     return parseAppsDirectoryUrl(raw);
-  } catch {
+  } catch (err) {
+    // parseAppsDirectoryUrl only throws Error.
+    logWarn("auth.apps_directory.invalid_url", {
+      reason: (err as Error).message,
+    });
     return null;
   }
 }

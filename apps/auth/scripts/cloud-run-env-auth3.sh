@@ -220,6 +220,7 @@ echo ""
 echo "Preparing Cloud Run env vars..."
 
 UPDATE_ARGS=()
+REMOVE_ARGS=()
 
 # Plain env vars (hardcoded)
 for var in "${!PLAIN_VARS[@]}"; do
@@ -230,8 +231,18 @@ done
 # Per-environment env vars (from env file, not secrets)
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
-  echo " [$var] Setting to $value"
-  [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
+  if [[ -n "$value" ]]; then
+    echo " [$var] Setting to $value"
+    UPDATE_ARGS+=("${var}=${value}")
+  elif [[ "$var" == "APPS_DIRECTORY_URL" ]]; then
+    # Optional with a default in code. Cloud Run keeps a variable that is
+    # left out of --update-env-vars, so remove it explicitly or deleting it
+    # from the env file would leave an old "off" or URL in place.
+    echo " [$var] Unset, removing from the service"
+    REMOVE_ARGS+=("$var")
+  else
+    echo " [$var] Unset, leaving the service's value as is"
+  fi
 done
 
 # "|" instead of a comma join so a comma inside EMAIL_FROM stays in the value
@@ -319,10 +330,15 @@ done
 
 echo ""
 echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
+REMOVE_FLAGS=()
+if [[ ${#REMOVE_ARGS[@]} -gt 0 ]]; then
+  REMOVE_FLAGS=(--remove-env-vars "$(IFS=,; echo "${REMOVE_ARGS[*]}")")
+fi
 gcloud run services update "$SERVICE_NAME" \
     --project "$PROJECT" \
     --region "$REGION" \
     --update-env-vars "$ENV_VARS_ARG" \
+    ${REMOVE_FLAGS[@]+"${REMOVE_FLAGS[@]}"} \
     --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
     --quiet
 

@@ -1,8 +1,6 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
-import { parseAppsDirectoryUrl } from "./lib/apps-directory";
-
 export const env = createEnv({
   server: {
     API_KEY: z.string().min(1),
@@ -28,20 +26,9 @@ export const env = createEnv({
     // Where the signed-in home page links to the other F3 apps. Unset means
     // https://apps.f3nation.com; "off" hides the link (see
     // lib/apps-directory.ts for why staging sets that).
-    APPS_DIRECTORY_URL: z
-      .string()
-      .optional()
-      .refine(
-        (v) => {
-          try {
-            parseAppsDirectoryUrl(v);
-            return true;
-          } catch {
-            return false;
-          }
-        },
-        { message: 'Must be an http(s) URL or "off"' },
-      ),
+    // Not validated here: a bad value only hides the link (with a warning),
+    // instead of failing every route that loads ~/env.
+    APPS_DIRECTORY_URL: z.string().optional(),
     DATABASE_HOST: z.string().min(1),
     DATABASE_USER: z.string().min(1),
     DATABASE_PASSWORD: z.string().min(1),
