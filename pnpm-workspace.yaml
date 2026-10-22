@@ -111,7 +111,7 @@ catalog:
   libphonenumber-js: ^1.13.15
   lodash: ^4.18.1
   lucide-react: ^1.55.0
-  next: ^16.4.0
+  next: ^16.4.2
   next-auth: 5.0.0-beta.32
   next-themes: ^0.4.6
   nodemailer: ^10.1.0
@@ -178,7 +178,7 @@ overrides:
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.12" # GHSA-rgw5-rvv9-x895 (DoS)
   "fast-uri@<3.1.5": "3.1.8" # host confusion via failed backslash authority introducer
   "sharp@<0.35.5": "0.35.5" # GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889) and earlier libheif advisories; next's optional sharp dep resolved to 0.35.3, outside the old <0.35.0 range
-  "next@>=16.0.0 <16.3.8": "16.4.0" # GHSA-vcvr-r3jv-pc5j (RCE in next/og ImageResponse) / GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
+  "next@>=16.0.0 <16.4.1": "16.4.2" # GHSA-2464-fhr4-w9xw (RCE in image optimization with SVG) / GHSA-p3m5-59mp-jv5r (Server Actions DoS) / GHSA-vcvr-r3jv-pc5j (RCE in next/og ImageResponse) / GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
   "postcss@<8.5.12": "^8.5.29" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
   "nanoid@<3.3.17": "^6.0.2" # GHSA-2v37-7h3g-55p8
   "nanoid@>=4.0.0 <5.1.16": "^6.0.2" # GHSA-28wg-ghj8-5hjv
