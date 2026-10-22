@@ -71,8 +71,7 @@ apps/me/
 │       ├── auth/                 # Auth utilities
 │       ├── api/client.ts         # F3 API client (server-side)
 │       ├── gcs.ts                # GCS upload helper
-│       ├── types.ts              # TypeScript interfaces
-│       └── utils.ts              # Utility functions
+│       └── types.ts              # TypeScript interfaces
 ├── __tests__/                    # Test suite
 ├── scripts/                      # Deployment scripts
 ├── Dockerfile                    # Production container build

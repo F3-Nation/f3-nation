@@ -50,8 +50,7 @@ src/
     │   └── AuthProvider.tsx — Client-side auth context
     ├── api/client.ts       — Server-side F3 API client
     ├── gcs.ts              — Google Cloud Storage upload helper
-    ├── types.ts            — TypeScript interfaces
-    └── utils.ts            — cn() helper, fallback avatar
+    └── types.ts            — TypeScript interfaces
 ```
 
 ## API Reference
