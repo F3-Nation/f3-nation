@@ -44,6 +44,7 @@ FNG_META_BATTLE_BUDDY = "battle_buddy"
 
 
 def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
+    """Open the /fng form: the FNG's name, contact details and, optionally, who brought him."""
     blocks = [
         InputBlock(label="First name", action=FNG_FIRST_NAME, optional=False, element=PlainTextInputElement()),
         InputBlock(label="Last name", action=FNG_LAST_NAME, optional=False, element=PlainTextInputElement()),
@@ -86,6 +87,7 @@ def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict,
 
 
 def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
+    """Create the FNG's profile (create-only), email him the invite and report the outcome to the submitter."""
     values = safe_get(body, "view", "state", "values") or {}
 
     def text(action: str) -> str | None:
