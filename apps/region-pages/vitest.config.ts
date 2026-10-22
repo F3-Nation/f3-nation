@@ -34,8 +34,8 @@ export default defineConfig({
         // doesn't demand filler tests. See docs/testing.md § Thresholds.
         autoUpdate: (newThreshold, previousThreshold) =>
           Math.max(previousThreshold, Math.floor(newThreshold) - 5),
-        statements: 48,
-        branches: 37,
+        statements: 49,
+        branches: 38,
         functions: 47,
         lines: 48,
       },

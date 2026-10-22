@@ -51,6 +51,8 @@ Public, anonymous directory of F3 regions and their weekly workouts at
    constant fails the build. If you change any cache TTL, keep the total
    under 1 h (see the budget in `src/lib/site.ts`).
 8. **Config goes through `src/env.ts`** (validated), never raw `process.env`.
+   `src/instrumentation.ts` loads it at boot and exits on invalid config, so a
+   misconfigured Cloud Run revision fails to start instead of serving 500s.
    No `NEXT_PUBLIC_*` variables: Next inlines them at build, and one image
    serves both staging and prod.
 9. **Tailwind v4 with OS (media) dark mode.** This app does not use `@acme/ui`

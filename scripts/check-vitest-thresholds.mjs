@@ -11,7 +11,11 @@ import process from "node:process";
 const WORKSPACE_ROOTS = ["apps", "packages", "tooling"];
 const CONFIG_NAMES = ["vitest.config.ts", "vitest.config.mts"];
 const HAS_THRESHOLDS = /thresholds\s*:\s*\{/;
-const HAS_AUTO_UPDATE = /autoUpdate\s*:\s*(true\b|\(|[A-Za-z_$][\w$]*\s*[,)])/;
+// `true`, or an inline function: arrow (`(n, p) =>`, `n =>`, `async (...) =>`)
+// or `function`. Named references are not accepted: a bare identifier can't be
+// told apart from `false`/`null`/`undefined` by a regex.
+const HAS_AUTO_UPDATE =
+  /autoUpdate\s*:\s*(?:true\b|(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>|(?:async\s+)?function\b)/;
 
 function discoverConfigs() {
   return WORKSPACE_ROOTS.flatMap((root) => {
