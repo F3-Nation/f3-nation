@@ -82,7 +82,8 @@ export async function sendEmailCode(
   // Normalize early so all downstream usage (DB keys, magic link URL) is consistent.
   const normalizedEmail = email.toLowerCase().trim();
 
-  const code = crypto.randomInt(100000, 999999).toString();
+  // randomInt's upper bound is exclusive.
+  const code = crypto.randomInt(100000, 1000000).toString();
   await storeCode(normalizedEmail, code);
 
   // Build the magic link — include callbackUrl so clicking the link lands
