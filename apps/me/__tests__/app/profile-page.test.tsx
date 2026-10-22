@@ -26,12 +26,16 @@ vi.mock("@/components/profile-form", () => ({ ProfileForm: () => null }));
 vi.mock("next/image", () => ({
   default: (props: { alt: string }) => <span>{props.alt}</span>,
 }));
-vi.mock("@/lib/logging", () => ({ logError: vi.fn(), logWarn: vi.fn() }));
+const { logWarn } = vi.hoisted(() => ({ logWarn: vi.fn() }));
+vi.mock("@/lib/logging", () => ({ logError: vi.fn(), logWarn }));
 
 function expectOutageScreen(page: Awaited<ReturnType<typeof renderPage>>) {
   render(page);
   expect(
-    screen.getByRole("heading", { name: /temporarily unavailable/i }),
+    screen.getByRole("heading", {
+      level: 1,
+      name: /temporarily unavailable/i,
+    }),
   ).toBeDefined();
 }
 
@@ -50,17 +54,25 @@ describe("ProfilePage", () => {
   });
 
   it("shows the outage screen when the profile lookup cannot reach the API", async () => {
-    getMyProfile.mockRejectedValue(new TypeError("fetch failed"));
+    const err = new TypeError("fetch failed");
+    getMyProfile.mockRejectedValue(err);
 
     expectOutageScreen(await renderPage());
+    expect(logWarn).toHaveBeenCalledWith(
+      "me.profile.api_unavailable",
+      expect.objectContaining({ lookup: "profile", err }),
+    );
   });
 
   it("shows the outage screen when the regions lookup cannot reach the API", async () => {
-    getRegions.mockRejectedValue(
-      new ORPCError("SERVICE_UNAVAILABLE", { status: 503 }),
-    );
+    const err = new ORPCError("SERVICE_UNAVAILABLE", { status: 503 });
+    getRegions.mockRejectedValue(err);
 
     expectOutageScreen(await renderPage());
+    expect(logWarn).toHaveBeenCalledWith(
+      "me.profile.api_unavailable",
+      expect.objectContaining({ lookup: "regions", err }),
+    );
   });
 
   it("still sends a missing user to the sign-in screen", async () => {

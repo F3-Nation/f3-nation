@@ -66,6 +66,19 @@ describe("getMyProfile during an API outage", () => {
     expect(isApiUnavailableError(await profileError())).toBe(true);
   });
 
+  it("classifies a 5xx with malformed JSON as unavailable", async () => {
+    // Labelled JSON but cut off (e.g. by a proxy); parsing it must not lose
+    // the 5xx status.
+    fetchMock.mockResolvedValue(
+      new Response('{"json":{"code":', {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    expect(isApiUnavailableError(await profileError())).toBe(true);
+  });
+
   it("times out an API that never answers", async () => {
     vi.stubEnv("F3_API_TIMEOUT_MS", "20");
     fetchMock.mockImplementation(

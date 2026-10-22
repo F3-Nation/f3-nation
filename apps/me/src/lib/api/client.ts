@@ -42,7 +42,6 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
       const timeout = setTimeout(() => controller.abort(), getApiTimeoutMs());
       const upstreamSignal = (init as RequestInit | undefined)?.signal;
       const onAbort = () => controller.abort();
-      let bodyPending = false;
 
       if (upstreamSignal) {
         if (upstreamSignal.aborted) {
@@ -75,24 +74,26 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
           });
         }
 
-        // A 5xx page from a proxy or load balancer (not a JSON oRPC error) would
-        // otherwise surface as a body-parse error with its status lost, and be
-        // mistaken for a bug rather than an outage.
-        if (
-          response.status >= 500 &&
-          !response.headers.get("content-type")?.startsWith("application/json")
-        ) {
-          await response.body?.cancel();
-          throw new ORPCError("SERVICE_UNAVAILABLE", {
-            status: response.status,
-          });
+        // Read the body here, under the timeout: an API that sends headers and
+        // then stalls must not hang the page, and the timer can then always be
+        // cleared below instead of outliving the request.
+        const body = await response.text();
+
+        // A 5xx that isn't a well-formed oRPC error (an HTML page from a proxy
+        // or load balancer, or truncated JSON) would otherwise surface as a
+        // body-parse error with its status lost, and be mistaken for a bug
+        // rather than an outage.
+        if (response.status >= 500) {
+          try {
+            JSON.parse(body);
+          } catch {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              status: response.status,
+            });
+          }
         }
 
-        // Keep the timeout armed: oRPC reads the body after this returns, and
-        // an API that sends headers and then stalls must not hang the page.
-        // Aborting once the body has been read is a no-op.
-        bodyPending = true;
-        return response;
+        return new Response(body, response);
       } catch (err) {
         logError(
           "me.api.upstream_request_failed",
@@ -106,10 +107,8 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
         );
         throw err;
       } finally {
-        if (!bodyPending) {
-          clearTimeout(timeout);
-          upstreamSignal?.removeEventListener("abort", onAbort);
-        }
+        clearTimeout(timeout);
+        upstreamSignal?.removeEventListener("abort", onAbort);
       }
     },
   });

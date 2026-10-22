@@ -51,7 +51,10 @@ describe("ApiUnavailable", () => {
   it("explains the outage", () => {
     render(<Screen />);
     expect(
-      screen.getByRole("heading", { name: /temporarily unavailable/i }),
+      screen.getByRole("heading", {
+        level: 1,
+        name: /temporarily unavailable/i,
+      }),
     ).toBeDefined();
   });
 

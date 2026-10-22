@@ -4,13 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect } from "react";
 
 import { Button } from "./button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "./card";
+import { Card, CardContent, CardDescription, CardHeader } from "./card";
 
 export const RETRY_BASE_MS = 30_000;
 // Every open tab lands here at the same moment an outage starts; jitter keeps
@@ -52,7 +46,10 @@ export function ApiUnavailable(props: {
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
         {props.logo && <div className="mx-auto mb-4">{props.logo}</div>}
-        <CardTitle className="text-2xl">{props.title}</CardTitle>
+        {/* CardTitle is an h3; this screen is the whole page, so it needs the h1. */}
+        <h1 className="text-2xl leading-none font-semibold tracking-tight">
+          {props.title}
+        </h1>
         <CardDescription>{props.message}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-4 text-center">

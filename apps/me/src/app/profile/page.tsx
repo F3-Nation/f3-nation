@@ -24,7 +24,12 @@ export default async function ProfilePage() {
       redirect("/?error=user_not_found");
     }
     if (isApiUnavailableError(err)) {
-      logWarn("me.profile.api_unavailable", { sessionUserId: session.userId });
+      logWarn("me.profile.api_unavailable", {
+        sessionUserId: session.userId,
+        apiBaseUrl: process.env.F3_API_BASE_URL,
+        lookup: "profile",
+        err,
+      });
       return <ProfileUnavailable />;
     }
 
@@ -43,7 +48,12 @@ export default async function ProfilePage() {
     regions = await getRegions();
   } catch (err) {
     if (isApiUnavailableError(err)) {
-      logWarn("me.profile.api_unavailable", { sessionUserId: session.userId });
+      logWarn("me.profile.api_unavailable", {
+        sessionUserId: session.userId,
+        apiBaseUrl: process.env.F3_API_BASE_URL,
+        lookup: "regions",
+        err,
+      });
       return <ProfileUnavailable />;
     }
     logError(
