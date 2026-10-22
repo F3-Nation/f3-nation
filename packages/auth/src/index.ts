@@ -76,6 +76,8 @@ export async function getSessionFromHeaders(
     logWarn("auth.session.non_ok_response", { status: response.status });
     return null;
   }
+  // This request is a GET, so the jwt callback never sees trigger="update"
+  // here and token roles are not re-read from the database.
   // Auth() may set Set-Cookie headers here (rolling JWT refresh, or clearing
   // an invalid session cookie) -- intentionally dropped. This function is
   // only used as an oRPC middleware authorization gate, which has no

@@ -110,6 +110,39 @@ describe("jwt callback on trigger=update", () => {
     expect(getUser).not.toHaveBeenCalled();
   });
 
+  it.each(["not-a-number", "7.5", ""])(
+    "drops all roles without a lookup when the token id is %j",
+    async (id) => {
+      const jwt = await loadJwtCallback();
+
+      const result = await jwt({
+        token: token({ id }),
+        trigger: "update",
+        session: { roles: [FORGED_ADMIN] },
+      });
+
+      expect(result?.roles).toEqual([]);
+      expect(getUser).not.toHaveBeenCalled();
+    },
+  );
+
+  // Fail closed: the callback must reject rather than keep the old roles.
+  // @auth/core's session action catches the rejection and clears the session
+  // cookie (lib/actions/session.js, `sessionStore.clean()`); that part is
+  // @auth/core's behavior and is not re-tested here.
+  it("rejects, keeping nothing, when the database lookup fails", async () => {
+    getUser.mockRejectedValue(new Error("db outage"));
+    const jwt = await loadJwtCallback();
+
+    await expect(
+      jwt({
+        token: token(),
+        trigger: "update",
+        session: { roles: [FORGED_ADMIN] },
+      }),
+    ).rejects.toThrow("db outage");
+  });
+
   it("leaves roles alone on a plain session read", async () => {
     const jwt = await loadJwtCallback();
 

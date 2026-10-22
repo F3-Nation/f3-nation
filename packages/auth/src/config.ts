@@ -227,11 +227,19 @@ export const authConfig: NextAuthConfig = {
 
       if (trigger === "update") {
         // Re-read roles from the database for the token's own user. A DB error
-        // propagates; @auth/core then clears the session cookie (fail closed).
+        // (or an adapter without getUser) throws; on the map app's own
+        // /api/auth route @auth/core then clears the session cookie (fail
+        // closed). apps/api only reads sessions via GET (getSessionFromHeaders),
+        // so this branch never runs there and the guarantee does not apply.
+        if (!adapter.getUser) {
+          throw new Error("Auth adapter must implement getUser");
+        }
         const userId = Number(token.id);
-        const dbUser = Number.isInteger(userId)
-          ? await adapter.getUser?.(userId)
-          : null;
+        // User ids are positive serials; Number("") and Number(null) are 0.
+        const dbUser =
+          Number.isInteger(userId) && userId > 0
+            ? await adapter.getUser(userId)
+            : null;
         token.roles = dbUser?.roles ?? [];
       }
 
