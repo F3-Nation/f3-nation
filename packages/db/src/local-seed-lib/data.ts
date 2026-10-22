@@ -285,7 +285,7 @@ export const LOCAL_API_KEYS: LocalApiKeySeed[] = [
     role: null,
   },
   {
-    key: "f3-org-map",
+    key: "local-org-map-key",
     name: "Homepage org map (local dev)",
     description:
       "Used by apps/homepage org chart for read-only API access in local dev",
