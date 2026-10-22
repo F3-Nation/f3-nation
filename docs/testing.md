@@ -74,6 +74,26 @@ enforces this. It fails any config with a `thresholds` block that lacks
 check executes. The pre-commit job is fast local feedback; the `lint` job is the
 backstop that `--no-verify` cannot skip.
 
+### Buffered ratchet
+
+`autoUpdate` may also be a function. Vitest calls it with the measured and the
+current threshold. Apps that opt in (currently `apps/region-pages`) use:
+
+```ts
+autoUpdate: (newThreshold, previousThreshold) =>
+  Math.max(previousThreshold, Math.floor(newThreshold) - 5),
+```
+
+The floor still only rises, so it remains a ratchet. It trails measured
+coverage by 5 points, so deleting well-covered code or a small refactor doesn't
+fail the suite and push anyone, human or AI, into writing tests just to restore
+a number. A large regression still fails. The threshold checker accepts `true`
+or a function and rejects `false`.
+
+Pair the buffer with an app-level `coverage.exclude` for declarative files that
+have no logic to test (layouts, error/not-found shells, env schemas, inline SVG
+icons), so the percentage reflects behavior.
+
 ## Characterization suite (apps/api)
 
 `apps/api/characterization/` is a behavior-pinning suite separate from the unit

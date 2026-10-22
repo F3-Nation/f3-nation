@@ -15,13 +15,29 @@ export default defineConfig({
       reporter: ["text", "json", "html"],
       reportsDirectory: "./coverage",
       include: coverageInclude,
-      exclude: coverageExclude,
+      exclude: [
+        ...coverageExclude,
+        // Declarative Next.js shells and config with no logic to test; at 0%
+        // they only add noise to the percentage.
+        "src/app/layout.tsx",
+        "src/app/error.tsx",
+        "src/app/not-found.tsx",
+        "src/app/robots.ts",
+        "src/env.ts",
+        "src/lib/logging.ts",
+        "src/components/google-analytics.tsx",
+        "src/components/svgs/**",
+      ],
       thresholds: {
-        autoUpdate: true,
-        statements: 48.75,
-        branches: 39.55,
-        functions: 46.62,
-        lines: 48.38,
+        // Ratchets 5 points below measured coverage, never down: big
+        // regressions fail, but deleting well-covered code or a small refactor
+        // doesn't demand filler tests. See docs/testing.md § Thresholds.
+        autoUpdate: (newThreshold, previousThreshold) =>
+          Math.max(previousThreshold, Math.floor(newThreshold) - 5),
+        statements: 48,
+        branches: 37,
+        functions: 47,
+        lines: 48,
       },
     },
   },

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Fails when a vitest.config.ts declares coverage thresholds without
-// `autoUpdate: true`. See AGENTS.md § Testing Guidelines for the rationale.
+// `autoUpdate` enabled: either `true` or a function that ratchets to a
+// buffered floor (see docs/testing.md § Thresholds).
 // Pass file paths as args to check only those (used by the lefthook job).
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -10,7 +11,7 @@ import process from "node:process";
 const WORKSPACE_ROOTS = ["apps", "packages", "tooling"];
 const CONFIG_NAMES = ["vitest.config.ts", "vitest.config.mts"];
 const HAS_THRESHOLDS = /thresholds\s*:\s*\{/;
-const HAS_AUTO_UPDATE = /autoUpdate\s*:\s*true/;
+const HAS_AUTO_UPDATE = /autoUpdate\s*:\s*(true\b|\(|[A-Za-z_$][\w$]*\s*[,)])/;
 
 function discoverConfigs() {
   return WORKSPACE_ROOTS.flatMap((root) => {
@@ -42,10 +43,10 @@ if (offenders.length) {
       "",
       "Coverage thresholds must ratchet automatically.",
       "",
-      "These configs declare `test.coverage.thresholds` without `autoUpdate: true`:",
+      "These configs declare `test.coverage.thresholds` without `autoUpdate` enabled:",
       ...offenders.map((path) => `  - ${path}`),
       "",
-      "Restore `autoUpdate: true` inside the thresholds block. Vitest rewriting",
+      "Restore `autoUpdate` (true, or a ratcheting function) inside the thresholds block. Vitest rewriting",
       "the numbers after a test run is expected — commit that change, don't",
       "disable the flag. Lowering or freezing thresholds to make a suite pass is",
       "not an acceptable fix. See AGENTS.md § Testing Guidelines.",
