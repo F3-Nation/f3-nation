@@ -18,9 +18,13 @@ export interface RoleCheckRequest {
   roleName: UserRole;
 }
 
+/** Max org ids per hierarchy query (each is a bind parameter; Postgres caps one statement at 65535). */
+const ROLE_CHECK_ORG_CHUNK_SIZE = 10_000;
+
 /**
- * Resolves many role checks with at most ONE hierarchy query, regardless of how
- * many checks (or distinct orgs) are passed. The result array lines up with
+ * Resolves many role checks with one hierarchy query (one more per
+ * ROLE_CHECK_ORG_CHUNK_SIZE distinct orgs beyond the first chunk, which keeps a
+ * huge client-supplied list under Postgres' bind-parameter limit). The result array lines up with
  * `checks` by index, and each entry is exactly what `checkHasRoleOnOrg` returns
  * for that check on its own -- `checkHasRoleOnOrg` is implemented on top of
  * this, so the two cannot drift.
@@ -78,7 +82,12 @@ export const checkHasRolesOnOrgs = async ({
 
   // org id -> ids of the org itself and every ancestor within the depth guard
   const ancestorIdsByOrg = new Map<number, Set<number>>();
-  if (unresolvedOrgIds.length > 0) {
+  const rootsAtDepthLimit = new Set<number>();
+  // Each org id is one bind parameter, and Postgres rejects a statement with
+  // more than 65535 of them, so a very long list is walked in chunks. Roots
+  // are independent in the CTE, so chunking cannot change any decision.
+  for (let i = 0; i < unresolvedOrgIds.length; i += ROLE_CHECK_ORG_CHUNK_SIZE) {
+    const chunk = unresolvedOrgIds.slice(i, i + ROLE_CHECK_ORG_CHUNK_SIZE);
     const ancestors = await db.execute<{
       root_id: number;
       id: number;
@@ -93,7 +102,7 @@ export const checkHasRolesOnOrgs = async ({
           ARRAY[${schema.orgs.id}]
         FROM ${schema.orgs}
         WHERE ${schema.orgs.id} IN (${sql.join(
-          unresolvedOrgIds.map((orgId) => sql`${orgId}`),
+          chunk.map((orgId) => sql`${orgId}`),
           sql`, `,
         )})
 
@@ -119,7 +128,6 @@ export const checkHasRolesOnOrgs = async ({
       GROUP BY root_id, id
     `);
 
-    const rootsAtDepthLimit = new Set<number>();
     for (const { root_id, id, min_depth } of ancestors) {
       if (min_depth > ORG_TREE_MAX_DEPTH) {
         // One log per org that hit the guard, as a lone checkHasRoleOnOrg would.

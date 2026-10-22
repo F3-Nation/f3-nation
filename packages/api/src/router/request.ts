@@ -717,7 +717,7 @@ export const requestRouter = {
     })
     .handler(async ({ context: ctx, input }) => {
       // protectedProcedure guarantees an authenticated session, so every result
-      // comes from checkHasRoleOnOrg (modes: direct-permission/org-admin/no-permission).
+      // comes from checkHasRolesOnOrgs (modes: direct-permission/org-admin/no-permission).
       const results = await checkHasRolesOnOrgs({
         session: ctx.session,
         db: ctx.db,

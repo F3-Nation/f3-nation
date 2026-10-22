@@ -1,7 +1,15 @@
 import type { Session } from "@acme/auth";
 import type { UserRole } from "@acme/shared/app/enums";
 import { inArray, schema } from "@acme/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   createMixedOrgTree,
@@ -16,7 +24,12 @@ import {
   checkHasRolesOnOrgs,
 } from "./check-has-role-on-org";
 import type { RoleCheckOutcome } from "./check-has-role-on-org";
+import * as loggerModule from "./logger";
 import { ORG_TREE_MAX_DEPTH } from "./org-tree";
+
+vi.mock("./logger", { spy: true });
+
+const mockLogError = vi.mocked(loggerModule.logError);
 
 /**
  * The batched role check must return exactly what the old one-org-at-a-time
@@ -351,6 +364,135 @@ describe("batched role checks", () => {
       orgId: null,
       roleName: null,
       mode: "no-permission",
+    });
+  });
+
+  describe("depth guard", () => {
+    /** A parent chain of `length` orgs, root first. */
+    const createChain = async (length: number) => {
+      const chain: number[] = [];
+      let parentId: number | null = null;
+      for (let i = 0; i < length; i++) {
+        const inserted: { id: number }[] = await db
+          .insert(schema.orgs)
+          .values({
+            name: `Batched ${uniqueId()} deep ${i}`,
+            orgType: "region" as const,
+            parentId,
+            isActive: true,
+          })
+          .returning({ id: schema.orgs.id });
+        const row = inserted[0];
+        if (!row) throw new Error("Failed to create deep chain org");
+        createdOrgIds.push(row.id);
+        chain.push(row.id);
+        parentId = row.id;
+      }
+      parentById = new Map(
+        (
+          await db
+            .select({ id: schema.orgs.id, parentId: schema.orgs.parentId })
+            .from(schema.orgs)
+        ).map((row) => [row.id, row.parentId]),
+      );
+      return chain;
+    };
+
+    beforeEach(() => {
+      mockLogError.mockClear();
+    });
+
+    it("grants from an ancestor at ORG_TREE_MAX_DEPTH and denies from one beyond it, like the single-org check and the reference", async () => {
+      // ORG_TREE_MAX_DEPTH + 2 orgs = ORG_TREE_MAX_DEPTH + 1 parent edges.
+      const chain = await createChain(ORG_TREE_MAX_DEPTH + 2);
+      const leaf = chain[chain.length - 1]!;
+      const atGuard = chain[1]!; // exactly ORG_TREE_MAX_DEPTH edges above the leaf
+      const beyondGuard = chain[0]!; // one edge further
+
+      const cases = [
+        { ancestor: atGuard, expected: true },
+        { ancestor: beyondGuard, expected: false },
+      ];
+      for (const { ancestor, expected } of cases) {
+        const session = makeSession(9100, [
+          { orgId: ancestor, orgName: "Deep", roleName: "editor" },
+        ]);
+        const [batched] = await checkHasRolesOnOrgs({
+          session,
+          checks: [{ orgId: leaf, roleName: "editor" }],
+          db,
+        });
+        expect(batched?.success).toBe(expected);
+        expect(batched).toEqual(referenceCheck(session, leaf, "editor"));
+        expect(
+          await checkHasRoleOnOrg({
+            session,
+            orgId: leaf,
+            db,
+            roleName: "editor",
+          }),
+        ).toEqual(batched);
+      }
+    });
+
+    it("logs the depth-limit error once per org that hits the guard in a batch", async () => {
+      const [chainA, chainB] = [
+        await createChain(ORG_TREE_MAX_DEPTH + 2),
+        await createChain(ORG_TREE_MAX_DEPTH + 2),
+      ];
+      const leafA = chainA[chainA.length - 1]!;
+      const leafB = chainB[chainB.length - 1]!;
+
+      await checkHasRolesOnOrgs({
+        session: sessions().noRoles,
+        checks: [
+          { orgId: leafA, roleName: "editor" },
+          { orgId: leafB, roleName: "editor" },
+          { orgId: leafA, roleName: "admin" },
+          { orgId: manyAoIds[0]!, roleName: "editor" },
+        ],
+        db,
+      });
+
+      const depthLogs = mockLogError.mock.calls.filter(
+        ([event, fields]) =>
+          event === "api.org_tree.depth_limit_reached" &&
+          (fields as { source?: string } | undefined)?.source === "role_check",
+      );
+      expect(depthLogs).toHaveLength(2);
+    });
+
+    it("splits a list beyond the bind-parameter limit into chunks without changing any decision", async () => {
+      // 65535 is Postgres' per-statement parameter cap; ids this large do not exist.
+      const ghostIds = Array.from(
+        { length: 70_000 },
+        (_, i) => 2_000_000_000 + i,
+      );
+      const session = sessions().territoryEditor;
+      const checks = [
+        ...ghostIds.slice(0, 35_000),
+        orgs.territoryBranch.ao.id,
+        orgs.directBranch.ao.id,
+        ...ghostIds.slice(35_000),
+      ].map((orgId) => ({ orgId, roleName: "editor" as const }));
+
+      const { db: counted, counter } = countingDb();
+      const batched = await checkHasRolesOnOrgs({
+        session,
+        checks,
+        db: counted,
+      });
+
+      expect(counter.executes).toBe(Math.ceil(checks.length / 10_000));
+      expect(batched).toHaveLength(checks.length);
+      expect(batched.filter((r) => r.success).map((r) => r.orgId)).toEqual([
+        orgs.territory.id,
+      ]);
+      expect(batched[35_000]).toEqual(
+        referenceCheck(session, orgs.territoryBranch.ao.id, "editor"),
+      );
+      expect(batched[35_001]?.success).toBe(false);
+      expect(batched[0]?.success).toBe(false);
     });
   });
 
