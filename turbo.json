@@ -2,10 +2,12 @@
   "$schema": "https://turborepo.org/schema.json",
   "globalDependencies": [
     "**/.env",
+    ".github/workflows/ci.yml",
     ".gitignore",
     ".nvmrc",
     ".prettierignore",
     ".python-version",
+    "apps/*/Dockerfile",
     "pyproject.toml",
     "uv.lock",
     "scripts/python-task.sh"
@@ -115,6 +117,14 @@
     },
     "test:characterization": {
       "dependsOn": ["^topo", "reset-test-db", "^reset-test-db", "test"],
+      "env": [
+        "CHAR_TEST_AUTH_ISSUER",
+        "CHAR_TEST_AUTH_PROVIDER_URL",
+        "CHAR_TEST_AUTH_CLIENT_ID",
+        "CHAR_TEST_AUTH_CLIENT_SECRET",
+        "CHAR_TEST_AUTH_USER_TOKEN",
+        "CHAR_TEST_AUTH_USER_CLIENT_ID"
+      ],
       "cache": false
     },
     "clean": {
