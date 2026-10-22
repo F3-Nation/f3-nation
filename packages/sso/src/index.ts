@@ -224,9 +224,17 @@ export class AuthClient {
     };
   }
 
-  /** Revokes an access or refresh token. Server-side only. */
+  /**
+   * Revokes an access or refresh token. Server-side only — sends
+   * `client_secret`, which Better Auth (auth3) requires on revoke (RFC 7009
+   * §2.1). The hand-rolled auth server ignores the client fields.
+   */
   async revokeToken(token: string): Promise<void> {
-    const body = new URLSearchParams({ token });
+    const body = new URLSearchParams({
+      token,
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+    });
 
     const res = await fetch(`${this.config.authServerUrl}/api/oauth/revoke`, {
       method: "POST",
