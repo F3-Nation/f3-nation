@@ -374,7 +374,7 @@ describe("POST with AUTH_USE_BETTER_AUTH on", () => {
     );
   });
 
-  it("leaves a Basic header with no secret alone", async () => {
+  it("leaves a Basic header with no secret alone, but keys limits and CORS on its client id", async () => {
     const basic = Buffer.from("public-client:").toString("base64");
     const req = formRequest(
       { grant_type: "authorization_code" },
@@ -388,6 +388,8 @@ describe("POST with AUTH_USE_BETTER_AUTH on", () => {
       dropCookies: true,
       dropAuthorization: false,
     });
+    expect(rateLimit).toHaveBeenCalledWith("token:public-client", 60, 60000);
+    expect(getCorsHeaders).toHaveBeenCalledWith(req, "public-client");
   });
 
   it("rate limits by the client_id in a Basic auth header", async () => {

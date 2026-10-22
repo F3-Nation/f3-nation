@@ -428,12 +428,39 @@ async function main() {
   }
 
   for (const row of toLink) {
-    await db.insert(betterAuthOauthClientResource).values({
-      id: crypto.randomUUID(),
-      clientId: row.clientId,
-      resourceId: resource,
-      createdAt: now,
+    // toLink was planned from the same snapshot as toStamp, so re-read the
+    // row's ownership under a lock and skip it if it is now pinned to a user
+    // or held by another referenceId (a failed stamp above, or a change since).
+    const linked = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({
+          referenceId: betterAuthOauthClient.referenceId,
+          userId: betterAuthOauthClient.userId,
+        })
+        .from(betterAuthOauthClient)
+        .where(eq(betterAuthOauthClient.clientId, row.clientId))
+        .for("update");
+      if (
+        !current ||
+        current.userId ||
+        current.referenceId !== F3_NATION_CLIENT_REFERENCE_ID
+      ) {
+        return false;
+      }
+      await tx.insert(betterAuthOauthClientResource).values({
+        id: crypto.randomUUID(),
+        clientId: row.clientId,
+        resourceId: resource,
+        createdAt: now,
+      });
+      return true;
     });
+    if (!linked) {
+      logWarn("auth.migrate_oauth_clients.resource_link_skipped", {
+        clientId: row.clientId,
+      });
+      continue;
+    }
     logInfo("auth.migrate_oauth_clients.resource_link_created", {
       clientId: row.clientId,
       resource,
@@ -451,7 +478,7 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   main().catch((err: unknown) => {
-    console.error(err);
+    logError("auth.migrate_oauth_clients.failed", {}, err);
     process.exit(1);
   });
 }
