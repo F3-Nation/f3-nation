@@ -233,6 +233,10 @@ export const WorkoutDetailsContent = ({
     orpc.event.byId.queryOptions({
       input: { id: selectedSeriesId ?? -1 },
       enabled: needsParentEventFallback,
+      // A failed fallback must degrade to the "workout unavailable" path via
+      // `isParentEventError`, not throw into global-error.tsx and replace the
+      // whole map (see the app-wide throwOnError in `~/orpc/query-client`).
+      throwOnError: false,
     }),
   );
 
