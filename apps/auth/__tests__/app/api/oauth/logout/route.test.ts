@@ -214,5 +214,29 @@ describe("GET /api/oauth/logout", () => {
       {},
       expect.any(Error),
     );
+    expect(deleteBetterAuthOAuthTokens).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a failed Better Auth token deletion once before signing out", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    const signOut = vi.fn().mockResolvedValue(new Response(null));
+    vi.mocked(getAuth).mockResolvedValue({ api: { signOut } } as never);
+    vi.mocked(getCurrentSession).mockResolvedValue({
+      user: { id: "42", email: null, name: null },
+    });
+    vi.mocked(deleteBetterAuthOAuthTokens)
+      .mockRejectedValueOnce(new Error("transient"))
+      .mockResolvedValueOnce(undefined);
+
+    const res = await GET(
+      makeRequest("https://auth.test.invalid/api/oauth/logout"),
+    );
+
+    expect(res.status).toBe(307);
+    expect(deleteBetterAuthOAuthTokens).toHaveBeenCalledTimes(2);
+    expect(
+      vi.mocked(deleteBetterAuthOAuthTokens).mock.invocationCallOrder[1],
+    ).toBeLessThan(signOut.mock.invocationCallOrder[0]!);
+    expect(logError).not.toHaveBeenCalled();
   });
 });

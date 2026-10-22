@@ -21,8 +21,16 @@ export async function revokeUserOAuthTokens(
   }
   if (!env.AUTH_USE_BETTER_AUTH) return {};
 
+  // One retry: once the caller signs the browser out, a retried logout has no
+  // session left to find these tokens by, so give a transient error a second
+  // chance first.
   try {
-    await deleteBetterAuthOAuthTokens(await getAuth(), userId);
+    const auth = await getAuth();
+    try {
+      await deleteBetterAuthOAuthTokens(auth, userId);
+    } catch {
+      await deleteBetterAuthOAuthTokens(auth, userId);
+    }
     return {};
   } catch (betterAuthError) {
     return { betterAuthError };
