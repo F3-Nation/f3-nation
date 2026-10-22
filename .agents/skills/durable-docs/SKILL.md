@@ -70,19 +70,23 @@ the file, or meaning that won't be true later.
 - **One-time instructions** — run-once scripts, "on staging run X then Y"
   written for a single upcoming change, "delete after backfill". See below.
 
-### Durable exceptions
+### Exceptions: content that stays
 
-Content that looks like the failures above can itself be a standing
-constraint; cutting it silently changes what the file guarantees. These stay:
+Not everything that looks transient belongs in an issue. Content the reader
+needs to act correctly — or whose removal would change what the file
+guarantees — stays:
 
 - **Dates the constraint depends on** — a deprecation deadline, an SLA
   window, an incident date an availability limit is measured from. The anchor
   is the "why"; keep it and cut only the narrative around it.
-- **Forward-looking obligations** — rollout gates, phase and roadmap
-  boundaries, exit criteria, "X must land before Y". They say what must be
-  true before the next step, which is a standing why in future tense. Never
-  delete one: if it names an issue or PR number, replace the number with the
-  condition it stands for and keep the obligation itself.
+- **Constraints in force now** — a pending rollout gate, exit criterion, or
+  "X must land before Y". Hiding one in an issue puts the constraint where
+  the reader of the file will never look, so state the condition itself in
+  present tense — never an issue number. A permanent constraint stays; an
+  expiring one (a phase gate) is cut once its phase ships, because after
+  that it is only narrative. A plan with no present constraint ("Phase 2
+  will add …") is not a constraint: that goes to an issue or milestone,
+  never the file.
 - **Records** — merged ADRs and their `Date`/`Author(s)` headers are
   append-only (see audit step 5); rewriting one falsifies the record.
 
@@ -95,6 +99,7 @@ has a body-shaped home:
 | ----------------------------------------------------- | ------------------------------------------------------------------------ |
 | What this particular change did and why               | PR body                                                                  |
 | One-time data fix / backfill script, run-once runbook | PR body that performs it; an issue body if no PR will carry it           |
+| Plan or roadmap for upcoming work                     | An **issue or milestone**, closed when the work ships                    |
 | We tried X and it failed — worth remembering          | An **issue that quotes the file path and symbol**, then closed as record |
 | Schema migration `.sql`                               | **Stays** — versioned schema history in `packages/db/drizzle/`           |
 | How to run migrations, ever                           | `docs/db-migrations.md` (standing process)                               |
@@ -179,10 +184,11 @@ without their say-so.
    `tmp-*`).
 
 4. **Rewrite each finding** to present-tense what + standing why, or delete
-   it outright when nothing durable is left — never when it is a
-   forward-looking obligation or a date-anchored constraint (see **Durable
-   exceptions**): restate those instead. Replace an issue/PR link with the
-   fact it was standing in for — never with another link.
+   it outright when nothing durable is left — never when it is a constraint
+   in force now or a date-anchored constraint (see **Exceptions: content
+   that stays**): restate those instead, and leave plans (no present
+   constraint) to an issue. Replace an issue/PR link with the fact it was
+   standing in for — never with another link.
 5. **Merged ADRs and `docs/specs/` are flag-only.**
    [`docs/adr/README.md`](../../../docs/adr/README.md) makes merged ADRs
    append-only records; rewriting one falsifies the record. Specs are the
