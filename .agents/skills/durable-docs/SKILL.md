@@ -1,6 +1,6 @@
 ---
 name: durable-docs
-description: Rules for documentation that still makes sense in three months — inline comments and markdown that say what something does and why it protects or prevents, never change history, GitHub issue/PR links, or one-time instructions. Use whenever writing or editing code comments or any markdown in this repo (docs/, READMEs, specs, .agents/skills, app AGENTS.md), whenever a PR touches comments or docs, or when asked to audit, clean up, or "make the docs less stale" — even if durability is never mentioned.
+description: Rules for documentation that still makes sense in three months — inline comments and markdown that say what something does and why it protects or prevents, never change history, GitHub issue/PR links, or one-time instructions. Use whenever writing or editing code comments or any markdown in this repo (docs/, READMEs, specs, .agents/skills, app AGENTS.md), or whenever a PR touches comments or docs — even if durability is never mentioned. Audit mode, which rewrites existing files in bulk, runs only when the user explicitly asks to audit or sweep existing docs; a casual "clean up" or "make the docs less stale" means apply these rules to the text at hand, not run an audit.
 ---
 
 # Durable docs and comments
@@ -18,6 +18,11 @@ or stops being true as the system changes, the text isn't durable.
 
 Three modes: **writing** new code, **reviewing** a PR, **auditing** what
 exists. The rules are the same in all three; only the last section differs.
+
+These rules govern text you write or touch. There is no repo-wide migration:
+loading this skill never implies rewriting existing files. Existing text
+changes either when normal work already has you editing it, or in **audit
+mode** below, which runs only on an explicit request.
 
 ## What durable text contains
 
@@ -63,6 +68,22 @@ the file, or meaning that won't be true later.
   thread". Anything the reader can't resolve from the file alone gets cut.
 - **One-time instructions** — run-once scripts, "on staging run X then Y"
   written for a single upcoming change, "delete after backfill". See below.
+
+### Durable exceptions
+
+Content that looks like the failures above can itself be a standing
+constraint; cutting it silently changes what the file guarantees. These stay:
+
+- **Dates the constraint depends on** — a deprecation deadline, an SLA
+  window, an incident date an availability limit is measured from. The anchor
+  is the "why"; keep it and cut only the narrative around it.
+- **Forward-looking obligations** — rollout gates, phase and roadmap
+  boundaries, exit criteria, "X must land before Y". They say what must be
+  true before the next step, which is a standing why in future tense. Never
+  delete one: if it names an issue or PR number, replace the number with the
+  condition it stands for and keep the obligation itself.
+- **Records** — merged ADRs and their `Date`/`Author(s)` headers are
+  append-only (see audit step 5); rewriting one falsifies the record.
 
 ## Transient content: PR and issue bodies, not the repo
 
@@ -110,45 +131,63 @@ When a PR adds or edits comments or markdown, review the text like code:
 
 ## Mode: periodic audit
 
-Rewrites happen **in place on a clean branch from `main`**; the person who
-asked creates the PR. Nothing is pushed and no issue is filed without their
-say-so.
+Rewrites happen **in place on a clean branch** off the base chosen in step 2;
+the person who asked creates the PR. Nothing is pushed and no issue is filed
+without their say-so.
 
 1. **Confirm scope** — which trees: `apps/`, `packages/`, `docs/`,
-   `.agents/`? Default to the paths they named; the whole repo only if they
-   asked for it.
-2. **Branch from a clean tree.** If `git status --porcelain` is non-empty,
-   **stop and ask** how they want to proceed (commit, stash, or a separate
-   worktree) — never disturb uncommitted work. Otherwise:
+   `.agents/`, root-level `README.md`/`AGENTS.md`? Default to the paths they
+   named; the whole repo only if they asked for it.
+2. **Pick the base with them, from a clean tree.** The audit should land on
+   the branch that will actually be reviewed and merged — default to their
+   current branch, and branch from `origin/main` only when they say main. If
+   `git status --porcelain` is non-empty, **stop and ask** how they want to
+   proceed (commit, stash, or a separate worktree) — never disturb
+   uncommitted work. Otherwise:
 
    ```bash
-   git fetch origin main && git switch -c chore/durable-docs-audit origin/main
+   git fetch origin && git switch -c chore/durable-docs-audit <base-branch>
    ```
 
-3. **Find failures.** Read the files in scope; seed the search with the smell
-   patterns below and add any you notice in passing. Matches are candidates,
-   not verdicts — read the context before changing anything.
+3. **Find failures, then show the list before touching anything.** Read the
+   files in scope; seed the search with the smell patterns below and add any
+   you notice in passing. Matches are candidates, not verdicts — read the
+   context before changing anything, and never rewrite a literal value
+   (hex colors and other literals can match the `#` pattern). Present the
+   findings as `file → line → why it fails` and rewrite only the files they
+   confirm; the rest go to the summary as-is.
 
    ```bash
-   grep -rn -E 'github\.com/[^ )]+/(pull|issues)/' --include='*.ts' --include='*.tsx' --include='*.md'
-   grep -rn -E '(^|[^a-zA-Z0-9_])#[0-9]{3,5}' apps packages docs .agents --include='*.ts' --include='*.md'
-   grep -rni -E 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' --include='*.ts' --include='*.tsx' --include='*.md'
+   grep -rn -E 'github\.com/[^ )]+/(pull|issues)/' --include='*.ts' --include='*.tsx' --include='*.md' --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.claude --exclude-dir=dist --exclude-dir=coverage .
+   grep -rn -E '(^|[^a-zA-Z0-9_])#[0-9]{3,5}\b' --include='*.ts' --include='*.tsx' --include='*.md' --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.claude --exclude-dir=dist --exclude-dir=coverage .
+   grep -rni -E 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' --include='*.ts' --include='*.tsx' --include='*.md' --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.claude --exclude-dir=dist --exclude-dir=coverage .
    ```
 
-   Also flag files whose names declare them one-offs (`*one-off*`,
-   `*onetime*`, `fix-*`, `tmp-*`).
+   Narrow `.` to the confirmed scope from step 1 when it is smaller than the
+   whole repo. Also flag files whose names declare them one-offs
+   (`*one-off*`, `*onetime*`, `fix-*`, `tmp-*`).
 
 4. **Rewrite each finding** to present-tense what + standing why, or delete
-   it outright when nothing durable is left. Replace an issue/PR link with the
+   it outright when nothing durable is left — never when it is a
+   forward-looking obligation or a date-anchored constraint (see **Durable
+   exceptions**): restate those instead. Replace an issue/PR link with the
    fact it was standing in for — never with another link.
-5. **Merged ADRs are exempt.** [`docs/adr/README.md`](../../../docs/adr/README.md)
-   makes them append-only records; rewriting one falsifies the record. List
-   their findings in the summary instead of editing. (New ADRs follow the
-   rules from their first line.)
+5. **Merged ADRs and `docs/specs/` are flag-only.**
+   [`docs/adr/README.md`](../../../docs/adr/README.md) makes merged ADRs
+   append-only records; rewriting one falsifies the record. Specs are the
+   source of truth for what a feature does and who may do it (see
+   [`AGENTS.md`](../../../AGENTS.md)), and a bulk rewrite cannot preserve
+   that behavioral contract — list findings for both in the summary instead
+   of editing. Spec phrasing gets fixed deliberately during normal feature
+   work (writing mode, step 3). (New ADRs follow the rules from their first
+   line.)
 6. **Collect excised narrative** — anything you removed that someone still
    needs — into the draft PR body (or an issue, if they prefer). That is the
    durable home for it.
-7. **Format, then commit.** Format only what you touched:
+7. **Check the diff, then format and commit.** Re-read `git diff` hunk by
+   hunk: every hunk that removes a why must show where its standing why went
+   — replacement text, an explicit "pure narrative, nothing durable" reason,
+   or it gets reverted. Then format only what you touched:
    `pnpm exec prettier --write <files>`. Commit per `AGENTS.md` Conventional
    Commits with the scope of the files touched (e.g.
    `docs(repo): make docs and comments durable`, `docs(auth): …`). Verify
@@ -163,6 +202,8 @@ say-so.
 - Dead _external_ links: outside-repo link rot is a different problem.
 - Generated or vendored files: `CHANGELOG.md`, `.claude/skills/` (copied from
   `.agents/skills/`), `node_modules/`.
+- This skill's own `SKILL.md` during an audit — the `#123`/`#1482` examples
+  are illustrations, and the audit greps will find them.
 - Merged ADRs, and the `Date`/`Author(s)` header of any ADR — records keep
   their identity.
 - Deleting `packages/db/drizzle/*.sql` migration history — never.
