@@ -76,7 +76,8 @@ The user can interrupt at any point; treat "stop" or "abort" as an exit, which m
    ended. Mention them in the plan with the cleanup command, and carry on: they hold their own
    ports, so they don't block this run. For the plan's count of runs still going, use `init`'s
    `ACTIVE_RUNS` minus one, since another run may start between the two commands. Never tear
-   down a row whose OWNER is `live` and isn't this session's run. If browser checks are likely,
+   down a row whose OWNER is `live` or `unknown` (the agent had no `CLAUDE_PID`) and isn't this
+   session's run. If browser checks are likely,
    note whether `.playwright-mcp/` exists in the session's working folder (see `reference.md`
    → **Browser checks**).
 2. **Checks.** Run all of them, then report **every** failure in one stop message:
@@ -85,9 +86,10 @@ The user can interrupt at any point; treat "stop" or "abort" as an exit, which m
    - Tools: `git`, `gh` (`gh auth status`), `jq`, `curl`, `openssl`, `docker`, and `lsof`
      (or `ss` on Linux). Install hints are in `reference.md`.
    - Docker running: `docker info` (fixes in `reference.md`).
-   - GitHub write access: `gh repo view --json viewerPermission --jq .viewerPermission`.
-     Anything but `ADMIN`, `MAINTAIN`, or `WRITE` isn't a stop: set `CAN_POST=false`, and the
-     plan says feedback is drafted but not posted.
+   - GitHub access, through the repo `github` skill's pre-flight:
+     `bash <repo root>/.agents/skills/github/scripts/gh-check.sh`. A failure here is a stop.
+     Then run it again with `--require-write`; if only that fails, it isn't a stop: set
+     `CAN_POST=false`, and the plan says feedback is drafted but not posted.
 
 ## Phase 1 — Create the sandbox
 
@@ -202,6 +204,11 @@ clean up).
    and seed. It checks that the applied migrations match the PR's migration list, because the
    migrate command's exit code isn't reliable, and copies only the user's Google Maps key over.
    The examples keep the error tracker and analytics off, so test traffic stays local.
+   - If `setup --at-base` stops because the merge base predates per-checkout ports, run plain
+     `setup` and note in the results that the migrations ran on a fresh database.
+   - `ENV_TEMPLATES_CHANGED=<files>`: the run's `.env` files came from the base's examples.
+     Add the keys the PR's versions add or change to the matching `.env` (keep the run's ports),
+     and say so in the results.
 2. `<S> serve $RUN <app> [dev|start]` for each app the plan needs, one at a time. It waits until
    the app listens and prints its URL. `<S> info $RUN` shows every port and whether each server
    is up.
@@ -278,8 +285,8 @@ it again.
 - **Inline comments:** only for problems traced to the diff. Use pr-review-inline's comment
   body format (dual audience, severity label) and its dedup rules (its Steps 5 and 8). Save them
   as `$RUN/comments.json`: an array of `{path, line, side, body}`, plus `start_line` and
-  `start_side` for multi-line spans. End each body with `<!-- pr-local-test -->`, **not**
-  pr-review-inline's `<!-- pr-review-inline -->` marker.
+  `start_side` for multi-line spans. Put `<!-- pr-local-test -->` on the line just above each
+  body's signature, **not** pr-review-inline's `<!-- pr-review-inline -->` marker.
 - **Review summary** (`$RUN/summary.md`): a short body with the **full results table**
   (mandatory, every time: the same rows and wording as the Results report, including the Notes
   column and the legend, never condensed or dropped) and any description mismatches. Omit the
@@ -292,8 +299,8 @@ it again.
   line out.
 - **Signature:** the one required by the repo's `github` skill (`.agents/skills/github/SKILL.md`:
   `_written by <model name>_` as the last line). It ends `summary.md` and every issue body.
-- **Hidden marker:** after the signature, the last line of `summary.md` is
-  `<!-- pr-local-test -->`. GitHub doesn't render it; triage tooling uses it to tell this
+- **Hidden marker:** the line just above the signature in `summary.md` is
+  `<!-- pr-local-test -->`, so the signature stays the last line. GitHub doesn't render it; triage tooling uses it to tell this
   skill's review apart from pr-review-inline's comments, which share the signature.
 
 **Older bugs become issues (drafted now, filed on "post"):** for each older bug in `notes.md`:
@@ -313,11 +320,17 @@ it again.
      `## For the coding agent`, which gives the root cause with file paths, the fix, exact
      reproduction steps, and how to verify. Don't hard-wrap lines; GitHub renders single
      newlines as line breaks. End with the signature.
-   - **Label:** `ai-audit`, if the repo has it (`gh label list --search ai-audit`).
+   - **Label:** `ai-audit`, if the repo has it (`gh label list --search ai-audit`). Record
+     the answer as `LABELS='["ai-audit"]'` or `LABELS='[]'` for Phase 6.
    - Save each body to `$RUN/issue-<k>.md`.
    - Put only claims you verified in the verify steps.
 
 ## Phase 6 — Post (only after "post")
+
+Run this phase's `gh` commands from `<repo root>`: `down --keep-drafts` has already removed
+`$RUN/wt`, and `gh` needs a checkout to find the repo. First run the write pre-flight,
+`bash <repo root>/.agents/skills/github/scripts/gh-check.sh --require-write`; if it fails, hand
+the user the drafted text instead of posting.
 
 Before posting, compare `gh pr view <N> --json headRefOid` with the run's `tested_sha`
 (`jq -r .tested_sha $RUN/state.json`). If the author has pushed since, say so in your reply; the
@@ -339,7 +352,8 @@ line is advice only. If `CAN_POST` is false, hand the user the drafted text inst
 On "post", also file each drafted issue:
 
 ```bash
-jq -n --arg title "<title>" --rawfile body "$RUN/issue-<k>.md" '{title:$title, body:$body, labels:["ai-audit"]}' \
+jq -n --arg title "<title>" --rawfile body "$RUN/issue-<k>.md" --argjson labels "$LABELS" \
+  '{title:$title, body:$body, labels:$labels}' \
   | gh api -X POST repos/{owner}/{repo}/issues --input - --jq '{number, html_url}'
 ```
 
@@ -356,7 +370,9 @@ issues only"). Link every filed issue in the final report.
      printf '%s\t%s\t%s\t%s\t%s\n' "{owner}/{repo}" "<N>" pr-local-test "$(jq -r .tested_sha $RUN/state.json)" \
      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$PR_TRIAGE_LEDGER"
    ```
-3. `<S> down $RUN`, which removes the last of the run's files.
+3. `<S> down $RUN`, which removes the last of the run's files. If it (or the earlier
+   `down --keep-drafts`) prints `DOCKER_SKIPPED`, tell the user to start Docker and run `down`
+   again; the run stays listed until its containers are gone.
 4. Clear browser leftovers (`reference.md` → **Browser checks**).
 
 Report one line each for servers, containers, worktree, and ports, from the `down` output (the
@@ -370,14 +386,14 @@ See `reference.md` → **Keep-running** and **Cleanup**.
 
 ## Common mistakes
 
-| Mistake                                                                               | Fix                                                                               |
-| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Using `localhost:3000`–`3005`, `8025`, or `/tmp/jar` from repo docs                   | Use this run's ports (`<S> info`) and `$RUN/jar/`                                 |
-| `docker exec f3-postgres …`, or `pnpm docker:up` / `local:setup` outside the worktree | Those are the user's; use `<S> psql` and `<S> setup`                              |
-| Starting a server with `pnpm --filter … dev &` or the harness's preview tool          | Use `<S> serve`; it uses the run's port and records the process group for cleanup |
-| Reading the PR description or commit messages before the diff                         | Everything you then test becomes the claim instead of the code                    |
-| `git diff origin/main..HEAD`                                                          | Diff against the merge base: `git -C "$RUN/wt" diff <MERGE_BASE> HEAD`            |
-| Plain `setup` for a PR with migrations                                                | `setup --at-base`, so the PR's migrations run on top of existing data             |
-| Testing in `next dev` when the change only shows in a build                           | `serve <app> start` with the needed env values in front                           |
-| Checking out another commit in the worktree to read old code                          | `git show <MERGE_BASE>:<path>`; moving the worktree moves the running apps        |
-| Tearing down another session's live run during cleanup                                | Only `gone` rows and this session's runs, unless the user names it                |
+| Mistake                                                                               | Fix                                                                                     |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Using `localhost:3000`–`3005`, `8025`, or `/tmp/jar` from repo docs                   | Use this run's ports (`<S> info`) and `$RUN/jar/`                                       |
+| `docker exec f3-postgres …`, or `pnpm docker:up` / `local:setup` outside the worktree | Those are the user's; use `<S> psql` and `<S> setup`                                    |
+| Starting a server with `pnpm --filter … dev &` or the harness's preview tool          | Use `<S> serve`; it uses the run's port and records the process group for cleanup       |
+| Reading the PR description or commit messages before the diff                         | Everything you then test becomes the claim instead of the code                          |
+| `git diff origin/main..HEAD`                                                          | Diff against the merge base: `git -C "$RUN/wt" diff <MERGE_BASE> HEAD`                  |
+| Plain `setup` for a PR with migrations                                                | `setup --at-base`, so the PR's migrations run on top of existing data                   |
+| Testing in `next dev` when the change only shows in a build                           | `serve <app> start` with the needed env values in front                                 |
+| Checking out another commit in the worktree to read old code                          | `git show <MERGE_BASE>:<path>`; moving the worktree moves the running apps              |
+| Tearing down another session's live run during cleanup                                | Only `gone` rows and this session's runs, unless the user names it; ask about `unknown` |

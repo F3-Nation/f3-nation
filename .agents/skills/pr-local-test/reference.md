@@ -1,6 +1,6 @@
 # Reference
 
-Look-ups for SKILL.md. `<S>` is `bash <skill folder>/scripts/prt.sh`; `$RUN` is the run folder.
+Look-ups for SKILL.md. `<S>` is `bash <repo root>/.agents/skills/pr-local-test/scripts/prt.sh`, with `<repo root>` the user's own checkout (never `$RUN/wt`); `$RUN` is the run folder.
 
 ## Platform
 
@@ -173,7 +173,10 @@ answers with a 308 redirect, which plain `curl` reports in place of the real res
 
 - Results say the apps are still up, with `<S> info` URLs.
 - **New commits:** `<S> update $RUN` fetches the PR's newest commits, stops the servers, moves
-  the worktree, reinstalls, and applies new migrations. If it prints
+  the worktree, reinstalls, and applies new migrations. For a fork PR it stops at
+  `NEEDS_APPROVAL <old> -> <new>` (exit code 6) before running anything: scan
+  `git -C "$RUN/wt" diff <old> <new>` with the `SKILL.md` Phase 2c checklist, wait for a new
+  "go, run it", then run `<S> update $RUN --approved`. If it prints
   `EXISTING_MIGRATIONS_CHANGED`, rebuild the database: `<S> down-db $RUN`, then `setup` (with
   `--at-base` if 2a called for it). Then restart the servers you need, re-run the checks
   touched by the new diff (`git -C "$RUN/wt" diff <old> <new>`), and produce fresh results and
@@ -187,5 +190,7 @@ For "/pr-local-test cleanup" or any request to clear leftovers: run `<S> list`, 
 - a named run-id: `<S> down /tmp/pr-local-test/<run-id>`
 - "all": tear down every row whose OWNER is `gone`, plus this session's own runs. For a row that
   is `live` in another session, list it and ask before touching it; another session is using it.
+  Ask about `unknown` rows too: the agent that made them had no `CLAUDE_PID`, so the helper
+  can't tell whether it's still running.
 
 Report what was removed using the `down` output.

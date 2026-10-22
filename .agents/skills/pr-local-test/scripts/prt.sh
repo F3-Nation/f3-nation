@@ -11,7 +11,7 @@
 #   bash prt.sh exec <run-dir> -- <cmd...>  run a command in the worktree with the run's env
 #   bash prt.sh psql <run-dir> [psql args]  psql into this run's database (stdin ok)
 #   bash prt.sh info <run-dir>              ports, URLs, server status
-#   bash prt.sh update <run-dir>            pull the PR's newest commits (keep-running)
+#   bash prt.sh update <run-dir> [--approved]  pull the PR's newest commits (keep-running)
 #   bash prt.sh down-db <run-dir>           delete this run's containers + data (then setup)
 #   bash prt.sh down <run-dir> [--keep-drafts]
 #   bash prt.sh list                        every run on this machine, with liveness
@@ -26,6 +26,13 @@ RUN_DIR_RE='^/tmp/pr-local-test/pr[0-9]+-[0-9a-f]{4}$'
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# A run's state.json decides what load sources and down deletes, so the root must be ours alone.
+check_root() {
+  [ -e "$ROOT" ] || mkdir -m 700 "$ROOT"
+  { [ ! -L "$ROOT" ] && [ -d "$ROOT" ] && [ -O "$ROOT" ]; } || die "$ROOT isn't a directory you own; remove it and retry"
+  chmod 700 "$ROOT"
+}
 
 listening() {
   if command -v lsof >/dev/null 2>&1; then
@@ -50,11 +57,14 @@ load() {
   RUN_DIR="${1:-}"
   RUN_DIR="${RUN_DIR%/}"
   [[ "$RUN_DIR" =~ $RUN_DIR_RE ]] || die "not a run dir: '$RUN_DIR'"
+  check_root
   [ -f "$RUN_DIR/state.json" ] || die "no state.json in $RUN_DIR"
   WT=$(st .wt)
   MAIN=$(st .main)
   PROJECT=$(st .compose_project)
   PATH="$(st .path_prefix):$PATH"
+  # dotenv doesn't override the environment, so an exported URL would beat the run's .env files.
+  unset DATABASE_URL TEST_DATABASE_URL
   set -a
   # shellcheck disable=SC1091
   . "$WT/.env"
@@ -140,8 +150,13 @@ cmd_init() {
   fi
   [ -n "$pnpm_dir" ] || { cleanup_refs; echo "PNPM_MISSING=1"; exit 3; }
 
-  # Port block: slot k owns 41000+20k .. +19. mkdir is the atomic claim.
+  # Port block: slot k owns 41000+20k .. +19. mkdir is the atomic claim. The run dir exists
+  # first, so `list` never mistakes a fresh claim for a stale one.
+  check_root
   mkdir -p "$SLOTS"
+  RUN_DIR="$ROOT/$run_id"
+  mkdir -p "$RUN_DIR/logs" "$RUN_DIR/evidence" "$RUN_DIR/keys" "$RUN_DIR/jar"
+  chmod 700 "$RUN_DIR/keys"
   local k=0 slot="" base e ok
   while [ $k -lt 20 ]; do
     if mkdir "$SLOTS/$k" 2>/dev/null; then
@@ -154,12 +169,9 @@ cmd_init() {
     fi
     k=$((k + 1))
   done
-  [ -n "$slot" ] || { cleanup_refs; die "no free port block (20 runs active, or ports 41000-41399 busy)"; }
+  [ -n "$slot" ] || { rm -rf "$RUN_DIR"; cleanup_refs; die "no free port block (20 runs active, or ports 41000-41399 busy)"; }
   base=$((41000 + slot * 20))
 
-  RUN_DIR="$ROOT/$run_id"
-  mkdir -p "$RUN_DIR/logs" "$RUN_DIR/evidence" "$RUN_DIR/keys" "$RUN_DIR/jar"
-  chmod 700 "$RUN_DIR/keys"
   git -C "$MAIN" worktree add -q --detach "$RUN_DIR/wt" "$pr_sha" >/dev/null 2>&1 \
     || { rm -rf "${SLOTS:?}/$slot" "$RUN_DIR"; cleanup_refs; die "git worktree add failed"; }
 
@@ -175,8 +187,9 @@ cmd_init() {
     ports=$(jq --arg k "${a%%:*}" --argjson v $((base + ${e##*:})) '. + {($k): $v}' <<<"$ports")
   done
 
-  local owner_pid="${CLAUDE_PID:-$PPID}" owner_cmd active
-  owner_cmd=$(ps -o command= -p "$owner_pid" 2>/dev/null | cut -c1-200 || true)
+  # Without CLAUDE_PID the caller is a throwaway shell, so the owner is unknown, not gone.
+  local owner_pid="${CLAUDE_PID:-}" owner_cmd="" active
+  [ -z "$owner_pid" ] || owner_cmd=$(ps -o command= -p "$owner_pid" 2>/dev/null | cut -c1-200 || true)
   active=$(find "$SLOTS" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
 
   jq -n \
@@ -215,7 +228,14 @@ pnpm_install() {
     || { tail -30 "$RUN_DIR/logs/install-$sha.log"; die "pnpm install failed at $sha"; }
 }
 
-# The migrate command can exit 0 on failure, so compare applied rows with the journal.
+# The worktree is disposable: edits the run itself made (uv.lock, coverage thresholds) are dropped.
+checkout_wt() {
+  local dirty; dirty=$(git -C "$WT" status --porcelain --untracked-files=no)
+  [ -z "$dirty" ] || echo "DISCARDED_LOCAL_CHANGES: $(printf '%s' "$dirty" | tr '\n' ' ')"
+  git -C "$WT" checkout -q -f --detach "$1"
+}
+
+# The exit code misses some migrator failures, so also compare applied rows with the journal.
 check_migrations() {
   local label="$1" log="$2" want table have
   want=$(jq '.entries | length' "$WT/packages/db/drizzle/meta/_journal.json")
@@ -237,20 +257,32 @@ local_setup() {
   check_migrations "$label" "$log"
 }
 
+migrate() {
+  local label="$1" log="$RUN_DIR/logs/migrate-$1.log"
+  (cd "$WT" && pnpm db:migrate:local) >"$log" 2>&1 \
+    || { tail -25 "$log"; die "pnpm db:migrate:local failed ($label) — see $log"; }
+  check_migrations "$label" "$log"
+}
+
 cmd_setup() {
   load "$1"; shift
   local at_base=false a
   for a in "$@"; do case "$a" in --at-base) at_base=true ;; *) die "unknown flag $a" ;; esac; done
   local pr_sha merge_base
   pr_sha=$(st .tested_sha); merge_base=$(st .merge_base)
+  if $at_base && ! git -C "$WT" cat-file -e "$merge_base:scripts/lib/local-ports.sh" 2>/dev/null; then
+    die "the PR's merge base predates per-checkout ports; use plain setup, or ask the author to update the branch"
+  fi
   if $at_base; then
     # Seed at the PR's starting point, then apply its migrations on top.
-    git -C "$WT" checkout -q --detach "$merge_base"
+    checkout_wt "$merge_base"
     pnpm_install; local_setup base
-    git -C "$WT" checkout -q --detach "$pr_sha"
+    checkout_wt "$pr_sha"
     pnpm_install
-    (cd "$WT" && pnpm db:migrate:local) >"$RUN_DIR/logs/migrate-pr.log" 2>&1 || true
-    check_migrations pr "$RUN_DIR/logs/migrate-pr.log"
+    migrate pr
+    # The app .env files came from the base's templates; re-running local:setup would re-seed.
+    local tpl; tpl=$(git -C "$WT" diff --name-only "$merge_base" "$pr_sha" -- '*.env.example' | tr '\n' ' ')
+    [ -z "$tpl" ] || echo "ENV_TEMPLATES_CHANGED=${tpl% }"
   else
     pnpm_install; local_setup pr
   fi
@@ -297,6 +329,7 @@ cmd_serve() {
   script=$(jq -r --arg m "$mode" '.scripts[$m] // empty' "$dir/package.json")
   [ -n "$script" ] || die "$pkg has no '$mode' script"
   log="$RUN_DIR/logs/$app.log"
+  ! listening "$p" || die "port $p is already in use (lsof -nP -iTCP:$p -sTCP:LISTEN); not starting $app"
   if [ "$mode" = dev ]; then
     # dev scripts read F3_<APP>_PORT (and the API reads PORT) from the run's env.
     cmd="pnpm run dev"
@@ -325,12 +358,18 @@ kill_group() {
   group_alive "$g" || return 0
   kill -TERM -- "-$g" 2>/dev/null || true
   while group_alive "$g" && [ $i -lt 10 ]; do sleep 1; i=$((i + 1)); done
-  group_alive "$g" && kill -KILL -- "-$g" 2>/dev/null || true
+  group_alive "$g" || return 0
+  kill -KILL -- "-$g" 2>/dev/null || true
+  i=0
+  while group_alive "$g" && [ $i -lt 5 ]; do sleep 1; i=$((i + 1)); done
+  ! group_alive "$g"
 }
 
 stop_app() {
   local app="$1" g
-  for g in $(jq -r --arg a "$app" '.servers[] | select(.app == $a) | .pgid' "$RUN_DIR/state.json"); do kill_group "$g"; done
+  for g in $(jq -r --arg a "$app" '.servers[] | select(.app == $a) | .pgid' "$RUN_DIR/state.json"); do
+    kill_group "$g" || die "$app (pgid $g) didn't exit"
+  done
   st_set --arg a "$app" '.servers |= map(select(.app != $a))'
 }
 
@@ -360,24 +399,38 @@ cmd_info() {
 }
 
 cmd_update() {
-  load "$1"
-  local ref old new apps a
-  ref=$(st .git_ref); old=$(st .tested_sha)
-  git -C "$MAIN" fetch -q origin "+refs/pull/$(st .pr)/head:$ref" || die "fetch failed"
+  load "$1"; shift
+  local approved=false a
+  for a in "$@"; do case "$a" in --approved) approved=true ;; *) die "unknown flag $a" ;; esac; done
+  local ref old new apps base_ref base_sha merge_base
+  ref=$(st .git_ref); old=$(st .tested_sha); base_ref=$(st .base_ref)
+  git -C "$MAIN" fetch -q origin "+refs/pull/$(st .pr)/head:$ref" "+refs/heads/$base_ref:$ref-base" || die "fetch failed"
   new=$(git -C "$MAIN" rev-parse "$ref")
   if [ "$new" = "$old" ]; then echo "NO_NEW_COMMITS ($old)"; return 0; fi
+  # A fork's new commits run nothing until the user has approved them.
+  if [ "$(st .cross_repo)" = true ] && ! $approved; then
+    echo "NEEDS_APPROVAL $old -> $new (scan git -C $WT diff $old $new, then run update --approved)"
+    exit 6
+  fi
+  base_sha=$(git -C "$MAIN" rev-parse "$ref-base")
+  merge_base=$(git -C "$MAIN" merge-base "$new" "$base_sha")
   apps=$(jq -r '[.servers[].app] | join(" ")' "$RUN_DIR/state.json")
   for a in $apps; do stop_app "$a"; done
-  git -C "$WT" checkout -q --detach "$new"
-  st_set --arg n "$new" '.tested_sha = $n | .pr_sha = $n'
+  checkout_wt "$new"
+  st_set --arg n "$new" --arg b "$base_sha" --arg m "$merge_base" \
+    '.tested_sha = $n | .pr_sha = $n | .base_sha = $b | .merge_base = $m'
   echo "UPDATED $old -> $new"
+  echo "MERGE_BASE=$merge_base"
   git -C "$WT" diff --stat "$old" "$new" | tail -1
   pnpm_install
-  if [ -n "$(git -C "$WT" diff --name-only --diff-filter=MDR "$old" "$new" -- packages/db/drizzle)" ]; then
+  # Appending a migration also rewrites the journal; only a change to earlier entries needs a rebuild.
+  local journal=packages/db/drizzle/meta/_journal.json
+  if [ -n "$(git -C "$WT" diff --name-only --diff-filter=MDR "$old" "$new" -- 'packages/db/drizzle/*.sql' 'packages/db/drizzle/meta/*_snapshot.json')" ] \
+    || ! jq -e --slurpfile o <(git -C "$WT" show "$old:$journal") \
+      '.entries[:($o[0].entries | length)] == $o[0].entries' "$WT/$journal" >/dev/null 2>&1; then
     echo "EXISTING_MIGRATIONS_CHANGED: rebuild the database with down-db, then setup"
-  elif [ -n "$(git -C "$WT" diff --name-only "$old" "$new" -- packages/db/drizzle)" ]; then
-    (cd "$WT" && pnpm db:migrate:local) >"$RUN_DIR/logs/migrate-update.log" 2>&1 || true
-    check_migrations update "$RUN_DIR/logs/migrate-update.log"
+  elif [ -n "$(git -C "$WT" diff --name-only "$old" "$new" -- "$journal")" ]; then
+    migrate update
   fi
   echo "STOPPED_SERVERS=$apps (restart the ones you need with serve)"
 }
@@ -397,6 +450,7 @@ docker_cleanup() {
 
 cmd_down_db() {
   load "$1"
+  docker info >/dev/null 2>&1 || die "Docker isn't running; start it, then run down-db again"
   docker_cleanup
   st_set '.db_mode = null'
   echo "DB_REMOVED (rebuild with setup)"
@@ -408,12 +462,13 @@ cmd_down() {
   [ "${2:-}" = "--keep-drafts" ] && keep_drafts=true
   RUN_DIR="${1%/}"
   [[ "$RUN_DIR" =~ $RUN_DIR_RE ]] || die "not a run dir: '$RUN_DIR'"
+  check_root
   [ -f "$RUN_DIR/state.json" ] || { rm -rf "$RUN_DIR"; echo "REMOVED (no state)"; return 0; }
   WT=$(st .wt); MAIN=$(st .main); PROJECT=$(st .compose_project)
 
   local g pid p left="" pat
   pat="pr-local-test/$(st .run_id)/wt/"
-  for g in $(jq -r '.servers[].pgid' "$RUN_DIR/state.json"); do kill_group "$g"; done
+  for g in $(jq -r '.servers[].pgid' "$RUN_DIR/state.json"); do kill_group "$g" || true; done
   # Safety net: anything still running from this run's worktree (path is unique).
   for pid in $(pgrep -f "$pat" 2>/dev/null || true); do
     case "$(ps -o command= -p "$pid" 2>/dev/null)" in *"$pat"*) kill -TERM "$pid" 2>/dev/null || true ;; esac
@@ -429,8 +484,14 @@ cmd_down() {
     echo "SERVERS_STOPPED"
   fi
 
-  docker_cleanup
-  echo "DOCKER_REMOVED project=$PROJECT remaining=$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" | wc -l | tr -d ' ')"
+  local docker_ok=true
+  if docker info >/dev/null 2>&1; then
+    docker_cleanup
+    echo "DOCKER_REMOVED project=$PROJECT remaining=$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" | wc -l | tr -d ' ')"
+  else
+    docker_ok=false
+    echo "DOCKER_SKIPPED project=$PROJECT (Docker isn't running; start it and run down again)"
+  fi
 
   if [ -e "$MAIN/.git" ]; then
     git -C "$MAIN" worktree remove --force "$WT" 2>/dev/null || true
@@ -448,6 +509,12 @@ cmd_down() {
     echo "PORTS_RELEASED block=$((41000 + slot * 20))"
   fi
 
+  # Keep the run listed so a second down can remove its containers and volumes.
+  if ! $docker_ok; then
+    st_set '.servers = [] | .phase = "docker_pending"'
+    exit 1
+  fi
+
   if $keep_drafts; then
     rm -rf "$RUN_DIR/logs" "$RUN_DIR/keys" "$RUN_DIR/jar"
     st_set '.servers = [] | .phase = "torn_down"'
@@ -462,6 +529,7 @@ cmd_down() {
 # --------------------------------------------------------------------------- list
 cmd_list() {
   local d s owner alive servers containers
+  check_root
   mkdir -p "$SLOTS"
   for s in "$SLOTS"/*; do
     [ -d "$s" ] || continue
@@ -469,15 +537,18 @@ cmd_list() {
       [ -d "$ROOT/$(cat "$s/run")" ] || rm -rf "$s"
     elif [ -n "$(find "$s" -maxdepth 0 -mmin +5)" ]; then rm -rf "$s"; fi
   done
-  printf '%-14s %-6s %-11s %-5s %-6s %-8s %-10s %s\n' RUN PR PHASE KEEP OWNER SERVERS CONTAINERS REPO
+  printf '%-14s %-6s %-14s %-5s %-8s %-8s %-10s %s\n' RUN PR PHASE KEEP OWNER SERVERS CONTAINERS REPO
   for d in "$ROOT"/pr*-*; do
     [ -f "$d/state.json" ] || continue
     owner=$(jq -r .owner_pid "$d/state.json")
-    if kill -0 "$owner" 2>/dev/null && [ "$(ps -o command= -p "$owner" | cut -c1-200)" = "$(jq -r .owner_cmd "$d/state.json")" ]; then alive=live; else alive=gone; fi
+    if [ -z "$owner" ]; then alive=unknown
+    elif kill -0 "$owner" 2>/dev/null && [ "$(ps -o command= -p "$owner" | cut -c1-200)" = "$(jq -r .owner_cmd "$d/state.json")" ]; then alive=live
+    else alive=gone; fi
     servers=0
     for s in $(jq -r '.servers[].pgid' "$d/state.json"); do group_alive "$s" && servers=$((servers + 1)); done
-    containers=$(docker ps -q --filter "label=com.docker.compose.project=$(jq -r .compose_project "$d/state.json")" 2>/dev/null | wc -l | tr -d ' ')
-    printf '%-14s %-6s %-11s %-5s %-6s %-8s %-10s %s\n' "$(jq -r .run_id "$d/state.json")" "#$(jq -r .pr "$d/state.json")" \
+    containers=$(docker ps -q --filter "label=com.docker.compose.project=$(jq -r .compose_project "$d/state.json")" 2>/dev/null | wc -l | tr -d ' ') \
+      || containers='?'
+    printf '%-14s %-6s %-14s %-5s %-8s %-8s %-10s %s\n' "$(jq -r .run_id "$d/state.json")" "#$(jq -r .pr "$d/state.json")" \
       "$(jq -r .phase "$d/state.json")" "$(jq -r .keep "$d/state.json")" "$alive" "$servers" "$containers" "$(jq -r .main "$d/state.json")"
   done
 }

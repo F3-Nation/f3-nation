@@ -32,6 +32,8 @@ git diff [BASE_SHA]..[HEAD_SHA]
 - Read the code around each change (callers, tests, types), not only the hunks.
 - Only report what you verified in the code. Say "unverified" when a claim depends on
   something you couldn't check (runtime behavior, a library's semantics).
+- If a concern is about code outside this diff, or about a requirement you can't evaluate,
+  don't report it as an issue; list it under "Declined to judge" with one line on why.
 
 ## What to check, in priority order
 1. Correctness: logic errors, edge cases (empty, null, zero, duplicates, ordering), broken
@@ -61,6 +63,9 @@ Likely wrong or risky: missing error handling, test gaps on risky paths, contrac
 Clarity, small improvements.
 
 For each issue: file:line, what's wrong, why it matters, how to fix.
+
+### Declined to judge
+One line each: what you set aside and why (pre-existing, outside the range, unverifiable).
 
 ### Assessment
 Ready to merge? Yes | No | With fixes, plus one or two sentences of reasoning.
