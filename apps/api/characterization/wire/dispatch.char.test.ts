@@ -46,6 +46,7 @@ describe("handler dispatch", () => {
   it.each([
     ["f3-me", Client.F3_ME, "10.90.1.1"],
     ["orpc-ssg", Client.ORPC_SSG, "10.90.1.2"],
+    ["f3-region-pages", Client.F3_REGION_PAGES, "10.90.1.3"],
   ])("routes %s to the RPC handler", async (_label, clientHeader, clientIp) => {
     // Reality diverges from this plan's prediction: a bare REST-shaped GET
     // DOES resolve at the RPC handler — RPCHandler matches on the router KEY
@@ -66,8 +67,8 @@ describe("handler dispatch", () => {
       }),
     );
     expect(res.status).toBe(200);
-    // Asserted against the SAME golden the `orpc` case pins above: all three
-    // Client values must produce the byte-identical RPC envelope, `meta`
+    // Asserted against the SAME golden the `orpc` case pins above: every
+    // Client value must produce the byte-identical RPC envelope, `meta`
     // type-preservation table included.
     await expect(
       stableStringify(

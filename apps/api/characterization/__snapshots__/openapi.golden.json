@@ -15563,6 +15563,544 @@
         ]
       }
     },
+    "/v1/region-pages/region": {
+      "get": {
+        "description": "Look up an active region by its slug and return it with its public workouts. Returns null when no active region has that slug.",
+        "operationId": "regionPages.region",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "allowEmptyValue": true,
+            "allowReserved": true,
+            "in": "query",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "region": {
+                          "properties": {
+                            "city": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "City of the most common workout zip"
+                            },
+                            "country": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "email": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "facebook": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "id": {
+                              "description": "Region org ID",
+                              "type": "string"
+                            },
+                            "image": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "description": "Region logo URL"
+                            },
+                            "instagram": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "latitude": {
+                              "description": "Map center latitude",
+                              "type": "number"
+                            },
+                            "longitude": {
+                              "description": "Map center longitude",
+                              "type": "number"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "slug": {
+                              "description": "URL slug (kebab-case of the name)",
+                              "type": "string"
+                            },
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "twitter": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "website": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "workoutCount": {
+                              "description": "Public workouts in the region",
+                              "type": "number"
+                            },
+                            "zip": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "zoom": {
+                              "description": "Map zoom that frames every workout",
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "slug",
+                            "description",
+                            "website",
+                            "image",
+                            "email",
+                            "facebook",
+                            "twitter",
+                            "instagram",
+                            "city",
+                            "state",
+                            "zip",
+                            "country",
+                            "latitude",
+                            "longitude",
+                            "zoom",
+                            "workoutCount"
+                          ],
+                          "type": "object"
+                        },
+                        "workouts": {
+                          "items": {
+                            "properties": {
+                              "city": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "country": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "group": {
+                                "description": "Day of week (lowercase)",
+                                "type": "string"
+                              },
+                              "id": {
+                                "description": "Event (series) ID",
+                                "type": "string"
+                              },
+                              "latitude": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "location": {
+                                "description": "Formatted street address",
+                                "type": "string"
+                              },
+                              "longitude": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "name": {
+                                "description": "Workout name",
+                                "type": "string"
+                              },
+                              "notes": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Event description"
+                              },
+                              "regionId": {
+                                "description": "Region org ID",
+                                "type": "string"
+                              },
+                              "state": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "time": {
+                                "description": "Time range, e.g. \"5:30 AM - 6:15 AM\"",
+                                "type": "string"
+                              },
+                              "type": {
+                                "description": "Primary event type",
+                                "type": "string"
+                              },
+                              "types": {
+                                "description": "All event types",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "zip": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "regionId",
+                              "name",
+                              "time",
+                              "type",
+                              "types",
+                              "group",
+                              "notes",
+                              "latitude",
+                              "longitude",
+                              "location",
+                              "city",
+                              "state",
+                              "zip",
+                              "country"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "region",
+                        "workouts"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Get one region and its workouts",
+        "tags": [
+          "region-pages"
+        ]
+      }
+    },
+    "/v1/region-pages/regions": {
+      "get": {
+        "description": "All active regions with their public workout count and an area (city/state and map center) derived from their workouts. Ordered by name.",
+        "operationId": "regionPages.regions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "properties": {
+                      "city": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "City of the most common workout zip"
+                      },
+                      "country": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "description": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "email": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "facebook": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "id": {
+                        "description": "Region org ID",
+                        "type": "string"
+                      },
+                      "image": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Region logo URL"
+                      },
+                      "instagram": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "latitude": {
+                        "description": "Map center latitude",
+                        "type": "number"
+                      },
+                      "longitude": {
+                        "description": "Map center longitude",
+                        "type": "number"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "slug": {
+                        "description": "URL slug (kebab-case of the name)",
+                        "type": "string"
+                      },
+                      "state": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "twitter": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "website": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "workoutCount": {
+                        "description": "Public workouts in the region",
+                        "type": "number"
+                      },
+                      "zip": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "zoom": {
+                        "description": "Map zoom that frames every workout",
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "slug",
+                      "description",
+                      "website",
+                      "image",
+                      "email",
+                      "facebook",
+                      "twitter",
+                      "instagram",
+                      "city",
+                      "state",
+                      "zip",
+                      "country",
+                      "latitude",
+                      "longitude",
+                      "zoom",
+                      "workoutCount"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List regions for the region directory",
+        "tags": [
+          "region-pages"
+        ]
+      }
+    },
     "/v1/request": {
       "get": {
         "description": "Get a paginated list of map change requests with optional filtering and sorting. Limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",

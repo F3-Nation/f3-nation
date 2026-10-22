@@ -148,25 +148,27 @@ describe("handleRequest", () => {
   });
 
   describe("oRPC client requests use the RPC handler", () => {
-    it.each([Client.ORPC, Client.ORPC_SSG, Client.F3_ME])(
-      "routes the %s client header to the RPC handler",
-      async (client) => {
-        const rpcResponse = new Response("rpc-ok");
-        rpcHandle.mockResolvedValue({ response: rpcResponse });
-        const { handleRequest } = await importHandler();
+    it.each([
+      Client.ORPC,
+      Client.ORPC_SSG,
+      Client.F3_ME,
+      Client.F3_REGION_PAGES,
+    ])("routes the %s client header to the RPC handler", async (client) => {
+      const rpcResponse = new Response("rpc-ok");
+      rpcHandle.mockResolvedValue({ response: rpcResponse });
+      const { handleRequest } = await importHandler();
 
-        const response = await handleRequest(
-          new Request("https://api.example.com/v1/ping", {
-            method: "POST",
-            headers: { [Header.Client]: client },
-          }),
-        );
+      const response = await handleRequest(
+        new Request("https://api.example.com/v1/ping", {
+          method: "POST",
+          headers: { [Header.Client]: client },
+        }),
+      );
 
-        expect(rpcHandle).toHaveBeenCalledTimes(1);
-        expect(openApiHandle).not.toHaveBeenCalled();
-        expect(response).toBe(rpcResponse);
-      },
-    );
+      expect(rpcHandle).toHaveBeenCalledTimes(1);
+      expect(openApiHandle).not.toHaveBeenCalled();
+      expect(response).toBe(rpcResponse);
+    });
 
     it("returns 404 when the RPC handler produces no response", async () => {
       rpcHandle.mockResolvedValue({ response: undefined });
