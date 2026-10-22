@@ -5,6 +5,7 @@
   "apps/homepage": "1.8.0",
   "apps/map": "7.8.0",
   "apps/me": "2.3.0",
+  "apps/region-pages": "0.1.0",
   "apps/slackbot": "2.9.0",
   "apps/analytics": "1.1.0",
   "packages/api": "0.14.0",

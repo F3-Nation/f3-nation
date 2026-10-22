@@ -11,6 +11,7 @@ export default {
         "homepage",
         "map",
         "me",
+        "region-pages",
         "slackbot",
         "analytics",
 
