@@ -40,6 +40,7 @@ const token = (overrides: Partial<JWT> = {}): JWT =>
     email: "pax@example.com",
     name: "Pax",
     roles: [EDITOR],
+    rolesVersion: 1,
     ...overrides,
   }) as JWT;
 
@@ -84,7 +85,7 @@ describe("jwt callback on trigger=update", () => {
     expect(getUser).toHaveBeenCalledWith(7);
   });
 
-  it("drops all roles when the user no longer exists", async () => {
+  it("signs out when the user no longer exists", async () => {
     getUser.mockResolvedValue(null);
     const jwt = await loadJwtCallback();
 
@@ -94,10 +95,10 @@ describe("jwt callback on trigger=update", () => {
       session: { roles: [FORGED_ADMIN] },
     });
 
-    expect(result?.roles).toEqual([]);
+    expect(result).toBeNull();
   });
 
-  it("drops all roles without a lookup when the token has no usable id", async () => {
+  it("signs out without a lookup when the token has no usable id", async () => {
     const jwt = await loadJwtCallback();
 
     const result = await jwt({
@@ -106,12 +107,12 @@ describe("jwt callback on trigger=update", () => {
       session: { roles: [FORGED_ADMIN] },
     });
 
-    expect(result?.roles).toEqual([]);
+    expect(result).toBeNull();
     expect(getUser).not.toHaveBeenCalled();
   });
 
   it.each(["not-a-number", "7.5", ""])(
-    "drops all roles without a lookup when the token id is %j",
+    "signs out without a lookup when the token id is %j",
     async (id) => {
       const jwt = await loadJwtCallback();
 
@@ -121,7 +122,7 @@ describe("jwt callback on trigger=update", () => {
         session: { roles: [FORGED_ADMIN] },
       });
 
-      expect(result?.roles).toEqual([]);
+      expect(result).toBeNull();
       expect(getUser).not.toHaveBeenCalled();
     },
   );
@@ -150,5 +151,49 @@ describe("jwt callback on trigger=update", () => {
 
     expect(result?.roles).toEqual([EDITOR]);
     expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it("stamps the roles marker on sign-in", async () => {
+    const jwt = await loadJwtCallback();
+
+    const result = await jwt({
+      token: token({ rolesVersion: undefined }),
+      user: { id: 7, email: "pax@example.com", name: "Pax", roles: [EDITOR] },
+      trigger: "signIn",
+    });
+
+    expect(result?.rolesVersion).toBe(1);
+    expect(result?.roles).toEqual([EDITOR]);
+  });
+});
+
+// Tokens minted before the fix carry no marker and may hold forged roles.
+describe("jwt callback on a pre-marker token", () => {
+  beforeEach(() => {
+    getUser.mockReset();
+  });
+
+  it("replaces embedded roles with the database's on a plain read", async () => {
+    getUser.mockResolvedValue({ id: 7, roles: [EDITOR] });
+    const jwt = await loadJwtCallback();
+
+    const result = await jwt({
+      token: token({ roles: [FORGED_ADMIN], rolesVersion: undefined }),
+    });
+
+    expect(getUser).toHaveBeenCalledWith(7);
+    expect(result?.roles).toEqual([EDITOR]);
+    expect(result?.rolesVersion).toBe(1);
+  });
+
+  it("signs out on a plain read when the user no longer exists", async () => {
+    getUser.mockResolvedValue(null);
+    const jwt = await loadJwtCallback();
+
+    const result = await jwt({
+      token: token({ roles: [FORGED_ADMIN], rolesVersion: undefined }),
+    });
+
+    expect(result).toBeNull();
   });
 });

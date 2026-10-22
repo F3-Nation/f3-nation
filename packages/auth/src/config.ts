@@ -163,6 +163,9 @@ if (isDevModeSignInAllowed()) {
 
 const adapter = MDPGDrizzleAdapter(db);
 
+/** Marks tokens whose roles came from the database (sign-in or refresh). */
+const ROLES_VERSION = 1;
+
 export const authConfig: NextAuthConfig = {
   // Must cast since we use number for user ids
   // And next-auth expects string for user ids
@@ -223,14 +226,16 @@ export const authConfig: NextAuthConfig = {
         token.email = user.email ?? undefined;
         token.name = user.name;
         token.roles = user.roles;
+        token.rolesVersion = ROLES_VERSION;
       }
 
-      if (trigger === "update") {
+      // Tokens without the marker predate the server-side role refresh (#436)
+      // and may carry forged roles, so they must not keep their embedded roles.
+      if (trigger === "update" || token.rolesVersion !== ROLES_VERSION) {
         // Re-read roles from the database for the token's own user. A DB error
-        // (or an adapter without getUser) throws; on the map app's own
-        // /api/auth route @auth/core then clears the session cookie (fail
-        // closed). apps/api only reads sessions via GET (getSessionFromHeaders),
-        // so this branch never runs there and the guarantee does not apply.
+        // (or an adapter without getUser) throws, and @auth/core then clears
+        // the session cookie (fail closed). Plain GET reads (including apps/api's
+        // getSessionFromHeaders) only reach this for pre-marker tokens.
         if (!adapter.getUser) {
           throw new Error("Auth adapter must implement getUser");
         }
@@ -240,7 +245,11 @@ export const authConfig: NextAuthConfig = {
           Number.isInteger(userId) && userId > 0
             ? await adapter.getUser(userId)
             : null;
-        token.roles = dbUser?.roles ?? [];
+        // A missing user is signed out, like the DB-error path above;
+        // @auth/core treats a null token as signed out and clears the cookie.
+        if (!dbUser) return null;
+        token.roles = dbUser.roles;
+        token.rolesVersion = ROLES_VERSION;
       }
 
       return token;
