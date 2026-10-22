@@ -161,11 +161,13 @@ if (isDevModeSignInAllowed()) {
   );
 }
 
+const adapter = MDPGDrizzleAdapter(db);
+
 export const authConfig: NextAuthConfig = {
   // Must cast since we use number for user ids
   // And next-auth expects string for user ids
   // And it is a nightmare (impossible?) to overwrite the type
-  adapter: MDPGDrizzleAdapter(db) as Adapter,
+  adapter: adapter as Adapter,
   session: { strategy: "jwt" },
   // Needed to run on cloud build docker deployment (basePath and trustHost)
   // https://github.com/nextauthjs/next-auth/issues/9819#issuecomment-1912903196
@@ -211,7 +213,10 @@ export const authConfig: NextAuthConfig = {
   },
   providers,
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
+    // `session` is deliberately not destructured: on `trigger === "update"` it
+    // is the body of a POST to /api/auth/session, which any signed-in user can
+    // send with whatever roles they like. Nothing in it may reach the token.
+    async jwt({ token, user, trigger }) {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth passes `user` only on sign-in, despite its type
       if (user) {
         token.id = user.id;
@@ -220,12 +225,17 @@ export const authConfig: NextAuthConfig = {
         token.roles = user.roles;
       }
 
-      if (trigger === "update" && session && "roles" in session) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-        token.roles = session.roles;
+      if (trigger === "update") {
+        // Re-read roles from the database for the token's own user. A DB error
+        // propagates; @auth/core then clears the session cookie (fail closed).
+        const userId = Number(token.id);
+        const dbUser = Number.isInteger(userId)
+          ? await adapter.getUser?.(userId)
+          : null;
+        token.roles = dbUser?.roles ?? [];
       }
 
-      return Promise.resolve(token);
+      return token;
     },
     async session({ session, token }) {
       const result = {
