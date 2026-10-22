@@ -38,15 +38,15 @@ describe.runIf(target.inProcess)("rate limiting", () => {
     expect(res.status).toBe(200);
   });
 
-  it("keys off the FIRST IP in an x-forwarded-for chain, not a later hop", async () => {
+  it("keys off the LAST x-forwarded-for hop (the one Cloud Run appended), not caller-set ones", async () => {
     // Reusing the exhausted IP discriminates which position getClientIP reads:
-    // leading, it must inherit that counter; trailing, it must be ignored in
-    // favor of the fresh leading address. All-fresh addresses would pass
-    // regardless of which position the limiter picked.
-    const leading = await ping(`${EXHAUSTED}, 10.0.0.1, 10.0.0.2`);
-    expect(leading.status).toBe(429);
+    // trailing, it must inherit that counter; leading, it is caller-forgeable
+    // and must be ignored in favor of the fresh trailing address. All-fresh
+    // addresses would pass regardless of which position the limiter picked.
+    const trailing = await ping(`10.0.0.1, 10.0.0.2, ${EXHAUSTED}`);
+    expect(trailing.status).toBe(429);
 
-    const trailing = await ping(`10.70.3.1, ${EXHAUSTED}, 10.0.0.2`);
-    expect(trailing.status).toBe(200);
+    const leading = await ping(`${EXHAUSTED}, 10.0.0.2, 10.70.3.1`);
+    expect(leading.status).toBe(200);
   });
 });
