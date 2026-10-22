@@ -1,10 +1,11 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { createORPCClient } from "@orpc/client";
+import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { RouterClient } from "@orpc/server";
 import type { router } from "@acme/api";
+import { isUpstreamFailureResponse } from "@acme/shared/app/api-availability";
 import { Client, Header } from "@acme/shared/common/enums";
 import { ACCESS_TOKEN_COOKIE_NAME } from "@/lib/auth/constants";
 import { logError, logWarn } from "@/lib/logging";
@@ -71,6 +72,16 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
               response.headers.get("x-request-id") ??
               response.headers.get("x-cloud-trace-context") ??
               undefined,
+          });
+        }
+
+        // A 5xx page from a proxy or load balancer (not a JSON oRPC error)
+        // would otherwise surface as a body-parse error with its status lost,
+        // and be mistaken for a bug rather than an outage.
+        if (isUpstreamFailureResponse(response)) {
+          await response.body?.cancel();
+          throw new ORPCError("SERVICE_UNAVAILABLE", {
+            status: response.status,
           });
         }
 
