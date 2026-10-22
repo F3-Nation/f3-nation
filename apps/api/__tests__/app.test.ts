@@ -247,6 +247,9 @@ describe("app", () => {
       expectSecurityHeaders(await app.fetch(new Request(url)));
     });
 
+    // Guards the 500 path: Hono's compose catches the throw at the dispatch
+    // level and runs onError, so the security middleware's post-`next()` code
+    // still runs. See the comment above the middleware in src/app.ts.
     it("is set on an unhandled-error 500", async () => {
       handleRequest.mockImplementationOnce(() => {
         throw new Error("boom");

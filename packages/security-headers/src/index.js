@@ -13,7 +13,9 @@
 
 /**
  * One year, no `includeSubDomains`, no `preload`: both are hard to undo and the
- * f3nation.com subdomains are not all owned by these apps.
+ * f3nation.com subdomains are not all owned by these apps. Every origin that
+ * sends this must stay HTTPS-only (Cloud Run terminates TLS today); a one-year
+ * max-age is hard to take back if a plain-HTTP listener is ever added.
  */
 export const HSTS_VALUE = "max-age=31536000";
 
@@ -38,6 +40,8 @@ export function securityHeaders({ frame, geolocation = false }) {
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
     {
       key: "Permissions-Policy",
+      // `usb=()` only gates the WebUSB API. WebAuthn/passkeys are a separate
+      // feature and are unaffected (the auth app has no passkey flow today).
       value: [
         "camera=()",
         "microphone=()",

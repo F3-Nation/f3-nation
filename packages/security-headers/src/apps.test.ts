@@ -5,9 +5,10 @@
 // apps/homepage is deliberately absent: it is a static export (`output:
 // "export"`) served from GitHub Pages, where Next's `headers()` does not apply
 // and the host controls the response headers.
+import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 interface Header {
   key: string;
@@ -26,9 +27,32 @@ const APPS = [
   { name: "map", file: "next.config.js", embeddable: true },
 ] as const;
 
+// Apps with no Next config to check here: analytics and slackbot are Python,
+// homepage is a static export (see the top of this file), and the Hono API's
+// middleware is tested in apps/api/__tests__/app.test.ts.
+const NOT_NEXT_APPS = ["analytics", "api", "homepage", "slackbot"];
+
+const previousSkipEnvValidation = process.env.SKIP_ENV_VALIDATION;
 beforeAll(() => {
   // admin/map validate their env at import time.
   process.env.SKIP_ENV_VALIDATION = "1";
+});
+afterAll(() => {
+  if (previousSkipEnvValidation === undefined) {
+    delete process.env.SKIP_ENV_VALIDATION;
+  } else {
+    process.env.SKIP_ENV_VALIDATION = previousSkipEnvValidation;
+  }
+});
+
+it("covers every app directory, so a new app cannot ship without a header check", () => {
+  const appsDir = fileURLToPath(new URL("../../../apps", import.meta.url));
+  const dirs = readdirSync(appsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => !NOT_NEXT_APPS.includes(name))
+    .sort();
+  expect(dirs).toEqual(APPS.map((app) => app.name).sort());
 });
 
 describe.each(APPS)("apps/$name next config", ({ name, file, embeddable }) => {
