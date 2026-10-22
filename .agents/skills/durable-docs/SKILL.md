@@ -165,7 +165,8 @@ without their say-so.
    Python, shell, YAML, JSON, and root-level docs included — so no source or
    doc format escapes the scan and untracked build output is never searched;
    the pathspecs exclude generated history (`CHANGELOG.md`), the lockfile,
-   and `*.sql` migration history, all already out of scope. Matches are
+   and the `packages/db/drizzle/` migration history — all already out of
+   scope; every other tracked SQL file is searched. Matches are
    candidates, not verdicts — read the context before changing anything, and
    never rewrite a literal value (hex colors, in-repo anchor links, and
    other literals can match the `#` pattern). Present the findings as
@@ -173,9 +174,9 @@ without their say-so.
    rest go to the summary as-is.
 
    ```bash
-   git grep -nE 'github\.com/[^ )]+/(pull|issues)/' -- ':(exclude)*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
-   git grep -nE '(^|[^a-zA-Z0-9_])#[0-9]+\b' -- ':(exclude)*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
-   git grep -niE 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' -- ':(exclude)*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   git grep -nE 'github\.com/[^ )]+/(pull|issues)/' -- ':(exclude)packages/db/drizzle/*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   git grep -nE '(^|[^a-zA-Z0-9_])#[0-9]+\b' -- ':(exclude)packages/db/drizzle/*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   git grep -niE 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' -- ':(exclude)packages/db/drizzle/*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
    ```
 
    Narrow to the confirmed scope from step 1 by appending its paths (e.g.
