@@ -1,5 +1,8 @@
 import { requireAuth } from "@/lib/auth/server";
 import { getMyProfile, getRegions, isNotFoundApiError } from "@/lib/api/client";
+import Image from "next/image";
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
+import { ApiUnavailable } from "@acme/ui/api-unavailable";
 import { ProfileForm } from "@/components/profile-form";
 import { redirect } from "next/navigation";
 import { logError, logWarn } from "@/lib/logging";
@@ -20,6 +23,10 @@ export default async function ProfilePage() {
       });
       redirect("/?error=user_not_found");
     }
+    if (isApiUnavailableError(err)) {
+      logWarn("me.profile.api_unavailable", { sessionUserId: session.userId });
+      return <ProfileUnavailable />;
+    }
 
     logError(
       "me.profile.load_failed",
@@ -35,6 +42,10 @@ export default async function ProfilePage() {
   try {
     regions = await getRegions();
   } catch (err) {
+    if (isApiUnavailableError(err)) {
+      logWarn("me.profile.api_unavailable", { sessionUserId: session.userId });
+      return <ProfileUnavailable />;
+    }
     logError(
       "me.profile.regions_failed",
       {
@@ -47,4 +58,24 @@ export default async function ProfilePage() {
   }
 
   return <ProfileForm user={user} regions={regions} />;
+}
+
+function ProfileUnavailable() {
+  return (
+    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
+      <ApiUnavailable
+        title="F3 Me is temporarily unavailable"
+        message="The F3 Nation API is not responding, so your profile cannot load right now."
+        logo={
+          <Image
+            src="/f3_logo.png"
+            alt="F3 Nation"
+            width={80}
+            height={80}
+            className="rounded-xl"
+          />
+        }
+      />
+    </div>
+  );
 }
