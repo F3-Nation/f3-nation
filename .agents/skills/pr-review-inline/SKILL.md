@@ -200,7 +200,12 @@ finding postable.
   range), side (RIGHT for added/changed code, LEFT for removed code), severity, what is wrong,
   why it matters, and a fix. If the fix is a drop-in replacement for exactly those lines, give
   the replacement code.
-- Skip Strengths and Recommendations; only Issues and the Assessment are used.
+- Start from the diff and the code it directly calls or is called by. Read further (other apps,
+  other languages, history) only to confirm or rule out a specific suspicion, and say what you
+  were checking.
+- Already raised on this PR (don't repeat these unless you think one is wrong):
+  <one line per existing comment from Step 5: path:line — concern>
+- Skip Strengths and Recommendations; Issues, Declined to judge, and the Assessment are used.
 - Focus areas from the user, if any: <aspects>.
 ```
 
@@ -216,7 +221,7 @@ Give each seat its own fresh sub-agent (a general-purpose sub-agent in Claude Co
 worker in Codex) with only the filled brief, never this session's history. If the agent has no
 sub-agent tool, run the brief yourself, one group at a time, and say so in the report.
 
-## Step 7 — Parse and verify findings
+## Step 7 — Parse findings
 
 For each finding, extract:
 
@@ -238,22 +243,27 @@ For each finding, extract:
 - `agent_spec` — exact repo-relative paths, exact replacement content, and verification
   steps. Built from `suggested_fix`, filled in where the reviewer left it vague.
 
-**Verify before posting.** For each 🔴 and 🟠 finding, read the cited lines at `HEAD_SHA`
-yourself and confirm the problem is real and caused by this PR. Drop or downgrade what doesn't
-hold up, and record it for the report. Reviewers over-report; a wrong comment costs the author
-more than a missing nit.
-
-## Step 8 — Dedup against existing feedback
+## Step 8 — Dedup, then verify
 
 Drop a finding when a prior comment already covers it: same-or-near `path` + overlapping `line`
 **and** the same underlying concern (judge semantically — exact text will not match). Also drop
-a finding already addressed by a top-level comment. Track every skip and the reason, for the
-final report.
+a finding already addressed by a top-level comment, or one the PR description already
+acknowledges as a known gap. Track every skip and the reason, for the final report.
+
+**Then verify what's left.** Dedup first, so no effort goes into checking a duplicate. For each
+remaining 🔴 and 🟠 finding, read the cited lines at `HEAD_SHA` yourself and confirm the problem
+is real and caused by this PR. For a 🟡 finding that makes a factual claim (expected values in a
+suggested test, a behavior the code supposedly has), check that claim too. Drop or downgrade
+what doesn't hold up, and record it for the report. Reviewers over-report; a wrong comment costs
+the author more than a missing nit.
 
 ## Step 9 — Post each surviving finding as an individual inline comment
 
-**`--dry-run`:** don't post. Show each drafted comment with its `path:line` in the report, and
-post them only if the user then says "post".
+**`--dry-run`:** don't post. Show each drafted comment, in full, with its `path:line` in the
+report, and post only the ones the user then approves. Before posting them later, re-run the
+GitHub pre-flight and compare `gh pr view <n> --json headRefOid` with `HEAD_SHA`. If the author
+has pushed since, say so: the comments still attach to `HEAD_SHA`, and a line may have moved or
+been fixed, so offer a `--rereview` instead.
 
 Post **one comment per finding**, each attached to its own file and line. Never post a top-level
 or review-summary comment, and do not use `POST .../reviews` with a body.
@@ -390,7 +400,8 @@ even when zero comments were posted:
    (or, for `--dry-run`, the drafts).
 4. **Skipped** — duplicates (and which existing comment each matched), findings dropped or
    downgraded in verification, and any dropped for line-not-in-diff.
-5. **Review engine** — which brief and how many reviewer seats ran.
+5. **Review engine** — which brief and how many reviewer seats ran, and the reviewer's
+   "Declined to judge" list in one line each (pre-existing problems there may deserve an issue).
 6. **Worktree cleanup** — confirmation, from `git worktree list`, that the worktree was removed;
    if it was not, the leftover path and the exact command for the user to run.
 
