@@ -132,7 +132,10 @@ Build an inventory:
 - **How to observe it:** a dev server (`next dev`) can hide some changes, such as behavior that
   depends on a production build or on a channel or environment value. For those, use
   `serve … start` (it builds first), and put extra environment values in front of the command
-  (`FOO=bar <S> serve …`). If a change shows up only in an outside service (the error tracker,
+  (`FOO=bar <S> serve …`). The helper drops inherited values for any name the repo's env files
+  define, so list a deliberate override of one of those in `PRT_PASS`
+  (`F3_CHANNEL=staging PRT_PASS=F3_CHANNEL <S> serve …`); database and mail settings can't be
+  passed. If a change shows up only in an outside service (the error tracker,
   Slack), check what's visible locally, such as logs or response codes. Re-run the PR's own
   tests for the rest.
 - **Sandbox needs:**

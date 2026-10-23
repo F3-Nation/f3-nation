@@ -66,6 +66,7 @@ echo 24.0.0 >"$origin/.nvmrc"
 echo '{"entries":[{},{}]}' >"$origin/packages/db/drizzle/meta/_journal.json"
 printf 'DATABASE_HOST=\nEMAIL_SERVER=\n' >"$origin/apps/auth/.env.example"
 echo '{"name":"f3-map","scripts":{"dev":"true"}}' >"$origin/apps/map/package.json"
+echo 'F3_CHANNEL=local' >"$origin/apps/map/.env.example"
 ln -s "$victim" "$origin/.env"
 git -C "$origin" add -A
 git -C "$origin" commit -q -m c1
@@ -114,6 +115,16 @@ map_port="$(jq -r .ports.map "$run/state.json")"
 assert_eq "load unsets inherited split DB/SMTP/URL settings and keeps unrelated vars" \
   "unset|unset|unset|1|$map_port" "$env_out"
 
+# --- load: deliberate overrides listed in PRT_PASS survive; connection settings can't be passed
+pass_out="$(F3_CHANNEL=staging F3_MAP_PORT=1234 PRT_PASS="F3_CHANNEL F3_MAP_PORT" \
+  bash -c '. "$1"; load "$2"; echo "${F3_CHANNEL-unset}|$F3_MAP_PORT"' _ "$prt" "$run")"
+assert_eq "PRT_PASS keeps an override, even over the run's own .env" "staging|1234" "$pass_out"
+pass_out="$(F3_CHANNEL=staging bash -c '. "$1"; load "$2"; echo "${F3_CHANNEL-unset}"' _ "$prt" "$run")"
+assert_eq "without PRT_PASS the inherited override is dropped" "unset" "$pass_out"
+pass_out="$(PRT_PASS=DATABASE_HOST bash -c '. "$1"; load "$2"' _ "$prt" "$run" 2>&1)"
+assert_eq "PRT_PASS refuses a connection setting" "1" "$?"
+assert_contains "the refusal names the variable" "DATABASE_HOST is a connection setting" "$pass_out"
+
 # --- update: approval is bound to the scanned commit
 echo change >"$origin/README"
 git -C "$origin" add -A
@@ -145,6 +156,33 @@ assert_eq "successful retry advances tested_sha" "$c2" "$(jq -r .tested_sha "$ru
 assert_eq "successful retry clears the pending revision" "none" "$(jq -r '.update_pending // "none"' "$run/state.json")"
 out="$(bash "$prt" update "$run" 2>&1)"
 assert_contains "a further update at the same head is a no-op" "NO_NEW_COMMITS" "$out"
+
+# --- update: a commit that needs a Node that isn't installed stops before touching the run
+echo 99.0.0 >"$origin/.nvmrc"
+git -C "$origin" add -A
+git -C "$origin" commit -q -m c3
+c3="$(git -C "$origin" rev-parse HEAD)"
+git -C "$origin" update-ref refs/pull/1/head "$c3"
+out="$(bash "$prt" update "$run" --approved "$c3" 2>&1)"
+assert_eq "update stops when the new Node isn't installed" "3" "$?"
+assert_contains "it names the missing Node" "NODE_MISSING=99.0.0" "$out"
+assert_eq "the worktree stays on the tested commit" "$c2" "$(git -C "$run/wt" rev-parse HEAD)"
+assert_eq "tested_sha is unchanged" "$c2" "$(jq -r .tested_sha "$run/state.json")"
+
+# --- update: new template keys reach the generated .env, and the Node version is refreshed
+printf 'DATABASE_HOST=localhost\nEMAIL_SERVER=smtp://local' >"$run/wt/apps/auth/.env"
+echo 24.0.0 >"$origin/.nvmrc"
+printf 'DATABASE_HOST=\nEMAIL_SERVER=\nNEW_KEY=abc\n' >"$origin/apps/auth/.env.example"
+git -C "$origin" add -A
+git -C "$origin" commit -q -m c4
+c4="$(git -C "$origin" rev-parse HEAD)"
+git -C "$origin" update-ref refs/pull/1/head "$c4"
+out="$(bash "$prt" update "$run" --approved "$c4" 2>&1)"
+assert_eq "update with a new template key succeeds" "0" "$?"
+assert_contains "it reports the added key" "ENV_KEYS_ADDED=apps/auth/.env:NEW_KEY" "$out"
+assert_contains "it appends the key without touching existing ones" "EMAIL_SERVER=smtp://local
+NEW_KEY=abc" "$(cat "$run/wt/apps/auth/.env")"
+assert_eq "path_prefix is refreshed for the new commit" "$bin:$bin" "$(jq -r .path_prefix "$run/state.json")"
 
 # --- check_migrations: applied rows must match the journal
 log="$tmp_dir/migrate.log"

@@ -9,6 +9,7 @@
 #   bash prt.sh serve <run-dir> <app> [dev|start] [--restart]
 #   bash prt.sh stop <run-dir> <app>
 #   bash prt.sh exec <run-dir> -- <cmd...>  run a command in the worktree with the run's env
+#     (inherited settings the env files define are dropped; PRT_PASS="NAME ..." keeps chosen overrides)
 #   bash prt.sh psql <run-dir> [psql args]  psql into this run's database (stdin ok)
 #   bash prt.sh info <run-dir>              ports, URLs, server status
 #   bash prt.sh update <run-dir> [--approved <sha>]  pull the PR's newest commits (keep-running)
@@ -64,17 +65,30 @@ load() {
   PROJECT=$(st .compose_project)
   PATH="$(st .path_prefix):$PATH"
   # dotenv doesn't override the environment, so any exported value that an env file also defines
-  # (DB host/port, SMTP, API keys, ...) would beat the run's own files. Unset every name they use.
-  local k
+  # (DB host/port, SMTP, API keys, ...) would beat the run's own files. Unset every name they use,
+  # except the ones the caller deliberately lists in PRT_PASS (e.g. PRT_PASS="F3_CHANNEL").
+  local k pass="" kept=""
+  for k in ${PRT_PASS:-}; do
+    [[ "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "PRT_PASS: '$k' isn't a variable name"
+    case "$k" in DATABASE_* | TEST_DATABASE_* | EMAIL_*) die "PRT_PASS: $k is a connection setting; the run's own is always used" ;; esac
+    pass="$pass $k"
+  done
   while IFS= read -r k; do
     case "$k" in PATH | HOME | USER | SHELL | TMPDIR | PWD | TERM | LANG) continue ;; esac
+    case " $pass " in *" $k "*) continue ;; esac
     unset "$k" 2>/dev/null || true
   done < <(cat "$WT/.env" "$WT"/.env.example "$WT"/apps/*/.env* "$WT"/packages/*/.env* 2>/dev/null \
     | sed -n -E 's/^(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p' | sort -u)
   unset DATABASE_URL TEST_DATABASE_URL
+  # An override must also beat the run's own .env, which is sourced next.
+  for k in $pass; do
+    [ -z "${!k+x}" ] || kept="$kept $k=$(printf '%q' "${!k}")"
+  done
   set -a
   # shellcheck disable=SC1091
   . "$WT/.env"
+  # shellcheck disable=SC2163 # kept holds quoted NAME=value words
+  [ -z "$kept" ] || eval "export $kept"
   set +a
   st_set '.'
 }
@@ -86,6 +100,45 @@ pg_container() { docker ps -q --filter "label=com.docker.compose.project=$PROJEC
 group_alive() { kill -0 -- "-$1" 2>/dev/null; }
 
 # --------------------------------------------------------------------------- init
+# Node for a commit: the exact version from its Dockerfiles, else its .nvmrc. Sets NODE_V,
+# NODE_NOTE, NODE_BIN and PNPM_DIR; prints the reason and returns 3 when it can't.
+resolve_node() {
+  local sha="$1" versions d
+  NODE_NOTE="" NODE_BIN="" PNPM_DIR=""
+  versions=$(git -C "$MAIN" grep -h '^FROM node:' "$sha" -- 'apps/*/Dockerfile' 2>/dev/null \
+    | sed -E 's/^FROM node:([^ ]+).*/\1/' | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/' | sort -u || true)
+  if [ "$(printf '%s\n' "$versions" | grep -c .)" = 1 ] && [[ "$versions" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    NODE_V=$versions
+  else
+    NODE_V=$(git -C "$MAIN" show "$sha:.nvmrc" 2>/dev/null | tr -d 'v[:space:]') || true
+    NODE_NOTE="Dockerfiles give '$(printf '%s' "$versions" | tr '\n' ' ')'; used .nvmrc ($NODE_V)"
+  fi
+  [[ "$NODE_V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "NODE_UNKNOWN=$versions"; return 3; }
+
+  if command -v node >/dev/null 2>&1 && [ "$(node --version)" = "v$NODE_V" ]; then
+    NODE_BIN=$(dirname "$(command -v node)")
+  else
+    for d in "${NVM_DIR:-$HOME/.nvm}/versions/node/v$NODE_V/bin" \
+      "$HOME/.local/share/fnm/node-versions/v$NODE_V/installation/bin" \
+      "$HOME/Library/Application Support/fnm/node-versions/v$NODE_V/installation/bin" \
+      "$HOME/.volta/tools/image/node/$NODE_V/bin" \
+      "$HOME/.local/share/mise/installs/node/$NODE_V/bin" \
+      "$HOME/.asdf/installs/nodejs/$NODE_V/bin"; do
+      if [ -x "$d/node" ]; then NODE_BIN=$d; break; fi
+    done
+  fi
+  [ -n "$NODE_BIN" ] || { echo "NODE_MISSING=$NODE_V"; echo "NODE_ON_PATH=$(command -v node || echo none)"; return 3; }
+
+  if [ -x "$NODE_BIN/pnpm" ]; then PNPM_DIR=$NODE_BIN
+  elif command -v pnpm >/dev/null 2>&1; then PNPM_DIR=$(dirname "$(command -v pnpm)")
+  else
+    for d in "${NVM_DIR:-$HOME/.nvm}"/versions/node/*/bin; do
+      if [ -x "$d/pnpm" ]; then PNPM_DIR=$d; break; fi
+    done
+  fi
+  [ -n "$PNPM_DIR" ] || { echo "PNPM_MISSING=1"; return 3; }
+}
+
 cmd_init() {
   local pr="${1:-}" keep=false a
   [[ "$pr" =~ ^[0-9]+$ ]] || die "usage: init <pr-number> [--keep]"
@@ -120,42 +173,9 @@ cmd_init() {
     exit 5
   fi
 
-  # Node: exact version from the PR's Dockerfiles, else its .nvmrc.
-  local versions node_v node_note=""
-  versions=$(git -C "$MAIN" grep -h '^FROM node:' "$pr_sha" -- 'apps/*/Dockerfile' 2>/dev/null \
-    | sed -E 's/^FROM node:([^ ]+).*/\1/' | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/' | sort -u || true)
-  if [ "$(printf '%s\n' "$versions" | grep -c .)" = 1 ] && [[ "$versions" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    node_v=$versions
-  else
-    node_v=$(git -C "$MAIN" show "$pr_sha:.nvmrc" 2>/dev/null | tr -d 'v[:space:]') || true
-    node_note="Dockerfiles give '$(printf '%s' "$versions" | tr '\n' ' ')'; used .nvmrc ($node_v)"
-  fi
-  [[ "$node_v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { cleanup_refs; echo "NODE_UNKNOWN=$versions"; exit 3; }
-
-  local node_bin="" d
-  if command -v node >/dev/null 2>&1 && [ "$(node --version)" = "v$node_v" ]; then
-    node_bin=$(dirname "$(command -v node)")
-  else
-    for d in "${NVM_DIR:-$HOME/.nvm}/versions/node/v$node_v/bin" \
-      "$HOME/.local/share/fnm/node-versions/v$node_v/installation/bin" \
-      "$HOME/Library/Application Support/fnm/node-versions/v$node_v/installation/bin" \
-      "$HOME/.volta/tools/image/node/$node_v/bin" \
-      "$HOME/.local/share/mise/installs/node/$node_v/bin" \
-      "$HOME/.asdf/installs/nodejs/$node_v/bin"; do
-      if [ -x "$d/node" ]; then node_bin=$d; break; fi
-    done
-  fi
-  [ -n "$node_bin" ] || { cleanup_refs; echo "NODE_MISSING=$node_v"; echo "NODE_ON_PATH=$(command -v node || echo none)"; exit 3; }
-
-  local pnpm_dir=""
-  if [ -x "$node_bin/pnpm" ]; then pnpm_dir=$node_bin
-  elif command -v pnpm >/dev/null 2>&1; then pnpm_dir=$(dirname "$(command -v pnpm)")
-  else
-    for d in "${NVM_DIR:-$HOME/.nvm}"/versions/node/*/bin; do
-      if [ -x "$d/pnpm" ]; then pnpm_dir=$d; break; fi
-    done
-  fi
-  [ -n "$pnpm_dir" ] || { cleanup_refs; echo "PNPM_MISSING=1"; exit 3; }
+  local node_v node_note node_bin pnpm_dir
+  resolve_node "$pr_sha" || { cleanup_refs; exit 3; }
+  node_v=$NODE_V node_note=$NODE_NOTE node_bin=$NODE_BIN pnpm_dir=$PNPM_DIR
 
   # Port block: slot k owns 41000+20k .. +19. mkdir is the atomic claim. The run dir exists
   # first, so `list` never mistakes a fresh claim for a stale one.
@@ -424,6 +444,27 @@ cmd_info() {
   done
 }
 
+# New keys in a changed .env.example are added to the generated .env (never reseeding it); a
+# changed template is reported so the caller can look at values the run keeps.
+refresh_env() {
+  local old="$1" new="$2" f env line key added="" changed=""
+  for f in $(git -C "$WT" diff --name-only --diff-filter=AM "$old" "$new" -- '*.env.example'); do
+    [ "$f" != .env.example ] || continue # the root .env is the run's own
+    changed="$changed $f"
+    env="$WT/${f%.example}"
+    { [ -f "$env" ] && [ ! -L "$env" ]; } || continue
+    while IFS= read -r line; do
+      key=${line%%=*}
+      grep -q "^${key}=" "$env" && continue
+      [ -z "$(tail -c1 "$env")" ] || echo >>"$env"
+      printf '%s\n' "$line" >>"$env"
+      added="$added ${f%.example}:$key"
+    done < <(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$WT/$f" || true)
+  done
+  [ -z "$added" ] || echo "ENV_KEYS_ADDED=${added# }"
+  [ -z "$changed" ] || echo "ENV_TEMPLATES_CHANGED=${changed# }"
+}
+
 cmd_update() {
   load "$1"; shift
   local approved_sha="" a
@@ -449,13 +490,18 @@ cmd_update() {
   fi
   base_sha=$(git -C "$MAIN" rev-parse "$ref-base")
   merge_base=$(git -C "$MAIN" merge-base "$new" "$base_sha")
+  # The new commit may need another Node; stop before touching the run if it isn't installed.
+  resolve_node "$new" || exit 3
   apps=$(jq -r '[.servers[].app] | join(" ")' "$RUN_DIR/state.json")
   for a in $apps; do stop_app "$a"; done
   checkout_wt "$new"
+  PATH="$NODE_BIN:$PNPM_DIR:$PATH"
+  st_set --arg p "$NODE_BIN:$PNPM_DIR" --arg v "$NODE_V" --arg nn "$NODE_NOTE" '.path_prefix = $p | .node_version = $v | .node_note = $nn'
   # The tested revision advances only once install and migrations succeed, so a retry at the
   # same head repeats the preparation instead of reporting NO_NEW_COMMITS.
   st_set --arg n "$new" '.update_pending = $n | .phase = "update_incomplete"'
   pnpm_install
+  refresh_env "$old" "$new"
   # Appending a migration also rewrites the journal; only a change to earlier entries needs a rebuild.
   local journal=packages/db/drizzle/meta/_journal.json
   if [ -n "$(git -C "$WT" diff --name-only --diff-filter=MDR "$old" "$new" -- 'packages/db/drizzle/*.sql' 'packages/db/drizzle/meta/*_snapshot.json')" ] \
@@ -599,6 +645,6 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     serve) cmd_serve "$@" ;; stop) cmd_stop "$@" ;; exec) cmd_exec "$@" ;; psql) cmd_psql "$@" ;;
     info) cmd_info "$@" ;; update) cmd_update "$@" ;; down-db) cmd_down_db "$@" ;;
     down) cmd_down "$@" ;; list) cmd_list ;;
-    *) sed -n '2,16p' "$0"; exit 2 ;;
+    *) sed -n '2,17p' "$0"; exit 2 ;;
   esac
 fi
