@@ -21,6 +21,10 @@ checks and "do not flag" decisions for reviewing a diff, stricter than the
 writing conventions, and never a second copy of this file. Conventions for
 writing code stay here and in `docs/`.
 
+**When you review a diff** (any assistant or tool), apply
+`.github/copilot-instructions.md` and every `.github/instructions/*.instructions.md`
+whose `applyTo` matches a changed file, in addition to this file.
+
 Claude Code (v2.1.281+) reads `AGENTS.md` files directly, so there is no
 `CLAUDE.md`. Don't add one: a `CLAUDE.md` or `CLAUDE.local.md` in the
 working directory or above it makes Claude Code skip `AGENTS.md` entirely.
