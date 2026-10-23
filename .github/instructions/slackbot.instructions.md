@@ -19,7 +19,8 @@ Deploys independently of the TypeScript apps. Python conventions are in
 - Respect Block Kit limits: 100 blocks per modal, 50 per message; section text
   3,000 characters; option labels 75; keep `text` fallback <= 4,000 (the
   recommended cap; Slack truncates at 40,000).
-- For posted messages, on `invalid_blocks` or `msg_too_long` fall back to plain
+- For posted messages, on `invalid_blocks`, `msg_blocks_too_long` or
+  `msg_too_long` fall back to plain
   `text`.
 - Never pass `None` to `set_initial_values`; omit the key. Deep-copy shared
   form/element instances before mutating them.

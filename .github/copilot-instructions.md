@@ -105,8 +105,9 @@ Stale references are findings.
   Out-of-scope findings get a tracking issue linked in the reply. Do not
   resolve threads; humans do. Sign AI-written PR text and replies
   `_written by <model>_` (see `.agents/skills/github/SKILL.md`).
-- Keep PRs well under 100 files, with mechanical sweeps (lint, renames,
-  dependency bumps) separate from behavior changes.
+- Keep PRs small enough to review in one sitting (review bots skip very
+  large PRs), with mechanical sweeps (lint, renames, dependency bumps)
+  separate from behavior changes.
 - File pre-existing bugs found along the way as separate issues, not PR scope
   creep. Search for duplicates first and follow the issue templates; lead
   with plain-language impact, then root cause with file paths, the fix and

@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit settings for this repo. `inheritance: true` merges this file over
+# the organization/repository UI settings instead of replacing them.
+#
+# CodeRabbit already reads AGENTS.md, .github/copilot-instructions.md and
+# .github/instructions/*.instructions.md, but scopes each file to the
+# directory it lives in and ignores the Copilot `applyTo` frontmatter. The
+# entries below give each instructions file the same scope Copilot uses.
+# Keep each `applyTo` identical to the file's frontmatter.
+inheritance: true
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - files: ".github/copilot-instructions.md"
+        applyTo: "**"
+      - files: ".github/instructions/api.instructions.md"
+        applyTo: "packages/api/**,apps/api/**,packages/validators/**"
+      - files: ".github/instructions/auth.instructions.md"
+        applyTo: "apps/auth/**,packages/auth/**,packages/sso/**,packages/sso-next/**,apps/*/proxy.ts,apps/*/src/proxy.ts,apps/*/src/lib/auth/**,packages/api/src/shared.ts"
+      - files: ".github/instructions/build-config.instructions.md"
+        applyTo: "**/package.json,pnpm-workspace.yaml,turbo.json,renovate.json,knip.config.ts,commitlint.config.mjs,release-please-config.json,.release-please-manifest.json,.nvmrc,**/Dockerfile,docker-compose*.yml,**/env.ts,**/.env*.example,turbo/generators/**"
+      - files: ".github/instructions/db.instructions.md"
+        applyTo: "packages/db/**,packages/db-python/**"
+      - files: ".github/instructions/docs.instructions.md"
+        applyTo: "**/*.md,docs/**,.agents/**,.coderabbit.yaml"
+      - files: ".github/instructions/github-actions.instructions.md"
+        applyTo: ".github/workflows/**,.github/actions/**,.github/scripts/**,.github/preview/**"
+      - files: ".github/instructions/python.instructions.md"
+        applyTo: "**/*.py,**/pyproject.toml,uv.lock,.python-version"
+      - files: ".github/instructions/scripts.instructions.md"
+        applyTo: "**/*.sh,scripts/**,tooling/scripts/**,apps/*/scripts/**,.agents/skills/**/scripts/**"
+      - files: ".github/instructions/slackbot.instructions.md"
+        applyTo: "apps/slackbot/**"
+      - files: ".github/instructions/tests.instructions.md"
+        applyTo: "**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/__tests__/**,**/tests/**,apps/api/characterization/**,**/vitest.config.*,**/vitest.*.ts,tooling/vitest/**"
+      - files: ".github/instructions/web-apps.instructions.md"
+        applyTo: "apps/map/**,apps/admin/**,apps/me/**,apps/homepage/**,apps/auth/src/app/**,packages/ui/**"

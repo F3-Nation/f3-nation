@@ -12,9 +12,10 @@ keep those pointer files thin. Per-app specifics belong in that app's
 Path-scoped review rules live in
 [`.github/instructions/`](.github/instructions/) — one
 `*.instructions.md` per area (API, DB, auth, web apps, tests, docs, …), each
-scoped by its `applyTo` glob. Copilot code review loads them automatically;
-other assistants should read the matching file before changing code in that
-area. They hold review checks and "do not flag" decisions, not a second copy
+scoped by its `applyTo` glob. Copilot code review loads them automatically,
+and CodeRabbit loads them through the matching `applyTo` entries in
+[`.coderabbit.yaml`](.coderabbit.yaml) — change both together. Other
+assistants should read the matching file before changing code in that area. They hold review checks and "do not flag" decisions, not a second copy
 of this file.
 
 Claude Code (v2.1.281+) reads `AGENTS.md` files directly, so there is no
