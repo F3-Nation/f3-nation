@@ -47,32 +47,44 @@ current branch's PR (`gh pr view` with no argument); if that finds nothing, ask 
 gh pr view <ref> --json number,url,title,state,headRefName,headRefOid,headRepository,headRepositoryOwner,isCrossRepository,maintainerCanModify
 ```
 
-Stop if `state` is not `OPEN`. Stop if `isCrossRepository` is true and `maintainerCanModify` is
-false: the push in Step 5b would be refused. Use `number` from the JSON from here on, and derive
-`BASE_REPO` (`<owner>/<name>`) from `url`: it is the repository that owns the PR's `pull/<number>/head` ref,
-which is not necessarily `origin`.
+Stop if `state` is not `OPEN`. Use `number` from the JSON from here on, and derive two repositories
+(`<owner>/<name>`):
+
+- `BASE_REPO` from `url`: the repository that owns the PR and its `pull/<number>/head` ref, which
+  is not necessarily `origin`. Every later `gh` call pins it (`--repo`, or a `repos/<BASE_REPO>/…`
+  path), because a bare PR number resolves against gh's default repository.
+- `HEAD_REPO` from `headRepositoryOwner` and `headRepository`: where the PR branch lives and where
+  Step 5b pushes.
+
+For a cross-repository PR (`isCrossRepository` is true), stop unless the push in Step 5b would be
+accepted: `maintainerCanModify` is true, or the viewer can push to the head repository
+(`gh api repos/<HEAD_REPO> --jq .permissions.push` prints `true`). The flag only governs access
+granted to upstream maintainers, so a fork author can still push when it is false.
 
 ## Step 2 — Set Up the PR Worktree
 
 ```bash
 MAIN_ROOT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+git -C "$MAIN_ROOT" fetch "https://github.com/<BASE_REPO>.git" "pull/<number>/head"
 git worktree list --porcelain
 ```
 
-`MAIN_ROOT` is the repo's main checkout, even when this session runs inside a worktree. Look for a
-`branch refs/heads/<headRefName>` line in the listing. A matching branch name alone does not prove
-the worktree belongs to this PR (an unrelated local branch, or a fork's, can share the name), so
-verify the candidate before treating it as the PR's checkout:
+`MAIN_ROOT` is the repo's main checkout, even when this session runs inside a worktree. The fetch
+brings the PR head commit (`headRefOid`) into the local object store for the checks below; use
+`BASE_REPO`, whose `origin` may be a fork. Look for a `branch refs/heads/<headRefName>` line in the
+listing. A matching branch name alone does not prove the worktree belongs to this PR (an unrelated
+local branch, or a fork's, can share the name), so verify the candidate by commit rather than by
+upstream or remote configuration, which can be a named remote, a bare URL, or absent:
 
 ```bash
 git -C "<candidate>" rev-parse HEAD
-git -C "<candidate>" rev-parse --abbrev-ref --symbolic-full-name @{upstream}
-git -C "<candidate>" remote get-url "$(git -C "<candidate>" config branch.<headRefName>.remote)"
+git -C "<candidate>" merge-base --is-ancestor HEAD <headRefOid> && echo "equal or behind"
 ```
 
-Its HEAD must equal `headRefOid` or be a descendant of it, and for a cross-repository PR the
-upstream remote's URL must point at `headRepositoryOwner/headRepository`. If either check fails,
-stop and ask the user rather than reusing it. Then pick the case that applies:
+Its HEAD must equal `headRefOid`. If it is strictly behind (an ancestor), bring it up with
+`git -C "<candidate>" merge --ff-only <headRefOid>` once the worktree is clean. If it is ahead of
+`headRefOid` or has diverged, it holds commits that are not on the PR: stop and ask the user rather
+than reusing it, since Step 5b would publish them. Then pick the case that applies:
 
 | Where the PR branch is checked out                                  | What to do                                                                                                                                                      |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -81,23 +93,24 @@ stop and ask the user rather than reusing it. Then pick the case that applies:
 | `MAIN_ROOT`                                                         | Stop. Git allows a branch in only one checkout: ask the user to switch the main checkout off the PR branch (e.g. `git -C <MAIN_ROOT> switch main`), then re-run |
 | Nowhere                                                             | Create a worktree, as below. This run owns it                                                                                                                   |
 
-Creating the worktree. Fetch the PR head by its pull ref from the base repository (`BASE_REPO`
-from Check 1, whose `origin` may be a fork), which also works for fork PRs, then let
-`gh pr checkout` attach the right local branch and upstream. First pick a destination that is
-free: if `$WT` is already in the worktree list or exists on disk, ask the user before reusing it,
-or append a suffix (`-2`, `-3`, …) to get an unused path.
+Creating the worktree. The PR head is already fetched (above), which also works for fork PRs; let
+`gh pr checkout` attach the right local branch. First pick a destination that is free, as its own
+command, and do not run the next block unless this prints `free`. If it prints `in use`, ask the
+user before reusing the path, or append a suffix (`-2`, `-3`, …) and check again:
+
+```bash
+WT="$MAIN_ROOT/.claude/worktrees/pr-<number>-comments"
+if [ -e "$WT" ] || git -C "$MAIN_ROOT" worktree list --porcelain | grep -qx "worktree $WT"; then echo "in use"; else echo "free"; fi
+```
 
 ```bash
 git -C "$MAIN_ROOT" branch --format='%(refname:short)'
-git -C "$MAIN_ROOT" fetch "https://github.com/<BASE_REPO>.git" "pull/<number>/head"
-WT="$MAIN_ROOT/.claude/worktrees/pr-<number>-comments"
-test -e "$WT" && echo "path in use: pick another"
-git -C "$MAIN_ROOT" worktree add --detach "$WT" FETCH_HEAD
-cd "$WT" && gh pr checkout <number> --repo <BASE_REPO>
+git -C "$MAIN_ROOT" worktree add --detach "$WT" FETCH_HEAD && cd "$WT" && gh pr checkout <number> --repo <BASE_REPO>
 git -C "$WT" branch --show-current
 ```
 
-Record the branch list printed first. `LOCAL_BRANCH` is what `--show-current` prints. Note whether
+The commands are chained with `&&` so a failed `worktree add` never leaves `gh pr checkout`
+running in a directory that already existed. Record the branch list printed first. `LOCAL_BRANCH` is what `--show-current` prints. Note whether
 it was in that first list, because Step 6 deletes only a branch this run created.
 
 **Move the session into the worktree.** Never read or edit a file under `MAIN_ROOT` itself.
@@ -108,32 +121,22 @@ it was in that first list, because Step 6 deletes only a branch this run created
   `cd "<WT>" && …` (a terminal tool may not keep the directory between calls), use absolute
   paths under `WT` for every file read and edit, and give `WT` to any subagent you start.
 
-**Make it runnable**, for a worktree this run created. Copy the main checkout's gitignored `.env`
-files — only the ones beside a tracked `.env.example`, so build output such as
-`.next/standalone/**/.env` isn't copied — then install with the frozen lockfile. Commit hooks
-(formatting, lint, typecheck) need the dependencies installed.
-
-```bash
-cd "$MAIN_ROOT" && git ls-files '*.env.example' | sed 's/\.example$//' | while read -r f; do [ -f "$f" ] && cp "$f" "$WT/$f" && echo "copied $f"; done
-cd "$WT" && pnpm install --frozen-lockfile
-```
-
-The copied `.env` files point at the main checkout's local services. If addressing a comment
-needs running apps or a database, ask the user before giving the worktree its own services with
-`pnpm local:setup --slot N` (see `docs/LOCAL_DEV_DOCKER.md`).
+Do not install dependencies yet: that runs the PR's code, so it waits for plan approval (see
+"Prepare the worktree" in Step 5).
 
 **Check: is the worktree clean, and does it hold only pushed work?** This applies to every
-worktree you use — current, reused, or newly created.
+worktree you use — current, reused, or newly created. A newly created one is detached at
+`headRefOid`, so the second command prints nothing.
 
 ```bash
-git status -sb
 git status --porcelain
+git log --oneline <headRefOid>..HEAD
 ```
 
-If `status -sb` shows the branch is ahead of its upstream, that local branch has unpushed commits
-from earlier work: stop and ask before going on, since Step 5b's push would publish them.
+If the `log` command prints anything, that local branch has commits that are not on the PR from
+earlier work: stop and ask before going on, since Step 5b's push would publish them.
 
-If any output is returned: tell the user "Uncommitted or untracked changes detected — commit, stash, or remove them before proceeding." List the affected files. Stop here. (`--porcelain` reports staged, unstaged, and untracked files alike, and Step 5b commits everything modified, so the tree must be fully clean. Gitignored files such as `.env` and `node_modules` don't show.)
+If the `status` command prints anything: tell the user "Uncommitted or untracked changes detected — commit, stash, or remove them before proceeding." List the affected files. Stop here. (`--porcelain` reports staged, unstaged, and untracked files alike, and Step 5b commits everything modified, so the tree must be fully clean. Gitignored files such as `.env` and `node_modules` don't show.)
 
 If you stop at any point after creating a worktree, still run Step 6's cleanup.
 
@@ -142,8 +145,8 @@ If you stop at any point after creating a worktree, still run Step 6's cleanup.
 Run all three. Never truncate comment bodies — replies must respond to the reviewer's exact words.
 
 ```bash
-# Get repo context
-gh repo view --json owner,name
+# Pin everything to BASE_REPO (Check 1): split it into <owner> and <name> for GraphQL, and pass
+# --repo <BASE_REPO> to every gh pr command. Never rely on gh's default repository.
 
 # 1. Unresolved inline review threads, with every comment in each thread. GraphQL, not REST:
 #    thread resolution exists only on PullRequestReviewThread, and a reviewer's follow-up reply
@@ -166,7 +169,7 @@ query($owner: String!, $name: String!, $pr: Int!) {
       }
     }
   }
-}' -f owner={owner} -f name={name} -F pr={pr_number} \
+}' -f owner=<owner> -f name=<name> -F pr=<number> \
   --jq '.data.repository.pullRequest.reviewThreads
         | {hasNextPage: .pageInfo.hasNextPage, endCursor: .pageInfo.endCursor,
            threads: [.nodes[] | select(.isResolved | not)
@@ -183,11 +186,11 @@ query($owner: String!, $name: String!, $pr: Int!) {
 # can push the combined output past the tool limit, where the harness saves it to a file and
 # shows only a preview — that is how reviews get silently missed. Read a specific body in full
 # only after this listing tells you it matters.
-gh pr view {pr_number} --json reviews \
+gh pr view <number> --repo <BASE_REPO> --json reviews \
   --jq '.reviews[] | [.author.login, .state, .submittedAt, (.body|length), (.body[0:300]|gsub("\n";" "))] | @tsv'
 
 # 3. PR conversation comments — top-level discussion, not attached to any line
-gh pr view {pr_number} --json comments \
+gh pr view <number> --repo <BASE_REPO> --json comments \
   --jq '.comments[] | {author: .author.login, createdAt, body}'
 ```
 
@@ -244,9 +247,36 @@ Within each bucket, group inline comments by file. Each entry:
 resolved, and this skill never resolves threads itself
 ```
 
+Approving the plan also approves running the PR's own code: dependency install scripts and the
+commit hooks run with the user's normal credentials. If the PR changes `package.json`, the
+lockfile, hook config or scripts, say so in the plan so the user can decide.
+
 End the plan by asking the user to reply **"approve"** to proceed as-is, or with changes to the plan. Make no code changes and post no replies until they explicitly approve. On requested changes, revise and re-present; on an ambiguous response, ask.
 
 ## Step 5 — Execute (approved plan only)
+
+### Prepare the worktree
+
+Only for a worktree this run created, and only when a comment needs a code change. Commit hooks
+(formatting, lint, typecheck) need the dependencies installed, so install with the frozen
+lockfile first. Then create each `.env` from the worktree's own tracked `.env.example` — never
+copy the main checkout's `.env` files, which may hold real credentials the PR's code could read.
+The loop skips symlinks, existing files, and any destination whose real parent directory is
+outside the worktree:
+
+```bash
+cd "$WT" && pnpm install --frozen-lockfile
+cd "$WT" && git ls-files '*.env.example' | while read -r ex; do
+  f="${ex%.example}"
+  [ -L "$ex" ] && { echo "skip $ex (symlink)"; continue; }
+  { [ -e "$f" ] || [ -L "$f" ]; } && { echo "skip $f (exists)"; continue; }
+  case "$(cd "$(dirname "$f")" && pwd -P)/" in "$(pwd -P)"/*) ;; *) echo "skip $f (outside worktree)"; continue ;; esac
+  cp "$ex" "$f" && echo "created $f"
+done
+```
+
+If addressing a comment needs running apps or a database, ask the user before giving the
+worktree its own services with `pnpm local:setup --slot N` (see `docs/LOCAL_DEV_DOCKER.md`).
 
 ### 5a — Code changes
 
@@ -264,17 +294,24 @@ checks, and pushback tone. Otherwise hold to the same rules:
 ### 5b — Commit and push
 
 If 5a changed nothing (`git status --porcelain` is empty — a reply-only plan), skip the commit and
-push: confirm the PR head is the one you planned against (`gh pr view --json headRefOid`) and go
-straight to 5c.
+push: confirm the PR head is the one you planned against
+(`gh pr view <number> --repo <BASE_REPO> --json headRefOid`) and go straight to 5c.
 
 Otherwise stage and commit all modified files with a Conventional Commit message scoped to the PR, e.g.
 `fix(scope): address PR #NNN review comments`. The scope must be in `commitlint.config.mjs`'s
 `scope-enum`. (Claude Code users with the `commit-commands` plugin may use its `commit` skill.)
-The Lefthook hooks run on commit; if one fails, fix the cause — never `--no-verify`. Then push:
+The Lefthook hooks run on commit; if one fails, fix the cause — never `--no-verify`. Then check
+that only this run's commits are outgoing, and push to an explicit destination:
 
 ```bash
-git push
+git log --oneline <headRefOid>..HEAD
+git push "https://github.com/<HEAD_REPO>.git" "HEAD:refs/heads/<headRefName>"
 ```
+
+Never use a bare `git push`: where it goes depends on `push.default`, the branch's upstream and
+`branch.<name>.pushRemote`, none of which this skill controls. If the push is rejected as
+non-fast-forward, the PR moved since you planned: stop and ask. If HTTPS authentication fails
+(`gh auth setup-git` configures it), ask the user.
 
 **Push before posting any replies.** Review bots re-fetch the diff the moment a reply lands; a
 reply posted before the push makes them respond to code that isn't on GitHub yet.
@@ -293,11 +330,11 @@ the macOS and GNU `mktemp`).
 
 ```bash
 # Inline review thread — {comment_id} is the thread's `id` from Step 3 #1:
-gh api repos/{owner}/{name}/pulls/{pr_number}/comments/{comment_id}/replies \
+gh api repos/<BASE_REPO>/pulls/<number>/comments/<comment_id>/replies \
   -F body=@"$REPLY_DIR/<n>.md"
 
 # Top-level PR conversation comment:
-gh pr comment {pr_number} --body-file "$REPLY_DIR/<n>.md"
+gh pr comment <number> --repo <BASE_REPO> --body-file "$REPLY_DIR/<n>.md"
 ```
 
 Issue these as plain sequential commands, not inside a shell function.
@@ -322,11 +359,13 @@ user asked to keep it for another round; then give them the path and the command
    If git refuses because of uncommitted or untracked files, don't force it. Show the user
    `git -C "$WT" status --porcelain` and ask.
 
-3. If this run created `LOCAL_BRANCH`, delete it once the push has landed. Compare the two SHAs
-   first and delete only when they match:
+3. If this run created `LOCAL_BRANCH`, delete it once the push has landed. Fetch the branch from
+   the head repository by URL (the branch may have no upstream or named remote), compare the two
+   SHAs, and delete only when they match:
 
    ```bash
-   git -C "$MAIN_ROOT" rev-parse "<LOCAL_BRANCH>" "<LOCAL_BRANCH>@{upstream}"
+   git -C "$MAIN_ROOT" fetch "https://github.com/<HEAD_REPO>.git" "<headRefName>"
+   git -C "$MAIN_ROOT" rev-parse "<LOCAL_BRANCH>" FETCH_HEAD
    git -C "$MAIN_ROOT" branch -D "<LOCAL_BRANCH>"
    ```
 
