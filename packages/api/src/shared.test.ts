@@ -169,7 +169,7 @@ describe("Rate Limiting Middleware", () => {
     expect(mockLimit).toHaveBeenCalledWith("192.168.1.1");
   });
 
-  it("should extract first IP from x-forwarded-for chain", async () => {
+  it("keys on the hop Cloud Run appended, not the caller-set leftmost entry", async () => {
     mockLimit.mockResolvedValue({
       success: true,
       limit: maxRequests,
@@ -177,7 +177,8 @@ describe("Rate Limiting Middleware", () => {
       reset: Date.now() + 60000,
     });
 
-    // Simulate proxy chain: client -> proxy1 -> proxy2 -> server
+    // Caller sent "203.0.113.50, 70.41.3.18"; Cloud Run appended the real
+    // client IP. Only that last entry can't be forged.
     const mockHeaders = new Headers({
       "x-forwarded-for": "203.0.113.50, 70.41.3.18, 150.172.238.178",
     });
@@ -185,11 +186,31 @@ describe("Rate Limiting Middleware", () => {
     const client = await createTestClientWithHeaders(mockHeaders);
     await client.test();
 
-    // Should use the first IP (the actual client)
-    expect(mockLimit).toHaveBeenCalledWith("203.0.113.50");
+    expect(mockLimit).toHaveBeenCalledWith("150.172.238.178");
   });
 
-  it("should handle x-forwarded-for with spaces around IPs", async () => {
+  it("gives every spoofed x-forwarded-for from one client the same bucket", async () => {
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: maxRequests,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+
+    const client = await createTestClientWithHeaders(
+      new Headers({ "x-forwarded-for": "1.1.1.1, 198.51.100.7" }),
+    );
+    await client.test();
+    const client2 = await createTestClientWithHeaders(
+      new Headers({ "x-forwarded-for": "2.2.2.2, 3.3.3.3, 198.51.100.7" }),
+    );
+    await client2.test();
+
+    expect(mockLimit).toHaveBeenNthCalledWith(1, "198.51.100.7");
+    expect(mockLimit).toHaveBeenNthCalledWith(2, "198.51.100.7");
+  });
+
+  it("should handle x-forwarded-for with spaces and empty entries", async () => {
     mockLimit.mockResolvedValue({
       success: true,
       limit: maxRequests,
@@ -198,14 +219,13 @@ describe("Rate Limiting Middleware", () => {
     });
 
     const mockHeaders = new Headers({
-      "x-forwarded-for": "  192.168.1.100  , 10.0.0.1",
+      "x-forwarded-for": "  192.168.1.100  ,  10.0.0.1  , ",
     });
 
     const client = await createTestClientWithHeaders(mockHeaders);
     await client.test();
 
-    // Should trim whitespace from the first IP
-    expect(mockLimit).toHaveBeenCalledWith("192.168.1.100");
+    expect(mockLimit).toHaveBeenCalledWith("10.0.0.1");
   });
 });
 
