@@ -54,6 +54,9 @@ Flag these in new or changed text only, not in untouched legacy lines.
 
 - `AGENTS.md` and `.github/copilot-instructions.md` load into every session,
   so keep them lean and high-signal.
+- Writing conventions go in `AGENTS.md` and `docs/`. Review rules go in the
+  review files and may be stricter; don't move writing conventions into them
+  or copy review rules into `AGENTS.md`.
 - Write rules as short imperative bullets that are checkable from a diff.
   Give the reason only when it isn't obvious.
 - Each rule lives in exactly one file, scoped by `applyTo` to the paths where

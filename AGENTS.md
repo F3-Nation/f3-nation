@@ -9,14 +9,15 @@ guidance, put it in `AGENTS.md` (or `docs/` for deep topics and link it) and
 keep those pointer files thin. Per-app specifics belong in that app's
 `AGENTS.md`.
 
-Path-scoped review rules live in
-[`.github/instructions/`](.github/instructions/) — one
-`*.instructions.md` per area (API, DB, auth, web apps, tests, docs, …), each
-scoped by its `applyTo` glob. Copilot code review loads them automatically,
-and CodeRabbit loads them through the matching `applyTo` entries in
-[`.coderabbit.yaml`](.coderabbit.yaml) — change both together. Other
-assistants should read the matching file before changing code in that area. They hold review checks and "do not flag" decisions, not a second copy
-of this file.
+Code-review rules are kept separate from the conventions here:
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md)
+(repo-wide) and [`.github/instructions/`](.github/instructions/) (one
+`*.instructions.md` per area, scoped by its `applyTo` glob). Review tools load
+them at review time: Copilot natively, CodeRabbit through the matching entries
+in [`.coderabbit.yaml`](.coderabbit.yaml) (change both together). They hold
+checks and "do not flag" decisions for reviewing a diff, stricter than the
+writing conventions, and never a second copy of this file. Conventions for
+writing code stay here and in `docs/`.
 
 Claude Code (v2.1.281+) reads `AGENTS.md` files directly, so there is no
 `CLAUDE.md`. Don't add one: a `CLAUDE.md` or `CLAUDE.local.md` in the
@@ -172,11 +173,14 @@ changed, not by its scope** — is documented in
 ## Pull Request Guidelines
 
 - Every pull request should:
-  - Include a clear summary, any related issue(s), commands run, and impact to DB/env.
+  - Fill in the PR template with a plain-language TL;DR first, related issue(s) (`Closes #<n>` or `Part of #<n>`), commands run, and DB, env-var and deploy-order impact. Remove template placeholders, and keep the body true to the diff as scope changes.
   - Add screenshots or screen recordings for UI changes in `apps/map`.
   - Highlight any new migrations or environment variables.
   - Never include secrets.
-- Before opening a pull request, ensure both `pnpm lint` and `pnpm format` pass with no errors or changes required.
+- Keep PRs small enough to review in one sitting (review bots skip very large PRs), with mechanical sweeps (lint, renames, dependency bumps) separate from behavior changes.
+- Before opening a pull request, run `pnpm ci:local` (at minimum `pnpm lint` and `pnpm format`) and commit any coverage-threshold rewrite.
+- Reply to every review thread with what changed (commit SHA) or why not; out-of-scope findings get a tracking issue linked in the reply. AI agents never resolve threads and sign what they write `_written by <model>_` (see [`.agents/skills/github/SKILL.md`](.agents/skills/github/SKILL.md)).
+- File pre-existing bugs found along the way as separate issues, not PR scope creep: search for duplicates, follow the issue templates, and lead with plain-language impact before the root cause and fix.
 
 ## Security & Environment
 

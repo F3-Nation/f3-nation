@@ -1,8 +1,8 @@
-# Copilot instructions
+# Code review instructions
 
-`AGENTS.md` is the canonical source for repo conventions. This file adds
-review priorities that apply everywhere. Path-specific rules live in
-`.github/instructions/*.instructions.md`.
+Code-review rules for the whole repo. Path-specific review rules live in
+`.github/instructions/*.instructions.md`; conventions for writing code, PRs and
+issues live in `AGENTS.md`.
 
 ## What to look for first
 
@@ -90,26 +90,3 @@ Stale references are findings.
 | Analytics dataset contract                              | `docs/duckdb-producer-contract.md`                                                                                                                                                         |
 | An app's structure, env or auth flow                    | That app's `AGENTS.md` and `README.md`                                                                                                                                                     |
 | A convention reviewers enforce, or a bot false positive | The matching `.github/instructions/*.instructions.md`                                                                                                                                      |
-
-## When writing code or PRs (cloud agent)
-
-- Read the relevant `docs/specs/` file and `docs/AI_GUARDRAILS.md` first. Say
-  in the PR when a change touches security, availability or scalability; a
-  human signs those off.
-- Make the smallest correct change and ship tests that pin it.
-- Run `pnpm ci:local` and commit any coverage-threshold rewrite.
-- PR body: a plain-language TL;DR, details, how to test, `Closes #<n>` or
-  `Part of #<n>`, commands run, DB/env-var/deploy-order impact, and
-  screenshots for UI changes. Remove template placeholders and keep the body
-  true to the diff as scope changes.
-- Reply to every review thread with what changed (commit SHA) or why not.
-  Out-of-scope findings get a tracking issue linked in the reply. Do not
-  resolve threads; humans do. Sign AI-written PR text and replies
-  `_written by <model>_` (see `.agents/skills/github/SKILL.md`).
-- Keep PRs small enough to review in one sitting (review bots skip very
-  large PRs), with mechanical sweeps (lint, renames, dependency bumps)
-  separate from behavior changes.
-- File pre-existing bugs found along the way as separate issues, not PR scope
-  creep. Search for duplicates first and follow the issue templates; lead
-  with plain-language impact, then root cause with file paths, the fix and
-  acceptance criteria.

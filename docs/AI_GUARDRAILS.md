@@ -28,8 +28,9 @@
   truth (see [Reliability](AI_DEVELOPMENT_GUIDE.md#reliability-in-a-multi-instance-world)).
 - **Keep guardrails tool-agnostic.** Durable guidance goes in `AGENTS.md`,
   `docs/`, or this file — vendor config files stay thin pointers. The one
-  exception is `.github/instructions/*.instructions.md`: path-scoped review
-  rules that Copilot loads by `applyTo` glob (see `AGENTS.md`).
+  exception is code-review rules (`.github/copilot-instructions.md` and
+  `.github/instructions/*.instructions.md`), which review tools load at review
+  time (see `AGENTS.md`).
 - **Flag, don't bury.** When a change touches a human-owned domain (below),
   say so explicitly in the PR description.
 
