@@ -33,8 +33,10 @@ set -euo pipefail
 BOT_TIMEOUT_SECS="${PR_TRIAGE_BOT_TIMEOUT_SECS:-7200}"
 LEDGER="${PR_TRIAGE_LEDGER:-${XDG_STATE_HOME:-$HOME/.local/state}/pr-triage/ledger.tsv}"
 LEGACY_CUTOFF="2026-10-21T00:00:00Z"
-PAGE_SIZE=50
-MAX_PAGES="${PR_TRIAGE_MAX_PAGES:-10}"
+# Each PR pulls hundreds of comments and reviews; at 50 PRs a page GitHub's ~10s GraphQL
+# limit returns HTTP 504, while 10 PRs answer in about 3s. 50 pages still covers 500 PRs.
+PAGE_SIZE=10
+MAX_PAGES="${PR_TRIAGE_MAX_PAGES:-50}"
 SEP=$'\x1f'
 
 usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
@@ -135,7 +137,11 @@ else
     args=(-f query="$query" -f owner="${repo%%/*}" -f name="${repo#*/}")
     [[ -n "$cursor" ]] && args+=(-f cursor="$cursor")
     page_file="$pages_dir/$(printf '%03d' "$page").json"
-    gh api graphql "${args[@]}" >"$page_file"
+    if ! gh api graphql "${args[@]}" >"$page_file"; then
+      # A busy GitHub occasionally answers 502 or 504; one retry usually succeeds.
+      sleep 2
+      gh api graphql "${args[@]}" >"$page_file"
+    fi
     [[ "$(jq -r '.data.repository.pullRequests.pageInfo.hasNextPage' "$page_file")" == "true" ]] || break
     (( page < MAX_PAGES )) || break
     cursor=$(jq -r '.data.repository.pullRequests.pageInfo.endCursor' "$page_file")
