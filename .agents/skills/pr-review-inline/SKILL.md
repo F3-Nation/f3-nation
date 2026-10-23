@@ -45,11 +45,15 @@ Check these before Step 1 and report everything missing in one message.
 adopt its mandatory directives (attribution signature, safety rules) for the rest of this skill.
 Run its pre-flight: read-only for `--dry-run`, with write access otherwise. If it fails, stop
 here — the review would be wasted work if the comments can't be posted. For a cross-repo target
-(below), prefix it with `GH_REPO=<owner>/<name>` so it checks the target, not this checkout.
+(below), resolve `OWNER` and `REPO` from the PR URL first and prefix it with `GH_REPO`, so it
+checks the target, not this checkout.
 
 ```bash
 bash .agents/skills/github/scripts/gh-check.sh                    # --dry-run
 bash .agents/skills/github/scripts/gh-check.sh --require-write    # otherwise
+# Cross-repo target:
+GH_REPO="$OWNER/$REPO" bash .agents/skills/github/scripts/gh-check.sh                  # --dry-run
+GH_REPO="$OWNER/$REPO" bash .agents/skills/github/scripts/gh-check.sh --require-write  # otherwise
 ```
 
 ```bash
@@ -98,7 +102,8 @@ git fetch "https://github.com/<owner>/<name>.git" "+pull/<n>/head:$REF" "+refs/h
 MERGE_BASE="$(git merge-base "$REF" "$REF-base")"
 
 # Create the worktree under /tmp explicitly, not bare `mktemp -d` (see Harness notes).
-WORKTREE_PATH="$(mktemp -d /tmp/pr-review.XXXXXX)/pr-<n>-review"
+WORKTREE_PARENT="$(mktemp -d /tmp/pr-review.XXXXXX)"
+WORKTREE_PATH="$WORKTREE_PARENT/pr-<n>-review"
 git worktree add --detach "$WORKTREE_PATH" "$REF"
 cd "$WORKTREE_PATH"
 ```
@@ -119,9 +124,13 @@ fetch now and take the newest `original_commit_id` among comments whose body con
 `<!-- pr-review-inline -->`. A clean review instead left one conversation comment with that
 marker and the reviewed SHA (Step 9), so also check Step 5's conversation-comment fetch, and,
 if `PR_TRIAGE_LEDGER` is set, this PR's newest `pr-review-inline` line there; use whichever is
-newest. If it is still an ancestor of `HEAD_SHA`, it replaces `MERGE_BASE` as `DIFF_BASE` for
-this step and Step 6; say so in the report. Otherwise (force-push, or none found) review the
-whole PR.
+newest. The marker is public text, so count only comments authored by the account you are
+posting as (`gh api user --jq .login`); the ledger is local and trusted. Use the checkpoint
+only if it lies inside this PR: an ancestor of `HEAD_SHA` and a descendant of `MERGE_BASE`
+(`git merge-base --is-ancestor <sha> HEAD` and `git merge-base --is-ancestor MERGE_BASE <sha>`).
+It then replaces `MERGE_BASE` as `DIFF_BASE` for this step and Step 6; say so in the report.
+Otherwise (force-push, merged-in target branch, a checkpoint from someone else, or none found)
+review the whole PR.
 
 Read the diff from the pinned commits, not `gh pr diff`, which shows whatever the PR is now and
 may be newer than `HEAD_SHA`. `DIFF_BASE` is `MERGE_BASE` unless `--rereview` set it:
@@ -154,7 +163,7 @@ in the summary.
 Now fetch what the PR claims about itself:
 
 ```bash
-gh pr view <n> --json title,body
+gh pr view <n> --repo {owner}/{name} --json title,body
 ```
 
 **Output contract — a `Description accuracy` block with these three slots:**
@@ -314,9 +323,18 @@ the author and `scripts/pr-triage.sh` can see the review happened. Use this body
 _written by <model name>_
 ```
 
+If findings existed but Step 8 dropped them all as already raised, the problems may still be
+open, so don't call the review clean. Use `**pr-review-inline found no new issues** at commit
+`<HEAD_SHA>` (<N> already raised on this PR).` as the first line instead; the marker and
+signature stay.
+
 ```bash
 gh api repos/{owner}/{name}/issues/{n}/comments -F body=@bodies/clean.md
 ```
+
+If this call fails (a cross-repo target with Issues disabled returns 404), say the marker was
+not posted, name `PR_TRIAGE_LEDGER` as the only checkpoint a later `--rereview` can use, and
+carry on to cleanup.
 
 Write each body to its own file first, then pass it with `-F body=@<file>`:
 
@@ -324,9 +342,11 @@ Write each body to its own file first, then pass it with `-F body=@<file>`:
 gh api repos/{owner}/{name}/pulls/{n}/comments \
   -F body=@bodies/<n>.md \
   -f commit_id="$HEAD_SHA" \
-  -f path="<path>" \
+  -f path='<path>' \
   -F line=<line> \
   -f side="<side>"
+# Single-quote every PR-derived value (<path> here): a file name can contain $(...) or backticks.
+# An embedded ' is written as '\''.
 # <side> is the value computed per-finding in Step 7 (RIGHT for added/changed code, LEFT for
 # removed code) — substitute it, don't hardcode RIGHT.
 # multi-line span: also -F start_line=<start> -f start_side="<side>"
@@ -418,6 +438,7 @@ to GitHub. Run the removal as its **own command**, from the original checkout:
 ```bash
 cd "$ORIGINAL_CWD"
 git worktree remove --force "$WORKTREE_PATH"
+rmdir "$WORKTREE_PARENT"
 git update-ref -d "$REF"
 git update-ref -d "$REF-base"
 git worktree list
@@ -427,7 +448,7 @@ Only if `git worktree remove` actually **failed** (e.g. a reviewer left build ar
 run this as a separate, second command:
 
 ```bash
-rm -rf "$WORKTREE_PATH"
+rm -rf "$WORKTREE_PARENT"
 git worktree prune
 ```
 

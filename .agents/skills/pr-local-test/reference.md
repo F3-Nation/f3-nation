@@ -176,7 +176,8 @@ answers with a 308 redirect, which plain `curl` reports in place of the real res
   the worktree, reinstalls, and applies new migrations. For a fork PR it stops at
   `NEEDS_APPROVAL <old> -> <new>` (exit code 6) before running anything: scan
   `git -C "$RUN/wt" diff <old> <new>` with the `SKILL.md` Phase 2c checklist, wait for a new
-  "go, run it", then run `<S> update $RUN --approved`. If it prints
+  "go, run it", then run `<S> update $RUN --approved <new>` with the exact commit you scanned;
+  if the PR moved again meanwhile, it prints `NEEDS_APPROVAL` for the newer head. If it prints
   `EXISTING_MIGRATIONS_CHANGED`, rebuild the database: `<S> down-db $RUN`, then `setup` (with
   `--at-base` if 2a called for it). Then restart the servers you need, re-run the checks
   touched by the new diff (`git -C "$RUN/wt" diff <old> <new>`), and produce fresh results and

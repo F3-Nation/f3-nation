@@ -11,18 +11,18 @@
 #   bash prt.sh exec <run-dir> -- <cmd...>  run a command in the worktree with the run's env
 #   bash prt.sh psql <run-dir> [psql args]  psql into this run's database (stdin ok)
 #   bash prt.sh info <run-dir>              ports, URLs, server status
-#   bash prt.sh update <run-dir> [--approved]  pull the PR's newest commits (keep-running)
+#   bash prt.sh update <run-dir> [--approved <sha>]  pull the PR's newest commits (keep-running)
 #   bash prt.sh down-db <run-dir>           delete this run's containers + data (then setup)
 #   bash prt.sh down <run-dir> [--keep-drafts]
 #   bash prt.sh list                        every run on this machine, with liveness
 set -euo pipefail
 
-ROOT=/tmp/pr-local-test
+ROOT="${PRT_ROOT:-/tmp/pr-local-test}" # PRT_ROOT is a test hook
 SLOTS="$ROOT/slots"
 APPS="map api admin me auth homepage"
 # repo variable (scripts/lib/local-ports.sh) : state key : offset in the run's port block
 PORTMAP="F3_MAP_PORT:map:0 F3_API_PORT:api:1 F3_ADMIN_PORT:admin:2 F3_ME_PORT:me:3 F3_AUTH_PORT:auth:4 F3_HOMEPAGE_PORT:homepage:5 F3_POSTGRES_PORT:postgres:10 F3_MAILPIT_SMTP_PORT:smtp:11 F3_MAILPIT_UI_PORT:mailpit:12 F3_GCS_PORT:gcs:13 F3_ADMINER_PORT:adminer:14"
-RUN_DIR_RE='^/tmp/pr-local-test/pr[0-9]+-[0-9a-f]{4}$'
+RUN_DIR_RE="^$ROOT/pr[0-9]+-[0-9a-f]{4}\$"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -63,7 +63,14 @@ load() {
   MAIN=$(st .main)
   PROJECT=$(st .compose_project)
   PATH="$(st .path_prefix):$PATH"
-  # dotenv doesn't override the environment, so an exported URL would beat the run's .env files.
+  # dotenv doesn't override the environment, so any exported value that an env file also defines
+  # (DB host/port, SMTP, API keys, ...) would beat the run's own files. Unset every name they use.
+  local k
+  while IFS= read -r k; do
+    case "$k" in PATH | HOME | USER | SHELL | TMPDIR | PWD | TERM | LANG) continue ;; esac
+    unset "$k" 2>/dev/null || true
+  done < <(cat "$WT/.env" "$WT"/.env.example "$WT"/apps/*/.env* "$WT"/packages/*/.env* 2>/dev/null \
+    | sed -n -E 's/^(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p' | sort -u)
   unset DATABASE_URL TEST_DATABASE_URL
   set -a
   # shellcheck disable=SC1091
@@ -120,7 +127,7 @@ cmd_init() {
   if [ "$(printf '%s\n' "$versions" | grep -c .)" = 1 ] && [[ "$versions" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     node_v=$versions
   else
-    node_v=$(git -C "$MAIN" show "$pr_sha:.nvmrc" 2>/dev/null | tr -d 'v[:space:]')
+    node_v=$(git -C "$MAIN" show "$pr_sha:.nvmrc" 2>/dev/null | tr -d 'v[:space:]') || true
     node_note="Dockerfiles give '$(printf '%s' "$versions" | tr '\n' ' ')'; used .nvmrc ($node_v)"
   fi
   [[ "$node_v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { cleanup_refs; echo "NODE_UNKNOWN=$versions"; exit 3; }
@@ -158,6 +165,16 @@ cmd_init() {
   mkdir -p "$RUN_DIR/logs" "$RUN_DIR/evidence" "$RUN_DIR/keys" "$RUN_DIR/jar"
   chmod 700 "$RUN_DIR/keys"
   local k=0 slot="" base e ok
+  # An interrupt or set -e exit before state.json exists would otherwise leak the slot, run dir,
+  # worktree and refs. Disarmed once the state is written.
+  init_cleanup() {
+    [ -z "$slot" ] || rm -rf "${SLOTS:?}/$slot"
+    git -C "$MAIN" worktree remove --force "$RUN_DIR/wt" 2>/dev/null || true
+    git -C "$MAIN" worktree prune 2>/dev/null || true
+    rm -rf "$RUN_DIR"
+    cleanup_refs
+  }
+  trap init_cleanup EXIT
   while [ $k -lt 20 ]; do
     if mkdir "$SLOTS/$k" 2>/dev/null; then
       base=$((41000 + k * 20)); ok=1
@@ -175,8 +192,10 @@ cmd_init() {
   git -C "$MAIN" worktree add -q --detach "$RUN_DIR/wt" "$pr_sha" >/dev/null 2>&1 \
     || { rm -rf "${SLOTS:?}/$slot" "$RUN_DIR"; cleanup_refs; die "git worktree add failed"; }
 
-  # The run's ports, in the file `pnpm local:setup --slot N` would write.
+  # The run's ports, in the file `pnpm local:setup --slot N` would write. A fork can track `.env`
+  # as a symlink, so drop whatever the checkout put there instead of writing through it.
   local project="prt-$run_id" ports="{}"
+  rm -rf "$RUN_DIR/wt/.env"
   {
     echo "COMPOSE_PROJECT_NAME=$project"
     echo "F3_CONTAINER_PREFIX=$project"
@@ -208,6 +227,7 @@ cmd_init() {
       path_prefix:$path_prefix, owner_pid:$owner_pid, owner_cmd:$owner_cmd,
       phase:"init", servers:[], db_mode:null, created_at:$t, updated_at:$t}' \
     >"$RUN_DIR/state.json"
+  trap - EXIT
 
   echo "RUN_DIR=$RUN_DIR"
   echo "WT=$RUN_DIR/wt"
@@ -229,10 +249,16 @@ pnpm_install() {
 }
 
 # The worktree is disposable: edits the run itself made (uv.lock, coverage thresholds) are dropped.
+# The run's root .env (its ports and project) survives the checkout even if the PR tracks a `.env`.
 checkout_wt() {
-  local dirty; dirty=$(git -C "$WT" status --porcelain --untracked-files=no)
+  local dirty env_keep
+  dirty=$(git -C "$WT" status --porcelain --untracked-files=no | grep -v ' \.env$' || true)
   [ -z "$dirty" ] || echo "DISCARDED_LOCAL_CHANGES: $(printf '%s' "$dirty" | tr '\n' ' ')"
+  env_keep=$(mktemp "$RUN_DIR/.env.XXXXXX")
+  cp "$WT/.env" "$env_keep"
   git -C "$WT" checkout -q -f --detach "$1"
+  rm -rf "$WT/.env"
+  mv "$env_keep" "$WT/.env"
 }
 
 # The exit code misses some migrator failures, so also compare applied rows with the journal.
@@ -400,28 +426,35 @@ cmd_info() {
 
 cmd_update() {
   load "$1"; shift
-  local approved=false a
-  for a in "$@"; do case "$a" in --approved) approved=true ;; *) die "unknown flag $a" ;; esac; done
+  local approved_sha="" a
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --approved) approved_sha="${2:-}"; [ -n "$approved_sha" ] || die "--approved needs the approved commit sha"; shift 2 ;;
+      *) die "unknown flag $1" ;;
+    esac
+  done
   local ref old new apps base_ref base_sha merge_base
   ref=$(st .git_ref); old=$(st .tested_sha); base_ref=$(st .base_ref)
   git -C "$MAIN" fetch -q origin "+refs/pull/$(st .pr)/head:$ref" "+refs/heads/$base_ref:$ref-base" || die "fetch failed"
   new=$(git -C "$MAIN" rev-parse "$ref")
   if [ "$new" = "$old" ]; then echo "NO_NEW_COMMITS ($old)"; return 0; fi
-  # A fork's new commits run nothing until the user has approved them.
-  if [ "$(st .cross_repo)" = true ] && ! $approved; then
-    echo "NEEDS_APPROVAL $old -> $new (scan git -C $WT diff $old $new, then run update --approved)"
-    exit 6
+  # A fork's new commits run nothing until the user has approved exactly this commit.
+  if [ "$(st .cross_repo)" = true ]; then
+    local approved_oid=""
+    [ -z "$approved_sha" ] || approved_oid=$(git -C "$MAIN" rev-parse --verify -q "$approved_sha^{commit}" 2>/dev/null || true)
+    if [ "$approved_oid" != "$new" ]; then
+      echo "NEEDS_APPROVAL $old -> $new (scan git -C $WT diff $old $new, then run update --approved $new)"
+      exit 6
+    fi
   fi
   base_sha=$(git -C "$MAIN" rev-parse "$ref-base")
   merge_base=$(git -C "$MAIN" merge-base "$new" "$base_sha")
   apps=$(jq -r '[.servers[].app] | join(" ")' "$RUN_DIR/state.json")
   for a in $apps; do stop_app "$a"; done
   checkout_wt "$new"
-  st_set --arg n "$new" --arg b "$base_sha" --arg m "$merge_base" \
-    '.tested_sha = $n | .pr_sha = $n | .base_sha = $b | .merge_base = $m'
-  echo "UPDATED $old -> $new"
-  echo "MERGE_BASE=$merge_base"
-  git -C "$WT" diff --stat "$old" "$new" | tail -1
+  # The tested revision advances only once install and migrations succeed, so a retry at the
+  # same head repeats the preparation instead of reporting NO_NEW_COMMITS.
+  st_set --arg n "$new" '.update_pending = $n | .phase = "update_incomplete"'
   pnpm_install
   # Appending a migration also rewrites the journal; only a change to earlier entries needs a rebuild.
   local journal=packages/db/drizzle/meta/_journal.json
@@ -432,6 +465,11 @@ cmd_update() {
   elif [ -n "$(git -C "$WT" diff --name-only "$old" "$new" -- "$journal")" ]; then
     migrate update
   fi
+  st_set --arg n "$new" --arg b "$base_sha" --arg m "$merge_base" \
+    '.tested_sha = $n | .pr_sha = $n | .base_sha = $b | .merge_base = $m | del(.update_pending) | .phase = "ready"'
+  echo "UPDATED $old -> $new"
+  echo "MERGE_BASE=$merge_base"
+  git -C "$WT" diff --stat "$old" "$new" | tail -1
   echo "STOPPED_SERVERS=$apps (restart the ones you need with serve)"
 }
 
@@ -553,11 +591,14 @@ cmd_list() {
   done
 }
 
-cmd="${1:-}"; shift || true
-case "$cmd" in
-  init) cmd_init "$@" ;; setup) cmd_setup "$@" ;;
-  serve) cmd_serve "$@" ;; stop) cmd_stop "$@" ;; exec) cmd_exec "$@" ;; psql) cmd_psql "$@" ;;
-  info) cmd_info "$@" ;; update) cmd_update "$@" ;; down-db) cmd_down_db "$@" ;;
-  down) cmd_down "$@" ;; list) cmd_list ;;
-  *) sed -n '2,16p' "$0"; exit 2 ;;
-esac
+# Sourcing the file (the tests do) defines the functions without running a command.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  cmd="${1:-}"; shift || true
+  case "$cmd" in
+    init) cmd_init "$@" ;; setup) cmd_setup "$@" ;;
+    serve) cmd_serve "$@" ;; stop) cmd_stop "$@" ;; exec) cmd_exec "$@" ;; psql) cmd_psql "$@" ;;
+    info) cmd_info "$@" ;; update) cmd_update "$@" ;; down-db) cmd_down_db "$@" ;;
+    down) cmd_down "$@" ;; list) cmd_list ;;
+    *) sed -n '2,16p' "$0"; exit 2 ;;
+  esac
+fi

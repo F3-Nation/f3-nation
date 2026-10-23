@@ -7,6 +7,7 @@ vitest_thresholds_status=0
 python_task_status=0
 turbo_scope_status=0
 mirror_postgres_image_status=0
+prt_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
 pnpm run lint:ws || ws_status=$?
@@ -14,6 +15,7 @@ node scripts/check-vitest-thresholds.mjs || vitest_thresholds_status=$?
 bash scripts/python-task.test.sh || python_task_status=$?
 bash scripts/select-turbo-scope.test.sh || turbo_scope_status=$?
 bash scripts/mirror-postgres-image.test.sh || mirror_postgres_image_status=$?
+bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
 
 if [ "$turbo_status" -ne 0 ]; then
   exit "$turbo_status"
@@ -35,4 +37,8 @@ if [ "$turbo_scope_status" -ne 0 ]; then
   exit "$turbo_scope_status"
 fi
 
-exit "$mirror_postgres_image_status"
+if [ "$mirror_postgres_image_status" -ne 0 ]; then
+  exit "$mirror_postgres_image_status"
+fi
+
+exit "$prt_status"
