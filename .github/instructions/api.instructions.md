@@ -9,54 +9,50 @@ Background: `docs/AI_DEVELOPMENT_GUIDE.md` (authorization, error handling) and
 
 ## Authorization
 
-- A procedure tier is not authorization. `protectedProcedure`,
-  `editorProcedure` and `adminProcedure` only prove a role exists _somewhere_.
+- A procedure tier is not authorization. `protectedProcedure` proves a
+  session; `editorProcedure` and `adminProcedure` prove a role on _some_ org.
   Every read or write of a specific resource must call `checkHasRoleOnOrg`, or
-  an equivalent, against the org of the **fetched DB row**. Never use an
-  org id taken from input.
+  an equivalent, against the org of the **fetched DB row**, never an org id
+  from input.
 - Mutations that move a record (`orgId`, `parentId`, `aoId`, `locationId`,
-  `seriesId`, any foreign id) must authorize the caller on **both** the
-  source and the destination. Use `requireEditorOnRescope`. Check that the
-  target exists (`NOT_FOUND`) before the permission check.
-- Any foreign id accepted in input must be verified to exist, be active, and
-  belong to an org the caller can edit, before writing.
+  `seriesId`, any foreign id) must authorize the caller on **both** source and
+  destination. Use `requireEditorOnRescope`, which checks the target exists
+  (`NOT_FOUND`) before the permission check.
+- Any foreign id in input must be verified to exist, be active, and belong to
+  an org the caller can edit, before writing.
 - Anonymous or `publicReadProcedure` paths:
   - Force `isActive` and `!isPrivate` on the row, its series and its full
     ancestor chain (`orgAndAncestorsAreActive` / `ancestorOrgsAreActive`),
     whatever filters the caller supplies.
   - Select an explicit column allowlist (no emails, phones, `meta` or tokens).
   - Bound the page size.
-  - Reject unknown slugs or keys before touching the DB or a cache.
-- Put a joined table's active/private predicate inside the `LEFT JOIN`, not
-  in `WHERE`. A `WHERE` on the joined table drops the base row.
+- Put a joined table's active/private predicate in the `LEFT JOIN`, not in
+  `WHERE`, which drops the base row.
 - API-key sessions never inherit the key owner's privileges. Self-edit and
-  "is owner" shortcuts must exclude API-key sessions.
-- Never add identity-based overrides (hard-coded emails, dev backdoors) to an
+  "is owner" shortcuts must exclude them.
+- No identity-based overrides (hard-coded emails, dev backdoors) in an
   authorization path.
 - A refused write throws `ORPCError("UNAUTHORIZED")`. Never drop the refused
   fields silently and return success.
 
 ## Errors and logging
 
-- Throw `ORPCError(code, { message })`, never a raw `Error`. oRPC turns
-  untyped throws into an opaque 500.
-- In `catch`, pass an existing `ORPCError` through. Otherwise `logError` the
-  original and wrap it:
-  - `BAD_GATEWAY` for upstream failures.
-  - `CONFLICT` for FK violations; read the SQLSTATE from
-    `err.cause?.code ?? err.code`.
-  - `INTERNAL_SERVER_ERROR` for everything else.
-- Use `NOT_FOUND` only when the caller could have caused the miss. A miss on
-  a literal, enum or session-derived key is our bug, so it is
-  `INTERNAL_SERVER_ERROR`.
-- Log ids and `Object.keys(changes)`, never request bodies, emails, or raw
-  Drizzle errors (bound parameters carry PII).
+- Throw `ORPCError(code, { message })`, never a raw `Error`; oRPC masks it
+  as an opaque 500. In `catch`, pass an `ORPCError` through, otherwise
+  `logError` and wrap it (`BAD_GATEWAY` upstream, else
+  `INTERNAL_SERVER_ERROR`). Use `NOT_FOUND` only when the caller could cause
+  the miss.
+- Map an FK violation to `CONFLICT`; read the SQLSTATE with `getPgError` /
+  `isForeignKeyViolationError` (`lib/user.ts`), which also checks `.cause`.
+- Log ids and `Object.keys(changes)`, never request bodies or emails. Drizzle
+  errors embed SQL and bound parameters (PII); don't log one raw when the
+  query binds PII.
 
 ## Data correctness
 
 - Every offset-paginated query ends its `ORDER BY` with a unique tiebreaker
-  (`asc(table.id)`). This applies to caller-supplied sorts and to an empty
-  sort array too. `getSortingColumns` drops unknown sort ids silently.
+  (`asc(table.id)`), including caller-supplied sorts and an empty sort array.
+  `getSortingColumns` silently drops unknown sort ids.
 - Partial updates (`crupdate`):
   - Omitted keys leave columns untouched; give optional booleans no Zod
     `.default()`.
@@ -64,52 +60,50 @@ Background: `docs/AI_DEVELOPMENT_GUIDE.md` (authorization, error handling) and
   - Apply insert defaults only in the insert branch.
 - Related writes go in one `db.transaction`: entity plus join rows, audit
   record plus mutation, cascade plus instance regeneration.
-- Claims and attempt counters use one conditional
-  `UPDATE … WHERE … RETURNING`, never read-then-write.
+- Claim one-time work (a "notified" marker) with one conditional
+  `UPDATE ... WHERE ... RETURNING`, never read-then-write. Claim before
+  sending and release the claim if the send fails.
 - Fire notifications, webhooks and cache revalidation only after every write
-  commits. Set "already notified" flags only after the send succeeds.
+  commits.
 - Org-tree logic is depth- and type-agnostic. Use the shared walkers bounded
   by `ORG_TREE_MAX_DEPTH`, with a cycle guard. Never chain fixed hops
-  (`parent.parent`, aliased self-joins, region→area→sector).
+  (`parent.parent`, aliased self-joins, region->area->sector).
   - Compute a recursive set once and anti-join it; never put
     `WITH RECURSIVE` inside a per-row `EXISTS`.
-- Never use `exists(select count() …)`: an aggregate always returns a row, so
+- Never `exists(select count() ...)`: an aggregate always returns a row, so
   `EXISTS` is always true.
-- Don't call authorization helpers in a loop over orgs; batch them. Chunk any
-  `IN` list built from client input, because Postgres caps a query at 65,535
-  bind parameters.
-- Pin `orgType` in org self-joins, and keep the same active/status filters
-  and returned fields across sibling procedures (`all`, `byId`,
-  `byLocation`). A column added to a grouped select is also added to
-  `groupBy`.
-- Optional contact and URL fields `.trim()` and normalize empty to `null`, so
-  clearing a field stores `null`, not `""`.
+- Chunk any `IN` list built from client input: Postgres caps a query at
+  65,535 bind parameters.
+- Pin `orgType` in org self-joins. Keep the same active/status filters and
+  returned fields across sibling procedures (org-chart `all`, `byId`,
+  `byLocation`). A column added to a grouped select also goes in `groupBy`.
+- Optional contact and URL fields `.trim()` and normalize empty to `null`.
 
 ## Contracts and callers
 
 - Changing what an endpoint accepts, returns, defaults or paginates breaks
-  callers. Grep for them and update or keep compatibility in the same PR:
-  - `apps/slackbot/infrastructure/api_client` (Python sends `True`/`False`).
-  - The map/admin/me hooks.
-  - `apps/homepage`.
+  callers. Grep for them and update or stay compatible in the same PR:
+  - `apps/slackbot/infrastructure/api_client` (Python `requests` sends
+    `True`/`False`).
+  - The map, admin and me hooks, and `apps/homepage`.
   - State any new 4xx in the PR.
 - REST query parameters:
-  - Never use `z.coerce.boolean()` (`"false"` becomes `true`).
-  - Never use a bare `z.coerce.number()` (`""` becomes `0`).
+  - Use `queryBooleanSchema`, never `z.coerce.boolean()` (`"false"` becomes
+    `true`).
+  - Never a bare `z.coerce.number()` (`""` becomes `0`).
   - Bound integer ids to `1..2147483647`.
   - Validate date strings with `z.iso.date()` before comparing them.
 - Every new or changed procedure has an `.output()` schema with `.describe()`
   on each field:
   - Output schemas strip unknown keys, so diff the returned fields.
-  - Derive enum lists and limits in descriptions from the shared constant,
-    never hand-written.
+  - Derive enum lists and limits in descriptions from the shared constant.
   - A delete returns `{ <entity>Id }`, not `z.void()`.
 - Any change to input or output schemas, descriptions, tags or security
-  requires regenerating
-  `apps/api/characterization/__snapshots__/openapi.golden.json`. Add a wire
-  test when REST and RPC behavior can diverge.
-- Keep app-specific shapes (Slack, map) in their sub-routers. Core CRUD
-  routers stay app-neutral.
+  updates `apps/api/characterization/__snapshots__/openapi.golden.json`
+  deliberately; call the diff out in the PR. Add a wire test when REST and
+  RPC behavior can diverge.
+- New app-specific shapes (Slack, map) go in `router/slack.ts` or
+  `router/map/`; core CRUD routers stay app-neutral.
 
 ## External calls
 

@@ -245,8 +245,8 @@ violation is a `BAD_REQUEST`, not a 500.
 - **Refresh-token rotation:** if the server single-uses (delete-on-use) refresh
   tokens, the client must **not** refresh concurrently per-request, or
   simultaneous requests at expiry will race, redeem the same token, and force
-  logouts. Either give rotation a short grace window with chain-linking on the
-  server, or single-flight the refresh on the client. See
+  logouts. Single-flight the refresh on the client; the server deliberately
+  has no grace window, because a reused rotated token revokes the family. See
   [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) and the `me`/`admin` middleware.
 - **MFA / email codes in local dev** are captured by Mailpit — see
   [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md). Don't disable verification to
