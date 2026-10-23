@@ -17,8 +17,22 @@ const currentDayKey = (referenceDate: Date, daysBack = 0): string =>
     .toISOString()
     .slice(0, 10);
 
+// A real calendar day: "2024-02-30" matches the pattern but rolls over to
+// March 1 in Date.UTC, so round-trip it to reject days that don't exist.
+const isCalendarDay = (date: string): boolean => {
+  if (!DATE_KEY.test(date)) return false;
+  const [year, month, day] = date.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return (
+    new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10) === date
+  );
+};
+
 const eventDayKey = (event: RegionEvent): string | null =>
-  DATE_KEY.test(event.date) ? event.date : null;
+  isCalendarDay(event.date) ? event.date : null;
 
 const timeSortKey = (time?: string): string => {
   const [hours = "0", minutes = "0"] = (time ?? "").split(":");

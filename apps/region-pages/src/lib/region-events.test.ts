@@ -115,6 +115,8 @@ describe("hasEventEnded", () => {
     ["a future day", { date: "2024-03-01" }, false],
     ["no date", { date: "" }, false],
     ["a malformed date", { date: "2024-2-1" }, false],
+    // Would count as ended if only the YYYY-MM-DD shape were checked.
+    ["a day that doesn't exist", { date: "2023-02-30" }, false],
   ])("%s -> %s", (_label, overrides, expected) => {
     expect(hasEventEnded(makeEvent(overrides), REFERENCE)).toBe(expected);
   });
