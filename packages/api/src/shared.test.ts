@@ -240,8 +240,7 @@ describe("Development mock session", () => {
     await expect(client.test()).resolves.toEqual({ session: null });
   });
 
-  it("protectedProcedure still succeeds with the dev mock session for an unauthenticated dev request", async () => {
-    vi.stubEnv("NODE_ENV", "development");
+  const callProtected = async () => {
     const { protectedProcedure } = await import("./shared");
 
     const testRouter = {
@@ -252,7 +251,62 @@ describe("Development mock session", () => {
     const client = createRouterClient(testRouter, {
       context: () => ({ reqHeaders: new Headers() }),
     });
+    return client.test();
+  };
 
-    await expect(client.test()).resolves.toEqual({ userId: "0" });
+  const stubLocalDev = () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "local");
+    vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "true");
+  };
+
+  it("protectedProcedure still succeeds with the dev mock session for an unauthenticated local dev request", async () => {
+    stubLocalDev();
+
+    await expect(callProtected()).resolves.toEqual({ userId: "0" });
+  });
+
+  it("personalUserProcedure refuses the dev mock session", async () => {
+    stubLocalDev();
+    const { personalUserProcedure } = await import("./shared");
+
+    const client = createRouterClient(
+      { test: personalUserProcedure.handler(() => ({ ok: true })) },
+      { context: () => ({ reqHeaders: new Headers() }) },
+    );
+
+    await expect(client.test()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it("refuses the dev mock session without the explicit opt-in flag", async () => {
+    stubLocalDev();
+    vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "");
+
+    await expect(callProtected()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it.each(["staging", "prod", "ci", "branch", "dev"])(
+    "refuses the dev mock session on channel %j even with NODE_ENV=development and the flag",
+    async (channel) => {
+      stubLocalDev();
+      vi.stubEnv("NEXT_PUBLIC_CHANNEL", channel);
+
+      await expect(callProtected()).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+      });
+    },
+  );
+
+  it("refuses the dev mock session outside NODE_ENV=development", async () => {
+    stubLocalDev();
+    vi.stubEnv("NODE_ENV", "production");
+
+    await expect(callProtected()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
   });
 });

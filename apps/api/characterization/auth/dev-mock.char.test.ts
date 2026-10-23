@@ -1,18 +1,26 @@
 import { vi } from "vitest";
 
 /**
- * The dev-mock branch: when isDevelopment is true, an unauthenticated request
- * (no cookie, no bearer) resolves to getDevMockSession() instead of null. Its
- * own file because it mocks @acme/shared/common/constants module-wide; the mock
- * must be registered before ../transport pulls in shared.ts. Only isDevelopment
- * is overridden — the importOriginal() spread is load-bearing, because @acme/db
- * reads isTest from this same module to select TEST_DATABASE_URL. Replacing the
- * factory with a plain object would silently point this file at the dev DB.
+ * The dev-mock branch: when isDevelopment is true, NEXT_PUBLIC_CHANNEL is
+ * "local" and ALLOW_DEV_MOCK_SESSION is "true", an unauthenticated request
+ * (no cookie, no bearer) to a protectedProcedure resolves to
+ * getDevMockSession() instead of null. Its own file because it mocks
+ * @acme/shared/common/constants module-wide; the mock must be registered
+ * before ../transport pulls in shared.ts. Only isDevelopment is overridden —
+ * the importOriginal() spread is load-bearing, because @acme/db reads isTest
+ * from this same module to select TEST_DATABASE_URL. Replacing the factory
+ * with a plain object would silently point this file at the dev DB.
  */
 vi.mock("@acme/shared/common/constants", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   isDevelopment: true,
 }));
+
+// shared.ts reads these per request, so stubbing before the first request is
+// enough. CI runs this suite with NEXT_PUBLIC_CHANNEL=ci, which the mock gate
+// refuses, so the channel is pinned here too.
+vi.stubEnv("NEXT_PUBLIC_CHANNEL", "local");
+vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "true");
 
 const { req, target } = await import("../transport");
 const { expectAuthorized, expectUnauthorized } = await import("./verdict");
@@ -37,8 +45,8 @@ describe.runIf(target.inProcess)("dev-mock branch", () => {
   });
 
   it("does NOT grant admin — the mock session carries no roles", async () => {
-    // getDevMockSession returns roles: [], so admin/editor guards still 401
-    // despite the code comment claiming 'admin access to all endpoints'.
+    // getDevMockSession returns roles: [] and the admin/editor tiers never
+    // receive it, so those guards still 401 for an unauthenticated request.
     await expectUnauthorized(
       await target.invoke(
         req("/v1/api-key", { headers: { "x-forwarded-for": IP(2) } }),
