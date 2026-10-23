@@ -13,8 +13,10 @@ Code-review rules are kept separate from the conventions here:
 [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
 (repo-wide) and [`.github/instructions/`](.github/instructions/) (one
 `*.instructions.md` per area, scoped by its `applyTo` glob). Review tools load
-them at review time: Copilot natively, CodeRabbit through the matching entries
-in [`.coderabbit.yaml`](.coderabbit.yaml) (change both together). They hold
+them at review time: Copilot natively, CodeRabbit through
+[`.coderabbit.yaml`](.coderabbit.yaml) and Greptile through
+[`.greptile/files.json`](.greptile/files.json). Both of those repeat each
+file's `applyTo`, so change all three together. They hold
 checks and "do not flag" decisions for reviewing a diff, stricter than the
 writing conventions, and never a second copy of this file. Conventions for
 writing code stay here and in `docs/`.

@@ -1,5 +1,5 @@
 ---
-applyTo: "**/*.md,docs/**,.agents/**,.coderabbit.yaml"
+applyTo: "**/*.md,docs/**,.agents/**,.coderabbit.yaml,.greptile/**"
 ---
 
 # Documentation and agent instructions
@@ -61,8 +61,8 @@ Flag these in new or changed text only, not in untouched legacy lines.
   Give the reason only when it isn't obvious.
 - Each rule lives in exactly one file, scoped by `applyTo` to the paths where
   it matters. Adding, renaming or rescoping an instructions file updates its
-  entry in `.coderabbit.yaml` (same `applyTo`), or CodeRabbit applies it to
-  the wrong files.
+  entries in `.coderabbit.yaml` and `.greptile/files.json` (same globs), or
+  those reviewers apply it to the wrong files.
 - Leave out anything a linter, formatter or typechecker enforces, anything
   derivable from config, and anything true of only one PR.
 - No version numbers, issue or PR references, external links, or tone and

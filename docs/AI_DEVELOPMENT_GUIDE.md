@@ -24,6 +24,7 @@ so each tool resolves to the same content:
 | **Claude** (Claude Code) | [`AGENTS.md`](../AGENTS.md) (root + per-app)                                               | Read directly (v2.1.281+); no `CLAUDE.md`     |
 | **GitHub Copilot**       | `AGENTS.md` + `.github/copilot-instructions.md` + `.github/instructions/*.instructions.md` | Conventions (`AGENTS.md`) + code-review rules |
 | **CodeRabbit**           | `AGENTS.md` + the same review files, scoped by `.coderabbit.yaml`                          | Conventions + code-review rules               |
+| **Greptile**             | `AGENTS.md` + the same review files, scoped by `.greptile/files.json`                      | Conventions + code-review rules               |
 | **Cursor**               | `.cursor/rules/*.mdc`                                                                      | Pointer → `AGENTS.md` + this guide            |
 
 **Rule of thumb:** put durable guidance in `AGENTS.md` (or, for deep topics, in
