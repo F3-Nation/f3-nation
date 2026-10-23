@@ -1,0 +1,121 @@
+{
+  "files": [
+    {
+      "path": ".github/copilot-instructions.md",
+      "description": "Repo-wide code-review priorities, comment rules and do-not-flag decisions."
+    },
+    {
+      "path": ".github/instructions/api.instructions.md",
+      "description": "Code-review rules for the oRPC API: authorization, anonymous reads, pagination, partial updates, contracts.",
+      "scope": ["packages/api/**", "apps/api/**", "packages/validators/**"]
+    },
+    {
+      "path": ".github/instructions/auth.instructions.md",
+      "description": "Code-review rules for auth, sessions, SSO and tokens.",
+      "scope": [
+        "apps/auth/**",
+        "packages/auth/**",
+        "packages/sso/**",
+        "packages/sso-next/**",
+        "apps/*/proxy.ts",
+        "apps/*/src/proxy.ts",
+        "apps/*/src/lib/auth/**",
+        "packages/api/src/shared.ts"
+      ]
+    },
+    {
+      "path": ".github/instructions/build-config.instructions.md",
+      "description": "Code-review rules for dependencies, pins, env vars and release config.",
+      "scope": [
+        "**/package.json",
+        "pnpm-workspace.yaml",
+        "turbo.json",
+        "renovate.json",
+        "knip.config.ts",
+        "commitlint.config.mjs",
+        "release-please-config.json",
+        ".release-please-manifest.json",
+        ".nvmrc",
+        "**/Dockerfile",
+        "docker-compose*.yml",
+        "**/env.ts",
+        "**/.env*.example",
+        "turbo/generators/**"
+      ]
+    },
+    {
+      "path": ".github/instructions/db.instructions.md",
+      "description": "Code-review rules for schema, migrations, seeds and DB tooling.",
+      "scope": ["packages/db/**", "packages/db-python/**"]
+    },
+    {
+      "path": ".github/instructions/docs.instructions.md",
+      "description": "Code-review rules for docs, specs, ADRs and agent instructions.",
+      "scope": [
+        "**/*.md",
+        "docs/**",
+        ".agents/**",
+        ".coderabbit.yaml",
+        ".greptile/**"
+      ]
+    },
+    {
+      "path": ".github/instructions/github-actions.instructions.md",
+      "description": "Code-review rules for GitHub Actions workflows and scripts.",
+      "scope": [
+        ".github/workflows/**",
+        ".github/actions/**",
+        ".github/scripts/**",
+        ".github/preview/**"
+      ]
+    },
+    {
+      "path": ".github/instructions/python.instructions.md",
+      "description": "Code-review rules for Python packages.",
+      "scope": ["**/*.py", "**/pyproject.toml", "uv.lock", "**/.python-version"]
+    },
+    {
+      "path": ".github/instructions/scripts.instructions.md",
+      "description": "Code-review rules for shell scripts and operator CLIs.",
+      "scope": [
+        "**/*.sh",
+        "scripts/**",
+        "tooling/scripts/**",
+        "apps/*/scripts/**",
+        ".agents/skills/**/scripts/**"
+      ]
+    },
+    {
+      "path": ".github/instructions/slackbot.instructions.md",
+      "description": "Code-review rules for the Slack bot.",
+      "scope": ["apps/slackbot/**"]
+    },
+    {
+      "path": ".github/instructions/tests.instructions.md",
+      "description": "Code-review rules for tests and coverage config.",
+      "scope": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/__tests__/**",
+        "**/tests/**",
+        "apps/api/characterization/**",
+        "**/vitest.config.*",
+        "**/vitest.*.ts",
+        "tooling/vitest/**"
+      ]
+    },
+    {
+      "path": ".github/instructions/web-apps.instructions.md",
+      "description": "Code-review rules for the Next.js apps and shared UI.",
+      "scope": [
+        "apps/map/**",
+        "apps/admin/**",
+        "apps/me/**",
+        "apps/homepage/**",
+        "apps/auth/src/app/**",
+        "packages/ui/**"
+      ]
+    }
+  ]
+}

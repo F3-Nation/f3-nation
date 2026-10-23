@@ -30,6 +30,8 @@ All the apps in this monorepo can be developed and tested locally. See [LOCAL_DE
 
 AI tools are welcome for writing code, tests, and PR descriptions. You're responsible for understanding, testing, and reviewing anything AI-generated before you submit it. See [AI_DEVELOPMENT_GUIDE.md](AI_DEVELOPMENT_GUIDE.md) and [AI_GUARDRAILS.md](AI_GUARDRAILS.md) for the guardrails our own AI agents follow.
 
+GitHub Copilot's review rules live in [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) and path-scoped files under [`.github/instructions/`](../.github/instructions/). If a review bot keeps raising the same false positive, or reviewers keep catching the same mistake, propose a one-line rule in the matching file — a "do not flag" entry for the former, a check for the latter.
+
 ## Choosing which Issues to work on
 
 Short answer: work on whatever interests you. Any improvement you can make will be appreciated, even if there's not a current Issue for it.

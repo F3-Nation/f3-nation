@@ -23,11 +23,16 @@
   `pnpm typecheck`, `pnpm build`, `pnpm test` — a PR that fails CI wastes a
   review cycle.
 - **Log through `@acme/logger`** with structured, dot-namespaced events —
-  never `console.*` (see [Logging](../AGENTS.md#logging)).
+  never `console.*` in runtime code. The only exceptions are the ones
+  [Logging](../AGENTS.md#logging) lists: the error-reporting pipeline's
+  failure paths and developer/operator CLIs.
 - **Assume multi-instance deployment.** No in-memory state as a source of
   truth (see [Reliability](AI_DEVELOPMENT_GUIDE.md#reliability-in-a-multi-instance-world)).
 - **Keep guardrails tool-agnostic.** Durable guidance goes in `AGENTS.md`,
-  `docs/`, or this file — vendor config files stay thin pointers.
+  `docs/`, or this file — vendor config files stay thin pointers. The one
+  exception is code-review rules (`.github/copilot-instructions.md` and
+  `.github/instructions/*.instructions.md`), which review tools load at review
+  time (see `AGENTS.md`).
 - **Flag, don't bury.** When a change touches a human-owned domain (below),
   say so explicitly in the PR description.
 

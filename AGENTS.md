@@ -9,7 +9,23 @@ guidance, put it in `AGENTS.md` (or `docs/` for deep topics and link it) and
 keep those pointer files thin. Per-app specifics belong in that app's
 `AGENTS.md`.
 
-Claude Code (v2.1.281+) reads `AGENTS.md` files directly, so there is no
+Code-review rules are kept separate from the conventions here:
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md)
+(repo-wide) and [`.github/instructions/`](.github/instructions/) (one
+`*.instructions.md` per area, scoped by its `applyTo` glob). Review tools load
+them at review time: Copilot natively, CodeRabbit through
+[`.coderabbit.yaml`](.coderabbit.yaml) and Greptile through
+[`.greptile/files.json`](.greptile/files.json). Both of those repeat each
+file's `applyTo`, so change all three together. They hold
+checks and "do not flag" decisions for reviewing a diff, stricter than the
+writing conventions, and never a second copy of this file. Conventions for
+writing code stay here and in `docs/`.
+
+**When you review a diff** (any assistant or tool), apply
+`.github/copilot-instructions.md` and every `.github/instructions/*.instructions.md`
+whose `applyTo` matches a changed file, in addition to this file.
+
+Current Claude Code reads `AGENTS.md` files directly, so there is no
 `CLAUDE.md`. Don't add one: a `CLAUDE.md` or `CLAUDE.local.md` in the
 working directory or above it makes Claude Code skip `AGENTS.md` entirely.
 
@@ -36,7 +52,9 @@ recently merged release-please PR, follow
 [`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
 or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
-— even if your tool does not load skills automatically.
+— even if your tool does not load skills automatically. Likewise, follow
+[`.agents/skills/db-migration/SKILL.md`](.agents/skills/db-migration/SKILL.md)
+for any change to the database schema or migrations.
 
 ## Project Structure & Module Organization
 
@@ -66,6 +84,7 @@ or
 - Use Prettier (`@acme/prettier-config`) and ESLint (`@acme/eslint-config` base/next/react) as the source of truth.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
+- Comments and docs are durable: state current behavior and the non-obvious why. No issue/PR numbers or GitHub links, dates, names, or "temporary/new/until" history — that belongs in the PR. Full rules: [`.github/instructions/docs.instructions.md`](.github/instructions/docs.instructions.md).
 
 ## Logging
 
@@ -77,8 +96,12 @@ or
     `@acme/observability`, and `global-error.tsx`, which is browser-only
     where pino does not run. `logError` there would re-enter the reporter
     that just failed, so those sites use `console.error` deliberately and
-    each says so in a comment. Nothing else gets this exemption; see
+    each says so in a comment. No other runtime code gets this exemption; see
     [`docs/OBSERVABILITY_PLAN.md`](docs/OBSERVABILITY_PLAN.md).
+  - Developer/operator CLIs are not runtime code: `scripts/`,
+    `tooling/scripts/`, `apps/*/scripts/`, `packages/db` CLIs (`migrate*`,
+    `reset`) and `*.verify.ts` harnesses print with `console.*` and may read
+    `process.env` directly.
 - Signature is `(event, ctx, err)` — **`event` first**, unlike pino's native
   methods. `event` is a fixed dot-namespaced literal
   (`<area>.<feature>.<outcome>`, `snake_case` segments); per-occurrence data goes
@@ -95,12 +118,12 @@ or
 - Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
 - **Set the Docker target platform at build time, not in the `Dockerfile`.** Cloud Run only runs `linux/amd64`. The app `Dockerfile` `FROM` lines must **not** pin `--platform` (BuildKit's `FromPlatformFlagConstDisallowed` lint, and it forces emulation on arm64 dev machines). Instead pass the platform at the build invocation: `platforms: linux/amd64` on `docker/build-push-action` (CI) and `--platform=linux/amd64` on `docker build` (deploy). Building a **deployable** image locally on Apple Silicon therefore requires an explicit `docker build --platform=linux/amd64 …`. Do **not** switch to `$BUILDPLATFORM` cross-builds — `sharp`'s native binaries are platform-specific and would break in the amd64 runtime.
 - Share toolchain setup through the composite action [`.github/actions/setup`](.github/actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
-- The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. The ruleset currently requires 8 checks (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`, `security-audit`, `lint-title`, `db-schema-sync`). Each deploy workflow's `check-regexp` lists only 7 of those — `lint-title` is deliberately excluded from the deploy gate because it only runs on `pull_request` (`pr-title.yml` has no `push` trigger), so it never produces a check-run on a commit reached via tag push, and waiting on one that will never exist would hang the gate rather than deploy.
+- The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. Every required check except `lint-title` belongs in each deploy workflow's `check-regexp` — `lint-title` is deliberately excluded from the deploy gate because it only runs on `pull_request` (`pr-title.yml` has no `push` trigger), so it never produces a check-run on a commit reached via tag push, and waiting on one that will never exist would hang the gate rather than deploy.
 
 ## Testing Guidelines
 
 - Use Vitest for unit and integration tests; name test files `*.test.ts[x]` and place under or near source code or in `__tests__`.
-- Reset databases before any suite that mutates data (`pnpm reset-test-db` or `pnpm -C packages/db reset-test-db`).
+- Suites that mutate the database run against a reset test DB. `packages/api`'s Vitest global setup resets it on every run (see [`packages/api/AGENTS.md`](packages/api/AGENTS.md)); other suites need `pnpm reset-test-db` (or `pnpm -C packages/db reset-test-db`) first.
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
 - **Coverage thresholds ratchet upward.** `vitest.config.ts` being rewritten by a
   test run is expected — commit it. Never set `thresholds.autoUpdate` to `false`
@@ -156,15 +179,18 @@ changed, not by its scope** — is documented in
 ## Pull Request Guidelines
 
 - Every pull request should:
-  - Include a clear summary, any related issue(s), commands run, and impact to DB/env.
+  - Fill in the PR template with a plain-language TL;DR first, related issue(s) (`Closes #<n>` or `Part of #<n>`), commands run, and DB, env-var and deploy-order impact. Remove template placeholders, and keep the body true to the diff as scope changes.
   - Add screenshots or screen recordings for UI changes in `apps/map`.
   - Highlight any new migrations or environment variables.
   - Never include secrets.
-- Before opening a pull request, ensure both `pnpm lint` and `pnpm format` pass with no errors or changes required.
+- Keep PRs small enough to review in one sitting (review bots skip very large PRs), with mechanical sweeps (lint, renames, dependency bumps) separate from behavior changes.
+- Before opening a pull request, run `pnpm ci:local` (at minimum `pnpm lint` and `pnpm format`) and commit any coverage-threshold rewrite.
+- Reply to every review thread with what changed (commit SHA) or why not; out-of-scope findings get a tracking issue linked in the reply. AI agents never resolve threads and sign what they write `_written by <model>_` (see [`.agents/skills/github/SKILL.md`](.agents/skills/github/SKILL.md)).
+- File pre-existing bugs found along the way as separate issues, not PR scope creep: search for duplicates, follow the issue templates, and lead with plain-language impact before the root cause and fix.
 
 ## Security & Environment
 
-- Store all secrets in per-directory `.env` files (one per app, `packages/env`, and `packages/db`). Always use `with-env` helpers to load environment variables and never commit `.env` files to the repo.
+- Store all secrets in per-directory `.env` files (one per app, `packages/env`, and `packages/db`). Package scripts load their `.env` through the `with-env` script prefix; app code reads configuration through its validated `env.ts` module. Never commit `.env` files to the repo.
 - Scope PostHog/analytics keys per environment and rotate if leaked. Run production DB changes only through scripts in `packages/db`.
 
 <!-- BEGIN:turborepo-agent-rules -->
