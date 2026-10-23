@@ -79,7 +79,6 @@ catalog:
   "@vitest/eslint-plugin": ^1.6.27
   better-auth: ^1.7.7
   class-variance-authority: ^0.7.1
-  clsx: ^2.1.1
   cmdk: ^1.1.1
   commitizen: ^4.3.2
   dayjs: ^1.11.23
