@@ -81,9 +81,11 @@ if grep -q '\.\.\.' apps/auth/.env 2>/dev/null; then
           openssl pkcs8 -topk8 -nocrypt -outform PEM | \
           awk 'NR>1{printf "\\n"} {printf "%s", $0}')
     KEY="${KEY%\\n}"
-    grep -v '^AUTH_JWT_PRIVATE_KEY=' apps/auth/.env > /tmp/auth_env_tmp
-    printf 'AUTH_JWT_PRIVATE_KEY="%s"\n' "$KEY" >> /tmp/auth_env_tmp
-    mv /tmp/auth_env_tmp apps/auth/.env
+    # Per-run temp file: checkouts set up in parallel must not share one.
+    AUTH_ENV_TMP=$(mktemp "${TMPDIR:-/tmp}/auth_env_tmp.XXXXXX")
+    grep -v '^AUTH_JWT_PRIVATE_KEY=' apps/auth/.env > "$AUTH_ENV_TMP"
+    printf 'AUTH_JWT_PRIVATE_KEY="%s"\n' "$KEY" >> "$AUTH_ENV_TMP"
+    mv "$AUTH_ENV_TMP" apps/auth/.env
     echo "     Generated AUTH_JWT_PRIVATE_KEY in apps/auth/.env"
   else
     echo "     WARNING: openssl not found — AUTH_JWT_PRIVATE_KEY left as placeholder in apps/auth/.env"
