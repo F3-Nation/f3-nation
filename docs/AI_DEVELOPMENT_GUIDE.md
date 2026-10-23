@@ -110,8 +110,10 @@ if (!success) throw new ORPCError("UNAUTHORIZED");
 
 Use [`checkHasRoleOnOrg`](../packages/api/src/check-has-role-on-org.ts) — it
 walks the org hierarchy (AO → region → … → nation) so a region admin is
-authorized for its AOs. When you call it in a loop over many orgs, batch where
-possible to avoid N+1 queries.
+authorized for its AOs. Never call it in a loop over many orgs (an N+1 on the
+auth path): use `checkHasRolesOnOrgs` (per-check results),
+`checkHasRoleOnAnyOrg` or `checkHasRoleOnAllOrgs` from the same file, which
+resolve every org's ancestors in a single query and return the same decisions.
 
 ### Reads expose PII too
 
