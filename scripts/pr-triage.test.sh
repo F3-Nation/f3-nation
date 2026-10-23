@@ -72,7 +72,16 @@ jq -n '
       | .reviews.nodes = [review("andy"; "2026-10-15T00:00:00Z"; ""; ["Old finding.\n_written by Model_"])]),
     (pr(12; "unmarked AI comment after cutoff"; "someone")
       | .reviews.nodes = [review("bot-user"; "2026-10-22T00:00:00Z"; ""; ["Some note.\n_written by Model_"])]),
-    (pr(13; "</script><img src=x onerror=alert(1)>"; "someone") | .isDraft = true)
+    (pr(13; "</script><img src=x onerror=alert(1)>"; "someone") | .isDraft = true),
+    (pr(14; "bot rerun just started on an old commit"; "someone")
+      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[0] +=
+          {state: "PENDING", createdAt: "2026-10-22T11:50:00Z"}),
+    (pr(15; "bot run stuck for hours"; "someone")
+      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[1] +=
+          {status: "IN_PROGRESS", startedAt: "2026-10-22T08:00:00Z"}),
+    (pr(16; "first line\nsecond line"; "someone")),
+    (pr(17; "over 100 threads"; "someone") | .reviews.nodes = [inline_review]
+      | .reviewThreads = {pageInfo: {hasNextPage: true}, nodes: [thread(true; "andy")]})
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -109,6 +118,14 @@ assert_eq "approved waits to merge" "MERGE" "$(bucket_of 9)"
 assert_eq "the viewer's own finished PR" "OWN" "$(bucket_of 10)"
 assert_eq "a review from before the markers is recognized" "LOCAL" "$(bucket_of 11)"
 assert_eq "an unmarked AI comment after the cutoff isn't a skill run" "INLINE" "$(bucket_of 12)"
+assert_eq "a bot run started minutes ago holds the PR, however old the commit" "BOTS" "$(bucket_of 14)"
+assert_eq "a bot run started over 2h ago stops blocking" "INLINE" "$(bucket_of 15)"
+assert_eq "a bot run started over 2h ago is noted" "gave up waiting on Greptile" "$(note_of 15)"
+assert_eq "a multiline title is flattened" "first line second line" \
+  "$(board_json | jq -r '.prs[] | select(.number == 16) | .title')"
+assert_eq "threads past the first 100 hold the PR" "THREADS" "$(bucket_of 17)"
+assert_eq "threads past the first 100 are noted" "over 100 threads, check the rest on GitHub" \
+  "$(note_of 17)"
 
 hostile_count=$(grep -c '</script><img' "$tmp_dir/board.html")
 assert_eq "a hostile title can't close the data block" "0" "$hostile_count"
@@ -122,6 +139,8 @@ assert_eq "text mode lists /pr-local-test PRs first" "Run /pr-local-test" "$(sed
 assert_eq "text mode shows the empty-note url on its own line" \
   "         https://github.com/acme/repo/pull/5" \
   "$(grep -A1 '#5 ' "$tmp_dir/text.out" | tail -1)"
+assert_eq "text mode keeps a multiline title's card on one line" \
+  "  #16    first line second line (someone)" "$(grep '#16 ' "$tmp_dir/text.out")"
 assert_eq "text mode counts drafts" "2 drafts ignored; skipped (Renovate/release-please): #2 " \
   "$(tail -1 "$tmp_dir/text.out")"
 

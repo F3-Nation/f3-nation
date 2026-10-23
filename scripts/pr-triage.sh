@@ -89,8 +89,8 @@ query($owner: String!, $name: String!) {
         commits(last: 1) {
           nodes { commit { committedDate statusCheckRollup { contexts(first: 100) { nodes {
             __typename
-            ... on CheckRun { name status }
-            ... on StatusContext { context state description }
+            ... on CheckRun { name status startedAt }
+            ... on StatusContext { context state description createdAt }
           } } } } }
         }
         comments(last: 100) { nodes { author { login } body } }
@@ -101,6 +101,7 @@ query($owner: String!, $name: String!) {
           }
         }
         reviewThreads(first: 100) {
+          pageInfo { hasNextPage }
           nodes { isResolved comments(first: 1) { nodes { author { login } } } }
         }
       }
@@ -139,20 +140,30 @@ classify='
       | ($pr.author.login // "ghost") as $author
       | ($pr.commits.nodes[0].commit) as $head
       | ($head.statusCheckRollup.contexts.nodes // []) as $ctx
-      | ([$pr.createdAt, $pr.timelineItems.nodes[0].createdAt, $head.committedDate] | map(ts) | max) as $since
-      | (($now - $since) > $timeout) as $overdue
+      | ([$pr.createdAt, $pr.timelineItems.nodes[0].createdAt, $head.committedDate] | map(ts) | max)
+        as $since
 
-      # Bot state: done | running | none
+      # Bot state: done | running | none. A running bot is timed from when its run started;
+      # one that never appeared, from when the PR became ready or got its newest commit.
       | ($ctx | map(select(.context == "CodeRabbit")) | last) as $cr
       | (if $cr == null then "none"
-         elif $cr.state == "PENDING" or (($cr.description // "") | startswith("Review skipped: draft")) then "running"
+         elif $cr.state == "PENDING" then "running"
+         elif ($cr.description // "") | startswith("Review skipped: draft") then "none"
          else "done" end) as $crState
       | ($ctx | map(select(.name == "Greptile Review")) | last) as $gr
-      | (if $gr == null then "none" elif $gr.status == "COMPLETED" then "done" else "running" end) as $grState
+      | (if $gr == null then "none" elif $gr.status == "COMPLETED" then "done" else "running" end)
+        as $grState
       | (if any($pr.comments.nodes[]; ((.author.login // "") | startswith("qodo"))
-             and ((.body // "") | contains("Code Review by Qodo"))) then "done" else "none" end) as $qoState
-      | [["CodeRabbit", $crState], ["Greptile", $grState], ["Qodo", $qoState]] as $bots
-      | [$bots[] | select(.[1] != "done") | .[0]] as $pendingBots
+             and ((.body // "") | contains("Code Review by Qodo"))) then "done" else "none" end)
+        as $qoState
+      | [["CodeRabbit", $crState, $cr.createdAt], ["Greptile", $grState, $gr.startedAt],
+         ["Qodo", $qoState, null]]
+      | map(select(.[1] != "done")
+          | {name: .[0], overdue: (($now - (if .[1] == "running" and .[2] != null
+                                              then .[2] | ts else $since end)) > $timeout)})
+        as $unfinished
+      | [$unfinished[] | select(.overdue | not) | .name] as $pendingBots
+      | [$unfinished[] | select(.overdue) | .name] as $gaveUpOn
 
       # Skill runs, by anyone
       | ($ledger | map(select(.pr == $pr.number) | .skill)) as $logged
@@ -172,35 +183,42 @@ classify='
         as $inlineReviewed
 
       # Threads
-      | [$pr.reviewThreads.nodes[] | select(.isResolved | not) | (.comments.nodes[0].author.login // "ghost")] as $open
+      | [$pr.reviewThreads.nodes[] | select(.isResolved | not)
+          | (.comments.nodes[0].author.login // "ghost")] as $open
       | ($open | group_by(.) | map("\(.[0]) \(length)") | join(", ")) as $openBy
+      # Past the first 100 threads none can be checked, so the PR waits rather than advancing.
+      | ($pr.reviewThreads.pageInfo.hasNextPage // false) as $moreThreads
       | ($pr.reviewDecision == "APPROVED") as $approved
       | ($pr.mergeable == "CONFLICTING") as $conflicts
 
       | (if $pr.isDraft then ["DRAFT", ""]
          elif ($author | test("renovate|release-please")) then ["SKIP", ""]
-         elif ($pendingBots | length) > 0 and ($overdue | not) then
-           ["BOTS", "waiting on \($pendingBots | join(", "))"]
+         elif ($pendingBots | length) > 0 then ["BOTS", "waiting on \($pendingBots | join(", "))"]
          elif ($inlineReviewed | not) then ["INLINE", ""]
-         elif ($open | length) > 0 then ["THREADS", "\($open | length) unresolved (\($openBy))"
-           + (if $localTested then "; both skills done" else "" end)]
+         elif ($open | length) > 0 or $moreThreads then ["THREADS",
+           (if ($open | length) > 0 then "\($open | length) unresolved (\($openBy))" else "" end)
+           + (if $moreThreads then "; over 100 threads, check the rest on GitHub" else "" end)
+           + (if $localTested then "; both skills done" else "" end) | ltrimstr("; ")]
          elif ($localTested | not) then ["LOCAL", ""]
-         elif $author == $me then ["OWN", (if $approved then "approved" else "needs another approver" end)]
+         elif $author == $me then
+           ["OWN", (if $approved then "approved" else "needs another approver" end)]
          elif $approved then ["MERGE", ""]
          else ["MANUAL", ""]
          end) as $verdict
+      | ($verdict[0] | IN("DRAFT", "SKIP") | not) as $active
       | {
           bucket: $verdict[0],
           number: $pr.number,
-          title: $pr.title,
+          # Newlines would split a card across lines in the terminal listing.
+          title: ($pr.title | gsub("[\\r\\n]+"; " ")),
           author: $author,
           url: $pr.url,
           mine: ($author == $me),
           note: ([
             (if $verdict[1] != "" then $verdict[1] else empty end),
-            (if $conflicts and ($verdict[0] | IN("DRAFT", "SKIP") | not) then "merge conflicts" else empty end),
-            (if ($pendingBots | length) > 0 and $overdue and ($verdict[0] | IN("DRAFT", "SKIP") | not)
-             then "gave up waiting on \($pendingBots | join(", "))" else empty end)
+            (if $conflicts and $active then "merge conflicts" else empty end),
+            (if ($gaveUpOn | length) > 0 and $active
+             then "gave up waiting on \($gaveUpOn | join(", "))" else empty end)
           ] | join("; "))
         }
     ]
@@ -266,18 +284,23 @@ if $html; then
   .meta code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
   .notice { margin-top: 10px; padding: 8px 12px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); }
   main { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr);
-    gap: 12px; padding: 12px 16px 16px; max-width: 1800px; margin: 0 auto; overflow-x: auto; align-items: start; }
-  .col { background: var(--panel); border-radius: 8px; border-top: 4px solid var(--accent); padding: 10px; min-width: 0; }
+    gap: 12px; padding: 12px 16px 16px; max-width: 1800px; margin: 0 auto;
+    overflow-x: auto; align-items: start; }
+  .col { background: var(--panel); border-radius: 8px; border-top: 4px solid var(--accent);
+    padding: 10px; min-width: 0; }
   .col h2 { font-size: 14px; margin: 0; display: flex; justify-content: space-between; gap: 8px; }
   .count { color: var(--muted); font-weight: 600; }
   .hint { color: var(--muted); font-size: 12px; margin: 4px 0 10px; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; margin-bottom: 8px; }
   .card a { color: var(--link); text-decoration: none; }
   .card a:hover { text-decoration: underline; }
   .num { font-weight: 600; margin-right: 4px; }
   .title { overflow-wrap: anywhere; }
-  .by { color: var(--muted); font-size: 12px; margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .chip { background: var(--chip); color: var(--chip-text); border-radius: 10px; padding: 0 7px; font-size: 11px; font-weight: 600; }
+  .by { color: var(--muted); font-size: 12px; margin-top: 4px; display: flex; gap: 6px;
+    flex-wrap: wrap; align-items: center; }
+  .chip { background: var(--chip); color: var(--chip-text); border-radius: 10px; padding: 0 7px;
+    font-size: 11px; font-weight: 600; }
   .note { font-size: 12px; margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
   .empty { color: var(--muted); font-size: 12px; font-style: italic; }
   footer { color: var(--muted); font-size: 12px; padding: 0 16px 24px; max-width: 1800px; margin: 0 auto; }
@@ -303,7 +326,8 @@ HTML
   const columns = [
     ["BOTS", "Waiting on AI bots", "CodeRabbit, Greptile and Qodo are still reviewing.", "--c-bots"],
     ["INLINE", "Needs /pr-review-inline", "Run the pr-review-inline skill on these.", "--c-inline"],
-    ["THREADS", "Waiting on unresolved threads", "The author needs to address or reply to open review threads.", "--c-threads"],
+    ["THREADS", "Waiting on unresolved threads",
+      "The author needs to address or reply to open review threads.", "--c-threads"],
     ["LOCAL", "Needs /pr-local-test", "Threads are resolved. Run the pr-local-test skill on these.", "--c-local"],
     ["MANUAL", "Needs codeowner approval", "Both skills are done. Review and approve.", "--c-manual"],
     ["MERGE", "Approved, waiting to merge", "Approved and ready to merge.", "--c-merge"],
@@ -329,7 +353,8 @@ HTML
   meta.append(`Generated ${new Date(data.generatedAt).toLocaleString()} for @${data.viewer}. Rerun `);
   meta.append(el("code", "", "scripts/pr-triage.sh --html"), " to refresh.");
   if (data.truncated) {
-    document.querySelector("header").append(el("div", "notice", "More than 50 open PRs: only the oldest 50 are shown."));
+    document.querySelector("header").append(
+      el("div", "notice", "More than 50 open PRs: only the oldest 50 are shown."));
   }
 
   const board = document.getElementById("board");
@@ -358,7 +383,8 @@ HTML
   const drafts = data.prs.filter((pr) => pr.bucket === "DRAFT").length;
   const skipped = data.prs.filter((pr) => pr.bucket === "SKIP").map((pr) => `#${pr.number}`);
   document.getElementById("footer").textContent =
-    `${drafts} draft${drafts === 1 ? "" : "s"} ignored. Skipped (Renovate and release-please): ${skipped.join(" ") || "none"}.`;
+    `${drafts} draft${drafts === 1 ? "" : "s"} ignored. ` +
+    `Skipped (Renovate and release-please): ${skipped.join(" ") || "none"}.`;
 </script>
 </body>
 </html>
