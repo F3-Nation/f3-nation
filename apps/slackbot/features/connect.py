@@ -58,6 +58,28 @@ def _get_requester_slack_space(team_id):
     return slack_space
 
 
+def _notify_admin_request_unverified(body: dict, logger: Logger):
+    channel_id = (
+        safe_get(body, "container", "channel_id")
+        or safe_get(body, "channel", "id")
+        or safe_get(body, "channel", "channel_id")
+    )
+    user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
+    admin_token = os.environ.get("ADMIN_BOT_TOKEN")
+    if not channel_id or not user_id or not admin_token:
+        return
+    try:
+        WebClient(token=admin_token).chat_postEphemeral(
+            channel=channel_id,
+            user=user_id,
+            text=(
+                "The requester workspace could not be verified. Please ask them to resubmit; this request needs review."
+            ),
+        )
+    except Exception:
+        logger.info("Could not display unverified connection request feedback")
+
+
 def build_connect_options_form(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
@@ -320,12 +342,19 @@ def handle_approve_connection(
     slack_space_record = _get_requester_slack_space(team_id)
     if not slack_space_record:
         logger.warning("Unable to resolve requester workspace credentials for connection approval.")
+        _notify_admin_request_unverified(body, logger)
         return
     workspace_settings = safe_get(slack_space_record, "settings")
     if not isinstance(workspace_settings, dict) or workspace_settings.get("team_id") != team_id:
         logger.warning("Unable to resolve requester workspace settings for connection approval.")
+        _notify_admin_request_unverified(body, logger)
         return
-    region_record = SlackSettings(**workspace_settings)
+    try:
+        region_record = SlackSettings(**workspace_settings)
+    except (TypeError, ValueError):
+        logger.warning("Unable to parse requester workspace settings for connection approval.")
+        _notify_admin_request_unverified(body, logger)
+        return
     region_record.bot_token = slack_space_record.bot_token
     requester_client = WebClient(token=slack_space_record.bot_token)
     org_record = DbManager.get(Org, metadata.get("region_id"))

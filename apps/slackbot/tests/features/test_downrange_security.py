@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from slack_sdk.errors import SlackApiError
+from slack_sdk.web.slack_response import SlackResponse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -69,6 +71,7 @@ def test_request_uses_server_resolved_target_token_and_never_emits_token_metadat
         body, client, MagicMock(), {}, SlackSettings(team_id="T_REQUESTER", org_id=9, bot_token="xoxb-requester-secret")
     )
 
+    assert web_client_factory.call_args.kwargs["token"] == "xoxb-target-secret"
     payload = target_client.chat_postMessage.call_args.kwargs["metadata"]["event_payload"]
     assert payload["requester_team_id"] == "T_REQUESTER"
     assert not any("token" in key.lower() for key in payload)
@@ -87,6 +90,7 @@ def test_approval_uses_server_side_requester_space_and_legacy_token_metadata_is_
             "ts": "1",
         },
         "channel": {"id": "C1"},
+        "user": {"id": "U_ADMIN"},
     }
 
     downrange.handle_invite_approve(body, web_client, MagicMock(), {}, record)
@@ -116,12 +120,18 @@ def test_legacy_denial_and_mark_done_metadata_never_lookup_or_send(monkeypatch, 
             "ts": "1",
         },
         "channel": {"id": "C1"},
+        "user": {"id": "U_ADMIN"},
     }
 
     getattr(downrange, handler_name)(legacy_body, client, MagicMock(), {}, SlackSettings(team_id="T_TARGET", org_id=42))
 
     lookup.assert_not_called()
     client.chat_postMessage.assert_not_called()
+    client.chat_postEphemeral.assert_called_once_with(
+        channel="C1",
+        user="U_ADMIN",
+        text="This request can't be completed. Please ask the requester to resubmit from Downrange.",
+    )
 
 
 def test_missing_server_side_bot_token_fails_closed(monkeypatch):
@@ -137,6 +147,28 @@ def test_missing_server_side_bot_token_fails_closed(monkeypatch):
     }
     downrange.handle_invite_deny(body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="T_TARGET", org_id=42))
     factory.assert_not_called()
+
+
+@pytest.mark.parametrize("value", [{}, {"target_team_id": "T_TARGET", "target_org_id": 42}])
+def test_unresolved_request_updates_modal_with_fixed_resubmit_guidance(monkeypatch, value):
+    client = MagicMock()
+    monkeypatch.setattr(downrange, "_get_target_region_info", MagicMock(return_value=("OTHER", None, None)))
+    body = {"actions": [{"value": json.dumps(value)}], "view": {"id": "V1", "state": {"values": {}}}}
+
+    downrange.handle_invite_request(body, client, MagicMock(), {}, SlackSettings(team_id="T_REQUESTER"))
+
+    client.views_update.assert_called_once()
+    assert "resubmit from Downrange" in str(client.views_update.call_args)
+    assert "target_team_id" not in str(client.views_update.call_args)
+
+
+def test_unresolved_admin_feedback_is_best_effort_without_channel_or_user():
+    client = MagicMock()
+    body = {"message": {"metadata": {"event_payload": {}}}}
+
+    downrange.handle_invite_deny(body, client, MagicMock(), {}, SlackSettings(team_id="T_TARGET"))
+
+    client.chat_postEphemeral.assert_not_called()
 
 
 def test_broken_link_uses_org_team_lookup_and_ignores_legacy_embedded_token(monkeypatch):
@@ -169,3 +201,61 @@ def test_broken_link_uses_org_team_lookup_and_ignores_legacy_embedded_token(monk
     assert factory.call_args.kwargs["token"] == "xoxb-server-target"
     sent_blocks = target_client.chat_postMessage.call_args.kwargs["blocks"]
     assert all("xoxb" not in str(block).lower() for block in sent_blocks)
+
+
+def test_slack_api_error_logging_includes_only_safe_error_code():
+    logger = MagicMock()
+    error = SlackApiError(
+        "request failed with xoxb-secret",
+        {"error": "ratelimited", "response_metadata": {"token": "xoxb-response-secret"}},
+    )
+
+    downrange._log_slack_call_error(logger, "handle_invite_approve.requester_dm_error", error)
+
+    logged = str(logger.error.call_args)
+    assert "ratelimited" in logged
+    assert "handle_invite_approve.requester_dm_error" in logged
+    assert "xoxb" not in logged
+
+
+def test_slack_api_error_with_real_slack_response_logs_only_error_code():
+    logger = MagicMock()
+    response = SlackResponse(
+        client=None,
+        http_verb="POST",
+        api_url="https://slack.example/api",
+        req_args={},
+        data={"error": "channel_not_found", "token": "xoxb-response-secret"},
+        headers={},
+        status_code=200,
+    )
+    error = SlackApiError("request failed with xoxb-secret", response)
+
+    downrange._log_slack_call_error(logger, "handle_invite_approve.requester_dm_error", error)
+
+    logged = str(logger.error.call_args)
+    assert "channel_not_found" in logged
+    assert "xoxb" not in logged
+    assert "response" not in logged
+
+
+def test_slack_error_with_unexpected_code_and_other_errors_log_type_only():
+    slack_logger = MagicMock()
+    downrange._log_slack_call_error(
+        slack_logger,
+        "handle_invite_deny.requester_dm_error",
+        SlackApiError("xoxb-secret", {"error": "xoxb_secret"}),
+    )
+    assert "unclassified" in str(slack_logger.error.call_args)
+    assert "xoxb" not in str(slack_logger.error.call_args)
+
+    exception_logger = MagicMock()
+    downrange._log_slack_call_error(
+        exception_logger,
+        "handle_invite_mark_done.admin_message_update_error",
+        RuntimeError("xoxb-exception-secret"),
+    )
+    logged = str(exception_logger.error.call_args)
+    assert "RuntimeError" in logged
+    assert "handle_invite_mark_done.admin_message_update_error" in logged
+    assert "xoxb" not in logged

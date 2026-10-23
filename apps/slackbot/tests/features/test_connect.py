@@ -3,6 +3,8 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from features import connect
@@ -188,3 +190,97 @@ def test_approve_uses_requester_workspace_client_without_admin_context(monkeypat
     assert client_factory.call_args.kwargs["token"] == "current-db-token"
     assert get_user.call_args.args[2] is client_factory.return_value
     assert client_factory.return_value.chat_postMessage.call_args.kwargs["channel"] == "U_REQUESTER"
+
+
+def test_approve_rejects_unexpected_workspace_settings_before_database_writes(monkeypatch):
+    requester_space = SimpleNamespace(
+        bot_token="current-db-token",
+        settings={"team_id": "TREQUESTER", "unexpected_stale_field": True},
+    )
+    find_first_record = MagicMock(return_value=requester_space)
+    create_record = MagicMock()
+    update_records = MagicMock()
+    logger = MagicMock()
+    monkeypatch.setattr(connect.DbManager, "find_first_record", find_first_record)
+    monkeypatch.setattr(connect.DbManager, "create_record", create_record)
+    monkeypatch.setattr(connect.DbManager, "update_records", update_records)
+    client_factory = MagicMock()
+    monkeypatch.setattr(connect, "WebClient", client_factory)
+    body = {
+        "message": {
+            "metadata": {
+                "event_payload": {
+                    "team_id": "TREQUESTER",
+                    "user_id": "U_REQUESTER",
+                    "region_id": 7,
+                    "requestor_bot_token": "poisoned-legacy-token",
+                }
+            }
+        }
+    }
+
+    connect.handle_approve_connection(
+        body,
+        MagicMock(),
+        logger,
+        {"bot_token": "admin-token"},
+        SlackSettings(team_id="TADMIN"),
+    )
+
+    create_record.assert_not_called()
+    update_records.assert_not_called()
+    client_factory.assert_not_called()
+    logger.warning.assert_called_once_with("Unable to parse requester workspace settings for connection approval.")
+
+
+@pytest.mark.parametrize(
+    "space, warning",
+    [
+        (None, "Unable to resolve requester workspace credentials for connection approval."),
+        (
+            SimpleNamespace(bot_token="requester-token", settings={"team_id": "TOTHER"}),
+            "Unable to resolve requester workspace settings for connection approval.",
+        ),
+        (
+            SimpleNamespace(bot_token="requester-token", settings={"team_id": "TREQUESTER", "unexpected": True}),
+            "Unable to parse requester workspace settings for connection approval.",
+        ),
+    ],
+)
+def test_approve_failure_feedback_uses_admin_client_and_does_not_write(monkeypatch, space, warning):
+    monkeypatch.setattr(connect, "_get_requester_slack_space", MagicMock(return_value=space))
+    writes = [MagicMock(), MagicMock()]
+    monkeypatch.setattr(connect.DbManager, "create_record", writes[0])
+    monkeypatch.setattr(connect.DbManager, "update_records", writes[1])
+    factory = MagicMock()
+    monkeypatch.setattr(connect, "WebClient", factory)
+    monkeypatch.setenv("ADMIN_BOT_TOKEN", "admin-workspace-token")
+    logger = MagicMock()
+    body = {
+        "user": {"id": "U_ADMIN"},
+        "channel": {"id": "C_ADMIN"},
+        "message": {"metadata": {"event_payload": {"team_id": "TREQUESTER"}}},
+    }
+
+    connect.handle_approve_connection(body, MagicMock(), logger, {}, SlackSettings(team_id="TADMIN"))
+
+    logger.warning.assert_called_once_with(warning)
+    factory.assert_called_once_with(token="admin-workspace-token")
+    factory.return_value.chat_postEphemeral.assert_called_once()
+    assert factory.return_value.chat_postEphemeral.call_args.kwargs["channel"] == "C_ADMIN"
+    assert factory.return_value.chat_postEphemeral.call_args.kwargs["user"] == "U_ADMIN"
+    assert "requester-token" not in str(factory.return_value.chat_postEphemeral.call_args)
+    for write in writes:
+        write.assert_not_called()
+
+
+def test_approve_failure_feedback_skips_missing_channel_or_user(monkeypatch):
+    monkeypatch.setattr(connect, "_get_requester_slack_space", MagicMock(return_value=None))
+    factory = MagicMock()
+    monkeypatch.setattr(connect, "WebClient", factory)
+    monkeypatch.setenv("ADMIN_BOT_TOKEN", "admin-workspace-token")
+    body = {"message": {"metadata": {"event_payload": {"team_id": "TREQUESTER"}}}}
+
+    connect.handle_approve_connection(body, MagicMock(), MagicMock(), {}, SlackSettings(team_id="TADMIN"))
+
+    factory.assert_not_called()
