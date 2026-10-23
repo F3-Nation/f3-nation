@@ -308,8 +308,11 @@ assert_eq "a rejected mark writes nothing" "2" "$(wc -l <"$mark_ledger" | tr -d 
 # PR 29's blocked report was posted at 02:00. Only a later hand-recorded mark clears it.
 bucket_with_ledger() {
   printf '%s\n' "$1" >"$tmp_dir/override.tsv"
+  # A failed run must not leave the previous case's board to be read.
+  rm -f "$tmp_dir/override.html"
   PR_TRIAGE_FIXTURE="$tmp_dir/fixture.json" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$tmp_dir/override.tsv" \
-    bash "$triage" -R acme/repo --out "$tmp_dir/override.html" --no-open >/dev/null 2>&1
+    bash "$triage" -R acme/repo --out "$tmp_dir/override.html" --no-open >/dev/null 2>&1 \
+    || { echo "pr-triage failed"; return; }
   sed -n '/id="data">/,/<\/script>/p' "$tmp_dir/override.html" | sed '1d;$d' \
     | jq -r '.prs[] | select(.number == 29) | .bucket'
 }
