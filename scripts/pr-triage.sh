@@ -62,6 +62,8 @@ if [[ -z "${PR_TRIAGE_FIXTURE:-}" ]]; then
 fi
 
 if [[ "${1:-}" == "mark" ]]; then
+  # Options go before `mark`; anything after <PR> and the kind (like a stray -R) is an error.
+  [[ $# -eq 3 ]] || usage 1
   pr="${2:-}" kind="${3:-}"
   [[ "$pr" =~ ^[0-9]+$ ]] || usage 1
   case "$kind" in
@@ -86,7 +88,7 @@ query($owner: String!, $name: String!, $cursor: String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         number title url isDraft createdAt reviewDecision mergeable
-        author { login }
+        author { login __typename }
         timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) {
           nodes { ... on ReadyForReviewEvent { createdAt } }
         }
@@ -209,9 +211,16 @@ classify='
           or any($pr.reviews.nodes[]; human_marker("pr-local-test")
             or any(.comments.nodes[]; human_marker("pr-local-test")))
           or any($legacy[]; (.body // "") as $b | ($b | footer) and ($b | contains("|"))))
-        as $localTested
+        as $localRan
+      # A report that could not recommend yet (its main check was blocked) needs another run.
+      # The skill omits that line on a PR its runner authored, so a blocked run there still counts.
+      # "." stands for the apostrophe, straight or curly.
+      | ([$pr.reviews.nodes[] | select(human_marker("pr-local-test"))]
+          | sort_by(.submittedAt // "") | last | (.body // "")
+          | test("Can.t recommend yet")) as $localBlocked
+      | ($localRan and ($localBlocked | not)) as $localTested
       # A clean inline review leaves only a "no issues" comment, and a local test always follows one.
-      | ($localTested
+      | ($localRan
           or ($logged | index("pr-review-inline") != null)
           or any($pr.comments.nodes[]; human_marker("pr-review-inline"))
           or any($pr.reviews.nodes[]; any(.comments.nodes[]; human_marker("pr-review-inline")))
@@ -229,14 +238,17 @@ classify='
       | ($pr.mergeable == "CONFLICTING") as $conflicts
 
       | (if $pr.isDraft then ["DRAFT", ""]
-         elif ($author | test("^(app/)?(renovate|release-please)(\\[bot\\])?$")) then ["SKIP", ""]
+         elif ($author | test("^(app/)?(renovate|release-please)(\\[bot\\])?$"))
+           or ($pr.author.__typename == "Bot" and ($author | test("renovate|release-please")))
+           then ["SKIP", ""]
          elif ($pendingBots | length) > 0 then ["BOTS", "waiting on \($pendingBots | join(", "))"]
          elif ($inlineReviewed | not) then ["INLINE", ""]
          elif ($open | length) > 0 or $moreThreads then ["THREADS",
            (if ($open | length) > 0 then "\($open | length) unresolved (\($openBy))" else "" end)
            + (if $moreThreads then "; over 100 threads, check the rest on GitHub" else "" end)
            + (if $localTested then "; both skills done" else "" end) | ltrimstr("; ")]
-         elif ($localTested | not) then ["LOCAL", ""]
+         elif ($localTested | not) then
+           ["LOCAL", (if $localBlocked then "last local test could not recommend yet" else "" end)]
          elif $author == $me then
            ["OWN", (if $approved then "approved" else "needs another approver" end)]
          elif $approved then ["MERGE", ""]

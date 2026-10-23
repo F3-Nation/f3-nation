@@ -56,6 +56,9 @@ jq -n '
     ["Fix this.\n<!-- pr-review-inline -->\n_written by Model_"]);
   def local_review: review("andy"; "2026-10-22T01:00:00Z";
     "| Check | Result |\n<!-- pr-local-test -->\n_written by Model_"; []);
+  def blocked_review($at; $apostrophe): review("andy"; $at;
+    "⏸️ **Can\($apostrophe)t recommend yet:** sign-in wasn\($apostrophe)t tested.\n| Check | Result |\n"
+    + "<!-- pr-local-test -->\n_written by Model_"; []);
   def thread($resolved; $by): {isResolved: $resolved, comments: {nodes: [{author: {login: $by}}]}};
 
   {data: {viewer: {login: "viewer"}, repository: {pullRequests: {pageInfo: {hasNextPage: false}, nodes: [
@@ -112,7 +115,16 @@ jq -n '
       | .firstReviews.nodes = [inline_review, local_review]),
     (pr(28; "clean review note only among the oldest comments"; "someone")
       | .firstComments.nodes = [{author: {login: "luis", __typename: "User"},
-          body: "No issues found.\n<!-- pr-review-inline -->"}])
+          body: "No issues found.\n<!-- pr-review-inline -->"}]),
+    (pr(29; "local test blocked"; "someone")
+      | .reviews.nodes = [inline_review, blocked_review("2026-10-22T02:00:00Z"; "'"'"'")]),
+    (pr(30; "blocked, then rerun and passed"; "someone")
+      | .reviews.nodes = [inline_review, blocked_review("2026-10-22T00:30:00Z"; "'"'"'"), local_review]),
+    (pr(31; "local test blocked, curly apostrophe"; "someone")
+      | .reviews.nodes = [inline_review, blocked_review("2026-10-22T02:00:00Z"; "\u2019")]),
+    (pr(32; "release"; "f3-nation-release-please") | .author.__typename = "Bot"),
+    (pr(33; "a person whose login mentions release-please"; "release-please-fan")
+      | .author.__typename = "User")
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -173,6 +185,12 @@ assert_eq "a bot that hasn't shown up is named" "waiting on Qodo" "$(note_of 25)
 assert_eq "recently marking ready restarts the bot clock" "BOTS" "$(bucket_of 26)"
 assert_eq "skill markers among the oldest reviews still count" "MANUAL" "$(bucket_of 27)"
 assert_eq "a clean-review note among the oldest comments still counts" "LOCAL" "$(bucket_of 28)"
+assert_eq "a blocked local test still needs /pr-local-test" "LOCAL" "$(bucket_of 29)"
+assert_eq "a blocked local test is noted" "last local test could not recommend yet" "$(note_of 29)"
+assert_eq "a rerun that passed after a blocked one counts" "MANUAL" "$(bucket_of 30)"
+assert_eq "a blocked report with a curly apostrophe is recognized" "LOCAL" "$(bucket_of 31)"
+assert_eq "a release-please bot with a prefixed login is skipped" "SKIP" "$(bucket_of 32)"
+assert_eq "a person whose login mentions release-please isn't skipped" "INLINE" "$(bucket_of 33)"
 
 hostile_count=$(grep -c '</script><img' "$tmp_dir/board.html")
 assert_eq "a hostile title can't close the data block" "0" "$hostile_count"
@@ -188,7 +206,7 @@ assert_eq "text mode shows the empty-note url on its own line" \
   "$(grep -A1 '#5 ' "$tmp_dir/text.out" | tail -1)"
 assert_eq "text mode keeps a multiline title's card on one line" \
   "  #16    first line second line (someone)" "$(grep '#16 ' "$tmp_dir/text.out")"
-assert_eq "text mode counts drafts" "3 drafts ignored; skipped (Renovate/release-please): #2 " \
+assert_eq "text mode counts drafts" "3 drafts ignored; skipped (Renovate/release-please): #2 #32 " \
   "$(tail -1 "$tmp_dir/text.out")"
 
 ledger="$tmp_dir/ledger.tsv"
@@ -282,6 +300,9 @@ run_mark abc inline >/dev/null 2>&1
 assert_eq "mark rejects a non-numeric PR" "1" "$?"
 run_mark 5 bogus >/dev/null 2>&1
 assert_eq "mark rejects an unknown kind" "1" "$?"
+run_mark 12 inline -R other/repo >/dev/null 2>&1
+assert_eq "mark rejects options after the subcommand" "1" "$?"
+assert_eq "a rejected mark writes nothing" "2" "$(wc -l <"$mark_ledger" | tr -d ' ')"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} pr-triage test(s) failed"
