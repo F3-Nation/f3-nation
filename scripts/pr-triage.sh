@@ -23,10 +23,11 @@
 #   otherwise, approved                           -> approved, waiting to merge
 #   otherwise                                     -> needs codeowner review and approval
 #
-# A skill run, by anyone, is detected by its hidden marker (<!-- pr-review-inline --> or
-# <!-- pr-local-test -->) in a PR comment or review, or by your local ledger
-# ($PR_TRIAGE_LEDGER, default ~/.local/state/pr-triage/ledger.tsv). Runs from before the
-# markers existed are recognized by the shape of their comments.
+# A skill run, by anyone but a bot, is detected by its hidden marker, or by your local ledger
+# ($PR_TRIAGE_LEDGER, default ${XDG_STATE_HOME:-~/.local/state}/pr-triage/ledger.tsv). The
+# <!-- pr-review-inline --> marker is read in PR comments and inline review comments; the
+# <!-- pr-local-test --> marker in review bodies and inline review comments. Runs from before
+# the markers existed are recognized by the shape of their comments.
 set -euo pipefail
 
 BOT_TIMEOUT_SECS="${PR_TRIAGE_BOT_TIMEOUT_SECS:-7200}"
@@ -96,11 +97,11 @@ query($owner: String!, $name: String!, $cursor: String) {
             ... on StatusContext { context state description createdAt }
           } } } } }
         }
-        comments(last: 100) { nodes { author { login } body } }
-        reviews(first: 100) {
+        comments(last: 100) { nodes { author { login __typename } body } }
+        reviews(last: 100) {
           nodes {
-            author { login } body submittedAt
-            comments(first: 5) { nodes { body replyTo { id } } }
+            author { login __typename } body submittedAt
+            comments(first: 5) { nodes { author { login __typename } body replyTo { id } } }
           }
         }
         reviewThreads(first: 100) {
@@ -120,7 +121,7 @@ else
   cursor="" page=0
   while :; do
     page=$((page + 1))
-    args=(-f query="$query" -F owner="${repo%%/*}" -F name="${repo#*/}")
+    args=(-f query="$query" -f owner="${repo%%/*}" -f name="${repo#*/}")
     [[ -n "$cursor" ]] && args+=(-f cursor="$cursor")
     page_file="$pages_dir/$(printf '%03d' "$page").json"
     gh api graphql "${args[@]}" >"$page_file"
@@ -136,8 +137,12 @@ fi
 ledger_json="[]"
 if [[ -f "$LEDGER" ]]; then
   ledger_json=$(jq -R -s --arg repo "$repo" '
-    split("\n") | map(select(length > 0) | split("\t") | select(.[0] == $repo)
-      | {pr: (.[1] | tonumber), skill: .[2]})' "$LEDGER")
+    [split("\n")[] | select(length > 0) | split("\t")] as $rows
+    | [$rows[] | select(length >= 3 and (.[1] | test("^[0-9]+$")))] as $valid
+    | {bad: (($rows | length) - ($valid | length)),
+       rows: [$valid[] | select(.[0] == $repo) | {pr: (.[1] | tonumber), skill: .[2]}]}' "$LEDGER")
+  [[ "$(jq '.bad' <<<"$ledger_json")" == "0" ]] || echo "pr-triage: ignoring malformed lines in $LEDGER" >&2
+  ledger_json=$(jq -c '.rows' <<<"$ledger_json")
 fi
 
 # shellcheck disable=SC2016
@@ -145,6 +150,8 @@ classify='
   def footer: test("_written by |— _Claude Code_");
   def ts: if . == null then 0 else fromdateiso8601 end;
   def has_marker($m): (. // "") | contains("<!-- \($m) -->");
+  # Review bots quote the markers back in their own comments, so only human authors count.
+  def human_marker($m): ((.author.__typename // "") != "Bot") and (.body | has_marker($m));
 
   ($now // now) as $now
   | .data.viewer.login as $me
@@ -188,15 +195,15 @@ classify='
       | ($ledger | map(select(.pr == $pr.number) | .skill)) as $logged
       | [$pr.reviews.nodes[] | select((.submittedAt | ts) < ($cutoff | ts))] as $legacy
       | (($logged | index("pr-local-test") != null)
-          or any($pr.reviews.nodes[]; (.body | has_marker("pr-local-test"))
-            or any(.comments.nodes[]; .body | has_marker("pr-local-test")))
+          or any($pr.reviews.nodes[]; human_marker("pr-local-test")
+            or any(.comments.nodes[]; human_marker("pr-local-test")))
           or any($legacy[]; (.body // "") as $b | ($b | footer) and ($b | contains("|"))))
         as $localTested
       # A clean inline review leaves only a "no issues" comment, and a local test always follows one.
       | ($localTested
           or ($logged | index("pr-review-inline") != null)
-          or any($pr.comments.nodes[]; .body | has_marker("pr-review-inline"))
-          or any($pr.reviews.nodes[]; any(.comments.nodes[]; .body | has_marker("pr-review-inline")))
+          or any($pr.comments.nodes[]; human_marker("pr-review-inline"))
+          or any($pr.reviews.nodes[]; any(.comments.nodes[]; human_marker("pr-review-inline")))
           or any($legacy[]; (.body // "") == "" and any(.comments.nodes[];
                .replyTo == null and (.body | footer) and (.body | has_marker("pr-local-test") | not))))
         as $inlineReviewed
@@ -211,7 +218,7 @@ classify='
       | ($pr.mergeable == "CONFLICTING") as $conflicts
 
       | (if $pr.isDraft then ["DRAFT", ""]
-         elif ($author | test("renovate|release-please")) then ["SKIP", ""]
+         elif ($author | test("^(app/)?(renovate|release-please)(\\[bot\\])?$")) then ["SKIP", ""]
          elif ($pendingBots | length) > 0 then ["BOTS", "waiting on \($pendingBots | join(", "))"]
          elif ($inlineReviewed | not) then ["INLINE", ""]
          elif ($open | length) > 0 or $moreThreads then ["THREADS",
@@ -243,10 +250,12 @@ classify='
     ]
   }'
 
+jq -e '.data.repository.pullRequests.nodes' <<<"$data" >/dev/null 2>&1 \
+  || die "GitHub response had no pull request data for $repo: $(jq -c '.errors // .' <<<"$data" | head -c 300)"
 board=$(jq --arg repo "$repo" --arg cutoff "$LEGACY_CUTOFF" \
   --argjson ledger "$ledger_json" --argjson timeout "$BOT_TIMEOUT_SECS" \
-  --argjson now "${PR_TRIAGE_NOW:-null}" "$classify" <<<"$data")
-[[ -n "$board" ]] || die "GitHub returned no data for $repo."
+  --argjson now "${PR_TRIAGE_NOW:-null}" "$classify" <<<"$data") \
+  || die "could not classify PRs for $repo"
 
 open_file() {
   local file="$1"

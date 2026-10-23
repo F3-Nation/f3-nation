@@ -87,7 +87,27 @@ jq -n '
           {status: "IN_PROGRESS", startedAt: "2026-10-22T08:00:00Z"}),
     (pr(16; "first line\nsecond line"; "someone")),
     (pr(17; "over 100 threads"; "someone") | .reviews.nodes = [inline_review]
-      | .reviewThreads = {pageInfo: {hasNextPage: true}, nodes: [thread(true; "andy")]})
+      | .reviewThreads = {pageInfo: {hasNextPage: true}, nodes: [thread(true; "andy")]}),
+    (pr(18; "marker quoted by a review bot"; "someone")
+      | .comments.nodes += [{author: {login: "coderabbitai", __typename: "Bot"},
+          body: "Quoting <!-- pr-review-inline -->"}]),
+    pr(19; "lookalike author"; "renovated-ideas"),
+    (pr(20; "conflicts with open thread"; "someone") | .mergeable = "CONFLICTING"
+      | .reviews.nodes = [inline_review, local_review] | .reviewThreads.nodes = [thread(false; "andy")]),
+    (pr(21; "conflicts, ready for approval"; "someone") | .mergeable = "CONFLICTING"
+      | .reviews.nodes = [inline_review, local_review]),
+    (pr(22; "conflicting draft"; "someone") | .isDraft = true | .mergeable = "CONFLICTING"),
+    (pr(23; "Greptile running"; "someone")
+      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[1] +=
+          {status: "IN_PROGRESS", startedAt: "2026-10-22T11:50:00Z"}),
+    (pr(24; "CodeRabbit skipped a draft"; "someone")
+      | .commits.nodes[0].commit.committedDate = "2026-10-22T11:30:00Z"
+      | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[0] +=
+          {description: "Review skipped: draft detected"}),
+    (pr(25; "Qodo not started"; "someone")
+      | .commits.nodes[0].commit.committedDate = "2026-10-22T11:30:00Z" | .comments.nodes = []),
+    (pr(26; "recently marked ready"; "someone")
+      | .timelineItems.nodes = [{createdAt: "2026-10-22T11:45:00Z"}] | .comments.nodes = [])
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -132,6 +152,20 @@ assert_eq "a multiline title is flattened" "first line second line" \
 assert_eq "threads past the first 100 hold the PR" "THREADS" "$(bucket_of 17)"
 assert_eq "threads past the first 100 are noted" "over 100 threads, check the rest on GitHub" \
   "$(note_of 17)"
+assert_eq "a marker quoted by a bot isn't a skill run" "INLINE" "$(bucket_of 18)"
+assert_eq "an author merely containing renovate isn't skipped" "INLINE" "$(bucket_of 19)"
+assert_eq "conflicts are noted beside open threads and finished skills" \
+  "1 unresolved (andy 1); both skills done; merge conflicts" "$(note_of 20)"
+assert_eq "a conflicting PR still awaits approval" "MANUAL" "$(bucket_of 21)"
+assert_eq "conflicts are noted on a PR awaiting approval" "merge conflicts" "$(note_of 21)"
+assert_eq "a conflicting draft gets no note" "" "$(note_of 22)"
+assert_eq "a running Greptile holds the PR" "BOTS" "$(bucket_of 23)"
+assert_eq "a running Greptile is named" "waiting on Greptile" "$(note_of 23)"
+assert_eq "a CodeRabbit draft skip holds the PR" "BOTS" "$(bucket_of 24)"
+assert_eq "a CodeRabbit draft skip is named" "waiting on CodeRabbit" "$(note_of 24)"
+assert_eq "a bot that hasn't shown up holds a fresh push" "BOTS" "$(bucket_of 25)"
+assert_eq "a bot that hasn't shown up is named" "waiting on Qodo" "$(note_of 25)"
+assert_eq "recently marking ready restarts the bot clock" "BOTS" "$(bucket_of 26)"
 
 hostile_count=$(grep -c '</script><img' "$tmp_dir/board.html")
 assert_eq "a hostile title can't close the data block" "0" "$hostile_count"
@@ -147,7 +181,7 @@ assert_eq "text mode shows the empty-note url on its own line" \
   "$(grep -A1 '#5 ' "$tmp_dir/text.out" | tail -1)"
 assert_eq "text mode keeps a multiline title's card on one line" \
   "  #16    first line second line (someone)" "$(grep '#16 ' "$tmp_dir/text.out")"
-assert_eq "text mode counts drafts" "2 drafts ignored; skipped (Renovate/release-please): #2 " \
+assert_eq "text mode counts drafts" "3 drafts ignored; skipped (Renovate/release-please): #2 " \
   "$(tail -1 "$tmp_dir/text.out")"
 
 ledger="$tmp_dir/ledger.tsv"
@@ -186,6 +220,61 @@ assert_eq "a complete fetch isn't marked cut off" "false" "$(jq -r .truncated <<
 paged=$(PR_TRIAGE_MAX_PAGES=1 run_paged)
 assert_eq "the page cap stops fetching" "5" "$(jq -r '[.prs[].number] | join(" ")' <<<"$paged")"
 assert_eq "a capped fetch is marked cut off" "true 1" "$(jq -r '"\(.truncated) \(.fetched)"' <<<"$paged")"
+
+# A response with no PR data reports GitHub's own errors.
+echo '{"data":null,"errors":[{"message":"boom"}]}' >"$tmp_dir/errors.json"
+err_out=$(PR_TRIAGE_FIXTURE="$tmp_dir/errors.json" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \
+  bash "$triage" -R acme/repo 2>&1)
+status=$?
+assert_eq "an errors-only response exits 1" "1" "$status"
+assert_eq "an errors-only response reports GitHub's message" "pr-triage: GitHub response had no pull request data" \
+  "$(echo "$err_out" | head -1 | cut -c1-51)"
+assert_eq "an errors-only response includes the error text" "1" "$(echo "$err_out" | grep -c boom)"
+
+# One bad ledger row is skipped, not fatal.
+bad_ledger="$tmp_dir/bad-ledger.tsv"
+printf 'acme/repo\tabc\tpr-review-inline\nacme/repo\t5\tpr-review-inline\tsha\t2026-10-22T00:00:00Z\n' >"$bad_ledger"
+PR_TRIAGE_FIXTURE="$tmp_dir/fixture.json" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$bad_ledger" \
+  bash "$triage" -R acme/repo --out "$tmp_dir/bad.html" --no-open >/dev/null 2>"$tmp_dir/bad.err"
+status=$?
+assert_eq "a malformed ledger row doesn't fail the run" "0" "$status"
+assert_eq "a malformed ledger row is reported" "pr-triage: ignoring malformed lines in $bad_ledger" \
+  "$(cat "$tmp_dir/bad.err")"
+assert_eq "the valid ledger row is still honored" "LOCAL" \
+  "$(sed -n '/id="data">/,/<\/script>/p' "$tmp_dir/bad.html" | sed '1d;$d' \
+    | jq -r '.prs[] | select(.number == 5) | .bucket')"
+
+# mark: a fake gh supplies the head SHA; the ledger it writes must be readable by the reader.
+mark_stub="$tmp_dir/mark-stub"
+mkdir -p "$mark_stub"
+cat >"$mark_stub/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  "auth status") exit 0 ;;
+  *headRefOid*) echo deadbeef ;;
+esac
+STUB
+chmod +x "$mark_stub/gh"
+mark_ledger="$tmp_dir/new-dir/ledger.tsv"
+run_mark() { PATH="$mark_stub:$PATH" PR_TRIAGE_LEDGER="$mark_ledger" bash "$triage" -R acme/repo mark "$@"; }
+run_mark 5 inline >/dev/null 2>&1
+run_mark 8 local >/dev/null 2>&1
+assert_eq "mark writes one line per run" "2" "$(wc -l <"$mark_ledger" | tr -d ' ')"
+assert_eq "mark writes five tab-separated fields" "5 5" "$(awk -F'\t' '{printf "%s%s", sep, NF; sep=" "}' "$mark_ledger")"
+assert_eq "mark maps the kinds to skills" "pr-review-inline pr-local-test" \
+  "$(awk -F'\t' '{printf "%s%s", sep, $3; sep=" "}' "$mark_ledger")"
+PR_TRIAGE_FIXTURE="$tmp_dir/fixture.json" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$mark_ledger" \
+  bash "$triage" -R acme/repo --out "$tmp_dir/marked.html" --no-open >/dev/null 2>&1
+marked_bucket() {
+  sed -n '/id="data">/,/<\/script>/p' "$tmp_dir/marked.html" | sed '1d;$d' \
+    | jq -r --argjson n "$1" '.prs[] | select(.number == $n) | .bucket'
+}
+assert_eq "a marked PR moves past /pr-review-inline" "LOCAL" "$(marked_bucket 5)"
+assert_eq "an already-finished PR is unchanged by mark" "MANUAL" "$(marked_bucket 8)"
+run_mark abc inline >/dev/null 2>&1
+assert_eq "mark rejects a non-numeric PR" "1" "$?"
+run_mark 5 bogus >/dev/null 2>&1
+assert_eq "mark rejects an unknown kind" "1" "$?"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} pr-triage test(s) failed"
