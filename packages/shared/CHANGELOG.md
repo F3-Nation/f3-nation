@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.5.0...pkg-shared@0.5.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+
 ## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.4.1...pkg-shared@0.5.0) (2026-10-14)
 
 
