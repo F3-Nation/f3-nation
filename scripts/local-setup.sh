@@ -53,7 +53,7 @@ echo "  ────────────────────────
 # ── Step 1: Copy per-directory env files ─────────────────────────────────────
 echo "  → Copying .env.example files..."
 _env_ts=$(date +%Y%m%d%H%M%S)
-for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/slackbot packages/env packages/db; do
+for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/region-pages apps/slackbot packages/env packages/db; do
   if [ -f "$dir/.env" ]; then
     mv "$dir/.env" "$dir/.env.bak.$_env_ts"
     echo "     $dir/.env backed up → $dir/.env.bak.$_env_ts"
@@ -163,7 +163,7 @@ echo "    Mailpit   → http://localhost:${F3_MAILPIT_UI_PORT:-8025}  (all outbo
 if [ -n "${F3_MAP_PORT:-}" ]; then
   echo ""
   echo "  This checkout uses its own ports (saved in the root .env):"
-  echo "    Map ${F3_MAP_PORT} · API ${F3_API_PORT} · Admin ${F3_ADMIN_PORT} · Me ${F3_ME_PORT} · Auth ${F3_AUTH_PORT} · Homepage ${F3_HOMEPAGE_PORT}"
+  echo "    Map ${F3_MAP_PORT} · API ${F3_API_PORT} · Admin ${F3_ADMIN_PORT} · Me ${F3_ME_PORT} · Auth ${F3_AUTH_PORT} · Homepage ${F3_HOMEPAGE_PORT} · Region pages ${F3_REGION_PAGES_PORT}"
   echo "    pnpm dev picks them up. When starting one app on its own, export them first:"
   echo "      set -a; . ./.env; set +a"
 fi

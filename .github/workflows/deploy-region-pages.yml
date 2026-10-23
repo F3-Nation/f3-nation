@@ -1,0 +1,41 @@
+name: Deploy Region Pages
+
+on:
+  push:
+    tags:
+      - "region-pages@*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re-)deploy, e.g. region-pages@1.2.3"
+        required: true
+        type: string
+
+# Prevent concurrent deploys of the same tag
+concurrency:
+  group: deploy-region-pages-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+# Reusable workflows can't elevate GITHUB_TOKEN beyond what the caller grants.
+# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate.
+permissions:
+  contents: read
+  id-token: write
+  checks: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_deploy-cloudrun.yml
+    with:
+      ref: ${{ inputs.tag }}
+      image_name: f3-region-pages
+      service_name: f3-region-pages
+      staging_project: f3-region-pages-staging
+      prod_project: f3-region-pages
+      tag_prefix: region-pages@
+      dockerfile: apps/region-pages/Dockerfile
+      staging_environment: region-pages-staging
+      prod_environment: region-pages-production
+      staging_url: https://staging.regions.f3nation.com
+      prod_url: https://regions.f3nation.com
+      flags: "--max-instances=10"
