@@ -4,26 +4,25 @@ import type { RegionEventsEntry, RegionEvent } from "@/types/event";
 
 const regionEvents = regionEventsData as RegionEventsEntry[];
 
-const startOfDay = (value: Date): Date => {
-  const copy = new Date(value);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-};
+// Event dates are calendar days. A day counts as over only once it has ended
+// everywhere ("anywhere on Earth", UTC-12), so an event stays upcoming through
+// its whole date in every region and the result never depends on the
+// server's timezone.
+const AOE_OFFSET_MS = 12 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
-const toComparableDate = (event: RegionEvent): Date => {
-  if (!event.date) {
-    return new Date(0);
-  }
+const currentDayKey = (referenceDate: Date, daysBack = 0): string =>
+  new Date(referenceDate.getTime() - AOE_OFFSET_MS - daysBack * DAY_MS)
+    .toISOString()
+    .slice(0, 10);
 
-  const dateString = `${event.date}T${event.startTime ?? "00:00"}:00`;
-  const result = new Date(dateString);
+const eventDayKey = (event: RegionEvent): string | null =>
+  DATE_KEY.test(event.date) ? event.date : null;
 
-  // Fallback in case the combined string is invalid (e.g., missing month)
-  if (Number.isNaN(result.valueOf())) {
-    return new Date(event.date);
-  }
-
-  return result;
+const timeSortKey = (time?: string): string => {
+  const [hours = "0", minutes = "0"] = (time ?? "").split(":");
+  return `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
 };
 
 const extractEventIdFromSlug = (slug: string): string | null => {
@@ -107,21 +106,20 @@ export const getUpcomingRegionEvents = (
     return [];
   }
 
-  const comparisonDate = startOfDay(referenceDate);
-  if (includePastDays > 0) {
-    comparisonDate.setDate(comparisonDate.getDate() - includePastDays);
-  }
+  const earliestDay = currentDayKey(
+    referenceDate,
+    Math.max(includePastDays, 0),
+  );
 
   const upcoming = region.events
     .filter((event) => {
-      if (!event.date) {
-        return false;
-      }
-      const eventDate = startOfDay(toComparableDate(event));
-      return eventDate >= comparisonDate;
+      const day = eventDayKey(event);
+      return day !== null && day >= earliestDay;
     })
-    .sort(
-      (a, b) => toComparableDate(a).getTime() - toComparableDate(b).getTime(),
+    .sort((a, b) =>
+      `${a.date} ${timeSortKey(a.startTime)}`.localeCompare(
+        `${b.date} ${timeSortKey(b.startTime)}`,
+      ),
     );
 
   return typeof limit === "number" ? upcoming.slice(0, limit) : upcoming;
@@ -142,14 +140,8 @@ export const hasEventEnded = (
   event: RegionEvent,
   referenceDate: Date = new Date(),
 ): boolean => {
-  if (!event.date) {
-    return false;
-  }
-
-  const eventDate = startOfDay(toComparableDate(event));
-  const comparisonDate = startOfDay(referenceDate);
-
-  return eventDate < comparisonDate;
+  const day = eventDayKey(event);
+  return day !== null && day < currentDayKey(referenceDate);
 };
 
 export const formatEventDate = (date: string, locale = "en-US"): string => {

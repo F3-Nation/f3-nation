@@ -43,8 +43,11 @@ Public, anonymous directory of F3 regions and their weekly workouts at
    database or grow a cache.
 5. **Render database HTML only through `useSanitizedHtml`**
    (`src/lib/safe-html.tsx`). Calling `sanitizeHtmlToReactNodes` during render
-   breaks hydration. Never use `dangerouslySetInnerHTML`. Links must be
-   http(s); see `httpUrlOrNull` in the API lib.
+   breaks hydration. Never use `dangerouslySetInnerHTML`. Description links
+   may be http(s), `mailto:`, `tel:` or relative (`isSafeHref`); stored
+   website and social URLs must be http(s) (`httpUrlOrNull` in the API lib).
+   When sanitizing leaves no text, render the default description
+   (`useRegionDescription`), never the raw string.
 6. **Nothing fetches at build time.** The Docker build has no API access.
    `generateStaticParams` returns `[]`, and `/` is `force-dynamic`.
 7. **Route segment config must be a literal**, e.g. `revalidate = 3000`. A

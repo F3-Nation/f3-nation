@@ -15,7 +15,7 @@ import {
   formatEventDate,
   formatEventTimeRange,
 } from "@/lib/region-events";
-import { useSanitizedHtml } from "@/lib/safe-html";
+import { useRegionDescription } from "@/lib/region-description";
 
 interface RegionContentProps {
   regionSlug: string;
@@ -57,15 +57,8 @@ interface OrphanedRegionContentProps {
   region: Region;
 }
 
-const defaultRegionDescription =
-  "Free, peer-led workouts for men. Open to all men, held outdoors, rain or shine, hot or cold.";
-
 export function OrphanedRegionContent({ region }: OrphanedRegionContentProps) {
-  const descriptionSource =
-    region.description && region.description.trim().length > 0
-      ? region.description
-      : defaultRegionDescription;
-  const sanitizedDescription = useSanitizedHtml(descriptionSource);
+  const description = useRegionDescription(region.description);
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -97,11 +90,7 @@ export function OrphanedRegionContent({ region }: OrphanedRegionContentProps) {
         <h1 className="mb-2 flex items-center text-4xl font-bold">
           F3 {region.name}
         </h1>
-        <p className="mb-4 text-gray-600 dark:text-gray-400">
-          {sanitizedDescription.length > 0
-            ? sanitizedDescription
-            : descriptionSource}
-        </p>
+        <p className="mb-4 text-gray-600 dark:text-gray-400">{description}</p>
       </div>
 
       <RegionHeader
@@ -205,13 +194,9 @@ export function RegionContent({
   const hasUpcomingEvents =
     Array.isArray(upcomingEvents) && upcomingEvents.length > 0;
   const eventsToShow = upcomingEvents ?? [];
-  const descriptionSource =
-    regionDescription && regionDescription.trim().length > 0
-      ? regionDescription
-      : defaultRegionDescription;
   const [logoError, setLogoError] = useState(false);
   const isFallbackLogo = !image || logoError;
-  const sanitizedDescription = useSanitizedHtml(descriptionSource);
+  const description = useRegionDescription(regionDescription);
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -271,11 +256,7 @@ export function RegionContent({
           )}
           F3 {regionName}
         </h1>
-        <p className="mb-4 text-gray-600 dark:text-gray-400">
-          {sanitizedDescription.length > 0
-            ? sanitizedDescription
-            : descriptionSource}
-        </p>
+        <p className="mb-4 text-gray-600 dark:text-gray-400">{description}</p>
       </div>
 
       <RegionHeader

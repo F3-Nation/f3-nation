@@ -51,7 +51,7 @@ const stripHtml = (value: string): string =>
     .trim();
 
 /** Plain-text rendering of `html`; what the server (no DOMParser) shows. */
-const htmlToPlainText = (html: string | null | undefined): string =>
+export const htmlToPlainText = (html: string | null | undefined): string =>
   html ? stripHtml(html) : "";
 
 const sanitizeChildNodes = (

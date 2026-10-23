@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildEventSlug,
   findRegionEvent,
@@ -57,8 +57,8 @@ const makeEvent = (overrides: Partial<RegionEvent> = {}): RegionEvent => ({
   ...overrides,
 });
 
-// Thursday, 2024-02-01 10:30 local time.
-const REFERENCE = new Date("2024-02-01T10:30:00");
+// 10:30 on Thursday 2024-02-01 at UTC-12, the last timezone to reach a day.
+const REFERENCE = new Date("2024-02-01T22:30:00Z");
 
 describe("buildEventSlug", () => {
   it.each([
@@ -114,12 +114,47 @@ describe("hasEventEnded", () => {
     ["later today", { date: "2024-02-01", startTime: "06:00" }, false],
     ["a future day", { date: "2024-03-01" }, false],
     ["no date", { date: "" }, false],
+    ["a malformed date", { date: "2024-2-1" }, false],
   ])("%s -> %s", (_label, overrides, expected) => {
     expect(hasEventEnded(makeEvent(overrides), REFERENCE)).toBe(expected);
+  });
+
+  it("keeps an event current until its date has ended everywhere", () => {
+    const event = makeEvent({ date: "2024-02-01", startTime: "19:00" });
+
+    // Evening of the event in the US: already the next day in UTC.
+    expect(hasEventEnded(event, new Date("2024-02-02T01:00:00Z"))).toBe(false);
+    expect(hasEventEnded(event, new Date("2024-02-02T11:59:59Z"))).toBe(false);
+    expect(hasEventEnded(event, new Date("2024-02-02T12:00:00Z"))).toBe(true);
+  });
+
+  describe("server timezone", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it.each(["Pacific/Kiritimati", "Pacific/Pago_Pago", "UTC"])(
+      "gives the same answer in %s",
+      (timeZone) => {
+        vi.stubEnv("TZ", timeZone);
+        const event = makeEvent({ date: "2024-02-01", startTime: "06:00" });
+
+        expect(hasEventEnded(event, new Date("2024-02-02T06:00:00Z"))).toBe(
+          false,
+        );
+        expect(hasEventEnded(event, new Date("2024-02-02T13:00:00Z"))).toBe(
+          true,
+        );
+      },
+    );
   });
 });
 
 describe("getUpcomingRegionEvents", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("returns today-and-later dated events in order, skipping past and undated", () => {
     const ids = getUpcomingRegionEvents("atlanta", {
       referenceDate: REFERENCE,
@@ -145,6 +180,16 @@ describe("getUpcomingRegionEvents", () => {
 
     expect(upcoming[0]?.id).toBe("aaaaaa");
     expect(upcoming).toHaveLength(4);
+  });
+
+  it("still lists today's event on the evening of its date in the US", () => {
+    // Production servers run in UTC, where it is already the next day.
+    vi.stubEnv("TZ", "UTC");
+    const ids = getUpcomingRegionEvents("atlanta", {
+      referenceDate: new Date("2024-02-02T02:00:00Z"),
+    }).map((event) => event.id);
+
+    expect(ids[0]).toBe("dddddd");
   });
 
   it("returns an empty array for an unknown region", () => {
