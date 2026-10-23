@@ -39,6 +39,7 @@
     "local:setup": "bash scripts/local-setup.sh",
     "postinstall": "bash scripts/postinstall-uv-sync.sh",
     "pr:triage": "bash scripts/pr-triage.sh",
+    "pr:triage:html": "bash scripts/pr-triage.sh --html",
     "python:install": "uv sync --all-packages",
     "reset-test-db": "turbo run reset-test-db",
     "test": "turbo test",

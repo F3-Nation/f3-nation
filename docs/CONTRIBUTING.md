@@ -28,7 +28,7 @@ All the apps in this monorepo can be developed and tested locally. See [LOCAL_DE
 
 ## For codeowners: finding PRs to review
 
-Run `pnpm pr:triage` to see every open PR sorted by what it needs next: waiting on the AI bots, needs the `pr-review-inline` skill, waiting on the author's unresolved threads, needs the `pr-local-test` skill, needs a codeowner's approval, or approved and waiting to merge. Your own PRs get their own section, since someone else has to approve them. Add `--html` (`pnpm pr:triage --html`) to open the same thing as a board in your browser; run it again to refresh.
+Run `pnpm pr:triage` to see every open PR sorted by what it needs next: waiting on the AI bots, needs the `pr-review-inline` skill, waiting on the author's unresolved threads, needs the `pr-local-test` skill, needs a codeowner's approval, or approved and waiting to merge. Your own PRs get their own section, since someone else has to approve them. Run `pnpm pr:triage:html` to open the same thing as a board in your browser; run it again to refresh.
 
 It needs the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login`) and `jq`, and works on macOS, Linux and WSL. Drafts and Renovate and release-please PRs are left out. `scripts/pr-triage.sh --help` lists the options.
 
