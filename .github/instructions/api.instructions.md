@@ -62,7 +62,9 @@ Background: `docs/AI_DEVELOPMENT_GUIDE.md` (authorization, error handling) and
   record plus mutation, cascade plus instance regeneration.
 - Claim one-time work (a "notified" marker) with one conditional
   `UPDATE ... WHERE ... RETURNING`, never read-then-write. Claim before
-  sending and release the claim if the send fails.
+  sending; release the claim only when the send definitely failed. For an
+  ambiguous outcome (a timeout after the provider may have accepted it), keep
+  the claim or use an idempotency key.
 - Fire notifications, webhooks and cache revalidation only after every write
   commits.
 - Org-tree logic is depth- and type-agnostic. Use the shared walkers bounded

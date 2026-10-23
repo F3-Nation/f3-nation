@@ -38,8 +38,9 @@ assume the client is hostile.
 - Consume codes, auth codes and refresh tokens in one atomic statement
   (`UPDATE … WHERE <used>_at IS NULL RETURNING`, or `DELETE … RETURNING`) and
   reject an empty result.
-- Refresh-token reuse revokes every token for that user and client. There is
-  no grace window.
+- Reusing a rotated refresh token revokes every refresh token for that user
+  and client. There is no grace window. Issued access tokens stay valid until
+  they expire.
 - Attempt budgets are shared by every entry point that accepts a code.
 - Compare secrets in constant time (`constantTimeEqual`, or `timingSafeEqual`
   behind a length check).

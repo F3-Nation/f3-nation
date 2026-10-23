@@ -26,7 +26,7 @@ knowledge_base:
       - files: ".github/instructions/github-actions.instructions.md"
         applyTo: ".github/workflows/**,.github/actions/**,.github/scripts/**,.github/preview/**"
       - files: ".github/instructions/python.instructions.md"
-        applyTo: "**/*.py,**/pyproject.toml,uv.lock,.python-version"
+        applyTo: "**/*.py,**/pyproject.toml,uv.lock,**/.python-version"
       - files: ".github/instructions/scripts.instructions.md"
         applyTo: "**/*.sh,scripts/**,tooling/scripts/**,apps/*/scripts/**,.agents/skills/**/scripts/**"
       - files: ".github/instructions/slackbot.instructions.md"

@@ -6,7 +6,7 @@ applyTo: "**/package.json,pnpm-workspace.yaml,turbo.json,renovate.json,knip.conf
 
 ## Dependencies
 
-- Every version lives in the root `pnpm-workspace.yaml` catalog; `package.json`
+- Every dependency version lives in the root `pnpm-workspace.yaml` catalog; `package.json`
   files use `catalog:` (internal deps use `workspace:*`). Caret ranges are the
   default. Keep lockstep families (`@better-auth/*`, `@orpc/*`) on one range.
 - Each package declares every dependency and binary its own scripts import or

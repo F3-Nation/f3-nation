@@ -10,7 +10,8 @@ migration (`docs/AI_GUARDRAILS.md`).
 
 ## Migrations
 
-- Each migration PR adds exactly the DDL for its own change.
+- Each migration PR adds only the SQL for its own change, including any
+  backfill, function or trigger it needs.
   - Generate it from `schema.ts` with drizzle-kit; never hand-edit the
     snapshot.
   - Keep the SQL, `meta/NNNN_snapshot.json` and `meta/_journal.json` in
@@ -68,7 +69,7 @@ migration (`docs/AI_GUARDRAILS.md`).
 ## Operator scripts and seeds
 
 - Staging and prod are migrated only by `pnpm db:migrate:staging` /
-  `db:migrate:prod`, from `main`. No plain `db:migrate` exists; never add a
+  `pnpm db:migrate:prod`, from `main`. No plain `db:migrate` exists; never add a
   script or doc that runs Drizzle's migrator against a non-local URL.
 - Destructive scripts (reset, restore, obfuscate, load snapshot) fail closed:
   - Check the **live** connection (`SELECT current_database()`) against an

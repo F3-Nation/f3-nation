@@ -104,7 +104,7 @@ Reject and regenerate if any of these fail:
 
 ```bash
 pnpm db:migrate:local          # existing local DB, upgraded in place
-pnpm reset-test-db             # needs TEST_DATABASE_URL (a *_test DB), else it silently skips
+pnpm reset-test-db             # stop if it prints a skip warning: TEST_DATABASE_URL must name a *_test DB
 pnpm -F db generate            # must print no changes (what CI's db-schema-sync checks)
 pnpm -F db test && pnpm -F @acme/api test
 pnpm -F f3-data-models test    # if models.py changed; needs uv
@@ -118,10 +118,10 @@ it in the PR.
 Merge `main` again just before merge. If `main` gained a migration since you
 generated yours:
 
-1. Save your custom SQL. Remove your `.sql`, its `meta/NNNN_snapshot.json`
-   and its `_journal.json` entry, then restore main's copies of the shared
-   files: `git checkout <remote>/main -- packages/db/drizzle`. If you already
-   merged, `NNNN_snapshot.json` may be main's file: don't delete it.
+1. Save your custom SQL. Then reset only the migration files to main's,
+   keeping your `schema.ts` and `relations.ts` edits:
+   `git restore --source=<remote>/main --staged --worktree -- 'packages/db/drizzle/*.sql' packages/db/drizzle/meta`.
+   This also deletes your branch's own migration and snapshot.
 2. `pnpm -F db generate --name=<…>` (or `generate:empty` and paste the SQL).
    drizzle-kit takes the next index after the last journal entry and sets
    `when` to now.

@@ -16,7 +16,8 @@ not style. Review in this order:
    0 on failure, a gate that passes after checking nothing, a fallback that
    hides an outage.
 3. **Atomicity.** Read-then-write races, related writes outside one
-   transaction, one-time flags set before the side effect succeeds.
+   transaction, one-time claims that aren't atomic or are never released
+   when the side effect definitely fails.
 4. **Cross-boundary breakage.** Every caller of a changed contract: the Slack
    bot's Python API client, map/admin/me hooks, the OpenAPI golden, deploy
    workflows, Dockerfiles.

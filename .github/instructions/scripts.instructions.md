@@ -37,8 +37,9 @@ Developer/operator tools, not app runtime. Exceptions that ARE runtime:
   `F3_*_PORT` / `F3_CONTAINER_PREFIX` (see `scripts/lib/local-ports.sh`), or
   use `docker compose exec <service>`. Never hard-code `f3-postgres` or
   `:5433`.
-- Before sourcing an env file, unset inherited vars it is meant to supply:
-  `dotenv` and `source` don't override what the shell already exports.
+- Before loading an env file, clear inherited vars it is meant to supply:
+  `dotenv` never overrides a var the shell already exports, and `source`
+  leaves any var the file omits at its inherited value.
 - A new helper with branching logic ships a paired `*.test.sh` wired into
   `scripts/lint.sh`. The test fails, not skips, when a required tool is
   missing in CI. (Cloud Run env helpers may instead be tested from the app's

@@ -1,5 +1,5 @@
 ---
-applyTo: "**/*.py,**/pyproject.toml,uv.lock,.python-version"
+applyTo: "**/*.py,**/pyproject.toml,uv.lock,**/.python-version"
 ---
 
 # Python (slackbot, analytics, db-python)
@@ -22,8 +22,10 @@ applyTo: "**/*.py,**/pyproject.toml,uv.lock,.python-version"
 
 ## Correctness
 
-- Inside per-item loops (each recipient, org or region), catch, log and
-  continue so one failure doesn't stop the batch.
+- In best-effort batches where items are independent (each recipient, org
+  or region), catch, log and continue so one failure doesn't stop the batch.
+  Inside one shared DB transaction, let errors propagate (or isolate each
+  item with a savepoint); a caught DB error leaves the transaction aborted.
 - Never log emails, names, phone numbers or credentials.
 - Use `is not None` when `0` or `""` is a meaningful value.
 
