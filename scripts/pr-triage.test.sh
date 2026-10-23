@@ -6,6 +6,12 @@
 # Run directly: bash scripts/pr-triage.test.sh
 set -uo pipefail
 
+# pr-triage itself needs jq, but `pnpm lint` runs this for everyone, so don't fail lint for it.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "SKIP: pr-triage tests need jq, which isn't installed"
+  exit 0
+fi
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 triage="${script_dir}/pr-triage.sh"
 failures=0
