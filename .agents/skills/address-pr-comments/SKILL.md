@@ -44,11 +44,13 @@ safety rules — for the rest of this skill.
 current branch's PR (`gh pr view` with no argument); if that finds nothing, ask for a number.
 
 ```bash
-gh pr view <ref> --json number,url,title,state,headRefName,isCrossRepository,maintainerCanModify
+gh pr view <ref> --json number,url,title,state,headRefName,headRefOid,headRepository,headRepositoryOwner,isCrossRepository,maintainerCanModify
 ```
 
 Stop if `state` is not `OPEN`. Stop if `isCrossRepository` is true and `maintainerCanModify` is
-false: the push in Step 5b would be refused. Use `number` from the JSON from here on.
+false: the push in Step 5b would be refused. Use `number` from the JSON from here on, and derive
+`BASE_REPO` (`<owner>/<name>`) from `url`: it is the repository that owns the PR's `pull/<number>/head` ref,
+which is not necessarily `origin`.
 
 ## Step 2 — Set Up the PR Worktree
 
@@ -58,7 +60,19 @@ git worktree list --porcelain
 ```
 
 `MAIN_ROOT` is the repo's main checkout, even when this session runs inside a worktree. Look for a
-`branch refs/heads/<headRefName>` line in the listing, then pick the case that applies:
+`branch refs/heads/<headRefName>` line in the listing. A matching branch name alone does not prove
+the worktree belongs to this PR (an unrelated local branch, or a fork's, can share the name), so
+verify the candidate before treating it as the PR's checkout:
+
+```bash
+git -C "<candidate>" rev-parse HEAD
+git -C "<candidate>" rev-parse --abbrev-ref --symbolic-full-name @{upstream}
+git -C "<candidate>" remote get-url "$(git -C "<candidate>" config branch.<headRefName>.remote)"
+```
+
+Its HEAD must equal `headRefOid` or be a descendant of it, and for a cross-repository PR the
+upstream remote's URL must point at `headRepositoryOwner/headRepository`. If either check fails,
+stop and ask the user rather than reusing it. Then pick the case that applies:
 
 | Where the PR branch is checked out                                  | What to do                                                                                                                                                      |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -67,23 +81,24 @@ git worktree list --porcelain
 | `MAIN_ROOT`                                                         | Stop. Git allows a branch in only one checkout: ask the user to switch the main checkout off the PR branch (e.g. `git -C <MAIN_ROOT> switch main`), then re-run |
 | Nowhere                                                             | Create a worktree, as below. This run owns it                                                                                                                   |
 
-Creating the worktree. Fetch the PR head by its pull ref, which also works for fork PRs, then let
-`gh pr checkout` attach the right local branch and upstream:
+Creating the worktree. Fetch the PR head by its pull ref from the base repository (`BASE_REPO`
+from Check 1, whose `origin` may be a fork), which also works for fork PRs, then let
+`gh pr checkout` attach the right local branch and upstream. First pick a destination that is
+free: if `$WT` is already in the worktree list or exists on disk, ask the user before reusing it,
+or append a suffix (`-2`, `-3`, …) to get an unused path.
 
 ```bash
 git -C "$MAIN_ROOT" branch --format='%(refname:short)'
-git -C "$MAIN_ROOT" fetch origin "pull/<number>/head"
+git -C "$MAIN_ROOT" fetch "https://github.com/<BASE_REPO>.git" "pull/<number>/head"
 WT="$MAIN_ROOT/.claude/worktrees/pr-<number>-comments"
+test -e "$WT" && echo "path in use: pick another"
 git -C "$MAIN_ROOT" worktree add --detach "$WT" FETCH_HEAD
-cd "$WT" && gh pr checkout <number>
+cd "$WT" && gh pr checkout <number> --repo <BASE_REPO>
 git -C "$WT" branch --show-current
-git -C "$WT" status -sb
 ```
 
 Record the branch list printed first. `LOCAL_BRANCH` is what `--show-current` prints. Note whether
-it was in that first list, because Step 6 deletes only a branch this run created. If `status -sb`
-shows the branch is ahead of its upstream, that local branch has unpushed commits from earlier
-work: stop and ask before going on, since Step 5b's push would publish them.
+it was in that first list, because Step 6 deletes only a branch this run created.
 
 **Move the session into the worktree.** Never read or edit a file under `MAIN_ROOT` itself.
 
@@ -107,11 +122,16 @@ The copied `.env` files point at the main checkout's local services. If addressi
 needs running apps or a database, ask the user before giving the worktree its own services with
 `pnpm local:setup --slot N` (see `docs/LOCAL_DEV_DOCKER.md`).
 
-**Check: is the worktree clean?**
+**Check: is the worktree clean, and does it hold only pushed work?** This applies to every
+worktree you use — current, reused, or newly created.
 
 ```bash
+git status -sb
 git status --porcelain
 ```
+
+If `status -sb` shows the branch is ahead of its upstream, that local branch has unpushed commits
+from earlier work: stop and ask before going on, since Step 5b's push would publish them.
 
 If any output is returned: tell the user "Uncommitted or untracked changes detected — commit, stash, or remove them before proceeding." List the affected files. Stop here. (`--porcelain` reports staged, unstaged, and untracked files alike, and Step 5b commits everything modified, so the tree must be fully clean. Gitignored files such as `.env` and `node_modules` don't show.)
 
@@ -137,18 +157,26 @@ query($owner: String!, $name: String!, $pr: Int!) {
         pageInfo { hasNextPage endCursor }
         nodes {
           isResolved isOutdated path line originalLine
-          comments(first: 100) { nodes { databaseId author { login } createdAt body } }
+          id
+          comments(first: 100) {
+            pageInfo { hasNextPage endCursor }
+            nodes { databaseId author { login } createdAt body }
+          }
         }
       }
     }
   }
 }' -f owner={owner} -f name={name} -F pr={pr_number} \
   --jq '.data.repository.pullRequest.reviewThreads
-        | {hasNextPage: .pageInfo.hasNextPage,
+        | {hasNextPage: .pageInfo.hasNextPage, endCursor: .pageInfo.endCursor,
            threads: [.nodes[] | select(.isResolved | not)
-             | {id: .comments.nodes[0].databaseId, path, line: (.line // .originalLine), isOutdated,
+             | {id: .comments.nodes[0].databaseId, nodeId: .id, path, line: (.line // .originalLine), isOutdated,
+                moreComments: .comments.pageInfo.hasNextPage, commentsCursor: .comments.pageInfo.endCursor,
                 comments: [.comments.nodes[] | {author: .author.login, createdAt, body}]}]}'
-# If hasNextPage is true, re-run with `reviewThreads(first: 100, after: "<endCursor>")`.
+# If hasNextPage is true, re-run with `reviewThreads(first: 100, after: "<endCursor>")` using the
+# printed endCursor, until hasNextPage is false.
+# If a thread shows moreComments: true, fetch the rest before choosing its latest comment:
+#   node(id: "<nodeId>") { ... on PullRequestReviewThread { comments(first: 100, after: "<commentsCursor>") { nodes { ... } } } }
 
 # 2. Review bodies — formal review submissions (APPROVED, CHANGES_REQUESTED, COMMENTED)
 # Compact on purpose: one line per review, body capped. Dumping full bodies (bots post 10KB+)
@@ -235,7 +263,11 @@ checks, and pushback tone. Otherwise hold to the same rules:
 
 ### 5b — Commit and push
 
-Stage and commit all modified files with a Conventional Commit message scoped to the PR, e.g.
+If 5a changed nothing (`git status --porcelain` is empty — a reply-only plan), skip the commit and
+push: confirm the PR head is the one you planned against (`gh pr view --json headRefOid`) and go
+straight to 5c.
+
+Otherwise stage and commit all modified files with a Conventional Commit message scoped to the PR, e.g.
 `fix(scope): address PR #NNN review comments`. The scope must be in `commitlint.config.mjs`'s
 `scope-enum`. (Claude Code users with the `commit-commands` plugin may use its `commit` skill.)
 The Lefthook hooks run on commit; if one fails, fix the cause — never `--no-verify`. Then push:
