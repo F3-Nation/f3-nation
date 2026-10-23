@@ -21,7 +21,7 @@ so each tool resolves to the same content:
 | Tool                     | Entry point it reads                                                                       | What it contains                              |
 | ------------------------ | ------------------------------------------------------------------------------------------ | --------------------------------------------- |
 | **All / standard**       | [`AGENTS.md`](../AGENTS.md) (root + per-app)                                               | Canonical conventions                         |
-| **Claude** (Claude Code) | [`AGENTS.md`](../AGENTS.md) (root + per-app)                                               | Read directly (v2.1.281+); no `CLAUDE.md`     |
+| **Claude** (Claude Code) | [`AGENTS.md`](../AGENTS.md) (root + per-app)                                               | Read directly; no `CLAUDE.md`                 |
 | **GitHub Copilot**       | `AGENTS.md` + `.github/copilot-instructions.md` + `.github/instructions/*.instructions.md` | Conventions (`AGENTS.md`) + code-review rules |
 | **CodeRabbit**           | `AGENTS.md` + the same review files, scoped by `.coderabbit.yaml`                          | Conventions + code-review rules               |
 | **Greptile**             | `AGENTS.md` + the same review files, scoped by `.greptile/files.json`                      | Conventions + code-review rules               |
@@ -244,12 +244,12 @@ violation is a `BAD_REQUEST`, not a 500.
   that, make the coupling explicit and tested.
 - **OAuth/OIDC:** enforce PKCE and reject `plain`; validate `state`/`nonce`;
   allow-list redirect URIs (no open redirect); rate-limit `revoke`/`userinfo`.
-- **Refresh-token rotation:** if the server single-uses (delete-on-use) refresh
-  tokens, the client must **not** refresh concurrently per-request, or
-  simultaneous requests at expiry will race, redeem the same token, and force
-  logouts. Single-flight the refresh on the client; the server deliberately
-  has no grace window, because a reused rotated token revokes the family. See
-  [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) and the `me`/`admin` middleware.
+- **Refresh-token rotation:** refresh tokens are single-use and the server
+  has no grace window. Concurrent requests at expiry race to redeem the same
+  token, and all but one get `invalid_grant`. A proxy treats that loss on a
+  non-navigation request as expected: it returns 401 without clearing cookies,
+  so the winning rotation's cookies survive. See
+  [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) and the `me`/`admin` proxies.
 - **MFA / email codes in local dev** are captured by Mailpit — see
   [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md). Don't disable verification to
   make flows pass; drive them properly.

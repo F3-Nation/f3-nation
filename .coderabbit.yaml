@@ -9,8 +9,8 @@
 # Keep each `applyTo` identical to the file's frontmatter.
 inheritance: true
 reviews:
-  # Repo decisions: no docstring requirement, `.env` key order isn't
-  # enforced, and generated unit-test PRs were closed as noise.
+  # Repo decisions: docstrings aren't required, `.env` key order isn't
+  # enforced, and generated unit-test PRs add review noise.
   pre_merge_checks:
     docstrings:
       mode: "off"
