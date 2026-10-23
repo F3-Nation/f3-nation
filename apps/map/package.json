@@ -24,6 +24,7 @@
     "@acme/auth": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/observability": "workspace:*",
+    "@acme/security-headers": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/tailwind-config": "workspace:*",
     "@acme/ui": "workspace:*",

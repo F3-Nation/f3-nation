@@ -19,6 +19,7 @@
     "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/mail": "workspace:*",
+    "@acme/security-headers": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/storage": "workspace:*",
     "@acme/tailwind-config": "workspace:*",

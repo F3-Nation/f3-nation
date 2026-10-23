@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
+import { nextSecurityHeaders } from "@acme/security-headers";
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
+  headers: nextSecurityHeaders({ frame: "deny" }),
   transpilePackages: ["@acme/logger"],
   // pino-pretty relies on worker threads (thread-stream); keep pino external so
   // Next.js does not try to bundle it.

@@ -19,6 +19,7 @@
   "dependencies": {
     "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/security-headers": "workspace:*",
     "@acme/shared": "workspace:*",
     "@auth/core": "catalog:",
     "@better-auth/core": "catalog:",

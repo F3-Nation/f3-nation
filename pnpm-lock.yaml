@@ -667,6 +667,9 @@ importers:
       '@acme/mail':
         specifier: workspace:*
         version: link:../../packages/mail
+      '@acme/security-headers':
+        specifier: workspace:*
+        version: link:../../packages/security-headers
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -835,6 +838,9 @@ importers:
       '@acme/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@acme/security-headers':
+        specifier: workspace:*
+        version: link:../../packages/security-headers
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -932,6 +938,9 @@ importers:
       '@acme/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@acme/security-headers':
+        specifier: workspace:*
+        version: link:../../packages/security-headers
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1177,6 +1186,9 @@ importers:
       '@acme/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@acme/security-headers':
+        specifier: workspace:*
+        version: link:../../packages/security-headers
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1370,6 +1382,9 @@ importers:
       '@acme/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@acme/security-headers':
+        specifier: workspace:*
+        version: link:../../packages/security-headers
       '@acme/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1915,6 +1930,39 @@ importers:
       postgres:
         specifier: 'catalog:'
         version: 3.4.9
+      prettier:
+        specifier: 'catalog:'
+        version: 3.9.10
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.15)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/security-headers:
+    devDependencies:
+      '@acme/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@acme/prettier-config':
+        specifier: workspace:*
+        version: link:../../tooling/prettier
+      '@acme/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@acme/vitest-config':
+        specifier: workspace:*
+        version: link:../../tooling/vitest
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      eslint:
+        specifier: 'catalog:'
+        version: 10.12.0(jiti@2.7.0)(supports-color@7.2.0)
       prettier:
         specifier: 'catalog:'
         version: 3.9.10

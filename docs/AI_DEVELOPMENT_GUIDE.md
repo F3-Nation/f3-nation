@@ -279,7 +279,11 @@ violation is a `BAD_REQUEST`, not a 500.
   `Permissions-Policy`, and framing controls. Use `X-Frame-Options: DENY` /
   `frame-ancestors 'none'` for auth/admin surfaces; the map is intentionally
   embeddable and needs a `frame-ancestors` **allow-list**, not a blanket deny.
-  Disable `poweredByHeader`.
+  Disable `poweredByHeader`. The baseline (everything except a full CSP) comes
+  from `@acme/security-headers`; use it in new apps instead of hand-rolling
+  headers. `apps/homepage` is a static export on GitHub Pages, where
+  `headers()` does not apply. A full CSP is still a follow-up (ship it as
+  `Content-Security-Policy-Report-Only` first).
 - **Sanitize untrusted HTML.** `dangerouslySetInnerHTML` must run through
   DOMPurify; escape all user input interpolated into email templates.
 - **File uploads:** authenticate the endpoint, enforce a size cap (don't
