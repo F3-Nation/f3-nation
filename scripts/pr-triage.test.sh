@@ -158,6 +158,35 @@ assert_eq "a local ledger entry counts as a run" "LOCAL" \
   "$(sed -n '/id="data">/,/<\/script>/p' "$tmp_dir/ledger.html" | sed '1d;$d' \
     | jq -r '.prs[] | select(.number == 5) | .bucket')"
 
+# Paging: a fake gh serves page 2 when asked for the cursor page 1 returned.
+stub_dir="$tmp_dir/stub"
+mkdir -p "$stub_dir"
+jq '.data.repository.pullRequests |= (.pageInfo = {hasNextPage: true, endCursor: "c1"}
+  | .nodes = [.nodes[] | select(.number == 5)])' "$tmp_dir/fixture.json" >"$stub_dir/page1.json"
+jq '.data.repository.pullRequests |= (.pageInfo = {hasNextPage: false, endCursor: null}
+  | .nodes = [.nodes[] | select(.number == 8)])' "$tmp_dir/fixture.json" >"$stub_dir/page2.json"
+cat >"$stub_dir/gh" <<STUB
+#!/usr/bin/env bash
+case "\$*" in
+  "auth status") exit 0 ;;
+  *cursor=c1*) cat "$stub_dir/page2.json" ;;
+  *) cat "$stub_dir/page1.json" ;;
+esac
+STUB
+chmod +x "$stub_dir/gh"
+
+run_paged() {
+  PATH="$stub_dir:$PATH" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$tmp_dir/no-ledger.tsv" \
+    bash "$triage" -R acme/repo --out "$tmp_dir/paged.html" --no-open >/dev/null 2>&1
+  sed -n '/id="data">/,/<\/script>/p' "$tmp_dir/paged.html" | sed '1d;$d'
+}
+paged=$(run_paged)
+assert_eq "every page of open PRs is fetched" "5 8" "$(jq -r '[.prs[].number] | join(" ")' <<<"$paged")"
+assert_eq "a complete fetch isn't marked cut off" "false" "$(jq -r .truncated <<<"$paged")"
+paged=$(PR_TRIAGE_MAX_PAGES=1 run_paged)
+assert_eq "the page cap stops fetching" "5" "$(jq -r '[.prs[].number] | join(" ")' <<<"$paged")"
+assert_eq "a capped fetch is marked cut off" "true 1" "$(jq -r '"\(.truncated) \(.fetched)"' <<<"$paged")"
+
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} pr-triage test(s) failed"
   exit 1

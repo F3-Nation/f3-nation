@@ -32,6 +32,8 @@ set -euo pipefail
 BOT_TIMEOUT_SECS="${PR_TRIAGE_BOT_TIMEOUT_SECS:-7200}"
 LEDGER="${PR_TRIAGE_LEDGER:-${XDG_STATE_HOME:-$HOME/.local/state}/pr-triage/ledger.tsv}"
 LEGACY_CUTOFF="2026-10-21T00:00:00Z"
+PAGE_SIZE=50
+MAX_PAGES="${PR_TRIAGE_MAX_PAGES:-10}"
 SEP=$'\x1f'
 
 usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
@@ -75,11 +77,12 @@ fi
 
 # shellcheck disable=SC2016
 query='
-query($owner: String!, $name: String!) {
+query($owner: String!, $name: String!, $cursor: String) {
   viewer { login }
   repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: 50, orderBy: {field: CREATED_AT, direction: ASC}) {
-      pageInfo { hasNextPage }
+    pullRequests(states: OPEN, first: '"$PAGE_SIZE"', after: $cursor,
+                 orderBy: {field: CREATED_AT, direction: ASC}) {
+      pageInfo { hasNextPage endCursor }
       nodes {
         number title url isDraft createdAt reviewDecision mergeable
         author { login }
@@ -112,7 +115,22 @@ query($owner: String!, $name: String!) {
 if [[ -n "${PR_TRIAGE_FIXTURE:-}" ]]; then
   data=$(cat "$PR_TRIAGE_FIXTURE")
 else
-  data=$(gh api graphql -f query="$query" -F owner="${repo%%/*}" -F name="${repo#*/}")
+  pages_dir=$(mktemp -d "${TMPDIR:-/tmp}/pr-triage.XXXXXX")
+  trap 'rm -rf "$pages_dir"' EXIT
+  cursor="" page=0
+  while :; do
+    page=$((page + 1))
+    args=(-f query="$query" -F owner="${repo%%/*}" -F name="${repo#*/}")
+    [[ -n "$cursor" ]] && args+=(-f cursor="$cursor")
+    page_file="$pages_dir/$(printf '%03d' "$page").json"
+    gh api graphql "${args[@]}" >"$page_file"
+    [[ "$(jq -r '.data.repository.pullRequests.pageInfo.hasNextPage' "$page_file")" == "true" ]] || break
+    (( page < MAX_PAGES )) || break
+    cursor=$(jq -r '.data.repository.pullRequests.pageInfo.endCursor' "$page_file")
+  done
+  # Every page's PRs under the last page's pageInfo, so hasNextPage still marks a cut-off list.
+  data=$(jq -s '(map(.data.repository.pullRequests.nodes) | add) as $all
+    | last | .data.repository.pullRequests.nodes = $all' "$pages_dir"/*.json)
 fi
 
 ledger_json="[]"
@@ -136,6 +154,7 @@ classify='
     viewer: $me,
     generatedAt: ($now | todate),
     truncated: $prs.pageInfo.hasNextPage,
+    fetched: ($prs.nodes | length),
     prs: [$prs.nodes[] | . as $pr
       | ($pr.author.login // "ghost") as $author
       | ($pr.commits.nodes[0].commit) as $head
@@ -354,7 +373,7 @@ HTML
   meta.append(el("code", "", "scripts/pr-triage.sh --html"), " to refresh.");
   if (data.truncated) {
     document.querySelector("header").append(
-      el("div", "notice", "More than 50 open PRs: only the oldest 50 are shown."));
+      el("div", "notice", `There are more open PRs: only the oldest ${data.fetched} are shown.`));
   }
 
   const board = document.getElementById("board");
@@ -424,7 +443,7 @@ section() {
 viewer=$(jq -r '.viewer' <<<"$board")
 echo "${bold}PR triage for $repo${reset} ${dim}(as @$viewer)${reset}"
 if [[ "$(jq -r '.truncated' <<<"$board")" == "true" ]]; then
-  echo "  More than 50 open PRs; only the oldest 50 are shown"
+  echo "  There are more open PRs; only the oldest $(jq -r '.fetched' <<<"$board") are shown"
 fi
 section LOCAL "Run /pr-local-test"
 section INLINE "Run /pr-review-inline"
