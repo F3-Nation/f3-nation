@@ -4,15 +4,15 @@ import { normalize, stableStringify } from "../normalize";
 import { req, target } from "../transport";
 
 /**
- * The `CORSPlugin` in `[[...rest]]/route.ts` is configured with
- * `origin: (origin) => origin`, `credentials: true`, `maxAge: 600`, and
- * allow-headers content-type / authorization / client. All of it lands in these
- * goldens. This is the group that catches a Hono port wiring OPTIONS wrong —
- * the failure mode there is a preflight that 404s or omits the credentials
- * header, which browsers surface as an opaque CORS error rather than a 500.
+ * The `CORSPlugin` in `src/handler.ts` is configured with `origin: "*"`,
+ * `credentials: false`, `maxAge: 600`, and allow-headers content-type /
+ * authorization / client. All of it lands in these goldens. This is the group
+ * that catches a server port wiring OPTIONS wrong — the failure mode there is a
+ * preflight that 404s or omits the allow-origin header, which browsers surface
+ * as an opaque CORS error rather than a 500.
  */
 describe("CORS", () => {
-  it("echoes the origin on a preflight and allows credentials", async () => {
+  it("allows any origin on a preflight, without credentials", async () => {
     const res = await target.invoke(
       req("/v1/ping", {
         method: "OPTIONS",
@@ -46,23 +46,42 @@ describe("CORS", () => {
     ).toMatchFileSnapshot("../__snapshots__/cors-actual-response.golden.json");
   });
 
-  it("echoes a different origin verbatim rather than a fixed allow-list", async () => {
-    // `origin: (origin) => origin` reflects whatever is asked for. Pinning a
-    // second origin makes that reflection explicit, so a port that hardcodes
-    // one production origin fails here instead of in a browser.
+  it("never echoes the origin or allows credentials for an unknown origin", async () => {
+    // The API used to reflect any origin with credentials allowed, which let
+    // any web page make cookie-authenticated calls and read the response
+    // (#361). Bearer-token browser callers on any origin must keep working,
+    // so the answer is `*` without credentials, not an allow-list.
     const res = await target.invoke(
       req("/v1/ping", {
         method: "OPTIONS",
         headers: {
           origin: "https://example.invalid",
           "access-control-request-method": "GET",
+          "access-control-request-headers": "authorization,client",
           "x-forwarded-for": "10.91.0.3",
         },
       }),
     );
-    expect(res.headers.get("access-control-allow-origin")).toBe(
-      "https://example.invalid",
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(res.headers.get("access-control-allow-credentials")).toBeNull();
+  });
+
+  it("treats an opaque Origin: null the same, even with a cookie", async () => {
+    // Sandboxed iframes and file: pages send `Origin: null`. It must get `*`
+    // without credentials like any other origin, never an echoed `null`.
+    const res = await target.invoke(
+      req("/v1/ping", {
+        method: "OPTIONS",
+        headers: {
+          origin: "null",
+          cookie: "session=ignored",
+          "access-control-request-method": "GET",
+          "x-forwarded-for": "10.91.0.4",
+        },
+      }),
     );
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(res.headers.get("access-control-allow-credentials")).toBeNull();
   });
 
   it("carries CORS headers on a handler-produced error response", async () => {
@@ -75,14 +94,12 @@ describe("CORS", () => {
       }),
     );
     expect(res.status).toBe(401);
-    expect(res.headers.get("access-control-allow-origin")).toBe(
-      "https://map.f3nation.com",
-    );
-    expect(res.headers.get("access-control-allow-credentials")).toBe("true");
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(res.headers.get("access-control-allow-credentials")).toBeNull();
   });
 
   it("omits CORS headers on the out-of-handler 404 fall-through", async () => {
-    // route.ts builds this Response outside handler.handle(), so CORSPlugin
+    // handleRequest builds this Response outside handler.handle(), so CORSPlugin
     // never sees it — a browser gets an opaque CORS error, not a 404. Pinned
     // as the current contract, quirk and all.
     const res = await target.invoke(
