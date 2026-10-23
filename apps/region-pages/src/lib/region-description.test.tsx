@@ -36,6 +36,23 @@ describe("useRegionDescription", () => {
     },
   );
 
+  it("keeps a link with no text, shown as its URL", () => {
+    const container = renderedText('<a href="https://f3boone.com"></a>');
+
+    expect(container.textContent).toBe("https://f3boone.com");
+    expect(container.querySelector("a")).toHaveAttribute(
+      "href",
+      "https://f3boone.com",
+    );
+  });
+
+  it.each(['<a href="javascript:alert(1)"></a>', "<a></a>"])(
+    "uses the default when the only link would be dropped: %j",
+    (html) => {
+      expect(renderedText(html).textContent).toBe(defaultRegionDescription);
+    },
+  );
+
   it("renders the sanitized description when it has text", () => {
     const container = renderedText(
       '<p>Hi <a href="https://f3boone.com">site</a></p>',

@@ -51,7 +51,7 @@ const stripHtml = (value: string): string =>
     .trim();
 
 /** Plain-text rendering of `html`; what the server (no DOMParser) shows. */
-export const htmlToPlainText = (html: string | null | undefined): string =>
+const htmlToPlainText = (html: string | null | undefined): string =>
   html ? stripHtml(html) : "";
 
 const sanitizeChildNodes = (
@@ -120,6 +120,24 @@ const sanitizeNode = (node: ChildNode, key: string): ReactNode[] => {
   }
 
   return [];
+};
+
+const ANCHOR_HREF =
+  /<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+
+/**
+ * Whether `html` renders anything a visitor can see: text, or a link the
+ * sanitizer keeps. An empty-text link still shows, because the sanitizer
+ * falls back to the URL as its text.
+ */
+export const hasVisibleContent = (html: string | null | undefined): boolean => {
+  if (!html) return false;
+  if (htmlToPlainText(html).trim().length > 0) return true;
+  for (const match of html.matchAll(ANCHOR_HREF)) {
+    const href = match[1] ?? match[2] ?? match[3] ?? "";
+    if (isSafeHref(href)) return true;
+  }
+  return false;
 };
 
 export const sanitizeHtmlToReactNodes = (
