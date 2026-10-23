@@ -324,7 +324,10 @@ async function createEventInstancesForSeriesInTransaction(
       currentIndex++;
 
       const shouldCreate =
-        recurrencePattern === "weekly" || currentIndex === indexWithinInterval;
+        recurrencePattern === "weekly" ||
+        (indexWithinInterval === 0
+          ? addDays(currentDate, 7).getMonth() !== currentDate.getMonth()
+          : currentIndex === indexWithinInterval);
 
       if (shouldCreate && currentInterval === 1) {
         instanceRecords.push({
