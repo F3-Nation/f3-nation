@@ -174,9 +174,9 @@ without their say-so.
    rest go to the summary as-is.
 
    ```bash
-   git grep -nE 'github\.com/[^ )]+/(pull|issues)/' -- ':(exclude)packages/db/drizzle/*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
-   git grep -nE '(^|[^a-zA-Z0-9_])#[0-9]+\b' -- ':(exclude)packages/db/drizzle/*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
-   git grep -niE 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' -- ':(exclude)packages/db/drizzle/*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   git grep -nE 'github\.com/[^ )]+/(pull|issues)/' -- ':(exclude).agents/skills/durable-docs/SKILL.md' ':(exclude)packages/db/drizzle/*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   git grep -nE '(^|[^a-zA-Z0-9_])#[0-9]+\b' -- ':(exclude).agents/skills/durable-docs/SKILL.md' ':(exclude)packages/db/drizzle/*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   git grep -niE 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' -- ':(exclude).agents/skills/durable-docs/SKILL.md' ':(exclude)packages/db/drizzle/*.sql' ':(exclude)CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
    ```
 
    Narrow to the confirmed scope from step 1 by appending its paths (e.g.
@@ -223,8 +223,8 @@ without their say-so.
 - Generated or vendored files: `CHANGELOG.md`, `.claude/skills/` (copied from
   `.agents/skills/`), `node_modules/`.
 - This skill's own `SKILL.md` during an audit — its `#<n>` placeholders and
-  quoted ban-list phrases are illustrations, and the audit greps will find
-  them.
+  quoted ban-list phrases are illustrations, and the seeded searches exclude
+  it so the audit doesn't self-flag.
 - Merged ADRs, and the `Date`/`Author(s)` header of any ADR — records keep
   their identity.
 - Deleting `packages/db/drizzle/*.sql` migration history — never.
