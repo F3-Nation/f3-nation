@@ -65,5 +65,7 @@ security and reliability checks. Apply them to new and changed workflows.
   Flag a change that touches only the workflow or only the doc.
 - Check environment protection rules before adding a trigger. A deployment
   environment's branch or tag policy can make a new path undeployable.
+- Don't demand a test harness for short inline `run:` or `github-script`
+  steps; extract logic into a tested script only when it branches.
 - Upload logs on `failure() || cancelled()`, and write job summaries in
   `finally`.

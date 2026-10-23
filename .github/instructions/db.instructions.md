@@ -85,6 +85,8 @@ migration (`docs/AI_GUARDRAILS.md`).
 - Changes to pool settings, timeouts or the connection path state the
   production evidence behind them, the metric to watch, and the rollback.
   Long-running CLIs opt out of query timeouts (`QUERY_TIMEOUT_MS=0`).
+- A user with no role is a normal user by design. Don't flag seeded users
+  without roles, or ask to seed a `user` role.
 - Local seed API keys keep the `local-` prefix: the staging obfuscator's
   `--preserve-local-seed` spares only `local-*` keys.
 - Seed lookups scope by parent (`parentId`, region); names are not unique.

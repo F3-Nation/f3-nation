@@ -8,6 +8,18 @@
 # entries below give each instructions file the same scope Copilot uses.
 # Keep each `applyTo` identical to the file's frontmatter.
 inheritance: true
+reviews:
+  # Repo decisions: no docstring requirement, `.env` key order isn't
+  # enforced, and generated unit-test PRs were closed as noise.
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  tools:
+    dotenvLint:
+      enabled: false
+  finishing_touches:
+    unit_tests:
+      enabled: false
 knowledge_base:
   code_guidelines:
     filePatterns:

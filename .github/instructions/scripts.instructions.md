@@ -43,7 +43,9 @@ Developer/operator tools, not app runtime. Exceptions that ARE runtime:
 - A new helper with branching logic ships a paired `*.test.sh` wired into
   `scripts/lint.sh`. The test fails, not skips, when a required tool is
   missing in CI. (Cloud Run env helpers may instead be tested from the app's
-  vitest/pytest suite.)
+  vitest/pytest suite.) A hand-run, top-to-bottom operator script with no
+  reusable logic may skip tests if the PR says why; don't demand a harness
+  for it.
 - Cloud Run env helpers (`apps/*/scripts/cloud-run-env*.sh`):
   - `--update-env-vars` never removes keys: pass unset optional vars to
     `--remove-env-vars`.

@@ -31,6 +31,9 @@ applyTo: "**/package.json,pnpm-workspace.yaml,turbo.json,renovate.json,knip.conf
   Grep Dockerfiles for independently pinned tools (`npm i -g`, versioned
   paths, checksums).
 - Docker base images use `name:version@sha256:`.
+- Cloud Run sets `PORT` at runtime, overriding a Dockerfile's `ENV PORT`
+  default. Apps listen on `PORT`; don't ask to hard-code a port in start
+  scripts or app code.
 - Major or runtime bumps (Next, React, Tailwind, Node, UI primitives, auth
   libraries) list the upstream behavior changes in the PR, and are checked in
   the shared `packages/ui` primitives and in a built image that actually
