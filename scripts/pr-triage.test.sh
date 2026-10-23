@@ -285,7 +285,8 @@ run_mark() { PATH="$mark_stub:$PATH" PR_TRIAGE_LEDGER="$mark_ledger" bash "$tria
 run_mark 5 inline >/dev/null 2>&1
 run_mark 8 local >/dev/null 2>&1
 assert_eq "mark writes one line per run" "2" "$(wc -l <"$mark_ledger" | tr -d ' ')"
-assert_eq "mark writes five tab-separated fields" "5 5" "$(awk -F'\t' '{printf "%s%s", sep, NF; sep=" "}' "$mark_ledger")"
+assert_eq "mark writes six tab-separated fields, tagged as a mark" "6:mark 6:mark" \
+  "$(awk -F'\t' '{printf "%s%s:%s", sep, NF, $6; sep=" "}' "$mark_ledger")"
 assert_eq "mark maps the kinds to skills" "pr-review-inline pr-local-test" \
   "$(awk -F'\t' '{printf "%s%s", sep, $3; sep=" "}' "$mark_ledger")"
 PR_TRIAGE_FIXTURE="$tmp_dir/fixture.json" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$mark_ledger" \
@@ -303,6 +304,21 @@ assert_eq "mark rejects an unknown kind" "1" "$?"
 run_mark 12 inline -R other/repo >/dev/null 2>&1
 assert_eq "mark rejects options after the subcommand" "1" "$?"
 assert_eq "a rejected mark writes nothing" "2" "$(wc -l <"$mark_ledger" | tr -d ' ')"
+
+# PR 29's blocked report was posted at 02:00. Only a later hand-recorded mark clears it.
+bucket_with_ledger() {
+  printf '%s\n' "$1" >"$tmp_dir/override.tsv"
+  PR_TRIAGE_FIXTURE="$tmp_dir/fixture.json" PR_TRIAGE_NOW="$now" PR_TRIAGE_LEDGER="$tmp_dir/override.tsv" \
+    bash "$triage" -R acme/repo --out "$tmp_dir/override.html" --no-open >/dev/null 2>&1
+  sed -n '/id="data">/,/<\/script>/p' "$tmp_dir/override.html" | sed '1d;$d' \
+    | jq -r '.prs[] | select(.number == 29) | .bucket'
+}
+assert_eq "a later mark clears a blocked local test" "MANUAL" \
+  "$(bucket_with_ledger "$(printf 'acme/repo\t29\tpr-local-test\tsha\t2026-10-22T03:00:00Z\tmark')")"
+assert_eq "the skill's own later ledger line doesn't clear it" "LOCAL" \
+  "$(bucket_with_ledger "$(printf 'acme/repo\t29\tpr-local-test\tsha\t2026-10-22T03:00:00Z')")"
+assert_eq "a mark from before the blocked report doesn't clear it" "LOCAL" \
+  "$(bucket_with_ledger "$(printf 'acme/repo\t29\tpr-local-test\tsha\t2026-10-22T01:00:00Z\tmark')")"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} pr-triage test(s) failed"

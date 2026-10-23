@@ -73,7 +73,9 @@ if [[ "${1:-}" == "mark" ]]; then
   esac
   sha=$(gh pr view "$pr" -R "$repo" --json headRefOid -q .headRefOid)
   mkdir -p "$(dirname "$LEDGER")"
-  printf '%s\t%s\t%s\t%s\t%s\n' "$repo" "$pr" "$skill" "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$LEDGER"
+  # The sixth field tells a hand-recorded run apart from the line each skill writes for itself.
+  printf '%s\t%s\t%s\t%s\t%s\tmark\n' "$repo" "$pr" "$skill" "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    >>"$LEDGER"
   echo "Recorded $skill for $repo#$pr in $LEDGER"
   exit 0
 fi
@@ -149,7 +151,8 @@ if [[ -f "$LEDGER" ]]; then
     [split("\n")[] | select(length > 0) | split("\t")] as $rows
     | [$rows[] | select(length >= 3 and (.[1] | test("^[0-9]+$")))] as $valid
     | {bad: (($rows | length) - ($valid | length)),
-       rows: [$valid[] | select(.[0] == $repo) | {pr: (.[1] | tonumber), skill: .[2]}]}' "$LEDGER")
+       rows: [$valid[] | select(.[0] == $repo)
+         | {pr: (.[1] | tonumber), skill: .[2], at: .[4], manual: (.[5] == "mark")}]}' "$LEDGER")
   [[ "$(jq '.bad' <<<"$ledger_json")" == "0" ]] || echo "pr-triage: ignoring malformed lines in $LEDGER" >&2
   ledger_json=$(jq -c '.rows' <<<"$ledger_json")
 fi
@@ -205,7 +208,8 @@ classify='
       | [$unfinished[] | select(.overdue) | .name] as $gaveUpOn
 
       # Skill runs, by anyone
-      | ($ledger | map(select(.pr == $pr.number) | .skill)) as $logged
+      | ($ledger | map(select(.pr == $pr.number))) as $ledgerRows
+      | ($ledgerRows | map(.skill)) as $logged
       | [$pr.reviews.nodes[] | select((.submittedAt | ts) < ($cutoff | ts))] as $legacy
       | (($logged | index("pr-local-test") != null)
           or any($pr.reviews.nodes[]; human_marker("pr-local-test")
@@ -216,8 +220,13 @@ classify='
       # The skill omits that line on a PR its runner authored, so a blocked run there still counts.
       # "." stands for the apostrophe, straight or curly.
       | ([$pr.reviews.nodes[] | select(human_marker("pr-local-test"))]
-          | sort_by(.submittedAt // "") | last | (.body // "")
-          | test("Can.t recommend yet")) as $localBlocked
+          | sort_by(.submittedAt // "") | last) as $lastLocal
+      # Only a hand-recorded `mark` made after that report clears it: the skill logs every run,
+      # blocked ones included, just after posting the report.
+      | ([$ledgerRows[] | select(.manual and .skill == "pr-local-test") | .at | try ts catch 0]
+          | max // 0) as $markedLocalAt
+      | ((($lastLocal.body // "") | test("Can.t recommend yet"))
+          and ($markedLocalAt <= ($lastLocal.submittedAt | ts))) as $localBlocked
       | ($localRan and ($localBlocked | not)) as $localTested
       # A clean inline review leaves only a "no issues" comment, and a local test always follows one.
       | ($localRan
