@@ -5,6 +5,8 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 
+import { isApiUnavailableError } from "@acme/shared/app/api-availability";
+
 const serializer = new StandardRPCJsonSerializer();
 
 export const createQueryClient = () =>
@@ -31,6 +33,10 @@ export const createQueryClient = () =>
           // SSG-hydrated map datasets) keeps showing that data; throwing would
           // replace a working map with the error boundary.
           if (query.state.data !== undefined) return false;
+          // The API being down is not a bug in the map: keep it mounted and
+          // let <ApiOutageBanner /> explain and retry, rather than replacing
+          // the whole app with the global error screen.
+          if (isApiUnavailableError(error)) return false;
           // Don't throw abort errors - they're expected when components unmount
           if (
             error instanceof Error &&
