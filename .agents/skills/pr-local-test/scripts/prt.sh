@@ -447,19 +447,26 @@ cmd_info() {
 # New keys in a changed .env.example are added to the generated .env (never reseeding it); a
 # changed template is reported so the caller can look at values the run keeps.
 refresh_env() {
-  local old="$1" new="$2" f env line key added="" changed=""
+  local old="$1" new="$2" f env fresh line key added="" changed=""
   for f in $(git -C "$WT" diff --name-only --diff-filter=AM "$old" "$new" -- '*.env.example'); do
     [ "$f" != .env.example ] || continue # the root .env is the run's own
     changed="$changed $f"
     env="$WT/${f%.example}"
     { [ -f "$env" ] && [ ! -L "$env" ]; } || continue
+    fresh=$(mktemp "$RUN_DIR/.newenv.XXXXXX")
     while IFS= read -r line; do
       key=${line%%=*}
       grep -q "^${key}=" "$env" && continue
-      [ -z "$(tail -c1 "$env")" ] || echo >>"$env"
-      printf '%s\n' "$line" >>"$env"
+      printf '%s\n' "$line" >>"$fresh"
       added="$added ${f%.example}:$key"
     done < <(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$WT/$f" || true)
+    if [ -s "$fresh" ]; then
+      # Same port rewrite local:setup applies, with this run's ports (exported by load).
+      (cd "$WT" && . scripts/lib/local-ports.sh && rewrite_env_ports "$fresh")
+      [ -z "$(tail -c1 "$env")" ] || echo >>"$env"
+      cat "$fresh" >>"$env"
+    fi
+    rm -f "$fresh"
   done
   [ -z "$added" ] || echo "ENV_KEYS_ADDED=${added# }"
   [ -z "$changed" ] || echo "ENV_TEMPLATES_CHANGED=${changed# }"

@@ -304,7 +304,7 @@ the author more than a missing nit.
 
 **`--dry-run`:** don't post. Show each drafted comment, in full, with its `path:line` in the
 report, and post only the ones the user then approves. Before posting them later, re-run the
-GitHub pre-flight and compare `gh pr view <n> --json headRefOid` with `HEAD_SHA`. If the author
+GitHub pre-flight and compare `gh pr view <n> --repo {owner}/{name} --json headRefOid` with `HEAD_SHA`. If the author
 has pushed since, say so: the comments still attach to `HEAD_SHA`, and a line may have moved or
 been fixed, so offer a `--rereview` instead.
 
@@ -324,9 +324,12 @@ _written by <model name>_
 ```
 
 If findings existed but Step 8 dropped them all as already raised, the problems may still be
-open, so don't call the review clean. Use `**pr-review-inline found no new issues** at commit
-`<HEAD_SHA>` (<N> already raised on this PR).` as the first line instead; the marker and
-signature stay.
+open, so don't call the review clean. Use this as the first line instead; the marker and
+signature stay:
+
+```markdown
+**pr-review-inline found no new issues** at commit `<HEAD_SHA>` (<N> already raised on this PR).
+```
 
 ```bash
 gh api repos/{owner}/{name}/issues/{n}/comments -F body=@bodies/clean.md

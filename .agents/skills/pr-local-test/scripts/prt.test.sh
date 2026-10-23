@@ -6,6 +6,7 @@
 #   - load() makes the run's env authoritative over inherited connection settings
 #   - update --approved is bound to the scanned commit, and a failed update is retried
 #   - check_migrations (applied vs journal), kill_group, and serve's port-in-use refusal
+# Missing prerequisites (jq, git, python3, lsof or ss) fail the test.
 # Run directly: bash .agents/skills/pr-local-test/scripts/prt.test.sh
 set -uo pipefail
 
@@ -37,12 +38,16 @@ assert_contains() {
   fi
 }
 
+# A missing tool fails the test rather than skipping it, so the lint gate can't pass unchecked.
 for tool in jq git python3; do
-  command -v "$tool" >/dev/null 2>&1 || { echo "SKIP: $tool not installed"; exit 0; }
+  command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: $tool is required by this test" >&2; exit 1; }
 done
-command -v lsof >/dev/null 2>&1 || command -v ss >/dev/null 2>&1 || { echo "SKIP: neither lsof nor ss installed"; exit 0; }
+command -v lsof >/dev/null 2>&1 || command -v ss >/dev/null 2>&1 || { echo "FAIL: lsof or ss is required by this test" >&2; exit 1; }
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/prt-test.XXXXXX")"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/prt-test.XXXXXX")" || {
+  echo "FAIL: could not create the test directory" >&2
+  exit 1
+}
 listener_pid=""
 cleanup() {
   [ -z "$listener_pid" ] || kill "$listener_pid" 2>/dev/null
@@ -61,7 +66,7 @@ origin="$tmp_dir/origin"
 git init -q "$origin"
 git -C "$origin" symbolic-ref HEAD refs/heads/main
 mkdir -p "$origin/scripts/lib" "$origin/packages/db/drizzle/meta" "$origin/apps/auth" "$origin/apps/map"
-echo ':' >"$origin/scripts/lib/local-ports.sh"
+cp "$script_dir/../../../../scripts/lib/local-ports.sh" "$origin/scripts/lib/local-ports.sh"
 echo 24.0.0 >"$origin/.nvmrc"
 echo '{"entries":[{},{}]}' >"$origin/packages/db/drizzle/meta/_journal.json"
 printf 'DATABASE_HOST=\nEMAIL_SERVER=\n' >"$origin/apps/auth/.env.example"
@@ -172,7 +177,7 @@ assert_eq "tested_sha is unchanged" "$c2" "$(jq -r .tested_sha "$run/state.json"
 # --- update: new template keys reach the generated .env, and the Node version is refreshed
 printf 'DATABASE_HOST=localhost\nEMAIL_SERVER=smtp://local' >"$run/wt/apps/auth/.env"
 echo 24.0.0 >"$origin/.nvmrc"
-printf 'DATABASE_HOST=\nEMAIL_SERVER=\nNEW_KEY=abc\n' >"$origin/apps/auth/.env.example"
+printf 'DATABASE_HOST=\nEMAIL_SERVER=\nNEW_KEY=abc\nNEW_URL=http://localhost:3001/x\n' >"$origin/apps/auth/.env.example"
 git -C "$origin" add -A
 git -C "$origin" commit -q -m c4
 c4="$(git -C "$origin" rev-parse HEAD)"
@@ -182,6 +187,7 @@ assert_eq "update with a new template key succeeds" "0" "$?"
 assert_contains "it reports the added key" "ENV_KEYS_ADDED=apps/auth/.env:NEW_KEY" "$out"
 assert_contains "it appends the key without touching existing ones" "EMAIL_SERVER=smtp://local
 NEW_KEY=abc" "$(cat "$run/wt/apps/auth/.env")"
+assert_eq "a new key's default port is rewritten to this run's" "NEW_URL=http://localhost:$(jq -r .ports.api "$run/state.json")/x" "$(grep '^NEW_URL=' "$run/wt/apps/auth/.env")"
 assert_eq "path_prefix is refreshed for the new commit" "$bin:$bin" "$(jq -r .path_prefix "$run/state.json")"
 
 # --- check_migrations: applied rows must match the journal
