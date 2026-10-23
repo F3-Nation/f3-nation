@@ -3,8 +3,10 @@
 # origin/clone with stubbed gh, node, pnpm and docker, and PRT_ROOT pointed at a temp directory,
 # so no real PR, Docker daemon or /tmp/pr-local-test state is touched. Covers:
 #   - init never writes through a PR-tracked `.env` symlink
-#   - load() makes the run's env authoritative over inherited connection settings
+#   - load() makes the run's env authoritative over inherited settings, commented template keys
+#     included, and update re-applies that for the new commit's templates
 #   - update --approved is bound to the scanned commit, and a failed update is retried
+#   - a failed update blocks setup, and the head returning to the tested commit still repairs it
 #   - check_migrations (applied vs journal), kill_group, and serve's port-in-use refusal
 # Missing prerequisites (jq, git, python3, lsof or ss) fail the test.
 # Run directly: bash .agents/skills/pr-local-test/scripts/prt.test.sh
@@ -88,6 +90,7 @@ echo v24.0.0
 EOF
 cat >"$bin/pnpm" <<EOF
 #!/usr/bin/env bash
+[ ! -e "$tmp_dir/pnpm_probe" ] || echo "\${PROBE_KEY-unset}" >>"$tmp_dir/pnpm_probe"
 [ ! -e "$tmp_dir/pnpm_fail" ] || { echo "pnpm failed" >&2; exit 1; }
 EOF
 cat >"$bin/gh" <<EOF
@@ -189,6 +192,46 @@ assert_contains "it appends the key without touching existing ones" "EMAIL_SERVE
 NEW_KEY=abc" "$(cat "$run/wt/apps/auth/.env")"
 assert_eq "a new key's default port is rewritten to this run's" "NEW_URL=http://localhost:$(jq -r .ports.api "$run/state.json")/x" "$(grep '^NEW_URL=' "$run/wt/apps/auth/.env")"
 assert_eq "path_prefix is refreshed for the new commit" "$bin:$bin" "$(jq -r .path_prefix "$run/state.json")"
+
+# --- load: a template that only shows a commented-out key still isolates it
+echo '# POSTHOG_KEY=' >>"$run/wt/apps/map/.env.example"
+env_out="$(POSTHOG_KEY=leak bash -c '. "$1"; load "$2"; echo "${POSTHOG_KEY-unset}"' _ "$prt" "$run")"
+assert_eq "load unsets an inherited variable that a template only declares in a comment" "unset" "$env_out"
+git -C "$run/wt" checkout -q -- apps/map/.env.example
+
+# --- update: variables first named by the new commit's templates are cleared before install
+echo 'PROBE_KEY=x' >>"$origin/apps/map/.env.example"
+git -C "$origin" add -A
+git -C "$origin" commit -q -m c5
+c5="$(git -C "$origin" rev-parse HEAD)"
+git -C "$origin" update-ref refs/pull/1/head "$c5"
+: >"$tmp_dir/pnpm_probe"
+out="$(PROBE_KEY=leak bash "$prt" update "$run" --approved "$c5" 2>&1)"
+assert_eq "update with an inherited new-template variable succeeds" "0" "$?"
+assert_eq "install sees the new template's variable unset" "unset" "$(sort -u "$tmp_dir/pnpm_probe")"
+rm "$tmp_dir/pnpm_probe"
+
+# --- update: a failed update blocks setup, and the head returning to the tested commit repairs it
+echo '{"entries":[{},{},{}]}' >"$origin/packages/db/drizzle/meta/_journal.json"
+git -C "$origin" add -A
+git -C "$origin" commit -q -m c6
+c6="$(git -C "$origin" rev-parse HEAD)"
+git -C "$origin" update-ref refs/pull/1/head "$c6"
+touch "$tmp_dir/pnpm_fail"
+out="$(bash "$prt" update "$run" --approved "$c6" 2>&1)"
+assert_eq "an update that fails during install exits 1" "1" "$?"
+rm "$tmp_dir/pnpm_fail"
+out="$(bash "$prt" setup "$run" --at-base 2>&1)"
+assert_eq "setup refuses while an update is pending" "1" "$?"
+assert_contains "the refusal names the pending commit" "an update to $c6 didn't finish" "$out"
+git -C "$origin" update-ref refs/pull/1/head "$c5"
+out="$(bash "$prt" update "$run" --approved "$c5" 2>&1)"
+assert_eq "update after the head returns to the tested commit succeeds" "0" "$?"
+assert_eq "it is not reported as nothing to do" "no" "$([[ "$out" == *NO_NEW_COMMITS* ]] && echo yes || echo no)"
+assert_eq "the checkout moves back to the tested commit" "$c5" "$(git -C "$run/wt" rev-parse HEAD)"
+assert_eq "the pending revision is cleared" "none" "$(jq -r '.update_pending // "none"' "$run/state.json")"
+assert_eq "the run is ready again" "ready" "$(jq -r .phase "$run/state.json")"
+assert_contains "the abandoned commit's migrations are flagged for a rebuild" "the abandoned update to $c6 may have migrated the database" "$out"
 
 # --- check_migrations: applied rows must match the journal
 log="$tmp_dir/migrate.log"

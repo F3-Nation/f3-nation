@@ -195,6 +195,12 @@ keep only `path`, `line`, and the first ~200 characters of each body in context.
 A cross-repo target such as a private GHSA advisory repo often has Issues disabled, so the
 `issues/{n}/comments` call 404s. That's expected; proceed with the inline-only baseline.
 
+Also build `OPEN_EXISTING`, independent of what the review finds: every concern in this
+baseline that still applies at `HEAD_SHA`. Read each cited line at `HEAD_SHA`; a concern is
+closed only when you confirm the code now does what the comment asked, or a later reply explains
+why it is intended and no one disputes it. Anything you can't confirm stays open. Step 9 reads
+this list, because the review can say nothing new about a problem it was told to skip.
+
 ## Step 6 — Run the review
 
 **Pick the brief.** If the Superpowers `requesting-code-review` skill is available (Claude Code:
@@ -323,13 +329,16 @@ the author and `scripts/pr-triage.sh` can see the review happened. Use this body
 _written by <model name>_
 ```
 
-If findings existed but Step 8 dropped them all as already raised, the problems may still be
-open, so don't call the review clean. Use this as the first line instead; the marker and
-signature stay:
+Call the review clean only when `OPEN_EXISTING` (Step 5) is empty. If it isn't, the problems
+may still be open whatever the reviewer reported (it was told not to repeat them, and a new
+finding may also have failed verification), so use this as the first line instead; the marker
+and signature stay:
 
 ```markdown
-**pr-review-inline found no new issues** at commit `<HEAD_SHA>` (<N> already raised on this PR).
+**pr-review-inline found no new issues** at commit `<HEAD_SHA>` (<N> already raised on this PR and still open).
 ```
+
+`<N>` is the size of `OPEN_EXISTING`, not the number of findings Step 8 dropped.
 
 ```bash
 gh api repos/{owner}/{name}/issues/{n}/comments -F body=@bodies/clean.md

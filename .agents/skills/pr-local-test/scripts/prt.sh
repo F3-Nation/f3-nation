@@ -52,6 +52,35 @@ st_set() {
   mv "$tmp" "$RUN_DIR/state.json"
 }
 
+# Variable names an env file declares, commented-out examples included: a template that only
+# shows `# KEY=` still makes the apps read an exported KEY.
+env_names() { sed -n -E 's/^#?[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p'; }
+
+# dotenv doesn't override the environment, so any exported value that an env file also defines
+# (DB host/port, SMTP, API keys, ...) would beat the run's own files. Unset every name the
+# worktree's templates and env files use, except the ones the caller deliberately lists in
+# PRT_PASS (e.g. PRT_PASS="F3_CHANNEL") and the ones the run's root .env sets itself (load
+# sources that file, and a later call must not undo it). Run again after the worktree moves to
+# a commit whose templates may name new variables.
+isolate_env() {
+  local k pass="" own=""
+  for k in ${PRT_PASS:-}; do
+    [[ "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "PRT_PASS: '$k' isn't a variable name"
+    case "$k" in DATABASE_* | TEST_DATABASE_* | EMAIL_*) die "PRT_PASS: $k is a connection setting; the run's own is always used" ;; esac
+    pass="$pass $k"
+  done
+  own=" $(env_names <"$WT/.env" | tr '\n' ' ') "
+  while IFS= read -r k; do
+    case "$k" in PATH | HOME | USER | SHELL | TMPDIR | PWD | TERM | LANG) continue ;; esac
+    case " $pass " in *" $k "*) continue ;; esac
+    case "$own" in *" $k "*) continue ;; esac
+    unset "$k" 2>/dev/null || true
+  done < <(cat "$WT/.env" "$WT"/.env.example "$WT"/apps/*/.env* "$WT"/packages/*/.env* 2>/dev/null | env_names | sort -u)
+  for k in DATABASE_URL TEST_DATABASE_URL; do
+    case "$own" in *" $k "*) ;; *) unset "$k" ;; esac
+  done
+}
+
 # Loads a run: its paths, its Node, and its ports (the worktree's root .env,
 # which Compose, local:setup and the apps' dev scripts all read).
 load() {
@@ -64,22 +93,8 @@ load() {
   MAIN=$(st .main)
   PROJECT=$(st .compose_project)
   PATH="$(st .path_prefix):$PATH"
-  # dotenv doesn't override the environment, so any exported value that an env file also defines
-  # (DB host/port, SMTP, API keys, ...) would beat the run's own files. Unset every name they use,
-  # except the ones the caller deliberately lists in PRT_PASS (e.g. PRT_PASS="F3_CHANNEL").
-  local k pass="" kept=""
-  for k in ${PRT_PASS:-}; do
-    [[ "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "PRT_PASS: '$k' isn't a variable name"
-    case "$k" in DATABASE_* | TEST_DATABASE_* | EMAIL_*) die "PRT_PASS: $k is a connection setting; the run's own is always used" ;; esac
-    pass="$pass $k"
-  done
-  while IFS= read -r k; do
-    case "$k" in PATH | HOME | USER | SHELL | TMPDIR | PWD | TERM | LANG) continue ;; esac
-    case " $pass " in *" $k "*) continue ;; esac
-    unset "$k" 2>/dev/null || true
-  done < <(cat "$WT/.env" "$WT"/.env.example "$WT"/apps/*/.env* "$WT"/packages/*/.env* 2>/dev/null \
-    | sed -n -E 's/^(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p' | sort -u)
-  unset DATABASE_URL TEST_DATABASE_URL
+  isolate_env
+  local k pass="${PRT_PASS:-}" kept=""
   # An override must also beat the run's own .env, which is sourced next.
   for k in $pass; do
     [ -z "${!k+x}" ] || kept="$kept $k=$(printf '%q' "${!k}")"
@@ -314,7 +329,9 @@ cmd_setup() {
   load "$1"; shift
   local at_base=false a
   for a in "$@"; do case "$a" in --at-base) at_base=true ;; *) die "unknown flag $a" ;; esac; done
-  local pr_sha merge_base
+  local pr_sha merge_base pending
+  pending=$(st '.update_pending // empty')
+  [ -z "$pending" ] || die "an update to $pending didn't finish; run update again before setup"
   pr_sha=$(st .tested_sha); merge_base=$(st .merge_base)
   if $at_base && ! git -C "$WT" cat-file -e "$merge_base:scripts/lib/local-ports.sh" 2>/dev/null; then
     die "the PR's merge base predates per-checkout ports; use plain setup, or ask the author to update the branch"
@@ -481,11 +498,14 @@ cmd_update() {
       *) die "unknown flag $1" ;;
     esac
   done
-  local ref old new apps base_ref base_sha merge_base
+  local ref old new apps base_ref base_sha merge_base pending
   ref=$(st .git_ref); old=$(st .tested_sha); base_ref=$(st .base_ref)
   git -C "$MAIN" fetch -q origin "+refs/pull/$(st .pr)/head:$ref" "+refs/heads/$base_ref:$ref-base" || die "fetch failed"
   new=$(git -C "$MAIN" rev-parse "$ref")
-  if [ "$new" = "$old" ]; then echo "NO_NEW_COMMITS ($old)"; return 0; fi
+  # An unfinished update leaves the checkout and database somewhere past $old, so the head
+  # matching $old no longer means there is nothing to do.
+  pending=$(st '.update_pending // empty')
+  if [ "$new" = "$old" ] && [ -z "$pending" ]; then echo "NO_NEW_COMMITS ($old)"; return 0; fi
   # A fork's new commits run nothing until the user has approved exactly this commit.
   if [ "$(st .cross_repo)" = true ]; then
     local approved_oid=""
@@ -502,6 +522,8 @@ cmd_update() {
   apps=$(jq -r '[.servers[].app] | join(" ")' "$RUN_DIR/state.json")
   for a in $apps; do stop_app "$a"; done
   checkout_wt "$new"
+  # The new commit's templates may name variables the run was loaded without.
+  isolate_env
   PATH="$NODE_BIN:$PNPM_DIR:$PATH"
   st_set --arg p "$NODE_BIN:$PNPM_DIR" --arg v "$NODE_V" --arg nn "$NODE_NOTE" '.path_prefix = $p | .node_version = $v | .node_note = $nn'
   # The tested revision advances only once install and migrations succeed, so a retry at the
@@ -511,7 +533,11 @@ cmd_update() {
   refresh_env "$old" "$new"
   # Appending a migration also rewrites the journal; only a change to earlier entries needs a rebuild.
   local journal=packages/db/drizzle/meta/_journal.json
-  if [ -n "$(git -C "$WT" diff --name-only --diff-filter=MDR "$old" "$new" -- 'packages/db/drizzle/*.sql' 'packages/db/drizzle/meta/*_snapshot.json')" ] \
+  # A pending commit other than this one may have applied migrations to the database before it failed.
+  if [ -n "$pending" ] && [ "$pending" != "$new" ] \
+    && [ -n "$(git -C "$WT" diff --name-only "$old" "$pending" -- "$journal")" ]; then
+    echo "EXISTING_MIGRATIONS_CHANGED: the abandoned update to $pending may have migrated the database; rebuild it with down-db, then setup"
+  elif [ -n "$(git -C "$WT" diff --name-only --diff-filter=MDR "$old" "$new" -- 'packages/db/drizzle/*.sql' 'packages/db/drizzle/meta/*_snapshot.json')" ] \
     || ! jq -e --slurpfile o <(git -C "$WT" show "$old:$journal") \
       '.entries[:($o[0].entries | length)] == $o[0].entries' "$WT/$journal" >/dev/null 2>&1; then
     echo "EXISTING_MIGRATIONS_CHANGED: rebuild the database with down-db, then setup"
