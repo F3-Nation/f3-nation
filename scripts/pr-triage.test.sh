@@ -107,7 +107,12 @@ jq -n '
     (pr(25; "Qodo not started"; "someone")
       | .commits.nodes[0].commit.committedDate = "2026-10-22T11:30:00Z" | .comments.nodes = []),
     (pr(26; "recently marked ready"; "someone")
-      | .timelineItems.nodes = [{createdAt: "2026-10-22T11:45:00Z"}] | .comments.nodes = [])
+      | .timelineItems.nodes = [{createdAt: "2026-10-22T11:45:00Z"}] | .comments.nodes = []),
+    (pr(27; "markers only among the oldest reviews and comments"; "someone")
+      | .firstReviews.nodes = [inline_review, local_review]),
+    (pr(28; "clean review note only among the oldest comments"; "someone")
+      | .firstComments.nodes = [{author: {login: "luis", __typename: "User"},
+          body: "No issues found.\n<!-- pr-review-inline -->"}])
   ]}}}}' >"$tmp_dir/fixture.json"
 
 now=$(jq -n '"2026-10-22T12:00:00Z" | fromdateiso8601')
@@ -166,6 +171,8 @@ assert_eq "a CodeRabbit draft skip is named" "waiting on CodeRabbit" "$(note_of 
 assert_eq "a bot that hasn't shown up holds a fresh push" "BOTS" "$(bucket_of 25)"
 assert_eq "a bot that hasn't shown up is named" "waiting on Qodo" "$(note_of 25)"
 assert_eq "recently marking ready restarts the bot clock" "BOTS" "$(bucket_of 26)"
+assert_eq "skill markers among the oldest reviews still count" "MANUAL" "$(bucket_of 27)"
+assert_eq "a clean-review note among the oldest comments still counts" "LOCAL" "$(bucket_of 28)"
 
 hostile_count=$(grep -c '</script><img' "$tmp_dir/board.html")
 assert_eq "a hostile title can't close the data block" "0" "$hostile_count"

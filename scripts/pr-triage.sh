@@ -97,19 +97,26 @@ query($owner: String!, $name: String!, $cursor: String) {
             ... on StatusContext { context state description createdAt }
           } } } } }
         }
-        comments(last: 100) { nodes { author { login __typename } body } }
-        reviews(last: 100) {
-          nodes {
-            author { login __typename } body submittedAt
-            comments(first: 5) { nodes { author { login __typename } body replyTo { id } } }
-          }
-        }
+        # Both ends of each list: a skill marker may be among the oldest or the newest.
+        comments(last: 100) { ...comments }
+        firstComments: comments(first: 100) { ...comments }
+        reviews(last: 100) { ...reviews }
+        firstReviews: reviews(first: 100) { ...reviews }
         reviewThreads(first: 100) {
           pageInfo { hasNextPage }
           nodes { isResolved comments(first: 1) { nodes { author { login } } } }
         }
       }
     }
+  }
+}
+fragment comments on IssueCommentConnection {
+  nodes { author { login __typename } body }
+}
+fragment reviews on PullRequestReviewConnection {
+  nodes {
+    author { login __typename } body submittedAt
+    comments(first: 5) { nodes { author { login __typename } body replyTo { id } } }
   }
 }'
 
@@ -162,7 +169,11 @@ classify='
     generatedAt: ($now | todate),
     truncated: $prs.pageInfo.hasNextPage,
     fetched: ($prs.nodes | length),
-    prs: [$prs.nodes[] | . as $pr
+    prs: [$prs.nodes[]
+      # On a PR with under 100 of either, both ends hold the same items; any() tolerates that.
+      | .comments.nodes += (.firstComments.nodes // [])
+      | .reviews.nodes += (.firstReviews.nodes // [])
+      | . as $pr
       | ($pr.author.login // "ghost") as $author
       | ($pr.commits.nodes[0].commit) as $head
       | ($head.statusCheckRollup.contexts.nodes // []) as $ctx
