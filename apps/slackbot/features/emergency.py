@@ -133,7 +133,13 @@ def _show_emergency_info_modal(
     else:
         accessing_user_name = safe_get(body, "user", "name") or safe_get(body, "user", "username") or "Unknown"
 
-    _notify_user_of_access(user, accessing_user_name, is_local, accessing_region_name)
+    notification_submitted = _notify_user_of_access(user, accessing_user_name, is_local, accessing_region_name)
+    if not user.email:
+        notification_status = ":warning: No email notification was sent because this user has no email address on file."
+    elif notification_submitted:
+        notification_status = ":warning: An email notification about this access was submitted for delivery."
+    else:
+        notification_status = ":warning: Email notification about this access could not be confirmed."
 
     blocks = [
         HeaderBlock(label=f"Emergency Info for {user.f3_name or 'Unknown'}").as_form_field(),
@@ -175,13 +181,7 @@ def _show_emergency_info_modal(
         )
 
     blocks.append(DividerBlock().as_form_field())
-    blocks.append(
-        ContextBlock(
-            element=ContextElement(
-                initial_value=":warning: The user has been emailed to let them know that their emergency information was accessed."  # noqa: E501
-            )
-        ).as_form_field()
-    )
+    blocks.append(ContextBlock(element=ContextElement(initial_value=notification_status)).as_form_field())
 
     client.views_update(
         view_id=update_view_id,
@@ -195,10 +195,10 @@ def _show_emergency_info_modal(
     )
 
 
-def _notify_user_of_access(user: User, accessing_user_name: str, is_local: bool, accessing_region_name: str):
-    """Send email notification to user that their emergency info was accessed."""
+def _notify_user_of_access(user: User, accessing_user_name: str, is_local: bool, accessing_region_name: str) -> bool:
+    """Attempt to email the user about access; report submission without guaranteeing delivery."""
     if not user.email:
-        return
+        return False
 
     access_type = "local Slack workspace" if is_local else f"downrange search from {accessing_region_name}"
     timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p UTC")
@@ -225,7 +225,7 @@ def _notify_user_of_access(user: User, accessing_user_name: str, is_local: bool,
     </html>
     """
 
-    send_via_sendgrid(
+    return send_via_sendgrid(
         to_email=user.email,
         subject="F3 Nation - Your Emergency Information Was Accessed",
         html_content=html_content,
@@ -256,8 +256,8 @@ EMERGENCY_SEARCH_FORM = BlockView(
         HeaderBlock(label="Search for Emergency Info"),
         ContextBlock(
             element=ContextElement(
-                initial_value=":warning: *Important:* The user will be emailed to let them know that their emergency "
-                "information was accessed. Only use this feature in genuine emergency situations."
+                initial_value=":warning: *Important:* The bot will attempt to email the user to let them know that "
+                "their emergency information was accessed. Only use this feature in genuine emergency situations."
             )
         ),
         DividerBlock(),
