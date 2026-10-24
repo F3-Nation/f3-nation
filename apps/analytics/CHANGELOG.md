@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/F3-Nation/f3-nation/compare/analytics@1.1.0...analytics@1.2.0) (2026-10-23)
+
+
+### Features
+
+* **analytics:** splitting pv_events for more efficient loading ([#1230](https://github.com/F3-Nation/f3-nation/issues/1230)) ([0445ebb](https://github.com/F3-Nation/f3-nation/commit/0445ebb254475abe16e61390d2e06b1a5750a5bd))
+
+
+### Bug Fixes
+
+* **analytics:** make CTAS worker deadline test independent of runner speed ([#1255](https://github.com/F3-Nation/f3-nation/issues/1255)) ([eb00cb0](https://github.com/F3-Nation/f3-nation/commit/eb00cb065977ef283108af1923ca03a53f29e793))
+* **deps:** update python dependencies and CA bundles ([#1325](https://github.com/F3-Nation/f3-nation/issues/1325)) ([3cc6edf](https://github.com/F3-Nation/f3-nation/commit/3cc6edf62b97c03a232523d65b99fa052f57b9fc))
+
 ## [1.1.0](https://github.com/F3-Nation/f3-nation/compare/analytics@1.0.0...analytics@1.1.0) (2026-10-14)
 
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## [6.12.1](https://github.com/F3-Nation/f3-nation/compare/api@6.12.0...api@6.12.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **api,admin:** list existing API-key roles accurately ([#1260](https://github.com/F3-Nation/f3-nation/issues/1260)) ([2542caa](https://github.com/F3-Nation/f3-nation/commit/2542caa44a7974ca0f5de6447b9011eb966536bd))
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+* **api:** hide retired org hierarchies from anonymous reads ([#1275](https://github.com/F3-Nation/f3-nation/issues/1275)) ([ac11ec7](https://github.com/F3-Nation/f3-nation/commit/ac11ec7815a2267fa07cb1d32e6bf76f3fa17c7e))
+* **api:** validate region ID integer domain ([#1236](https://github.com/F3-Nation/f3-nation/issues/1236)) ([21c87c0](https://github.com/F3-Nation/f3-nation/commit/21c87c0451695a84e42523b79e775ec8b3396a69))
+* **auth,map:** stop trusting client-supplied roles on JWT update ([#1341](https://github.com/F3-Nation/f3-nation/issues/1341)) ([f27c924](https://github.com/F3-Nation/f3-nation/commit/f27c9241d062ed417cd8701198cdc0583c7c4558))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.15.0
+    * @acme/shared bumped to 0.5.1
+  * devDependencies
+    * @acme/db bumped to 0.10.1
+    * @f3nation/sso bumped to 0.5.0
+
 ## [6.12.0](https://github.com/F3-Nation/f3-nation/compare/api@6.11.0...api@6.12.0) (2026-10-14)
 
 
