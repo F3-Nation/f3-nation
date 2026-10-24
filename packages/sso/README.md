@@ -669,7 +669,7 @@ const user = await auth.getUserInfo(tokens.accessToken);
 
 ### `revokeToken(token)`
 
-Revokes a refresh token, preventing it from being used to get new access tokens. Always returns successfully per [RFC 7009](https://tools.ietf.org/html/rfc7009) — even if the token doesn't exist or was already revoked.
+Revokes a refresh token, preventing it from being used to get new access tokens. Always returns successfully per [RFC 7009](https://tools.ietf.org/html/rfc7009) — even if the token doesn't exist or was already revoked. **Server-side only** — sends `client_id` and `client_secret` in the body, which auth3 requires (the current auth server ignores them).
 
 | Parameter | Type     | Required | Description                 |
 | --------- | -------- | -------- | --------------------------- |
