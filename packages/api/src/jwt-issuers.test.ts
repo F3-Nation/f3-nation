@@ -1,7 +1,6 @@
 /**
- * JWT access tokens from more than one trusted issuer (AUTH_TRUSTED_ISSUERS,
- * or NEXT_PUBLIC_AUTH_URL alone when that is unset), verified end to end
- * through shared.ts.
+ * JWT access tokens from more than one trusted issuer (AUTH_TRUSTED_ISSUERS),
+ * verified end to end through shared.ts.
  *
  * shared.ts builds its issuer list and JWKS fetchers at import time, so each
  * case stubs the env and re-imports it. Real signature/issuer/expiry checks
@@ -70,8 +69,8 @@ vi.mock("@acme/auth", () => ({
   getSessionFromHeaders: vi.fn(() => Promise.resolve(null)),
 }));
 
-async function loadClient(env: { fallback?: string; list?: string }) {
-  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", env.fallback);
+async function loadClient(env: { authUrl?: string; list?: string }) {
+  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", env.authUrl);
   vi.stubEnv("AUTH_TRUSTED_ISSUERS", env.list);
   vi.resetModules();
   const { protectedProcedure } = await import("./shared");
@@ -134,8 +133,22 @@ describe("JWT verification across trusted issuers", () => {
   });
 
   describe("with AUTH_TRUSTED_ISSUERS unset", () => {
-    it("trusts only NEXT_PUBLIC_AUTH_URL, as before", async () => {
-      const call = await loadClient({ fallback: PRIMARY });
+    it.each([{}, { authUrl: PRIMARY }])(
+      "accepts no JWT, whatever NEXT_PUBLIC_AUTH_URL is (%j)",
+      async (env) => {
+        const call = await loadClient(env);
+        expect(mocks.created).toEqual([]);
+        await expect(
+          call(await sign(PRIMARY, primaryKey)),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        expect(mocks.fetched).toEqual([]);
+      },
+    );
+  });
+
+  describe("with one issuer in AUTH_TRUSTED_ISSUERS", () => {
+    it("trusts only that issuer", async () => {
+      const call = await loadClient({ list: PRIMARY });
       expect(mocks.created).toEqual([jwksUrl(PRIMARY)]);
 
       await expect(call(await sign(PRIMARY, primaryKey))).resolves.toEqual({
@@ -148,15 +161,6 @@ describe("JWT verification across trusted issuers", () => {
       });
       expect(mocks.fetched).toEqual([]);
     });
-
-    it("accepts no JWT when no issuer is configured at all", async () => {
-      const call = await loadClient({});
-      expect(mocks.created).toEqual([]);
-      await expect(call(await sign(PRIMARY, primaryKey))).rejects.toMatchObject(
-        { code: "UNAUTHORIZED" },
-      );
-      expect(mocks.fetched).toEqual([]);
-    });
   });
 
   describe("with both issuers in AUTH_TRUSTED_ISSUERS", () => {
@@ -164,7 +168,7 @@ describe("JWT verification across trusted issuers", () => {
 
     beforeEach(async () => {
       call = await loadClient({
-        fallback: "https://ignored.example.test",
+        authUrl: "https://ignored.example.test",
         list: ` ${PRIMARY} , ,${AUTH3},${AUTH3}/`,
       });
     });
@@ -296,7 +300,7 @@ describe("JWT verification across trusted issuers", () => {
 
   it("fails at import when a listed issuer is malformed", async () => {
     await expect(
-      loadClient({ fallback: PRIMARY, list: `${AUTH3},auth3.example` }),
+      loadClient({ list: `${AUTH3},auth3.example` }),
     ).rejects.toThrow(/Invalid AUTH_TRUSTED_ISSUERS entry "auth3.example"/);
   });
 });

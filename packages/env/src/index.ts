@@ -42,7 +42,7 @@ export const env = createEnv({
     // Comma-separated auth server origins whose JWTs packages/api accepts.
     // Only declared here; the format is checked by
     // packages/api/src/trusted-issuers.ts, which throws at startup on a
-    // malformed entry. Unset and empty both mean "NEXT_PUBLIC_AUTH_URL only".
+    // malformed entry. Unset and empty both mean "accept no JWT".
     AUTH_TRUSTED_ISSUERS: z.string().optional(),
   },
   client: {

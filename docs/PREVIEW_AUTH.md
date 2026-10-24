@@ -42,14 +42,15 @@ for every session hop:
 
 3. **The api accepts auth-server JWTs as bearer headers.** `getSession` in
    `packages/api/src/shared.ts` verifies `Authorization: Bearer <jwt>` as an
-   RS256 token against `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json` with an
+   RS256 token against `${AUTH_TRUSTED_ISSUERS}/.well-known/jwks.json` with an
    issuer check (`authJwksByIssuer`, `getSession` and `getSessionFromJWT` in
    `shared.ts`), then loads roles
-   from the DB. Headers don't care about cookie domains. Outside previews,
-   `AUTH_TRUSTED_ISSUERS` can list the trusted issuers instead (e.g. auth2
-   and auth3 during the Better Auth cutover); each token is checked against the JWKS of the
+   from the DB. Headers don't care about cookie domains. Previews set
+   `AUTH_TRUSTED_ISSUERS` to the auth preview's URL. Outside previews it can
+   list more than one issuer (e.g. auth2 and auth3 during the Better Auth
+   cutover); each token is checked against the JWKS of the
    allowlisted issuer its `iss` names (`packages/api/src/trusted-issuers.ts`).
-   Deploy #1320 to auth3 before setting it: until then auth3 signs `iss` as
+   Deploy #1320 to auth3 before adding auth3 to it: until then auth3 signs `iss` as
    `<origin>/api/auth2`, which never matches a bare-origin entry, so every
    auth3 token the api sees is a 401.
 

@@ -42,9 +42,9 @@ declare -A SECRET_MAP=(
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
-# Cloud Run env vars). An empty value is skipped, not cleared, except
-# AUTH_TRUSTED_ISSUERS: leaving it unset removes it from the service, so the
-# API goes back to trusting NEXT_PUBLIC_AUTH_URL alone.
+# Cloud Run env vars). AUTH_TRUSTED_ISSUERS is required (checked after the
+# env file is sourced): without it the API accepts no JWT, so admin and me
+# can't call it.
 ENV_FILE_VARS=(
   AUTH_TRUSTED_ISSUERS
   EMAIL_ADMIN_DESTINATIONS
@@ -102,6 +102,13 @@ fi
 set -a
 source "$ENV_FILE"
 set +a
+
+if [[ -z "${AUTH_TRUSTED_ISSUERS:-}" ]]; then
+  echo "Error: AUTH_TRUSTED_ISSUERS is empty in $ENV_FILE."
+  echo "Set it to the auth server origin(s) whose tokens the API accepts,"
+  echo "e.g. the same value as NEXT_PUBLIC_AUTH_URL."
+  exit 1
+fi
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
@@ -191,7 +198,6 @@ echo ""
 echo "Updating Cloud Run service env vars and secret references..."
 
 UPDATE_ARGS=()
-REMOVE_ARGS=()
 
 # Plain env vars (hardcoded).
 for var in "${!PLAIN_VARS[@]}"; do
@@ -202,17 +208,8 @@ done
 # Per-environment env vars (from env file, not secrets).
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
-  if [[ -n "$value" ]]; then
-    echo " [$var] Setting to $value"
-    UPDATE_ARGS+=("${var}=${value}")
-  elif [[ "$var" == "AUTH_TRUSTED_ISSUERS" ]]; then
-    # Cloud Run keeps a variable left out of --update-env-vars, so remove it
-    # explicitly or a previously trusted issuer would stay trusted.
-    echo " [$var] Unset, removing from the service"
-    REMOVE_ARGS+=("$var")
-  else
-    echo " [$var] Unset, leaving the service's value as is"
-  fi
+  echo " [$var] Setting to $value"
+  [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
 done
 
 # Secret-backed env vars.
@@ -229,15 +226,10 @@ done
 
 echo ""
 echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
-REMOVE_FLAGS=()
-if [[ ${#REMOVE_ARGS[@]} -gt 0 ]]; then
-  REMOVE_FLAGS=(--remove-env-vars "$(IFS=,; echo "${REMOVE_ARGS[*]}")")
-fi
 gcloud run services update "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
   --update-env-vars "^::^$(printf '%s::' "${UPDATE_ARGS[@]}" | sed 's/::$//')" \
-  ${REMOVE_FLAGS[@]+"${REMOVE_FLAGS[@]}"} \
   --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
   --quiet
 
