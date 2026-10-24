@@ -175,9 +175,11 @@ describe("AuthClient.getAuthorizationUrl", () => {
     authServerUrl: "https://auth.test",
   });
 
-  it("requests openid profile email by default", () => {
+  it("requests offline_access by default so auth3 issues a refresh token", () => {
     const url = new URL(client.getAuthorizationUrl());
-    expect(url.searchParams.get("scope")).toBe("openid profile email");
+    expect(url.searchParams.get("scope")).toBe(
+      "openid profile email offline_access",
+    );
   });
 
   it("uses an explicit scope as given", () => {
