@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DayFilter } from "@/components/day-filter";
 import { WorkoutTypeFilter } from "@/components/workout-type-filter";
@@ -12,16 +12,22 @@ interface WorkoutFiltersProps {
 }
 
 export function WorkoutFilters({ workouts }: WorkoutFiltersProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  // Collapsed on mobile until opened (the legacy mount effect collapsed it
+  // immediately, so this matches what visitors saw).
+  const [isExpanded, setIsExpanded] = useState(false);
   const searchParams = useSearchParams();
   const selectedDay = searchParams.get("day");
   const selectedType = searchParams.get("type");
   const hasFilters = Boolean(selectedDay) || Boolean(selectedType);
 
-  // Auto-collapse when filters change
-  useEffect(() => {
+  // Collapse again whenever the filters change: adjust state during render
+  // (https://react.dev/learn/you-might-not-need-an-effect) instead of an effect.
+  const filterKey = `${selectedDay ?? ""}|${selectedType ?? ""}`;
+  const [lastFilterKey, setLastFilterKey] = useState(filterKey);
+  if (filterKey !== lastFilterKey) {
+    setLastFilterKey(filterKey);
     setIsExpanded(false);
-  }, [selectedDay, selectedType]);
+  }
 
   const getFilterSummary = () => {
     const parts = [];

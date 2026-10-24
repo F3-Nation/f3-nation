@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Region } from "@/types/region";
@@ -6,11 +6,12 @@ import { RegionsClient } from "@/components/regions-client";
 import { toRegionSummary } from "@/types/region";
 
 let letterParam: string | null = null;
+const push = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () =>
     new URLSearchParams(letterParam ? { letter: letterParam } : {}),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push }),
 }));
 
 const makeRegion = (overrides: Partial<Region> = {}): Region => ({
@@ -81,5 +82,18 @@ describe("RegionsClient", () => {
       "href",
       "/boone",
     );
+  });
+
+  it("highlights a single search match so Enter opens it", () => {
+    render(<RegionsClient regions={regions} />);
+    const input = screen.getByLabelText("Search regions");
+
+    fireEvent.change(input, { target: { value: "boo" } });
+
+    expect(
+      screen.getByRole("option", { name: /Boone/, selected: true }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(push).toHaveBeenCalledWith("/boone");
   });
 });

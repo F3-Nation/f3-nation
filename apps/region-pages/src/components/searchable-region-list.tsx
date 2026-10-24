@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ALL_LETTERS } from "@/lib/letters";
@@ -180,9 +180,10 @@ export default function SearchableRegionList({
     [router],
   );
 
-  useEffect(() => {
-    if (filteredRegions.length === 1) setSelectedIndex(0);
-  }, [filteredRegions]);
+  // A single match is highlighted without the user arrowing to it. Derived
+  // during render rather than synced by an effect.
+  const activeIndex =
+    selectedIndex === -1 && filteredRegions.length === 1 ? 0 : selectedIndex;
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
@@ -191,18 +192,20 @@ export default function SearchableRegionList({
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
-          setSelectedIndex((prev) =>
-            prev < filteredRegions.length - 1 ? prev + 1 : prev,
+          setSelectedIndex(
+            activeIndex < filteredRegions.length - 1
+              ? activeIndex + 1
+              : activeIndex,
           );
           break;
         case "ArrowUp":
           e.preventDefault();
-          setSelectedIndex((prev) => (prev > -1 ? prev - 1 : prev));
+          setSelectedIndex(activeIndex > -1 ? activeIndex - 1 : activeIndex);
           break;
         case "Enter":
           e.preventDefault();
-          if (selectedIndex >= 0 && selectedIndex < filteredRegions.length) {
-            const slug = filteredRegions[selectedIndex]?.slug;
+          if (activeIndex >= 0 && activeIndex < filteredRegions.length) {
+            const slug = filteredRegions[activeIndex]?.slug;
             if (slug) {
               setIsLoading(true);
               router.push(`/${slug}`);
@@ -217,7 +220,7 @@ export default function SearchableRegionList({
           break;
       }
     },
-    [searchQuery, filteredRegions, selectedIndex, router],
+    [searchQuery, filteredRegions, activeIndex, router],
   );
 
   const handleSuggestionClick = useCallback(
@@ -256,8 +259,8 @@ export default function SearchableRegionList({
               className="w-full rounded-lg border border-gray-200 bg-white p-4 pr-16 text-gray-900 placeholder-gray-500 outline-hidden transition-all focus:border-gray-300 focus:ring-2 focus:ring-gray-200 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400 dark:focus:border-gray-600 dark:focus:ring-gray-700"
               aria-label="Search regions"
               aria-activedescendant={
-                selectedIndex >= 0
-                  ? `suggestion-${filteredRegions[selectedIndex]?.slug ?? ""}`
+                activeIndex >= 0
+                  ? `suggestion-${filteredRegions[activeIndex]?.slug ?? ""}`
                   : undefined
               }
               aria-autocomplete="list"
@@ -348,10 +351,10 @@ export default function SearchableRegionList({
                 key={`suggestion-${region.slug}`}
                 id={`suggestion-${region.slug}`}
                 role="option"
-                aria-selected={index === selectedIndex}
+                aria-selected={index === activeIndex}
                 onClick={() => handleSuggestionClick(region.slug)}
                 className={`w-full px-4 py-2 text-left text-gray-900 capitalize hover:bg-gray-50 focus:bg-gray-50 focus:outline-hidden dark:text-gray-100 dark:hover:bg-gray-700 dark:focus:bg-gray-700 ${
-                  index === selectedIndex ? "bg-gray-50 dark:bg-gray-700" : ""
+                  index === activeIndex ? "bg-gray-50 dark:bg-gray-700" : ""
                 }`}
               >
                 <div>
