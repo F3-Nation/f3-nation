@@ -113,38 +113,27 @@ export function useUserSearch({
   const selectedUser =
     value != null && selectedUserState?.id === value ? selectedUserState : null;
 
-  // Resolve selectedUser display label when value is set but user isn't loaded yet
-  const resolvedRef = useRef<number | null>(null);
+  // Resolve selectedUser display label when value is set but the matching user
+  // isn't loaded yet. Re-runs only when `value` or the derived `selectedUser`
+  // changes, so a failed fetch for the same value is not retried in a loop,
+  // while restoring a previously-seen value (whose user was replaced by a
+  // different selection) fetches it again.
   useEffect(() => {
+    if (value == null || selectedUser !== null) return;
+
     const controller = new AbortController();
-
-    if (value == null) {
-      resolvedRef.current = null;
-      return () => controller.abort();
-    }
-
-    if (selectedUser !== null || resolvedRef.current === value) return;
 
     void (async () => {
       try {
         const res = await fetch(`/api/users?userId=${value}`, {
           signal: controller.signal,
         });
-        if (!res.ok) {
-          if (resolvedRef.current === value) resolvedRef.current = null;
-          return;
-        }
+        if (!res.ok) return;
         const data = (await res.json()) as { users: UserListItem[] };
         if (controller.signal.aborted) return;
         const found = data.users.find((u) => u.id === value);
-        if (found) {
-          setSelectedUser(found);
-          resolvedRef.current = value;
-        } else if (resolvedRef.current === value) {
-          resolvedRef.current = null;
-        }
+        if (found) setSelectedUser(found);
       } catch {
-        if (resolvedRef.current === value) resolvedRef.current = null;
         // Silently fail — trigger will show fallback text
       }
     })();

@@ -133,4 +133,66 @@ describe("useUserSearch selectedUser", () => {
     rerender({ value: 4 });
     expect(result.current.selectedUser).toBeNull();
   });
+
+  it("re-resolves A when the parent restores it after B was picked via setSelectedUser", async () => {
+    const userA = makeUser(5, "Alpha");
+    const userB = makeUser(7, "Bravo");
+    fetchMock.mockImplementation((url: string) => {
+      const id = Number(new URL(url, "http://x").searchParams.get("userId"));
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ users: [id === 5 ? userA : userB] }),
+      });
+    });
+    const { result, rerender } = renderHook<
+      ReturnType<typeof useUserSearch>,
+      { value: number | null }
+    >((props) => useUserSearch({ ...props, open: false, search: "" }), {
+      initialProps: { value: 5 },
+    });
+
+    await flush();
+    expect(result.current.selectedUser).toEqual(userA);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // User picks B from the dropdown: parent sets value, hook gets the user.
+    // (value change and setSelectedUser land in the same batch, as in the
+    // UserSelect click handler).
+    act(() => {
+      rerender({ value: 7 });
+      result.current.setSelectedUser(userB);
+    });
+    await flush();
+    expect(result.current.selectedUser).toEqual(userB);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Parent restores A (e.g. form reset) without calling setSelectedUser.
+    rerender({ value: 5 });
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.selectedUser).toEqual(userA);
+  });
+
+  it("does not refetch in a loop after a failed fetch for the same value", async () => {
+    fetchMock.mockResolvedValue({ ok: false, json: () => Promise.resolve({}) });
+    const { result, rerender } = renderHook<
+      ReturnType<typeof useUserSearch>,
+      { value: number | null; open: boolean }
+    >((props) => useUserSearch({ ...props, search: "" }), {
+      initialProps: { value: 5, open: false },
+    });
+
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.selectedUser).toBeNull();
+
+    rerender({ value: 5, open: true });
+    rerender({ value: 5, open: false });
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.selectedUser).toBeNull();
+  });
 });
