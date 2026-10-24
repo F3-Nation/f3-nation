@@ -110,7 +110,7 @@ catalog:
   libphonenumber-js: ^1.13.15
   lodash: ^4.18.1
   lucide-react: ^1.55.0
-  next: ^16.4.0
+  next: ^16.4.2
   next-auth: 5.0.0-beta.32
   next-themes: ^0.4.6
   nodemailer: ^10.1.0
@@ -148,23 +148,11 @@ catalog:
   vite: ^8.3.4
   vitest: ^5.0.4
   vitest-canvas-mock: ^1.2.0
-  zod: ^4.5.4
+  zod: ^4.6.6
   zustand: ^5.0.15
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^4.0.6"
-  # zod 4.6.0's JSON-Schema-converter rewrite (colinhacks/zod#6550, PR #6554)
-  # drops format/minLength/int32 bounds when @orpc/zod's ZodToJsonSchemaConverter
-  # converts apps/api's whole router in one pass, failing openapi-spec.char.test.ts's
-  # committed golden. @scalar/types also carries its own independent "zod": "^4.4.3"
-  # dependency (unrelated to our catalog), which resolves to the newest matching
-  # zod on every install; without this override that stray 4.6.x copy leaks into
-  # @better-auth/core's peer resolution and reproduces the same bug for one field
-  # (oauth-client redirectUris) even when our own catalog entry is held back. The
-  # override forces every consumer in the tree onto the same held-back zod instance.
-  # Keep in lockstep with the zod catalog entry above; remove both once upstream
-  # fixes the bulk-conversion case (tracking: colinhacks/zod#6613) or we
-  # deliberately accept the metadata loss.
-  zod: "^4.5.4"
+  "zod@<4.6.6": "^4.6.6" # GHSA-mrhx-c7xc-m3w5 (memory exhaustion on oversized constrained collections)
   "@auth/core": "0.41.3" # GHSA-7rqj-j65f-68wh / GHSA-xmf8-cvqr-rfgj (Auth.js email normalizer & getToken DoS)
   # Force patched versions of transitive deps flagged by `pnpm audit --prod
   # --audit-level=high`. Scoped to the vulnerable ranges so unaffected
@@ -177,7 +165,7 @@ overrides:
   "brace-expansion@>=3.0.0 <5.0.9": "5.0.12" # GHSA-rgw5-rvv9-x895 (DoS)
   "fast-uri@<3.1.5": "3.1.8" # host confusion via failed backslash authority introducer
   "sharp@<0.35.5": "0.35.5" # GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889) and earlier libheif advisories; next's optional sharp dep resolved to 0.35.3, outside the old <0.35.0 range
-  "next@>=16.0.0 <16.3.8": "16.4.0" # GHSA-vcvr-r3jv-pc5j (RCE in next/og ImageResponse) / GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
+  "next@>=16.0.0 <16.4.1": "16.4.2" # GHSA-2464-fhr4-w9xw (RCE in image optimization with SVG) / GHSA-p3m5-59mp-jv5r (Server Actions DoS) / GHSA-vcvr-r3jv-pc5j (RCE in next/og ImageResponse) / GHSA-89xv-2m56-2m9x / GHSA-p9j2-gv94-2wf4 (SSRF in rewrites); covers transitive geist>next & @scalar>next. Keep in lockstep with the `next` catalog entry: a second `next` version forks next-auth's peer instance and detaches the type-extensions augmentation.
   "postcss@<8.5.12": "^8.5.29" # GHSA-6g55-p6wh-862q (sourceMappingURL arbitrary file read)
   "nanoid@<3.3.17": "^6.0.2" # GHSA-2v37-7h3g-55p8
   "nanoid@>=4.0.0 <5.1.16": "^6.0.2" # GHSA-28wg-ghj8-5hjv
