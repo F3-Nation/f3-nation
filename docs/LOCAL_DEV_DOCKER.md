@@ -168,6 +168,13 @@ uv --version
 
 After installing `uv`, run `pnpm python:install` to sync the Slackbot Python dependencies.
 
+Python workspaces share Ruff settings from the root [`pyproject.toml`](../pyproject.toml).
+Each member explicitly extends that file in its own `pyproject.toml`, which also
+holds any package-specific overrides, including Analytics' existing relative-import
+ordering. Each member's `dev` dependency group pins the exact Ruff version, with
+the resolved version recorded in [`uv.lock`](../uv.lock). Renovate manages these
+pins alongside the other Python dependencies.
+
 </details>
 
 <details>

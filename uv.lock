@@ -570,7 +570,7 @@ requires-dist = [
 dev = [
     { name = "poethepoet", specifier = ">=0.49.0,<0.50.0" },
     { name = "pytest", specifier = ">=9.1.1,<9.2.0" },
-    { name = "ruff", specifier = ">=0.14.0,<1.0.0" },
+    { name = "ruff", specifier = "==0.16.3" },
 ]
 
 [[package]]
@@ -603,7 +603,7 @@ requires-dist = [
 dev = [
     { name = "mypy", specifier = ">=2.4.0,<2.5.0" },
     { name = "pytest", specifier = ">=9.0.3,<10.0.0" },
-    { name = "ruff", specifier = ">=0.14.0,<1.0.0" },
+    { name = "ruff", specifier = "==0.16.3" },
 ]
 
 [[package]]
@@ -680,7 +680,7 @@ dev = [
     { name = "pandas", specifier = "==2.3.3" },
     { name = "pytest", specifier = ">=9.1.1,<9.2.0" },
     { name = "pyyaml", specifier = ">=6.0.3,<7.0.0" },
-    { name = "ruff", specifier = ">=0.14.0,<1.0.0" },
+    { name = "ruff", specifier = "==0.16.3" },
 ]
 scripts = [
     { name = "dataframe-image", specifier = ">=0.2.7,<0.3.0" },
