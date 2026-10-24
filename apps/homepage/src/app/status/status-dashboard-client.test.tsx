@@ -46,6 +46,23 @@ describe("StatusDashboardClient", () => {
     vi.unstubAllGlobals();
   });
 
+  it.each([
+    [undefined, "https://api.f3nation.com/v1/status"],
+    ["staging", "https://staging.api.f3nation.com/v1/status"],
+  ])(
+    "fetches the channel's API when NEXT_PUBLIC_API_URL is unset (channel %s)",
+    async (channel, expected) => {
+      vi.stubEnv("NEXT_PUBLIC_API_URL", undefined);
+      vi.stubEnv("NEXT_PUBLIC_LOCAL_DEV", undefined);
+      vi.stubEnv("NEXT_PUBLIC_CHANNEL", channel);
+      const fetchMock = vi.fn().mockResolvedValue(makeApiResponse());
+      vi.stubGlobal("fetch", fetchMock);
+      render(<StatusDashboardClient />);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(expected);
+    },
+  );
+
   it("shows loading indicator before first fetch completes", () => {
     vi.stubGlobal(
       "fetch",

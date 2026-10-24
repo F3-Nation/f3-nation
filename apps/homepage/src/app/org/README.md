@@ -33,7 +33,8 @@ The key is `NEXT_PUBLIC_ORG_MAP_API_KEY`. Because this is a static bundle, that
 value is **baked in at build time and visible in devtools** — it is intentionally
 scoped so it grants nothing beyond the public org-chart reads. The API base
 resolves from `NEXT_PUBLIC_API_URL` (falling back to localhost in dev, else
-`https://api.f3nation.com`). See the repo-root
+`https://api.f3nation.com`, or `https://staging.api.f3nation.com` in the
+staging build). See the repo-root
 [`apps/homepage/README.md`](../../../README.md#environment-variables) for the env
 var table.
 

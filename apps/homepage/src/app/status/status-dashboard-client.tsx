@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { getDefaultApiBase } from "@/app/_lib/channel";
 import { StatusCard } from "@/app/status/status-card";
 import type { StatusResult } from "@f3nation/health";
 
@@ -24,7 +25,7 @@ function getApiBaseUrl(): string {
     return "http://localhost:3001";
   }
 
-  return "https://api.f3nation.com";
+  return getDefaultApiBase();
 }
 
 function statusEndpointUrl(): string {

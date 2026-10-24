@@ -1,144 +1,12 @@
 import Image from "next/image";
 
-/** App with a production URL — renders as a clickable card. */
-interface NavigableApp {
-  name: string;
-  description: string;
-  href: string;
-  /** Local dev URL override; falls back to `href` when absent. */
-  localHref?: string;
-  /** Link button label. Defaults to "Open". */
-  linkLabel?: string;
-}
-
-/** App with no link — renders as a non-clickable informational card in both dev and prod. */
-interface InformationalApp {
-  name: string;
-  description: string;
-  href?: never;
-  linkLabel?: never;
-}
-
-type App = NavigableApp | InformationalApp;
-
-interface AppGroup {
-  title: string;
-  description: string;
-  /** At least one app is required — an empty group renders a heading with no cards. */
-  apps: [App, ...App[]];
-}
+import type { App } from "./_lib/apps";
+import { APP_GROUPS, resolveHref, selectAppGroups } from "./_lib/apps";
 
 const isLocal = process.env.NEXT_PUBLIC_LOCAL_DEV === "true";
 
-const APP_GROUPS: AppGroup[] = [
-  {
-    title: "Everyday Use",
-    description:
-      "Apps built for every PAX — find workouts, manage your profile, and explore the F3 ecosystem.",
-    apps: [
-      {
-        name: "F3 Map",
-        description:
-          "Find F3 workouts near you. Browse every workout group across the nation on an interactive map.",
-        href: "https://map.f3nation.com",
-        localHref: "http://localhost:3000",
-      },
-      {
-        name: "F3 Near Me",
-        description:
-          "Lightweight, fast map for discovering F3 workout locations near you — no account needed.",
-        href: "https://f3near.me",
-      },
-      {
-        name: "F3 Me",
-        description:
-          "Your personal F3 profile. Update your avatar, manage emergency contacts, and control your info.",
-        href: "https://me.f3nation.com",
-        localHref: "http://localhost:3003",
-      },
-      {
-        name: "PAX Vault",
-        description:
-          "Analytics and reporting for F3 regions. Participation, leadership load, attendance trends — data over vibes.",
-        href: "https://pax-vault.f3nation.com",
-      },
-      {
-        name: "The Codex",
-        description:
-          "The F3 Exicon and Lexicon — a living, searchable repository of exercises and F3 terminology built by the community.",
-        href: "https://codex.f3nation.com",
-      },
-      {
-        name: "Org Chart",
-        description:
-          "Geographic digital directory visualizing F3's organizational structure — Sectors, Areas, and Regions on a map.",
-        href: "https://apps.f3nation.com/org",
-        localHref: "http://localhost:3005/org",
-        linkLabel: "Open",
-      },
-    ],
-  },
-  {
-    title: "Region Admins",
-    description:
-      "Tools for ITQs, region leaders, and anyone responsible for keeping a local F3 community running.",
-    apps: [
-      {
-        name: "Admin",
-        description:
-          "Administrative portal for region and group leadership. Manage locations, events, and organization settings.",
-        href: "https://admin.f3nation.com",
-        localHref: "http://localhost:3002",
-      },
-      {
-        name: "Region Pages",
-        description:
-          "Dedicated pages for F3 regions — workout calendars, member directories, event info, and contact details for each local community.",
-        href: "https://regions.f3nation.com",
-      },
-      {
-        name: "Slack Bot",
-        description:
-          "The primary way most PAX interact with F3 tech. Scheduling, attendance tracking, and region management — installed on 300+ workspaces.",
-        href: "https://docs.google.com/document/d/1e7tmuY3irKDt9oy1URQVcxPwxyet1ZY_bVZhGvhESEw",
-        linkLabel: "Learn More",
-      },
-      {
-        name: "SyncBot",
-        description:
-          "Slack app for syncing channels and messages across multiple workspaces (threads, reactions, and media).",
-        href: "https://github.com/F3-Nation/syncbot/blob/main/docs/USER_GUIDE.md",
-        linkLabel: "Learn More",
-      },
-    ],
-  },
-  {
-    title: "Developers",
-    description:
-      "Infrastructure and APIs for contributors building on or integrating with the F3 Nation platform.",
-    apps: [
-      {
-        name: "Auth",
-        description:
-          "Shared SSO authentication powering F3 Nation apps. Secure, centralized sign-in for PAX across the ecosystem.",
-      },
-      {
-        name: "API",
-        description:
-          "The F3 Nation data API. Unified backend powering the map, admin, and other apps — the single source of truth for F3 data.",
-        href: "https://api.f3nation.com",
-        localHref: "http://localhost:3001",
-      },
-      {
-        name: "Status",
-        description:
-          "Real-time health and status for all F3 Nation services. Check if something's down or having issues.",
-        href: "https://apps.f3nation.com/status/",
-        localHref: "http://localhost:3005/status",
-      },
-    ],
-  },
-];
+/** The directory for this build's channel (NEXT_PUBLIC_CHANNEL, inlined at build time). */
+const CHANNEL_APP_GROUPS = selectAppGroups();
 
 if (process.env.NODE_ENV === "development") {
   const titles = APP_GROUPS.map((g) => g.title);
@@ -175,11 +43,7 @@ function ArrowIcon() {
 
 function AppCard({ app }: { app: App }) {
   const label = app.linkLabel ?? "Open";
-  const resolvedHref = app.href
-    ? isLocal
-      ? (app.localHref ?? app.href)
-      : app.href
-    : undefined;
+  const resolvedHref = resolveHref(app, isLocal);
   const inner = (
     <>
       <h3 className="mb-2 text-lg font-semibold text-foreground">{app.name}</h3>
@@ -247,7 +111,7 @@ export default function HomePage() {
         </div>
 
         <div className="space-y-16">
-          {APP_GROUPS.map((group) => (
+          {CHANNEL_APP_GROUPS.map((group) => (
             <section key={group.title}>
               <div className="mb-6">
                 <h2 className="text-2xl font-bold tracking-tight text-foreground">
