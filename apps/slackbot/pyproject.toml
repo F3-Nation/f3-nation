@@ -11,7 +11,7 @@ warn_redundant_casts = true
 
 [project]
 name = "f3-nation-slack-bot"
-version = "2.9.0"
+version = "2.10.0"
 description = ""
 authors = [{ name = "Evan Petzoldt", email = "evan.petzoldt@protonmail.com" }]
 readme = "README.md"
