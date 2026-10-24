@@ -38,6 +38,15 @@ or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
 — even if your tool does not load skills automatically.
 
+To review a PR with inline comments, or to test one hands-on in a local
+sandbox, follow
+[`.agents/skills/pr-review-inline/SKILL.md`](.agents/skills/pr-review-inline/SKILL.md)
+or
+[`.agents/skills/pr-local-test/SKILL.md`](.agents/skills/pr-local-test/SKILL.md).
+The review uses the [Superpowers](https://github.com/obra/superpowers)
+`requesting-code-review` skill when it is installed (optional; a bundled brief
+covers it otherwise).
+
 To address, respond to, or work through review feedback on a pull request,
 follow
 [`.agents/skills/address-pr-comments/SKILL.md`](.agents/skills/address-pr-comments/SKILL.md).
