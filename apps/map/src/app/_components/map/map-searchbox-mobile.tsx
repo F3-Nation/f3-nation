@@ -39,15 +39,6 @@ export function MapSearchBoxMobile({
     }
   };
 
-  const eject = () => {
-    inputRef.current?.blur();
-    searchStore.setState({
-      text: "",
-      shouldShowResults: false,
-      searchBarFocused: false,
-    });
-  };
-
   const { ref: inputRef } = useOnKeyPress<HTMLInputElement>({
     keys: ["Enter"],
     cb: (key) => {
@@ -56,6 +47,15 @@ export function MapSearchBoxMobile({
       }
     },
   });
+
+  const eject = () => {
+    inputRef.current?.blur();
+    searchStore.setState({
+      text: "",
+      shouldShowResults: false,
+      searchBarFocused: false,
+    });
+  };
 
   return (
     <div
