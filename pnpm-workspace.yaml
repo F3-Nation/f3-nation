@@ -153,10 +153,7 @@ catalog:
   zustand: ^5.0.15
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^4.0.6"
-  # GHSA-mrhx-c7xc-m3w5 (zod memory exhaustion on oversized constrained collections).
-  # Forces every consumer, including @scalar/types' own "zod" range, onto the
-  # patched release; keep in lockstep with the zod catalog entry above.
-  zod: "^4.6.6"
+  "zod@<4.6.6": "^4.6.6" # GHSA-mrhx-c7xc-m3w5 (memory exhaustion on oversized constrained collections)
   "@auth/core": "0.41.3" # GHSA-7rqj-j65f-68wh / GHSA-xmf8-cvqr-rfgj (Auth.js email normalizer & getToken DoS)
   # Force patched versions of transitive deps flagged by `pnpm audit --prod
   # --audit-level=high`. Scoped to the vulnerable ranges so unaffected
