@@ -4,6 +4,11 @@
 # prunes, and the Python lint wrappers reject the flag.
 set -uo pipefail
 
+if (($# > 0)); then
+  echo "lint:fix: arguments are not supported; it always runs repo-wide. Run \`pnpm lint\` in a workspace to check one." >&2
+  exit 2
+fi
+
 cache=(--cache --cache-location node_modules/.cache/.eslintcache)
 baselines=()
 include=()

@@ -55,7 +55,7 @@ or
 - **Second checkout or worktree:** `pnpm local:setup --slot N` (N = 1–9) gives it its own ports, containers, and database so it can run next to the main one. See [Running several checkouts at once](docs/LOCAL_DEV_DOCKER.md#running-several-checkouts-at-once-git-worktrees).
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Each app, `packages/env`, and `packages/db` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
-- Code quality: always run `pnpm lint:fix` and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
+- Code quality: always run `pnpm lint:fix` (whole repo only; it takes no arguments) and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - `pnpm lint` does **not** cover dead-code detection: CI's `lint` job runs `pnpm lint` and `pnpm lint:unused` (knip) as two separate steps, so run `pnpm lint:unused` as well before pushing.
 - `pnpm ci:local` chains the whole CI sequence (`format` → `lint` → `lint:unused` → `typecheck` → `build` → `test`) and is the closest local predictor of the CI gate.
 - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
