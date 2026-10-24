@@ -38,6 +38,10 @@ or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
 — even if your tool does not load skills automatically.
 
+When asked to write or edit comments or markdown in this repo, use
+[`.agents/skills/durable-docs/SKILL.md`](.agents/skills/durable-docs/SKILL.md)
+for the repo's durable documentation rules.
+
 ## Project Structure & Module Organization
 
 - Deployable apps live in `apps/`, shared code in `packages/`, config in `tooling/`, and Turbo generators in `turbo/`.
