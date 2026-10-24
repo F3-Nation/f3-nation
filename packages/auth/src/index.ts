@@ -76,6 +76,10 @@ export async function getSessionFromHeaders(
     logWarn("auth.session.non_ok_response", { status: response.status });
     return null;
   }
+  // This request is a GET, so the jwt callback never sees trigger="update"
+  // here; token roles are re-read from the database only for tokens minted
+  // before the rolesVersion marker. The cookie re-sign is dropped below, so an
+  // api-only client repeats that read until a map page load re-signs it.
   // Auth() may set Set-Cookie headers here (rolling JWT refresh, or clearing
   // an invalid session cookie) -- intentionally dropped. This function is
   // only used as an oRPC middleware authorization gate, which has no

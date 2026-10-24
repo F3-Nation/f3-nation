@@ -274,19 +274,19 @@ export function MapSearchBox({
                   .map((result, index) =>
                     isF3LocationMapSearchResult(result) ? (
                       <PlaceRowF3Location
-                        key={`f3-location-result-${result.destination.item.locationId}-${result.destination.item.eventId}`}
+                        key={result.key}
                         result={result}
                         focused={focusedIndex === index}
                       />
                     ) : isF3RegionMapSearchResult(result) ? (
                       <PlaceRowF3Region
-                        key={`f3-region-result-${result.destination.id}`}
+                        key={result.key}
                         result={result}
                         focused={focusedIndex === index}
                       />
                     ) : (
                       <PlaceRowMap
-                        key={`geo-result-${result.destination.placeId}`}
+                        key={result.key}
                         result={result}
                         focused={focusedIndex === index}
                       />
