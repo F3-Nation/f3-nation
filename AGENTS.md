@@ -38,6 +38,19 @@ or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
 — even if your tool does not load skills automatically.
 
+To review a PR with inline comments, or to test one hands-on in a local
+sandbox, follow
+[`.agents/skills/pr-review-inline/SKILL.md`](.agents/skills/pr-review-inline/SKILL.md)
+or
+[`.agents/skills/pr-local-test/SKILL.md`](.agents/skills/pr-local-test/SKILL.md).
+The review uses the [Superpowers](https://github.com/obra/superpowers)
+`requesting-code-review` skill when it is installed (optional; a bundled brief
+covers it otherwise).
+
+To address, respond to, or work through review feedback on a pull request,
+follow
+[`.agents/skills/address-pr-comments/SKILL.md`](.agents/skills/address-pr-comments/SKILL.md).
+
 ## Project Structure & Module Organization
 
 - Deployable apps live in `apps/`, shared code in `packages/`, config in `tooling/`, and Turbo generators in `turbo/`.
@@ -55,7 +68,7 @@ or
 - **Second checkout or worktree:** `pnpm local:setup --slot N` (N = 1–9) gives it its own ports, containers, and database so it can run next to the main one. See [Running several checkouts at once](docs/LOCAL_DEV_DOCKER.md#running-several-checkouts-at-once-git-worktrees).
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Each app, `packages/env`, and `packages/db` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
-- Code quality: always run `pnpm lint:fix` and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
+- Code quality: always run `pnpm lint:fix` (whole repo only; it takes no arguments) and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - `pnpm lint` does **not** cover dead-code detection: CI's `lint` job runs `pnpm lint` and `pnpm lint:unused` (knip) as two separate steps, so run `pnpm lint:unused` as well before pushing.
 - `pnpm ci:local` chains the whole CI sequence (`format` → `lint` → `lint:unused` → `typecheck` → `build` → `test`) and is the closest local predictor of the CI gate.
 - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
@@ -66,6 +79,7 @@ or
 - Use Prettier (`@acme/prettier-config`) and ESLint (`@acme/eslint-config` base/next/react) as the source of truth.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
+- Existing `react-hooks/refs` and `react-hooks/set-state-in-effect` violations are baselined in each workspace's `eslint-suppressions.json`. Fix them when you touch the file; never add entries (no `--suppress-rule`/`--suppress-all`); `pnpm lint` fails when a baseline grows. A stale entry fails `pnpm lint`; `pnpm lint:fix` and the pre-commit hook prune it.
 
 ## Logging
 
