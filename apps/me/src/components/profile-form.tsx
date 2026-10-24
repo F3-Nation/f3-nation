@@ -23,17 +23,14 @@ import type { UserProfile, Region } from "@/lib/types";
 interface ProfileFormProps {
   user: UserProfile;
   regions: Region[];
-  /**
-   * apps.f3nation.com has no staging copy and only lists production apps,
-   * which need a production sign-in, so only production links to it.
-   */
-  showAppsDirectory: boolean;
+  /** Where the "Explore F3 Nation" card links; null hides the card. */
+  appsDirectoryUrl: string | null;
 }
 
 export function ProfileForm({
   user,
   regions,
-  showAppsDirectory,
+  appsDirectoryUrl,
 }: ProfileFormProps) {
   const {
     form,
@@ -45,7 +42,7 @@ export function ProfileForm({
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 pb-12">
       {/* Header: Avatar + Ecosystem discovery */}
-      <div className={cn("grid gap-6", showAppsDirectory && "lg:grid-cols-2")}>
+      <div className={cn("grid gap-6", appsDirectoryUrl && "lg:grid-cols-2")}>
         <Card>
           <CardHeader>
             <CardTitle>Profile</CardTitle>
@@ -62,7 +59,7 @@ export function ProfileForm({
           </CardContent>
         </Card>
 
-        {showAppsDirectory && (
+        {appsDirectoryUrl && (
           <Card className="flex flex-col justify-between">
             <CardHeader>
               <CardTitle>Explore F3 Nation</CardTitle>
@@ -74,12 +71,12 @@ export function ProfileForm({
             </CardHeader>
             <CardContent>
               <a
-                href="https://apps.f3nation.com"
+                href={appsDirectoryUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden"
               >
-                Go to apps.f3nation.com &rarr;
+                Go to {new URL(appsDirectoryUrl).host} &rarr;
               </a>
             </CardContent>
           </Card>

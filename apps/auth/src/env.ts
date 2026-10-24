@@ -25,10 +25,7 @@ export const env = createEnv({
       .transform((v) => v === "true"),
     // The signed-in home page's link to the other F3 apps (see
     // lib/apps-directory.ts). Shown unless set to "false".
-    APPS_DIRECTORY_ENABLED: z
-      .string()
-      .optional()
-      .transform((v) => v?.trim().toLowerCase() !== "false"),
+    APPS_DIRECTORY_ENABLED: z.string().optional(),
     // Where that link goes. Unset means https://apps.f3nation.com.
     // Not validated here: a bad value only hides the link (with a warning),
     // instead of failing every route that loads ~/env.

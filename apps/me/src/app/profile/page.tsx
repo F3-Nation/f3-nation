@@ -4,6 +4,7 @@ import { ProfileForm } from "@/components/profile-form";
 import { redirect } from "next/navigation";
 import { logError, logWarn } from "@/lib/logging";
 import { env } from "@/env";
+import { appsDirectoryUrl } from "@/lib/apps-directory";
 
 export default async function ProfilePage() {
   const session = await requireAuth();
@@ -51,7 +52,10 @@ export default async function ProfilePage() {
     <ProfileForm
       user={user}
       regions={regions}
-      showAppsDirectory={env.F3_CHANNEL === "prod"}
+      appsDirectoryUrl={
+        appsDirectoryUrl(env.APPS_DIRECTORY_ENABLED, env.APPS_DIRECTORY_URL)
+          ?.href ?? null
+      }
     />
   );
 }

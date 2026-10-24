@@ -33,16 +33,22 @@ const user: UserProfile = {
 afterEach(cleanup);
 
 describe("ProfileForm apps directory card", () => {
-  it("links to apps.f3nation.com in production", () => {
-    render(<ProfileForm user={user} regions={[]} showAppsDirectory />);
+  it("links to the configured directory, labeled with its host", () => {
+    render(
+      <ProfileForm
+        user={user}
+        regions={[]}
+        appsDirectoryUrl="https://staging.apps.f3nation.com/"
+      />,
+    );
 
     expect(
-      screen.getByRole("link", { name: /apps\.f3nation\.com/ }),
-    ).toHaveAttribute("href", "https://apps.f3nation.com");
+      screen.getByRole("link", { name: /staging\.apps\.f3nation\.com/ }),
+    ).toHaveAttribute("href", "https://staging.apps.f3nation.com/");
   });
 
-  it("leaves the card out elsewhere, since the directory only lists production apps", () => {
-    render(<ProfileForm user={user} regions={[]} showAppsDirectory={false} />);
+  it("leaves the card out when there is no directory URL", () => {
+    render(<ProfileForm user={user} regions={[]} appsDirectoryUrl={null} />);
 
     expect(screen.queryByText("Explore F3 Nation")).toBeNull();
     expect(

@@ -1,12 +1,12 @@
 import { logWarn } from "~/lib/logging";
 
 /**
- * Where the signed-in home page points people to explore the other F3 apps.
+ * Where auth's home page points people to explore the other F3 apps.
  *
- * The directory at apps.f3nation.com has no staging copy, and every app it
- * lists signs in through production auth. Linking to it from a staging auth
- * server sends people to production, where their staging session doesn't
- * exist and they're asked to sign in again. So each deployment says whether
+ * The directory at apps.f3nation.com lists production apps, so linking to it
+ * from staging sends people out of staging (and, for apps that sign in
+ * through auth, to a sign-in their staging session doesn't cover). So each
+ * deployment says whether
  * to show the link (APPS_DIRECTORY_ENABLED, on unless "false") and where it
  * goes (APPS_DIRECTORY_URL, an http(s) URL; unset keeps the production
  * default). A bad URL hides the link and logs a warning, so a typo can't
@@ -26,11 +26,15 @@ export function parseAppsDirectoryUrl(raw: string | undefined): URL {
   return url;
 }
 
+export function appsDirectoryEnabled(raw: string | undefined): boolean {
+  return raw?.trim().toLowerCase() !== "false";
+}
+
 export function appsDirectoryUrl(
-  enabled: boolean,
+  enabledRaw: string | undefined,
   raw: string | undefined,
 ): URL | null {
-  if (!enabled) return null;
+  if (!appsDirectoryEnabled(enabledRaw)) return null;
   try {
     return parseAppsDirectoryUrl(raw);
   } catch (err) {

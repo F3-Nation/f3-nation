@@ -44,6 +44,8 @@ ENV_FILE_VARS=(
   F3_CHANNEL
   NEXT_PUBLIC_GA_MEASUREMENT_ID
   NEXT_PUBLIC_SITE_URL
+  APPS_DIRECTORY_ENABLED
+  APPS_DIRECTORY_URL
 )
 
 # Plain env vars (hardcoded, same across environments)
@@ -91,6 +93,11 @@ if [[ ! -f "$ENV_FILE" ]]; then
   echo "Copy .env.cloud-run.example and populate with $ENV_NAME values."
   exit 1
 fi
+
+# APPS_DIRECTORY_ENABLED and APPS_DIRECTORY_URL are removed from the service
+# when the file leaves them out, so drop any value the calling shell exported
+# first: otherwise that value, not the file's, would be applied.
+unset APPS_DIRECTORY_ENABLED APPS_DIRECTORY_URL
 
 # Safely parse the env file without sourcing to prevent execution of arbitrary shell code
 while IFS= read -r line || [[ -n "$line" ]]; do
@@ -212,6 +219,7 @@ echo ""
 echo "Updating Cloud Run service env vars and secret references..."
 
 UPDATE_ARGS=()
+REMOVE_ARGS=()
 
 # Plain env vars (hardcoded)
 for var in "${!PLAIN_VARS[@]}"; do
@@ -221,8 +229,20 @@ done
 # Per-environment env vars (from env file, not secrets)
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
-  [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
+  if [[ -n "$value" ]]; then
+    UPDATE_ARGS+=("${var}=${value}")
+  elif [[ "$var" == APPS_DIRECTORY_* ]]; then
+    # Optional with a default in code. Cloud Run keeps a variable that is
+    # left out of --update-env-vars, so remove it explicitly or deleting it
+    # from the env file would leave an old value in place.
+    REMOVE_ARGS+=("$var")
+  fi
 done
+
+REMOVE_FLAGS=()
+if [[ ${#REMOVE_ARGS[@]} -gt 0 ]]; then
+  REMOVE_FLAGS=(--remove-env-vars "$(IFS=,; echo "${REMOVE_ARGS[*]}")")
+fi
 
 # Secret-backed env vars
 SECRET_ARGS=()
@@ -235,6 +255,7 @@ gcloud run services update "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
   --update-env-vars "$(IFS=,; echo "${UPDATE_ARGS[*]}")" \
+  ${REMOVE_FLAGS[@]+"${REMOVE_FLAGS[@]}"} \
   --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
   --quiet
 

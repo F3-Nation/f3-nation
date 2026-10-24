@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const envMock: {
   AUTH_USE_BETTER_AUTH: boolean;
-  APPS_DIRECTORY_ENABLED: boolean;
+  APPS_DIRECTORY_ENABLED?: string;
   APPS_DIRECTORY_URL?: string;
-} = { AUTH_USE_BETTER_AUTH: false, APPS_DIRECTORY_ENABLED: true };
+} = { AUTH_USE_BETTER_AUTH: false };
 vi.mock("~/env", () => ({ env: envMock }));
 vi.mock("~/lib/current-session", () => ({
   getCurrentSession: vi.fn(async () => ({
@@ -27,7 +27,7 @@ async function renderHome() {
 }
 
 beforeEach(() => {
-  envMock.APPS_DIRECTORY_ENABLED = true;
+  delete envMock.APPS_DIRECTORY_ENABLED;
   delete envMock.APPS_DIRECTORY_URL;
   logWarn.mockClear();
 });
@@ -55,7 +55,7 @@ describe("signed-in home page apps directory link", () => {
   });
 
   it("hides the link when disabled", async () => {
-    envMock.APPS_DIRECTORY_ENABLED = false;
+    envMock.APPS_DIRECTORY_ENABLED = "false";
     envMock.APPS_DIRECTORY_URL = "https://staging.apps.f3nation.com";
 
     await renderHome();
