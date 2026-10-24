@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.1](https://github.com/F3-Nation/f3-nation/compare/auth@2.6.0...auth@2.6.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **map,eslint:** enable React Compiler lint rules and stop marker moves leaking into the query cache ([#1295](https://github.com/F3-Nation/f3-nation/issues/1295)) ([f049283](https://github.com/F3-Nation/f3-nation/commit/f049283bf9d3c83a005475fac8f55a4e75cc4050))
+* **repo:** bump zod to 4.6.7 for GHSA-mrhx-c7xc-m3w5 ([#1373](https://github.com/F3-Nation/f3-nation/issues/1373)) ([4e680ab](https://github.com/F3-Nation/f3-nation/commit/4e680ab0d831a324f10645a8e7beb765b225dc79))
+
 ## [2.6.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.5.0...auth@2.6.0) (2026-10-23)
 
 
