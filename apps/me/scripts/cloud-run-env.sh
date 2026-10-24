@@ -116,6 +116,17 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done < "$ENV_FILE"
 unset _env_key _env_val
 
+# Plain env vars go to gcloud joined with '|' (see below). Reject a value that
+# contains it now, before any secret or IAM change, so a bad env file stops
+# the run with nothing half-applied.
+for var in "${ENV_FILE_VARS[@]}" "${!PLAIN_VARS[@]}"; do
+  value="${!var:-${PLAIN_VARS[$var]:-}}"
+  if [[ "$value" == *"|"* ]]; then
+    echo "Error: $var contains '|', the env-var delimiter. Remove it from the value."
+    exit 1
+  fi
+done
+
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
 echo "Service:      $SERVICE_NAME"
@@ -246,12 +257,7 @@ fi
 
 # Join with gcloud's "^|^" custom delimiter: a plain comma join would split a
 # value that contains a comma (APPS_DIRECTORY_URL can carry a query string).
-for entry in "${UPDATE_ARGS[@]}"; do
-  if [[ "$entry" == *"|"* ]]; then
-    echo "Error: ${entry%%=*} contains '|', the env-var delimiter. Remove it from the value."
-    exit 1
-  fi
-done
+# Values were checked for '|' before any secret was pushed.
 ENV_VARS_ARG="^|^$(IFS='|'; echo "${UPDATE_ARGS[*]}")"
 
 # Secret-backed env vars
