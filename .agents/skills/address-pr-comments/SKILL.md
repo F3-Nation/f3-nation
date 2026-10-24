@@ -30,11 +30,13 @@ Check these before Step 1 and report everything missing in one message.
 
 Stop at the first failing check.
 
-**Check 0: Repo GitHub policy.** Read `.agents/skills/github/SKILL.md` and run its pre-flight with
-write access:
+**Check 0: Repo GitHub policy.** Read `.agents/skills/github/SKILL.md` and run its pre-flight.
+Leave out `--require-write` here: it checks the current checkout's repository, which may be a
+read-only clone of a repository other than the one Step 5b pushes to. Check 1 runs the write check
+against the push target.
 
 ```bash
-bash .agents/skills/github/scripts/gh-check.sh --require-write
+bash .agents/skills/github/scripts/gh-check.sh
 ```
 
 Adopt its mandatory directives — the `_written by <model_name>_` attribution signature and its
@@ -56,10 +58,16 @@ Stop if `state` is not `OPEN`. Use `number` from the JSON from here on, and deri
 - `HEAD_REPO` from `headRepositoryOwner` and `headRepository`: where the PR branch lives and where
   Step 5b pushes.
 
-For a cross-repository PR (`isCrossRepository` is true), stop unless the push in Step 5b would be
-accepted: `maintainerCanModify` is true, or the viewer can push to the head repository
-(`gh api repos/<HEAD_REPO> --jq .permissions.push` prints `true`). The flag only governs access
-granted to upstream maintainers, so a fork author can still push when it is false.
+Then run the write pre-flight against the push target (`gh-check.sh` reads `gh repo view`, which
+follows `GH_REPO`):
+
+```bash
+GH_REPO=<HEAD_REPO> bash .agents/skills/github/scripts/gh-check.sh --require-write
+```
+
+Stop if it fails, unless the PR is cross-repository (`isCrossRepository` is true) and
+`maintainerCanModify` is true: GitHub then accepts a maintainer's push to the fork branch without
+write access to the fork. For a same-repository PR, `HEAD_REPO` is `BASE_REPO`.
 
 ## Step 2 — Set Up the PR Worktree
 
@@ -81,10 +89,10 @@ git -C "<candidate>" rev-parse HEAD
 git -C "<candidate>" merge-base --is-ancestor HEAD <headRefOid> && echo "equal or behind"
 ```
 
-Its HEAD must equal `headRefOid`. If it is strictly behind (an ancestor), bring it up with
-`git -C "<candidate>" merge --ff-only <headRefOid>` once the worktree is clean. If it is ahead of
-`headRefOid` or has diverged, it holds commits that are not on the PR: stop and ask the user rather
-than reusing it, since Step 5b would publish them. Then pick the case that applies:
+These only read. Its HEAD must equal `headRefOid` or be strictly behind it (an ancestor). If it is
+ahead of `headRefOid` or has diverged, it holds commits that are not on the PR: stop and ask the
+user rather than reusing it, since Step 5b would publish them. Change nothing in the candidate
+yet; first pick the case that applies and get any permission it needs:
 
 | Where the PR branch is checked out                                  | What to do                                                                                                                                                      |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -137,6 +145,13 @@ If the `log` command prints anything, that local branch has commits that are not
 earlier work: stop and ask before going on, since Step 5b's push would publish them.
 
 If the `status` command prints anything: tell the user "Uncommitted or untracked changes detected — commit, stash, or remove them before proceeding." List the affected files. Stop here. (`--porcelain` reports staged, unstaged, and untracked files alike, and Step 5b commits everything modified, so the tree must be fully clean. Gitignored files such as `.env` and `node_modules` don't show.)
+
+Only once both checks pass, and only in the worktree you are now in (never `MAIN_ROOT`), bring a
+worktree that is strictly behind up to the PR head:
+
+```bash
+git merge --ff-only <headRefOid>
+```
 
 If you stop at any point after creating a worktree, still run Step 6's cleanup.
 
@@ -277,6 +292,7 @@ done
 
 If addressing a comment needs running apps or a database, ask the user before giving the
 worktree its own services with `pnpm local:setup --slot N` (see `docs/LOCAL_DEV_DOCKER.md`).
+Note that this run started them: Step 6 stops them.
 
 ### 5a — Code changes
 
@@ -350,7 +366,18 @@ user asked to keep it for another round; then give them the path and the command
 1. Leave the worktree. In Claude Code, call `ExitWorktree` with `action: "keep"`: it returns the
    session to where it started and never removes a worktree entered by `path`, so the next
    commands do that. In any other agent, run the next commands from `MAIN_ROOT`.
-2. Remove the worktree from outside it. Its gitignored `.env` files and `node_modules` go with it:
+2. If this run gave the worktree a slot (Step 5), stop that slot's containers first. They live
+   outside the worktree, so removing it would leave them running and holding ports. This stops
+   only that slot's containers and keeps its data:
+
+   ```bash
+   cd "$WT" && pnpm docker:down
+   ```
+
+   Its database and uploads stay in Docker volumes. Ask the user before deleting them with
+   `cd "$WT" && docker compose down -v`.
+
+3. Remove the worktree from outside it. Its gitignored `.env` files and `node_modules` go with it:
 
    ```bash
    git -C "$MAIN_ROOT" worktree remove "$WT"
@@ -359,20 +386,21 @@ user asked to keep it for another round; then give them the path and the command
    If git refuses because of uncommitted or untracked files, don't force it. Show the user
    `git -C "$WT" status --porcelain` and ask.
 
-3. If this run created `LOCAL_BRANCH`, delete it once the push has landed. Fetch the branch from
+4. If this run created `LOCAL_BRANCH`, delete it once the push has landed. Fetch the branch from
    the head repository by URL (the branch may have no upstream or named remote), compare the two
    SHAs, and delete only when they match:
 
    ```bash
-   git -C "$MAIN_ROOT" fetch "https://github.com/<HEAD_REPO>.git" "<headRefName>"
-   git -C "$MAIN_ROOT" rev-parse "<LOCAL_BRANCH>" FETCH_HEAD
-   git -C "$MAIN_ROOT" branch -D "<LOCAL_BRANCH>"
+   git -C "$MAIN_ROOT" fetch "https://github.com/<HEAD_REPO>.git" "<headRefName>" &&
+   test "$(git -C "$MAIN_ROOT" rev-parse "<LOCAL_BRANCH>")" = "$(git -C "$MAIN_ROOT" rev-parse FETCH_HEAD)" &&
+   git -C "$MAIN_ROOT" branch -D -- "<LOCAL_BRANCH>"
    ```
 
-   `-D` is needed because the branch isn't merged into main yet. It's safe here because every
-   commit on it is on the remote.
+   `-D` is needed because the branch isn't merged into main yet. It's safe here because the chain
+   runs it only when every commit on the branch is on the remote. If the chain stops early, keep
+   the branch and tell the user.
 
-4. `rm -r "$REPLY_DIR"`, then `git -C "$MAIN_ROOT" worktree list` to confirm the worktree is gone.
+5. `rm -r "$REPLY_DIR"`, then `git -C "$MAIN_ROOT" worktree list` to confirm the worktree is gone.
 
 ### 6b — Report
 
