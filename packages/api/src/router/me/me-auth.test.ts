@@ -291,7 +291,7 @@ describe("Personal operations authentication", () => {
     });
     expect(mocks.error).toHaveBeenCalledWith(
       "api.auth.jwks_unavailable",
-      { reason: "ECONNREFUSED" },
+      { issuer: "https://auth.example.test", reason: "ECONNREFUSED" },
       down,
     );
   });
