@@ -27,7 +27,10 @@ export default async function HomePage({
     redirect("/login");
   }
 
-  const appsDirectory = appsDirectoryUrl(env.APPS_DIRECTORY_URL);
+  const appsDirectory = appsDirectoryUrl(
+    env.APPS_DIRECTORY_ENABLED,
+    env.APPS_DIRECTORY_URL,
+  );
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">

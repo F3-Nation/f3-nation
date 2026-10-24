@@ -3,8 +3,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const envMock: { AUTH_USE_BETTER_AUTH: boolean; APPS_DIRECTORY_URL?: string } =
-  { AUTH_USE_BETTER_AUTH: false };
+const envMock: {
+  AUTH_USE_BETTER_AUTH: boolean;
+  APPS_DIRECTORY_ENABLED: boolean;
+  APPS_DIRECTORY_URL?: string;
+} = { AUTH_USE_BETTER_AUTH: false, APPS_DIRECTORY_ENABLED: true };
 vi.mock("~/env", () => ({ env: envMock }));
 vi.mock("~/lib/current-session", () => ({
   getCurrentSession: vi.fn(async () => ({
@@ -24,6 +27,7 @@ async function renderHome() {
 }
 
 beforeEach(() => {
+  envMock.APPS_DIRECTORY_ENABLED = true;
   delete envMock.APPS_DIRECTORY_URL;
   logWarn.mockClear();
 });
@@ -50,8 +54,9 @@ describe("signed-in home page apps directory link", () => {
     );
   });
 
-  it("hides the link when set to off", async () => {
-    envMock.APPS_DIRECTORY_URL = "off";
+  it("hides the link when disabled", async () => {
+    envMock.APPS_DIRECTORY_ENABLED = false;
+    envMock.APPS_DIRECTORY_URL = "https://staging.apps.f3nation.com";
 
     await renderHome();
 
@@ -68,7 +73,7 @@ describe("signed-in home page apps directory link", () => {
     expect(screen.queryByRole("link")).toBeNull();
     expect(logWarn).toHaveBeenCalledWith("auth.apps_directory.invalid_url", {
       reason:
-        'APPS_DIRECTORY_URL must be an http(s) URL or "off", got "javascript:alert(1)"',
+        'APPS_DIRECTORY_URL must be an http(s) URL, got "javascript:alert(1)"',
     });
   });
 });

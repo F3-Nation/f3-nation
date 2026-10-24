@@ -88,6 +88,7 @@ ENV_FILE_VARS=(
   NEXT_PUBLIC_AUTH_URL
   NEXT_PUBLIC_API_URL
   EMAIL_FROM
+  APPS_DIRECTORY_ENABLED
   APPS_DIRECTORY_URL
 )
 
@@ -134,10 +135,11 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Source the env file. APPS_DIRECTORY_URL is removed from the service when
-# the file leaves it out, so drop any value the calling shell exported first:
-# otherwise that value, not the file's, would be applied.
-unset APPS_DIRECTORY_URL
+# Source the env file. APPS_DIRECTORY_ENABLED and APPS_DIRECTORY_URL are
+# removed from the service when the file leaves them out, so drop any value
+# the calling shell exported first: otherwise that value, not the file's,
+# would be applied.
+unset APPS_DIRECTORY_ENABLED APPS_DIRECTORY_URL
 set -a
 source "$ENV_FILE"
 set +a
@@ -237,10 +239,10 @@ for var in "${ENV_FILE_VARS[@]}"; do
   if [[ -n "$value" ]]; then
     echo " [$var] Setting to $value"
     UPDATE_ARGS+=("${var}=${value}")
-  elif [[ "$var" == "APPS_DIRECTORY_URL" ]]; then
+  elif [[ "$var" == APPS_DIRECTORY_* ]]; then
     # Optional with a default in code. Cloud Run keeps a variable that is
     # left out of --update-env-vars, so remove it explicitly or deleting it
-    # from the env file would leave an old "off" or URL in place.
+    # from the env file would leave an old value in place.
     echo " [$var] Unset, removing from the service"
     REMOVE_ARGS+=("$var")
   else
