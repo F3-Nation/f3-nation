@@ -14,7 +14,10 @@ All edits, commits, and pushes happen in a git worktree for the PR's branch, nev
 main checkout. A worktree this run creates is removed at the end (Step 6).
 
 Shell variables do not persist between commands. Whenever a step sets `MAIN_ROOT`, `WT`,
-`LOCAL_BRANCH`, or `REPLY_DIR`, note the literal value and write it into later commands.
+`LOCAL_BRANCH`, or `REPLY_DIR`, note the literal value and write it into later commands. Branch
+names come from the PR author and may hold shell syntax (`$(…)`, backticks, quotes are all valid
+in a ref), so write `<headRefName>` or `LOCAL_BRANCH` into a command only after it passes the name
+check in Check 1 or Step 2.
 
 ## Requirements
 
@@ -57,6 +60,14 @@ Stop if `state` is not `OPEN`. Use `number` from the JSON from here on, and deri
   path), because a bare PR number resolves against gh's default repository.
 - `HEAD_REPO` from `headRepositoryOwner` and `headRepository`: where the PR branch lives and where
   Step 5b pushes.
+
+Check that the branch name is safe to write into shell commands. This tests it inside `--jq`, as
+data, so the name itself never reaches the shell. Stop unless it prints `true`, and tell the user
+the PR's branch name has characters this skill will not write into a command:
+
+```bash
+gh pr view <number> --repo <BASE_REPO> --json headRefName --jq '.headRefName | test("^[A-Za-z0-9._/-]+$")'
+```
 
 Then run the write pre-flight against the push target (`gh-check.sh` reads `gh repo view`, which
 follows `GH_REPO`):
@@ -117,10 +128,13 @@ if [ -e "$WT" ] || git -C "$MAIN_ROOT" worktree list --porcelain | grep -qx "wor
 git -C "$MAIN_ROOT" branch --format='%(refname:short)'
 git -C "$MAIN_ROOT" worktree add --detach "$WT" FETCH_HEAD && cd "$WT" && gh pr checkout <number> --repo <BASE_REPO>
 git -C "$WT" branch --show-current
+git -C "$WT" branch --show-current | grep -Eqx '[A-Za-z0-9._/-]+' && echo safe
 ```
 
 The commands are chained with `&&` so a failed `worktree add` never leaves `gh pr checkout`
-running in a directory that already existed. Record the branch list printed first. `LOCAL_BRANCH` is what `--show-current` prints. Note whether
+running in a directory that already existed. Record the branch list printed first. `LOCAL_BRANCH` is what `--show-current` prints;
+if the last command does not print `safe`, stop and run Step 6's cleanup without the branch
+deletion. Note whether
 it was in that first list, because Step 6 deletes only a branch this run created.
 
 **Move the session into the worktree.** Never read or edit a file under `MAIN_ROOT` itself.
