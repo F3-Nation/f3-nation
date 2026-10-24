@@ -2,7 +2,7 @@
 
 import type { SortingState, TableOptions } from "@tanstack/react-table";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import type { MdTableFeatures } from "@acme/ui/table-features";
@@ -24,6 +24,7 @@ import { AOSFilter } from "../_components/ao-filter";
 import type { DateRange } from "../_components/date-range-filter";
 import {
   DateRangeFilter,
+  EMPTY_DATE_RANGE,
   todayForwardDateRange,
 } from "../_components/date-range-filter";
 import { MobileFilterSheet } from "../_components/mobile-filter-sheet";
@@ -55,9 +56,15 @@ export const EventInstancesTable = () => {
     "active",
   ]);
 
-  const [startDateRange, setStartDateRange] = useState<DateRange>(
-    todayForwardDateRange,
-  );
+  // null until mount. "Today" has to come from the browser: the server runs
+  // on UTC, so on a US evening it's already tomorrow there and the filter
+  // label wouldn't match during hydration.
+  const [startDateRange, setStartDateRange] = useState<DateRange | null>(null);
+  useEffect(() => {
+    setStartDateRange(todayForwardDateRange());
+  }, []);
+  const dateRange = startDateRange ?? EMPTY_DATE_RANGE;
+
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
@@ -75,9 +82,12 @@ export const EventInstancesTable = () => {
             : undefined,
         aoOrgIds:
           selectedAos.length > 0 ? selectedAos.map((a) => a.id) : undefined,
-        startDate: startDateRange.from || undefined,
-        startDateTo: startDateRange.to || undefined,
+        startDate: dateRange.from || undefined,
+        startDateTo: dateRange.to || undefined,
       },
+      // Wait for today's date, otherwise the first page would include every
+      // past instance.
+      enabled: startDateRange !== null,
     }),
   );
 
@@ -93,7 +103,7 @@ export const EventInstancesTable = () => {
     selectedStatuses.length +
     selectedAos.length +
     selectedRegions.length +
-    (startDateRange.from || startDateRange.to ? 1 : 0);
+    (dateRange.from || dateRange.to ? 1 : 0);
 
   const handleStartDateRangeChange = (range: DateRange) => {
     setStartDateRange(range);
@@ -155,7 +165,7 @@ export const EventInstancesTable = () => {
               selectedRegions={selectedRegions}
             />
             <DateRangeFilter
-              value={startDateRange}
+              value={dateRange}
               onChange={handleStartDateRangeChange}
               label="Filter by start date"
             />
@@ -189,7 +199,7 @@ export const EventInstancesTable = () => {
             <div>
               <p className="mb-1 text-sm font-medium">Start date</p>
               <DateRangeFilter
-                value={startDateRange}
+                value={dateRange}
                 onChange={handleStartDateRangeChange}
                 label="Filter by start date"
               />
