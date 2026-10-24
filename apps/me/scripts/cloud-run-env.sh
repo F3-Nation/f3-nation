@@ -244,6 +244,16 @@ if [[ ${#REMOVE_ARGS[@]} -gt 0 ]]; then
   REMOVE_FLAGS=(--remove-env-vars "$(IFS=,; echo "${REMOVE_ARGS[*]}")")
 fi
 
+# Join with gcloud's "^|^" custom delimiter: a plain comma join would split a
+# value that contains a comma (APPS_DIRECTORY_URL can carry a query string).
+for entry in "${UPDATE_ARGS[@]}"; do
+  if [[ "$entry" == *"|"* ]]; then
+    echo "Error: ${entry%%=*} contains '|', the env-var delimiter. Remove it from the value."
+    exit 1
+  fi
+done
+ENV_VARS_ARG="^|^$(IFS='|'; echo "${UPDATE_ARGS[*]}")"
+
 # Secret-backed env vars
 SECRET_ARGS=()
 for var in "${!SECRET_MAP[@]}"; do
@@ -254,7 +264,7 @@ done
 gcloud run services update "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
-  --update-env-vars "$(IFS=,; echo "${UPDATE_ARGS[*]}")" \
+  --update-env-vars "$ENV_VARS_ARG" \
   ${REMOVE_FLAGS[@]+"${REMOVE_FLAGS[@]}"} \
   --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
   --quiet
