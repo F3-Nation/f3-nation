@@ -65,9 +65,11 @@ follows `GH_REPO`):
 GH_REPO=<HEAD_REPO> bash .agents/skills/github/scripts/gh-check.sh --require-write
 ```
 
-Stop if it fails, unless the PR is cross-repository (`isCrossRepository` is true) and
-`maintainerCanModify` is true: GitHub then accepts a maintainer's push to the fork branch without
-write access to the fork. For a same-repository PR, `HEAD_REPO` is `BASE_REPO`.
+Stop if it fails, unless the PR is cross-repository (`isCrossRepository` is true),
+`maintainerCanModify` is true, and the viewer has write access to the base repository
+(`GH_REPO=<BASE_REPO> bash .agents/skills/github/scripts/gh-check.sh --require-write` passes):
+GitHub then accepts an upstream maintainer's push to the fork branch without write access to the
+fork. For a same-repository PR, `HEAD_REPO` is `BASE_REPO`.
 
 ## Step 2 — Set Up the PR Worktree
 
