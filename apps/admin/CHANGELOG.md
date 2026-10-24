@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.9.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.9.0...admin@2.9.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **admin:** link time input labels to their inputs ([#1284](https://github.com/F3-Nation/f3-nation/issues/1284)) ([22f78fc](https://github.com/F3-Nation/f3-nation/commit/22f78fc0d7f55b977e1825c98685b437e362aaaa))
+* **admin:** retain organization IDs after partial saves ([#1259](https://github.com/F3-Nation/f3-nation/issues/1259)) ([cb94e6f](https://github.com/F3-Nation/f3-nation/commit/cb94e6f74bd172e1a261c114d5588aea2bec5e04))
+* **admin:** show an outage screen when the API is unavailable ([#1305](https://github.com/F3-Nation/f3-nation/issues/1305)) ([6acdd77](https://github.com/F3-Nation/f3-nation/commit/6acdd775a10f9e3260001b062f0735533f9425d5))
+* **api,admin:** list existing API-key roles accurately ([#1260](https://github.com/F3-Nation/f3-nation/issues/1260)) ([2542caa](https://github.com/F3-Nation/f3-nation/commit/2542caa44a7974ca0f5de6447b9011eb966536bd))
+* **api:** deduplicate cross-region event lists ([#1263](https://github.com/F3-Nation/f3-nation/issues/1263)) ([9d5cd91](https://github.com/F3-Nation/f3-nation/commit/9d5cd9112ec651449a568ed93bfe18c364fcf1aa))
+* **db-python:** include formatting in workspace checks ([#1300](https://github.com/F3-Nation/f3-nation/issues/1300)) ([2c54ed4](https://github.com/F3-Nation/f3-nation/commit/2c54ed453300e44720aa77e610156350717e8329))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.15.0
+    * @acme/shared bumped to 0.5.1
+    * @acme/ui bumped to 0.2.3
+    * @acme/validators bumped to 0.5.1
+    * @f3nation/sso-next bumped to 0.2.2
+  * devDependencies
+    * @f3nation/sso bumped to 0.5.0
+
 ## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.8.0...admin@2.9.0) (2026-10-14)
 
 
