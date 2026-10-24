@@ -204,17 +204,24 @@ export function useProfileForm({
     }
   }, [form, initialForm]);
 
-  // Sync form state when the user record changes (e.g. after navigation to a different user)
-  useEffect(() => {
+  // Sync form state when the user record changes (e.g. after navigation to a different user).
+  // Keyed on user.id only; f3Name/avatarUrl updates won't re-trigger (accepted trade-off).
+  // Adjusting state during render (instead of in an effect) avoids an extra render
+  // showing the previous user's data.
+  const [prevUserId, setPrevUserId] = useState(user.id);
+  if (user.id !== prevUserId) {
     const fresh = buildInitialFormState(user);
+    setPrevUserId(user.id);
     setForm(fresh);
     setInitialForm(fresh);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on user.id only; f3Name/avatarUrl updates won't re-trigger (accepted trade-off)
-  }, [user.id]);
+  }
 
-  // Keep a stable ref to handleSave for the context registration
+  // Keep a stable ref to handleSave for the context registration.
+  // Refs must not be written during render, so update it in an effect.
   const saveRef = useRef(handleSave);
-  saveRef.current = handleSave;
+  useEffect(() => {
+    saveRef.current = handleSave;
+  }, [handleSave]);
 
   // Register save state with the navbar; unregister on unmount to clear stale state
   const { register, unregister } = useSaveRegister();

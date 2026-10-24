@@ -31,9 +31,13 @@ function Avatar({
 }: AvatarProps) {
   const [imgError, setImgError] = React.useState(false);
 
-  React.useEffect(() => {
+  // Reset the error flag when `src` changes. Adjusting state during render
+  // (instead of in an effect) avoids an extra render with stale state.
+  const [prevSrc, setPrevSrc] = React.useState(src);
+  if (src !== prevSrc) {
+    setPrevSrc(src);
     setImgError(false);
-  }, [src]);
+  }
 
   const showFallback = !src || imgError;
   const px = sizePx[size];

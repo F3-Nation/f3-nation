@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 
 import { toast } from "@acme/ui/toast";
 
@@ -72,9 +72,14 @@ export function useAvatarUpload({
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentUrl);
   const [dragOver, setDragOver] = useState(false);
 
-  useEffect(() => {
+  // Re-sync the preview when the parent passes a new `currentUrl`.
+  // Adjusting state during render (instead of in an effect) avoids an extra
+  // render with the stale preview.
+  const [prevCurrentUrl, setPrevCurrentUrl] = useState(currentUrl);
+  if (currentUrl !== prevCurrentUrl) {
+    setPrevCurrentUrl(currentUrl);
     setPreviewUrl(currentUrl);
-  }, [currentUrl]);
+  }
 
   const handleUpload = useCallback(
     async (file: File) => {
