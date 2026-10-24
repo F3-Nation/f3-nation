@@ -329,10 +329,16 @@ cmd_setup() {
   load "$1"; shift
   local at_base=false a
   for a in "$@"; do case "$a" in --at-base) at_base=true ;; *) die "unknown flag $a" ;; esac; done
-  local pr_sha merge_base pending
+  local pr_sha merge_base pending base_sha=""
   pending=$(st '.update_pending // empty')
-  [ -z "$pending" ] || die "an update to $pending didn't finish; run update again before setup"
-  pr_sha=$(st .tested_sha); merge_base=$(st .merge_base)
+  if [ -n "$pending" ]; then
+    # An unfinished update was past its approval gate, so rebuild at that revision.
+    pr_sha=$pending
+    base_sha=$(git -C "$MAIN" rev-parse "$(st .git_ref)-base")
+    merge_base=$(git -C "$MAIN" merge-base "$pr_sha" "$base_sha")
+  else
+    pr_sha=$(st .tested_sha); merge_base=$(st .merge_base)
+  fi
   if $at_base && ! git -C "$WT" cat-file -e "$merge_base:scripts/lib/local-ports.sh" 2>/dev/null; then
     die "the PR's merge base predates per-checkout ports; use plain setup, or ask the author to update the branch"
   fi
@@ -370,6 +376,10 @@ cmd_setup() {
     [ $i -lt 60 ] || die "Mailpit not answering on $(port mailpit)"
     sleep 2; i=$((i + 2))
   done
+  if [ -n "$pending" ]; then
+    st_set --arg n "$pending" --arg b "$base_sha" --arg mb "$merge_base" \
+      '.tested_sha = $n | .pr_sha = $n | .base_sha = $b | .merge_base = $mb | del(.update_pending)'
+  fi
   st_set --arg m "$($at_base && echo at-base || echo fresh)" '.db_mode = $m | .phase = "ready"'
   echo "READY: Postgres localhost:$(port postgres), Mailpit http://localhost:$(port mailpit), project $PROJECT"
 }

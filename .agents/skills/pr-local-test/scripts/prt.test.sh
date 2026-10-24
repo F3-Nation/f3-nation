@@ -6,7 +6,8 @@
 #   - load() makes the run's env authoritative over inherited settings, commented template keys
 #     included, and update re-applies that for the new commit's templates
 #   - update --approved is bound to the scanned commit, and a failed update is retried
-#   - a failed update blocks setup, and the head returning to the tested commit still repairs it
+#   - setup after a failed update rebuilds the pending revision, and the head returning to the
+#     tested commit still repairs it
 #   - check_migrations (applied vs journal), kill_group, and serve's port-in-use refusal
 # Missing prerequisites (jq, git, python3, lsof or ss) fail the test.
 # Run directly: bash .agents/skills/pr-local-test/scripts/prt.test.sh
@@ -96,6 +97,10 @@ EOF
 cat >"$bin/gh" <<EOF
 #!/usr/bin/env bash
 echo '{"state":"OPEN","headRefOid":"$c1","baseRefName":"main","isCrossRepository":true,"url":"https://example.invalid/pull/1"}'
+EOF
+cat >"$bin/curl" <<'EOF'
+#!/usr/bin/env bash
+exit 0
 EOF
 cat >"$bin/docker" <<EOF
 #!/usr/bin/env bash
@@ -211,7 +216,7 @@ assert_eq "update with an inherited new-template variable succeeds" "0" "$?"
 assert_eq "install sees the new template's variable unset" "unset" "$(sort -u "$tmp_dir/pnpm_probe")"
 rm "$tmp_dir/pnpm_probe"
 
-# --- update: a failed update blocks setup, and the head returning to the tested commit repairs it
+# --- update: the head returning to the tested commit repairs a failed update
 echo '{"entries":[{},{},{}]}' >"$origin/packages/db/drizzle/meta/_journal.json"
 git -C "$origin" add -A
 git -C "$origin" commit -q -m c6
@@ -221,9 +226,6 @@ touch "$tmp_dir/pnpm_fail"
 out="$(bash "$prt" update "$run" --approved "$c6" 2>&1)"
 assert_eq "an update that fails during install exits 1" "1" "$?"
 rm "$tmp_dir/pnpm_fail"
-out="$(bash "$prt" setup "$run" --at-base 2>&1)"
-assert_eq "setup refuses while an update is pending" "1" "$?"
-assert_contains "the refusal names the pending commit" "an update to $c6 didn't finish" "$out"
 git -C "$origin" update-ref refs/pull/1/head "$c5"
 out="$(bash "$prt" update "$run" --approved "$c5" 2>&1)"
 assert_eq "update after the head returns to the tested commit succeeds" "0" "$?"
@@ -268,6 +270,23 @@ mv "$state_tmp" "$run/state.json"
 out="$(bash "$prt" serve "$run" map 2>&1)"
 assert_eq "serve on a busy port fails" "1" "$?"
 assert_contains "serve names the busy port" "port $busy_port is already in use" "$out"
+
+# --- setup: after a failed update, down-db then setup rebuilds the pending revision
+git -C "$origin" commit -q --allow-empty -m c7
+c7="$(git -C "$origin" rev-parse HEAD)"
+git -C "$origin" update-ref refs/pull/1/head "$c7"
+touch "$tmp_dir/pnpm_fail"
+bash "$prt" update "$run" --approved "$c7" >/dev/null 2>&1
+rm "$tmp_dir/pnpm_fail"
+assert_eq "a second failed update records its pending revision" "$c7" "$(jq -r .update_pending "$run/state.json")"
+echo 3 >"$tmp_dir/applied"
+out="$(bash "$prt" setup "$run" 2>&1)"
+assert_eq "setup rebuilds the pending revision" "0" "$?"
+assert_eq "the rebuilt revision becomes the tested commit" "$c7" "$(jq -r .tested_sha "$run/state.json")"
+assert_eq "setup clears the pending revision" "none" "$(jq -r '.update_pending // "none"' "$run/state.json")"
+assert_eq "setup leaves the run ready" "ready" "$(jq -r .phase "$run/state.json")"
+out="$(bash "$prt" update "$run" --approved "$c7" 2>&1)"
+assert_contains "a completed rebuild leaves nothing to update" "NO_NEW_COMMITS" "$out"
 
 if [ "$failures" -ne 0 ]; then
   echo "${failures} assertion(s) failed"
