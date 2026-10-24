@@ -38,6 +38,10 @@ or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
 — even if your tool does not load skills automatically.
 
+To address, respond to, or work through review feedback on a pull request,
+follow
+[`.agents/skills/address-pr-comments/SKILL.md`](.agents/skills/address-pr-comments/SKILL.md).
+
 ## Project Structure & Module Organization
 
 - Deployable apps live in `apps/`, shared code in `packages/`, config in `tooling/`, and Turbo generators in `turbo/`.
