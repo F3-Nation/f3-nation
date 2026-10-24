@@ -28,7 +28,7 @@ Interactive API docs (via [`@scalar/hono-api-reference`](https://github.com/scal
 Every endpoint is protected except `/v1/ping`, `/v1/status`, `/docs`, and `/docs/openapi.json`. Protected endpoints accept any of:
 
 - A session cookie, for browser clients already signed in via [`apps/auth`](../auth)
-- A verified JWT bearer token, for first-party clients (the map app, F3 Me). Tokens are RS256 access tokens from a trusted issuer: `NEXT_PUBLIC_AUTH_URL`, plus any origins in the optional comma-separated `AUTH_ADDITIONAL_ISSUERS` (used while admin and F3 Me move to auth3 ahead of the API). Each is verified against `<issuer>/.well-known/jwks.json` for the issuer its `iss` claim names; a token from any other issuer is rejected without a key fetch, and a malformed `AUTH_ADDITIONAL_ISSUERS` entry fails startup.
+- A verified JWT bearer token, for first-party clients (the map app, F3 Me). Tokens are RS256 access tokens from a trusted issuer: each origin in the optional comma-separated `AUTH_TRUSTED_ISSUERS` (used while admin and F3 Me move to auth3 ahead of the API), or `NEXT_PUBLIC_AUTH_URL` alone when that is unset. Each is verified against `<issuer>/.well-known/jwks.json` for the issuer its `iss` claim names; a token from any other issuer is rejected without a key fetch, and a malformed `AUTH_TRUSTED_ISSUERS` entry fails startup.
 - A Bearer API key plus a `Client` header identifying the calling app, for third-party/external clients:
 
 ```bash

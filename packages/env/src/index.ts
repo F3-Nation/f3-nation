@@ -39,11 +39,11 @@ export const env = createEnv({
     SUPER_ADMIN_API_KEY: z.string().min(1).optional(),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
     GCS_EMULATOR_HOST: z.string().optional(),
-    // Comma-separated auth server origins whose JWTs packages/api accepts in
-    // addition to NEXT_PUBLIC_AUTH_URL's. Only declared here; the format is
-    // checked by packages/api/src/trusted-issuers.ts, which throws at startup
-    // on a malformed entry. Unset and empty both mean "none".
-    AUTH_ADDITIONAL_ISSUERS: z.string().optional(),
+    // Comma-separated auth server origins whose JWTs packages/api accepts.
+    // Only declared here; the format is checked by
+    // packages/api/src/trusted-issuers.ts, which throws at startup on a
+    // malformed entry. Unset and empty both mean "NEXT_PUBLIC_AUTH_URL only".
+    AUTH_TRUSTED_ISSUERS: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_ADMIN_URL: z.string().min(1).optional(),

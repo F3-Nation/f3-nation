@@ -1,11 +1,15 @@
 /**
  * The token issuers packages/api accepts JWT access tokens from.
  *
- * NEXT_PUBLIC_AUTH_URL is the primary issuer and is used exactly as written,
- * so a deployment that sets nothing else trusts the same issuer string it
- * always has. AUTH_ADDITIONAL_ISSUERS adds more, for the auth3 cutover:
- * admin and me move to the new auth server before apps/api does and forward
- * its access tokens here, so for a while both servers' tokens must verify.
+ * AUTH_TRUSTED_ISSUERS lists them, comma-separated, with no issuer ranked
+ * above another. During the auth3 cutover it holds both auth servers: admin
+ * and me move to auth3 before apps/api does and forward its access tokens
+ * here, so for a while both servers' tokens must verify.
+ *
+ * Left unset (or empty), the api trusts NEXT_PUBLIC_AUTH_URL alone, used
+ * exactly as written, so a deployment that sets nothing new trusts the same
+ * issuer string it always has. NEXT_PUBLIC_AUTH_URL stays a single URL
+ * because admin, me and map read it from the shared env as their sign-in URL.
  *
  * Every issuer's keys are fetched from `<issuer>/.well-known/jwks.json`.
  */
@@ -13,7 +17,7 @@
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
 /**
- * Parse AUTH_ADDITIONAL_ISSUERS: comma-separated origins such as
+ * Parse AUTH_TRUSTED_ISSUERS: comma-separated origins such as
  * `https://staging.auth3.f3nation.com`. Entries are trimmed, empty entries
  * ignored, and duplicates collapsed. Each must be a bare origin (an issuer
  * is compared to a token's `iss` claim exactly, and these servers put their
@@ -23,7 +27,7 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
  * deploy at startup (as an invalid variable in @acme/env does) rather than
  * quietly turning every token from that issuer into a 401.
  */
-export function parseAdditionalIssuers(raw: string | undefined): string[] {
+export function parseIssuerList(raw: string | undefined): string[] {
   if (!raw) return [];
   const issuers = new Set<string>();
   for (const part of raw.split(",")) {
@@ -36,7 +40,7 @@ export function parseAdditionalIssuers(raw: string | undefined): string[] {
 
 function parseIssuerOrigin(entry: string): string {
   const invalid = (why: string) =>
-    new Error(`Invalid AUTH_ADDITIONAL_ISSUERS entry "${entry}": ${why}`);
+    new Error(`Invalid AUTH_TRUSTED_ISSUERS entry "${entry}": ${why}`);
 
   let url: URL;
   try {
@@ -63,17 +67,14 @@ function parseIssuerOrigin(entry: string): string {
 }
 
 /**
- * The full trusted list: the primary issuer (verbatim) first, then the
- * additional ones, minus any that repeat an issuer already listed.
+ * The full trusted list: AUTH_TRUSTED_ISSUERS when it names any issuer,
+ * otherwise the fallback (NEXT_PUBLIC_AUTH_URL) verbatim, otherwise none.
  */
 export function trustedIssuers(
-  primary: string | undefined,
-  additionalRaw: string | undefined,
+  listRaw: string | undefined,
+  fallback: string | undefined,
 ): string[] {
-  const issuers = new Set<string>();
-  if (primary) issuers.add(primary);
-  for (const issuer of parseAdditionalIssuers(additionalRaw)) {
-    issuers.add(issuer);
-  }
-  return [...issuers];
+  const issuers = parseIssuerList(listRaw);
+  if (issuers.length > 0) return issuers;
+  return fallback ? [fallback] : [];
 }

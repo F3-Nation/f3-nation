@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAdditionalIssuers, trustedIssuers } from "./trusted-issuers";
+import { parseIssuerList, trustedIssuers } from "./trusted-issuers";
 
-describe("parseAdditionalIssuers", () => {
+describe("parseIssuerList", () => {
   it.each([undefined, "", " ", " , ,"])("is empty for %j", (raw) => {
-    expect(parseAdditionalIssuers(raw)).toEqual([]);
+    expect(parseIssuerList(raw)).toEqual([]);
   });
 
   it("trims, drops empty entries, normalizes to the origin and dedupes", () => {
     expect(
-      parseAdditionalIssuers(
+      parseIssuerList(
         " https://staging.auth3.f3nation.com , ,https://staging.auth3.f3nation.com/,https://auth3.f3nation.com",
       ),
     ).toEqual([
@@ -20,9 +20,9 @@ describe("parseAdditionalIssuers", () => {
 
   it("allows http only for localhost and 127.0.0.1", () => {
     expect(
-      parseAdditionalIssuers("http://localhost:3005,http://127.0.0.1:3006"),
+      parseIssuerList("http://localhost:3005,http://127.0.0.1:3006"),
     ).toEqual(["http://localhost:3005", "http://127.0.0.1:3006"]);
-    expect(() => parseAdditionalIssuers("http://auth3.f3nation.com")).toThrow(
+    expect(() => parseIssuerList("http://auth3.f3nation.com")).toThrow(
       /must use https/,
     );
   });
@@ -36,38 +36,38 @@ describe("parseAdditionalIssuers", () => {
     ["https://auth3.f3nation.com#x", /bare origin/],
     ["https://user:pw@auth3.f3nation.com", /bare origin/],
   ])("throws for the malformed entry %j", (entry, message) => {
-    expect(() =>
-      parseAdditionalIssuers(`https://ok.example.test,${entry}`),
-    ).toThrow(message);
-    expect(() => parseAdditionalIssuers(entry)).toThrow(
-      /Invalid AUTH_ADDITIONAL_ISSUERS entry/,
+    expect(() => parseIssuerList(`https://ok.example.test,${entry}`)).toThrow(
+      message,
+    );
+    expect(() => parseIssuerList(entry)).toThrow(
+      /Invalid AUTH_TRUSTED_ISSUERS entry/,
     );
   });
 });
 
 describe("trustedIssuers", () => {
-  it("is just the primary issuer, verbatim, when nothing else is set", () => {
-    expect(trustedIssuers("https://auth.f3nation.com", undefined)).toEqual([
+  it("is just the fallback issuer, verbatim, when the list is unset or empty", () => {
+    expect(trustedIssuers(undefined, "https://auth.f3nation.com")).toEqual([
       "https://auth.f3nation.com",
     ]);
-    // The primary is not normalized, so its exact `iss` match is unchanged.
-    expect(trustedIssuers("https://auth.f3nation.com/", "")).toEqual([
+    // The fallback is not normalized, so its exact `iss` match is unchanged.
+    expect(trustedIssuers(" , ", "https://auth.f3nation.com/")).toEqual([
       "https://auth.f3nation.com/",
     ]);
   });
 
-  it("lists the primary first and drops an additional entry repeating it", () => {
+  it("uses the list alone when it names any issuer, ignoring the fallback", () => {
     expect(
       trustedIssuers(
-        "https://auth.f3nation.com",
-        "https://auth3.f3nation.com,https://auth.f3nation.com",
+        "https://auth.f3nation.com,https://auth3.f3nation.com",
+        "https://auth2.f3nation.com",
       ),
     ).toEqual(["https://auth.f3nation.com", "https://auth3.f3nation.com"]);
   });
 
-  it("is empty with neither set, and additional-only without a primary", () => {
+  it("is empty with neither set, and the list alone without a fallback", () => {
     expect(trustedIssuers(undefined, undefined)).toEqual([]);
-    expect(trustedIssuers("", "https://auth3.f3nation.com")).toEqual([
+    expect(trustedIssuers("https://auth3.f3nation.com", "")).toEqual([
       "https://auth3.f3nation.com",
     ]);
   });

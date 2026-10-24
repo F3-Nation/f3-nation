@@ -46,8 +46,8 @@ for every session hop:
    issuer check (`authJwksByIssuer`, `getSession` and `getSessionFromJWT` in
    `shared.ts`), then loads roles
    from the DB. Headers don't care about cookie domains. Outside previews,
-   `AUTH_ADDITIONAL_ISSUERS` can add more trusted issuers (e.g. auth3 during
-   the Better Auth cutover); each token is checked against the JWKS of the
+   `AUTH_TRUSTED_ISSUERS` can list the trusted issuers instead (e.g. auth2
+   and auth3 during the Better Auth cutover); each token is checked against the JWKS of the
    allowlisted issuer its `iss` names (`packages/api/src/trusted-issuers.ts`).
    Deploy #1320 to auth3 before setting it: until then auth3 signs `iss` as
    `<origin>/api/auth2`, which never matches a bare-origin entry, so every

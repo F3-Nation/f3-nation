@@ -56,13 +56,13 @@ const RATE_LIMIT_MAX_REQUESTS = isDevelopment ? 10000 : 500;
 // app-server clock skew and cross-check inconsistencies.
 const DB_NOW = sql`timezone('utc'::text, now())`;
 
-// The auth servers whose access tokens are accepted: the primary one's base
-// URL (e.g. https://auth.f3nation.com), plus any AUTH_ADDITIONAL_ISSUERS
-// (e.g. auth3 during the Better Auth cutover). See ./trusted-issuers.
+// The auth servers whose access tokens are accepted: AUTH_TRUSTED_ISSUERS
+// (e.g. auth2 and auth3 during the Better Auth cutover), or the base URL in
+// NEXT_PUBLIC_AUTH_URL when that is unset. See ./trusted-issuers.
 // Read from process.env to avoid t3-env client/server type mismatch.
 const authIssuers = trustedIssuers(
+  process.env.AUTH_TRUSTED_ISSUERS,
   process.env.NEXT_PUBLIC_AUTH_URL,
-  process.env.AUTH_ADDITIONAL_ISSUERS,
 );
 
 // Cached JWKS fetcher per trusted issuer for JWT verification, keyed by the

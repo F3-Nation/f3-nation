@@ -43,10 +43,10 @@ declare -A SECRET_MAP=(
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
 # Cloud Run env vars). An empty value is skipped, not cleared, except
-# AUTH_ADDITIONAL_ISSUERS: leaving it unset removes it from the service, so the
-# API stops trusting any issuer it listed before.
+# AUTH_TRUSTED_ISSUERS: leaving it unset removes it from the service, so the
+# API goes back to trusting NEXT_PUBLIC_AUTH_URL alone.
 ENV_FILE_VARS=(
-  AUTH_ADDITIONAL_ISSUERS
+  AUTH_TRUSTED_ISSUERS
   EMAIL_ADMIN_DESTINATIONS
   EMAIL_FROM
   NEXT_PUBLIC_ADMIN_URL
@@ -205,7 +205,7 @@ for var in "${ENV_FILE_VARS[@]}"; do
   if [[ -n "$value" ]]; then
     echo " [$var] Setting to $value"
     UPDATE_ARGS+=("${var}=${value}")
-  elif [[ "$var" == "AUTH_ADDITIONAL_ISSUERS" ]]; then
+  elif [[ "$var" == "AUTH_TRUSTED_ISSUERS" ]]; then
     # Cloud Run keeps a variable left out of --update-env-vars, so remove it
     # explicitly or a previously trusted issuer would stay trusted.
     echo " [$var] Unset, removing from the service"

@@ -1,6 +1,7 @@
 /**
- * JWT access tokens from more than one trusted issuer (NEXT_PUBLIC_AUTH_URL
- * plus AUTH_ADDITIONAL_ISSUERS), verified end to end through shared.ts.
+ * JWT access tokens from more than one trusted issuer (AUTH_TRUSTED_ISSUERS,
+ * or NEXT_PUBLIC_AUTH_URL alone when that is unset), verified end to end
+ * through shared.ts.
  *
  * shared.ts builds its issuer list and JWKS fetchers at import time, so each
  * case stubs the env and re-imports it. Real signature/issuer/expiry checks
@@ -69,9 +70,9 @@ vi.mock("@acme/auth", () => ({
   getSessionFromHeaders: vi.fn(() => Promise.resolve(null)),
 }));
 
-async function loadClient(env: { primary?: string; additional?: string }) {
-  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", env.primary);
-  vi.stubEnv("AUTH_ADDITIONAL_ISSUERS", env.additional);
+async function loadClient(env: { fallback?: string; list?: string }) {
+  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", env.fallback);
+  vi.stubEnv("AUTH_TRUSTED_ISSUERS", env.list);
   vi.resetModules();
   const { protectedProcedure } = await import("./shared");
   const router = {
@@ -132,9 +133,9 @@ describe("JWT verification across trusted issuers", () => {
     await db.delete(schema.users).where(eq(schema.users.id, userId));
   });
 
-  describe("with AUTH_ADDITIONAL_ISSUERS unset", () => {
-    it("trusts only the primary issuer, as before", async () => {
-      const call = await loadClient({ primary: PRIMARY });
+  describe("with AUTH_TRUSTED_ISSUERS unset", () => {
+    it("trusts only NEXT_PUBLIC_AUTH_URL, as before", async () => {
+      const call = await loadClient({ fallback: PRIMARY });
       expect(mocks.created).toEqual([jwksUrl(PRIMARY)]);
 
       await expect(call(await sign(PRIMARY, primaryKey))).resolves.toEqual({
@@ -158,30 +159,30 @@ describe("JWT verification across trusted issuers", () => {
     });
   });
 
-  describe("with an additional issuer", () => {
+  describe("with both issuers in AUTH_TRUSTED_ISSUERS", () => {
     let call: (token: string) => Promise<{ id: number }>;
 
     beforeEach(async () => {
       call = await loadClient({
-        primary: PRIMARY,
-        additional: ` ${AUTH3} , ,${AUTH3}/`,
+        fallback: "https://ignored.example.test",
+        list: ` ${PRIMARY} , ,${AUTH3},${AUTH3}/`,
       });
     });
 
-    it("builds one key set per distinct issuer at import", () => {
+    it("builds one key set per distinct listed issuer at import", () => {
       // Whitespace, an empty entry and a trailing-slash duplicate collapse
-      // to the one origin.
+      // to the one origin, and NEXT_PUBLIC_AUTH_URL is not trusted.
       expect(mocks.created).toEqual([jwksUrl(PRIMARY), jwksUrl(AUTH3)]);
     });
 
-    it("still accepts a primary-issuer token, checked against the primary's keys", async () => {
+    it("accepts the first issuer's token, checked against its keys", async () => {
       await expect(call(await sign(PRIMARY, primaryKey))).resolves.toEqual({
         id: userId,
       });
       expect(mocks.fetched).toEqual([jwksUrl(PRIMARY)]);
     });
 
-    it("accepts an additional-issuer token, checked against that issuer's keys", async () => {
+    it("accepts the second issuer's token, checked against its keys", async () => {
       await expect(call(await sign(AUTH3, auth3Key))).resolves.toEqual({
         id: userId,
       });
@@ -274,7 +275,7 @@ describe("JWT verification across trusted issuers", () => {
       expect(mocks.fetched).toEqual([jwksUrl(AUTH3), jwksUrl(PRIMARY)]);
     });
 
-    it("still rejects an additional issuer's ID token", async () => {
+    it("still rejects a listed issuer's ID token", async () => {
       await expect(
         call(await sign(AUTH3, auth3Key, "id")),
       ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
@@ -293,9 +294,9 @@ describe("JWT verification across trusted issuers", () => {
     });
   });
 
-  it("fails at import when an additional issuer is malformed", async () => {
+  it("fails at import when a listed issuer is malformed", async () => {
     await expect(
-      loadClient({ primary: PRIMARY, additional: `${AUTH3},auth3.example` }),
-    ).rejects.toThrow(/Invalid AUTH_ADDITIONAL_ISSUERS entry "auth3.example"/);
+      loadClient({ fallback: PRIMARY, list: `${AUTH3},auth3.example` }),
+    ).rejects.toThrow(/Invalid AUTH_TRUSTED_ISSUERS entry "auth3.example"/);
   });
 });
