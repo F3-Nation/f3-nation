@@ -47,6 +47,10 @@ The review uses the [Superpowers](https://github.com/obra/superpowers)
 `requesting-code-review` skill when it is installed (optional; a bundled brief
 covers it otherwise).
 
+To address, respond to, or work through review feedback on a pull request,
+follow
+[`.agents/skills/address-pr-comments/SKILL.md`](.agents/skills/address-pr-comments/SKILL.md).
+
 ## Project Structure & Module Organization
 
 - Deployable apps live in `apps/`, shared code in `packages/`, config in `tooling/`, and Turbo generators in `turbo/`.
