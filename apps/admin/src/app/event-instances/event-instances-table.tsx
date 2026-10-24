@@ -2,7 +2,7 @@
 
 import type { SortingState, TableOptions } from "@tanstack/react-table";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import type { IsActiveStatus } from "@acme/shared/app/enums";
 import type { MdTableFeatures } from "@acme/ui/table-features";
@@ -47,6 +47,11 @@ function seriesExceptionLabel(value: string): string {
   }
 }
 
+// Nothing to subscribe to, the date is only read when the table renders.
+const subscribeToToday = () => () => undefined;
+const getBrowserToday = () => todayForwardDateRange().from;
+const getServerToday = () => null;
+
 export const EventInstancesTable = () => {
   const [sorting, setSorting] = useState<SortingState>([]);
   const { pagination, setPagination } = usePagination({ pageSize: 20 });
@@ -56,14 +61,20 @@ export const EventInstancesTable = () => {
     "active",
   ]);
 
-  // null until mount. "Today" has to come from the browser: the server runs
-  // on UTC, so on a US evening it's already tomorrow there and the filter
-  // label wouldn't match during hydration.
+  // "Today" has to come from the browser: the server runs on UTC, so on a US
+  // evening it's already tomorrow there and the filter label wouldn't match
+  // during hydration. It's null for the server render and hydration, then
+  // React re-renders with the browser's date.
+  const today = useSyncExternalStore(
+    subscribeToToday,
+    getBrowserToday,
+    getServerToday,
+  );
+  // null until the user picks a range.
   const [startDateRange, setStartDateRange] = useState<DateRange | null>(null);
-  useEffect(() => {
-    setStartDateRange(todayForwardDateRange());
-  }, []);
-  const dateRange = startDateRange ?? EMPTY_DATE_RANGE;
+  const dateRange =
+    startDateRange ??
+    (today === null ? EMPTY_DATE_RANGE : { from: today, to: "" });
 
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
@@ -87,7 +98,7 @@ export const EventInstancesTable = () => {
       },
       // Wait for today's date, otherwise the first page would include every
       // past instance.
-      enabled: startDateRange !== null,
+      enabled: today !== null,
     }),
   );
 

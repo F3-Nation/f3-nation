@@ -1,6 +1,15 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import { EventInstancesTable } from "~/app/event-instances/event-instances-table";
 
@@ -32,6 +41,11 @@ const eventInstancesQueries = () =>
     .map(([options]) => options as EventInstancesQuery)
     .filter((options) => options.queryKey[0] === "eventInstance.all");
 
+const enabledStartDates = () =>
+  eventInstancesQueries()
+    .filter((query) => query.enabled !== false)
+    .map((query) => query.input?.startDate);
+
 describe("EventInstancesTable", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -55,14 +69,33 @@ describe("EventInstancesTable", () => {
     ]);
   });
 
+  it("hydrates when the server is already on tomorrow", async () => {
+    vi.setSystemTime(new Date(2026, 0, 16, 3, 0));
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(<EventInstancesTable />);
+    document.body.appendChild(container);
+
+    vi.setSystemTime(new Date(2026, 0, 15, 21, 0));
+    const onRecoverableError = vi.fn();
+    const root = await act(() =>
+      hydrateRoot(container, <EventInstancesTable />, { onRecoverableError }),
+    );
+    onTestFinished(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+
+    expect(onRecoverableError).not.toHaveBeenCalled();
+    expect(screen.getByText("2026-01-15 → …")).toBeTruthy();
+    // The table re-renders after hydration, but no render may run the query
+    // without a start date.
+    expect(new Set(enabledStartDates())).toEqual(new Set(["2026-01-15"]));
+  });
+
   it("filters from the browser's today once mounted", () => {
     render(<EventInstancesTable />);
 
     expect(screen.getByText("2026-01-15 → …")).toBeTruthy();
-    expect(
-      eventInstancesQueries()
-        .filter((query) => query.enabled !== false)
-        .map((query) => query.input?.startDate),
-    ).toEqual(["2026-01-15"]);
+    expect(enabledStartDates()).toEqual(["2026-01-15"]);
   });
 });
