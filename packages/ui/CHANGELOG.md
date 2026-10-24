@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.2.3...pkg-ui@0.2.4) (2026-10-24)
+
+
+### Bug Fixes
+
+* **map,eslint:** enable React Compiler lint rules and stop marker moves leaking into the query cache ([#1295](https://github.com/F3-Nation/f3-nation/issues/1295)) ([f049283](https://github.com/F3-Nation/f3-nation/commit/f049283bf9d3c83a005475fac8f55a4e75cc4050))
+
 ## [0.2.3](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.2.2...pkg-ui@0.2.3) (2026-10-23)
 
 

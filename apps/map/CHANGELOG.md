@@ -1,5 +1,19 @@
 # Changelog
 
+## [7.8.2](https://github.com/F3-Nation/f3-nation/compare/map@7.8.1...map@7.8.2) (2026-10-24)
+
+
+### Bug Fixes
+
+* **map,eslint:** enable React Compiler lint rules and stop marker moves leaking into the query cache ([#1295](https://github.com/F3-Nation/f3-nation/issues/1295)) ([f049283](https://github.com/F3-Nation/f3-nation/commit/f049283bf9d3c83a005475fac8f55a4e75cc4050))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/ui bumped to 0.2.4
+
 ## [7.8.1](https://github.com/F3-Nation/f3-nation/compare/map@7.8.0...map@7.8.1) (2026-10-23)
 
 

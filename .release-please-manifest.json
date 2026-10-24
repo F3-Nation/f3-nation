@@ -1,10 +1,10 @@
 {
-  "apps/api": "6.12.1",
-  "apps/admin": "2.9.1",
-  "apps/auth": "2.6.0",
-  "apps/homepage": "1.8.1",
-  "apps/map": "7.8.1",
-  "apps/me": "2.3.1",
+  "apps/api": "6.12.2",
+  "apps/admin": "2.9.2",
+  "apps/auth": "2.6.1",
+  "apps/homepage": "1.8.2",
+  "apps/map": "7.8.2",
+  "apps/me": "2.3.2",
   "apps/slackbot": "2.10.0",
   "apps/analytics": "1.2.0",
   "packages/api": "0.15.0",
@@ -18,7 +18,7 @@
   "packages/sso": "0.5.0",
   "packages/sso-next": "0.2.2",
   "packages/storage": "0.2.2",
-  "packages/ui": "0.2.3",
+  "packages/ui": "0.2.4",
   "packages/validators": "0.5.1",
   "tooling/tailwind": "0.1.3"
 }
