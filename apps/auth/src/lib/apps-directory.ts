@@ -26,7 +26,7 @@ export function parseAppsDirectoryUrl(raw: string | undefined): URL {
   return url;
 }
 
-export function appsDirectoryEnabled(raw: string | undefined): boolean {
+function appsDirectoryEnabled(raw: string | undefined): boolean {
   return raw?.trim().toLowerCase() !== "false";
 }
 
