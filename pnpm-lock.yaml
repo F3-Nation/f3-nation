@@ -1933,6 +1933,9 @@ importers:
 
   packages/shared:
     dependencies:
+      '@orpc/client':
+        specifier: 'catalog:'
+        version: 1.15.7(@opentelemetry/api@1.9.1)
       lodash:
         specifier: 'catalog:'
         version: 4.18.1

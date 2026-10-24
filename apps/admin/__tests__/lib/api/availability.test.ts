@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/client";
 import { describe, expect, it } from "vitest";
 
-import { isApiUnavailableError } from "~/lib/api/availability";
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
 describe("isApiUnavailableError", () => {
   it.each([

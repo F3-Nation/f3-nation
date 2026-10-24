@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { createORPCClient } from "@orpc/client";
+import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { RouterClient } from "@orpc/server";
 import type { router } from "@acme/api";
@@ -74,7 +74,26 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
           });
         }
 
-        return response;
+        // Read the body here, under the timeout: an API that sends headers and
+        // then stalls must not hang the page, and the timer can then always be
+        // cleared below instead of outliving the request.
+        const body = await response.text();
+
+        // A 5xx that isn't a well-formed oRPC error (an HTML page from a proxy
+        // or load balancer, or truncated JSON) would otherwise surface as a
+        // body-parse error with its status lost, and be mistaken for a bug
+        // rather than an outage.
+        if (response.status >= 500) {
+          try {
+            JSON.parse(body);
+          } catch {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              status: response.status,
+            });
+          }
+        }
+
+        return new Response(body, response);
       } catch (err) {
         logError(
           "me.api.upstream_request_failed",
