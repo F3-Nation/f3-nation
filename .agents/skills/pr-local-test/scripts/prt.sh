@@ -162,9 +162,31 @@ cmd_init() {
 
   MAIN=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || die "run init from inside the repo"
   MAIN=$(dirname "$MAIN")
-  local run_id ref
-  run_id="pr$pr-$(openssl rand -hex 2)"
+  local run_id ref k=0 slot="" base e ok
+  # The run dir is the claim on run_id and its refs: plain mkdir fails on an existing run, so a
+  # suffix collision retries instead of reusing (and later cleaning up) another run's directory.
+  check_root
+  mkdir -p "$SLOTS"
+  RUN_DIR=""
+  while [ $k -lt 20 ]; do
+    run_id="pr$pr-$(openssl rand -hex 2)"
+    if mkdir "$ROOT/$run_id" 2>/dev/null; then RUN_DIR="$ROOT/$run_id"; break; fi
+    k=$((k + 1))
+  done
+  [ -n "$RUN_DIR" ] || die "couldn't claim a run directory for PR #$pr; try again"
   ref="refs/pr-local-test/$run_id"
+  cleanup_refs() { git -C "$MAIN" update-ref -d "$ref" 2>/dev/null || true; git -C "$MAIN" update-ref -d "$ref-base" 2>/dev/null || true; }
+  # An interrupt or set -e exit before state.json exists would otherwise leak the slot, run dir,
+  # worktree and refs. Disarmed once the state is written.
+  init_cleanup() {
+    [ -z "$slot" ] || rm -rf "${SLOTS:?}/$slot"
+    git -C "$MAIN" worktree remove --force "$RUN_DIR/wt" 2>/dev/null || true
+    git -C "$MAIN" worktree prune 2>/dev/null || true
+    rm -rf "$RUN_DIR"
+    cleanup_refs
+  }
+  trap init_cleanup EXIT
+  k=0
 
   local info base_ref head_oid
   info=$(cd "$MAIN" && gh pr view "$pr" --json state,headRefOid,baseRefName,isCrossRepository,url) || die "gh can't read PR #$pr"
@@ -174,7 +196,6 @@ cmd_init() {
   git -C "$MAIN" fetch -q origin "+refs/pull/$pr/head:$ref" "+refs/heads/$base_ref:$ref-base" \
     || git -C "$MAIN" fetch -q origin "+refs/pull/$pr/head:$ref" "+refs/heads/$base_ref:$ref-base" \
     || die "fetch of PR #$pr failed"
-  cleanup_refs() { git -C "$MAIN" update-ref -d "$ref" 2>/dev/null || true; git -C "$MAIN" update-ref -d "$ref-base" 2>/dev/null || true; }
   local pr_sha base_sha merge_base head_note=""
   pr_sha=$(git -C "$MAIN" rev-parse "$ref")
   base_sha=$(git -C "$MAIN" rev-parse "$ref-base")
@@ -194,22 +215,8 @@ cmd_init() {
 
   # Port block: slot k owns 41000+20k .. +19. mkdir is the atomic claim. The run dir exists
   # first, so `list` never mistakes a fresh claim for a stale one.
-  check_root
-  mkdir -p "$SLOTS"
-  RUN_DIR="$ROOT/$run_id"
   mkdir -p "$RUN_DIR/logs" "$RUN_DIR/evidence" "$RUN_DIR/keys" "$RUN_DIR/jar"
   chmod 700 "$RUN_DIR/keys"
-  local k=0 slot="" base e ok
-  # An interrupt or set -e exit before state.json exists would otherwise leak the slot, run dir,
-  # worktree and refs. Disarmed once the state is written.
-  init_cleanup() {
-    [ -z "$slot" ] || rm -rf "${SLOTS:?}/$slot"
-    git -C "$MAIN" worktree remove --force "$RUN_DIR/wt" 2>/dev/null || true
-    git -C "$MAIN" worktree prune 2>/dev/null || true
-    rm -rf "$RUN_DIR"
-    cleanup_refs
-  }
-  trap init_cleanup EXIT
   while [ $k -lt 20 ]; do
     if mkdir "$SLOTS/$k" 2>/dev/null; then
       base=$((41000 + k * 20)); ok=1
@@ -392,7 +399,7 @@ cmd_serve() {
   case "$mode" in dev | start) ;; --restart) mode=dev; restart=true ;; *) die "mode must be dev or start" ;; esac
   [ "${4:-}" = "--restart" ] && restart=true
   case " $APPS " in *" $app "*) ;; *) die "unknown app '$app' (one of: $APPS)" ;; esac
-  local dir="$WT/apps/$app" p pkg script cmd log pgid
+  local dir="$WT/apps/$app" p pkg script cmd log pgid started
   p=$(port "$app")
   if [ "$(jq -r --arg a "$app" '[.servers[] | select(.app == $a)] | length' "$RUN_DIR/state.json")" != 0 ]; then
     $restart || die "$app already started; pass --restart"
@@ -415,8 +422,9 @@ cmd_serve() {
   fi
   export PRT_CMD="$cmd"
   pgid=$(cd "$dir" && PORT=$p bash -c 'set -m; nohup pnpm exec sh -c "$PRT_CMD" >"$0" 2>&1 </dev/null & echo $!' "$log")
-  st_set --arg a "$app" --argjson port "$p" --arg m "$mode" --argjson g "$pgid" --arg l "$log" --arg c "$cmd" \
-    '.servers += [{app:$a, port:$port, mode:$m, pgid:$g, log:$l, command:$c}] | .phase = "testing"'
+  started=$(proc_start "$pgid")
+  st_set --arg a "$app" --argjson port "$p" --arg m "$mode" --argjson g "$pgid" --arg s "$started" --arg l "$log" --arg c "$cmd" \
+    '.servers += [{app:$a, port:$port, mode:$m, pgid:$g, started:$s, log:$l, command:$c}] | .phase = "testing"'
   local i=0
   until listening "$p"; do
     group_alive "$pgid" || { tail -30 "$log"; die "$app exited before listening — see $log"; }
@@ -426,9 +434,21 @@ cmd_serve() {
   echo "SERVING $app ($mode) at http://localhost:$p  pgid=$pgid  log=$log"
 }
 
+proc_start() { ps -o lstart= -p "$1" 2>/dev/null | sed 's/^ *//; s/ *$//'; }
+
+# A saved group number can be reused by an unrelated job. Its leader was started by this run, so
+# a live leader must match the saved start time. A group outliving its leader can only be the
+# original one: the kernel doesn't reuse a pid that is still a process group id.
+group_is_ours() {
+  local g="$1" want="$2" have
+  have=$(proc_start "$g")
+  [ -z "$have" ] || { [ -n "$want" ] && [ "$have" = "$want" ]; }
+}
+
 kill_group() {
-  local g="$1" i=0
+  local g="$1" started="${2:-}" i=0
   group_alive "$g" || return 0
+  group_is_ours "$g" "$started" || { echo "SKIPPED process group $g: it no longer matches the process this run started" >&2; return 0; }
   kill -TERM -- "-$g" 2>/dev/null || true
   while group_alive "$g" && [ $i -lt 10 ]; do sleep 1; i=$((i + 1)); done
   group_alive "$g" || return 0
@@ -439,10 +459,10 @@ kill_group() {
 }
 
 stop_app() {
-  local app="$1" g
-  for g in $(jq -r --arg a "$app" '.servers[] | select(.app == $a) | .pgid' "$RUN_DIR/state.json"); do
-    kill_group "$g" || die "$app (pgid $g) didn't exit"
-  done
+  local app="$1" g started
+  while IFS=$'\t' read -r g started; do
+    [ -z "$g" ] || kill_group "$g" "$started" || die "$app (pgid $g) didn't exit"
+  done < <(jq -r --arg a "$app" '.servers[] | select(.app == $a) | [.pgid, .started // ""] | @tsv' "$RUN_DIR/state.json")
   st_set --arg a "$app" '.servers |= map(select(.app != $a))'
 }
 
@@ -593,9 +613,11 @@ cmd_down() {
   [ -f "$RUN_DIR/state.json" ] || { rm -rf "$RUN_DIR"; echo "REMOVED (no state)"; return 0; }
   WT=$(st .wt); MAIN=$(st .main); PROJECT=$(st .compose_project)
 
-  local g pid p left="" pat
+  local g started pid p left="" pat
   pat="pr-local-test/$(st .run_id)/wt/"
-  for g in $(jq -r '.servers[].pgid' "$RUN_DIR/state.json"); do kill_group "$g" || true; done
+  while IFS=$'\t' read -r g started; do
+    [ -z "$g" ] || kill_group "$g" "$started" || true
+  done < <(jq -r '.servers[] | [.pgid, .started // ""] | @tsv' "$RUN_DIR/state.json")
   # Safety net: anything still running from this run's worktree (path is unique).
   for pid in $(pgrep -f "$pat" 2>/dev/null || true); do
     case "$(ps -o command= -p "$pid" 2>/dev/null)" in *"$pat"*) kill -TERM "$pid" 2>/dev/null || true ;; esac

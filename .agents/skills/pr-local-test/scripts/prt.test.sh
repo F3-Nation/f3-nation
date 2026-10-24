@@ -8,7 +8,8 @@
 #   - update --approved is bound to the scanned commit, and a failed update is retried
 #   - setup after a failed update rebuilds the pending revision, and the head returning to the
 #     tested commit still repairs it
-#   - check_migrations (applied vs journal), kill_group, and serve's port-in-use refusal
+#   - init claims its run directory atomically, retrying a run-id collision
+#   - check_migrations (applied vs journal), kill_group (identity-checked), and serve's port-in-use refusal
 # Missing prerequisites (jq, git, python3, lsof or ss) fail the test.
 # Run directly: bash .agents/skills/pr-local-test/scripts/prt.test.sh
 set -uo pipefail
@@ -249,9 +250,15 @@ assert_contains "match reports the count" "MIGRATED(pr)=2/2" "$out"
 
 # --- kill_group: terminates a process group, and tolerates one that is already gone
 pgid="$(bash -c 'set -m; sleep 300 >/dev/null 2>&1 & echo $!')"
-bash -c '. "$1"; kill_group "$2"' _ "$prt" "$pgid"
+started="$(bash -c '. "$1"; proc_start "$2"' _ "$prt" "$pgid")"
+out="$(bash -c '. "$1"; kill_group "$2" "Mon Jan  1 00:00:00 2001"' _ "$prt" "$pgid" 2>&1)"
+assert_eq "kill_group spares a group whose leader doesn't match the saved start time" "1" "$(kill -0 -- "-$pgid" 2>/dev/null && echo 1 || echo 0)"
+assert_contains "the skipped group is reported" "SKIPPED process group $pgid" "$out"
+bash -c '. "$1"; kill_group "$2"' _ "$prt" "$pgid" 2>/dev/null
+assert_eq "kill_group spares a group with no saved start time" "1" "$(kill -0 -- "-$pgid" 2>/dev/null && echo 1 || echo 0)"
+bash -c '. "$1"; kill_group "$2" "$3"' _ "$prt" "$pgid" "$started"
 assert_eq "kill_group ends the process group" "0" "$(kill -0 -- "-$pgid" 2>/dev/null && echo 1 || echo 0)"
-bash -c '. "$1"; kill_group "$2"' _ "$prt" "$pgid"
+bash -c '. "$1"; kill_group "$2" "$3"' _ "$prt" "$pgid" "$started"
 assert_eq "kill_group on a dead group succeeds" "0" "$?"
 
 # --- serve: refuses a port that is already taken
@@ -287,6 +294,23 @@ assert_eq "setup clears the pending revision" "none" "$(jq -r '.update_pending /
 assert_eq "setup leaves the run ready" "ready" "$(jq -r .phase "$run/state.json")"
 out="$(bash "$prt" update "$run" --approved "$c7" 2>&1)"
 assert_contains "a completed rebuild leaves nothing to update" "NO_NEW_COMMITS" "$out"
+
+# --- init: a run-id collision retries instead of reusing another run's directory
+git -C "$origin" update-ref refs/pull/1/head "$c7"
+mkdir -p "$PRT_ROOT/pr1-aaaa"
+echo keep >"$PRT_ROOT/pr1-aaaa/sentinel"
+printf 'aaaa\nbbbb\n' >"$tmp_dir/suffixes"
+cat >"$bin/openssl" <<EOF
+#!/usr/bin/env bash
+head -n1 "$tmp_dir/suffixes"
+sed -i.bak 1d "$tmp_dir/suffixes"
+EOF
+chmod +x "$bin/openssl"
+out="$(cd "$tmp_dir/main" && bash "$prt" init 1 2>&1)"
+assert_eq "init succeeds despite a colliding run id" "0" "$?"
+assert_contains "init takes the next suffix" "RUN_DIR=$PRT_ROOT/pr1-bbbb" "$out"
+assert_eq "the colliding run is untouched" "keep" "$(cat "$PRT_ROOT/pr1-aaaa/sentinel")"
+rm "$bin/openssl"
 
 if [ "$failures" -ne 0 ]; then
   echo "${failures} assertion(s) failed"
