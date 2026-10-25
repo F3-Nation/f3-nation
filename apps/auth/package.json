@@ -19,6 +19,7 @@
   "dependencies": {
     "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/observability": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/ui": "workspace:*",
     "@auth/core": "catalog:",
