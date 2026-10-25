@@ -129,6 +129,6 @@ BEGIN
 		  AND c.conname = expected.conname
 	);
 	IF missing IS NOT NULL THEN
-		RAISE EXCEPTION 'codex schema is missing constraints required by migration 0027: %. Apply packages/db/scripts/codex-constraints.sql as the codex owner (app_codex) first.', missing;
+		RAISE EXCEPTION 'codex schema is missing constraints required by migration 0033: %. Apply packages/db/scripts/codex-constraints.sql as the codex owner (app_codex) first.', missing;
 	END IF;
 END $$;

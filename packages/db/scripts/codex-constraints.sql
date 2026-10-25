@@ -2,9 +2,9 @@
 --
 -- The `codex` schema is externally provisioned and owned by `app_codex`; the
 -- Drizzle migration role cannot ALTER its tables. This script installs the
--- primary keys and unique constraint that 0027's snapshot declares (and that
--- 0027's final block verifies) on an ALREADY-EXISTING codex schema. Fresh
--- databases get them from CREATE TABLE in 0027 and never need this file.
+-- primary keys and unique constraint that 0033's snapshot declares (and that
+-- 0033's final block verifies) on an ALREADY-EXISTING codex schema. Fresh
+-- databases get them from CREATE TABLE in 0033 and never need this file.
 --
 -- Run as the schema owner, e.g. through the Cloud SQL Auth Proxy:
 --   cloud-sql-proxy f3data:us-central1:f3data --port 5433
