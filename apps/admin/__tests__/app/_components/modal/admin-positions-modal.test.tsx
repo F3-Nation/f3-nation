@@ -164,6 +164,45 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
 });
 
+// React deduplicates this warning, so check it before other position loads.
+describe("Position ID field", () => {
+  it("keeps the disabled ID controlled while the position loads", async () => {
+    let resolvePosition!: (value: unknown) => void;
+    const positionLookup = new Promise((resolve) => {
+      resolvePosition = resolve;
+    });
+    mocks.byId.mockReturnValue(positionLookup);
+    const consoleError = vi.spyOn(console, "error");
+
+    try {
+      mount(7);
+      const id = screen.getByPlaceholderText<HTMLInputElement>("ID");
+      expect(id.disabled).toBe(true);
+      expect(id.value).toBe("");
+
+      await act(async () => {
+        resolvePosition({
+          position: {
+            id: 7,
+            name: "Weasel Shaker",
+            orgType: "region",
+            orgId: 42,
+            orgName: "Example Region",
+            isActive: true,
+          },
+        });
+        await positionLookup;
+      });
+      await waitFor(() => expect(id.value).toBe("7"));
+      expect(consoleError.mock.calls.flat().join("\n")).not.toMatch(
+        /uncontrolled input to be controlled|controlled input to be uncontrolled/,
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+});
+
 describe("Territory positions", () => {
   it("selects Territory and submits its organization and type", async () => {
     mount();
