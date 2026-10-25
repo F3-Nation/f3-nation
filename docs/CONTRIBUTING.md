@@ -36,7 +36,7 @@ It needs the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login
 
 AI tools are welcome for writing code, tests, and PR descriptions. You're responsible for understanding, testing, and reviewing anything AI-generated before you submit it. See [AI_DEVELOPMENT_GUIDE.md](AI_DEVELOPMENT_GUIDE.md) and [AI_GUARDRAILS.md](AI_GUARDRAILS.md) for the guardrails our own AI agents follow.
 
-GitHub Copilot's review rules live in [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) and path-scoped files under [`.github/instructions/`](../.github/instructions/). If a review bot keeps raising the same false positive, or reviewers keep catching the same mistake, propose a one-line rule in the matching file — a "do not flag" entry for the former, a check for the latter.
+Conventions for writing code live in each area's `AGENTS.md`; rules for reviewing it live in [`REVIEW.md`](../REVIEW.md), which every AI reviewer loads. If a review bot keeps raising the same false positive, add a "do not flag" entry to `REVIEW.md`. If reviewers keep catching the same mistake, add a one-line rule to the matching `AGENTS.md`.
 
 ## Choosing which Issues to work on
 

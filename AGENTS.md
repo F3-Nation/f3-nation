@@ -9,21 +9,25 @@ guidance, put it in `AGENTS.md` (or `docs/` for deep topics and link it) and
 keep those pointer files thin. Per-app specifics belong in that app's
 `AGENTS.md`.
 
-Code-review rules are kept separate from the conventions here:
-[`.github/copilot-instructions.md`](.github/copilot-instructions.md)
-(repo-wide) and [`.github/instructions/`](.github/instructions/) (one
-`*.instructions.md` per area, scoped by its `applyTo` glob). Review tools load
-them at review time: Copilot natively, CodeRabbit through
-[`.coderabbit.yaml`](.coderabbit.yaml) and Greptile through
-[`.greptile/files.json`](.greptile/files.json). Both of those repeat each
-file's `applyTo`, so change all three together. They hold
-checks and "do not flag" decisions for reviewing a diff, stricter than the
-writing conventions, and never a second copy of this file. Conventions for
-writing code stay here and in `docs/`.
+Writing rules are scoped by directory: each area's own `AGENTS.md`
+(`apps/AGENTS.md` for the Next.js apps, `packages/api`, `packages/db`,
+`apps/auth`, `apps/slackbot`, `apps/analytics`, `.github`, …) applies to the
+files beneath it.
 
-**When you review a diff** (any assistant or tool), apply
-`.github/copilot-instructions.md` and every `.github/instructions/*.instructions.md`
-whose `applyTo` matches a changed file, in addition to this file.
+Code-review rules live in [`REVIEW.md`](REVIEW.md): review priorities,
+critical checks, reviewer conduct and "do not flag" decisions. **When you
+review a diff** (any assistant or tool), apply `REVIEW.md` together with the
+`AGENTS.md` files above each changed file. Claude Code Review and Copilot
+read `REVIEW.md` natively (Qodo does once its `enable_review_md` setting is on); CodeRabbit and Greptile are pointed at it
+by [`.coderabbit.yaml`](.coderabbit.yaml) and
+[`.greptile/files.json`](.greptile/files.json). `pnpm lint` runs
+`scripts/check-review-links.mjs`, which fails if a `REVIEW.md` link breaks or
+a nested `AGENTS.md` is missing from the Greptile list.
+
+When writing agent guidance: short imperative bullets checkable from a diff,
+each rule in one place, nothing a linter or config already enforces, no
+version numbers or issue/PR references. Add a rule when reviewers catch the
+same mistake twice, and delete rules that no longer match the code.
 
 In its default instruction mode, Claude Code reads `AGENTS.md` files directly
 when no `CLAUDE.md` exists, so there is no `CLAUDE.md` (a `claude-md`-only
@@ -103,7 +107,7 @@ follow
 - Use Prettier (`@acme/prettier-config`) and ESLint (`@acme/eslint-config` base/next/react) as the source of truth.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
-- Comments and docs are durable: state current behavior and the non-obvious why. No issue/PR numbers or GitHub links, dates, names, or "temporary/new/until" history — that belongs in the PR. Full rules: [`.github/instructions/docs.instructions.md`](.github/instructions/docs.instructions.md).
+- Comments and docs are durable and true: no change history, issue/PR links or one-time instructions, and every factual claim (what a library throws, what calls this, a default or limit) matches the code. Rules: [`durable-docs`](.agents/skills/durable-docs/SKILL.md).
 - Existing `react-hooks/refs` and `react-hooks/set-state-in-effect` violations are baselined in each workspace's `eslint-suppressions.json`. Fix them when you touch the file; never add entries (no `--suppress-rule`/`--suppress-all`); `pnpm lint` fails when a baseline grows. A stale entry fails `pnpm lint`; `pnpm lint:fix` and the pre-commit hook prune it.
 
 ## Logging
@@ -140,11 +144,33 @@ follow
 - Share toolchain setup through the composite action [`.github/actions/setup`](.github/actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
 - The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. Every required check except `lint-title` belongs in each deploy workflow's `check-regexp` — `lint-title` is deliberately excluded from the deploy gate because it only runs on `pull_request` (`pr-title.yml` has no `push` trigger), so it never produces a check-run on a commit reached via tag push, and waiting on one that will never exist would hang the gate rather than deploy.
 
+## Scripts and operator CLIs
+
+- JS/TS operator CLIs may use `console.*` and `process.env` (see Logging). The runtime exceptions are `apps/slackbot/scripts/*.py` (Cloud Run Job code) and `apps/slackbot/app_startup.sh`.
+- Local-dev scripts in `scripts/` run on macOS bash 3.2 and WSL (no `declare -A`, `readlink -f`, `mapfile` or GNU-only flags); the `cloud-run-env*.sh` helpers require bash 4+.
+- Exit non-zero on any real failure; `|| true` only for best-effort teardown. Never print secrets, DB URLs or row values.
+- Install an `EXIT` trap before claiming a resource, use `mktemp` (never fixed `/tmp` paths), check a flag's value exists before `shift 2`, and resolve user-supplied relative paths against the caller's directory (`$INIT_CWD`).
+- Local-dev scripts are slot-aware: derive ports and container names from `F3_*_PORT` / `F3_CONTAINER_PREFIX` (`scripts/lib/local-ports.sh`); never hard-code `f3-postgres` or `:5433`.
+- Before loading an env file, clear inherited vars it's meant to supply: `dotenv` never overrides an exported var, and `source` leaves any var the file omits at its inherited value.
+- A new helper with branching logic ships a paired `*.test.sh` wired into `scripts/lint.sh` that fails (not skips) when a required tool is missing in CI. A hand-run, top-to-bottom operator script may skip tests if the PR says why.
+- Cloud Run env helpers (`apps/*/scripts/cloud-run-env*.sh`): pass unset optional vars to `--remove-env-vars` (`--update-env-vars` never removes keys), join values with gcloud's `^DELIM^` syntax and reject values containing the delimiter, validate the whole argument before pushing any secret or IAM binding, never rotate a secret another service shares, and require `F3_CHANNEL` / `NEXT_PUBLIC_CHANNEL` to equal `--env` before any cloud call.
+
+## Dependencies and environment variables
+
+- Every dependency version lives in the root `pnpm-workspace.yaml` catalog; `package.json` files use `catalog:` and internal deps `workspace:*`. Caret ranges are the default; keep lockstep families (`@better-auth/*`, `@orpc/*`) on one range. Each package declares every dependency and binary its own scripts use.
+- Never downgrade a dependency, runtime or tool to satisfy a resolver; upgrade the other side. Security overrides cover the advisory's full vulnerable range, with the advisory ids in the PR. `minimumReleaseAge: 0` is intentional (the `recent-package-watch` job covers new releases).
+- A Node or pnpm bump updates every pin together: `.nvmrc`, root `engines`/`packageManager` and every Dockerfile. Docker base images use `name:version@sha256:`. Major or runtime bumps list upstream behavior changes in the PR and are checked in `packages/ui` and in a built image that actually starts.
+- Cloud Run services read `PORT` at runtime (it overrides a Dockerfile's `ENV PORT`); don't hard-code a port.
+- Adding, renaming or removing an env var updates, in the same PR: the `env.ts` schema, `.env.example` (saying what unset does) and `.env.cloud-run.example`, the app's `scripts/cloud-run-env.sh`, the `ci.yml` mock env, `turbo.json` (build-affecting vars in `globalEnv`, test-only vars in that task's `env`, per-commit values like `GITHUB_SHA` only in `globalPassThroughEnv`), and any doc that lists it. Prefer existing config (`F3_CHANNEL`) over a new variable.
+- Required production vars fail fast with no silent `localhost` fallback; URL vars use `z.url()`. `apps/api` uses `@t3-oss/env-core` with every var in `runtimeEnvStrict`; the Next apps use `@t3-oss/env-nextjs`.
+- New packages use `AGPL-3.0-or-later`. Registering or removing an app or package: [`docs/RELEASE_PROCESS.md` § Adding a New App to Release Please](docs/RELEASE_PROCESS.md#adding-a-new-app-to-release-please).
+
 ## Testing Guidelines
 
 - Use Vitest for unit and integration tests; name test files `*.test.ts[x]` and place under or near source code or in `__tests__`.
 - Suites that mutate the database run against a reset test DB. `packages/api`'s Vitest global setup resets it on every run (see [`packages/api/AGENTS.md`](packages/api/AGENTS.md)); other suites need `pnpm reset-test-db` (or `pnpm -C packages/db reset-test-db`) first.
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
+- A test must fail if the line it guards is deleted: assert values and persisted state (not `200` or `toBeDefined()`), assert the specific error code (`rejects.toMatchObject({ code })`), and cover both sides of every guard, including a cross-org authorization case. Details and isolation rules: [`docs/testing.md` § Writing tests that can fail](docs/testing.md#writing-tests-that-can-fail).
 - **Coverage thresholds ratchet upward.** `vitest.config.ts` being rewritten by a
   test run is expected — commit it. Never set `thresholds.autoUpdate` to `false`
   or delete the key, and never lower a threshold to make a suite pass; add tests

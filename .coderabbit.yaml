@@ -1,49 +1,12 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-# CodeRabbit settings for this repo. `inheritance: true` merges this file over
-# the organization/repository UI settings instead of replacing them.
+# `inheritance: true` merges this file over the organization and repository UI
+# settings instead of replacing them.
 #
-# CodeRabbit already reads AGENTS.md, .github/copilot-instructions.md and
-# .github/instructions/*.instructions.md, but scopes each file to the
-# directory it lives in and ignores the Copilot `applyTo` frontmatter. The
-# entries below give each instructions file the same scope Copilot uses.
-# Keep each `applyTo` identical to the file's frontmatter.
+# CodeRabbit reads every AGENTS.md by default, scoped to its directory. It
+# doesn't read REVIEW.md by default; this pattern adds it, with the same
+# directory scoping.
 inheritance: true
-reviews:
-  # Repo decisions: docstrings aren't required, `.env` key order isn't
-  # enforced, and generated unit-test PRs add review noise.
-  pre_merge_checks:
-    docstrings:
-      mode: "off"
-  tools:
-    dotenvLint:
-      enabled: false
-  finishing_touches:
-    unit_tests:
-      enabled: false
 knowledge_base:
   code_guidelines:
     filePatterns:
-      - files: ".github/copilot-instructions.md"
-        applyTo: "**"
-      - files: ".github/instructions/api.instructions.md"
-        applyTo: "packages/api/**,apps/api/**,packages/validators/**"
-      - files: ".github/instructions/auth.instructions.md"
-        applyTo: "apps/auth/**,packages/auth/**,packages/sso/**,packages/sso-next/**,apps/*/proxy.ts,apps/*/src/proxy.ts,apps/*/src/lib/auth/**,packages/api/src/shared.ts"
-      - files: ".github/instructions/build-config.instructions.md"
-        applyTo: "**/package.json,pnpm-workspace.yaml,turbo.json,renovate.json,knip.config.ts,commitlint.config.mjs,release-please-config.json,.release-please-manifest.json,.nvmrc,**/Dockerfile,docker-compose*.yml,**/env.ts,**/.env*.example,turbo/generators/**"
-      - files: ".github/instructions/db.instructions.md"
-        applyTo: "packages/db/**,packages/db-python/**"
-      - files: ".github/instructions/docs.instructions.md"
-        applyTo: "**/*.md,docs/**,.agents/**,.coderabbit.yaml,.greptile/**"
-      - files: ".github/instructions/github-actions.instructions.md"
-        applyTo: ".github/workflows/**,.github/actions/**,.github/scripts/**,.github/preview/**"
-      - files: ".github/instructions/python.instructions.md"
-        applyTo: "**/*.py,**/pyproject.toml,uv.lock,**/.python-version"
-      - files: ".github/instructions/scripts.instructions.md"
-        applyTo: "**/*.sh,scripts/**,tooling/scripts/**,apps/*/scripts/**,.agents/skills/**/scripts/**"
-      - files: ".github/instructions/slackbot.instructions.md"
-        applyTo: "apps/slackbot/**"
-      - files: ".github/instructions/tests.instructions.md"
-        applyTo: "**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/__tests__/**,**/tests/**,apps/api/characterization/**,**/vitest.config.*,**/vitest.*.ts,tooling/vitest/**"
-      - files: ".github/instructions/web-apps.instructions.md"
-        applyTo: "apps/map/**,apps/admin/**,apps/me/**,apps/homepage/**,apps/auth/src/app/**,packages/ui/**"
+      - "**/REVIEW.md"

@@ -17,6 +17,47 @@ Use Vitest for unit and integration tests. Name test files `*.test.ts[x]` and
 place them next to the source or under `__tests__`. Reset databases before any
 suite that mutates data (`pnpm reset-test-db`).
 
+## Writing tests that can fail
+
+A test exists to fail when the behavior it pins breaks. If it would still pass
+with the fix or guard line deleted, it isn't doing its job.
+
+- Assert values, identity and persisted DB state, not `200`, `toBeDefined()` or
+  `toHaveBeenCalled()`. Assert call content (SQL, params, payload).
+- Assert the specific error code (`rejects.toMatchObject({ code })`), never a
+  bare `rejects.toThrow()`, and after a rejection assert the DB is unchanged.
+- Cover both sides of every guard: allowed and denied, source and destination
+  org, wrong and missing claim, each boundary value. Authorization tests include
+  a cross-org case (editor on org A, rejected on org B).
+- Anonymous paths really run signed out. In `packages/api` tests the default
+  session is an admin; use `mockAuthWithSession(null)`.
+- Don't build the expected value from the code under test, mock the unit under
+  test, or use stubs that ignore `where()` (they can't verify a filter).
+- Order and tiebreak tests use fixtures whose insertion order differs from the
+  expected order, across more than one page.
+- Test schema-facing code against the real Drizzle schema and DB, not a mocked
+  parser.
+
+### Isolation and flakiness
+
+- Never `if (!fixture) return`; throw or assert instead.
+- DB-backed tests isolate data with unique per-test prefixes and clean up in
+  `finally`, `afterEach` or `onTestFinished`, registering each fixture for
+  cleanup as soon as it's created.
+- Generate dates relative to now or from the DB clock, and freeze time for
+  midnight and timezone cases.
+- Use `vi.hoisted` for anything a `vi.mock` factory references. Restore stubs
+  (`vi.unstubAllGlobals`, `vi.unstubAllEnvs`, `vi.restoreAllMocks`) in
+  `afterEach`, and prefer `resetAllMocks` to `clearAllMocks` when
+  implementations are set.
+- Create a fresh `Response` per mocked `fetch` call; a body can be read once.
+- Wait on a deterministic signal for fire-and-forget work, never a fixed sleep,
+  and leave wall-clock budgets room for a loaded CI runner.
+- Env-schema tests run in the `node` environment (`// @vitest-environment node`
+  in jsdom apps); under jsdom they pass vacuously.
+- Use the shared `coverageInclude` / `coverageExclude` from
+  `@acme/vitest-config`, not per-file allowlists.
+
 ## Coverage measurement (Vitest 4)
 
 Vitest 4's v8 coverage provider removed the `coverage.all` option and, by

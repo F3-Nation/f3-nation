@@ -18,14 +18,15 @@ Different developers use different assistants. To keep one source of truth, this
 repo uses the **`AGENTS.md` standard** as canonical and adds thin pointer files
 so each tool resolves to the same content:
 
-| Tool                     | Entry point it reads                                                                       | What it contains                              |
-| ------------------------ | ------------------------------------------------------------------------------------------ | --------------------------------------------- |
-| **All / standard**       | [`AGENTS.md`](../AGENTS.md) (root + per-app)                                               | Canonical conventions                         |
-| **Claude** (Claude Code) | [`AGENTS.md`](../AGENTS.md) (root + per-app)                                               | Read directly; no `CLAUDE.md`                 |
-| **GitHub Copilot**       | `AGENTS.md` + `.github/copilot-instructions.md` + `.github/instructions/*.instructions.md` | Conventions (`AGENTS.md`) + code-review rules |
-| **CodeRabbit**           | `AGENTS.md` + the same review files, scoped by `.coderabbit.yaml`                          | Conventions + code-review rules               |
-| **Greptile**             | `AGENTS.md` + the same review files, scoped by `.greptile/files.json`                      | Conventions + code-review rules               |
-| **Cursor**               | `.cursor/rules/*.mdc`                                                                      | Pointer → `AGENTS.md` + this guide            |
+| Tool                         | Entry point it reads                                                    | What it contains                    |
+| ---------------------------- | ----------------------------------------------------------------------- | ----------------------------------- |
+| **All / standard**           | [`AGENTS.md`](../AGENTS.md) (root + per-app)                            | Canonical conventions               |
+| **Claude** (Claude Code)     | [`AGENTS.md`](../AGENTS.md) (root + per-app)                            | Read directly; no `CLAUDE.md`       |
+| **Claude Code Review, Qodo** | `REVIEW.md` (Qodo: with `enable_review_md`)                             | Code-review rules                   |
+| **GitHub Copilot**           | `.github/copilot-instructions.md`                                       | Pointer → `AGENTS.md` + `REVIEW.md` |
+| **CodeRabbit**               | `AGENTS.md` (root + per-area) + `REVIEW.md` via `.coderabbit.yaml`      | Conventions + code-review rules     |
+| **Greptile**                 | `AGENTS.md` + per-area files and `REVIEW.md` via `.greptile/files.json` | Conventions + code-review rules     |
+| **Cursor**                   | `.cursor/rules/*.mdc`                                                   | Pointer → `AGENTS.md` + this guide  |
 
 **Rule of thumb:** put durable guidance in `AGENTS.md` (or, for deep topics, in
 `docs/` and link it). Keep the tool-specific pointer files thin so they never

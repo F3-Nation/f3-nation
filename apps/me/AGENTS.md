@@ -110,3 +110,6 @@ Tests use Vitest and are in `__tests__/`. Run with `pnpm test`.
 ### Updating shadcn/ui components
 
 Run `npx shadcn@latest add <component>` from `apps/me/`.
+
+Auth proxy (`proxy.ts`) and session changes follow
+[`apps/auth/AGENTS.md` § Security rules](../auth/AGENTS.md#security-rules).
