@@ -44,6 +44,8 @@ ENV_FILE_VARS=(
   F3_CHANNEL
   NEXT_PUBLIC_GA_MEASUREMENT_ID
   NEXT_PUBLIC_SITE_URL
+  APPS_DIRECTORY_ENABLED
+  APPS_DIRECTORY_URL
 )
 
 # Plain env vars (hardcoded, same across environments)
@@ -92,6 +94,11 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+# APPS_DIRECTORY_ENABLED and APPS_DIRECTORY_URL are removed from the service
+# when the file leaves them out, so drop any value the calling shell exported
+# first: otherwise that value, not the file's, would be applied.
+unset APPS_DIRECTORY_ENABLED APPS_DIRECTORY_URL
+
 # Safely parse the env file without sourcing to prevent execution of arbitrary shell code
 while IFS= read -r line || [[ -n "$line" ]]; do
   # Skip blank lines and comments
@@ -108,6 +115,17 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   fi
 done < "$ENV_FILE"
 unset _env_key _env_val
+
+# Plain env vars go to gcloud joined with '|' (see below). Reject a value that
+# contains it now, before any secret or IAM change, so a bad env file stops
+# the run with nothing half-applied.
+for var in "${ENV_FILE_VARS[@]}" "${!PLAIN_VARS[@]}"; do
+  value="${!var:-${PLAIN_VARS[$var]:-}}"
+  if [[ "$value" == *"|"* ]]; then
+    echo "Error: $var contains '|', the env-var delimiter. Remove it from the value."
+    exit 1
+  fi
+done
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
@@ -212,6 +230,7 @@ echo ""
 echo "Updating Cloud Run service env vars and secret references..."
 
 UPDATE_ARGS=()
+REMOVE_ARGS=()
 
 # Plain env vars (hardcoded)
 for var in "${!PLAIN_VARS[@]}"; do
@@ -221,8 +240,25 @@ done
 # Per-environment env vars (from env file, not secrets)
 for var in "${ENV_FILE_VARS[@]}"; do
   value="${!var:-}"
-  [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
+  if [[ -n "$value" ]]; then
+    UPDATE_ARGS+=("${var}=${value}")
+  elif [[ "$var" == APPS_DIRECTORY_* ]]; then
+    # Optional with a default in code. Cloud Run keeps a variable that is
+    # left out of --update-env-vars, so remove it explicitly or deleting it
+    # from the env file would leave an old value in place.
+    REMOVE_ARGS+=("$var")
+  fi
 done
+
+REMOVE_FLAGS=()
+if [[ ${#REMOVE_ARGS[@]} -gt 0 ]]; then
+  REMOVE_FLAGS=(--remove-env-vars "$(IFS=,; echo "${REMOVE_ARGS[*]}")")
+fi
+
+# Join with gcloud's "^|^" custom delimiter: a plain comma join would split a
+# value that contains a comma (APPS_DIRECTORY_URL can carry a query string).
+# Values were checked for '|' before any secret was pushed.
+ENV_VARS_ARG="^|^$(IFS='|'; echo "${UPDATE_ARGS[*]}")"
 
 # Secret-backed env vars
 SECRET_ARGS=()
@@ -234,7 +270,8 @@ done
 gcloud run services update "$SERVICE_NAME" \
   --project "$PROJECT" \
   --region "$REGION" \
-  --update-env-vars "$(IFS=,; echo "${UPDATE_ARGS[*]}")" \
+  --update-env-vars "$ENV_VARS_ARG" \
+  ${REMOVE_FLAGS[@]+"${REMOVE_FLAGS[@]}"} \
   --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
   --quiet
 

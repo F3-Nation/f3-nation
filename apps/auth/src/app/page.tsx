@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 
+import { appsDirectoryUrl } from "~/lib/apps-directory";
 import { getCurrentSession } from "~/lib/current-session";
 import SignOutButton from "~/app/components/SignOutButton";
 import { env } from "~/env";
@@ -25,6 +26,11 @@ export default async function HomePage({
   if (!session?.user) {
     redirect("/login");
   }
+
+  const appsDirectory = appsDirectoryUrl(
+    env.APPS_DIRECTORY_ENABLED,
+    env.APPS_DIRECTORY_URL,
+  );
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">
@@ -53,17 +59,19 @@ export default async function HomePage({
             You&rsquo;re signed in. You should have been sent back to where you
             came from — if not, you&rsquo;re logged in now.
           </p>
-          <p className="text-base text-muted-foreground">
-            Want to explore the F3 Nation ecosystem?{" "}
-            <a
-              href="https://apps.f3nation.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
-            >
-              apps.f3nation.com
-            </a>
-          </p>
+          {appsDirectory && (
+            <p className="text-base text-muted-foreground">
+              Want to explore the F3 Nation ecosystem?{" "}
+              <a
+                href={appsDirectory.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+              >
+                {appsDirectory.host}
+              </a>
+            </p>
+          )}
         </div>
         <SignOutButton useBetterAuth={env.AUTH_USE_BETTER_AUTH} />
       </div>
