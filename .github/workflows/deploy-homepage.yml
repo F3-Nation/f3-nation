@@ -82,6 +82,8 @@ jobs:
       - name: Build static export
         env:
           NEXT_PUBLIC_ORG_MAP_API_KEY: ${{ vars.NEXT_PUBLIC_ORG_MAP_API_KEY }}
+          # Inlined into the static bundle for browser error reporting (#1223).
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
         run: pnpm build --filter f3-homepage
 
       - name: Configure GitHub Pages
