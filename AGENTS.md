@@ -25,8 +25,9 @@ writing code stay here and in `docs/`.
 `.github/copilot-instructions.md` and every `.github/instructions/*.instructions.md`
 whose `applyTo` matches a changed file, in addition to this file.
 
-Current Claude Code reads `AGENTS.md` files directly, so there is no
-`CLAUDE.md`. Don't add one: a `CLAUDE.md` or `CLAUDE.local.md` in the
+In its default instruction mode, Claude Code reads `AGENTS.md` files directly
+when no `CLAUDE.md` exists, so there is no `CLAUDE.md` (a `claude-md`-only
+mode would skip this file). Don't add one: a `CLAUDE.md` or `CLAUDE.local.md` in the
 working directory or above it makes Claude Code skip `AGENTS.md` entirely.
 
 Deeper guidance lives in [`docs/`](docs/) — scan the directory and read a doc's

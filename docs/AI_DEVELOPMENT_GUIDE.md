@@ -245,11 +245,13 @@ violation is a `BAD_REQUEST`, not a 500.
 - **OAuth/OIDC:** enforce PKCE and reject `plain`; validate `state`/`nonce`;
   allow-list redirect URIs (no open redirect); rate-limit `revoke`/`userinfo`.
 - **Refresh-token rotation:** refresh tokens are single-use and the server
-  has no grace window. Concurrent requests at expiry race to redeem the same
-  token, and all but one get `invalid_grant`. A proxy treats that loss on a
-  non-navigation request as expected: it returns 401 without clearing cookies,
-  so the winning rotation's cookies survive. See
-  [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) and the `me`/`admin` proxies.
+  has no grace window. A reused rotated token revokes every refresh token for
+  that user and client, including the one the winning request just received.
+  So concurrent refreshes with the same token force a re-login: clients must
+  serialize refresh calls (single-flight). Not clearing cookies on a losing
+  non-navigation request (the `me`/`admin` proxies) avoids clobbering the
+  winner's cookies but does not prevent the revocation. See
+  [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md).
 - **MFA / email codes in local dev** are captured by Mailpit — see
   [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md). Don't disable verification to
   make flows pass; drive them properly.

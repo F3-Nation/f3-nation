@@ -24,9 +24,9 @@ assume the client is hostile.
 - A JWKS or auth-server outage never authenticates a request, but it is
   **non-destructive**: no forced logout and no cookie clearing on a transient
   error.
-- The issuer and JWKS location must match what relying parties compute (the
-  bare auth origin and `/.well-known/jwks.json`). Pin that with a test that
-  verifies a real token.
+- Each trusted issuer's `iss` and JWKS location must match what relying
+  parties compute (that issuer's bare origin and `/.well-known/jwks.json`).
+  Pin that with a test that verifies a real token.
 - Classify `jose` errors by `err.code`, not `name` or message (minification
   breaks names).
 
@@ -39,12 +39,14 @@ assume the client is hostile.
   (`UPDATE … WHERE <used>_at IS NULL RETURNING`, or `DELETE … RETURNING`) and
   reject an empty result.
 - Reusing a rotated refresh token revokes every refresh token for that user
-  and client. There is no grace window. Issued access tokens stay valid until
-  they expire.
+  and client, including the replacement just issued. There is no grace
+  window. Issued access tokens stay valid until they expire. Clients must
+  serialize refresh calls for a token: concurrent refreshes force a re-login.
 - Attempt budgets are shared by every entry point that accepts a code.
 - Compare secrets in constant time (`constantTimeEqual`, or `timingSafeEqual`
   behind a length check).
-- Store OAuth client secrets and codes hashed; show a generated secret once.
+- Store OAuth client secrets and email OTP codes hashed; show a generated
+  secret once.
 - Normalize emails identically at store and lookup (`trim().toLowerCase()`).
 
 ## Requests
@@ -57,7 +59,9 @@ assume the client is hostile.
   - `NextResponse.redirect` needs an absolute URL.
 - Rate-limit keys use the proxy-appended (rightmost) `X-Forwarded-For` hop,
   never the leftmost, which the caller controls. In-memory limiters are
-  per-instance.
+  per-instance. Better Auth's built-in limiter doesn't use our helper: it
+  needs `advanced.ipAddress` (`trustedProxies` or `ipAddressHeaders`) set to
+  key on the real client IP.
 - Unauthenticated endpoints that accept credentials, codes or identifiers:
   - Rate-limit them.
   - Return generic errors that never echo `err.message`.
@@ -83,6 +87,10 @@ assume the client is hostile.
   with a test.
 - Server-side checks enforce anything the UI gates. A disabled button is not
   a control.
+- Better Auth (`apps/auth/src/lib/better-auth.ts`): any new endpoint that
+  checks an emailed code joins `OTP_VERIFYING_PATHS`, so it spends the shared
+  attempt budget. Plugin order (`emailOTP`, `jwt`, `oauthProvider`, then the
+  claim-shape plugin) is load-bearing; don't reorder it.
 - Dev-only auth providers are gated by a server-side runtime allowlist
   (`F3_CHANNEL`) that fails closed, never by a `NEXT_PUBLIC_*` build-time
   value.

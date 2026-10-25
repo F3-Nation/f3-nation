@@ -122,8 +122,8 @@ generated yours:
    keeping your `schema.ts` and `relations.ts` edits:
    `git restore --source=<remote>/main --staged --worktree -- 'packages/db/drizzle/*.sql' packages/db/drizzle/meta`.
    This also deletes your branch's own migration and snapshot if they are
-   committed. If they aren't, delete them too: preview with
-   `git clean -n -- packages/db/drizzle`, then `git clean -f -- packages/db/drizzle`.
+   committed. If they aren't, delete just those two files by name:
+   `git clean -f -- packages/db/drizzle/<NNNN>_<name>.sql packages/db/drizzle/meta/<NNNN>_snapshot.json`.
 2. `pnpm -F db generate --name=<…>` (or `generate:empty` and paste the SQL).
    drizzle-kit takes the next index after the last journal entry and sets
    `when` to now.
