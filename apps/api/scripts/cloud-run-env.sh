@@ -51,7 +51,6 @@ ENV_FILE_VARS=(
   EMAIL_FROM
   NEXT_PUBLIC_ADMIN_URL
   NEXT_PUBLIC_API_URL
-  NEXT_PUBLIC_AUTH_URL
   NEXT_PUBLIC_CHANNEL
   NEXT_PUBLIC_MAP_URL
 )
@@ -105,8 +104,7 @@ set +a
 
 if [[ -z "${AUTH_TRUSTED_ISSUERS:-}" ]]; then
   echo "Error: AUTH_TRUSTED_ISSUERS is empty in $ENV_FILE."
-  echo "Set it to the auth server origin(s) whose tokens the API accepts,"
-  echo "e.g. the same value as NEXT_PUBLIC_AUTH_URL."
+  echo "Set it to the auth server origin(s) whose tokens the API accepts."
   exit 1
 fi
 

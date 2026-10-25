@@ -47,12 +47,10 @@ for every session hop:
    `shared.ts`), then loads roles
    from the DB. Headers don't care about cookie domains. Previews set
    `AUTH_TRUSTED_ISSUERS` to the auth preview's URL. Outside previews it can
-   list more than one issuer (e.g. auth2 and auth3 during the Better Auth
-   cutover); each token is checked against the JWKS of the
+   list more than one issuer; each token is checked against the JWKS of the
    allowlisted issuer its `iss` names (`packages/api/src/trusted-issuers.ts`).
-   Deploy #1320 to auth3 before adding auth3 to it: until then auth3 signs `iss` as
-   `<origin>/api/auth2`, which never matches a bare-origin entry, so every
-   auth3 token the api sees is a 401.
+   Entries are bare origins, so an auth server must sign `iss` as its bare
+   origin for its tokens to verify.
 
 4. **The admin app (not yet in previews) also needs no shared cookie.** It
    runs an OAuth authorization-code flow against `AUTH_PROVIDER_URL`, stores

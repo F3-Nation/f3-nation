@@ -50,8 +50,6 @@ spec:
             # JWTs against ${AUTH_URL}/.well-known/jwks.json (issuer check
             # included), which is how E2E carries a signed-in identity to the
             # api across run.app hosts. See docs/PREVIEW_AUTH.md.
-            - name: NEXT_PUBLIC_AUTH_URL
-              value: ${AUTH_URL}
             - name: AUTH_TRUSTED_ISSUERS
               value: ${AUTH_URL}
             - name: NEXT_PUBLIC_CHANNEL
