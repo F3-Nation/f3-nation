@@ -123,7 +123,7 @@ export function SearchBox({
     <div ref={containerRef} className="relative">
       <label
         htmlFor="org-search"
-        className="mb-1 block text-xs tracking-widest text-muted-foreground uppercase"
+        className="mb-1 block text-xs tracking-widest text-muted-foreground uppercase max-md:sr-only"
       >
         Search
       </label>
@@ -137,7 +137,7 @@ export function SearchBox({
         placeholder={placeholder}
         disabled={disabled}
         autoComplete="off"
-        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-muted disabled:text-muted-foreground"
+        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-muted disabled:text-muted-foreground md:text-sm"
       />
       {open && (results.length > 0 || aoResults.length > 0 || aoLoading) && (
         <div

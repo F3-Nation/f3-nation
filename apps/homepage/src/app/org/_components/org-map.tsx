@@ -52,6 +52,10 @@ import { SearchBox } from "./search-box";
 // Screen-pixel radius of the fan used to separate co-located location pins.
 const PIN_FAN_RADIUS_PX = 18;
 
+// Matches Tailwind's `md` breakpoint, where the layout switches from the phone
+// overlay (floating search + bottom sheet) to the side-by-side sidebar.
+const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
+
 type InfoState =
   | { status: "idle" }
   | { status: "loading"; org: Org }
@@ -176,6 +180,10 @@ function getFocusBounds(
 export default function OrgMap() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  // Phone-only overlays that cover the map; fits are padded to clear them.
+  const searchCardRef = useRef<HTMLDivElement>(null);
+  const infoSheetRef = useRef<HTMLElement>(null);
+  const breadcrumbRef = useRef<HTMLElement>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
 
   // Stable data refs — don't trigger re-renders
@@ -221,6 +229,10 @@ export default function OrgMap() {
     orgId: number;
     locationId: number;
   } | null>(null);
+
+  // Phone bottom sheet: collapsed shows a peek of the info panel so the map
+  // stays usable; expanded shows the full panel. Ignored on desktop.
+  const [sheetExpanded, setSheetExpanded] = useState(false);
 
   // Layers actually present in the data (depth-agnostic)
   const [presentLayers, setPresentLayers] = useState<OrgType[]>(LAYER_TYPES);
@@ -366,11 +378,41 @@ export default function OrgMap() {
     // Pin layer sits on top of polygons
     pinLayerGroupRef.current = L.layerGroup().addTo(map);
 
+    // Tapping the map hands the screen back to it. Pin markers don't bubble
+    // clicks to the map, so opening a pin's details doesn't collapse the sheet.
+    map.on("click", () => setSheetExpanded(false));
+
+    // Leaflet measures its container once; re-measure when the layout settles
+    // or the viewport changes (phone rotation, mobile URL bar) so tiles fill it.
+    const resizeObserver = new ResizeObserver(() => map.invalidateSize());
+    resizeObserver.observe(mapContainerRef.current);
+
     return () => {
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
       layerGroupRef.current = null;
     };
+  }, []);
+
+  // On phones the search card and info sheet float over the map, so pad fits
+  // to land the focused orgs in the strip left visible between them.
+  const getFitOptions = useCallback((): L.FitBoundsOptions => {
+    const container = mapContainerRef.current;
+    if (!container || window.matchMedia(DESKTOP_MEDIA_QUERY).matches) {
+      return { padding: [24, 24] };
+    }
+    const mapRect = container.getBoundingClientRect();
+    const searchBottom =
+      searchCardRef.current?.getBoundingClientRect().bottom ?? mapRect.top;
+    const sheetTop =
+      infoSheetRef.current?.getBoundingClientRect().top ?? mapRect.bottom;
+    const top = Math.max(0, searchBottom - mapRect.top) + 12;
+    let bottom = Math.max(0, mapRect.bottom - sheetTop) + 12;
+    // An expanded sheet covers most of the map; don't squeeze the fit into
+    // the sliver above it.
+    if (mapRect.height - top - bottom < mapRect.height * 0.35) bottom = 12;
+    return { paddingTopLeft: [12, top], paddingBottomRight: [12, bottom] };
   }, []);
 
   const loadLocationInfo = useCallback(async (locationId: number) => {
@@ -438,11 +480,13 @@ export default function OrgMap() {
         byCoord.set(key, group);
       }
 
+      // The visible dot is 14px; the transparent 32px box around it gives a
+      // finger-sized tap target.
       const icon = L.divIcon({
         className: "",
-        html: `<div style="width:14px;height:14px;border-radius:50%;background:#B70D06;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)"></div>`,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
+        html: `<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center"><div style="width:14px;height:14px;border-radius:50%;background:#B70D06;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)"></div></div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
       });
 
       const map = mapRef.current;
@@ -467,6 +511,8 @@ export default function OrgMap() {
           });
           marker.on("click", () => {
             void loadLocationInfo(loc.locationId);
+            // Phones have no hover: a tapped pin's details are the point.
+            setSheetExpanded(true);
           });
 
           marker.addTo(pinLayer);
@@ -503,6 +549,8 @@ export default function OrgMap() {
       );
       setCurrentLevel(level);
       setSelectedPath(path);
+      // Show the newly focused orgs rather than leaving the sheet over them.
+      setSheetExpanded(false);
 
       // Always record the selected org itself, not the last breadcrumb entry:
       // for a view-only leaf (region) the breadcrumb excludes the org, so
@@ -516,12 +564,12 @@ export default function OrgMap() {
         descendantCacheRef.current,
       );
       if (bounds && mapRef.current) {
-        mapRef.current.fitBounds(bounds, { padding: [24, 24] });
+        mapRef.current.fitBounds(bounds, getFitOptions());
       }
 
       void loadOrgInfo(org);
     },
-    [loadOrgInfo],
+    [loadOrgInfo, getFitOptions],
   );
 
   const navigateToAo = useCallback(
@@ -660,7 +708,10 @@ export default function OrgMap() {
 
       polygon.on("click", () => {
         if (org.orgType === LAYER_TYPES[0]) {
-          // Leaf layer: show location pins for this org
+          // Leaf layer: show location pins for this org. Load its info too —
+          // on touch there is no hover to have loaded it already.
+          writeUrlState(currentLevel, org.id);
+          void loadOrgInfo(org);
           showPinsForOrg(org);
           return;
         }
@@ -671,7 +722,7 @@ export default function OrgMap() {
     }
 
     if (allLatLngs.length > 0) {
-      map.fitBounds(L.latLngBounds(allLatLngs), { padding: [24, 24] });
+      map.fitBounds(L.latLngBounds(allLatLngs), getFitOptions());
     }
 
     return () => {
@@ -687,7 +738,14 @@ export default function OrgMap() {
     loadOrgInfo,
     navigateToOrg,
     showPinsForOrg,
+    getFitOptions,
   ]);
+
+  // Keep the current (last) crumb in view when the phone breadcrumb scrolls.
+  useEffect(() => {
+    const el = breadcrumbRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [selectedPath]);
 
   // After an AO search selection, once the region view has (re)rendered, show
   // its pins and open the selected AO's location. Declared after the polygon
@@ -857,12 +915,14 @@ export default function OrgMap() {
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-screen flex-col bg-[#f6f3ea]">
+    <div className="flex h-dvh flex-col bg-[#f6f3ea]">
       {/* Header */}
-      <header className="flex flex-wrap items-center justify-between gap-4 bg-[#0b0d12] px-6 py-4 text-[#f6f3ea] md:flex-nowrap md:gap-8">
+      <header className="flex flex-col gap-2 bg-[#0b0d12] px-3 py-2 text-[#f6f3ea] md:flex-row md:items-center md:justify-between md:gap-8 md:px-6 md:py-4">
         <div>
-          <div className="text-lg font-bold">F3 Geographic Directory</div>
-          <div className="text-xs text-[rgba(215,38,56,0.85)]">
+          <h1 className="text-base font-bold md:text-lg">
+            F3 Geographic Directory
+          </h1>
+          <div className="hidden text-xs text-[rgba(215,38,56,0.85)] md:block">
             {presentLayers
               .slice()
               .reverse()
@@ -872,8 +932,12 @@ export default function OrgMap() {
           </div>
         </div>
 
-        {/* Layer buttons — generated from data, depth-agnostic */}
-        <nav className="flex flex-wrap gap-2" aria-label="Map layers">
+        {/* Layer buttons — generated from data, depth-agnostic. One swipeable
+            row on phones instead of wrapping onto extra lines. */}
+        <nav
+          className="-mx-3 flex gap-2 overflow-x-auto px-3 md:mx-0 md:flex-wrap md:overflow-visible md:px-0"
+          aria-label="Map layers"
+        >
           {presentLayers
             .slice()
             .reverse()
@@ -882,7 +946,7 @@ export default function OrgMap() {
                 key={layer}
                 type="button"
                 onClick={() => navigateViaLevelButton(layer)}
-                className={`rounded-sm border px-4 py-2 text-xs font-medium tracking-wide uppercase transition-all ${
+                className={`shrink-0 rounded-sm border px-3 py-1.5 text-xs font-medium tracking-wide uppercase transition-all md:px-4 md:py-2 ${
                   currentLevel === layer
                     ? "border-[#B70D06] bg-[#B70D06] text-[#1a1a1a]"
                     : "border-[#2c3648] bg-[#151a24] text-[#f8f4ea] hover:border-[#3b4a62] hover:bg-[#233046]"
@@ -893,9 +957,10 @@ export default function OrgMap() {
             ))}
         </nav>
 
-        {/* Breadcrumb */}
+        {/* Breadcrumb — a single scrolling line on phones */}
         <nav
-          className="flex-1 text-sm md:flex-none"
+          ref={breadcrumbRef}
+          className="overflow-x-auto text-sm whitespace-nowrap md:overflow-visible md:whitespace-normal"
           aria-label="Location breadcrumb"
         >
           {crumbs.map((crumb, idx) => {
@@ -921,10 +986,12 @@ export default function OrgMap() {
         </nav>
       </header>
 
-      {/* Main content */}
-      <main className="grid flex-1 grid-cols-1 gap-4 overflow-hidden p-4 md:grid-cols-[1fr_320px]">
-        {/* Map */}
-        <div className="relative min-h-[60vh] overflow-hidden rounded-2xl shadow-xl md:min-h-0">
+      {/* Main content. Phones: full-bleed map with the search card floating on
+          top and the info panel as a bottom sheet. Desktop: map + sidebar. */}
+      <main className="relative min-h-0 flex-1 overflow-hidden md:grid md:grid-cols-[1fr_320px] md:gap-4 md:p-4">
+        {/* Map. `isolate` keeps Leaflet's high pane/control z-indexes from
+            stacking above the phone overlays. */}
+        <div className="absolute inset-0 isolate overflow-hidden md:relative md:inset-auto md:rounded-2xl md:shadow-xl">
           {/* Loading overlay */}
           {!isLoaded && !loadError && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[rgba(11,13,18,0.4)] text-[#f8f4ea]">
@@ -937,12 +1004,21 @@ export default function OrgMap() {
               <span className="text-sm">Failed to load: {loadError}</span>
             </div>
           )}
-          <div ref={mapContainerRef} className="h-full w-full" />
+          {/* Phones pinch to zoom, and the +/- control would sit under the
+              floating search card. */}
+          <div
+            ref={mapContainerRef}
+            className="h-full w-full max-md:[&_.leaflet-control-zoom]:hidden"
+          />
         </div>
 
-        {/* Sidebar */}
-        <aside className="flex flex-col gap-3 overflow-y-auto">
-          <div className="rounded-2xl bg-white p-4 shadow-md">
+        {/* Sidebar. `contents` on phones lets its two cards position against
+            <main> as overlays. */}
+        <aside className="contents md:flex md:flex-col md:gap-3 md:overflow-y-auto">
+          <div
+            ref={searchCardRef}
+            className="absolute inset-x-2 top-2 z-10 rounded-2xl bg-white p-2 shadow-md md:static md:p-4"
+          >
             <SearchBox
               presentLayers={presentLayers}
               getResults={getSearchResults}
@@ -951,40 +1027,61 @@ export default function OrgMap() {
               disabled={!isLoaded}
             />
           </div>
-          <div className="flex flex-1 flex-col gap-3 rounded-2xl bg-white p-5 shadow-md">
-            {infoState.status === "loading-location" ||
-            infoState.status === "loaded-location" ||
-            infoState.status === "error-location" ? (
-              <LocationInfoPanel
-                status={
-                  infoState.status === "loading-location"
-                    ? "loading"
-                    : infoState.status === "error-location"
-                      ? "error"
-                      : "loaded"
-                }
-                locationId={infoState.locationId}
-                detail={
-                  infoState.status === "loaded-location"
-                    ? infoState.detail
-                    : undefined
-                }
-              />
-            ) : (
-              <OrgInfoPanel
-                status={infoState.status}
-                org={infoOrg}
-                detail={
-                  infoState.status === "loaded" ? infoState.detail : undefined
-                }
-                descendantOrgs={infoDescendants}
-                aggregatedMetrics={infoMetrics}
-                footprintSqMi={infoFootprint}
-                nearestAdminOrg={nearestAdminOrg}
-                adminLookupInconclusive={adminLookupInconclusive}
-              />
-            )}
-          </div>
+          <section
+            ref={infoSheetRef}
+            aria-label="Details"
+            className="absolute inset-x-0 bottom-0 z-10 flex max-h-[70%] flex-col rounded-t-2xl bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.15)] md:static md:max-h-none md:flex-1 md:rounded-2xl md:shadow-md"
+          >
+            <button
+              type="button"
+              onClick={() => setSheetExpanded((v) => !v)}
+              aria-expanded={sheetExpanded}
+              aria-controls="org-info-content"
+              aria-label={sheetExpanded ? "Collapse details" : "Expand details"}
+              className="flex w-full shrink-0 justify-center pt-2 pb-1 md:hidden"
+            >
+              <span className="h-1.5 w-10 rounded-full bg-muted-foreground/40" />
+            </button>
+            <div
+              id="org-info-content"
+              className={`flex min-h-0 flex-col gap-3 overflow-y-auto px-5 pb-5 md:p-5 ${
+                sheetExpanded ? "" : "max-md:max-h-32"
+              }`}
+            >
+              {infoState.status === "loading-location" ||
+              infoState.status === "loaded-location" ||
+              infoState.status === "error-location" ? (
+                <LocationInfoPanel
+                  status={
+                    infoState.status === "loading-location"
+                      ? "loading"
+                      : infoState.status === "error-location"
+                        ? "error"
+                        : "loaded"
+                  }
+                  locationId={infoState.locationId}
+                  detail={
+                    infoState.status === "loaded-location"
+                      ? infoState.detail
+                      : undefined
+                  }
+                />
+              ) : (
+                <OrgInfoPanel
+                  status={infoState.status}
+                  org={infoOrg}
+                  detail={
+                    infoState.status === "loaded" ? infoState.detail : undefined
+                  }
+                  descendantOrgs={infoDescendants}
+                  aggregatedMetrics={infoMetrics}
+                  footprintSqMi={infoFootprint}
+                  nearestAdminOrg={nearestAdminOrg}
+                  adminLookupInconclusive={adminLookupInconclusive}
+                />
+              )}
+            </div>
+          </section>
         </aside>
       </main>
     </div>
