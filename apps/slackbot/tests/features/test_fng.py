@@ -3,6 +3,7 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 from slack_sdk.errors import SlackApiError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -83,6 +84,25 @@ def test_brought_by_is_whoever_was_picked(monkeypatch):
     fng.handle_fng_form(submission(brought_by=42), MagicMock(), MagicMock(), {}, region_record())
 
     assert db.create_record.call_args.args[0].meta == {"battle_buddy": 7, "brought_by": 42}
+
+
+@pytest.mark.parametrize("selected", [None, {"value": ""}, {"value": "abc"}])
+def test_unusable_brought_by_is_ignored(monkeypatch, selected):
+    db, _, _ = patch_db(monkeypatch)
+    sub = submission()
+    sub["view"]["state"]["values"][fng.USER_FORM_BROUGHT_BY] = {fng.USER_FORM_BROUGHT_BY: {"selected_option": selected}}
+
+    fng.handle_fng_form(sub, MagicMock(), MagicMock(), {}, region_record())
+
+    assert db.create_record.call_args.args[0].meta == {"battle_buddy": 7}
+
+
+def test_pick_is_kept_when_buddy_has_no_user_id(monkeypatch):
+    db, _, _ = patch_db(monkeypatch, buddy_user_id=None)
+
+    fng.handle_fng_form(submission(brought_by=42), MagicMock(), MagicMock(), {}, region_record())
+
+    assert db.create_record.call_args.args[0].meta == {"brought_by": 42}
 
 
 def test_existing_user_is_left_alone(monkeypatch):
@@ -206,3 +226,5 @@ def test_form_asks_only_for_the_fngs_details():
         fng.FNG_PHONE,
         fng.USER_FORM_BROUGHT_BY,
     ]
+    picker = next(b for b in view["view"]["blocks"] if b.get("block_id") == fng.USER_FORM_BROUGHT_BY)
+    assert picker["optional"] is True
