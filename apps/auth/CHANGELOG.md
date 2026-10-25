@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.6.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.5.0...auth@2.6.0) (2026-10-23)
+
+
+### Features
+
+* **auth,sso:** accept offline_access on legacy authorize and authenticate revoke ([#1327](https://github.com/F3-Nation/f3-nation/issues/1327)) ([8f1ac19](https://github.com/F3-Nation/f3-nation/commit/8f1ac19a5df001bf94bec6a87a70f1b0784929c8))
+* **auth:** ask for home region on first login and stamp when it was confirmed ([#1267](https://github.com/F3-Nation/f3-nation/issues/1267)) ([f26bb92](https://github.com/F3-Nation/f3-nation/commit/f26bb92fd74a79f811828c35500882a465b8e07c))
+
+
+### Bug Fixes
+
+* **auth:** include 999999 in email sign-in code range ([#1307](https://github.com/F3-Nation/f3-nation/issues/1307)) ([da54c16](https://github.com/F3-Nation/f3-nation/commit/da54c16df4b338b88a4027e7592725f92b0fac84))
+* **auth:** recover from sign-in failure after registration ([#1256](https://github.com/F3-Nation/f3-nation/issues/1256)) ([2a5560f](https://github.com/F3-Nation/f3-nation/commit/2a5560f89feab8be5ea869d113e94daf92344594))
+* **auth:** require the emailed code before /api/register creates a user ([#1238](https://github.com/F3-Nation/f3-nation/issues/1238)) ([5acafe8](https://github.com/F3-Nation/f3-nation/commit/5acafe8adf04f925cfea5f711f72e63f7d4bbdda))
+* **auth:** share one OTP guess budget between registration and Better Auth sign-in ([#1315](https://github.com/F3-Nation/f3-nation/issues/1315)) ([3a337f0](https://github.com/F3-Nation/f3-nation/commit/3a337f0b50c3861c8c648e87860c477710d84dec))
+* **auth:** stamp the nation owner on migrated oauth clients ([#1268](https://github.com/F3-Nation/f3-nation/issues/1268)) ([5a0e7bf](https://github.com/F3-Nation/f3-nation/commit/5a0e7bfae4c18b5a1995713c7ef046a73112c1a6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.1
+    * @acme/shared bumped to 0.5.1
+  * devDependencies
+    * @f3nation/sso bumped to 0.5.0
+
 ## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.4.1...auth@2.5.0) (2026-10-14)
 
 

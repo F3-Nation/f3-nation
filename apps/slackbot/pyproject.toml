@@ -37,7 +37,7 @@ warn_redundant_casts = true
 
 [project]
 name = "f3-nation-slack-bot"
-version = "2.9.0"
+version = "2.10.0"
 description = ""
 authors = [{ name = "Evan Petzoldt", email = "evan.petzoldt@protonmail.com" }]
 readme = "README.md"
@@ -48,7 +48,7 @@ dependencies = [
     "sqlalchemy>=2.0.28,<3.0.0",
     "requests>=2.31.0,<3.0.0",
     "requests-oauthlib>=2.0.0,<2.1.0",
-    "sqlalchemy-utils>=0.42.1,<0.43.0",
+    "sqlalchemy-utils>=0.43.0,<0.44.0",
     "psycopg2-binary>=2.9.9,<3.0.0",
     "functions-framework>=3.8.1,<4.0.0",
     "pg8000>=1.31.5,<2.0.0",

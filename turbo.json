@@ -25,6 +25,8 @@
   ],
   "globalEnv": [
     "CI",
+    "APPS_DIRECTORY_ENABLED",
+    "APPS_DIRECTORY_URL",
     "NODE_ENV",
     "LOG_LEVEL",
     "SKIP_ENV_VALIDATION",
@@ -117,6 +119,14 @@
     },
     "test:characterization": {
       "dependsOn": ["^topo", "reset-test-db", "^reset-test-db", "test"],
+      "env": [
+        "CHAR_TEST_AUTH_ISSUER",
+        "CHAR_TEST_AUTH_PROVIDER_URL",
+        "CHAR_TEST_AUTH_CLIENT_ID",
+        "CHAR_TEST_AUTH_CLIENT_SECRET",
+        "CHAR_TEST_AUTH_USER_TOKEN",
+        "CHAR_TEST_AUTH_USER_CLIENT_ID"
+      ],
       "cache": false
     },
     "clean": {

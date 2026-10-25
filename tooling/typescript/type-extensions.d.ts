@@ -15,6 +15,7 @@ declare module "@auth/core/jwt" {
     id?: string | number;
     email: string | undefined;
     roles: OrgRole[];
+    rolesVersion?: number;
     signinunixsecondsepoch: number;
   }
 }
@@ -36,6 +37,7 @@ declare module "next-auth" {
     id?: string | number;
     email: string | undefined;
     roles: OrgRole[];
+    rolesVersion?: number;
     signinunixsecondsepoch: number;
   }
 

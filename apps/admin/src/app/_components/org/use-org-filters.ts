@@ -144,8 +144,9 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
   );
   const tierStates = useMemo(() => {
     // The nearest earlier tier with a selection narrows each picker.
-    let ancestorIds = new Set<number>();
+    const narrowing = { ancestorIds: new Set<number>() };
     return tiers.map((orgType) => {
+      const { ancestorIds } = narrowing;
       let offered = hierarchyOrgs?.filter(
         (org) => org.orgType === orgType && org.isActive,
       );
@@ -155,7 +156,8 @@ export function useOrgFilters(config: OrgAdminConfig, resetPage: () => void) {
         );
       }
       const kept = keepOffered(picked(pickedFilters, orgType), offered);
-      if (kept.length > 0) ancestorIds = new Set(kept.map((org) => org.id));
+      if (kept.length > 0)
+        narrowing.ancestorIds = new Set(kept.map((org) => org.id));
       return { orgType, offered, kept };
     });
   }, [tiers, pickedFilters, hierarchyOrgs, orgById]);
