@@ -81,9 +81,14 @@ if grep -q '\.\.\.' apps/auth/.env 2>/dev/null; then
           openssl pkcs8 -topk8 -nocrypt -outform PEM | \
           awk 'NR>1{printf "\\n"} {printf "%s", $0}')
     KEY="${KEY%\\n}"
-    grep -v '^AUTH_JWT_PRIVATE_KEY=' apps/auth/.env > /tmp/auth_env_tmp
-    printf 'AUTH_JWT_PRIVATE_KEY="%s"\n' "$KEY" >> /tmp/auth_env_tmp
-    mv /tmp/auth_env_tmp apps/auth/.env
+    # Per-run temp file beside .env: parallel checkouts don't share it, and the rename is atomic.
+    AUTH_ENV_TMP=$(mktemp apps/auth/.env.tmp.XXXXXX)
+    if ! { grep -v '^AUTH_JWT_PRIVATE_KEY=' apps/auth/.env; printf 'AUTH_JWT_PRIVATE_KEY="%s"\n' "$KEY"; } > "$AUTH_ENV_TMP" \
+      || ! mv "$AUTH_ENV_TMP" apps/auth/.env; then
+      rm -f "$AUTH_ENV_TMP"
+      echo "     ERROR: could not write AUTH_JWT_PRIVATE_KEY to apps/auth/.env"
+      exit 1
+    fi
     echo "     Generated AUTH_JWT_PRIVATE_KEY in apps/auth/.env"
   else
     echo "     WARNING: openssl not found — AUTH_JWT_PRIVATE_KEY left as placeholder in apps/auth/.env"
