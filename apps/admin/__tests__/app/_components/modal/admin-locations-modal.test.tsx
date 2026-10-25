@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -135,6 +136,44 @@ afterEach(() => {
 });
 
 describe("AdminLocationsModal", () => {
+  // React deduplicates this warning, so check it before other location loads.
+  it("keeps the disabled ID controlled while the location loads", async () => {
+    let resolveLocation!: (value: unknown) => void;
+    const locationLookup = new Promise((resolve) => {
+      resolveLocation = resolve;
+    });
+    mocks.byId.mockReturnValue(locationLookup);
+    const consoleError = vi.spyOn(console, "error");
+
+    try {
+      mount(9);
+      const id = screen.getByPlaceholderText<HTMLInputElement>("ID");
+      expect(id.disabled).toBe(true);
+      expect(id.value).toBe("");
+
+      await act(async () => {
+        resolveLocation({
+          location: {
+            id: 9,
+            locationName: "The Park",
+            regionId: 5,
+            latitude: 35,
+            longitude: -80,
+            addressCountry: "US",
+            isActive: true,
+          },
+        });
+        await locationLookup;
+      });
+      await waitFor(() => expect(id.value).toBe("9"));
+      expect(consoleError.mock.calls.flat().join("\n")).not.toMatch(
+        /uncontrolled input to be controlled|controlled input to be uncontrolled/,
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("saves a cleared country as an empty string, not []", async () => {
     mount(9);
     // The FormItem is keyed by value, so re-query after the reset remounts it.

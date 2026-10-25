@@ -43,3 +43,5 @@ jobs:
       # limiter is migrated to a shared store (Redis/Upstash) this flag can be
       # removed or raised.  See #356.
       flags: "--min-instances=1 --max-instances=1"
+    secrets:
+      posthog_key: ${{ secrets.POSTHOG_KEY }}

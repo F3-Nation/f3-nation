@@ -57,6 +57,11 @@ or
 [`.agents/skills/db-migration/SKILL.md`](.agents/skills/db-migration/SKILL.md)
 for any change to the database schema or migrations.
 
+When asked to write or edit comments or markdown, or to review a PR that
+touches comments or markdown, use
+[`.agents/skills/durable-docs/SKILL.md`](.agents/skills/durable-docs/SKILL.md)
+for the repo's durable documentation rules.
+
 To review a PR with inline comments, or to test one hands-on in a local
 sandbox, follow
 [`.agents/skills/pr-review-inline/SKILL.md`](.agents/skills/pr-review-inline/SKILL.md)

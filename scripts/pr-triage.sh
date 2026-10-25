@@ -93,6 +93,7 @@ query($owner: String!, $name: String!, $cursor: String) {
       nodes {
         number title url isDraft createdAt reviewDecision mergeable
         author { login __typename }
+        assignees(first: 10) { nodes { login } }
         timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) {
           nodes { ... on ReadyForReviewEvent { createdAt } }
         }
@@ -276,6 +277,7 @@ classify='
           # Newlines would split a card across lines in the terminal listing.
           title: ($pr.title | gsub("[\\r\\n]+"; " ")),
           author: $author,
+          assignee: (([$pr.assignees.nodes[]?.login] | join(", ")) | if . == "" then "Unassigned" else . end),
           url: $pr.url,
           mine: ($author == $me),
           note: ([
@@ -439,7 +441,9 @@ HTML
       const by = el("div", "by");
       by.append(el("span", "", `@${pr.author}`));
       if (pr.mine && bucket !== "OWN") by.append(el("span", "chip", "yours"));
-      card.append(head, by);
+      const assignee = el("div", "by",
+        pr.assignee === "Unassigned" ? "Unassigned" : `Assigned: ${pr.assignee}`);
+      card.append(head, by, assignee);
       if (pr.note) card.append(el("div", "note", pr.note));
       col.append(card);
     }
@@ -471,7 +475,7 @@ fi
 
 # Fields are split on \x1f, not tab: `read` collapses runs of whitespace separators, so an
 # empty note would shift the url left.
-rows=$(jq -r '.prs[] | [.bucket, (.number | tostring), (.title | gsub("\u001f"; " ")), .author, .note, .url]
+rows=$(jq -r '.prs[] | [.bucket, (.number | tostring), (.title | gsub("\u001f"; " ")), .author, .assignee, .note, .url]
   | join("\u001f")' <<<"$board")
 
 section() {
@@ -479,9 +483,10 @@ section() {
   matches=$(awk -F"$SEP" -v b="$bucket" '$1 == b' <<<"$rows")
   [[ -n "$matches" ]] || return 0
   printf '\n%s%s%s\n' "$bold" "$heading" "$reset"
-  while IFS="$SEP" read -r _ num title author note url; do
+  while IFS="$SEP" read -r _ num title author assignee note url; do
     (( ${#title} > 70 )) && title="${title:0:67}..."
     printf '  #%-5s %s %s(%s)%s\n' "$num" "$title" "$dim" "$author" "$reset"
+    printf '         %sAssignee: %s%s\n' "$dim" "$assignee" "$reset"
     [[ -n "$note" ]] && printf '         %s\n' "$note"
     printf '         %s%s%s\n' "$dim" "$url" "$reset"
   done <<<"$matches"
