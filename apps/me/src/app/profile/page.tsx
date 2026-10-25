@@ -3,6 +3,8 @@ import { getMyProfile, getRegions, isNotFoundApiError } from "@/lib/api/client";
 import { ProfileForm } from "@/components/profile-form";
 import { redirect } from "next/navigation";
 import { logError, logWarn } from "@/lib/logging";
+import { env } from "@/env";
+import { appsDirectoryUrl } from "@/lib/apps-directory";
 
 export default async function ProfilePage() {
   const session = await requireAuth();
@@ -46,5 +48,14 @@ export default async function ProfilePage() {
     throw err;
   }
 
-  return <ProfileForm user={user} regions={regions} />;
+  return (
+    <ProfileForm
+      user={user}
+      regions={regions}
+      appsDirectoryUrl={
+        appsDirectoryUrl(env.APPS_DIRECTORY_ENABLED, env.APPS_DIRECTORY_URL)
+          ?.href ?? null
+      }
+    />
+  );
 }

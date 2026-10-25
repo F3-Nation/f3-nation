@@ -25,6 +25,8 @@
   ],
   "globalEnv": [
     "CI",
+    "APPS_DIRECTORY_ENABLED",
+    "APPS_DIRECTORY_URL",
     "NODE_ENV",
     "LOG_LEVEL",
     "SKIP_ENV_VALIDATION",
