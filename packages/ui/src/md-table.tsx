@@ -145,7 +145,7 @@ export const MDTable = <T extends RowData>(params: MDTableProps<T>) => {
 
   const setPagination = useCallback(
     (val: Updater<PaginationState>) => {
-      _setPagination?.(val);
+      _setPagination(val);
       setPaginationParam?.(val);
     },
     [_setPagination, setPaginationParam],
@@ -223,7 +223,7 @@ export const MDTable = <T extends RowData>(params: MDTableProps<T>) => {
           {downloadCSV ? (
             <button
               className="text-blue-600 underline"
-              onClick={() => downloadCSV?.({ table, name: tableName })}
+              onClick={() => downloadCSV({ table, name: tableName })}
             >
               Download CSV
             </button>
@@ -260,23 +260,16 @@ export const MDTable = <T extends RowData>(params: MDTableProps<T>) => {
         </div>
       </div>
       <div className="pb-2 pl-[1px] text-sm text-muted-foreground">
-        {pagination ? (
-          table.getRowCount() === 0 ? (
-            <>Showing 0 {rowsName}</>
-          ) : (
-            <>
-              Showing {pagination.pageIndex * pagination.pageSize + 1}-
-              {Math.min(
-                (pagination.pageIndex + 1) * pagination.pageSize,
-                table.getRowCount(),
-              )}{" "}
-              of {table.getRowCount().toLocaleString()} {rowsName}
-            </>
-          )
+        {table.getRowCount() === 0 ? (
+          <>Showing 0 {rowsName}</>
         ) : (
           <>
-            Showing {table.getRowModel().rows?.length ?? 0} of{" "}
-            {table.getRowCount().toLocaleString()} {rowsName}
+            Showing {pagination.pageIndex * pagination.pageSize + 1}-
+            {Math.min(
+              (pagination.pageIndex + 1) * pagination.pageSize,
+              table.getRowCount(),
+            )}{" "}
+            of {table.getRowCount().toLocaleString()} {rowsName}
           </>
         )}
       </div>
@@ -316,7 +309,7 @@ export const MDTable = <T extends RowData>(params: MDTableProps<T>) => {
                   ))}
                 </TableRow>
               ))
-            ) : table.getRowModel().rows?.length ? (
+            ) : table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row, index) => (
                 <TableRow
                   key={row.id}
@@ -351,84 +344,82 @@ export const MDTable = <T extends RowData>(params: MDTableProps<T>) => {
             )}
           </TableBody>
         </Table>
-        {pagination ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 py-4 lg:px-3">
-            <div className="flex flex-row items-center gap-1 sm:gap-2">
-              <Button
-                variant="ghost"
-                className="h-8 w-8 rounded-sm border p-0"
-                onClick={() => table.setPageIndex(0)}
-                disabled={!table.getCanPreviousPage()}
-              >
-                {"<<"}
-              </Button>
-              <Button
-                variant="ghost"
-                className="h-8 w-8 rounded-sm border p-0"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
-              >
-                {"<"}
-              </Button>
-              <span className="flex items-center gap-1 px-1 text-sm sm:px-2 sm:text-base">
-                <span className="hidden sm:inline">Page</span>
-                <strong>
-                  {table.state.pagination.pageIndex + 1} of {pageCount}
-                </strong>
-              </span>
-              <Button
-                variant="ghost"
-                className="h-8 w-8 rounded-sm border p-0"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-              >
-                {">"}
-              </Button>
-              <Button
-                variant="ghost"
-                className="h-8 w-8 rounded-sm border p-0"
-                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-                disabled={!table.getCanNextPage()}
-              >
-                {">>"}
-              </Button>
-            </div>
-            {/* ability to select the size of the page */}
-            <div className="flex flex-row items-center gap-2">
-              <div className="pointer-events-none shrink-0 text-sm sm:text-base">
-                Page size
-              </div>
-              <Select
-                value={pagination.pageSize.toString()}
-                onValueChange={(value) => {
-                  const pageSize = safeParseInt(value);
-                  if (pageSize !== undefined) {
-                    table.setPageSize(pageSize);
-                  }
-                }}
-              >
-                <SelectTrigger className="mr-2 rounded-md bg-transparent px-1 focus:ring-0">
-                  <SelectValue>
-                    <strong>{pagination.pageSize}</strong>
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="z-10" position="popper">
-                  {(paginationOptions?.pageSizeOptions ?? [10, 20, 50])?.map(
-                    (size) => (
-                      <SelectItem
-                        key={size}
-                        className="flex cursor-pointer justify-center rounded-md px-4 py-1 text-lg font-semibold hover:bg-emerald-100"
-                        value={size.toString()}
-                      >
-                        {size}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 py-4 lg:px-3">
+          <div className="flex flex-row items-center gap-1 sm:gap-2">
+            <Button
+              variant="ghost"
+              className="h-8 w-8 rounded-sm border p-0"
+              onClick={() => table.setPageIndex(0)}
+              disabled={!table.getCanPreviousPage()}
+            >
+              {"<<"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="h-8 w-8 rounded-sm border p-0"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              {"<"}
+            </Button>
+            <span className="flex items-center gap-1 px-1 text-sm sm:px-2 sm:text-base">
+              <span className="hidden sm:inline">Page</span>
+              <strong>
+                {table.state.pagination.pageIndex + 1} of {pageCount}
+              </strong>
+            </span>
+            <Button
+              variant="ghost"
+              className="h-8 w-8 rounded-sm border p-0"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              {">"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="h-8 w-8 rounded-sm border p-0"
+              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+              disabled={!table.getCanNextPage()}
+            >
+              {">>"}
+            </Button>
           </div>
-        ) : null}
+          {/* ability to select the size of the page */}
+          <div className="flex flex-row items-center gap-2">
+            <div className="pointer-events-none shrink-0 text-sm sm:text-base">
+              Page size
+            </div>
+            <Select
+              value={pagination.pageSize.toString()}
+              onValueChange={(value) => {
+                const pageSize = safeParseInt(value);
+                if (pageSize !== undefined) {
+                  table.setPageSize(pageSize);
+                }
+              }}
+            >
+              <SelectTrigger className="mr-2 rounded-md bg-transparent px-1 focus:ring-0">
+                <SelectValue>
+                  <strong>{pagination.pageSize}</strong>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="z-10" position="popper">
+                {(paginationOptions?.pageSizeOptions ?? [10, 20, 50]).map(
+                  (size) => (
+                    <SelectItem
+                      key={size}
+                      className="flex cursor-pointer justify-center rounded-md px-4 py-1 text-lg font-semibold hover:bg-emerald-100"
+                      value={size.toString()}
+                    >
+                      {size}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         {isReloading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="flex h-24 w-32 items-center justify-center rounded-lg bg-card">

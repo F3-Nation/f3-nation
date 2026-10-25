@@ -1,6 +1,6 @@
 {
   "name": "f3-api",
-  "version": "6.9.0",
+  "version": "6.12.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "clean": "rm -rf .turbo node_modules dist",
     "dev": "TZ=UTC NODE_ENV=development pnpm with-env tsx watch --import ./src/instrument.ts src/server.ts",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path ../../.prettierignore",
-    "lint": "dotenv -v SKIP_ENV_VALIDATION=1 eslint .",
+    "lint": "dotenv -v SKIP_ENV_VALIDATION=1 -- eslint .",
     "typecheck": "tsc --noEmit",
     "test": "pnpm with-env vitest --run --coverage",
     "test:characterization": "pnpm with-env vitest --run --config vitest.characterization.config.ts",
@@ -37,6 +37,7 @@
     "@acme/prettier-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "@acme/vitest-config": "workspace:*",
+    "@f3nation/sso": "workspace:*",
     "@orpc/client": "catalog:",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",

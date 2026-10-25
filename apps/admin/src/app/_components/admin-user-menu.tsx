@@ -63,11 +63,12 @@ export const AdminUserMenu = () => {
             <div className="px-2 py-1.5">
               <div className="flex flex-wrap gap-1">
                 {session.roles.map((role) => {
-                  const roleStyles = {
+                  // Sessions can carry roles beyond these three.
+                  const roleStyles: Partial<Record<string, string>> = {
                     admin: "bg-purple-100 text-purple-700 border-purple-200",
                     editor: "bg-blue-100 text-blue-700 border-blue-200",
                     user: "bg-green-100 text-green-700 border-green-200",
-                  } as const;
+                  };
                   const roleStyle =
                     roleStyles[role.roleName] ??
                     "bg-muted text-muted-foreground border-muted";

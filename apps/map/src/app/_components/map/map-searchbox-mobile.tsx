@@ -6,7 +6,6 @@ import Link from "next/link";
 import { ChevronLeft, XCircle } from "lucide-react";
 
 import {
-  DEFAULT_CENTER,
   MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS,
   Z_INDEX,
 } from "@acme/shared/app/constants";
@@ -40,15 +39,6 @@ export function MapSearchBoxMobile({
     }
   };
 
-  const eject = () => {
-    inputRef.current?.blur();
-    searchStore.setState({
-      text: "",
-      shouldShowResults: false,
-      searchBarFocused: false,
-    });
-  };
-
   const { ref: inputRef } = useOnKeyPress<HTMLInputElement>({
     keys: ["Enter"],
     cb: (key) => {
@@ -57,6 +47,15 @@ export function MapSearchBoxMobile({
       }
     },
   });
+
+  const eject = () => {
+    inputRef.current?.blur();
+    searchStore.setState({
+      text: "",
+      shouldShowResults: false,
+      searchBarFocused: false,
+    });
+  };
 
   return (
     <div
@@ -147,10 +146,7 @@ export function MapSearchBoxMobile({
                 if (!value) {
                   searchStore.setState({ placesResults: [] });
                 } else if (value.length >= MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS) {
-                  const center = mapStore.get("center") ?? {
-                    lat: DEFAULT_CENTER[0] ?? 37.7937,
-                    lng: DEFAULT_CENTER[1] ?? -122.3965,
-                  };
+                  const center = mapStore.get("center");
                   const zoom = mapStore.get("zoom");
                   // Use debounced autocomplete to reduce API calls
                   debouncedPlacesAutocomplete(

@@ -53,11 +53,11 @@ export const AOFields = z.object({
   aoName: z.string().min(2, "AO name must be at least 2 characters"),
   aoLogo: z.preprocess(
     (val) => (val === "" ? undefined : val),
-    z.string().url("Must be a valid URL").optional().nullable(),
+    z.url("Must be a valid URL").optional().nullable(),
   ),
   aoWebsite: z.preprocess(
     (val) => (val === "" ? undefined : val),
-    z.string().url("Must be a valid URL").optional().nullable(),
+    z.url("Must be a valid URL").optional().nullable(),
   ),
 });
 
@@ -305,7 +305,7 @@ export type DeleteAOType = z.infer<typeof DeleteAOSchema>;
  * const LooseSchema = makeSchemaLoose(StrictSchema);
  * // Result: z.object({ name: z.unknown(), age: z.unknown() })
  */
-function makeSchemaLoose<T extends z.ZodObject<z.ZodRawShape>>(schema: T) {
+function makeSchemaLoose(schema: z.ZodObject<z.ZodRawShape>) {
   const shape = schema.shape;
   const looseShape: Record<string, z.ZodOptional<z.ZodUnknown>> = {};
 

@@ -1,0 +1,1 @@
+ALTER TABLE "auth"."better_auth_account" DROP COLUMN "issuer";

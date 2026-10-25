@@ -4,6 +4,7 @@ import {
   getDescendants,
   getLevelOrgs,
   getOrgPath,
+  isGeneralInternationalArea,
   nextNavigableLevel,
   pathForNavigatingTo,
 } from "./navigation";
@@ -201,5 +202,45 @@ describe("getLevelOrgs — International sector", () => {
       cache,
     );
     expect(orgs.map((o) => o.id)).toEqual([52]);
+  });
+});
+
+describe("getLevelOrgs — other levels", () => {
+  it("shows every org of the level when nothing is selected", () => {
+    const { orgById, childrenByParent, cache } = build(allOrgs);
+    const orgs = getLevelOrgs("region", [], orgById, childrenByParent, cache);
+    expect(orgs.map((o) => o.id)).toEqual([30, 31]);
+  });
+});
+
+describe("pathForNavigatingTo — non-layer orgs", () => {
+  it("shows an AO's ancestors without the AO itself", () => {
+    const { orgById, childrenByParent, cache } = build(allOrgs);
+    const { path, level } = pathForNavigatingTo(
+      ao,
+      orgById,
+      childrenByParent,
+      cache,
+    );
+    expect(level).toBe("ao");
+    expect(path.map((o) => o.id)).toEqual([10, 20, 30]);
+  });
+});
+
+describe("isGeneralInternationalArea", () => {
+  it("matches the General International area by name", () => {
+    expect(
+      isGeneralInternationalArea({
+        ...area,
+        name: " General International Area ",
+      }),
+    ).toBe(true);
+    expect(isGeneralInternationalArea(area)).toBe(false);
+    expect(
+      isGeneralInternationalArea({
+        ...region,
+        name: "General International Area",
+      }),
+    ).toBe(false);
   });
 });

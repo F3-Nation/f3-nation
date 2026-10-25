@@ -122,7 +122,7 @@ export const EventInstanceFormSchema = z
     ) {
       if (data.startTime > data.endTime) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "End time must be after start time",
           path: ["endTime"],
         });
@@ -130,7 +130,7 @@ export const EventInstanceFormSchema = z
     }
     if (data.startDate && data.endDate && data.endDate < data.startDate) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "End date must be on or after start date",
         path: ["endDate"],
       });
@@ -279,7 +279,7 @@ export default function AdminEventInstancesModal({
         instance?.endTime?.length === 4
           ? convertHHmmToHH_mm(instance.endTime)
           : null,
-      eventTypeIds: instance?.eventTypes?.map((et) => et.eventTypeId) ?? [],
+      eventTypeIds: instance?.eventTypes.map((et) => et.eventTypeId) ?? [],
       seriesId: instance?.seriesId ?? null,
       seriesException: instance?.seriesException ?? null,
       isPrivate: instance?.isPrivate ?? false,
@@ -306,14 +306,11 @@ export default function AdminEventInstancesModal({
           // Surface the server's message verbatim: it distinguishes "you can't
           // edit this instance" from "you can't move it to that organization",
           // which are different problems with different fixes for the user.
-          toast.error(
-            err.message ??
-              "You are not authorized to create or update event instances",
-          );
+          toast.error(err.message);
           return;
         }
         if (err instanceof ORPCError && err.code === "NOT_FOUND") {
-          toast.error(err.message ?? "This event instance no longer exists");
+          toast.error(err.message);
           return;
         }
         toast.error("Failed to save event instance");
@@ -406,14 +403,14 @@ export default function AdminEventInstancesModal({
                       <VirtualizedCombobox
                         value={field.value?.toString()}
                         options={
-                          regions?.orgs?.map((region) => ({
+                          regions?.orgs.map((region) => ({
                             value: region.id.toString(),
                             label: region.name,
                           })) ?? []
                         }
                         searchPlaceholder="Select a region"
                         onSelect={(value) => {
-                          const orgId = safeParseInt(value as string);
+                          const orgId = safeParseInt(value);
                           if (orgId == null) {
                             toast.error("Invalid region");
                             return;
@@ -437,9 +434,10 @@ export default function AdminEventInstancesModal({
                 render={({ field }) => {
                   const filteredAOs = aos?.orgs
                     .filter((ao) => ao.parentId === form.watch("regionId"))
-                    ?.slice()
-                    .sort((a, b) => a.name?.localeCompare(b.name ?? "") ?? 0);
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name));
                   return (
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                     <FormItem key={`ao-${String(field.value ?? "new")}`}>
                       <FormLabel>AO</FormLabel>
                       <FormControl>
@@ -450,12 +448,12 @@ export default function AdminEventInstancesModal({
                           options={
                             filteredAOs?.map((ao) => ({
                               value: ao.id.toString(),
-                              label: ao.name ?? "",
+                              label: ao.name,
                             })) ?? []
                           }
                           searchPlaceholder="Select an AO"
                           onSelect={(value) => {
-                            const aoId = safeParseInt(value as string);
+                            const aoId = safeParseInt(value);
                             field.onChange(aoId ?? 0);
 
                             const selectedAO = aos?.orgs.find(
@@ -499,6 +497,7 @@ export default function AdminEventInstancesModal({
                         placeholder="Start Date"
                         type="date"
                         {...field}
+                        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                         value={field.value ?? ""}
                       />
                     </FormControl>
@@ -528,13 +527,11 @@ export default function AdminEventInstancesModal({
                 <ControlledTimeInput
                   control={form.control}
                   name="startTime"
-                  id="startTime"
                   label="Start time (optional)"
                 />
                 <ControlledTimeInput
                   control={form.control}
                   name="endTime"
-                  id="endTime"
                   label="End time (optional)"
                 />
               </div>
@@ -544,11 +541,9 @@ export default function AdminEventInstancesModal({
                 render={({ field }) => {
                   const filteredLocations = locations?.locations
                     .filter((location) => location.regionId === formRegionId)
-                    ?.slice()
-                    .sort(
-                      (a, b) =>
-                        a.locationName?.localeCompare(b.locationName ?? "") ??
-                        0,
+                    .slice()
+                    .sort((a, b) =>
+                      a.locationName.localeCompare(b.locationName),
                     );
                   return (
                     <FormItem key={`location-${String(field.value ?? "none")}`}>
@@ -585,7 +580,7 @@ export default function AdminEventInstancesModal({
                               field.onChange(null);
                               return;
                             }
-                            const id = safeParseInt(value as string);
+                            const id = safeParseInt(value);
                             field.onChange(id ?? null);
                             const selectedLocation = locations?.locations.find(
                               (location) => location.id === id,
@@ -612,12 +607,11 @@ export default function AdminEventInstancesModal({
                   <FormItem key="eventTypeIds">
                     <FormLabel>Event types (optional)</FormLabel>
                     <VirtualizedCombobox
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                       value={field.value?.map(String)}
                       options={sortedEventTypes.map((et) => ({
                         value: et.id.toString(),
-                        label: et.eventCategory
-                          ? `${et.name} (${EVENT_CATEGORY_LABEL_MAP[et.eventCategory] ?? et.eventCategory})`
-                          : et.name,
+                        label: `${et.name} (${EVENT_CATEGORY_LABEL_MAP[et.eventCategory] ?? et.eventCategory})`,
                       }))}
                       searchPlaceholder={
                         formRegionId
@@ -655,7 +649,7 @@ export default function AdminEventInstancesModal({
                         }
                         options={events.map((event) => ({
                           value: event.id.toString(),
-                          label: event.name ?? "",
+                          label: event.name,
                         }))}
                         searchPlaceholder="Select a series"
                         onSelect={(value) => {
@@ -666,8 +660,7 @@ export default function AdminEventInstancesModal({
                             field.onChange(null);
                             return;
                           }
-                          const seriesId =
-                            safeParseInt(value as string) ?? null;
+                          const seriesId = safeParseInt(value) ?? null;
                           field.onChange(seriesId);
                           const selectedSeries = events.find(
                             (event) => event.id === seriesId,

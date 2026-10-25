@@ -11,6 +11,7 @@ import type { SeriesException } from "@acme/shared/app/enums";
 
 import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
 import type { MapStatus, SparseF3Marker } from "~/utils/types";
+import { MAP_DATASET_STALE_TIME_MS } from "~/orpc/query-client";
 import { orpc, useQuery } from "~/orpc/react";
 import { dateToDayOfWeek } from "~/utils/date";
 import type { StatusInstanceSummary } from "~/utils/event-status-map";
@@ -148,6 +149,7 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
   const { data: mapEventAndLocationData } = useQuery(
     orpc.map.location.eventsAndLocations.queryOptions({
       input: undefined,
+      staleTime: MAP_DATASET_STALE_TIME_MS,
     }),
   );
 
@@ -244,10 +246,10 @@ export const FilteredMapResultsProvider = (params: { children: ReactNode }) => {
     const locationMarkersWithDistances = filteredLocationMarkers.map(
       (location) => {
         const distance = latLngToDistance(
-          location.lat ?? null,
-          location.lon ?? null,
-          nearbyLocationCenter?.lat ?? null,
-          nearbyLocationCenter?.lng ?? null,
+          location.lat,
+          location.lon,
+          nearbyLocationCenter.lat,
+          nearbyLocationCenter.lng,
         );
         return { ...location, distance };
       },

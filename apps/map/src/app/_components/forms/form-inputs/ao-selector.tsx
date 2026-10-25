@@ -24,6 +24,8 @@ interface AOSelectorFormValues {
  * Depends on region being selected first
  * Side Effects: Clears dependent Event field when AO changes
  */
+// _T lets callers assert their form type includes these fields (`<X<FormType> />`).
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export function AOSelector<_T extends AOSelectorFormValues>({
   label = "From AO (optional):",
   fieldName = "newAoId",
@@ -46,7 +48,7 @@ export function AOSelector<_T extends AOSelectorFormValues>({
 
   const aoOptions =
     results?.aos
-      ?.map((ao) => ({
+      .map((ao) => ({
         label: ao.name,
         value: ao.id.toString(),
         labelComponent: (
@@ -80,9 +82,7 @@ export function AOSelector<_T extends AOSelectorFormValues>({
               options={aoOptions}
               value={field.value?.toString()}
               onSelect={(item) => {
-                const ao = results?.aos?.find(
-                  (ao) => ao.id.toString() === item,
-                );
+                const ao = results?.aos.find((ao) => ao.id.toString() === item);
                 const newValue = ao?.id ?? null;
 
                 // Set the AO

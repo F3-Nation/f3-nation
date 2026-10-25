@@ -439,7 +439,7 @@ describe("Status Router", () => {
         url: "https://status.slack.com",
         source: "external" as const,
         provider: "slack" as const,
-        // ftp:// passes z.string().url() but fails hasValidExternalConfig
+        // ftp:// passes z.url() but fails hasValidExternalConfig
         apiUrl: "ftp://not-http.example.com",
       },
     ];

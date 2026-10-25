@@ -89,14 +89,16 @@ vi.mock("@acme/ui/md-table", async (importOriginal) => {
           {props.filterComponent as ReactNode}
           <button
             onClick={() =>
-              (props.setSearchTerm as (value: string) => void)?.("needle")
+              (props.setSearchTerm as ((value: string) => void) | undefined)?.(
+                "needle",
+              )
             }
           >
             Search
           </button>
           <button
             onClick={() =>
-              (props.setSorting as (value: unknown) => void)?.([
+              (props.setSorting as ((value: unknown) => void) | undefined)?.([
                 { id: "name", desc: true },
               ])
             }
@@ -105,10 +107,12 @@ vi.mock("@acme/ui/md-table", async (importOriginal) => {
           </button>
           <button
             onClick={() =>
-              (props.setPagination as (value: unknown) => void)?.({
-                pageIndex: 2,
-                pageSize: 50,
-              })
+              (props.setPagination as ((value: unknown) => void) | undefined)?.(
+                {
+                  pageIndex: 2,
+                  pageSize: 50,
+                },
+              )
             }
           >
             Page
@@ -518,3 +522,59 @@ it.each(["sector", "territory"] as const)(
     ]);
   },
 );
+
+describe("row cells", () => {
+  const renderCell = (type: OrgType, row: Partial<Org>, columnId: string) => {
+    render(<OrgTable orgType={type} />);
+    const cell = capturedTable([
+      { created: "2024-01-01T00:00:00Z", ...row } as Org,
+    ])
+      .getRowModel()
+      .rows[0]!.getAllCells()
+      .find((item) => item.column.id === columnId)!;
+    return render(flexRender(cell.column.columnDef.cell, cell.getContext()));
+  };
+
+  it.each([
+    [true, "Active"],
+    [false, "Inactive"],
+  ])("labels an org with isActive=%s as %s", (isActive, label) => {
+    const { container } = renderCell("sector", { isActive }, "status");
+
+    expect(container.textContent).toBe(label);
+  });
+
+  it("formats the last annual review as a local date, or nothing", () => {
+    const reviewed = renderCell(
+      "sector",
+      { lastAnnualReview: "2024-03-05T10:00:00Z" },
+      "lastAnnualReview",
+    );
+    expect(reviewed.container.textContent).toBe(
+      new Date("2024-03-05T00:00:00").toLocaleDateString(),
+    );
+    reviewed.unmount();
+
+    const never = renderCell(
+      "sector",
+      { lastAnnualReview: null },
+      "lastAnnualReview",
+    );
+    expect(never.container.textContent).toBe("");
+  });
+
+  it.each([
+    ["sector", false],
+    ["territory", false],
+    ["nation", true],
+  ] as const)(
+    "offers an inactive %s row an action menu: %s",
+    (type, offered) => {
+      const { queryByRole } = renderCell(type, { isActive: false }, "id");
+
+      expect(queryByRole("button", { name: "Open menu" }) !== null).toBe(
+        offered,
+      );
+    },
+  );
+});

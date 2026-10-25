@@ -40,7 +40,7 @@ interface StorePersist<S, Ps> {
   };
 }
 
-const ZUSTAND_STORE_LOGS = false;
+const ZUSTAND_STORE_LOGS = false as boolean;
 /**
  * A note on useBoundStore: if you don't provide a selector, it will update on every state change
  * (even if the value didn't change)
@@ -66,7 +66,7 @@ export class ZustandStore<T extends Record<string, unknown>> {
       persist(() => props.initialState, {
         name: props.persistOptions.name,
         storage: createJSONStorage<T>(props.persistOptions.getStorage),
-        version: props.persistOptions.version ?? 1,
+        version: props.persistOptions.version,
         migrate: (state) => {
           ZUSTAND_STORE_LOGS && console.log("migrating state", state);
           return Promise.resolve(props.initialState);

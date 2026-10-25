@@ -47,14 +47,14 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
               className="flex items-center gap-1.5 pr-1"
             >
               <span>
-                {role.orgName ?? `Org ${role.orgId}`} — {role.roleName}
+                {role.orgName} — {role.roleName}
               </span>
               <button
                 type="button"
                 className="ml-1 rounded-full p-0.5 hover:bg-foreground/10 disabled:opacity-50"
                 disabled={removing !== null}
                 onClick={() => setRoleToConfirm(role)}
-                aria-label={`Remove ${role.roleName} role from ${role.orgName ?? `Org ${role.orgId}`}`}
+                aria-label={`Remove ${role.roleName} role from ${role.orgName}`}
               >
                 {removing === key ? (
                   <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
@@ -94,7 +94,7 @@ export function RoleList({ roles: initialRoles }: RoleListProps) {
         title="Remove Role?"
         description={
           roleToConfirm
-            ? `You are about to remove your ${roleToConfirm.roleName} role from ${roleToConfirm.orgName ?? `Org ${roleToConfirm.orgId}`}.`
+            ? `You are about to remove your ${roleToConfirm.roleName} role from ${roleToConfirm.orgName}.`
             : ""
         }
         actionText="Remove Role"

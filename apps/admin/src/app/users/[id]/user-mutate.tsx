@@ -31,6 +31,7 @@ import type { RouterOutputs } from "~/orpc/types";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 import { client } from "~/orpc/client";
 import { invalidateQueries, orpc, ORPCError, useMutation } from "~/orpc/react";
+import { toGrantableRoleEntries } from "~/lib/auth/session";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 
 export default function UserMutate({
@@ -63,7 +64,7 @@ export default function UserMutate({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: user?.roles ?? [],
+      roles: toGrantableRoleEntries(user?.roles),
     },
   });
 
@@ -76,8 +77,10 @@ export default function UserMutate({
       },
       onError: (err) => {
         toast.error(
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You are not authorized to upsert this user"
+          err instanceof ORPCError
+            ? err.code === "UNAUTHORIZED"
+              ? "You are not authorized to upsert this user"
+              : err.message || "Failed to upsert user"
             : "Failed to upsert user",
         );
       },
@@ -203,75 +206,72 @@ export default function UserMutate({
                   <FormItem>
                     <FormLabel>Roles</FormLabel>
                     <div className="space-y-2">
-                      {((field.value as RoleEntry[]) || []).map(
-                        (roleEntry, index) => (
-                          <div key={index} className="flex items-center gap-2">
-                            <Select
-                              onValueChange={(value) => {
-                                const newRoles = [
-                                  ...(field.value as RoleEntry[]),
-                                ];
-                                newRoles[index] = {
-                                  orgId: roleEntry.orgId,
-                                  roleName: value as "editor" | "admin",
-                                };
-                                field.onChange(newRoles);
-                              }}
-                              value={roleEntry.roleName}
-                            >
-                              <FormControl>
-                                <SelectTrigger className="w-[200px]">
-                                  <SelectValue placeholder="Select a role" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="editor">Editor</SelectItem>
-                                <SelectItem value="admin">Admin</SelectItem>
-                              </SelectContent>
-                            </Select>
+                      {(field.value as RoleEntry[]).map((roleEntry, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <Select
+                            onValueChange={(value) => {
+                              const newRoles = [
+                                ...(field.value as RoleEntry[]),
+                              ];
+                              newRoles[index] = {
+                                orgId: roleEntry.orgId,
+                                roleName: value as "editor" | "admin",
+                              };
+                              field.onChange(newRoles);
+                            }}
+                            value={roleEntry.roleName}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="w-[200px]">
+                                <SelectValue placeholder="Select a role" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="editor">Editor</SelectItem>
+                              <SelectItem value="admin">Admin</SelectItem>
+                            </SelectContent>
+                          </Select>
 
-                            <VirtualizedCombobox
-                              value={roleEntry.orgId.toString()}
-                              options={sortedRegions.map((region) => ({
-                                value: region.id.toString(),
-                                label: region.name,
-                              }))}
-                              searchPlaceholder="Select a region"
-                              onSelect={(value) => {
-                                const orgId = safeParseInt(value as string);
-                                if (orgId == undefined) {
-                                  toast.error("Invalid orgId");
-                                  return;
-                                }
-                                const newRoles = [
-                                  ...(field.value as RoleEntry[]),
-                                ];
-                                newRoles[index] = {
-                                  roleName:
-                                    newRoles[index]?.roleName ?? "editor",
-                                  orgId,
-                                };
-                                field.onChange(newRoles);
-                              }}
-                              isMulti={false}
-                            />
+                          <VirtualizedCombobox
+                            value={roleEntry.orgId.toString()}
+                            options={sortedRegions.map((region) => ({
+                              value: region.id.toString(),
+                              label: region.name,
+                            }))}
+                            searchPlaceholder="Select a region"
+                            onSelect={(value) => {
+                              const orgId = safeParseInt(value);
+                              if (orgId == undefined) {
+                                toast.error("Invalid orgId");
+                                return;
+                              }
+                              const newRoles = [
+                                ...(field.value as RoleEntry[]),
+                              ];
+                              newRoles[index] = {
+                                roleName: newRoles[index]?.roleName ?? "editor",
+                                orgId,
+                              };
+                              field.onChange(newRoles);
+                            }}
+                            isMulti={false}
+                          />
 
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                const newRoles = [
-                                  ...(field.value as RoleEntry[]),
-                                ];
-                                newRoles.splice(index, 1);
-                                field.onChange(newRoles);
-                              }}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ),
-                      )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const newRoles = [
+                                ...(field.value as RoleEntry[]),
+                              ];
+                              newRoles.splice(index, 1);
+                              field.onChange(newRoles);
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
 
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex flex-col">
@@ -294,7 +294,7 @@ export default function UserMutate({
                               orgId: 1,
                             };
                             field.onChange([
-                              ...((field.value as RoleEntry[]) ?? []),
+                              ...(field.value as RoleEntry[]),
                               newRoleEntry,
                             ]);
                           }}

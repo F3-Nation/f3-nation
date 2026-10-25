@@ -31,6 +31,29 @@ Install these before starting:
 
 Make sure Docker Desktop is **running** before you continue.
 
+### Bash for deployment-helper tests
+
+Deployment helpers and their unit tests require **Bash 4 or newer**, selected by
+`bash` on `PATH`. The Bash 3.2 bundled with macOS does not support their associative
+arrays. On macOS, install [Homebrew's Bash](https://formulae.brew.sh/formula/bash)
+and put it first on `PATH` before running `pnpm`:
+
+```bash
+brew install bash
+export PATH="$(brew --prefix bash)/bin:$PATH"
+```
+
+Keep that `export` in your shell startup file (for example, `~/.zshrc` for zsh),
+and reopen your terminal or IDE terminal so it uses the updated `PATH`. On Linux
+or WSL 2, use your distribution's `bash` package and check that its version is at
+least 4. On either platform, verify the executable selected in the terminal where
+you will run tests:
+
+```bash
+command -v bash
+bash --version
+```
+
 ## Detailed Prerequites Install Instructions
 
 <details>
@@ -278,21 +301,53 @@ Use `docker:up` for normal day-to-day use — containers run in the background a
 
 The Docker containers save their data in named volumes (`postgres_data`, `gcs_data`), so your data persists between restarts.
 
+## Running several checkouts at once (git worktrees)
+
+Every checkout normally uses the same ports (apps on 3000–3005, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead:
+
+```bash
+git worktree add ../f3-nation-review some-branch
+cd ../f3-nation-review
+pnpm install
+pnpm local:setup --slot 1
+pnpm dev
+```
+
+A slot moves every port up by 100 × the slot number, and gives the checkout its own containers (`f3-wt1-postgres`, …) and its own database:
+
+| Service    | Default (slot 0) | Slot 1    | Slot N         |
+| ---------- | ---------------- | --------- | -------------- |
+| Apps       | 3000–3005        | 3100–3105 | 3000 + 100N, … |
+| Postgres   | 5433             | 5533      | 5433 + 100N    |
+| Mailpit UI | 8025             | 8125      | 8025 + 100N    |
+| SMTP       | 1025             | 1125      | 1025 + 100N    |
+| GCS        | 9023             | 9123      | 9023 + 100N    |
+| Adminer    | 8080             | 8180      | 8080 + 100N    |
+
+The slot is saved in the root `.env` (gitignored), which `docker compose`, `pnpm docker:up`, `pnpm dev`, and later `pnpm local:setup` runs all read. `local:setup` also writes the matching URLs into the checkout's per-app `.env` files and seeds the sign-in clients for Admin and Me with the slot's ports.
+
+- `pnpm dev` picks up the slot by itself. To start a single app with `pnpm --filter <app> dev`, export the slot's ports first: `set -a; . ./.env; set +a`.
+- To put a checkout back on the defaults, run `pnpm local:setup --slot 0`.
+- Homepage gets `NEXT_PUBLIC_API_URL` for the slot's API. Its landing-page app links and the status page's health targets still use the default ports.
+- Slackbot stays on 3006. To run it in two checkouts at once, set `LOCAL_HTTP_PORT` in the second checkout's `apps/slackbot/.env` by hand.
+- `pnpm docker:down` in a slotted checkout stops only that checkout's containers. Remove a worktree's data for good with `docker compose down -v` from inside it before deleting the worktree.
+
 ---
 
 ## Understanding the .env files
 
 Each app and shared package has its own `.env` file, copied from a `.env.example` template during `pnpm local:setup`. All template values work out-of-the-box with Docker — you don't need to edit anything to get started.
 
-| Directory            | Purpose                                                            |
-| -------------------- | ------------------------------------------------------------------ |
-| `apps/api/.env`      | API app (Hono on port 3001)                                        |
-| `apps/auth/.env`     | Auth app (Next.js on port 3004)                                    |
-| `apps/map/.env`      | Map app (Next.js on port 3000)                                     |
-| `apps/admin/.env`    | Admin app (Next.js on port 3002)                                   |
-| `apps/me/.env`       | Me app (Next.js on port 3003)                                      |
-| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                 |
-| `packages/env/.env`  | Shared backend env root (used by `packages/db` and `packages/api`) |
+| Directory            | Purpose                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api/.env`      | API app (Hono on port 3001)                                                                                                        |
+| `apps/auth/.env`     | Auth app (Next.js on port 3004)                                                                                                    |
+| `apps/map/.env`      | Map app (Next.js on port 3000)                                                                                                     |
+| `apps/admin/.env`    | Admin app (Next.js on port 3002)                                                                                                   |
+| `apps/me/.env`       | Me app (Next.js on port 3003)                                                                                                      |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                                                                                 |
+| `packages/db/.env`   | Credentials for the `@acme/db` CLI scripts (migrations, resets, seeds, drizzle-kit, reset-test-db)                                 |
+| `packages/env/.env`  | Shared backend env read by the `@acme/api` package's test/script commands (`packages/api`); app services read their own app `.env` |
 
 Here's what each variable means:
 
@@ -361,7 +416,7 @@ These tell each Next.js app where to find the other apps. Don't change these unl
 1. Open <http://localhost:8080>
 2. Fill in the login form:
    - **System**: PostgreSQL
-   - **Server**: `f3-postgres`
+   - **Server**: `postgres`
    - **Username**: `f3local`
    - **Password**: `f3local`
    - **Database**: `f3nation`
@@ -372,11 +427,47 @@ You can run SQL queries, browse tables, and edit data from here.
 ### Useful database commands
 
 ```bash
-pnpm db:migrate       # apply any pending migrations
+pnpm db:migrate:local # apply any pending migrations
 pnpm db:studio        # open Drizzle Studio (interactive schema browser)
 pnpm db:seed:local    # re-run the local seed (safe to run multiple times)
 pnpm db:reset         # DANGER: wipe and recreate the database
+pnpm db:load:snapshot # replace the seed data with the sanitized Prod snapshot
 ```
+
+### Load the sanitized Prod snapshot
+
+The default seed is a small fake dataset. If you want real-shaped data (Prod's
+org hierarchy and events, plus event instances from 30 days back to 90 days ahead),
+load the sanitized Prod snapshot instead. Emails, phone numbers and Slack ids
+are replaced with fakes, private events are dropped, and free-text fields such
+as backblasts and user profiles are cleared. How it is produced and checked is
+in [Developer snapshot](STAGING_REFRESH.md#developer-snapshot---snapshot-only).
+
+```bash
+pnpm db:load:snapshot                     # download the published snapshot, ask, then load it
+pnpm db:load:snapshot --yes               # same, without the confirmation prompt
+pnpm db:load:snapshot --file ./snap.tar   # load a snapshot you already have
+```
+
+- **It replaces data.** The kept tables are truncated (with `CASCADE`, so
+  tables that reference them are emptied too) and restored in one
+  transaction, so the seed data in them is gone. The dev logins, API keys and
+  OAuth clients are re-created afterwards, so you can still sign in locally.
+- **Run it on an up-to-date local database.** Docker must be running (`pnpm docker:up`) and
+  migrations applied (`pnpm db:migrate:local`); the loader refuses a database
+  whose migrations are older than the snapshot's.
+- **It only runs against a disposable local database** (the one
+  `pnpm local:setup` creates) and refuses when `CI` is set.
+- **Age.** A snapshot is cut on demand, not on a schedule. The loader prints
+  when it was exported.
+- **Worktree slots.** In a `--slot N` checkout the load goes into that slot's
+  own database container.
+- **Not published?** A 404 means there is no snapshot at the published
+  location right now; ask in the project's Slack where it went, and keep the
+  seed data meanwhile.
+
+To go back to the fake data, run `pnpm db:reset`, then `pnpm db:migrate:local`
+and `pnpm db:seed:local`.
 
 ### Adding your own seed data
 
@@ -483,10 +574,21 @@ lsof -ti:5433
 
 # Kill it:
 lsof -ti:5433 | xargs kill
+```
 
-# Or, if Cloud SQL Auth Proxy is running as a service, stop it:
-launchctl unload ~/Library/LaunchAgents/com.google.cloud-sql-proxy.plist   # macOS
-systemctl --user stop cloud-sql-proxy                                        # Linux
+If the port is taken again right after you kill the process, you probably have the legacy Cloud SQL Auth Proxy installed as an auto-restarting service (from the removed `db:proxy:install`, or from the old guide's manual steps). Disable and remove it rather than killing it:
+
+```bash
+# macOS (removes both the scripted and the manually installed agent):
+launchctl bootout "gui/$(id -u)/com.f3nation.cloud-sql-proxy" 2>/dev/null || true
+launchctl bootout "gui/$(id -u)/com.google.cloud-sql-proxy" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.f3nation.cloud-sql-proxy.plist" \
+  "$HOME/Library/LaunchAgents/com.google.cloud-sql-proxy.plist"
+
+# Linux / WSL:
+systemctl --user disable --now cloud-sql-proxy 2>/dev/null || true
+rm -f "$HOME/.config/systemd/user/cloud-sql-proxy.service"
+systemctl --user daemon-reload
 ```
 
 The same pattern works for ports 8080 and 9023.
@@ -514,7 +616,7 @@ pnpm local:setup
 Check the container logs:
 
 ```bash
-docker logs f3-postgres
+docker compose logs postgres
 ```
 
 If the logs show a data directory error, try removing the volume and starting fresh:
@@ -539,16 +641,16 @@ curl -X POST http://localhost:9023/storage/v1/b \
 Make sure Docker is running and Postgres is healthy:
 
 ```bash
-docker ps                     # should show f3-postgres, f3-adminer, f3-gcs
-docker exec f3-postgres pg_isready -U f3local   # should print "accepting connections"
-pnpm db:migrate
+docker ps                     # should show f3-postgres, f3-adminer, f3-gcs (f3-wtN-* in a slot)
+docker compose exec postgres pg_isready -U f3local   # should print "accepting connections"
+pnpm db:migrate:local
 ```
 
 If migrations fail with a schema error, try resetting the database:
 
 ```bash
 pnpm db:reset       # wipes and recreates tables
-pnpm db:migrate     # re-applies all migrations
+pnpm db:migrate:local # re-applies all migrations
 pnpm db:seed:local  # re-seeds data
 ```
 
@@ -557,7 +659,7 @@ pnpm db:seed:local  # re-seeds data
 You have pending migrations. Run:
 
 ```bash
-pnpm db:migrate
+pnpm db:migrate:local
 ```
 
 ### App fails to start with env validation errors

@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.2.0](https://github.com/F3-Nation/f3-nation/compare/analytics@1.1.0...analytics@1.2.0) (2026-10-23)
+
+
+### Features
+
+* **analytics:** splitting pv_events for more efficient loading ([#1230](https://github.com/F3-Nation/f3-nation/issues/1230)) ([0445ebb](https://github.com/F3-Nation/f3-nation/commit/0445ebb254475abe16e61390d2e06b1a5750a5bd))
+
+
+### Bug Fixes
+
+* **analytics:** make CTAS worker deadline test independent of runner speed ([#1255](https://github.com/F3-Nation/f3-nation/issues/1255)) ([eb00cb0](https://github.com/F3-Nation/f3-nation/commit/eb00cb065977ef283108af1923ca03a53f29e793))
+* **deps:** update python dependencies and CA bundles ([#1325](https://github.com/F3-Nation/f3-nation/issues/1325)) ([3cc6edf](https://github.com/F3-Nation/f3-nation/commit/3cc6edf62b97c03a232523d65b99fa052f57b9fc))
+
+## [1.1.0](https://github.com/F3-Nation/f3-nation/compare/analytics@1.0.0...analytics@1.1.0) (2026-10-14)
+
+
+### Features
+
+* **analytics:** adding lifetime calcs to pv_pax and new pv_attendance ([#1179](https://github.com/F3-Nation/f3-nation/issues/1179)) ([61b7528](https://github.com/F3-Nation/f3-nation/commit/61b7528a7d8b16e849eb00257260289cb68439b9))
+
+
+### Bug Fixes
+
+* **analytics:** stop CTAS supervisor test flaking on loaded runners ([#1244](https://github.com/F3-Nation/f3-nation/issues/1244)) ([8aae558](https://github.com/F3-Nation/f3-nation/commit/8aae55822fff7e82c75d848ac1d19fb713459452))
+* **deps:** update python dependencies (non-major) ([#1214](https://github.com/F3-Nation/f3-nation/issues/1214)) ([d2f6e95](https://github.com/F3-Nation/f3-nation/commit/d2f6e950ce1b94a573b27852eb24a83629c0ff2d))
+
+## [1.0.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.4.0...analytics@1.0.0) (2026-10-06)
+
+
+### Bug Fixes
+
+* **analytics:** disabling duckdb filter pushdown and adding duckdb logging ([#1033](https://github.com/F3-Nation/f3-nation/issues/1033)) ([732690d](https://github.com/F3-Nation/f3-nation/commit/732690d18064bcdf352940f8739c780950877589))
+
 ## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/analytics@0.3.1...analytics@0.4.0) (2026-09-16)
 
 

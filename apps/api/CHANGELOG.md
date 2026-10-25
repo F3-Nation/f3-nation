@@ -1,5 +1,99 @@
 # Changelog
 
+## [6.12.1](https://github.com/F3-Nation/f3-nation/compare/api@6.12.0...api@6.12.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **api,admin:** list existing API-key roles accurately ([#1260](https://github.com/F3-Nation/f3-nation/issues/1260)) ([2542caa](https://github.com/F3-Nation/f3-nation/commit/2542caa44a7974ca0f5de6447b9011eb966536bd))
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+* **api:** hide retired org hierarchies from anonymous reads ([#1275](https://github.com/F3-Nation/f3-nation/issues/1275)) ([ac11ec7](https://github.com/F3-Nation/f3-nation/commit/ac11ec7815a2267fa07cb1d32e6bf76f3fa17c7e))
+* **api:** validate region ID integer domain ([#1236](https://github.com/F3-Nation/f3-nation/issues/1236)) ([21c87c0](https://github.com/F3-Nation/f3-nation/commit/21c87c0451695a84e42523b79e775ec8b3396a69))
+* **auth,map:** stop trusting client-supplied roles on JWT update ([#1341](https://github.com/F3-Nation/f3-nation/issues/1341)) ([f27c924](https://github.com/F3-Nation/f3-nation/commit/f27c9241d062ed417cd8701198cdc0583c7c4558))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.15.0
+    * @acme/shared bumped to 0.5.1
+  * devDependencies
+    * @acme/db bumped to 0.10.1
+    * @f3nation/sso bumped to 0.5.0
+
+## [6.12.0](https://github.com/F3-Nation/f3-nation/compare/api@6.11.0...api@6.12.0) (2026-10-14)
+
+
+### Features
+
+* **api:** filling cascade gaps for ao/series deactivation and reactivation ([#1173](https://github.com/F3-Nation/f3-nation/issues/1173)) ([7eddfd6](https://github.com/F3-Nation/f3-nation/commit/7eddfd60c9d149ba997ca668016be2a444b2e051))
+* **db,shared,admin:** add password_manager and password_reader roles ([#1180](https://github.com/F3-Nation/f3-nation/issues/1180)) ([e69f45d](https://github.com/F3-Nation/f3-nation/commit/e69f45d92f88ed1248a86cdce716e05a66389b85))
+
+
+### Bug Fixes
+
+* **api,map:** public read tier for the map API ([#378](https://github.com/F3-Nation/f3-nation/issues/378)), plus [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3 groundwork ([#1149](https://github.com/F3-Nation/f3-nation/issues/1149)) ([f65d3d9](https://github.com/F3-Nation/f3-nation/commit/f65d3d9120131c4cbff8bcdb019bcc546b8a6464))
+* **api:** accept region IDs from REST query strings ([#1233](https://github.com/F3-Nation/f3-nation/issues/1233)) ([216dd99](https://github.com/F3-Nation/f3-nation/commit/216dd99cbb71fb740c6c3620f8e958045fd9fe1f))
+* **map,api:** use one-off organizations at shared locations ([#1243](https://github.com/F3-Nation/f3-nation/issues/1243)) ([381106a](https://github.com/F3-Nation/f3-nation/commit/381106a39f8f3f51f92916354fa8e81904cbfc21))
+* **map:** open the detail panel for instance-only map pins ([#1216](https://github.com/F3-Nation/f3-nation/issues/1216)) ([af265ea](https://github.com/F3-Nation/f3-nation/commit/af265ea940b6e83982ce8028b2cbeda81e891f0f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.14.0
+    * @acme/shared bumped to 0.5.0
+  * devDependencies
+    * @acme/db bumped to 0.10.0
+
+## [6.11.0](https://github.com/F3-Nation/f3-nation/compare/api@6.10.0...api@6.11.0) (2026-10-10)
+
+
+### Features
+
+* **db:** add public-table audit history ([#1060](https://github.com/F3-Nation/f3-nation/issues/1060)) ([10454d8](https://github.com/F3-Nation/f3-nation/commit/10454d8ab47795b984a76b01768642860b7718b6))
+
+
+### Bug Fixes
+
+* **api,admin:** let home-region editors and admins see and edit user PII ([#1150](https://github.com/F3-Nation/f3-nation/issues/1150)) ([35f5efa](https://github.com/F3-Nation/f3-nation/commit/35f5efa9dab0647a3ce98ae2b783d54f0e6b4d45))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.13.0
+    * @acme/logger bumped to 0.3.0
+  * devDependencies
+    * @acme/db bumped to 0.9.0
+
+## [6.10.0](https://github.com/F3-Nation/f3-nation/compare/api@6.9.0...api@6.10.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+
+
+### Bug Fixes
+
+* **api:** scope API-key reads, map-change requests and key management ([#1169](https://github.com/F3-Nation/f3-nation/issues/1169)) ([9a946e8](https://github.com/F3-Nation/f3-nation/commit/9a946e8fb493c5005f76ed94460625eb533614f1))
+* **db:** clarify local and test database env usage ([#1148](https://github.com/F3-Nation/f3-nation/issues/1148)) ([b11dfe7](https://github.com/F3-Nation/f3-nation/commit/b11dfe79c1a28a90432fd343e3956c6c596425ad))
+* **observability,api:** report root causes, redact query params, stop reporting 4xx as exceptions ([#1112](https://github.com/F3-Nation/f3-nation/issues/1112)) ([2ddcb83](https://github.com/F3-Nation/f3-nation/commit/2ddcb831dec8e4a808bd1791fdb7d8767b314e3f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.12.0
+    * @acme/shared bumped to 0.4.1
+  * devDependencies
+    * @acme/db bumped to 0.8.0
+
 ## [6.9.0](https://github.com/F3-Nation/f3-nation/compare/api@6.8.0...api@6.9.0) (2026-09-27)
 
 

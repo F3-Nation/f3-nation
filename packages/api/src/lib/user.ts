@@ -43,6 +43,29 @@ interface HomeRegionSummary {
   homeRegionName: string | null;
 }
 
+/** User columns only returned to callers with PII access. */
+const userPiiColumns = {
+  email: schema.users.email,
+  emailVerified: schema.users.emailVerified,
+  phone: schema.users.phone,
+  emergencyContact: schema.users.emergencyContact,
+  emergencyPhone: schema.users.emergencyPhone,
+  emergencyNotes: schema.users.emergencyNotes,
+};
+
+/** Strips PII columns from a full user row unless the caller may see them. */
+export const shapeUserPii = <T extends Partial<UserSelectType>>(
+  user: T,
+  includePii: boolean,
+): T | Omit<T, keyof typeof userPiiColumns> => {
+  if (includePii) return user;
+  const publicUser = { ...user };
+  for (const column of Object.keys(userPiiColumns)) {
+    delete publicUser[column as keyof typeof userPiiColumns];
+  }
+  return publicUser;
+};
+
 // Shared function to build user select fields
 const buildUserSelect = ({
   includePii,
@@ -102,15 +125,7 @@ const buildUserSelect = ({
 
   // Add PII fields if requested
   if (includePii) {
-    select = {
-      ...select,
-      email: schema.users.email,
-      emailVerified: schema.users.emailVerified,
-      phone: schema.users.phone,
-      emergencyContact: schema.users.emergencyContact,
-      emergencyPhone: schema.users.emergencyPhone,
-      emergencyNotes: schema.users.emergencyNotes,
-    };
+    select = { ...select, ...userPiiColumns };
   } else if (includeEmail) {
     // Add only email if requested (without full PII)
     select = {
@@ -136,12 +151,35 @@ export const isDuplicateEmailError = (error: unknown): boolean => {
   );
 };
 
+interface PgErrorFields {
+  code: string;
+  constraint_name?: string;
+}
+
+const hasPgCode = (value: unknown): value is PgErrorFields =>
+  typeof value === "object" &&
+  value !== null &&
+  "code" in value &&
+  typeof (value as { code?: unknown }).code === "string";
+
+// Returns the Postgres error carried by `error`. The postgres-js/drizzle driver
+// can wrap the real PostgresError in `.cause`, so check both levels.
+export const getPgError = (error: unknown): PgErrorFields | undefined => {
+  if (hasPgCode(error)) return error;
+  if (error instanceof Error && hasPgCode(error.cause)) return error.cause;
+  return undefined;
+};
+
+// Helper to check if error is a foreign-key violation (Postgres 23503).
+export const isForeignKeyViolationError = (error: unknown): boolean =>
+  getPgError(error)?.code === "23503";
+
 // Base input schema object (before optional)
 export const userListInputSchema = z.object({
   roles: arrayOrSingle(z.enum(UserRole))
     .optional()
     .describe(
-      "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+      "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
     ),
   searchTerm: z
     .string()
@@ -185,7 +223,7 @@ export const userListUserOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),
@@ -217,7 +255,7 @@ export const userDetailOutputSchema = UserSelectSchema.partial()
         z.object({
           orgId: z.number().describe("Organization ID"),
           orgName: z.string().describe("Organization name"),
-          roleName: z.enum(["user", "editor", "admin"]).describe("Role name"),
+          roleName: z.enum(UserRole).describe("Role name"),
         }),
       )
       .describe("User roles"),
@@ -260,28 +298,35 @@ export const buildUserListQuery = async ({
   includePii: boolean;
 }) => {
   const { limit, offset, usePagination } = resolvePagination({
-    pageSize: input?.pageSize,
-    pageIndex: input?.pageIndex,
+    pageSize: input.pageSize,
+    pageIndex: input.pageIndex,
     defaultPageSize: 10,
   });
+  const selectedRoles = input.roles ?? [];
+  // Role-less users have no roles row (LEFT JOIN -> NULL name), so selecting
+  // "user" also matches them. OR the two branches so mixed selections match both.
+  const roleFilter = (() => {
+    if (selectedRoles.length === 0) return undefined;
+    const conditions: SQL[] = [inArray(schema.roles.name, selectedRoles)];
+    if (selectedRoles.includes("user"))
+      conditions.push(isNull(schema.roles.name));
+    return conditions.length === 1 ? conditions[0] : or(...conditions);
+  })();
+
   const where = and(
-    !input?.statuses?.length || input.statuses.length === UserStatus.length
+    !input.statuses?.length || input.statuses.length === UserStatus.length
       ? undefined
       : input.statuses.includes("active")
         ? eq(schema.users.status, "active")
         : eq(schema.users.status, "inactive"),
-    !input?.roles?.length || input.roles.length === UserRole.length
-      ? undefined
-      : input.roles.includes("user")
-        ? isNull(schema.roles.name)
-        : inArray(schema.roles.name, input.roles),
-    input?.searchTerm
+    roleFilter,
+    input.searchTerm
       ? or(
-          ilike(schema.users.f3Name, `%${input?.searchTerm}%`),
-          ilike(schema.users.firstName, `%${input?.searchTerm}%`),
-          ilike(schema.users.lastName, `%${input?.searchTerm}%`),
+          ilike(schema.users.f3Name, `%${input.searchTerm}%`),
+          ilike(schema.users.firstName, `%${input.searchTerm}%`),
+          ilike(schema.users.lastName, `%${input.searchTerm}%`),
           includePii
-            ? ilike(schema.users.email, `%${input?.searchTerm}%`)
+            ? ilike(schema.users.email, `%${input.searchTerm}%`)
             : eq(
                 schema.users.email,
                 input.searchTerm.includes("@")
@@ -290,7 +335,7 @@ export const buildUserListQuery = async ({
               ),
         )
       : undefined,
-    input?.orgIds?.length
+    input.orgIds?.length
       ? or(
           inArray(schema.rolesXUsersXOrg.orgId, input.orgIds),
           and(
@@ -299,19 +344,23 @@ export const buildUserListQuery = async ({
           ),
         )
       : undefined,
-    input?.homeRegionIds?.length
+    input.homeRegionIds?.length
       ? inArray(schema.users.homeRegionId, input.homeRegionIds)
       : undefined,
   );
 
   const homeRegion = aliasedTable(schema.orgs, "homeRegion");
 
+  // Match the whitespace removed by the displayed name's JavaScript trim().
+  const fullNameTrimCharacters =
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
+
   const sortedColumns = [
     ...getSortingColumns(
-      input?.sorting,
+      input.sorting,
       {
         id: schema.users.id,
-        name: schema.users.firstName,
+        name: sql`btrim(concat_ws(' ', ${schema.users.firstName}, ${schema.users.lastName}), ${fullNameTrimCharacters})`,
         f3Name: schema.users.f3Name,
         roles: sql`MIN(${schema.roles.name})`,
         status: schema.users.status,
@@ -464,7 +513,46 @@ export const buildSingleUserQuery = async (
   };
 };
 
-// Helper to check PII access for a user
+export const hasRoleOnAny = async (
+  ctx: Context,
+  orgIds: number[],
+  roleName: "editor" | "admin",
+): Promise<boolean> => {
+  for (const orgId of new Set(orgIds)) {
+    const { success } = await checkHasRoleOnOrg({
+      orgId,
+      session: ctx.session,
+      db: ctx.db,
+      roleName,
+    });
+    if (success) return true;
+  }
+  return false;
+};
+
+/**
+ * Orgs whose editors may edit a user's profile: the home region, else any org
+ * the user holds a role on, else the nation.
+ */
+export const getProfileScopeOrgIds = async (
+  ctx: Context,
+  homeRegionId: number | null,
+  roleOrgIds: number[],
+): Promise<number[]> => {
+  if (homeRegionId) return [homeRegionId];
+  if (roleOrgIds.length > 0) return roleOrgIds;
+  const nations = await ctx.db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.orgType, "nation"));
+  return nations.map(({ id }) => id);
+};
+
+/**
+ * PII access for an existing user: editors and admins of the orgs that scope
+ * their profile (checkHasRoleOnOrg walks up the org tree), or admins of an org
+ * the user has a role on. user.crupdate applies the same rule.
+ */
 export const checkUserPiiAccess = async ({
   ctx,
   userId,
@@ -472,26 +560,24 @@ export const checkUserPiiAccess = async ({
   ctx: Context;
   userId: number;
 }): Promise<boolean> => {
-  // Get the user's orgs to check if requester is admin of any
-  const userOrgs = await ctx.db
-    .selectDistinct({
-      orgId: schema.rolesXUsersXOrg.orgId,
-    })
-    .from(schema.rolesXUsersXOrg)
-    .where(eq(schema.rolesXUsersXOrg.userId, userId));
+  const [user] = await ctx.db
+    .select({ homeRegionId: schema.users.homeRegionId })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId));
+  if (!user) return false;
 
-  // Check if requester is an admin for any of the user's orgs
-  for (const userOrg of userOrgs) {
-    const { success } = await checkHasRoleOnOrg({
-      orgId: userOrg.orgId,
-      session: ctx.session,
-      db: ctx.db,
-      roleName: "admin",
-    });
-    if (success) {
-      return true;
-    }
-  }
+  const roleOrgIds = (
+    await ctx.db
+      .selectDistinct({ orgId: schema.rolesXUsersXOrg.orgId })
+      .from(schema.rolesXUsersXOrg)
+      .where(eq(schema.rolesXUsersXOrg.userId, userId))
+  ).map(({ orgId }) => orgId);
 
-  return false;
+  return (
+    (await hasRoleOnAny(
+      ctx,
+      await getProfileScopeOrgIds(ctx, user.homeRegionId, roleOrgIds),
+      "editor",
+    )) || (await hasRoleOnAny(ctx, roleOrgIds, "admin"))
+  );
 };

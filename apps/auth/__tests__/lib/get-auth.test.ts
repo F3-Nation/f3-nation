@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("~/lib/db", () => ({ db: {} }));
 vi.mock("~/lib/better-auth-email", () => ({
-  sendBetterAuthOtpEmail: vi.fn(),
+  deliverBetterAuthOtp: vi.fn(),
 }));
 vi.mock("~/env", () => ({
   env: {

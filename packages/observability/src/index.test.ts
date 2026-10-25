@@ -218,6 +218,255 @@ describe("captureException", () => {
   });
 });
 
+describe("captureException root cause", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  type Captured = [Error, undefined, Record<string, unknown>];
+
+  it("reports the driver error behind a real DrizzleQueryError, with params redacted", async () => {
+    // A genuine Drizzle failure, not a hand-built lookalike: a query against
+    // a closed port makes drizzle-orm wrap postgres.js's ECONNREFUSED in its
+    // own `Failed query: …\nparams: …` error — the shape every api/map
+    // database failure arrives in, and the one a connection-failure alert
+    // has to see through.
+    const { default: postgres } = await import("postgres");
+    const { drizzle } = await import("drizzle-orm/postgres-js");
+    const { sql } = await import("drizzle-orm");
+    const client = postgres("postgres://u:p@127.0.0.1:1/db", {
+      max: 1,
+      connect_timeout: 2,
+    });
+    let dbError: unknown;
+    try {
+      await drizzle(client).execute(sql`select ${"pii@example.com"}::text`);
+    } catch (err) {
+      dbError = err;
+    } finally {
+      await client.end({ timeout: 1 });
+    }
+    expect((dbError as Error).message).toMatch(/^Failed query: /);
+
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(dbError);
+
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toMatch(/ECONNREFUSED/);
+    expect(properties.root_cause_type).toBe("Error");
+    // The driver's code, a stable field to alert on.
+    expect(properties.root_cause_code).toBe("ECONNREFUSED");
+    // Re-attached as .cause so posthog-node emits a chained exception.
+    expect((reported.cause as Error).message).toMatch(/ECONNREFUSED/);
+    // The bound value never leaves the process — not in the message, the
+    // stack, or any property.
+    expect(reported.message).toContain("params: [redacted]");
+    expect(
+      JSON.stringify([reported.message, reported.stack, properties]),
+    ).not.toContain("pii@example.com");
+    // The cause attributes are folded into root_cause_*, not duplicated.
+    expect(properties).not.toHaveProperty("exception.cause.message");
+  });
+
+  it("drops a stack it cannot safely redact instead of sending the params", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const error = new Error("Failed query: select $1\nparams: secret@x.com");
+    // A stack whose header doesn't embed the message verbatim.
+    error.stack = "Error: rewritten\n    at x (y.ts:1:1)\nparams: secret@x.com";
+    await captureException(error);
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.message).toBe(
+      "Failed query: select $1\nparams: [redacted]",
+    );
+    expect(JSON.stringify([reported.stack, properties])).not.toContain(
+      "secret@x.com",
+    );
+    // The withheld stack is marked, not silently absent.
+    expect(properties["exception.stacktrace_dropped"]).toBe("redaction");
+  });
+
+  it("redacts the value a Postgres type error quotes back", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const cause = Object.assign(
+      new Error('invalid input syntax for type uuid: "alice@example.com"'),
+      { name: "PostgresError", code: "22P02" },
+    );
+    await captureException(
+      new Error("Failed query: select $1\nparams: x", { cause }),
+    );
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toBe(
+      'invalid input syntax for type uuid: "[redacted]"',
+    );
+    expect(properties.root_cause_code).toBe("22P02");
+    const cause_ = reported.cause as Error;
+    expect(
+      JSON.stringify([reported.message, reported.stack, properties]) +
+        cause_.message +
+        (cause_.stack ?? ""),
+    ).not.toContain("alice@example.com");
+  });
+
+  it("marks a cause stack withheld because redaction couldn't be verified", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const cause = new Error('bad input: "secret@x.com"');
+    cause.stack = "Error: rewritten header\n    at x (y.ts:1:1)";
+    await captureException(new Error("outer", { cause }));
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties["exception.cause.stacktrace_dropped"]).toBe("redaction");
+    expect(JSON.stringify(properties)).not.toContain("secret@x.com");
+  });
+
+  it("omits root_cause_code when the cause has none", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(new Error("outer", { cause: new Error("inner") }));
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties).not.toHaveProperty("root_cause_code");
+  });
+
+  it("reports a root cause that has no stack", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const cause = new Error("connect ECONNREFUSED 127.0.0.1:5432");
+    cause.stack = undefined;
+    await captureException(new Error("outer", { cause }));
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toBe(
+      "connect ECONNREFUSED 127.0.0.1:5432",
+    );
+    expect(reported.cause).toBeInstanceOf(Error);
+  });
+
+  it("still reports an error whose cause getter throws", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const error = new Error("outer");
+    Object.defineProperty(error, "cause", {
+      get() {
+        throw new Error("getter boom");
+      },
+    });
+    await captureException(error);
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.message).toBe("outer");
+    expect(properties).not.toHaveProperty("root_cause_message");
+  });
+
+  it("omits root_cause_* for an error without a cause", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(new Error("boom"));
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.cause).toBeUndefined();
+    expect(properties).not.toHaveProperty("root_cause_message");
+  });
+
+  it("preserves a sanitized audit SQLSTATE without restoring its cause", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const error = Object.assign(new Error("Audit history capture failed"), {
+      code: "AH002",
+    });
+    await captureException(error);
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.cause).toBeUndefined();
+    expect(properties.root_cause_code).toBe("AH002");
+    expect(properties).not.toHaveProperty("root_cause_message");
+  });
+
+  it.each([
+    ["an unrelated error", "ordinary failure", "ABCDE"],
+    ["an invalid audit code", "Audit history capture failed", "not-sqlstate"],
+  ])("does not promote the code from %s", async (_case, message, code) => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(Object.assign(new Error(message), { code }));
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties).not.toHaveProperty("root_cause_code");
+  });
+
+  it("ignores an error code getter that throws", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const error = new Error("Audit history capture failed");
+    Object.defineProperty(error, "code", {
+      get() {
+        throw new Error("unsafe getter");
+      },
+    });
+    await captureException(error);
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties).not.toHaveProperty("root_cause_code");
+  });
+
+  it("ignores a root cause code getter that throws", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    const cause = new Error("inner failure");
+    Object.defineProperty(cause, "code", {
+      get() {
+        throw new Error("unsafe getter");
+      },
+    });
+    await captureException(new Error("outer failure", { cause }));
+    const [, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toBe("inner failure");
+    expect(properties).not.toHaveProperty("root_cause_code");
+  });
+
+  it("callers cannot inject a root cause onto an error without one", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(new Error("no cause"), {
+      root_cause_message: "spoofed",
+      root_cause_code: "spoofed",
+      "exception.cause.message": "spoofed",
+      "exception.cause.code": "spoofed",
+      "exception.stacktrace_dropped": "spoofed",
+    });
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(reported.cause).toBeUndefined();
+    expect(properties).not.toHaveProperty("root_cause_message");
+    expect(properties).not.toHaveProperty("exception.cause.message");
+    expect(properties).not.toHaveProperty("root_cause_code");
+    expect(properties).not.toHaveProperty("exception.stacktrace_dropped");
+  });
+
+  it("callers cannot spoof the root cause", async () => {
+    const { registerObservability, captureException } = await freshModule();
+    registerObservability(config);
+    await captureException(
+      new Error("outer", { cause: new Error("real cause") }),
+      {
+        root_cause_message: "spoofed",
+        "exception.cause.message": "spoofed",
+      },
+    );
+    const [reported, , properties] = captureExceptionImmediateMock.mock
+      .calls[0] as Captured;
+    expect(properties.root_cause_message).toBe("real cause");
+    expect((reported.cause as Error).message).toBe("real cause");
+  });
+});
+
 describe("registerObservability", () => {
   beforeEach(() => {
     vi.clearAllMocks();

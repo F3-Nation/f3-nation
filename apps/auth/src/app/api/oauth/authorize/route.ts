@@ -12,6 +12,7 @@ import {
   validateRedirectUri,
   validateScopes,
 } from "~/lib/oauth";
+import { withoutOfflineAccess } from "~/lib/oauth-scope";
 import { rateLimit } from "~/lib/rate-limit";
 import { env } from "~/env";
 
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   const responseType = searchParams.get("response_type");
   const clientId = searchParams.get("client_id");
   const redirectUri = searchParams.get("redirect_uri");
-  const scope = searchParams.get("scope") ?? "openid profile email";
+  const requestedScope = searchParams.get("scope") ?? "openid profile email";
   const state = searchParams.get("state");
   const nonce = searchParams.get("nonce");
   const codeChallenge = searchParams.get("code_challenge");
@@ -91,13 +92,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const scope = withoutOfflineAccess(requestedScope, client.scopes);
   if (!validateScopes(client, scope)) {
     return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
   }
 
   // Check if user is authenticated
   const session = await getCurrentSession();
-  if (!session?.user?.id) {
+  if (!session?.user.id) {
     // Redirect to login with callback to this authorize URL
     const callbackUrl = `${publicUrl}${reqUrl.pathname}${reqUrl.search}`;
     const loginUrl = new URL("/login/email", publicUrl);
@@ -136,7 +138,7 @@ export async function GET(request: NextRequest) {
     userId: userId,
     redirectUri,
     scopes: scope,
-    codeChallenge: codeChallenge ?? undefined,
+    codeChallenge,
     codeChallengeMethod: codeChallenge ? codeChallengeMethod : undefined,
     // `|| undefined`, not `?? undefined`: an empty nonce=&... provides no
     // replay protection and shouldn't get echoed into a real id_token as a

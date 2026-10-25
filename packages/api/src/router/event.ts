@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { ORPCError } from "@orpc/server";
 import type { SQL } from "drizzle-orm";
 import { z } from "zod";
@@ -23,7 +25,11 @@ import {
   EventCategory,
   IsActiveStatus,
 } from "@acme/shared/app/enums";
-import { arrayOrSingle, getFullAddress } from "@acme/shared/app/functions";
+import {
+  arrayOrSingle,
+  getFullAddress,
+  queryBooleanSchema,
+} from "@acme/shared/app/functions";
 import { EventCrupdateSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -32,8 +38,15 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
 import { logError } from "../logger";
+import { orgAndAncestorsAreActive } from "../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
+import { requireEditorOnRescope } from "../require-editor-on-rescope";
 import type { Context } from "../shared";
-import { editorProcedure, protectedProcedure } from "../shared";
+import {
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 // Shared filter schema for events (used by both `all` and `count` endpoints)
@@ -84,7 +97,7 @@ const eventAllInputSchema = eventFilterSchema
   .extend({
     ...paginationFields("events"),
     sorting: z
-      .array(z.object({ id: z.string(), desc: z.coerce.boolean() }))
+      .array(z.object({ id: z.string(), desc: queryBooleanSchema }))
       .optional()
       .describe(
         "Sort results by field(s). Format: [{ id: 'fieldName', desc: true/false }]. Available fields: regions, parent, status, dayOfWeek, created.",
@@ -92,9 +105,113 @@ const eventAllInputSchema = eventFilterSchema
   })
   .optional();
 
+/**
+ * A location or region-specific event type must belong to the event's AO,
+ * its region, or another AO in that region. Only references the request adds (or all of them, when the
+ * event is created or moved) are checked, so pre-existing links don't block
+ * unrelated edits.
+ */
+async function assertEventRefsInScope({
+  ctx,
+  aoId,
+  existingEvent,
+  locationId,
+  eventTypeIds,
+}: {
+  ctx: Context;
+  aoId: number;
+  existingEvent: typeof schema.events.$inferSelect | undefined;
+  locationId: number | null | undefined;
+  eventTypeIds: number[];
+}): Promise<void> {
+  // True on create, since there is no current org.
+  const isNewPlacement = existingEvent?.orgId !== aoId;
+
+  const checkLocation =
+    locationId != null &&
+    (isNewPlacement || existingEvent.locationId !== locationId);
+
+  let typeIdsToCheck = eventTypeIds;
+  if (!isNewPlacement) {
+    const linked = await ctx.db
+      .select({ id: schema.eventsXEventTypes.eventTypeId })
+      .from(schema.eventsXEventTypes)
+      .where(eq(schema.eventsXEventTypes.eventId, existingEvent.id));
+    const linkedIds = new Set(linked.map(({ id }) => id));
+    typeIdsToCheck = eventTypeIds.filter((id) => !linkedIds.has(id));
+  }
+
+  if (!checkLocation && typeIdsToCheck.length === 0) return;
+
+  const [ao] = await ctx.db
+    .select({ parentId: schema.orgs.parentId, orgType: schema.orgs.orgType })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, aoId));
+  if (!ao) {
+    throw new ORPCError("NOT_FOUND", { message: "AO not found" });
+  }
+  const allowedOrgIds = ao.parentId == null ? [aoId] : [aoId, ao.parentId];
+  // AOs in one region share that region's locations and event types.
+  if (ao.orgType === "ao" && ao.parentId != null) {
+    const siblings = await ctx.db
+      .select({ id: schema.orgs.id })
+      .from(schema.orgs)
+      .where(
+        and(
+          eq(schema.orgs.parentId, ao.parentId),
+          eq(schema.orgs.orgType, "ao"),
+        ),
+      );
+    allowedOrgIds.push(...siblings.map(({ id }) => id));
+  }
+
+  if (checkLocation) {
+    const [location] = await ctx.db
+      .select({ orgId: schema.locations.orgId })
+      .from(schema.locations)
+      .where(eq(schema.locations.id, locationId));
+    if (!location) {
+      throw new ORPCError("NOT_FOUND", { message: "Location not found" });
+    }
+    if (!allowedOrgIds.includes(location.orgId)) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Location must belong to the event's region",
+      });
+    }
+  }
+
+  if (typeIdsToCheck.length > 0) {
+    const eventTypes = await ctx.db
+      .select({ specificOrgId: schema.eventTypes.specificOrgId })
+      .from(schema.eventTypes)
+      .where(inArray(schema.eventTypes.id, typeIdsToCheck));
+    if (eventTypes.length !== new Set(typeIdsToCheck).size) {
+      throw new ORPCError("NOT_FOUND", { message: "Event type not found" });
+    }
+    const allInScope = eventTypes.every(
+      ({ specificOrgId }) =>
+        specificOrgId == null || allowedOrgIds.includes(specificOrgId),
+    );
+    if (!allInScope) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Event types must be nation-wide or belong to the event's region",
+      });
+    }
+  }
+}
+
 // Aliased tables used across event queries
 const regionOrg = aliasedTable(schema.orgs, "region_org");
+const allRegionOrg = aliasedTable(schema.orgs, "all_region_org");
 const parentOrg = aliasedTable(schema.orgs, "parent_org");
+
+const pendingRegionNotificationTasks = new Set<Promise<void>>();
+
+/** Wait for detached region notification work to finish (used by deterministic tests). */
+export const waitForEventRegionNotificationTasks = async () => {
+  await Promise.all([...pendingRegionNotificationTasks]);
+};
 
 /**
  * Resolves editable org IDs for "onlyMine" filter
@@ -137,15 +254,40 @@ function buildEventWhereClause(params: {
   input?: EventFilterInput;
   editableOrgIds: number[];
   isNationAdmin: boolean;
+  isAnonymous: boolean;
 }): SQL | undefined {
-  const { input, editableOrgIds, isNationAdmin } = params;
+  const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
+
+  // `all` is public; `count` stays protected. For anonymous list callers,
+  // clamp to active-only regardless of what `statuses` they pass, since
+  // inactive events were never meant to be public. Authenticated behavior
+  // (including an explicit request for inactive/both) is unchanged.
+  const effectiveStatuses = isAnonymous
+    ? (["active"] as NonNullable<EventFilterInput["statuses"]>)
+    : input?.statuses;
 
   return and(
-    !input?.statuses?.length // no statuses provided, default to active
+    isAnonymous ? orgAndAncestorsAreActive(schema.events.orgId) : undefined,
+    !effectiveStatuses?.length // no statuses provided, default to active
       ? eq(schema.events.isActive, true)
-      : input.statuses.length === IsActiveStatus.length
+      : effectiveStatuses.length === IsActiveStatus.length
         ? undefined
-        : eq(schema.events.isActive, input.statuses.includes("active")),
+        : eq(schema.events.isActive, effectiveStatuses.includes("active")),
+    // publicReadProcedure lets an anonymous caller reach this endpoint;
+    // isPrivate events were never filtered because every prior caller was at
+    // least a signed-in user. Keep that behavior unchanged for authenticated
+    // callers and only hide private events from anonymous ones.
+    isAnonymous ? eq(schema.events.isPrivate, false) : undefined,
+    // location.delete only soft-deletes the location (isActive: false) and
+    // leaves its events untouched, so an anonymous caller could otherwise
+    // still read a deleted location's name/address through an active event
+    // that still points at it. Authenticated callers are unaffected.
+    isAnonymous
+      ? or(
+          isNull(schema.events.locationId),
+          eq(schema.locations.isActive, true),
+        )
+      : undefined,
     input?.searchTerm
       ? or(
           ilike(schema.events.name, `%${input.searchTerm}%`),
@@ -175,8 +317,12 @@ function buildEventWhereClause(params: {
 /**
  * Builds the base query with all required joins for event queries
  */
-function buildEventBaseQuery(params: { db: AppDb; where: SQL | undefined }) {
-  const { db, where } = params;
+function buildEventBaseQuery(params: {
+  db: AppDb;
+  where: SQL | undefined;
+  isAnonymous: boolean;
+}) {
+  const { db, where, isAnonymous } = params;
 
   return (
     db
@@ -208,7 +354,12 @@ function buildEventBaseQuery(params: { db: AppDb; where: SQL | undefined }) {
       )
       .leftJoin(
         schema.eventTypes,
-        eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+        and(
+          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+          isAnonymous
+            ? orgAndAncestorsAreActive(schema.eventTypes.specificOrgId)
+            : undefined,
+        ),
       )
       .where(where)
   );
@@ -220,16 +371,15 @@ function buildEventBaseQuery(params: { db: AppDb; where: SQL | undefined }) {
 async function getEventCount(params: {
   db: AppDb;
   where: SQL | undefined;
+  isAnonymous: boolean;
 }): Promise<number> {
-  const { db, where } = params;
-
-  const [eventCount] = await buildEventBaseQuery({ db, where });
+  const [eventCount] = await buildEventBaseQuery(params);
 
   return eventCount?.count ?? 0;
 }
 
 export const eventRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(eventAllInputSchema)
     .route({
       method: "GET",
@@ -304,6 +454,11 @@ export const eventRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      // resolvePagination already bounds the "omit both params"
+      // branch to a single default-sized page for every caller, so an
+      // anonymous caller reaching this endpoint can no longer scrape
+      // the whole table in one request — no anonymous-specific override
+      // needed here (unlike isActive/isPrivate filtering, which still is).
       const { limit, offset, usePagination } = resolvePagination({
         pageSize: input?.pageSize,
         pageIndex: input?.pageIndex,
@@ -323,17 +478,20 @@ export const eventRouter = {
 
       const { editableOrgIds, isNationAdmin } = editableResult;
 
+      const isAnonymousAll = !ctx.session?.user;
+      if (isAnonymousAll) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const where = buildEventWhereClause({
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: isAnonymousAll,
       });
 
       const sortedColumns = input?.sorting?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;
         switch (sorting.id) {
           case "regions":
-            return direction(regionOrg.name);
+            return direction(sql`min(${allRegionOrg.name})`);
           case "parent":
             return direction(parentOrg.name);
           case "status":
@@ -346,6 +504,9 @@ export const eventRouter = {
             return direction(schema.events.id);
         }
       }) ?? [desc(schema.events.id)];
+
+      // Break tied sort values so rows cannot repeat or vanish between pages.
+      sortedColumns.push(asc(schema.events.id));
 
       const select = {
         id: schema.events.id,
@@ -383,12 +544,12 @@ export const eventRouter = {
         regions: sql<{ regionId: number; regionName: string }[]>`COALESCE(
           json_agg(
             DISTINCT jsonb_build_object(
-              'regionId', ${regionOrg.id}, 
-              'regionName', ${regionOrg.name}
+              'regionId', ${allRegionOrg.id},
+              'regionName', ${allRegionOrg.name}
             )
           ) 
           FILTER (
-            WHERE ${regionOrg.id} IS NOT NULL
+            WHERE ${allRegionOrg.id} IS NOT NULL
           ), 
           '[]'
         )`,
@@ -419,7 +580,11 @@ export const eventRouter = {
         )`,
       };
 
-      const totalCount = await getEventCount({ db: ctx.db, where });
+      const totalCount = await getEventCount({
+        db: ctx.db,
+        where,
+        isAnonymous: isAnonymousAll,
+      });
 
       // Build the full query with select, joins, and groupBy
       const query = ctx.db
@@ -449,18 +614,34 @@ export const eventRouter = {
           ),
         )
         .leftJoin(
+          // Keep all associations even when regionOrg is narrowed by filters.
+          allRegionOrg,
+          and(
+            eq(allRegionOrg.orgType, "region"),
+            or(
+              eq(allRegionOrg.id, schema.locations.orgId),
+              eq(allRegionOrg.id, schema.events.orgId),
+              eq(allRegionOrg.id, parentOrg.parentId),
+            ),
+          ),
+        )
+        .leftJoin(
           schema.eventsXEventTypes,
           eq(schema.eventsXEventTypes.eventId, schema.events.id),
         )
         .leftJoin(
           schema.eventTypes,
-          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+          and(
+            eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+            isAnonymousAll
+              ? orgAndAncestorsAreActive(schema.eventTypes.specificOrgId)
+              : undefined,
+          ),
         )
         .where(where)
         .groupBy(
           schema.events.id,
           parentOrg.id,
-          regionOrg.id,
           schema.locations.name,
           schema.locations.addressStreet,
           schema.locations.addressStreet2,
@@ -476,6 +657,10 @@ export const eventRouter = {
       const eventsWithLocation = events.map((event) => ({
         ...event,
         location: getFullAddress(event),
+        // publicReadProcedure lets an anonymous caller reach this endpoint
+        // an event's contact email isn't part of the map's own
+        // public browse payload, so don't let it leak here either.
+        email: isAnonymousAll ? null : event.email,
       }));
 
       return { events: eventsWithLocation, totalCount };
@@ -513,13 +698,19 @@ export const eventRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        // protectedProcedure: always an authenticated caller.
+        isAnonymous: false,
       });
 
-      const count = await getEventCount({ db: ctx.db, where });
+      const count = await getEventCount({
+        db: ctx.db,
+        where,
+        isAnonymous: false,
+      });
 
       return { count };
     }),
-  byId: protectedProcedure
+  byId: publicReadProcedure
     .input(
       z.object({
         id: z.coerce.number().describe("The unique identifier of the event"),
@@ -592,6 +783,8 @@ export const eventRouter = {
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
       const aoOrg = aliasedTable(schema.orgs, "ao_org");
+      const isAnonymousById = !ctx.session?.user;
+      if (isAnonymousById) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const [event] = await ctx.db
         .select({
           id: schema.events.id,
@@ -600,6 +793,7 @@ export const eventRouter = {
           isActive: schema.events.isActive,
           location: aoOrg.name,
           locationId: schema.events.locationId,
+          locationIsActive: schema.locations.isActive,
           startDate: schema.events.startDate,
           endDate: schema.events.endDate,
           dayOfWeek: schema.events.dayOfWeek,
@@ -681,12 +875,48 @@ export const eventRouter = {
         )
         .leftJoin(
           schema.eventTypes,
-          eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+          and(
+            eq(schema.eventTypes.id, schema.eventsXEventTypes.eventTypeId),
+            isAnonymousById
+              ? orgAndAncestorsAreActive(schema.eventTypes.specificOrgId)
+              : undefined,
+          ),
         )
-        .where(eq(schema.events.id, input.id))
-        .groupBy(schema.events.id, aoOrg.id, regionOrg.id);
+        .where(
+          and(
+            eq(schema.events.id, input.id),
+            isAnonymousById
+              ? orgAndAncestorsAreActive(schema.events.orgId)
+              : undefined,
+          ),
+        )
+        .groupBy(schema.events.id, aoOrg.id, regionOrg.id, schema.locations.id);
 
-      return { event: event ?? null };
+      // SQL already checks the event's org chain for anonymous callers.
+      // Also hide private, inactive, and soft-deleted-location event details
+      // from anonymous callers, matching `all` and eventIdToRegionNameLookup.
+      if (
+        isAnonymousById &&
+        (event?.isPrivate ||
+          event?.isActive === false ||
+          (event?.locationId && event.locationIsActive === false))
+      ) {
+        return { event: null };
+      }
+
+      // email/meta aren't part of the map's own public event payload;
+      // locationIsActive is only here to compute the anonymous clamp above.
+      if (!event) {
+        return { event: null };
+      }
+      const { locationIsActive: _locationIsActive, ...eventFields } = event;
+      return {
+        event: {
+          ...eventFields,
+          email: isAnonymousById ? null : event.email,
+          meta: isAnonymousById ? null : event.meta,
+        },
+      };
     }),
   crupdate: editorProcedure
     .input(EventCrupdateSchema)
@@ -696,7 +926,7 @@ export const eventRouter = {
       tags: ["event"],
       summary: "Create or update event",
       description:
-        "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
+        "Create a new event or update an existing one. Requires editor role for the event's organization; deactivating an active event requires admin role. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
     })
     .output(
       z.object({
@@ -748,24 +978,11 @@ export const eventRouter = {
             .where(eq(schema.events.id, input.id))
         : [];
 
-      const orgIdToCheck = input.aoId ?? input.regionId;
-      if (!orgIdToCheck) {
+      if (!input.aoId) {
         throw new ORPCError("BAD_REQUEST", {
-          message: "AO ID or Region ID is required",
+          message: "AO ID is required",
         });
       }
-      const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: existingEvent?.orgId ?? orgIdToCheck,
-        session: ctx.session,
-        db: ctx.db,
-        roleName: "editor",
-      });
-      if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to update this Event",
-        });
-      }
-
       const { eventTypeIds, eventTagIds, meta, ...eventData } = input;
       const normalizedEventTagIds =
         eventTagIds === undefined ? undefined : [...new Set(eventTagIds)];
@@ -774,18 +991,137 @@ export const eventRouter = {
       const eventToUpdate: typeof schema.events.$inferInsert = {
         ...eventData,
         orgId: input.aoId,
-        meta: meta
-          ? {
-              ...meta,
-              mapSeed,
-              eventTypeId: undefined, // Remove eventTypeId from meta since we handle it in join table
-            }
-          : null,
+        ...(meta === undefined
+          ? {}
+          : {
+              meta: meta
+                ? {
+                    ...meta,
+                    mapSeed,
+                    eventTypeId: undefined, // Remove eventTypeId from meta since we handle it in join table
+                  }
+                : null,
+            }),
       };
 
-      let shouldNotifyFirstEventForRegion = false;
-      const result = await ctx.db.transaction(async (tx) => {
+      const {
+        result,
+        destinationRegionId,
+        movedAcrossRegions,
+        shouldNotifyFirstEventForRegion,
+      } = await ctx.db.transaction(async (tx) => {
         const transactionDb = tx as unknown as AppDb;
+        const transactionContext: Context = { ...ctx, db: transactionDb };
+        const lockedAoIds = [
+          ...new Set(
+            [existingEvent?.orgId, input.aoId].filter(
+              (id): id is number => id != null,
+            ),
+          ),
+        ].sort((a, b) => a - b);
+        const lockedAos = await transactionDb
+          .select({ id: schema.orgs.id, parentId: schema.orgs.parentId })
+          .from(schema.orgs)
+          .where(inArray(schema.orgs.id, lockedAoIds))
+          .orderBy(asc(schema.orgs.id))
+          .for("no key update");
+        const [transactionExistingEvent] = input.id
+          ? await transactionDb
+              .select()
+              .from(schema.events)
+              .where(eq(schema.events.id, input.id))
+              .for("update")
+          : [];
+        if (
+          transactionExistingEvent &&
+          transactionExistingEvent.orgId !== existingEvent?.orgId
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message: "Event was modified concurrently; reload and retry",
+          });
+        }
+
+        // Authorization and scope checks use the locked event placement and AO
+        // hierarchy, so a concurrent event/AO move cannot invalidate them.
+        await requireEditorOnRescope({
+          ctx: transactionContext,
+          currentOrgId: transactionExistingEvent?.orgId,
+          targetOrgId: input.aoId,
+          entity: "Event",
+        });
+        await assertEventRefsInScope({
+          ctx: transactionContext,
+          aoId: input.aoId,
+          existingEvent: transactionExistingEvent,
+          locationId: input.locationId,
+          eventTypeIds: input.eventTypeIds,
+        });
+
+        const previousRegionId = lockedAos.find(
+          ({ id }) => id === transactionExistingEvent?.orgId,
+        )?.parentId;
+        const destinationRegionId =
+          lockedAos.find(({ id }) => id === input.aoId)?.parentId ?? undefined;
+        const movedAcrossRegions =
+          transactionExistingEvent !== undefined &&
+          destinationRegionId != null &&
+          previousRegionId !== destinationRegionId;
+
+        const isDeactivationTransition =
+          transactionExistingEvent?.isActive === true && !input.isActive;
+        const isStatusTransition =
+          transactionExistingEvent !== undefined &&
+          transactionExistingEvent.isActive !== input.isActive;
+
+        if (isDeactivationTransition) {
+          const adminRoleCheck = await checkHasRoleOnOrg({
+            orgId: transactionExistingEvent.orgId,
+            session: ctx.session,
+            db: transactionDb,
+            roleName: "admin",
+          });
+          if (!adminRoleCheck.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to deactivate this Event",
+            });
+          }
+        }
+
+        if (transactionExistingEvent?.dayOfWeek && input.dayOfWeek === null) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "An existing event series cannot be converted to a one-off",
+          });
+        }
+
+        const structuralScheduleChanged =
+          transactionExistingEvent !== undefined &&
+          ((input.dayOfWeek !== undefined &&
+            input.dayOfWeek !== transactionExistingEvent.dayOfWeek) ||
+            (input.recurrencePattern !== undefined &&
+              input.recurrencePattern !==
+                transactionExistingEvent.recurrencePattern) ||
+            (input.recurrenceInterval !== undefined &&
+              input.recurrenceInterval !==
+                transactionExistingEvent.recurrenceInterval) ||
+            (input.indexWithinInterval !== undefined &&
+              input.indexWithinInterval !==
+                transactionExistingEvent.indexWithinInterval) ||
+            input.startDate !== transactionExistingEvent.startDate ||
+            (input.endDate !== undefined &&
+              input.endDate !== transactionExistingEvent.endDate));
+
+        if (
+          isStatusTransition &&
+          transactionExistingEvent.dayOfWeek &&
+          structuralScheduleChanged
+        ) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "An existing event series cannot change its schedule during a status transition",
+          });
+        }
+
         const [result] = await transactionDb
           .insert(schema.events)
           .values(eventToUpdate)
@@ -834,7 +1170,7 @@ export const eventRouter = {
         }
 
         const effectiveEventTagIds =
-          normalizedEventTagIds === undefined && existingEvent
+          normalizedEventTagIds === undefined && transactionExistingEvent
             ? (
                 await transactionDb
                   .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
@@ -843,19 +1179,47 @@ export const eventRouter = {
               ).map(({ eventTagId }) => eventTagId)
             : normalizedEventTagIds;
 
-        // Handle event type in join table
-        if (eventTypeIds) {
-          await transactionDb
-            .delete(schema.eventsXEventTypes)
+        let eventTypesChanged = false;
+        if (transactionExistingEvent) {
+          const existingEventTypes = await transactionDb
+            .select({ eventTypeId: schema.eventsXEventTypes.eventTypeId })
+            .from(schema.eventsXEventTypes)
             .where(eq(schema.eventsXEventTypes.eventId, result.id));
-
-          await transactionDb.insert(schema.eventsXEventTypes).values(
-            eventTypeIds.map((eventTypeId: number) => ({
-              eventId: result.id,
-              eventTypeId,
-            })),
-          );
+          const existingIds = existingEventTypes
+            .map(({ eventTypeId }) => eventTypeId)
+            .sort((a, b) => a - b);
+          const updatedIds = [...eventTypeIds].sort((a, b) => a - b);
+          eventTypesChanged =
+            existingIds.length !== updatedIds.length ||
+            existingIds.some((id, index) => id !== updatedIds[index]);
         }
+
+        let eventTagsChanged = false;
+        if (normalizedEventTagIds !== undefined && transactionExistingEvent) {
+          const existingEventTags = await transactionDb
+            .select({ eventTagId: schema.eventTagsXEvents.eventTagId })
+            .from(schema.eventTagsXEvents)
+            .where(eq(schema.eventTagsXEvents.eventId, result.id));
+          const existingIds = existingEventTags
+            .map(({ eventTagId }) => eventTagId)
+            .sort((a, b) => a - b);
+          const updatedIds = [...normalizedEventTagIds].sort((a, b) => a - b);
+          eventTagsChanged =
+            existingIds.length !== updatedIds.length ||
+            existingIds.some((id, index) => id !== updatedIds[index]);
+        }
+
+        // Handle event type in join table
+        await transactionDb
+          .delete(schema.eventsXEventTypes)
+          .where(eq(schema.eventsXEventTypes.eventId, result.id));
+
+        await transactionDb.insert(schema.eventsXEventTypes).values(
+          eventTypeIds.map((eventTypeId: number) => ({
+            eventId: result.id,
+            eventTypeId,
+          })),
+        );
 
         if (normalizedEventTagIds !== undefined) {
           await transactionDb
@@ -873,12 +1237,14 @@ export const eventRouter = {
 
         // Handle event instance cascade operations for series (events with recurrence patterns).
         // null recurrencePattern defaults to weekly in createEventInstancesForSeries.
-        if (result.dayOfWeek) {
+        if (result.dayOfWeek || transactionExistingEvent?.dayOfWeek) {
           const {
             isStructuralChange,
             createEventInstancesForSeries,
             updateFutureInstances,
             recreateFutureInstances,
+            softDeleteFutureInstancesForSeries,
+            reactivateFutureInstancesForSeries,
           } = await import("../lib/cascade-service");
 
           // Build series data for cascade operations
@@ -907,7 +1273,93 @@ export const eventRouter = {
             eventTagIds: effectiveEventTagIds,
           };
 
-          if (!existingEvent) {
+          if (isStatusTransition) {
+            // Existing-series status transitions never recreate the schedule;
+            // converting a one-off to a series creates its first schedule.
+            // Deactivation still closes the old schedule if the event becomes
+            // a one-off. Reactivation must not revive an obsolete schedule.
+            if (
+              isDeactivationTransition &&
+              (transactionExistingEvent.dayOfWeek || result.dayOfWeek)
+            ) {
+              await softDeleteFutureInstancesForSeries(
+                transactionDb,
+                result.id,
+              );
+            } else if (!isDeactivationTransition && result.dayOfWeek) {
+              if (!transactionExistingEvent.dayOfWeek) {
+                // An existing one-off becoming a series is a new schedule,
+                // unlike reactivating an existing series.
+                await createEventInstancesForSeries(
+                  transactionDb,
+                  seriesData,
+                  4,
+                  seriesData.startDate,
+                );
+              } else {
+                await reactivateFutureInstancesForSeries(
+                  transactionDb,
+                  result.id,
+                );
+              }
+            }
+
+            if (result.dayOfWeek && transactionExistingEvent.dayOfWeek) {
+              const instanceUpdateFields = (
+                [
+                  "locationId",
+                  "startTime",
+                  "endTime",
+                  "isPrivate",
+                  "meta",
+                  "description",
+                  "highlight",
+                  "name",
+                  "orgId",
+                ] as (
+                  | "locationId"
+                  | "startTime"
+                  | "endTime"
+                  | "isPrivate"
+                  | "meta"
+                  | "description"
+                  | "highlight"
+                  | "name"
+                  | "orgId"
+                  | "eventTypeIds"
+                  | "eventTagIds"
+                )[]
+              ).filter((field) => {
+                const key = field as keyof typeof result;
+                return field === "meta"
+                  ? !isDeepStrictEqual(
+                      result.meta,
+                      transactionExistingEvent.meta,
+                    )
+                  : result[key] !== transactionExistingEvent[key];
+              });
+              if (eventTypesChanged) {
+                instanceUpdateFields.push("eventTypeIds");
+              }
+              if (eventTagsChanged) {
+                instanceUpdateFields.push("eventTagIds");
+              }
+              if (instanceUpdateFields.length > 0) {
+                await updateFutureInstances(
+                  transactionDb,
+                  {
+                    ...seriesData,
+                    eventTagIds:
+                      normalizedEventTagIds === undefined
+                        ? undefined
+                        : effectiveEventTagIds,
+                  },
+                  undefined,
+                  { fields: instanceUpdateFields },
+                );
+              }
+            }
+          } else if (!transactionExistingEvent) {
             // New series: create event instances from series start date
             await createEventInstancesForSeries(
               transactionDb,
@@ -915,18 +1367,15 @@ export const eventRouter = {
               4,
               seriesData.startDate,
             );
-
-            // Run this notification only after the transaction commits.
-            shouldNotifyFirstEventForRegion = true;
-          } else if (existingEvent.dayOfWeek) {
+          } else if (transactionExistingEvent.dayOfWeek) {
             // Existing series: check for structural changes
             const existingSeriesData = {
-              dayOfWeek: existingEvent.dayOfWeek,
-              recurrencePattern: existingEvent.recurrencePattern,
-              recurrenceInterval: existingEvent.recurrenceInterval,
-              indexWithinInterval: existingEvent.indexWithinInterval,
-              startDate: existingEvent.startDate,
-              endDate: existingEvent.endDate,
+              dayOfWeek: transactionExistingEvent.dayOfWeek,
+              recurrencePattern: transactionExistingEvent.recurrencePattern,
+              recurrenceInterval: transactionExistingEvent.recurrenceInterval,
+              indexWithinInterval: transactionExistingEvent.indexWithinInterval,
+              startDate: transactionExistingEvent.startDate,
+              endDate: transactionExistingEvent.endDate,
             };
 
             const updatedSeriesData = {
@@ -966,32 +1415,65 @@ export const eventRouter = {
           }
         }
 
-        return result;
+        return {
+          result,
+          destinationRegionId,
+          movedAcrossRegions,
+          shouldNotifyFirstEventForRegion:
+            !transactionExistingEvent && Boolean(result.dayOfWeek),
+        };
       });
 
       // Notify only after the transaction commits.
       if (shouldNotifyFirstEventForRegion) {
-        const { maybeNotifyFirstEventForRegion } =
-          await import("../lib/first-event-service");
-        void maybeNotifyFirstEventForRegion(ctx.db, result.orgId).catch(
-          (err: unknown) =>
+        const notificationTask = import("../lib/first-event-service")
+          .then(({ maybeNotifyFirstEventForRegion }) =>
+            maybeNotifyFirstEventForRegion(
+              ctx.db,
+              result.orgId,
+              destinationRegionId,
+            ),
+          )
+          .catch((err: unknown) =>
             logError(
               "api.event.first_event_notify_failed",
               { orgId: result.orgId, eventId: result.id },
               err,
             ),
+          );
+        pendingRegionNotificationTasks.add(notificationTask);
+        void notificationTask.finally(() =>
+          pendingRegionNotificationTasks.delete(notificationTask),
         );
       }
-      if (result?.dayOfWeek) {
+      if (existingEvent && movedAcrossRegions && destinationRegionId != null) {
+        // Keep every notification-only operation detached from the committed update.
+        const notificationTask = import("../lib/first-event-service")
+          .then(({ maybeNotifyRegionInABox }) =>
+            maybeNotifyRegionInABox(ctx.db, destinationRegionId),
+          )
+          .catch((err: unknown) =>
+            logError(
+              "api.event.region_in_a_box_notify_failed",
+              { regionId: destinationRegionId, eventId: result.id },
+              err,
+            ),
+          );
+        pendingRegionNotificationTasks.add(notificationTask);
+        void notificationTask.finally(() =>
+          pendingRegionNotificationTasks.delete(notificationTask),
+        );
+      }
+      if (result.dayOfWeek) {
         notifyMapDataChange({
           type: input.id ? "event.updated" : "event.created",
           eventId: result.id,
         });
       }
 
-      return { event: result ?? null };
+      return { event: result };
     }),
-  eventIdToRegionNameLookup: protectedProcedure
+  eventIdToRegionNameLookup: publicReadProcedure
     .route({
       method: "GET",
       path: "/event-id-to-region-name-lookup",
@@ -1007,6 +1489,8 @@ export const eventRouter = {
       }),
     )
     .handler(async ({ context: ctx }) => {
+      const isAnonymous = !ctx.session?.user;
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const result = await ctx.db
         .select({
           eventId: schema.events.id,
@@ -1027,6 +1511,29 @@ export const eventRouter = {
               eq(regionOrg.orgType, "region"),
             ),
           ),
+        )
+        .leftJoin(
+          schema.locations,
+          eq(schema.locations.id, schema.events.locationId),
+        )
+        // publicReadProcedure lets an anonymous caller reach this endpoint
+        // don't leak a private OR inactive event's ID (even bare,
+        // with no other fields) to a caller with no session at all.
+        // location.delete only soft-deletes the location and leaves its
+        // events untouched, so an event at a deleted location must be
+        // hidden here too, same as buildEventWhereClause.
+        .where(
+          isAnonymous
+            ? and(
+                eq(schema.events.isPrivate, false),
+                eq(schema.events.isActive, true),
+                orgAndAncestorsAreActive(schema.events.orgId),
+                or(
+                  isNull(schema.events.locationId),
+                  eq(schema.locations.isActive, true),
+                ),
+              )
+            : undefined,
         )
         .groupBy(schema.events.id, regionOrg.id);
 

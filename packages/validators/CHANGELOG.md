@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.5.1](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.5.0...pkg-validators@0.5.1) (2026-10-23)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.1
+    * @acme/shared bumped to 0.5.1
+
+## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.4.6...pkg-validators@0.5.0) (2026-10-14)
+
+
+### Features
+
+* **db,shared,admin:** add password_manager and password_reader roles ([#1180](https://github.com/F3-Nation/f3-nation/issues/1180)) ([e69f45d](https://github.com/F3-Nation/f3-nation/commit/e69f45d92f88ed1248a86cdce716e05a66389b85))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.0
+    * @acme/shared bumped to 0.5.0
+
+## [0.4.6](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.4.5...pkg-validators@0.4.6) (2026-10-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.9.0
+
+## [0.4.5](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.4.4...pkg-validators@0.4.5) (2026-10-06)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.8.0
+    * @acme/shared bumped to 0.4.1
+
 ## [0.4.4](https://github.com/F3-Nation/f3-nation/compare/pkg-validators@0.4.3...pkg-validators@0.4.4) (2026-09-23)
 
 

@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 
@@ -9,6 +10,7 @@ from f3_data_models.utils import DbManager, get_session
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
+from utilities.constants import is_production_deployment
 from utilities.helper_functions import create_user, is_deactivated_slack_user, safe_get
 
 
@@ -16,6 +18,10 @@ def update_slack_users(force=False):
     """
     Update Slack users in the database with their latest information from Slack.
     """
+    if not is_production_deployment():
+        logging.getLogger(__name__).info("Skipping Slack user profile sync outside production.")
+        return
+
     all_slack_users = DbManager.find_records(cls=SlackUser, filters=[True])
     slack_user_dict = {user.slack_id: user for user in all_slack_users}
     all_slack_spaces: list[tuple[SlackSpace, Org_x_SlackSpace]] = DbManager.find_join_records2(
@@ -118,6 +124,14 @@ def update_home_regions():
             session.commit()
 
 
-if __name__ == "__main__":
+def main():
+    production = is_production_deployment()
     update_slack_users()
-    update_home_regions()
+    if production:
+        update_home_regions()
+    else:
+        logging.getLogger(__name__).info("Skipping home-region refresh outside production.")
+
+
+if __name__ == "__main__":
+    main()

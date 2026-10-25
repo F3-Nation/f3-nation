@@ -225,6 +225,49 @@ export default function OrgMap() {
   // Layers actually present in the data (depth-agnostic)
   const [presentLayers, setPresentLayers] = useState<OrgType[]>(LAYER_TYPES);
 
+  // ── info loading ─────────────────────────────────────────────────────────
+
+  const loadOrgInfo = useCallback(async (org: Org) => {
+    // selectOrg returns true on a switch to a different org; drop the previous
+    // org's fallback in the same commit as the new detail, so a switch to an
+    // already-cached org can't render its admin for a frame. A still-pending
+    // pin fetch is invalidated by selectOrg clearing the location selection.
+    if (infoGuardRef.current.selectOrg(org.id)) {
+      setNearestAdminOrg(null);
+      setAdminLookupInconclusive(false);
+    }
+
+    const cached = orgInfoCacheRef.current.get(org.id);
+    if (cached) {
+      if (infoGuardRef.current.isOrgCurrent(org.id)) {
+        setInfoState({ status: "loaded", org, detail: cached });
+      }
+      return;
+    }
+
+    setInfoState({ status: "loading", org });
+
+    let pending = orgInfoPendingRef.current.get(org.id);
+    if (!pending) {
+      pending = fetchOrgById(org.id);
+      orgInfoPendingRef.current.set(org.id, pending);
+    }
+
+    try {
+      const detail = await pending;
+      orgInfoCacheRef.current.set(org.id, detail);
+      orgInfoPendingRef.current.delete(org.id);
+      if (infoGuardRef.current.isOrgCurrent(org.id)) {
+        setInfoState({ status: "loaded", org, detail });
+      }
+    } catch {
+      orgInfoPendingRef.current.delete(org.id);
+      if (infoGuardRef.current.isOrgCurrent(org.id)) {
+        setInfoState({ status: "error", org });
+      }
+    }
+  }, []);
+
   // ── initial data load ────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -328,49 +371,6 @@ export default function OrgMap() {
       mapRef.current = null;
       layerGroupRef.current = null;
     };
-  }, []);
-
-  // ── info loading ─────────────────────────────────────────────────────────
-
-  const loadOrgInfo = useCallback(async (org: Org) => {
-    // selectOrg returns true on a switch to a different org; drop the previous
-    // org's fallback in the same commit as the new detail, so a switch to an
-    // already-cached org can't render its admin for a frame. A still-pending
-    // pin fetch is invalidated by selectOrg clearing the location selection.
-    if (infoGuardRef.current.selectOrg(org.id)) {
-      setNearestAdminOrg(null);
-      setAdminLookupInconclusive(false);
-    }
-
-    const cached = orgInfoCacheRef.current.get(org.id);
-    if (cached) {
-      if (infoGuardRef.current.isOrgCurrent(org.id)) {
-        setInfoState({ status: "loaded", org, detail: cached });
-      }
-      return;
-    }
-
-    setInfoState({ status: "loading", org });
-
-    let pending = orgInfoPendingRef.current.get(org.id);
-    if (!pending) {
-      pending = fetchOrgById(org.id);
-      orgInfoPendingRef.current.set(org.id, pending);
-    }
-
-    try {
-      const detail = await pending;
-      orgInfoCacheRef.current.set(org.id, detail);
-      orgInfoPendingRef.current.delete(org.id);
-      if (infoGuardRef.current.isOrgCurrent(org.id)) {
-        setInfoState({ status: "loaded", org, detail });
-      }
-    } catch {
-      orgInfoPendingRef.current.delete(org.id);
-      if (infoGuardRef.current.isOrgCurrent(org.id)) {
-        setInfoState({ status: "error", org });
-      }
-    }
   }, []);
 
   const loadLocationInfo = useCallback(async (locationId: number) => {
@@ -703,10 +703,7 @@ export default function OrgMap() {
   // ── nearest parent admin lookup (for empty-roles message) ───────────────
 
   useEffect(() => {
-    if (
-      infoState.status !== "loaded" ||
-      (infoState.detail.roles?.length ?? 0) > 0
-    ) {
+    if (infoState.status !== "loaded" || infoState.detail.roles.length > 0) {
       setNearestAdminOrg(null);
       setAdminLookupInconclusive(false);
       return;
@@ -736,6 +733,7 @@ export default function OrgMap() {
         if (!detail) {
           try {
             detail = await fetchOrgById(ancestor.id);
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the effect cleanup sets `cancelled` while this awaits
             if (!cancelled) orgInfoCacheRef.current.set(ancestor.id, detail);
           } catch {
             // Couldn't check this ancestor — distinct from "it has no admins".
@@ -744,10 +742,11 @@ export default function OrgMap() {
           }
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the effect cleanup sets `cancelled` while this awaits
         if (cancelled) return;
 
-        const admins = (detail.roles ?? []).filter(
-          (r) => r.title?.toLowerCase().includes("admin") ?? false,
+        const admins = detail.roles.filter((r) =>
+          r.title.toLowerCase().includes("admin"),
         );
         if (admins.length > 0) {
           // The guard flips synchronously on switch (before any await
@@ -883,7 +882,7 @@ export default function OrgMap() {
                 key={layer}
                 type="button"
                 onClick={() => navigateViaLevelButton(layer)}
-                className={`rounded border px-4 py-2 text-xs font-medium tracking-wide uppercase transition-all ${
+                className={`rounded-sm border px-4 py-2 text-xs font-medium tracking-wide uppercase transition-all ${
                   currentLevel === layer
                     ? "border-[#B70D06] bg-[#B70D06] text-[#1a1a1a]"
                     : "border-[#2c3648] bg-[#151a24] text-[#f8f4ea] hover:border-[#3b4a62] hover:bg-[#233046]"

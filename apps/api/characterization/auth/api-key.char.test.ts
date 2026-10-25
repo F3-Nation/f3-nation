@@ -5,8 +5,10 @@ import { req, target } from "../transport";
 import { expectAuthorized, expectUnauthorized } from "./verdict";
 
 /**
- * API-key resolution edges. `/v1/api-key` is adminProcedure, so an admin key
- * that authorizes returns 200; `/v1/position/assignments` is editorProcedure.
+ * API-key resolution edges. `/v1/position/assignments` is editorProcedure, so a
+ * key that resolves with its roles is authorized there (then 400s on input).
+ * `/v1/api-key` rejects every API-key session, so it only probes the admin
+ * guard for a key with no roles.
  * Every request carries a Client header — a bearer without one is the separate
  * concern pinned in session.char.test.ts.
  */
@@ -38,23 +40,27 @@ describe.runIf(target.inProcess)("API key resolution", () => {
   let adminKey: Awaited<ReturnType<typeof createApiKey>>;
   let noRoleKey: Awaited<ReturnType<typeof createApiKey>>;
   let expiredKey: Awaited<ReturnType<typeof createApiKey>>;
+  // Registered as created, so a beforeAll that fails partway cleans up only
+  // what exists.
+  const fixtures: { cleanup: () => Promise<void> }[] = [];
 
   beforeAll(async () => {
     adminKey = await createApiKey({ roles: [{ roleName: "admin" }] });
+    fixtures.push(adminKey);
     noRoleKey = await createApiKey({ roles: [] });
+    fixtures.push(noRoleKey);
     expiredKey = await createApiKey({
       roles: [{ roleName: "admin" }],
       expiresAt: new Date(Date.now() - 60_000).toISOString(),
     });
+    fixtures.push(expiredKey);
   });
 
   // Settled, not sequential: one rejected cleanup must not strand the others.
   // All files share one f3_test under fileParallelism: false, so a leaked row
   // resurfaces as a mystery golden diff in an unrelated suite — fail here.
   afterAll(async () => {
-    const results = await Promise.allSettled(
-      [adminKey, noRoleKey, expiredKey].map((f) => f?.cleanup()),
-    );
+    const results = await Promise.allSettled(fixtures.map((f) => f.cleanup()));
     const failed = results.filter((r) => r.status === "rejected");
     // eslint-disable-next-line vitest/no-standalone-expect -- intentional: asserts in afterAll, not a test block
     expect(
@@ -65,14 +71,22 @@ describe.runIf(target.inProcess)("API key resolution", () => {
 
   it("rejects an expired key (compared against the DB clock)", async () => {
     await expectUnauthorized(
-      await target.invoke(keyReq("/v1/api-key", 1, expiredKey.key)),
+      await target.invoke(
+        keyReq("/v1/position/assignments", 1, expiredKey.key, {
+          method: "POST",
+        }),
+      ),
       "Unauthorized",
     );
   });
 
   it("rejects an unknown key on a protected endpoint", async () => {
     await expectUnauthorized(
-      await target.invoke(keyReq("/v1/api-key", 2, "char-key-does-not-exist")),
+      await target.invoke(
+        keyReq("/v1/position/assignments", 2, "char-key-does-not-exist", {
+          method: "POST",
+        }),
+      ),
       "Unauthorized",
     );
   });
@@ -102,13 +116,23 @@ describe.runIf(target.inProcess)("API key resolution", () => {
     );
   });
 
+  it("rejects API-key management for an admin key", async () => {
+    await expectUnauthorized(
+      await target.invoke(keyReq("/v1/api-key", 8, adminKey.key)),
+      "Sign in with your user account to manage API keys.",
+    );
+  });
+
   it("trims whitespace around the bearer value", async () => {
     // shared.ts slices past "Bearer " then .trim()s; a header-name casing case
     // is not expressible here — the WHATWG Headers constructor lowercases every
     // field name, so no casing survives to the Request layer.
     await expectAuthorized(
       await target.invoke(
-        keyReq("/v1/api-key", 6, adminKey.key, { pad: "  " }),
+        keyReq("/v1/position/assignments", 6, adminKey.key, {
+          pad: "  ",
+          method: "POST",
+        }),
       ),
     );
   });
@@ -116,7 +140,10 @@ describe.runIf(target.inProcess)("API key resolution", () => {
   it("accepts a lowercase `bearer` scheme prefix", async () => {
     await expectAuthorized(
       await target.invoke(
-        keyReq("/v1/api-key", 7, adminKey.key, { prefix: "bearer" }),
+        keyReq("/v1/position/assignments", 7, adminKey.key, {
+          prefix: "bearer",
+          method: "POST",
+        }),
       ),
     );
   });

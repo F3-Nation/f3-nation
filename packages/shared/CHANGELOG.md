@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.5.1](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.5.0...pkg-shared@0.5.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+
+## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.4.1...pkg-shared@0.5.0) (2026-10-14)
+
+
+### Features
+
+* **db,shared,admin:** add password_manager and password_reader roles ([#1180](https://github.com/F3-Nation/f3-nation/issues/1180)) ([e69f45d](https://github.com/F3-Nation/f3-nation/commit/e69f45d92f88ed1248a86cdce716e05a66389b85))
+
+
+### Bug Fixes
+
+* **api,map:** public read tier for the map API ([#378](https://github.com/F3-Nation/f3-nation/issues/378)), plus [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3 groundwork ([#1149](https://github.com/F3-Nation/f3-nation/issues/1149)) ([f65d3d9](https://github.com/F3-Nation/f3-nation/commit/f65d3d9120131c4cbff8bcdb019bcc546b8a6464))
+
+## [0.4.1](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.4.0...pkg-shared@0.4.1) (2026-10-06)
+
+
+### Bug Fixes
+
+* **map,repo:** show the Dev Mode sign-in button on branch previews ([#1111](https://github.com/F3-Nation/f3-nation/issues/1111)) ([dcbb924](https://github.com/F3-Nation/f3-nation/commit/dcbb924178e63e741610e26ab3ae46a183ab1ad1))
+
 ## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/pkg-shared@0.3.1...pkg-shared@0.4.0) (2026-09-23)
 
 

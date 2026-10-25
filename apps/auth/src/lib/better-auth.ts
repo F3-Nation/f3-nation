@@ -30,7 +30,10 @@
  *     apps/auth/src/app/api/oauth/authorize/route.ts enforces today
  *     (redirect to /onboarding when `meta.onboarding_completed` is unset).
  *     Better Auth's own authorize flow has no hook for this app-specific
- *     business rule out of the box.
+ *     business rule out of the box. Nothing is lost while /api/oauth/*
+ *     stays hand-rolled: that route reads the session through
+ *     lib/current-session.ts, so the gate holds with the flag on too. It
+ *     has to move here if those routes are ever rewired.
  *   - Does not migrate existing oauth_clients rows — see
  *     apps/auth/scripts/migrate-oauth-clients-to-better-auth.ts, provided
  *     but not run by anything here.
@@ -44,6 +47,7 @@
  */
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, betterAuth } from "better-auth";
+import { createAuthMiddleware } from "better-auth/api";
 import { bearer } from "better-auth/plugins/bearer";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { jwt } from "better-auth/plugins/jwt";
@@ -60,7 +64,8 @@ import { eq } from "drizzle-orm";
 // its DATABASE_* env requirement) as a module-load side effect. See getAuth's
 // own dynamic `await import("~/lib/db")` below for the actual runtime import.
 import type { db as authDbType } from "~/lib/db";
-import { logInfo, logWarn } from "~/lib/logging";
+import { logError, logInfo, logWarn } from "~/lib/logging";
+import { F3_NATION_CLIENT_REFERENCE_ID } from "~/lib/oauth-client-reference";
 
 import { getUserRoles } from "@acme/db";
 import {
@@ -150,6 +155,22 @@ export interface CreateAuthInstanceOptions {
    */
   findF3UserId: (email: string) => Promise<number | null>;
   /**
+   * Checks `otp` against the code's shared guess budget, where a wrong code
+   * spends an attempt, and reports whether it matches. With `consume`, called
+   * only after Better Auth has verified the code, it uses the code up
+   * without spending an attempt. Production wires this to email-mfa.ts's
+   * claimEmailCode, the budget /api/register draws on:
+   * every sign-in code is also recorded in email_mfa_codes (see
+   * better-auth-email.ts's deliverBetterAuthOtp). Without it, emailOTP's
+   * own attempt counter is a second, separate budget, so a code would get 5
+   * guesses at registration plus 5 more here. See OTP_VERIFYING_PATHS below.
+   */
+  claimOtpAttempt: (
+    email: string,
+    otp: string,
+    options: { consume: boolean },
+  ) => Promise<boolean>;
+  /**
    * Returns whether the given F3 `users.id` currently holds the nation-admin
    * role — the same check `nationAdminProcedure` uses (packages/api/src/
    * shared.ts), just against a raw user id instead of a `Session`, since
@@ -185,12 +206,35 @@ export interface CreateAuthInstanceOptions {
   ) => Promise<boolean>;
 }
 
-// The stable "owner" identity for F3-Nation-managed OAuth clients — set as a
-// client's referenceId rather than a per-user userId, so any current or
-// future nation admin can read, list, and rotate the secret for a client one
-// of them created, not just whoever happened to create it. See oauthProvider's
-// clientReference option below.
-const F3_NATION_CLIENT_REFERENCE_ID = "f3-nation";
+/**
+ * Every emailOTP endpoint that checks a submitted code. Each is checked
+ * against the shared budget (claimOtpAttempt), where a wrong code spends an
+ * attempt, before Better Auth's own check runs. Only sign-in codes are
+ * recorded in that budget, so the other code types, which nothing in this app
+ * sends, are refused here as well. A flow that starts sending them has to
+ * record its codes there too (deliverBetterAuthOtp), or every one of its
+ * codes will be refused.
+ */
+const OTP_VERIFYING_PATHS = new Set([
+  "/sign-in/email-otp",
+  "/email-otp/check-verification-otp",
+  "/email-otp/verify-email",
+  "/email-otp/reset-password",
+  "/email-otp/change-email",
+]);
+
+/**
+ * The SQLSTATE of a database error, if any. DrizzleQueryError carries the
+ * driver's error (with `code`) as its `cause`, so look there first.
+ */
+function sqlState(err: unknown): string | undefined {
+  for (const e of [err instanceof Error ? err.cause : undefined, err]) {
+    if (e instanceof Error && "code" in e && typeof e.code === "string") {
+      return e.code;
+    }
+  }
+  return undefined;
+}
 
 /**
  * Split out from createAuthInstance so tests can pre-seed a memoryAdapter's
@@ -213,6 +257,59 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
     secret: options.secret,
     database: options.database,
     emailAndPassword: { enabled: false },
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        if (!OTP_VERIFYING_PATHS.has(ctx.path)) return;
+        const body = (ctx.body ?? {}) as {
+          email?: unknown;
+          newEmail?: unknown;
+          otp?: unknown;
+        };
+        // change-email names its address newEmail.
+        const email = body.email ?? body.newEmail;
+        // Malformed bodies fall through to the endpoint's own validation.
+        if (typeof email !== "string" || typeof body.otp !== "string") {
+          return;
+        }
+        if (
+          !(await options.claimOtpAttempt(email, body.otp, { consume: false }))
+        ) {
+          // Same error emailOTP gives for a wrong code, so a caller can't
+          // tell which budget refused it.
+          throw new APIError("BAD_REQUEST", {
+            code: "INVALID_OTP",
+            message: "Invalid OTP",
+          });
+        }
+      }),
+      // A successful sign-in uses the code up, so it can't be replayed at
+      // /api/register afterwards. Only once a session exists: a sign-in that
+      // fails later (NO_F3_ACCOUNT, say) leaves the code valid for
+      // registration.
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/sign-in/email-otp" || !ctx.context.newSession) {
+          return;
+        }
+        const body = ctx.body as { email: string; otp: string };
+        // The sign-in has already worked: Better Auth deleted its copy of
+        // the code and wrote the session. Failing here would drop the cookie
+        // and strand the user, so log and let it stand. The cost is that the
+        // email_mfa_codes row stays usable at /api/register until it expires,
+        // only by someone who holds the code.
+        try {
+          const consumed = await options.claimOtpAttempt(body.email, body.otp, {
+            consume: true,
+          });
+          if (!consumed) logWarn("auth.better_auth.otp_consume_skipped", {});
+        } catch (err) {
+          // Not the error itself: Drizzle puts the bound email in its message.
+          logError("auth.better_auth.otp_consume_failed", {
+            errorName: err instanceof Error ? err.name : typeof err,
+            code: sqlState(err),
+          });
+        }
+      }),
+    },
     databaseHooks: {
       user: {
         create: {
@@ -256,7 +353,10 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         sendVerificationOTP: options.sendVerificationOTP,
         otpLength: 6, // matches apps/auth/src/lib/email-mfa.ts's 6-digit code
         expiresIn: 600, // 10 minutes, matches CODE_TTL_MINUTES in email-mfa.ts
-        allowedAttempts: 5, // matches MAX_ATTEMPTS in email-mfa.ts
+        // Matches MAX_ATTEMPTS in email-mfa.ts. The binding limit is the
+        // shared budget in hooks.before above; this one only ever sees
+        // codes that already matched there.
+        allowedAttempts: 5,
         storeOTP: "hashed", // never store the plaintext code, matches hashCode() in email-mfa.ts
         // NOT disableSignUp: true — see findF3UserId's doc comment above
         // for why the "no account, no sign-in" rule has to be enforced in
@@ -290,7 +390,7 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
         clientRegistrationRequirePKCE: true,
         // Any nation admin can read/list/rotate a shared, F3-Nation-owned
         // client instead of it being tied to whichever individual admin
-        // happened to create it — see F3_NATION_CLIENT_REFERENCE_ID above.
+        // happened to create it — see F3_NATION_CLIENT_REFERENCE_ID in lib/oauth-client-reference.ts.
         // A session that isn't a nation admin gets `undefined` here, so
         // oauth-provider falls back to its normal per-user ownership
         // (session.user.id) for any client that admin creates for
@@ -365,6 +465,26 @@ export function createAuthInstance(options: CreateAuthInstanceOptions) {
 // env vars or open a DB connection as a side effect.
 // ---------------------------------------------------------------------------
 
+/**
+ * Better Auth model name -> Drizzle table, as handed to drizzleAdapter.
+ * Exported so tests run Better Auth's schema check against the exact
+ * mapping production uses.
+ */
+export const betterAuthDrizzleSchema = {
+  user: betterAuthUser,
+  session: betterAuthSession,
+  account: betterAuthAccount,
+  verification: betterAuthVerification,
+  jwks: betterAuthJwks,
+  oauthClient: betterAuthOauthClient,
+  oauthResource: betterAuthOauthResource,
+  oauthClientResource: betterAuthOauthClientResource,
+  oauthRefreshToken: betterAuthOauthRefreshToken,
+  oauthAccessToken: betterAuthOauthAccessToken,
+  oauthConsent: betterAuthOauthConsent,
+  oauthClientAssertion: betterAuthOauthClientAssertion,
+};
+
 let _auth: ReturnType<typeof createAuthInstance> | null = null;
 
 type AuthDb = typeof authDbType;
@@ -417,7 +537,8 @@ export async function getAuth() {
 
   const { db } = await import("~/lib/db");
   const { env } = await import("~/env");
-  const { sendBetterAuthOtpEmail } = await import("~/lib/better-auth-email");
+  const { deliverBetterAuthOtp } = await import("~/lib/better-auth-email");
+  const { claimEmailCode } = await import("~/lib/email-mfa");
 
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error(
@@ -442,24 +563,9 @@ export async function getAuth() {
     database: drizzleAdapter(db, {
       provider: "pg",
       schemaName: "auth",
-      schema: {
-        user: betterAuthUser,
-        session: betterAuthSession,
-        account: betterAuthAccount,
-        verification: betterAuthVerification,
-        jwks: betterAuthJwks,
-        oauthClient: betterAuthOauthClient,
-        oauthResource: betterAuthOauthResource,
-        oauthClientResource: betterAuthOauthClientResource,
-        oauthRefreshToken: betterAuthOauthRefreshToken,
-        oauthAccessToken: betterAuthOauthAccessToken,
-        oauthConsent: betterAuthOauthConsent,
-        oauthClientAssertion: betterAuthOauthClientAssertion,
-      },
+      schema: betterAuthDrizzleSchema,
     }),
-    sendVerificationOTP: async ({ email, otp }) => {
-      await sendBetterAuthOtpEmail(email, otp);
-    },
+    sendVerificationOTP: deliverBetterAuthOtp,
     findF3UserId: async (email) => {
       const normalizedEmail = email.toLowerCase().trim();
       const [existing] = await db
@@ -469,6 +575,7 @@ export async function getAuth() {
         .limit(1);
       return existing ? existing.id : null;
     },
+    claimOtpAttempt: claimEmailCode,
     isNationAdmin: (f3UserId) => isNationAdminForUser(db, f3UserId),
     allowClientAction: allowProductionClientAction,
   });

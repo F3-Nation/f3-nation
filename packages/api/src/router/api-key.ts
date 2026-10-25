@@ -4,10 +4,15 @@ import { z } from "zod";
 
 import { and, desc, eq, gt, inArray, isNull, or, schema, sql } from "@acme/db";
 
+import { UserRole } from "@acme/shared/app/enums";
+import { queryBooleanSchema } from "@acme/shared/app/functions";
+import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
+
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
-import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
-import { logError } from "../logger";
-import { adminProcedure } from "../shared";
+import { getDescendantOrgIds } from "../get-descendant-org-ids";
+import { logError, logWarn } from "../logger";
+import type { Context } from "../shared";
+import { userSessionAdminProcedure } from "../shared";
 
 const createApiKeySchema = z.object({
   name: z.string().min(1, { error: "Name is required" }),
@@ -26,7 +31,7 @@ const createApiKeySchema = z.object({
 
 const revokeApiKeySchema = z.object({
   id: z.coerce.number(),
-  revoke: z.coerce.boolean().optional(),
+  revoke: queryBooleanSchema.optional(),
 });
 
 const isUniqueError = (error: unknown) =>
@@ -39,42 +44,139 @@ const isUniqueError = (error: unknown) =>
 
 const buildApiKey = () => `f3_${randomBytes(24).toString("hex")}`;
 
+// Everything but the secret. Only `create` may return `key`.
+const apiKeyMetadataColumns = {
+  id: schema.apiKeys.id,
+  name: schema.apiKeys.name,
+  description: schema.apiKeys.description,
+  ownerId: schema.apiKeys.ownerId,
+  revokedAt: schema.apiKeys.revokedAt,
+  lastUsedAt: schema.apiKeys.lastUsedAt,
+  expiresAt: schema.apiKeys.expiresAt,
+  created: schema.apiKeys.created,
+  updated: schema.apiKeys.updated,
+};
+
+const apiKeyFieldsSchema = z.object({
+  id: z.number().describe("API key ID"),
+  name: z.string().describe("API key name"),
+  description: z.string().nullable().describe("API key description"),
+  ownerId: z.number().nullable().describe("Owner user ID"),
+  revokedAt: z.string().nullable().describe("Date the API key was revoked"),
+  lastUsedAt: z.string().nullable().describe("Date the API key was last used"),
+  expiresAt: z.string().nullable().describe("Date the API key expires"),
+  created: z.string().describe("Date the API key was created"),
+  updated: z.string().describe("Date the API key was last updated"),
+});
+
+const apiKeyOutputSchema = apiKeyFieldsSchema.nullable().describe("API key");
+
+interface ManageableKey {
+  ownerId: number | null;
+  roleOrgIds: number[];
+}
+
+/**
+ * Decides which API keys the caller may see and manage. Nation admins manage
+ * every key. Otherwise a key is manageable when the caller is admin on (or
+ * above) every org the key holds a role on, or when it is a read-only key the
+ * signed-in user owns.
+ *
+ * Owners always see their own keys and may revoke them, even when the key
+ * holds roles beyond the owner's (after a demotion, or a grant made directly
+ * in the database). Restoring or purging such a key still needs full scope:
+ * restore would hand the owner back roles they no longer hold.
+ *
+ * Ownership never counts for API-key sessions: their `session.id` is the key
+ * owner, whose rights can be wider than the key's own roles.
+ */
+const getApiKeyAccess = async (
+  ctx: Context,
+): Promise<{
+  canManage: (key: ManageableKey) => boolean;
+  owns: (key: ManageableKey) => boolean;
+}> => {
+  const session = ctx.session;
+  const ownerId = session && !session.apiKey ? session.id : null;
+  const owns = (key: ManageableKey) =>
+    ownerId != null && key.ownerId === ownerId;
+
+  if (isNationAdminFromSession(session)) {
+    return { canManage: () => true, owns };
+  }
+
+  const adminRootOrgIds = [
+    ...new Set(
+      (session?.roles ?? [])
+        .filter((r) => r.roleName === "admin")
+        .map((r) => r.orgId),
+    ),
+  ];
+  const adminOrgIds = new Set(
+    await getDescendantOrgIds(ctx.db, adminRootOrgIds),
+  );
+
+  return {
+    canManage: (key) =>
+      key.roleOrgIds.length > 0
+        ? key.roleOrgIds.every((orgId) => adminOrgIds.has(orgId))
+        : owns(key),
+    owns,
+  };
+};
+
+/**
+ * Out-of-scope keys are reported as NOT_FOUND so their ids can't be probed.
+ * An owner who lacks full scope gets FORBIDDEN unless `ownerMayAct`.
+ */
+const assertCanManageKey = async (
+  ctx: Context,
+  apiKeyId: number,
+  { ownerMayAct = false } = {},
+) => {
+  const [[apiKey], roles, { canManage, owns }] = await Promise.all([
+    ctx.db
+      .select({ ownerId: schema.apiKeys.ownerId })
+      .from(schema.apiKeys)
+      .where(eq(schema.apiKeys.id, apiKeyId)),
+    ctx.db
+      .select({ orgId: schema.rolesXApiKeysXOrg.orgId })
+      .from(schema.rolesXApiKeysXOrg)
+      .where(eq(schema.rolesXApiKeysXOrg.apiKeyId, apiKeyId)),
+    getApiKeyAccess(ctx),
+  ]);
+  if (!apiKey) throw new ORPCError("NOT_FOUND");
+
+  const key = {
+    ownerId: apiKey.ownerId,
+    roleOrgIds: roles.map((r) => r.orgId),
+  };
+  const isOwner = owns(key);
+  if (canManage(key) || (ownerMayAct && isOwner)) return;
+
+  logWarn("api.api_key.manage_denied", {
+    apiKeyId,
+    userId: ctx.session?.id,
+    viaApiKeyId: ctx.session?.apiKey?.id,
+  });
+  throw new ORPCError(isOwner ? "FORBIDDEN" : "NOT_FOUND");
+};
+
 export const apiKeyRouter = {
-  list: adminProcedure
+  list: userSessionAdminProcedure
     .route({
       method: "GET",
       path: "/",
       tags: ["api-key"],
       summary: "List API keys",
       description:
-        "Retrieve all API keys with their metadata, owner information, role assignments, and status. Requires admin role for any organization.",
+        "Retrieve the API keys the caller can manage, with their metadata, owner information, role assignments, and status. Nation admins see every key; other admins see keys whose every organization they administer, plus keys they own. `canManage` is false on an owned key that holds roles beyond the caller's own; the owner may revoke it but not restore or purge it.",
     })
     .output(
       z.object({
         apiKeys: z
           .array(
-            z.object({
-              id: z.number().describe("API key ID"),
-              name: z.string().describe("API key name"),
-              description: z
-                .string()
-                .nullable()
-                .describe("API key description"),
-              ownerId: z.number().nullable().describe("Owner user ID"),
-              revokedAt: z
-                .string()
-                .nullable()
-                .describe("Date the API key was revoked"),
-              lastUsedAt: z
-                .string()
-                .nullable()
-                .describe("Date the API key was last used"),
-              expiresAt: z
-                .string()
-                .nullable()
-                .describe("Date the API key expires"),
-              created: z.string().describe("Date the API key was created"),
-              updated: z.string().describe("Date the API key was last updated"),
+            apiKeyFieldsSchema.extend({
               ownerName: z.string().nullable().describe("Owner user name"),
               ownerEmail: z.email().nullable().describe("Owner user email"),
               keySignature: z
@@ -85,33 +187,30 @@ export const apiKeyRouter = {
                   z.object({
                     orgId: z.number().describe("Organization ID"),
                     orgName: z.string().describe("Organization name"),
-                    roleName: z.enum(["editor", "admin"]).describe("Role name"),
+                    roleName: z.enum(UserRole).describe("Role name"),
                   }),
                 )
                 .describe("Roles assigned to the API key"),
               orgIds: z.array(z.number()).describe("Organization IDs"),
               orgNames: z.array(z.string()).describe("Organization names"),
+              canManage: z
+                .boolean()
+                .describe(
+                  "Whether the caller may restore or purge this key. False means the caller only owns it and may only revoke it.",
+                ),
             }),
           )
           .describe("List of API keys"),
       }),
     )
     .handler(async ({ context: ctx }) => {
-      // Check if user is a nation admin (for email visibility)
-      const { isNationAdmin } = await getEditableOrgIdsForUser(ctx);
+      const isNationAdmin = isNationAdminFromSession(ctx.session);
+      const { canManage, owns } = await getApiKeyAccess(ctx);
 
       const keyQuery = await ctx.db
         .select({
-          id: schema.apiKeys.id,
-          key: schema.apiKeys.key,
-          name: schema.apiKeys.name,
-          description: schema.apiKeys.description,
-          ownerId: schema.apiKeys.ownerId,
-          revokedAt: schema.apiKeys.revokedAt,
-          lastUsedAt: schema.apiKeys.lastUsedAt,
-          expiresAt: schema.apiKeys.expiresAt,
-          created: schema.apiKeys.created,
-          updated: schema.apiKeys.updated,
+          ...apiKeyMetadataColumns,
+          keySignature: sql<string>`right(${schema.apiKeys.key}, 4)`,
           ownerName: schema.users.f3Name,
           ownerEmail: schema.users.email,
         })
@@ -119,7 +218,6 @@ export const apiKeyRouter = {
         .leftJoin(schema.users, eq(schema.users.id, schema.apiKeys.ownerId))
         .orderBy(desc(schema.apiKeys.created));
 
-      // Get all role-org associations for all API keys
       const apiKeyIds = keyQuery.map((key) => key.id);
       const roleAssociations =
         apiKeyIds.length > 0
@@ -128,6 +226,7 @@ export const apiKeyRouter = {
                 apiKeyId: schema.rolesXApiKeysXOrg.apiKeyId,
                 orgId: schema.orgs.id,
                 orgName: schema.orgs.name,
+                isActive: schema.orgs.isActive,
                 roleName: schema.roles.name,
               })
               .from(schema.rolesXApiKeysXOrg)
@@ -139,59 +238,49 @@ export const apiKeyRouter = {
                 schema.roles,
                 eq(schema.roles.id, schema.rolesXApiKeysXOrg.roleId),
               )
-              .where(
-                and(
-                  inArray(schema.rolesXApiKeysXOrg.apiKeyId, apiKeyIds),
-                  eq(schema.orgs.isActive, true),
-                ),
-              )
+              .where(inArray(schema.rolesXApiKeysXOrg.apiKeyId, apiKeyIds))
           : [];
 
-      // Group roles by API key ID
-      const rolesByApiKeyId = new Map<
-        number,
-        { orgId: number; orgName: string; roleName: string }[]
-      >();
+      const rolesByApiKeyId = new Map<number, typeof roleAssociations>();
       for (const assoc of roleAssociations) {
         if (!rolesByApiKeyId.has(assoc.apiKeyId)) {
           rolesByApiKeyId.set(assoc.apiKeyId, []);
         }
-        rolesByApiKeyId.get(assoc.apiKeyId)?.push({
-          orgId: assoc.orgId,
-          orgName: assoc.orgName,
-          roleName: assoc.roleName,
-        });
+        rolesByApiKeyId.get(assoc.apiKeyId)?.push(assoc);
       }
 
       return {
-        apiKeys: keyQuery.map((key) => {
-          const roles = rolesByApiKeyId.get(key.id) ?? [];
-          return {
-            id: key.id,
-            name: key.name,
-            description: key.description,
+        apiKeys: keyQuery.flatMap((key) => {
+          const allRoles = rolesByApiKeyId.get(key.id) ?? [];
+          const access = {
             ownerId: key.ownerId,
-            revokedAt: key.revokedAt,
-            lastUsedAt: key.lastUsedAt,
-            expiresAt: key.expiresAt,
-            created: key.created,
-            updated: key.updated,
-            ownerName: key.ownerName,
-            // Only include email if user is a nation admin
-            ownerEmail: isNationAdmin ? key.ownerEmail : null,
-            keySignature: key.key.slice(-4),
-            roles: roles.map((r) => ({
-              orgId: r.orgId,
-              orgName: r.orgName,
-              roleName: r.roleName as "editor" | "admin",
-            })),
-            orgIds: roles.map((r) => r.orgId),
-            orgNames: roles.map((r) => r.orgName),
+            roleOrgIds: allRoles.map((r) => r.orgId),
           };
+          const manageable = canManage(access);
+          if (!manageable && !owns(access)) {
+            return [];
+          }
+          // Roles on inactive orgs still count toward access above; they're
+          // just not displayed.
+          const roles = allRoles.filter((r) => r.isActive);
+          return [
+            {
+              ...key,
+              ownerEmail: isNationAdmin ? key.ownerEmail : null,
+              roles: roles.map((r) => ({
+                orgId: r.orgId,
+                orgName: r.orgName,
+                roleName: r.roleName,
+              })),
+              orgIds: roles.map((r) => r.orgId),
+              orgNames: roles.map((r) => r.orgName),
+              canManage: manageable,
+            },
+          ];
         }),
       };
     }),
-  create: adminProcedure
+  create: userSessionAdminProcedure
     .input(createApiKeySchema)
     .route({
       method: "POST",
@@ -244,56 +333,72 @@ export const apiKeyRouter = {
             });
           }
         }
+
+        // Callers may only create keys they can also manage.
+        const { canManage } = await getApiKeyAccess(ctx);
+        if (
+          !canManage({
+            ownerId: ctx.session?.id ?? null,
+            roleOrgIds: roles.map((r) => r.orgId),
+          })
+        ) {
+          throw new ORPCError("FORBIDDEN", {
+            message:
+              "You can only create API keys for organizations you administer",
+          });
+        }
       }
 
       const generatedKey = buildApiKey();
       try {
-        const [apiKey] = await ctx.db
-          .insert(schema.apiKeys)
-          .values({
-            key: generatedKey,
-            name: input.name,
-            description: input.description,
-            ownerId: ctx.session?.id,
-            expiresAt,
-          })
-          .returning();
+        return await ctx.db.transaction(async (tx) => {
+          const [apiKey] = await tx
+            .insert(schema.apiKeys)
+            .values({
+              key: generatedKey,
+              name: input.name,
+              description: input.description,
+              ownerId: ctx.session?.id,
+              expiresAt,
+            })
+            .returning();
 
-        if (!apiKey) {
-          throw new ORPCError("INTERNAL_SERVER_ERROR", {
-            message: "Unable to generate unique API key",
-          });
-        }
+          if (!apiKey) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Unable to generate unique API key",
+            });
+          }
 
-        if (roles.length > 0) {
-          // Get role IDs for all unique role names
-          const roleNames = [...new Set(roles.map((r) => r.roleName))];
-          const roleRecords = await ctx.db
-            .select({ id: schema.roles.id, name: schema.roles.name })
-            .from(schema.roles)
-            .where(inArray(schema.roles.name, roleNames));
+          if (roles.length > 0) {
+            // Get role IDs for all unique role names
+            const roleNames = [...new Set(roles.map((r) => r.roleName))];
+            const roleRecords = await tx
+              .select({ id: schema.roles.id, name: schema.roles.name })
+              .from(schema.roles)
+              .where(inArray(schema.roles.name, roleNames));
 
-          const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
+            const roleMap = new Map(roleRecords.map((r) => [r.name, r.id]));
 
-          // Insert org associations with roles
-          await ctx.db.insert(schema.rolesXApiKeysXOrg).values(
-            roles.map((role) => {
-              const roleId = roleMap.get(role.roleName);
-              if (roleId == null) {
-                throw new ORPCError("INTERNAL_SERVER_ERROR", {
-                  message: `Role "${role.roleName}" not found`,
-                });
-              }
-              return {
-                roleId,
-                apiKeyId: apiKey.id,
-                orgId: role.orgId,
-              };
-            }),
-          );
-        }
+            // Insert org associations with roles
+            await tx.insert(schema.rolesXApiKeysXOrg).values(
+              roles.map((role) => {
+                const roleId = roleMap.get(role.roleName);
+                if (roleId == null) {
+                  throw new ORPCError("INTERNAL_SERVER_ERROR", {
+                    message: `Role "${role.roleName}" not found`,
+                  });
+                }
+                return {
+                  roleId,
+                  apiKeyId: apiKey.id,
+                  orgId: role.orgId,
+                };
+              }),
+            );
+          }
 
-        return { ...apiKey, secret: generatedKey };
+          return { ...apiKey, secret: generatedKey };
+        });
       } catch (error) {
         if (isUniqueError(error)) {
           throw new ORPCError("INTERNAL_SERVER_ERROR", {
@@ -312,7 +417,7 @@ export const apiKeyRouter = {
         });
       }
     }),
-  revoke: adminProcedure
+  revoke: userSessionAdminProcedure
     .input(revokeApiKeySchema)
     .route({
       method: "POST",
@@ -320,37 +425,15 @@ export const apiKeyRouter = {
       tags: ["api-key"],
       summary: "Revoke API key",
       description:
-        "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests.",
+        "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests. Owners may revoke their own keys; restoring is limited to keys the caller can manage.",
     })
-    .output(
-      z.object({
-        apiKey: z
-          .object({
-            id: z.number().describe("API key ID"),
-            key: z.string().describe("API key value"),
-            name: z.string().describe("API key name"),
-            description: z.string().nullable().describe("API key description"),
-            ownerId: z.number().nullable().describe("Owner user ID"),
-            revokedAt: z
-              .string()
-              .nullable()
-              .describe("Date the API key was revoked"),
-            lastUsedAt: z
-              .string()
-              .nullable()
-              .describe("Date the API key was last used"),
-            expiresAt: z
-              .string()
-              .nullable()
-              .describe("Date the API key expires"),
-            created: z.string().describe("Date the API key was created"),
-            updated: z.string().describe("Date the API key was last updated"),
-          })
-          .nullable()
-          .describe("API key"),
-      }),
-    )
+    .output(z.object({ apiKey: apiKeyOutputSchema }))
     .handler(async ({ context: ctx, input }) => {
+      // Revoking only removes access, so owners may do it on any key they own.
+      await assertCanManageKey(ctx, input.id, {
+        ownerMayAct: input.revoke !== false,
+      });
+
       const timestamp =
         input.revoke === false
           ? null
@@ -365,15 +448,15 @@ export const apiKeyRouter = {
           updated: sql`timezone('utc'::text, now())`,
         })
         .where(eq(schema.apiKeys.id, input.id))
-        .returning();
+        .returning(apiKeyMetadataColumns);
 
       if (!apiKey) {
         throw new ORPCError("NOT_FOUND");
       }
 
-      return { apiKey: apiKey ?? null };
+      return { apiKey };
     }),
-  purge: adminProcedure
+  purge: userSessionAdminProcedure
     .input(
       z.object({
         id: z.coerce.number().describe("The unique identifier of the API key"),
@@ -385,54 +468,24 @@ export const apiKeyRouter = {
       tags: ["api-key"],
       summary: "Purge API key",
       description:
-        "Permanently delete an API key and all associated role assignments. This action cannot be undone.",
+        "Permanently delete an API key and all associated role assignments. This action cannot be undone. Limited to keys the caller can manage.",
     })
-    .output(
-      z.object({
-        apiKey: z
-          .object({
-            id: z.number().describe("API key ID"),
-            key: z.string().describe("API key value"),
-            name: z.string().describe("API key name"),
-            description: z.string().nullable().describe("API key description"),
-            ownerId: z.number().nullable().describe("Owner user ID"),
-            revokedAt: z
-              .string()
-              .nullable()
-              .describe("Date the API key was revoked"),
-            lastUsedAt: z
-              .string()
-              .nullable()
-              .describe("Date the API key was last used"),
-            expiresAt: z
-              .string()
-              .nullable()
-              .describe("Date the API key expires"),
-            created: z.string().describe("Date the API key was created"),
-            updated: z.string().describe("Date the API key was last updated"),
-          })
-          .nullable()
-          .describe("API key"),
-      }),
-    )
+    .output(z.object({ apiKey: apiKeyOutputSchema }))
     .handler(async ({ context: ctx, input }) => {
-      // Delete org associations first (cascade should handle this, but being explicit)
-      await ctx.db
-        .delete(schema.rolesXApiKeysXOrg)
-        .where(eq(schema.rolesXApiKeysXOrg.apiKeyId, input.id));
+      await assertCanManageKey(ctx, input.id);
 
       const [apiKey] = await ctx.db
         .delete(schema.apiKeys)
         .where(eq(schema.apiKeys.id, input.id))
-        .returning();
+        .returning(apiKeyMetadataColumns);
 
       if (!apiKey) {
         throw new ORPCError("NOT_FOUND");
       }
 
-      return { apiKey: apiKey ?? null };
+      return { apiKey };
     }),
-  validate: adminProcedure
+  validate: userSessionAdminProcedure
     .input(z.object({ key: z.string().describe("The API key to validate") }))
     .route({
       method: "POST",

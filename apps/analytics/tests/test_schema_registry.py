@@ -1,0 +1,339 @@
+from __future__ import annotations
+
+from pathlib import Path
+from shutil import copyfile
+from typing import Any
+
+import pytest
+from test_events_materialization import source as events_source
+
+from analytics.materializations import MATERIALIZATIONS_BY_NAME
+from analytics.schema_registry import (
+    SCHEMAS_BY_NAME,
+    SCHEMAS_BY_VERSION,
+    ExpectedColumn,
+    manifest_columns,
+    schema_fingerprint,
+)
+from analytics.source import (
+    MaterializationArtifacts,
+    SchemaValidationError,
+    materialize,
+    validate_artifacts,
+)
+
+
+def _event_artifacts(tmp_path: Path) -> tuple[Any, MaterializationArtifacts]:
+    connection = events_source()
+    definition = MATERIALIZATIONS_BY_NAME["pv_events"]
+    artifacts = materialize(connection, tmp_path / "events", definition, "2026-01-05T00:00:00Z", "2026-01-05")
+    return connection, artifacts
+
+
+def _rewrite_file(connection, artifacts: MaterializationArtifacts, query: str, source_count: int = 1) -> None:
+    path = artifacts.sorted_parquet_files[0]
+    replacement = path.with_suffix(".replacement.parquet")
+    connection.execute(
+        f"COPY ({query}) TO ? (FORMAT PARQUET)", [str(replacement), *(str(path) for _ in range(source_count))]
+    )
+    replacement.replace(path)
+
+
+def test_schema_registry_is_complete_and_ordered_for_all_registered_datasets():
+    assert tuple(SCHEMAS_BY_NAME) == tuple(MATERIALIZATIONS_BY_NAME)
+    for name, definition in MATERIALIZATIONS_BY_NAME.items():
+        schema = SCHEMAS_BY_NAME[name]
+        assert schema.dataset == definition.name
+        assert schema.schema_version == definition.schema_version
+        assert schema.columns
+        assert all(
+            column.name and column.duckdb_type and isinstance(column.nullable, bool) for column in schema.columns
+        )
+
+    for dataset in ("event_info", "future_event_info", "attendance_info"):
+        columns = {column.name: column.duckdb_type for column in SCHEMAS_BY_NAME[dataset].columns}
+        assert columns["created"] == "TIMESTAMP"
+        assert columns["updated"] == "TIMESTAMP"
+
+    assert next(column.duckdb_type for column in SCHEMAS_BY_NAME["pv_events"].columns if column.name == "types") == (
+        'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]'
+    )
+    events = SCHEMAS_BY_NAME["pv_events"]
+    assert events.schema_version == "pv_events.v3"
+    assert tuple(column.name for column in events.columns) == (
+        "refreshed_at",
+        "event_id",
+        "event_date",
+        "event_name",
+        "pax_count",
+        "fng_count",
+        "ao_org_id",
+        "ao_name",
+        "region_org_id",
+        "region_name",
+        "area_org_id",
+        "area_name",
+        "territory_org_id",
+        "territory_name",
+        "sector_org_id",
+        "sector_name",
+        "first_f_ind",
+        "second_f_ind",
+        "third_f_ind",
+        "types",
+        "tags",
+        "attendance",
+    )
+    assert tuple(column.duckdb_type for column in events.columns) == (
+        "TIMESTAMP WITH TIME ZONE",
+        "INTEGER",
+        "DATE",
+        "VARCHAR",
+        "INTEGER",
+        "INTEGER",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "VARCHAR",
+        "INTEGER",
+        "INTEGER",
+        "INTEGER",
+        'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]',
+        'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR)[]',
+        "STRUCT(user_id INTEGER, f3_name VARCHAR, q_ind INTEGER, coq_ind INTEGER, avatar_url VARCHAR, "
+        "attended BOOLEAN, ghost BOOLEAN, fartsack BOOLEAN)[]",
+    )
+    assert SCHEMAS_BY_VERSION[("pv_events", "pv_events.v2")].schema_version == "pv_events.v2"
+    assert "pv_events.v2" not in {schema.schema_version for schema in SCHEMAS_BY_NAME.values()}
+    legacy_events = SCHEMAS_BY_VERSION[("pv_events", "pv_events.v2")]
+    assert tuple((column.name, column.duckdb_type, column.nullable) for column in legacy_events.columns) == (
+        ("refreshed_at", "TIMESTAMP WITH TIME ZONE", True),
+        ("event_id", "INTEGER", True),
+        ("event_date", "DATE", True),
+        ("event_name", "VARCHAR", True),
+        ("pax_count", "INTEGER", True),
+        ("fng_count", "INTEGER", True),
+        ("description", "VARCHAR", True),
+        ("preblast", "VARCHAR", True),
+        ("preblast_rich", "JSON", True),
+        ("backblast", "VARCHAR", True),
+        ("backblast_rich", "JSON", True),
+        ("meta", "JSON", True),
+        ("ao_org_id", "INTEGER", True),
+        ("ao_name", "VARCHAR", True),
+        ("region_org_id", "INTEGER", True),
+        ("region_name", "VARCHAR", True),
+        ("area_org_id", "INTEGER", True),
+        ("area_name", "VARCHAR", True),
+        ("territory_org_id", "INTEGER", True),
+        ("territory_name", "VARCHAR", True),
+        ("sector_org_id", "INTEGER", True),
+        ("sector_name", "VARCHAR", True),
+        ("first_f_ind", "INTEGER", True),
+        ("second_f_ind", "INTEGER", True),
+        ("third_f_ind", "INTEGER", True),
+        ("types", 'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR, event_category VARCHAR)[]', True),
+        ("tags", 'STRUCT(id INTEGER, "name" VARCHAR, description VARCHAR)[]', True),
+        (
+            "attendance",
+            "STRUCT(user_id INTEGER, f3_name VARCHAR, q_ind INTEGER, coq_ind INTEGER, avatar_url VARCHAR, "
+            "attended BOOLEAN, ghost BOOLEAN, fartsack BOOLEAN)[]",
+            True,
+        ),
+    )
+
+    event_details = SCHEMAS_BY_NAME["pv_event_details"]
+    assert event_details.schema_version == "pv_event_details.v1"
+    assert tuple(column.name for column in event_details.columns) == (
+        "event_id",
+        "description",
+        "preblast",
+        "preblast_rich",
+        "backblast",
+        "backblast_rich",
+        "meta",
+        "refreshed_at",
+    )
+    assert tuple(column.duckdb_type for column in event_details.columns) == (
+        "INTEGER",
+        "VARCHAR",
+        "VARCHAR",
+        "JSON",
+        "VARCHAR",
+        "JSON",
+        "JSON",
+        "TIMESTAMP WITH TIME ZONE",
+    )
+
+    assert tuple(column.name for column in SCHEMAS_BY_NAME["pv_pax"].columns[-2:]) == (
+        "lifetime_posts",
+        "lifetime_qs",
+    )
+    legacy_pax = SCHEMAS_BY_VERSION[("pv_pax", "pv_pax.v2")]
+    assert tuple((column.name, column.duckdb_type, column.nullable) for column in legacy_pax.columns) == (
+        ("refreshed_at", "TIMESTAMP WITH TIME ZONE", True),
+        ("user_id", "INTEGER", True),
+        ("f3_name", "VARCHAR", True),
+        ("home_region_id", "INTEGER", True),
+        ("home_region_name", "VARCHAR", True),
+        ("avatar_url", "VARCHAR", True),
+        ("email", "VARCHAR", True),
+        ("status", "VARCHAR", True),
+        ("start_date_override", "VARCHAR", True),
+        ("regions", "STRUCT(region_org_id INTEGER, region_name VARCHAR)[]", True),
+        ("aos", "STRUCT(ao_org_id INTEGER, ao_name VARCHAR)[]", True),
+        ("types", "STRUCT(type_id INTEGER, type_name VARCHAR)[]", True),
+        ("tags", "STRUCT(tag_id INTEGER, tag_name VARCHAR)[]", True),
+        (
+            "roles",
+            "STRUCT(role_id INTEGER, role_name VARCHAR, org_id INTEGER, org_name VARCHAR, org_type VARCHAR)[]",
+            True,
+        ),
+    )
+    attendance = SCHEMAS_BY_NAME["pv_attendance"]
+    assert attendance.schema_version == "pv_attendance.v1"
+    assert tuple(column.name for column in attendance.columns) == (
+        "refreshed_at",
+        "id",
+        "user_id",
+        "event_instance_id",
+        "q_ind",
+        "coq_ind",
+        "start_date",
+        "ao_org_id",
+        "region_org_id",
+        "tags",
+        "types",
+        "categories",
+    )
+    assert tuple(column.duckdb_type for column in attendance.columns) == (
+        "TIMESTAMP WITH TIME ZONE",
+        "INTEGER",
+        "INTEGER",
+        "INTEGER",
+        "INTEGER",
+        "INTEGER",
+        "DATE",
+        "INTEGER",
+        "INTEGER",
+        "INTEGER[]",
+        "INTEGER[]",
+        "VARCHAR[]",
+    )
+
+
+def test_manifest_columns_keep_projection_order_and_fingerprint_is_stable():
+    columns = (ExpectedColumn("zeta", "VARCHAR", True), ExpectedColumn("alpha", "INTEGER", False))
+    assert manifest_columns(columns) == [
+        {"name": "zeta", "logicalType": "VARCHAR", "nullable": True},
+        {"name": "alpha", "logicalType": "INTEGER", "nullable": False},
+    ]
+    assert schema_fingerprint(columns) == "9938b2472774d28c567ba8dd2fe0358ff23a7bc8cc7c07ff227e9f16009eded5"
+
+
+def test_materialize_records_fingerprint_row_counts_and_physical_nested_schema(tmp_path: Path):
+    connection, artifacts = _event_artifacts(tmp_path)
+    assert artifacts.schema_evidence is not None
+    evidence = artifacts.schema_evidence
+    assert evidence.schemaFingerprintSha256 == evidence.schema_fingerprint_sha256
+    assert len(evidence.schema_fingerprint_sha256) == 64
+    assert evidence.file_row_counts == (artifacts.row_count,)
+    assert len(evidence.physical_schemas) == 1
+    assert any(name == "types" and children > 0 for name, _type, _repetition, children in evidence.physical_schemas[0])
+    assert validate_artifacts(connection, artifacts, MATERIALIZATIONS_BY_NAME["pv_events"]) == evidence
+
+
+@pytest.mark.parametrize(
+    "projection",
+    (
+        "SELECT event_name AS renamed, * EXCLUDE (event_name) FROM read_parquet(?)",
+        "SELECT event_name, * EXCLUDE (event_name) FROM read_parquet(?)",
+        "SELECT * REPLACE (CAST(event_id AS VARCHAR) AS event_id) FROM read_parquet(?)",
+    ),
+    ids=("name", "order", "type"),
+)
+def test_schema_mutations_are_rejected(tmp_path: Path, projection: str):
+    connection, artifacts = _event_artifacts(tmp_path)
+    _rewrite_file(connection, artifacts, projection)
+    with pytest.raises(SchemaValidationError, match="schema mismatch"):
+        validate_artifacts(connection, artifacts, MATERIALIZATIONS_BY_NAME["pv_events"])
+
+
+def test_parquet_row_count_mutation_is_rejected(tmp_path: Path):
+    connection, artifacts = _event_artifacts(tmp_path)
+    _rewrite_file(
+        connection,
+        artifacts,
+        "SELECT * FROM read_parquet(?) UNION ALL SELECT * FROM read_parquet(?)",
+        source_count=2,
+    )
+    with pytest.raises(SchemaValidationError, match="row counts"):
+        validate_artifacts(connection, artifacts, MATERIALIZATIONS_BY_NAME["pv_events"])
+
+
+def test_unlisted_parquet_files_are_rejected(tmp_path: Path):
+    connection, artifacts = _event_artifacts(tmp_path)
+    extra_file = artifacts.root / "unexpected.parquet"
+    connection.execute(
+        "COPY (SELECT * FROM read_parquet(?)) TO ? (FORMAT PARQUET)",
+        [str(extra_file), str(artifacts.sorted_parquet_files[0])],
+    )
+    with pytest.raises(SchemaValidationError, match="file set"):
+        validate_artifacts(connection, artifacts, MATERIALIZATIONS_BY_NAME["pv_events"])
+
+
+def test_parquet_partitions_with_different_physical_schemas_are_rejected(tmp_path: Path):
+    connection, artifacts = _event_artifacts(tmp_path)
+    first = artifacts.sorted_parquet_files[0]
+    second = first.with_name("pv_events-second.parquet")
+    copyfile(first, second)
+    partitioned = MaterializationArtifacts(
+        artifacts.root,
+        (first, second),
+        artifacts.row_count * 2,
+        artifacts.schema_evidence,
+    )
+
+    class MismatchedPhysicalSchemaConnection:
+        physical_reads = 0
+
+        def execute(self, query: str, *parameters: Any):
+            result = connection.execute(query, *parameters)
+            if "parquet_schema" not in query:
+                return result
+            rows = result.fetchall()
+            self.physical_reads += 1
+            if self.physical_reads == 2:
+                mismatched = list(rows[0])
+                mismatched[4] = "MISMATCHED_REPETITION"
+                rows[0] = tuple(mismatched)
+            return type("Rows", (), {"fetchall": lambda _self: rows})()
+
+    with pytest.raises(SchemaValidationError, match="inconsistent physical schemas"):
+        validate_artifacts(
+            MismatchedPhysicalSchemaConnection(),
+            partitioned,
+            MATERIALIZATIONS_BY_NAME["pv_events"],
+        )
+
+
+def test_rich_json_types_and_json_null_remain_distinct_from_sql_null(tmp_path: Path):
+    connection = events_source()
+    connection.execute("UPDATE pg.public.event_instances SET preblast_rich = 'null'::JSON WHERE id = 2")
+    definition = MATERIALIZATIONS_BY_NAME["pv_event_details"]
+    artifacts = materialize(connection, tmp_path / "event-details", definition, "2026-01-05T00:00:00Z", "2026-01-05")
+    rows = connection.execute(
+        "SELECT preblast_rich, backblast_rich FROM read_parquet(?) WHERE event_id = 2",
+        [str(artifacts.sorted_parquet_files[0])],
+    ).fetchone()
+    assert rows == ("null", None)
+    assert artifacts.schema_evidence is not None
+    columns = {column.name: column.duckdb_type for column in artifacts.schema_evidence.columns}
+    assert columns["preblast_rich"] == "JSON"
+    assert columns["backblast_rich"] == "JSON"

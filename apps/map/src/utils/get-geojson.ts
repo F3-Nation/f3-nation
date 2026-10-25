@@ -25,6 +25,6 @@ export const getGeojson = (filteredLocationMarkers: SparseF3Marker[]) => {
       Point,
       MarkerProperties
     >,
-  ) ?? { features: [], type: "FeatureCollection" };
+  );
   return geojson;
 };

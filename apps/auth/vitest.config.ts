@@ -1,7 +1,9 @@
 import { coverageExclude, coverageInclude } from "@acme/vitest-config";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  plugins: [react()],
   // jwt.ts imports ~/env; without this the tsconfig `~/*` path does not resolve.
   resolve: { tsconfigPaths: true },
   test: {
@@ -15,10 +17,10 @@ export default defineConfig({
       exclude: coverageExclude,
       thresholds: {
         autoUpdate: true,
-        statements: 63.27,
-        branches: 56.94,
-        functions: 67.5,
-        lines: 63.3,
+        statements: 79.55,
+        branches: 79.63,
+        functions: 82.73,
+        lines: 79.62,
       },
     },
   },

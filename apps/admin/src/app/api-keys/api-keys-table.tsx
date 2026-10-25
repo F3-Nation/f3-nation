@@ -3,6 +3,7 @@
 import { MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 
+import type { UserRole } from "@acme/shared/app/enums";
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@acme/ui/card";
@@ -41,6 +42,22 @@ const statusBadgeVariant: Record<
   expired: "outline",
 };
 
+const ROLE_STYLES = {
+  user: "bg-gray-100 text-gray-700 border-gray-200",
+  admin: "bg-purple-100 text-purple-700 border-purple-200",
+  editor: "bg-blue-100 text-blue-700 border-blue-200",
+  password_manager: "bg-gray-100 text-gray-700 border-gray-200",
+  password_reader: "bg-gray-100 text-gray-700 border-gray-200",
+} satisfies Record<UserRole, string>;
+
+const ROLE_LABELS = {
+  user: "User",
+  admin: "Admin",
+  editor: "Editor",
+  password_manager: "Password manager",
+  password_reader: "Password reader",
+} satisfies Record<UserRole, string>;
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—";
   try {
@@ -68,7 +85,7 @@ export const ApiKeysTable = () => {
       onSuccess: async (_result, variables) => {
         await invalidateQueries("apiKey");
         toast.success(
-          variables?.revoke === false
+          variables.revoke === false
             ? "API key reactivated"
             : "API key revoked",
         );
@@ -170,28 +187,16 @@ export const ApiKeysTable = () => {
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">
                         <div className="flex flex-wrap items-center gap-2">
-                          {row.roles && row.roles.length > 0 ? (
+                          {row.roles.length > 0 ? (
                             row.roles.map((role, index) => {
-                              const roleStyles = {
-                                admin:
-                                  "bg-purple-100 text-purple-700 border-purple-200",
-                                editor:
-                                  "bg-blue-100 text-blue-700 border-blue-200",
-                              } as const;
-
-                              const roleLabels = {
-                                admin: "Admin",
-                                editor: "Editor",
-                              } as const;
-
                               return (
                                 <span
                                   key={`${row.id}-${role.orgId}-${index}`}
                                   className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-                                    roleStyles[role.roleName]
+                                    ROLE_STYLES[role.roleName]
                                   }`}
                                 >
-                                  {role.orgName} ({roleLabels[role.roleName]})
+                                  {role.orgName} ({ROLE_LABELS[role.roleName]})
                                 </span>
                               );
                             })
@@ -214,38 +219,44 @@ export const ApiKeysTable = () => {
                         {formatDateTime(row.created)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Open menu</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Manage</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                revokeKey.mutate({
-                                  id: row.id,
-                                  revoke: status === "revoked" ? false : true,
-                                })
-                              }
-                            >
-                              <RotateCcw className="mr-2 h-4 w-4" />
-                              {status === "revoked"
-                                ? "Restore access"
-                                : "Revoke access"}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => confirmDelete(row.id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete key
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {(row.canManage || status !== "revoked") && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                                <span className="sr-only">Open menu</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Manage</DropdownMenuLabel>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  revokeKey.mutate({
+                                    id: row.id,
+                                    revoke: status === "revoked" ? false : true,
+                                  })
+                                }
+                              >
+                                <RotateCcw className="mr-2 h-4 w-4" />
+                                {status === "revoked"
+                                  ? "Restore access"
+                                  : "Revoke access"}
+                              </DropdownMenuItem>
+                              {row.canManage && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => confirmDelete(row.id)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete key
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

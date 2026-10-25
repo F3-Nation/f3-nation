@@ -112,8 +112,8 @@
 
 ### The request-path spots the specs name
 
-From the `/specs` observability sections (PR #551,
-`specs/map-update-request-flow.md` §9 and `specs/map-browse-and-search.md` §9):
+From the `docs/specs/` observability sections (PR #551,
+`docs/specs/map-update-request-flow.md` §9 and `docs/specs/map-browse-and-search.md` §9):
 
 | Spec-named signal                                    | Where it lives today                                                                                                                              |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -400,14 +400,15 @@ blockAllMedia: false` in `apps/map/src/instrumentation-client.ts` means
 
 ## 6. The `console.error` carve-out
 
-[`AGENTS.md`](../AGENTS.md) says never `console.*`. Three sites in this
+[`AGENTS.md`](../AGENTS.md) says never `console.*`. Four sites in this
 workstream break that rule on purpose:
 
-| Site                                                                    | Why                                                                                                                                               |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/observability/src/index.ts` (`captureException` catch)        | This function _is_ the logger's `errorReporter` target. `logError` here re-enters it — infinite recursion.                                        |
-| `packages/observability/src/posthog-exporter.ts` (export-failure catch) | Same pipeline, one layer down: the exporter's own failure cannot be reported through the exporter.                                                |
-| `apps/map/src/app/global-error.tsx` (report-failure catch)              | Browser-only, last-resort UI with no error boundary above it. `@acme/logger` is pino — it does not run here, so there is no approved alternative. |
+| Site                                                                                          | Why                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/observability/src/index.ts` (`captureException` catch)                              | This function _is_ the logger's `errorReporter` target. `logError` here re-enters it — infinite recursion.                                                                                                                       |
+| `packages/observability/src/posthog-exporter.ts` (export-failure catch)                       | Same pipeline, one layer down: the exporter's own failure cannot be reported through the exporter.                                                                                                                               |
+| `apps/map/src/app/global-error.tsx` (report-failure catch)                                    | Browser-only, last-resort UI with no error boundary above it. `@acme/logger` is pino — it does not run here, so there is no approved alternative.                                                                                |
+| `packages/observability/src/browser.ts` (`initErrorReporting` and `captureException` catches) | The admin/auth/me/homepage browser reporter: init runs at page load, capture is meant for error boundaries. Same reason as the map's: no browser logger, and the failure must not break the page or escape into the fallback UI. |
 
 Each is wrapped so the secondary failure can never escape, and each carries a
 comment naming this section.
@@ -423,5 +424,5 @@ Why no ESLint exemption? There is no `no-console` rule in
 not lint. Adding a disable directive would trip `reportUnusedDisableDirectives`
 and fail the lint job.
 
-**This list is exhaustive.** A new `console.*` outside these three files is a
+**This list is exhaustive.** A new `console.*` outside these four files is a
 review reject, not a precedent.

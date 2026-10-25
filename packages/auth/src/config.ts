@@ -161,11 +161,16 @@ if (isDevModeSignInAllowed()) {
   );
 }
 
+const adapter = MDPGDrizzleAdapter(db);
+
+/** Marks tokens whose roles came from the database (sign-in or refresh). */
+const ROLES_VERSION = 1;
+
 export const authConfig: NextAuthConfig = {
   // Must cast since we use number for user ids
   // And next-auth expects string for user ids
   // And it is a nightmare (impossible?) to overwrite the type
-  adapter: MDPGDrizzleAdapter(db) as Adapter,
+  adapter: adapter as Adapter,
   session: { strategy: "jwt" },
   // Needed to run on cloud build docker deployment (basePath and trustHost)
   // https://github.com/nextauthjs/next-auth/issues/9819#issuecomment-1912903196
@@ -211,20 +216,43 @@ export const authConfig: NextAuthConfig = {
   },
   providers,
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
+    // `session` is deliberately not destructured: on `trigger === "update"` it
+    // is the body of a POST to /api/auth/session, which any signed-in user can
+    // send with whatever roles they like. Nothing in it may reach the token.
+    async jwt({ token, user, trigger }) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth passes `user` only on sign-in, despite its type
       if (user) {
         token.id = user.id;
         token.email = user.email ?? undefined;
         token.name = user.name;
         token.roles = user.roles;
+        token.rolesVersion = ROLES_VERSION;
       }
 
-      if (trigger === "update" && session && "roles" in session) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-        token.roles = session.roles;
+      // Tokens without the marker predate the server-side role refresh (#436)
+      // and may carry forged roles, so they must not keep their embedded roles.
+      if (trigger === "update" || token.rolesVersion !== ROLES_VERSION) {
+        // Re-read roles from the database for the token's own user. A DB error
+        // (or an adapter without getUser) throws, and @auth/core then clears
+        // the session cookie (fail closed). Plain GET reads (including apps/api's
+        // getSessionFromHeaders) only reach this for pre-marker tokens.
+        if (!adapter.getUser) {
+          throw new Error("Auth adapter must implement getUser");
+        }
+        const userId = Number(token.id);
+        // User ids are positive serials; Number("") and Number(null) are 0.
+        const dbUser =
+          Number.isInteger(userId) && userId > 0
+            ? await adapter.getUser(userId)
+            : null;
+        // A missing user is signed out, like the DB-error path above;
+        // @auth/core treats a null token as signed out and clears the cookie.
+        if (!dbUser) return null;
+        token.roles = dbUser.roles;
+        token.rolesVersion = ROLES_VERSION;
       }
 
-      return Promise.resolve(token);
+      return token;
     },
     async session({ session, token }) {
       const result = {

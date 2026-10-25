@@ -11,8 +11,8 @@
 ## ALWAYS DO
 
 - **Work from a spec.** For feature work, read the feature's spec in
-  [`specs/`](../specs/) before generating code; if none exists, write one from
-  the [template](../specs/README.md) and get the acceptance criteria approved by
+  [`docs/specs/`](specs/) before generating code; if none exists, write one from
+  the [template](specs/README.md) and get the acceptance criteria approved by
   a human before building.
 - **Authorize, don't just authenticate.** Every new or changed endpoint uses
   the correct procedure tier **and** verifies role/ownership on the specific
@@ -90,5 +90,5 @@ Plus these explicit gates regardless of domain:
   commits).
 - [`docs/AI_DEVELOPMENT_GUIDE.md`](AI_DEVELOPMENT_GUIDE.md) — secure
   patterns, pitfalls, and the pre-flight checklist.
-- [`specs/README.md`](../specs/README.md) — the feature-spec template these
+- [`docs/specs/README.md`](specs/README.md) — the feature-spec template these
   guardrails assume.

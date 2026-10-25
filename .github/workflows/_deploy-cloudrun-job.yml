@@ -93,6 +93,11 @@ on:
         required: false
         type: string
         default: ""
+      deploy_prod:
+        description: "Whether to promote and deploy the production Cloud Run Job"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   ci-gate:
@@ -227,6 +232,15 @@ jobs:
 
   deploy-staging:
     needs: build
+    # Serialize deploys per target (project + region + job), not per
+    # release tag: two tags dispatched close together would otherwise both
+    # deploy this job at once and the slower, possibly older one would win.
+    # Unrelated jobs keep separate groups and still deploy in parallel.
+    # GitHub keeps at most one pending run per group (a newer one replaces it)
+    # -- see docs/RELEASE_PROCESS.md "Overlapping deploys".
+    concurrency:
+      group: cloudrun-job-deploy-${{ inputs.staging_project }}-${{ inputs.region }}-${{ inputs.staging_job_name || inputs.job_name }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -271,6 +285,11 @@ jobs:
 
   deploy-prod:
     needs: [build, deploy-staging]
+    if: inputs.deploy_prod
+    # Same per-target serialization as deploy-staging.
+    concurrency:
+      group: cloudrun-job-deploy-${{ inputs.prod_project }}-${{ inputs.region }}-${{ inputs.prod_job_name || inputs.job_name }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read

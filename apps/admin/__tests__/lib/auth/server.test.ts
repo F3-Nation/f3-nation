@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -207,6 +208,51 @@ describe("admin auth server helpers", () => {
     });
   });
 
+  it("drops non-admin roles when hydrating the session", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "valid-token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue(validPayload);
+    getMyProfileMock.mockResolvedValue({
+      roles: [
+        ...adminRoles,
+        {
+          roleId: 4,
+          orgId: 10,
+          orgName: "F3 Nation",
+          roleName: "password_manager",
+        },
+      ],
+    });
+
+    const { getSessionUser } = await import("~/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user?.roles).toEqual(adminRoles);
+  });
+
+  it("hydrates no roles when the profile holds only password roles", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "valid-token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue(validPayload);
+    getMyProfileMock.mockResolvedValue({
+      roles: [
+        {
+          roleId: 5,
+          orgId: 10,
+          orgName: "F3 Nation",
+          roleName: "password_reader",
+        },
+      ],
+    });
+
+    const { getSessionUser } = await import("~/lib/auth/server");
+    const user = await getSessionUser();
+
+    expect(user?.roles).toEqual([]);
+  });
+
   it("returns session without roles when getMyProfile throws", async () => {
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "valid-token" }),
@@ -246,6 +292,67 @@ describe("admin auth server helpers", () => {
       "admin.auth.roles_hydrate_failed",
       { err: "gateway timeout" },
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // getSessionLookup
+  // -------------------------------------------------------------------------
+
+  it.each([
+    ["times out", new DOMException("timed out", "TimeoutError")],
+    ["is unreachable", new TypeError("fetch failed")],
+    ["returns a 5xx", new ORPCError("SERVICE_UNAVAILABLE", { status: 503 })],
+  ])(
+    "flags the API as unavailable when the profile request %s",
+    async (_label, error) => {
+      cookiesMock.mockResolvedValue({
+        get: vi.fn().mockReturnValue({ value: "valid-token" }),
+      });
+      verifyAccessTokenMock.mockResolvedValue(validPayload);
+      getMyProfileMock.mockRejectedValue(error);
+
+      const { getSessionLookup } = await import("~/lib/auth/server");
+      const lookup = await getSessionLookup();
+
+      expect(lookup.apiUnavailable).toBe(true);
+      expect(lookup.session).toMatchObject({ id: 42, roles: [] });
+      expect(logWarnMock).toHaveBeenCalledWith("admin.auth.api_unavailable", {
+        err: error,
+      });
+      expect(logWarnMock).not.toHaveBeenCalledWith(
+        "admin.auth.roles_hydrate_failed",
+        expect.anything(),
+      );
+    },
+  );
+
+  it("does not flag the API as unavailable when it answers with a 4xx", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn().mockReturnValue({ value: "valid-token" }),
+    });
+    verifyAccessTokenMock.mockResolvedValue(validPayload);
+    const forbidden = new ORPCError("FORBIDDEN", { status: 403 });
+    getMyProfileMock.mockRejectedValue(forbidden);
+
+    const { getSessionLookup } = await import("~/lib/auth/server");
+    const lookup = await getSessionLookup();
+
+    expect(lookup.apiUnavailable).toBe(false);
+    expect(logWarnMock).toHaveBeenCalledWith(
+      "admin.auth.roles_hydrate_failed",
+      { err: forbidden },
+    );
+  });
+
+  it("does not consult the API when there is no session", async () => {
+    cookiesMock.mockResolvedValue({ get: vi.fn().mockReturnValue(undefined) });
+
+    const { getSessionLookup } = await import("~/lib/auth/server");
+    expect(await getSessionLookup()).toEqual({
+      session: null,
+      apiUnavailable: false,
+    });
+    expect(getMyProfileMock).not.toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------

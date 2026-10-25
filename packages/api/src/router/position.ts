@@ -740,6 +740,7 @@ export const positionRouter = {
    * @deprecated Kept for backward compatibility. The admin UI should not use this endpoint.
    */
   updateAssignments: editorProcedure
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated endpoint's own schema
     .input(UpdatePositionAssignmentsSchema)
     .route({
       method: "PUT",

@@ -3,12 +3,13 @@ import { z } from "zod";
 
 // Only override DATABASE_URL from --url flag if in non-production (i.e., development or test) environment
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- NODE_ENV is unset when scripts run outside Next/Vitest
 const nodeEnv = process.env.NODE_ENV || "development";
 if (nodeEnv !== "production") {
   const args = process.argv as string[] | undefined;
   const urlFlagIndex = args?.indexOf("--url") ?? -1;
   if (urlFlagIndex !== -1 && args?.[urlFlagIndex + 1]) {
-    process.env.DATABASE_URL = args?.[urlFlagIndex + 1];
+    process.env.DATABASE_URL = args[urlFlagIndex + 1];
   }
 }
 
@@ -18,6 +19,9 @@ export const env = createEnv({
       process.env.NODE_ENV === "production"
         ? z.string().min(1)
         : z.string().min(1).optional(),
+    // DB connection string consumed by @acme/db. This schema only declares and
+    // validates it; the DATABASE_URL -> TEST_DATABASE_URL switch for
+    // NODE_ENV=test happens in getDbUrl() (packages/db), not here.
     DATABASE_URL: z.string().min(1).optional(),
     EMAIL_SERVER: z.string().min(1),
     EMAIL_FROM: z.string().min(1),
@@ -29,6 +33,7 @@ export const env = createEnv({
       .default("info"),
     EMAIL_ADMIN_DESTINATIONS: z.string().min(1),
     EMAIL_REGION_IN_A_BOX_CC: z.string().min(1).optional(),
+    // Test-only database override; not used by normal local dev or production.
     TEST_DATABASE_URL: z.string().min(1).optional(),
     API_KEY: z.string().min(1),
     SUPER_ADMIN_API_KEY: z.string().min(1).optional(),

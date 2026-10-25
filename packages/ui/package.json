@@ -1,7 +1,7 @@
 {
   "name": "@acme/ui",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.3",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -54,6 +54,7 @@
   "devDependencies": {
     "@acme/eslint-config": "workspace:*",
     "@acme/prettier-config": "workspace:*",
+    "@acme/tailwind-config": "workspace:*",
     "@acme/tsconfig": "workspace:*",
     "@types/lodash": "catalog:",
     "@types/react": "catalog:",
@@ -61,6 +62,7 @@
     "prettier": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "zod": "catalog:"
   },

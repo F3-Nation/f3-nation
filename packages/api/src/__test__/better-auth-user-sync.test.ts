@@ -59,7 +59,7 @@ describe("better_auth_user sync with users (#953)", () => {
     await db.insert(authSchema.betterAuthSession).values({
       id: `${uniqueId()}-session`,
       token: uniqueId(),
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000),
       userId: String(user.id),
     });
 

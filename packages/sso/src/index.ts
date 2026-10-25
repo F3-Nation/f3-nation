@@ -130,10 +130,10 @@ export class AuthClient {
 
     if (!res.ok) {
       throw new AuthError(
-        (data.error_description as string) ??
-          (data.error as string) ??
+        (data.error_description as string | undefined) ??
+          (data.error as string | undefined) ??
           "Token exchange failed",
-        (data.error as string) ?? "unknown",
+        (data.error as string | undefined) ?? "unknown",
         res.status,
       );
     }
@@ -174,10 +174,10 @@ export class AuthClient {
 
     if (!res.ok) {
       throw new AuthError(
-        (data.error_description as string) ??
-          (data.error as string) ??
+        (data.error_description as string | undefined) ??
+          (data.error as string | undefined) ??
           "Token refresh failed",
-        (data.error as string) ?? "unknown",
+        (data.error as string | undefined) ?? "unknown",
         res.status,
       );
     }
@@ -209,8 +209,8 @@ export class AuthClient {
 
     if (!res.ok) {
       throw new AuthError(
-        (data.error as string) ?? "Failed to fetch user info",
-        (data.error as string) ?? "unknown",
+        (data.error as string | undefined) ?? "Failed to fetch user info",
+        (data.error as string | undefined) ?? "unknown",
         res.status,
       );
     }
@@ -224,9 +224,17 @@ export class AuthClient {
     };
   }
 
-  /** Revokes an access or refresh token. Server-side only. */
+  /**
+   * Revokes an access or refresh token. Server-side only — sends
+   * `client_secret`, which Better Auth (auth3) requires on revoke (RFC 7009
+   * §2.1). The hand-rolled auth server ignores the client fields.
+   */
   async revokeToken(token: string): Promise<void> {
-    const body = new URLSearchParams({ token });
+    const body = new URLSearchParams({
+      token,
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+    });
 
     const res = await fetch(`${this.config.authServerUrl}/api/oauth/revoke`, {
       method: "POST",
@@ -237,8 +245,8 @@ export class AuthClient {
     if (!res.ok) {
       const data = (await res.json()) as Record<string, unknown>;
       throw new AuthError(
-        (data.error as string) ?? "Token revocation failed",
-        (data.error as string) ?? "unknown",
+        (data.error as string | undefined) ?? "Token revocation failed",
+        (data.error as string | undefined) ?? "unknown",
         res.status,
       );
     }
@@ -246,6 +254,7 @@ export class AuthClient {
 }
 
 function getCrypto(): Crypto {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- older Node runtimes and insecure browser contexts lack Web Crypto
   if (!globalThis.crypto) {
     throw new AuthError(
       "Web Crypto API is not available",

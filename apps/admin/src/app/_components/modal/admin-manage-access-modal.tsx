@@ -50,6 +50,7 @@ import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
+import { toGrantableRoleEntries } from "~/lib/auth/session";
 import { VirtualizedCombobox } from "@acme/ui/virtualized-combobox";
 
 export default function AdminManageAccessModal({
@@ -111,7 +112,6 @@ export default function AdminManageAccessModal({
   const userIdToFetch = selectedUserId ?? data?.userId;
   const hasValidUserId =
     userIdToFetch !== undefined &&
-    userIdToFetch !== null &&
     typeof userIdToFetch === "number" &&
     userIdToFetch > 0;
   const { data: userByIdData } = useQuery(
@@ -315,17 +315,11 @@ export default function AdminManageAccessModal({
       form.setValue("f3Name", user.f3Name ?? "");
       form.setValue("phone", user.phone ?? "");
 
-      // Always set existing roles from the API (source of truth)
-      if (user.roles && Array.isArray(user.roles)) {
-        const existingRoles: RoleEntry[] = user.roles.map((role) => ({
-          orgId: role.orgId,
-          roleName: role.roleName as "editor" | "admin",
-        }));
-        form.setValue("roles", existingRoles);
-      } else {
-        // If no roles found, clear the roles field
-        form.setValue("roles", []);
-      }
+      // Load only grantable roles into the editable form. Dormant/hidden roles
+      // (e.g. password_*) are intentionally omitted so an editor can't
+      // mislabel or overwrite them; the API preserves those assignments on
+      // save (see user.crupdate's rolesToDelete guard).
+      form.setValue("roles", toGrantableRoleEntries(user.roles));
     }
   }, [userByIdData, form]);
 
@@ -369,16 +363,16 @@ export default function AdminManageAccessModal({
                   return;
                 }
                 // Validate that all roles have a valid org selected (orgId > 0)
-                const invalidRoles = data.roles?.filter(
+                const invalidRoles = data.roles.filter(
                   (role) => !role.orgId || role.orgId < 0,
                 );
-                if (invalidRoles && invalidRoles.length > 0) {
+                if (invalidRoles.length > 0) {
                   toast.error(
                     "Please select an organization for all roles before saving",
                   );
                   return;
                 }
-                const orgIds = data.roles?.map((r) => r.orgId) ?? [];
+                const orgIds = data.roles.map((r) => r.orgId);
                 if (new Set(orgIds).size !== orgIds.length) {
                   toast.error("A user can only have one role per organization");
                   return;
@@ -448,7 +442,7 @@ export default function AdminManageAccessModal({
                                   // Delay closing to allow click events on dropdown items
                                   // Check if the blur is happening because we clicked on a dropdown item
                                   const relatedTarget =
-                                    e.relatedTarget as HTMLElement;
+                                    e.relatedTarget as HTMLElement | null;
                                   if (
                                     !!relatedTarget?.closest(
                                       '[role="listbox"]',
@@ -686,23 +680,23 @@ export default function AdminManageAccessModal({
                     <FormItem>
                       <FormLabel>Roles</FormLabel>
                       <FormDescription>
-                        {selectedUserId && userByIdData?.user?.roles?.length
+                        {selectedUserId && userByIdData?.user?.roles.length
                           ? `Existing roles are shown below. Add or modify roles as needed.`
                           : `Assign roles to the user. They will be added to any existing roles.`}
                       </FormDescription>
                       <div className="space-y-2">
-                        {((field.value as RoleEntry[]) || []).map(
+                        {(field.value as RoleEntry[]).map(
                           (roleEntry, index) => {
                             // Check if admin has access to this org
                             const adminOrgIds = new Set(
-                              orgs?.orgs.map((org) => org.id) ?? [],
+                              orgs.orgs.map((org) => org.id),
                             );
                             const isNewRole = roleEntry.orgId === -1;
                             const hasAccess =
                               isNewRole || adminOrgIds.has(roleEntry.orgId);
 
                             // Get org name from user's roles (API includes orgName)
-                            const userRole = userByIdData?.user?.roles?.find(
+                            const userRole = userByIdData?.user?.roles.find(
                               (r) => r.orgId === roleEntry.orgId,
                             );
                             const orgName = userRole?.orgName;
@@ -728,10 +722,9 @@ export default function AdminManageAccessModal({
                             }
 
                             const assignedOrgIds = new Set(
-                              ((field.value as RoleEntry[]) ?? [])
+                              (field.value as RoleEntry[])
                                 .filter((_, i) => i !== index)
-                                .map((r) => r.orgId)
-                                .filter((id): id is number => id != null),
+                                .map((r) => r.orgId),
                             );
 
                             return (
@@ -767,20 +760,18 @@ export default function AdminManageAccessModal({
 
                                 <VirtualizedCombobox
                                   value={roleEntry.orgId.toString()}
-                                  options={
-                                    orgs?.orgs
-                                      .filter(
-                                        (org) => !assignedOrgIds.has(org.id),
-                                      )
-                                      .map((org) => ({
-                                        value: org.id.toString(),
-                                        label: `${org.name} (${org.orgType})`,
-                                      })) ?? []
-                                  }
+                                  options={orgs.orgs
+                                    .filter(
+                                      (org) => !assignedOrgIds.has(org.id),
+                                    )
+                                    .map((org) => ({
+                                      value: org.id.toString(),
+                                      label: `${org.name} (${org.orgType})`,
+                                    }))}
                                   searchPlaceholder="Select an organization"
                                   disabled={isLoadingOrgs}
                                   onSelect={(value) => {
-                                    const orgId = safeParseInt(value as string);
+                                    const orgId = safeParseInt(value);
                                     if (orgId == undefined) {
                                       toast.error("Invalid orgId");
                                       return;
@@ -841,7 +832,7 @@ export default function AdminManageAccessModal({
                                 orgId: -1,
                               };
                               field.onChange([
-                                ...((field.value as RoleEntry[]) ?? []),
+                                ...(field.value as RoleEntry[]),
                                 newRoleEntry,
                               ]);
                             }}

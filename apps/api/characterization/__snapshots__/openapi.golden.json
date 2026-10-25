@@ -1716,7 +1716,7 @@
     },
     "/v1/api-key": {
       "get": {
-        "description": "Retrieve all API keys with their metadata, owner information, role assignments, and status. Requires admin role for any organization.",
+        "description": "Retrieve the API keys the caller can manage, with their metadata, owner information, role assignments, and status. Nation admins see every key; other admins see keys whose every organization they administer, plus keys they own. `canManage` is false on an owned key that holds roles beyond the caller's own; the owner may revoke it but not restore or purge it.",
         "operationId": "apiKey.list",
         "parameters": [
           {
@@ -1733,6 +1733,10 @@
                       "description": "List of API keys",
                       "items": {
                         "properties": {
+                          "canManage": {
+                            "description": "Whether the caller may restore or purge this key. False means the caller only owns it and may only revoke it.",
+                            "type": "boolean"
+                          },
                           "created": {
                             "description": "Date the API key was created",
                             "type": "string"
@@ -1856,8 +1860,11 @@
                                 "roleName": {
                                   "description": "Role name",
                                   "enum": [
+                                    "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
@@ -1891,7 +1898,8 @@
                           "keySignature",
                           "roles",
                           "orgIds",
-                          "orgNames"
+                          "orgNames",
+                          "canManage"
                         ],
                         "type": "object"
                       },
@@ -2097,7 +2105,7 @@
     },
     "/v1/api-key/{id}/purge": {
       "delete": {
-        "description": "Permanently delete an API key and all associated role assignments. This action cannot be undone.",
+        "description": "Permanently delete an API key and all associated role assignments. This action cannot be undone. Limited to keys the caller can manage.",
         "operationId": "apiKey.purge",
         "parameters": [
           {
@@ -2153,10 +2161,6 @@
                               "description": "API key ID",
                               "type": "number"
                             },
-                            "key": {
-                              "description": "API key value",
-                              "type": "string"
-                            },
                             "lastUsedAt": {
                               "anyOf": [
                                 {
@@ -2201,7 +2205,6 @@
                           },
                           "required": [
                             "id",
-                            "key",
                             "name",
                             "description",
                             "ownerId",
@@ -2238,7 +2241,7 @@
     },
     "/v1/api-key/{id}/revoke": {
       "post": {
-        "description": "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests.",
+        "description": "Revoke an API key to prevent further use, or restore a previously revoked key. Revoked keys cannot be used to authenticate API requests. Owners may revoke their own keys; restoring is limited to keys the caller can manage.",
         "operationId": "apiKey.revoke",
         "parameters": [
           {
@@ -2259,7 +2262,20 @@
               "schema": {
                 "properties": {
                   "revoke": {
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ]
                   }
                 },
                 "type": "object"
@@ -2308,10 +2324,6 @@
                               "description": "API key ID",
                               "type": "number"
                             },
-                            "key": {
-                              "description": "API key value",
-                              "type": "string"
-                            },
                             "lastUsedAt": {
                               "anyOf": [
                                 {
@@ -2356,7 +2368,6 @@
                           },
                           "required": [
                             "id",
-                            "key",
                             "name",
                             "description",
                             "ownerId",
@@ -2642,9 +2653,26 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "boolean"
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "enum": [
+                        "0",
+                        "1",
+                        "true",
+                        "false"
+                      ],
+                      "type": "string"
+                    }
+                  ]
                 },
                 {
+                  "enum": [
+                    "True",
+                    "False"
+                  ],
                   "type": "string"
                 }
               ],
@@ -3079,7 +3107,20 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ]
                   },
                   "id": {
                     "type": "string"
@@ -3437,7 +3478,7 @@
         ]
       },
       "post": {
-        "description": "Create a new event or update an existing one. Requires editor role for the event's organization. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
+        "description": "Create a new event or update an existing one. Requires editor role for the event's organization; deactivating an active event requires admin role. Events are associated with locations and can have multiple event types. When creating or updating an event, future instances will be automatically created or updated based on the event's recurrence pattern. Changes to series events will cascade to future instances.",
         "operationId": "event.crupdate",
         "parameters": [
           {
@@ -4013,7 +4054,20 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ]
                   },
                   "id": {
                     "type": "string"
@@ -4110,7 +4164,20 @@
             "in": "query",
             "name": "onlyStandalone",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
@@ -4928,8 +4995,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -4950,7 +5030,20 @@
             "in": "query",
             "name": "ignoreNationEventTags",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
@@ -5400,7 +5493,20 @@
             "in": "query",
             "name": "isActive",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
@@ -5587,8 +5693,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -6794,8 +6913,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -8358,7 +8490,20 @@
             "in": "query",
             "name": "onlyMine",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "enum": [
+                    "0",
+                    "1",
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                }
+              ]
             }
           },
           {
@@ -8395,7 +8540,20 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ]
                   },
                   "id": {
                     "type": "string"
@@ -8776,7 +8934,9 @@
             "name": "regionId",
             "required": true,
             "schema": {
-              "type": "number"
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
             }
           }
         ],
@@ -9249,6 +9409,231 @@
                               "description": "Location ID",
                               "type": "number"
                             },
+                            "instanceOrgs": {
+                              "description": "AO and region context per visible upcoming instance, soonest first, including locations with recurring workouts",
+                              "items": {
+                                "properties": {
+                                  "instanceId": {
+                                    "description": "Event instance ID",
+                                    "type": "number"
+                                  },
+                                  "parentEmail": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentFacebook": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentInstagram": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentLogo": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentName": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentPhone": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentTwitter": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "parentWebsite": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionEmail": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionFacebook": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionInstagram": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionLogo": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionName": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionPhone": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionTwitter": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionType": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "regionWebsite": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "instanceId",
+                                  "parentId",
+                                  "parentLogo",
+                                  "parentName",
+                                  "parentWebsite",
+                                  "parentEmail",
+                                  "parentPhone",
+                                  "parentTwitter",
+                                  "parentFacebook",
+                                  "parentInstagram",
+                                  "regionId",
+                                  "regionName",
+                                  "regionLogo",
+                                  "regionWebsite",
+                                  "regionEmail",
+                                  "regionPhone",
+                                  "regionTwitter",
+                                  "regionFacebook",
+                                  "regionInstagram",
+                                  "regionType"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
                             "isActive": {
                               "description": "Whether the location is active",
                               "type": "boolean"
@@ -9617,6 +10002,7 @@
                             "regionFacebook",
                             "regionInstagram",
                             "regionType",
+                            "instanceOrgs",
                             "fullAddress",
                             "events"
                           ],
@@ -10179,15 +10565,19 @@
               "schema": {
                 "properties": {
                   "description": {
+                    "maxLength": 5000,
                     "type": "string"
                   },
                   "email": {
+                    "maxLength": 320,
                     "type": "string"
                   },
                   "subject": {
+                    "maxLength": 200,
                     "type": "string"
                   },
                   "type": {
+                    "maxLength": 200,
                     "type": "string"
                   }
                 },
@@ -10499,7 +10889,9 @@
                                 "enum": [
                                   "user",
                                   "editor",
-                                  "admin"
+                                  "admin",
+                                  "password_manager",
+                                  "password_reader"
                                 ],
                                 "type": "string"
                               }
@@ -10881,7 +11273,9 @@
                                 "enum": [
                                   "user",
                                   "editor",
-                                  "admin"
+                                  "admin",
+                                  "password_manager",
+                                  "password_reader"
                                 ],
                                 "type": "string"
                               }
@@ -11576,8 +11970,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -11856,7 +12263,7 @@
         ]
       },
       "post": {
-        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → territory → area → region → ao).",
+        "description": "Create a new organization or update an existing one. Requires editor role for the organization or its parent. Organizations follow a hierarchical structure (nation → sector → territory → area → region → ao). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances.",
         "operationId": "org.crupdate",
         "parameters": [
           {
@@ -13125,8 +13532,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -15145,7 +15565,7 @@
     },
     "/v1/request": {
       "get": {
-        "description": "Get a paginated list of map change requests with optional filtering and sorting",
+        "description": "Get a paginated list of map change requests with optional filtering and sorting. Limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
         "operationId": "request.all",
         "parameters": [
           {
@@ -15186,8 +15606,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -15218,7 +15651,7 @@
             "in": "query",
             "name": "onlyMine",
             "schema": {
-              "description": "If true, only return requests from regions where the requester has editor or admin role.",
+              "description": "Deprecated and ignored. Results are always limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
               "type": "boolean"
             }
           },
@@ -16314,7 +16747,7 @@
     },
     "/v1/request/id/{id}": {
       "get": {
-        "description": "Retrieve detailed information about a specific map change request including the proposed changes and current status",
+        "description": "Retrieve detailed information about a specific map change request including the proposed changes and current status. Returns null for requests that do not affect a region or AO where the requester has editor or admin role.",
         "operationId": "request.byId",
         "parameters": [
           {
@@ -19697,12 +20130,14 @@
             "in": "query",
             "name": "roles",
             "schema": {
-              "description": "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+              "description": "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
               "items": {
                 "enum": [
                   "user",
                   "editor",
-                  "admin"
+                  "admin",
+                  "password_manager",
+                  "password_reader"
                 ],
                 "type": "string"
               },
@@ -19755,8 +20190,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -20028,7 +20476,9 @@
                                   "enum": [
                                     "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
@@ -20083,7 +20533,7 @@
         ]
       },
       "post": {
-        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) can only be set if requester has admin access.",
+        "description": "Create a new user or update an existing one, including role assignments for organizations. Requires admin role for organizations where roles are being assigned. PII fields (email, phone, emergency contacts) of an existing user can only be changed, and are only returned, if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.crupdate",
         "parameters": [
           {
@@ -20476,15 +20926,10 @@
                     "f3Name",
                     "firstName",
                     "lastName",
-                    "phone",
                     "homeRegionId",
                     "avatarUrl",
                     "created",
                     "updated",
-                    "emergencyContact",
-                    "emergencyPhone",
-                    "emergencyNotes",
-                    "emailVerified",
                     "status",
                     "roles"
                   ],
@@ -20544,7 +20989,7 @@
     },
     "/v1/user/email/{email}": {
       "get": {
-        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is admin for one of the user's organizations.",
+        "description": "Retrieve a user's detailed information and role assignments by email address. PII fields are only included if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.byEmail",
         "parameters": [
           {
@@ -20567,7 +21012,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
               "type": "boolean"
             }
           }
@@ -20799,7 +21244,9 @@
                                     "enum": [
                                       "user",
                                       "editor",
-                                      "admin"
+                                      "admin",
+                                      "password_manager",
+                                      "password_reader"
                                     ],
                                     "type": "string"
                                   }
@@ -21094,7 +21541,9 @@
                                   "enum": [
                                     "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }
@@ -21151,7 +21600,7 @@
     },
     "/v1/user/id/{id}": {
       "get": {
-        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester has admin role for any of the user's organizations.",
+        "description": "Retrieve detailed information about a specific user including their roles, status, and organization assignments. PII fields (email, phone) are only included if the requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
         "operationId": "user.byId",
         "parameters": [
           {
@@ -21173,7 +21622,7 @@
             "name": "includePii",
             "schema": {
               "default": false,
-              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is admin for a user's organization.",
+              "description": "Include personally identifiable information (email, phone, emergency contacts). Only available if requester is an editor or admin of the user's home region (else an org the user has a role on, else the nation) or an org above it, or an admin for one of the user's organizations.",
               "type": "boolean"
             }
           }
@@ -21405,7 +21854,9 @@
                                     "enum": [
                                       "user",
                                       "editor",
-                                      "admin"
+                                      "admin",
+                                      "password_manager",
+                                      "password_reader"
                                     ],
                                     "type": "string"
                                   }
@@ -21475,12 +21926,14 @@
             "in": "query",
             "name": "roles",
             "schema": {
-              "description": "Filter users by role(s). Matches users with ANY of the given roles (admin, editor, user).",
+              "description": "Filter users by role(s). Matches users with ANY of the given roles (user, editor, admin, password_manager, password_reader).",
               "items": {
                 "enum": [
                   "user",
                   "editor",
-                  "admin"
+                  "admin",
+                  "password_manager",
+                  "password_reader"
                 ],
                 "type": "string"
               },
@@ -21533,8 +21986,21 @@
               "items": {
                 "properties": {
                   "desc": {
-                    "default": false,
-                    "type": "boolean"
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "0",
+                          "1",
+                          "true",
+                          "false"
+                        ],
+                        "type": "string"
+                      }
+                    ],
+                    "default": false
                   },
                   "id": {
                     "type": "string"
@@ -21806,7 +22272,9 @@
                                   "enum": [
                                     "user",
                                     "editor",
-                                    "admin"
+                                    "admin",
+                                    "password_manager",
+                                    "password_reader"
                                   ],
                                   "type": "string"
                                 }

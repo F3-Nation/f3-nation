@@ -13,7 +13,7 @@ export const handleSubmissionError = (error: unknown): void => {
     console.error("handleSubmissionError ZodError", error);
     const errorMessages = error.issues
       .map((err) => {
-        if (err?.message) {
+        if (err.message) {
           return `${err.path.join(".")}: ${err.message}`;
         }
         return null;
@@ -37,7 +37,7 @@ export const handleSubmissionError = (error: unknown): void => {
     )
       .map(([key, err]) => {
         const keyWords = convertCase({ str: key, toCase: Case.TitleCase });
-        if (err?.message) {
+        if (err.message) {
           return `${keyWords}: ${err.message}`;
         }
         return null;

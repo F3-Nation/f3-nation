@@ -2,6 +2,58 @@
 
 <!-- version list -->
 
+## [2.10.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.9.0...slackbot@2.10.0) (2026-10-23)
+
+
+### Features
+
+* **slackbot:** add /fng to sign up a new PAX ([#1224](https://github.com/F3-Nation/f3-nation/issues/1224)) ([3ae6695](https://github.com/F3-Nation/f3-nation/commit/3ae6695bfc036e34d490c93ea3423140f4408b02))
+
+
+### Bug Fixes
+
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+* **deps:** update python dependencies and CA bundles ([#1325](https://github.com/F3-Nation/f3-nation/issues/1325)) ([3cc6edf](https://github.com/F3-Nation/f3-nation/commit/3cc6edf62b97c03a232523d65b99fa052f57b9fc))
+* **slackbot:** downrange and connect optimizations ([#1370](https://github.com/F3-Nation/f3-nation/issues/1370)) ([50ae512](https://github.com/F3-Nation/f3-nation/commit/50ae512496ed9b689fb13dbc5ac74e3f2eb1ffc8))
+* **slackbot:** route shared email through configured SMTP ([#1276](https://github.com/F3-Nation/f3-nation/issues/1276)) ([014c644](https://github.com/F3-Nation/f3-nation/commit/014c644982cf3a150d4db0249124b6f6cdcefd0f))
+
+
+### Performance Improvements
+
+* **slackbot:** addressing high db spikes on calendar query ([#1270](https://github.com/F3-Nation/f3-nation/issues/1270)) ([1715159](https://github.com/F3-Nation/f3-nation/commit/1715159fe6c5cd9d9df8e869ed2929a51ef0f338))
+
+## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.8.0...slackbot@2.9.0) (2026-10-14)
+
+
+### Features
+
+* **slackbot:** bound the Slack bot's database connection pool ([#1120](https://github.com/F3-Nation/f3-nation/issues/1120)) ([0e553b8](https://github.com/F3-Nation/f3-nation/commit/0e553b8690638058e4e79177932b957d7796bdfe))
+
+
+### Bug Fixes
+
+* **deps:** update python dependencies (non-major) ([#1214](https://github.com/F3-Nation/f3-nation/issues/1214)) ([d2f6e95](https://github.com/F3-Nation/f3-nation/commit/d2f6e950ce1b94a573b27852eb24a83629c0ff2d))
+* **slackbot:** regenerate stale calendar images ([#1139](https://github.com/F3-Nation/f3-nation/issues/1139)) ([48f3730](https://github.com/F3-Nation/f3-nation/commit/48f37307e6f703b245c325043bb2b0aedc62696d))
+* **slackbot:** restore confirmation dialogs ([#1193](https://github.com/F3-Nation/f3-nation/issues/1193)) ([f6422d2](https://github.com/F3-Nation/f3-nation/commit/f6422d25d93957c7a2f40db5329c1c331e8e172b))
+
+## [2.8.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.7.0...slackbot@2.8.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+* **slackbot:** add F3versary announcements ([#943](https://github.com/F3-Nation/f3-nation/issues/943)) ([65c080e](https://github.com/F3-Nation/f3-nation/commit/65c080e3f50114aaea520fca95c7a945938aa3a7))
+* **slackbot:** added PII obfuscation for non-prod environments ([#1101](https://github.com/F3-Nation/f3-nation/issues/1101)) ([4a842b8](https://github.com/F3-Nation/f3-nation/commit/4a842b8f256cb812fed4437cae16ab00f490ce47))
+* **slackbot:** remove _expanded view dependencies ([#1069](https://github.com/F3-Nation/f3-nation/issues/1069)) ([56ccb26](https://github.com/F3-Nation/f3-nation/commit/56ccb260485ef4bddbef208682e8c9f3e863aab3))
+
+
+### Bug Fixes
+
+* **deps:** update dependency requests-oauthlib to v2 ([#1100](https://github.com/F3-Nation/f3-nation/issues/1100)) ([a439e69](https://github.com/F3-Nation/f3-nation/commit/a439e6955caa5b16635ebc99ddef4e4f5594d88b))
+* **deps:** update python dependencies (non-major) ([#1162](https://github.com/F3-Nation/f3-nation/issues/1162)) ([4c09c3b](https://github.com/F3-Nation/f3-nation/commit/4c09c3b040aa51b569599eb0a718578750cf18b8))
+* **slackbot:** exclude inactive event types from backblast picker ([#1164](https://github.com/F3-Nation/f3-nation/issues/1164)) ([4e8514a](https://github.com/F3-Nation/f3-nation/commit/4e8514a39f50bfa833fc6320abc802b75353bc93))
+* **slackbot:** fixing Kotter Report's remove-after default behavior ([#1116](https://github.com/F3-Nation/f3-nation/issues/1116)) ([d908f18](https://github.com/F3-Nation/f3-nation/commit/d908f18f50e0fe8675b18c2d40d09d3064f21219))
+
 ## [2.7.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.6.0...slackbot@2.7.0) (2026-09-27)
 
 

@@ -27,7 +27,7 @@ from infrastructure.api_client.exceptions import (
     F3ApiNotFoundError,
 )
 from utilities.builders import SUBMISSION_WAIT_VIEW, add_debug_form, add_loading_form, send_error_response
-from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE
+from utilities.constants import ENABLE_DEBUGGING, LOCAL_DEVELOPMENT, SOCKET_MODE, is_production_deployment
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
     get_oauth_settings,
@@ -55,9 +55,9 @@ def setup_debugger():
         logging.getLogger().warning(f"Failed to initialize debugpy: {exc}")
 
 
-setup_debugger()
-
 load_dotenv()
+is_production_deployment()
+setup_debugger()
 
 
 def get_user_facing_error_message(exc: Exception) -> str:

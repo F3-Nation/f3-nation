@@ -1,5 +1,7 @@
 import { EventTypes } from "@acme/shared/app/enums";
 
+import { localAppOrigin } from "../local-docker";
+
 // ---------------------------------------------------------------------------
 // Org hierarchy
 // ---------------------------------------------------------------------------
@@ -265,8 +267,8 @@ export const LOCAL_API_KEYS: LocalApiKeySeed[] = [
     // Region-scoped principal: editor on the Boone region org only (NOT the
     // nation), so cross-region RBAC denials (e.g. spec AC-15 — an editor of
     // region S cannot reject in region R) have a deterministic seeded key.
-    // The "local-" prefix keeps it inside the obfuscator's
-    // --preserve-local-seed allowlist (tooling/scripts/src/obfuscate-db.ts).
+    // Keep the "local-" prefix: the staging obfuscator's
+    // --preserve-local-seed mode only spares local-* keys.
     key: "local-boone-editor-key",
     name: "Boone Editor (local dev)",
     description:
@@ -283,12 +285,28 @@ export const LOCAL_API_KEYS: LocalApiKeySeed[] = [
     role: null,
   },
   {
+    key: "local-org-map-key",
+    name: "Homepage org map (local dev)",
+    description:
+      "Used by apps/homepage org chart for read-only API access in local dev",
+    role: null,
+  },
+  {
     key: "local-slackbot-key",
     name: "Slackbot (local dev)",
     description: "Used by apps/slackbot for full Admin access",
     role: "admin",
   },
 ];
+
+/** Region orgs the region-scoped dev API keys attach to. */
+export const LOCAL_API_KEY_REGION_NAMES = [
+  ...new Set(
+    LOCAL_API_KEYS.flatMap((k) => (k.regionName ? [k.regionName] : [])),
+  ),
+];
+
+export const DEV_LOGIN_HINT = `Log in with ${DEV_USERS.map((u) => u.email).join(", ")}`;
 
 // ---------------------------------------------------------------------------
 // OAuth clients (local dev — plaintext secret: local-me-client-secret)
@@ -301,8 +319,10 @@ export const LOCAL_OAUTH_CLIENTS = [
     // SHA-256 of "local-me-client-secret" — deterministic so it can be committed
     clientSecretHash:
       "6239f25f8cff37f5ab67b37bfbb9ae94abd1805db915f010573412111a8d54fc",
-    redirectUris: JSON.stringify(["http://localhost:3003/api/auth/callback"]),
-    allowedOrigin: "http://localhost:3003",
+    redirectUris: JSON.stringify([
+      `${localAppOrigin("F3_ME_PORT", 3003)}/api/auth/callback`,
+    ]),
+    allowedOrigin: localAppOrigin("F3_ME_PORT", 3003),
     scopes: "openid profile email",
     isActive: true,
   },
@@ -312,8 +332,10 @@ export const LOCAL_OAUTH_CLIENTS = [
     // SHA-256 of "local-admin-client-secret" — deterministic so it can be committed
     clientSecretHash:
       "47c7916194a344bae65495f8eae734a58ad0f37a28449b8f7d6e14535f4246e6",
-    redirectUris: JSON.stringify(["http://localhost:3002/api/auth/callback"]),
-    allowedOrigin: "http://localhost:3002",
+    redirectUris: JSON.stringify([
+      `${localAppOrigin("F3_ADMIN_PORT", 3002)}/api/auth/callback`,
+    ]),
+    allowedOrigin: localAppOrigin("F3_ADMIN_PORT", 3002),
     scopes: "openid profile email",
     isActive: true,
   },

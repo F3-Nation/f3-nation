@@ -67,6 +67,12 @@ def rows(db: duckdb.DuckDBPyConnection):
     return db.execute(SQL, ["2026-08-26T12:00:00+00:00", "2026-08-26"]).fetchall()
 
 
+def test_kotter_uses_an_explicit_event_projection():
+    assert "SELECT ei.*" not in SQL
+    assert "preblast" not in SQL
+    assert "backblast" not in SQL
+
+
 def test_exact_contract_and_bestie_shape():
     db = source()
     db.execute("INSERT INTO pg.public.event_instances VALUES (7, 'Bestie workout', 10, true, 10, '2026-08-11', '{}')")
@@ -115,4 +121,45 @@ def test_parquet_schema_is_exact_contract(tmp_path: Path):
         "last_event_ao_name",
         "last_event_ao_org_id",
         "bestie_list",
+    ]
+
+
+def test_besties_are_deduplicated_ranked_by_count_and_limited_to_three():
+    db = source()
+    db.executemany(
+        "INSERT INTO pg.public.users VALUES (?, ?, ?, ?, ?)",
+        [
+            (6, "Six", "six.png", "six@example.test", 1),
+            (7, "Seven", "seven.png", "seven@example.test", 1),
+            (8, "Eight", "eight.png", "eight@example.test", 1),
+            (9, "Nine", "nine.png", "nine@example.test", 1),
+        ],
+    )
+    db.executemany(
+        "INSERT INTO pg.public.event_instances VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            (event_id, f"Shared {event_id}", 10, True, 10, f"2026-08-{event_id - 4:02d}", "{}")
+            for event_id in range(9, 14)
+        ],
+    )
+    db.executemany(
+        "INSERT INTO pg.public.attendance VALUES (?, ?, ?)",
+        [(1, event_id, False) for event_id in range(9, 14)]
+        + [
+            (1, 9, False),
+            (4, 9, False),
+            (4, 10, False),
+            (6, 9, False),
+            (6, 10, False),
+            (7, 11, False),
+            (8, 12, False),
+            (9, 13, False),
+        ],
+    )
+
+    row = next(row for row in rows(db) if row[0] == 1)
+    assert [(bestie["user_id"], bestie["co_attendance_count"]) for bestie in row[-1]] == [
+        (4, 2),
+        (6, 2),
+        (7, 1),
     ]

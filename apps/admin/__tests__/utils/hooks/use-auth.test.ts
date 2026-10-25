@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { useAuth } from "~/utils/hooks/use-auth";
 
 interface MockSession {
-  roles?: { roleName: string; orgId: number; orgName: string }[];
+  roles: { roleName: string; orgId: number; orgName: string }[];
 }
 
 const { useAdminSessionMock } = vi.hoisted(() => ({
@@ -35,7 +35,7 @@ describe("useAuth", () => {
 
   it("reports no privileges for a session without roles", () => {
     useAdminSessionMock.mockReturnValue({
-      data: {},
+      data: { roles: [] },
       status: "authenticated",
     });
 
@@ -62,6 +62,24 @@ describe("useAuth", () => {
       isNationAdmin: false,
       isEditorOrAdmin: true,
       isAdmin: false,
+    });
+  });
+
+  it("reports no privileges for an authenticated ordinary user", () => {
+    useAdminSessionMock.mockReturnValue({
+      data: {
+        roles: [{ roleName: "user", orgId: 1, orgName: "F3 Nation" }],
+      },
+      status: "authenticated",
+    });
+
+    const { result } = renderHook(() => useAuth());
+
+    expect(result.current).toMatchObject({
+      isNationAdmin: false,
+      isEditorOrAdmin: false,
+      isAdmin: false,
+      status: "authenticated",
     });
   });
 

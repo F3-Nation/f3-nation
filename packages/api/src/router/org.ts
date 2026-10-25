@@ -14,6 +14,7 @@ import {
   inArray,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import type { AppDb } from "@acme/db/client";
 import { F3_NATION_ORG_ID } from "@acme/shared/app/constants";
@@ -28,13 +29,22 @@ import { assertValidParentType } from "../assert-valid-parent-type";
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
+import { getSessionRoles } from "../get-session-roles";
 import { getSortingColumns } from "../get-sorting-columns";
+import { logError } from "../logger";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { orgAndAncestorsAreActive } from "../org-activity";
 import { orgAncestorName } from "../org-ancestor-name";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import type { Context } from "../shared";
-import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
+import {
+  adminProcedure,
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 const DEFAULT_ORG_TYPES = ["region"] as const satisfies readonly OrgType[];
@@ -128,6 +138,18 @@ async function resolveEditableOrgIds(params: {
   return { editableOrgIds: [], isNationAdmin };
 }
 
+// publicReadProcedure lets an anonymous caller reach `all`/`byId`.
+// email/phone/meta/lastAnnualReview are org-entered contact/admin details
+// that the public map never surfaces — masked out below for a caller with
+// no session, without changing what an authenticated caller (e.g. the
+// admin UI) sees.
+const SENSITIVE_ORG_FIELD_MASK = {
+  email: null,
+  phone: null,
+  meta: null,
+  lastAnnualReview: null,
+} as const;
+
 /**
  * Builds the WHERE clause for org queries based on filter input
  */
@@ -135,17 +157,27 @@ function buildOrgWhereClause(params: {
   input: OrgFilterInput;
   editableOrgIds: number[];
   isNationAdmin: boolean;
+  isAnonymous: boolean;
 }): SQL | undefined {
-  const { input, editableOrgIds, isNationAdmin } = params;
+  const { input, editableOrgIds, isNationAdmin, isAnonymous } = params;
+
+  // `all` is public; `count` stays protected. For anonymous list callers,
+  // clamp to active-only regardless of what `statuses` they pass, since
+  // inactive orgs were never meant to be public. Authenticated behavior
+  // (including an explicit request for inactive/both) is unchanged.
+  const effectiveStatuses = isAnonymous
+    ? (["active"] as NonNullable<OrgFilterInput["statuses"]>)
+    : input.statuses;
 
   return and(
     inArray(org.orgType, input.orgTypes),
-    !input.statuses
+    isAnonymous ? orgAndAncestorsAreActive(org.id) : undefined,
+    !effectiveStatuses
       ? eq(org.isActive, true)
-      : !input.statuses.length ||
-          input.statuses.length === IsActiveStatus.length
+      : !effectiveStatuses.length ||
+          effectiveStatuses.length === IsActiveStatus.length
         ? undefined
-        : input.statuses.includes("active")
+        : effectiveStatuses.includes("active")
           ? eq(org.isActive, true)
           : eq(org.isActive, false),
     input.searchTerm
@@ -184,7 +216,7 @@ async function getOrgCount(params: {
 }
 
 export const orgRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(orgAllInputSchema)
     .route({
       method: "GET",
@@ -270,6 +302,11 @@ export const orgRouter = {
 
       // orgAllInputSchema is a required object (not `.optional()`), same as
       // the unguarded `input.onlyMine` below — no `?.` needed here.
+      // resolvePagination already bounds the "omit both params"
+      // branch to a single default-sized page for every caller, so an
+      // anonymous caller reaching this endpoint can no longer scrape
+      // the whole table in one request — no anonymous-specific override
+      // needed here (unlike isActive/email/meta/etc, which still is below).
       const { limit, offset, usePagination } = resolvePagination({
         pageSize: input.pageSize,
         pageIndex: input.pageIndex,
@@ -289,10 +326,12 @@ export const orgRouter = {
 
       const { editableOrgIds, isNationAdmin } = editableResult;
 
+      if (!ctx.session?.user) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const where = buildOrgWhereClause({
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: !ctx.session?.user,
       });
 
       // asc(id) is appended as a final tiebreaker -- a caller-supplied
@@ -356,8 +395,18 @@ export const orgRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
+      // publicReadProcedure lets an anonymous caller reach `all` --
+      // the `select` above pulls email/phone/meta/lastAnnualReview for
+      // every row, same as `byId` does, so mask them the same way here.
+      const isAnonymousAll = !ctx.session?.user;
+      const orgs = isAnonymousAll
+        ? orgs_untyped.map((o) =>
+            Object.assign({}, o, SENSITIVE_ORG_FIELD_MASK),
+          )
+        : orgs_untyped;
+
       // Something is broken with org to org types
-      return { orgs: orgs_untyped, total };
+      return { orgs, total };
     }),
 
   count: protectedProcedure
@@ -393,6 +442,7 @@ export const orgRouter = {
         input,
         editableOrgIds,
         isNationAdmin,
+        isAnonymous: false,
       });
 
       const count = await getOrgCount({ db: ctx.db, where });
@@ -444,19 +494,10 @@ export const orgRouter = {
         defaultPageSize: 10,
       });
 
-      // Check if user has a role with orgId = 1 (F3 Nation)
-      const [nationRole] = await ctx.db
-        .select()
-        .from(schema.rolesXUsersXOrg)
-        .where(
-          and(
-            eq(schema.rolesXUsersXOrg.userId, ctx.session.id),
-            eq(schema.rolesXUsersXOrg.orgId, F3_NATION_ORG_ID),
-          ),
-        );
+      const sessionRoles = await getSessionRoles(ctx);
 
       // If user has F3 Nation role, return all orgs with pagination and sorting
-      if (nationRole) {
+      if (sessionRoles.some((role) => role.orgId === F3_NATION_ORG_ID)) {
         // asc(id) is appended as a final tiebreaker -- neither the default
         // sort (by name, not unique) nor a caller-supplied custom sort is
         // guaranteed unique, so without one, offset pagination across
@@ -520,30 +561,14 @@ export const orgRouter = {
         };
       }
 
-      // Get the user's direct role assignments
-      const directRolesQuery = await ctx.db
-        .select()
-        .from(schema.rolesXUsersXOrg)
-        .innerJoin(
-          schema.orgs,
-          eq(schema.rolesXUsersXOrg.orgId, schema.orgs.id),
-        )
-        .innerJoin(
-          schema.roles,
-          eq(schema.rolesXUsersXOrg.roleId, schema.roles.id),
-        )
-        .where(eq(schema.rolesXUsersXOrg.userId, ctx.session.id));
-
       // Build a map of orgId -> role names for the user's direct assignments
       const directRolesMap = new Map<string, string[]>();
-      for (const row of directRolesQuery) {
-        const orgId = row.orgs.id;
-        const key = String(orgId);
-        const existing = directRolesMap.get(key) ?? [];
-        if (row.roles?.name) {
-          existing.push(row.roles.name);
-        }
-        directRolesMap.set(key, existing);
+      for (const role of sessionRoles) {
+        const key = String(role.orgId);
+        directRolesMap.set(key, [
+          ...(directRolesMap.get(key) ?? []),
+          role.roleName,
+        ]);
       }
 
       // Get direct editable roots, then expand their descendants once.
@@ -621,13 +646,17 @@ export const orgRouter = {
         roles: directRolesMap.get(String(org.id)) ?? [],
       }));
 
-      return {
-        orgs: paginatedOrgs,
-        total,
-      };
+      // Sorting and pagination are pushed into the SQL query above
+      // (editableOrgsQuery/withPagination) rather than done here in
+      // memory; `paginatedOrgs` and `total` are already final. No anonymous
+      // masking needed here: `protectedProcedure` already requires
+      // `ctx.session.user`, so an anonymous caller never reaches this
+      // handler at all (unlike `all`/`byId`, which run on
+      // `publicReadProcedure`).
+      return { orgs: paginatedOrgs, total };
     }),
 
-  byId: protectedProcedure
+  byId: publicReadProcedure
     .input(
       z.object({
         id: z.coerce
@@ -702,6 +731,8 @@ export const orgRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      const isAnonymous = !ctx.session?.user;
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
       const [org] = await ctx.db
         .select()
         .from(schema.orgs)
@@ -709,9 +740,16 @@ export const orgRouter = {
           and(
             eq(schema.orgs.id, input.id),
             input.orgType ? eq(schema.orgs.orgType, input.orgType) : undefined,
+            isAnonymous ? orgAndAncestorsAreActive(schema.orgs.id) : undefined,
           ),
         );
-      return { org: org ?? null };
+      return {
+        org: org
+          ? isAnonymous
+            ? { ...org, ...SENSITIVE_ORG_FIELD_MASK }
+            : org
+          : null,
+      };
     }),
 
   crupdate: editorProcedure
@@ -726,7 +764,9 @@ export const orgRouter = {
       ]
         .reverse()
         .map((t) => orgTypeDisplay[t].label.toLowerCase())
-        .join(" → ")}).`,
+        .join(
+          " → ",
+        )}). Deactivating an active AO requires resource-scoped admin permission and deactivates its event series and future instances.`,
     })
     .output(
       z.object({
@@ -822,11 +862,20 @@ export const orgRouter = {
           await assertValidParentType(ctx.db, input.parentId, input.orgType);
         }
 
+        const insertMeta =
+          input.orgType === "region" && input.meta != null
+            ? Object.fromEntries(
+                Object.entries(input.meta).filter(
+                  ([key]) => key !== "firstEventNotificationSent",
+                ),
+              )
+            : input.meta;
+
         const [result] = await ctx.db
           .insert(schema.orgs)
           .values({
             ...input,
-            meta: input.meta as Record<string, string>,
+            meta: insertMeta as Record<string, string> | null | undefined,
           })
           .returning();
 
@@ -850,9 +899,9 @@ export const orgRouter = {
         });
       }
 
-      if (existingOrg?.orgType !== input.orgType) {
+      if (existingOrg.orgType !== input.orgType) {
         throw new ORPCError("BAD_REQUEST", {
-          message: `org to edit is not a ${input.orgType ?? "unknown"}`,
+          message: `org to edit is not a ${input.orgType}`,
         });
       }
 
@@ -902,39 +951,150 @@ export const orgRouter = {
         );
       }
 
-      // If the parentId is changing and this is an AO, we need to move the locations for the org
-      if (
-        isChangingParent &&
-        input.orgType === "ao" &&
-        destinationParentOrgId !== null &&
-        existingOrg.parentId !== null
-      ) {
-        await moveAOLocsToNewRegion(ctx, {
-          oldRegionId: existingOrg.parentId,
-          newRegionId: destinationParentOrgId,
-          aoId: existingOrg.id,
-        });
-      }
-
       // 2. Update the org with the new values
 
       const orgToCrupdate: typeof schema.orgs.$inferInsert = {
         ...input,
         meta: input.meta,
       };
+      let orgUpdateSet: Record<string, unknown> = { ...orgToCrupdate };
 
-      const [result] = await ctx.db
-        .insert(schema.orgs)
-        .values(orgToCrupdate)
-        .onConflictDoUpdate({
-          target: [schema.orgs.id],
-          set: orgToCrupdate,
-        })
-        .returning();
+      // This marker is server-owned. Merge incoming metadata against the
+      // current row inside the upsert so a concurrent notification claim is
+      // not lost to the earlier `existingOrg` read.
+      if (input.orgType === "region" && input.meta !== undefined) {
+        const inputMetaJson =
+          input.meta === null ? null : JSON.stringify(input.meta);
+        orgUpdateSet = {
+          ...orgUpdateSet,
+          // Never accept the notification marker from client-supplied metadata:
+          // an old editor form must not restore a claim released after failed mail.
+          meta: sql`(
+            (CASE WHEN ${inputMetaJson}::jsonb IS NULL
+              THEN '{}'::jsonb
+              ELSE ${inputMetaJson}::jsonb END - 'firstEventNotificationSent')
+            || (CASE WHEN ${schema.orgs.meta}->'firstEventNotificationSent' = 'true'::jsonb
+              THEN '{"firstEventNotificationSent":true}'::jsonb ELSE '{}'::jsonb END)
+          )`,
+        };
+      }
+
+      const result = await ctx.db.transaction(async (tx) => {
+        const [lockedOrg] = await tx
+          .select()
+          .from(schema.orgs)
+          .where(eq(schema.orgs.id, input.id!))
+          .for("update");
+
+        if (!lockedOrg) {
+          throw new ORPCError("NOT_FOUND", { message: "Org not found" });
+        }
+
+        const lockedRoleCheckResult = await checkHasRoleOnOrg({
+          orgId: lockedOrg.id,
+          session: ctx.session,
+          db: tx as unknown as AppDb,
+          roleName: "editor",
+        });
+        if (!lockedRoleCheckResult.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message: "You are not authorized to update this org",
+          });
+        }
+
+        if (
+          lockedOrg.parentId !== existingOrg.parentId ||
+          lockedOrg.orgType !== existingOrg.orgType
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "Organization hierarchy changed while this update was being prepared. Reload and retry.",
+          });
+        }
+
+        const deactivatingAo =
+          lockedOrg.orgType === "ao" &&
+          lockedOrg.isActive &&
+          input.isActive === false;
+
+        if (deactivatingAo) {
+          const adminRoleCheck = await checkHasRoleOnOrg({
+            orgId: lockedOrg.id,
+            session: ctx.session,
+            db: tx as unknown as AppDb,
+            roleName: "admin",
+          });
+          if (!adminRoleCheck.success) {
+            throw new ORPCError("UNAUTHORIZED", {
+              message: "You are not authorized to deactivate this AO",
+            });
+          }
+        }
+
+        const isChangingLockedParent =
+          input.parentId !== undefined && input.parentId !== lockedOrg.parentId;
+
+        if (
+          isChangingLockedParent &&
+          lockedOrg.orgType === "ao" &&
+          destinationParentOrgId !== null &&
+          lockedOrg.parentId !== null
+        ) {
+          await moveAOLocsToNewRegion(
+            { ...ctx, db: tx as unknown as AppDb },
+            {
+              oldRegionId: lockedOrg.parentId,
+              newRegionId: destinationParentOrgId,
+              aoId: lockedOrg.id,
+            },
+          );
+        }
+
+        const [updatedOrg] = await tx
+          .insert(schema.orgs)
+          .values(orgToCrupdate)
+          .onConflictDoUpdate({
+            target: [schema.orgs.id],
+            set: orgUpdateSet,
+          })
+          .returning();
+
+        if (deactivatingAo) {
+          const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
+            await import("../lib/cascade-service");
+
+          await softDeleteSeriesForOrg(tx as unknown as AppDb, existingOrg.id);
+          await softDeleteFutureInstancesForOrg(
+            tx as unknown as AppDb,
+            existingOrg.id,
+          );
+        }
+
+        return updatedOrg;
+      });
 
       // Notify webhooks about the org update
       if (result) {
         notifyMapDataChange({ type: "org.updated", orgId: result.id });
+      }
+
+      if (
+        result &&
+        isChangingParent &&
+        input.orgType === "ao" &&
+        destinationParentOrgId !== null
+      ) {
+        void import("../lib/first-event-service")
+          .then(({ maybeNotifyRegionInABox }) =>
+            maybeNotifyRegionInABox(ctx.db, destinationParentOrgId),
+          )
+          .catch((error: unknown) => {
+            logError(
+              "api.org.region_in_a_box_notify_failed",
+              { orgId: result.id, destinationParentOrgId },
+              error,
+            );
+          });
       }
 
       return { org: result ?? null };
@@ -974,48 +1134,30 @@ export const orgRouter = {
         });
       }
 
-      const orgsQuery = await ctx.db
-        .select()
-        .from(schema.rolesXUsersXOrg)
-        .innerJoin(
-          schema.orgs,
-          eq(schema.rolesXUsersXOrg.orgId, schema.orgs.id),
-        )
-        .innerJoin(
-          schema.roles,
-          eq(schema.rolesXUsersXOrg.roleId, schema.roles.id),
-        )
-        .where(eq(schema.rolesXUsersXOrg.userId, ctx.session.id));
+      const sessionRoles = await getSessionRoles(ctx);
+      if (sessionRoles.length === 0) return { orgs: [] };
 
-      // Reduce multiple rows per org down to one row per org with possibly multiple roles
-      const orgMap: Record<
-        number,
-        {
-          orgs: (typeof orgsQuery)[number]["orgs"];
-          roles_x_users_x_org: (typeof orgsQuery)[number]["roles_x_users_x_org"];
-          roles: (typeof orgsQuery)[number]["roles"]["name"][];
-        }
-      > = {};
-
-      for (const row of orgsQuery) {
-        const orgId = row.orgs.id;
-        orgMap[orgId] ??= {
-          orgs: row.orgs,
-          roles_x_users_x_org: row.roles_x_users_x_org,
-          roles: [],
-        };
-        if (row.roles?.name) {
-          orgMap[orgId]?.roles.push(row.roles.name);
-        }
-      }
+      const orgs = await ctx.db
+        .select({
+          id: schema.orgs.id,
+          name: schema.orgs.name,
+          orgType: schema.orgs.orgType,
+          parentId: schema.orgs.parentId,
+        })
+        .from(schema.orgs)
+        .where(
+          inArray(
+            schema.orgs.id,
+            sessionRoles.map((role) => role.orgId),
+          ),
+        );
 
       return {
-        orgs: Object.values(orgMap).map((org) => ({
-          id: org.orgs.id,
-          name: org.orgs.name,
-          orgType: org.orgs.orgType,
-          parentId: org.orgs.parentId,
-          roles: org.roles,
+        orgs: orgs.map((org) => ({
+          ...org,
+          roles: sessionRoles
+            .filter((role) => role.orgId === org.id)
+            .map((role) => role.roleName),
         })),
       };
     }),

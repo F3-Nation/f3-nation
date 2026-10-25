@@ -38,10 +38,12 @@ DEFAULT_SEND_DAY = 0
 DEFAULT_SEND_HOUR_CST = 8
 VALID_SEND_MODES = {"group", "individual"}
 
-SLACK_TABLE_MAX_ROWS = 100
+SLACK_TABLE_MAX_ROWS = 201
 SLACK_TABLE_HEADER_ROWS = 1
 SLACK_TABLE_MAX_DATA_ROWS = SLACK_TABLE_MAX_ROWS - SLACK_TABLE_HEADER_ROWS
-TEXT_FALLBACK_MAX_ROWS = 99
+SLACK_DATA_TABLE_MAX_CHARS = 18_000
+SLACK_TABLE_MAX_CELL_CHARS = 1_000
+SLACK_MESSAGE_TEXT_MAX_CHARS = 4_000
 DEFAULT_SAMPLE_REPORT_ROWS = 8
 
 
@@ -131,8 +133,12 @@ def get_kotter_config(settings: SlackSettings) -> KotterConfig:
     )
     send_mode = settings.kotter_report_send_mode if settings.kotter_report_send_mode in VALID_SEND_MODES else "group"
     no_post_weeks = _positive_int(settings.NO_POST_THRESHOLD, DEFAULT_NO_POST_WEEKS)
-    remove_weeks = _optional_positive_int(settings.REMINDER_WEEKS)
-    # Unset/0/invalid values disable the upper removal bound. A positive bound must be beyond the inactive threshold.
+    reminder_weeks = settings.REMINDER_WEEKS
+    if reminder_weeks is None or (isinstance(reminder_weeks, str) and not reminder_weeks.strip()):
+        remove_weeks = no_post_weeks + 2
+    else:
+        remove_weeks = _optional_positive_int(reminder_weeks)
+    # A positive bound must be beyond the inactive threshold.
     if remove_weeks is not None and remove_weeks <= no_post_weeks:
         remove_weeks = None
 
@@ -486,15 +492,26 @@ def _stats_url(row: KotterRow, stats_url: str | None) -> str | None:
     return f"{stats_url.rstrip('/')}/stats/pax/{row.user_id}"
 
 
+def _truncate_table_text(value: str, limit: int = SLACK_TABLE_MAX_CELL_CHARS) -> str:
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 1]}…"
+
+
 def _pax_table_cell(row: KotterRow, stats_url: str | None) -> dict:
     url = _stats_url(row, stats_url)
+    display_name = _truncate_table_text(row.f3_name or f"User {row.user_id}")
+    if row.slack_user_id and len(str(row.slack_user_id)) > SLACK_TABLE_MAX_CELL_CHARS:
+        return {"type": "raw_text", "text": display_name}
+    if url and len(url) > SLACK_TABLE_MAX_CELL_CHARS:
+        return {"type": "raw_text", "text": display_name}
     name_element = (
-        {"type": "user", "user_id": row.slack_user_id} if row.slack_user_id else {"type": "text", "text": row.f3_name}
+        {"type": "user", "user_id": row.slack_user_id} if row.slack_user_id else {"type": "text", "text": display_name}
     )
     if not url:
         if row.slack_user_id:
             return {"type": "rich_text", "elements": [{"type": "rich_text_section", "elements": [name_element]}]}
-        return {"type": "raw_text", "text": row.f3_name}
+        return {"type": "raw_text", "text": display_name}
     return {
         "type": "rich_text",
         "elements": [
@@ -520,49 +537,79 @@ def _reason_text(row: KotterRow) -> str:
     return ", ".join(_reason_label(reason) for reason in row.reasons)
 
 
-def build_kotter_message(delivery: Delivery, stats_url: str | None = None) -> tuple[str, list[dict]]:
+def build_kotter_message(delivery: Delivery, stats_url: str | None = None) -> list[tuple[str, list[dict]]]:
     rows = delivery.rows
-    shown_rows = rows[:TEXT_FALLBACK_MAX_ROWS]
-    more_count = max(len(rows) - len(shown_rows), 0)
-    lines = [f"*{delivery.title}*", f"{len(rows)} PAX need attention."]
-    for row in shown_rows:
-        last_post = row.last_post_date.isoformat() if row.last_post_date else "unknown"
-        last_q = row.last_q_date.isoformat() if row.last_q_date else "unknown"
-        row_name = _row_name(row, stats_url)
-        reason_text = _reason_text(row)
-        home_ao = row.home_ao_name or "unknown"
-        lines.append(f"• {row_name} — {reason_text} — Home AO: {home_ao} — Last post: {last_post} — Last Q: {last_q}")
-    if more_count:
-        lines.append(f"+{more_count} more")
-    text = "\n".join(lines)
+    header = [{"type": "raw_text", "text": name} for name in ["PAX", "Reason", "Home AO", "Last Post", "Last Q"]]
 
-    if len(rows) > SLACK_TABLE_MAX_DATA_ROWS:
-        return text, [{"type": "section", "text": {"type": "mrkdwn", "text": text[:3000]}}]
+    def make_cells(row: KotterRow) -> list[dict]:
+        return [
+            _pax_table_cell(row, stats_url),
+            {"type": "raw_text", "text": _truncate_table_text(_reason_text(row) or "unknown")},
+            {"type": "raw_text", "text": _truncate_table_text(row.home_ao_name or "unknown")},
+            {"type": "raw_text", "text": row.last_post_date.isoformat() if row.last_post_date else "unknown"},
+            {"type": "raw_text", "text": row.last_q_date.isoformat() if row.last_q_date else "unknown"},
+        ]
 
-    table_rows: list[list[dict]] = [
-        [{"type": "raw_text", "text": header} for header in ["PAX", "Reason", "Home AO", "Last Post", "Last Q"]]
-    ]
+    def cell_chars(cells: list[dict]) -> int:
+        total = 0
+        for cell in cells:
+            if cell["type"] != "rich_text":
+                total += len(cell.get("text", ""))
+                continue
+            for section in cell.get("elements", []):
+                for element in section.get("elements", []):
+                    total += len(element.get("text", ""))
+                    total += len(element.get("url", ""))
+                    if element.get("type") == "user":
+                        total += len(str(element.get("user_id", "")))
+        return total
+
+    chunks: list[list[KotterRow]] = []
+    current: list[KotterRow] = []
+    caption = _truncate_table_text(delivery.title)
+    current_chars = cell_chars(header) + len(caption)
     for row in rows:
-        table_rows.append(
-            [
-                _pax_table_cell(row, stats_url),
-                {"type": "raw_text", "text": _reason_text(row)},
-                {"type": "raw_text", "text": row.home_ao_name or ""},
-                {"type": "raw_text", "text": row.last_post_date.isoformat() if row.last_post_date else ""},
-                {"type": "raw_text", "text": row.last_q_date.isoformat() if row.last_q_date else ""},
-            ]
+        row_chars = cell_chars(make_cells(row))
+        if current and (
+            len(current) >= SLACK_TABLE_MAX_DATA_ROWS or current_chars + row_chars > SLACK_DATA_TABLE_MAX_CHARS
+        ):
+            chunks.append(current)
+            current = []
+            current_chars = cell_chars(header) + len(caption)
+        current.append(row)
+        current_chars += row_chars
+    if current or not chunks:
+        chunks.append(current)
+
+    total_pages = len(chunks)
+    messages = []
+    for page, chunk in enumerate(chunks, start=1):
+        page_info = f" Part {page} of {total_pages}." if total_pages > 1 else ""
+        summary = _truncate_table_text(f"{delivery.title} — {len(rows)} PAX need attention.{page_info}", limit=3_000)
+        fallback_lines = [summary]
+        for row in chunk:
+            last_post = row.last_post_date.isoformat() if row.last_post_date else "unknown"
+            last_q = row.last_q_date.isoformat() if row.last_q_date else "unknown"
+            fallback_lines.append(
+                f"{_row_name(row, stats_url)}: {_reason_text(row)}; Home AO: {row.home_ao_name or 'unknown'}; "
+                f"last post: {last_post}; last Q: {last_q}."
+            )
+        text = "\n".join(fallback_lines)
+        if len(text) > SLACK_MESSAGE_TEXT_MAX_CHARS:
+            omitted_note = "\nAdditional details omitted from this text preview."
+            available_chars = SLACK_MESSAGE_TEXT_MAX_CHARS - len(omitted_note) - 1
+            text = f"{text[:available_chars].rstrip()}…{omitted_note}"
+        table_rows = [header, *(make_cells(row) for row in chunk)]
+        messages.append(
+            (
+                text,
+                [
+                    {"type": "section", "text": {"type": "mrkdwn", "text": summary[:3000]}},
+                    {"type": "data_table", "caption": caption, "page_size": 20, "rows": table_rows},
+                ],
+            )
         )
-    blocks = [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": text[:3000],
-            },
-        },
-        {"type": "table", "rows": table_rows},
-    ]
-    return text, blocks
+    return messages
 
 
 def _delivery_destination_label(delivery: Delivery) -> str:
@@ -589,6 +636,7 @@ def _post_delivery_message(
     blocks: list[dict],
     org_id: int | None,
     destination_label: str,
+    part: str,
 ) -> bool:
     try:
         client.chat_postMessage(channel=channel, text=text, blocks=blocks)
@@ -598,51 +646,84 @@ def _post_delivery_message(
         if error not in {"invalid_blocks", "msg_too_long"}:
             raise
         logger.error(
-            "Kotter Report rich payload failed (org_id=%s, destination=%s, error=%s)",
+            "Kotter Report rich payload failed (org_id=%s, destination=%s, part=%s, error=%s)",
             org_id,
             destination_label,
+            part,
             error,
         )
         try:
             client.chat_postMessage(channel=channel, text=text, blocks=None)
+            logger.warning(
+                "Kotter Report sent as text-only fallback (org_id=%s, destination=%s, part=%s)",
+                org_id,
+                destination_label,
+                part,
+            )
             return True
         except SlackApiError as retry_error:
             logger.error(
-                "Kotter Report text-only retry failed (org_id=%s, destination=%s, error=%s)",
+                "Kotter Report text-only retry failed (org_id=%s, destination=%s, part=%s, error=%s)",
                 org_id,
                 destination_label,
+                part,
                 retry_error.response.get("error"),
             )
             return False
 
 
 def _send_delivery(client: WebClient, delivery: Delivery, stats_url: str | None, org_id: int | None):
-    text, blocks = build_kotter_message(delivery, stats_url=stats_url)
+    messages = build_kotter_message(delivery, stats_url=stats_url)
     destination_label = _delivery_destination_label(delivery)
     try:
         channel = _delivery_channel(client, delivery)
-        if _post_delivery_message(client, channel, text, blocks, org_id, destination_label):
-            print(f"Sent Kotter Report to {destination_label} ({len(delivery.rows)} rows)")
-    except SlackApiError as e:
-        if e.response.get("error") == "not_in_channel" and delivery.destination:
+        total_parts = len(messages)
+        for part_number, (text, blocks) in enumerate(messages, start=1):
+            part = f"{part_number}/{total_parts}"
             try:
-                client.conversations_join(channel=delivery.destination)
-                if _post_delivery_message(client, delivery.destination, text, blocks, org_id, destination_label):
-                    print(f"Joined and sent Kotter Report to {destination_label} ({len(delivery.rows)} rows)")
-            except SlackApiError as e2:
+                sent = _post_delivery_message(client, channel, text, blocks, org_id, destination_label, part)
+            except SlackApiError as e:
+                if e.response.get("error") == "not_in_channel" and delivery.destination:
+                    try:
+                        client.conversations_join(channel=delivery.destination)
+                        sent = _post_delivery_message(
+                            client, delivery.destination, text, blocks, org_id, destination_label, part
+                        )
+                    except SlackApiError as e2:
+                        logger.error(
+                            "Error joining/sending Kotter Report (org_id=%s, destination=%s, part=%s, error=%s)",
+                            org_id,
+                            destination_label,
+                            part,
+                            e2.response.get("error"),
+                        )
+                        return
+                else:
+                    logger.error(
+                        "Error sending Kotter Report (org_id=%s, destination=%s, part=%s, error=%s)",
+                        org_id,
+                        destination_label,
+                        part,
+                        e.response.get("error"),
+                    )
+                    return
+            if not sent:
+                # Stop on a failed text-only retry so later parts do not imply a complete report.
                 logger.error(
-                    "Error joining/sending Kotter Report (org_id=%s, destination=%s, error=%s)",
+                    "Kotter Report part was not sent (org_id=%s, destination=%s, part=%s)",
                     org_id,
                     destination_label,
-                    e2.response.get("error"),
+                    part,
                 )
-        else:
-            logger.error(
-                "Error sending Kotter Report (org_id=%s, destination=%s, error=%s)",
-                org_id,
-                destination_label,
-                e.response.get("error"),
-            )
+                return
+        print(f"Sent Kotter Report to {destination_label} ({len(delivery.rows)} rows)")
+    except SlackApiError as e:
+        logger.error(
+            "Error sending Kotter Report (org_id=%s, destination=%s, error=%s)",
+            org_id,
+            destination_label,
+            e.response.get("error"),
+        )
     except ValueError as e:
         logger.error(
             "Error sending Kotter Report (org_id=%s, destination=%s, error=%s)",

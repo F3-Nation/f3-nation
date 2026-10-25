@@ -71,6 +71,11 @@
         "command": "/help",
         "description": "Opens a help menu",
         "should_escape": false
+      },
+      {
+        "command": "/fng",
+        "description": "Sign up an FNG: creates his F3 Nation profile and emails him the Slack invite",
+        "should_escape": false
       }
     ]
   },

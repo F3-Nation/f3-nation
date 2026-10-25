@@ -1,4 +1,4 @@
-import type { RegionRole } from "@acme/shared/app/enums";
+import type { UserRole } from "@acme/shared/app/enums";
 import {
   TEST_ADMIN_ROLE_ID,
   TEST_ADMIN_USER_ID,
@@ -34,9 +34,6 @@ import { getDb } from "./utils/functions";
 
 export const testSeed = async (db?: AppDb) => {
   const _db = db ?? getDb();
-  if (!_db) {
-    throw new Error("No database provided");
-  }
   // Create test nation org
   await _db.insert(orgs).values({
     id: TEST_NATION_ORG_ID,
@@ -217,7 +214,7 @@ export const testSeed = async (db?: AppDb) => {
       .insert(roles)
       .values({
         id: TEST_EDITOR_ROLE_ID,
-        name: "editor" as RegionRole,
+        name: "editor" as UserRole,
         description: "Editor role",
       })
       .returning(),
@@ -225,7 +222,7 @@ export const testSeed = async (db?: AppDb) => {
       .insert(roles)
       .values({
         id: TEST_ADMIN_ROLE_ID,
-        name: "admin" as RegionRole,
+        name: "admin" as UserRole,
         description: "Admin role",
       })
       .returning(),

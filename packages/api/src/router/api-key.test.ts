@@ -17,17 +17,23 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { eq, schema } from "@acme/db";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+vi.mock("../logger", { spy: true });
+
+import type { Session } from "@acme/auth";
+import { eq, inArray, schema } from "@acme/db";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
+  createMixedOrgTree,
   createTestClient,
   db,
   getOrCreateF3NationOrg,
+  getOrCreateRoles,
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
+import * as loggerModule from "../logger";
 
 describe("API Key Router", () => {
   // Track created API keys for cleanup
@@ -88,7 +94,7 @@ describe("API Key Router", () => {
         const key = result.apiKeys.find((k) => k.id === createResult.id);
         expect(key).toBeDefined();
         expect(key?.keySignature).toBeDefined();
-        expect(key?.keySignature?.length).toBe(4);
+        expect(key?.keySignature.length).toBe(4);
       }
     });
 
@@ -173,6 +179,10 @@ describe("API Key Router", () => {
             orgId: nationOrg.id,
             roleName: "editor",
           },
+          {
+            orgId: nationOrg.id,
+            roleName: "admin",
+          },
         ],
       });
 
@@ -183,10 +193,53 @@ describe("API Key Router", () => {
         createdApiKeyIds.push(result.id);
       }
 
-      // Verify the role was created
+      // Verify every requested role was committed with the key.
       const listResult = await client.apiKey.list();
       const createdKey = listResult.apiKeys.find((k) => k.id === result.id);
-      expect(createdKey?.roles?.length).toBeGreaterThan(0);
+      expect(createdKey?.roles).toHaveLength(2);
+      expect(createdKey?.roles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            orgId: nationOrg.id,
+            roleName: "editor",
+          }),
+          expect.objectContaining({
+            orgId: nationOrg.id,
+            roleName: "admin",
+          }),
+        ]),
+      );
+    });
+
+    it("should roll back the API key when duplicate role assignments fail", async () => {
+      const nationOrg = await getOrCreateF3NationOrg();
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const client = createTestClient();
+      const keyName = `Rollback API Key ${uniqueId()}`;
+
+      await expect(
+        client.apiKey.create({
+          name: keyName,
+          roles: [
+            { orgId: nationOrg.id, roleName: "editor" },
+            { orgId: nationOrg.id, roleName: "editor" },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Unable to create API key",
+      });
+
+      const remainingKeys = await db
+        .select({ id: schema.apiKeys.id })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.name, keyName));
+
+      // Also clean up a leaked key if the rollback regression fails.
+      createdApiKeyIds.push(...remainingKeys.map((key) => key.id));
+      expect(remainingKeys).toEqual([]);
     });
 
     it("should create an API key with expiration date", async () => {
@@ -280,6 +333,90 @@ describe("API Key Router", () => {
 
       expect(result.apiKey?.revokedAt).toBeNull();
     });
+
+    it.each(["false", "0"] as const)(
+      "restores a revoked API key when revoke is %s",
+      async (revoke) => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+        const client = createTestClient();
+        const created = await client.apiKey.create({
+          name: `String Restore Test ${uniqueId()}`,
+        });
+        createdApiKeyIds.push(created.id);
+        const revoked = await client.apiKey.revoke({
+          id: created.id,
+          revoke: true,
+        });
+        expect(revoked.apiKey?.revokedAt).toEqual(expect.any(String));
+
+        const restored = await client.apiKey.revoke({ id: created.id, revoke });
+
+        expect(restored.apiKey?.revokedAt).toBeNull();
+        const [row] = await db
+          .select({ revokedAt: schema.apiKeys.revokedAt })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.id, created.id));
+        expect(row).toEqual({ revokedAt: null });
+      },
+    );
+
+    it("still revokes when revoke is omitted", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+      const client = createTestClient();
+      const created = await client.apiKey.create({
+        name: `Default Revoke Test ${uniqueId()}`,
+      });
+      createdApiKeyIds.push(created.id);
+
+      const result = await client.apiKey.revoke({ id: created.id });
+
+      expect(result.apiKey?.revokedAt).toEqual(expect.any(String));
+      const [row] = await db
+        .select({ revokedAt: schema.apiKeys.revokedAt })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.id, created.id));
+      expect(row?.revokedAt).toBe(result.apiKey?.revokedAt);
+    });
+
+    it.each([false, true])(
+      "rejects invalid revoke values without changing the key (initially revoked: %s)",
+      async (initiallyRevoked) => {
+        const session = await createAdminSession();
+        await mockAuthWithSession(session);
+        const client = createTestClient();
+        const created = await client.apiKey.create({
+          name: `Invalid Revoke Test ${uniqueId()}`,
+        });
+        createdApiKeyIds.push(created.id);
+        if (initiallyRevoked) {
+          await client.apiKey.revoke({ id: created.id, revoke: true });
+        }
+        const readState = () =>
+          db
+            .select({
+              revokedAt: schema.apiKeys.revokedAt,
+              updated: schema.apiKeys.updated,
+            })
+            .from(schema.apiKeys)
+            .where(eq(schema.apiKeys.id, created.id));
+        const before = await readState();
+
+        for (const revoke of ["invalid", "", null, 0, 1, [], ["false"]]) {
+          await expect(
+            client.apiKey.revoke({
+              id: created.id,
+              // Bypass client typing to exercise runtime validation unchanged.
+              revoke: revoke as Parameters<
+                typeof client.apiKey.revoke
+              >[0]["revoke"],
+            }),
+          ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+          expect(await readState()).toEqual(before);
+        }
+      },
+    );
 
     it("should throw for non-existent key", async () => {
       const session = await createAdminSession();
@@ -431,6 +568,439 @@ describe("API Key Router", () => {
       });
 
       expect(result.isValid).toBe(false);
+    });
+  });
+
+  describe("access scoping", () => {
+    const createdOrgIds: number[] = [];
+    const createdUserIds: number[] = [];
+    const scopedKeyIds: number[] = [];
+    let tree: Awaited<ReturnType<typeof createMixedOrgTree>>;
+    let regionAdminId: number;
+    let regionAdminEmail: string;
+    let otherUserId: number;
+    let inactiveOrgId: number;
+
+    const insertUser = async () => {
+      const [user] = await db
+        .insert(schema.users)
+        .values({ email: `${uniqueId()}@example.com`, f3Name: "Key Owner" })
+        .returning({ id: schema.users.id, email: schema.users.email });
+      if (!user) throw new Error("Failed to create user");
+      createdUserIds.push(user.id);
+      return user;
+    };
+
+    const insertKey = async (
+      ownerId: number,
+      roles: { orgId: number; roleName: "editor" | "admin" }[] = [],
+    ) => {
+      const secret = `f3_${uniqueId()}`;
+      const [apiKey] = await db
+        .insert(schema.apiKeys)
+        .values({ key: secret, name: `Scoped ${uniqueId()}`, ownerId })
+        .returning({ id: schema.apiKeys.id });
+      if (!apiKey) throw new Error("Failed to create API key");
+      scopedKeyIds.push(apiKey.id);
+      if (roles.length > 0) {
+        const roleRows = await db
+          .select({ id: schema.roles.id, name: schema.roles.name })
+          .from(schema.roles)
+          .where(
+            inArray(
+              schema.roles.name,
+              roles.map((r) => r.roleName),
+            ),
+          );
+        await db.insert(schema.rolesXApiKeysXOrg).values(
+          roles.map((r) => ({
+            apiKeyId: apiKey.id,
+            orgId: r.orgId,
+            roleId: roleRows.find((row) => row.name === r.roleName)!.id,
+          })),
+        );
+      }
+      return { id: apiKey.id, secret };
+    };
+
+    const regionAdminSession = (
+      viaApiKey = false,
+      extraRoles: Session["roles"] = [],
+    ): Session => {
+      const roles = [
+        {
+          orgId: tree.directBranch.region.id,
+          orgName: tree.directBranch.region.name,
+          roleName: "admin" as const,
+        },
+        ...extraRoles,
+      ];
+      return {
+        id: regionAdminId,
+        email: "region-admin@example.com",
+        user: {
+          id: String(regionAdminId),
+          email: "region-admin@example.com",
+          name: "Region Admin",
+          roles,
+        },
+        roles,
+        ...(viaApiKey && {
+          apiKey: {
+            id: 0,
+            key: "f3_x...xxxx",
+            ownerId: regionAdminId,
+            revokedAt: null,
+            expiresAt: null,
+            orgIds: [tree.directBranch.region.id],
+          },
+        }),
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+    };
+
+    const nationAdminSession = (): Session => {
+      const roles = [
+        { orgId: 1, orgName: "F3 Nation", roleName: "admin" as const },
+      ];
+      return {
+        id: otherUserId,
+        email: "nation-admin@example.com",
+        user: {
+          id: String(otherUserId),
+          email: "nation-admin@example.com",
+          name: "Nation Admin",
+          roles,
+        },
+        roles,
+        expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+      };
+    };
+
+    beforeAll(async () => {
+      await getOrCreateRoles();
+      tree = await createMixedOrgTree(createdOrgIds);
+      ({ id: regionAdminId, email: regionAdminEmail } = await insertUser());
+      ({ id: otherUserId } = await insertUser());
+      const [inactiveOrg] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Inactive ${uniqueId()}`,
+          orgType: "ao",
+          parentId: tree.unrelatedBranch.region.id,
+          isActive: false,
+        })
+        .returning({ id: schema.orgs.id });
+      inactiveOrgId = inactiveOrg!.id;
+      createdOrgIds.push(inactiveOrgId);
+    });
+
+    afterAll(async () => {
+      for (const id of scopedKeyIds) await cleanup.apiKey(id);
+      for (const id of createdUserIds) await cleanup.user(id);
+      for (const id of [...createdOrgIds].reverse()) await cleanup.org(id);
+    });
+
+    it("lists only keys the region admin can manage", async () => {
+      const inScope = await insertKey(otherUserId, [
+        { orgId: tree.directBranch.ao.id, roleName: "admin" },
+      ]);
+      const ownReadOnly = await insertKey(regionAdminId);
+      const otherRegion = await insertKey(otherUserId, [
+        { orgId: tree.unrelatedBranch.region.id, roleName: "admin" },
+      ]);
+      const nationKey = await insertKey(otherUserId, [
+        { orgId: tree.nation.id, roleName: "admin" },
+      ]);
+      const mixed = await insertKey(otherUserId, [
+        { orgId: tree.directBranch.ao.id, roleName: "admin" },
+        { orgId: tree.unrelatedBranch.ao.id, roleName: "editor" },
+      ]);
+      const inactiveMixed = await insertKey(otherUserId, [
+        { orgId: tree.directBranch.ao.id, roleName: "admin" },
+        { orgId: inactiveOrgId, roleName: "admin" },
+      ]);
+      const othersReadOnly = await insertKey(otherUserId);
+
+      await mockAuthWithSession(regionAdminSession());
+      const { apiKeys } = await createTestClient().apiKey.list();
+      const ids = apiKeys.map((k) => k.id);
+
+      expect(apiKeys.find((k) => k.id === inScope.id)?.ownerEmail).toBeNull();
+      expect(ids).toContain(inScope.id);
+      expect(ids).toContain(ownReadOnly.id);
+      for (const hidden of [
+        otherRegion,
+        nationKey,
+        mixed,
+        inactiveMixed,
+        othersReadOnly,
+      ]) {
+        expect(ids).not.toContain(hidden.id);
+      }
+    });
+
+    it("rejects every API-key management endpoint for an API-key session", async () => {
+      const owned = await insertKey(regionAdminId);
+
+      await mockAuthWithSession(regionAdminSession(true));
+      const client = createTestClient();
+      const unauthorized = { code: "UNAUTHORIZED" };
+
+      await expect(client.apiKey.list()).rejects.toMatchObject(unauthorized);
+      await expect(
+        client.apiKey.create({ name: "child", roles: [], expiresAt: null }),
+      ).rejects.toMatchObject(unauthorized);
+      await expect(
+        client.apiKey.revoke({ id: owned.id, revoke: true }),
+      ).rejects.toMatchObject(unauthorized);
+      await expect(client.apiKey.purge({ id: owned.id })).rejects.toMatchObject(
+        unauthorized,
+      );
+      await expect(
+        client.apiKey.validate({ key: "anything" }),
+      ).rejects.toMatchObject(unauthorized);
+
+      const [row] = await db
+        .select({ revokedAt: schema.apiKeys.revokedAt })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.id, owned.id));
+      expect(row?.revokedAt).toBeNull();
+    });
+
+    it("lets an owner see and revoke, but not restore or purge, a key wider than them", async () => {
+      const ownedNationKey = await insertKey(regionAdminId, [
+        { orgId: tree.nation.id, roleName: "admin" },
+      ]);
+      const ownedInScope = await insertKey(regionAdminId, [
+        { orgId: tree.directBranch.ao.id, roleName: "admin" },
+      ]);
+
+      await mockAuthWithSession(regionAdminSession());
+      const client = createTestClient();
+      const { apiKeys } = await client.apiKey.list();
+
+      expect(apiKeys.find((k) => k.id === ownedNationKey.id)).toMatchObject({
+        canManage: false,
+      });
+      expect(apiKeys.find((k) => k.id === ownedInScope.id)).toMatchObject({
+        canManage: true,
+      });
+
+      await client.apiKey.revoke({ id: ownedNationKey.id, revoke: true });
+      await expect(
+        client.apiKey.revoke({ id: ownedNationKey.id, revoke: false }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(
+        client.apiKey.purge({ id: ownedNationKey.id }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      const [row] = await db
+        .select({ revokedAt: schema.apiKeys.revokedAt })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.id, ownedNationKey.id));
+      expect(row?.revokedAt).not.toBeNull();
+    });
+
+    it.each(["false", "0"] as const)(
+      "does not let an owner restore a wider key using revoke=%s",
+      async (revoke) => {
+        const ownedNationKey = await insertKey(regionAdminId, [
+          { orgId: tree.nation.id, roleName: "admin" },
+        ]);
+        await mockAuthWithSession(regionAdminSession());
+        const client = createTestClient();
+        const revoked = await client.apiKey.revoke({
+          id: ownedNationKey.id,
+          revoke: true,
+        });
+        expect(revoked.apiKey?.revokedAt).toEqual(expect.any(String));
+
+        await expect(
+          client.apiKey.revoke({ id: ownedNationKey.id, revoke }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+        const [row] = await db
+          .select({ revokedAt: schema.apiKeys.revokedAt })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.id, ownedNationKey.id));
+        expect(row?.revokedAt).toBe(revoked.apiKey?.revokedAt);
+      },
+    );
+
+    it("rejects revoke, restore, and purge of an out-of-scope key", async () => {
+      const outOfScope = [
+        await insertKey(otherUserId, [
+          { orgId: tree.nation.id, roleName: "admin" },
+        ]),
+        await insertKey(otherUserId, [
+          { orgId: tree.directBranch.ao.id, roleName: "admin" },
+          { orgId: tree.unrelatedBranch.ao.id, roleName: "editor" },
+        ]),
+        await insertKey(otherUserId, [
+          { orgId: tree.directBranch.ao.id, roleName: "admin" },
+          { orgId: inactiveOrgId, roleName: "editor" },
+        ]),
+        await insertKey(otherUserId, [
+          { orgId: inactiveOrgId, roleName: "editor" },
+        ]),
+      ];
+
+      await mockAuthWithSession(regionAdminSession());
+      const client = createTestClient();
+      const ids = (await client.apiKey.list()).apiKeys.map((k) => k.id);
+
+      for (const key of outOfScope) {
+        expect(ids).not.toContain(key.id);
+        for (const revoke of [false, true]) {
+          await expect(
+            client.apiKey.revoke({ id: key.id, revoke }),
+          ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        }
+        await expect(client.apiKey.purge({ id: key.id })).rejects.toMatchObject(
+          { code: "NOT_FOUND" },
+        );
+
+        const [row] = await db
+          .select({ revokedAt: schema.apiKeys.revokedAt })
+          .from(schema.apiKeys)
+          .where(eq(schema.apiKeys.id, key.id));
+        expect(row).toEqual({ revokedAt: null });
+      }
+    });
+
+    it("does not count an editor role toward key-management scope", async () => {
+      const editorScoped = await insertKey(otherUserId, [
+        { orgId: tree.unrelatedBranch.ao.id, roleName: "editor" },
+      ]);
+
+      await mockAuthWithSession(
+        regionAdminSession(false, [
+          {
+            orgId: tree.unrelatedBranch.region.id,
+            orgName: tree.unrelatedBranch.region.name,
+            roleName: "editor",
+          },
+        ]),
+      );
+      const client = createTestClient();
+      const ids = (await client.apiKey.list()).apiKeys.map((k) => k.id);
+
+      expect(ids).not.toContain(editorScoped.id);
+      for (const revoke of [false, true]) {
+        await expect(
+          client.apiKey.revoke({ id: editorScoped.id, revoke }),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      }
+      await expect(
+        client.apiKey.purge({ id: editorScoped.id }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("logs denied management of an existing key but not of a missing one", async () => {
+      const nationKey = await insertKey(otherUserId, [
+        { orgId: tree.nation.id, roleName: "admin" },
+      ]);
+
+      await mockAuthWithSession(regionAdminSession());
+      const client = createTestClient();
+
+      await expect(
+        client.apiKey.revoke({ id: 999999, revoke: true }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(loggerModule.logWarn).not.toHaveBeenCalledWith(
+        "api.api_key.manage_denied",
+        expect.anything(),
+      );
+
+      await expect(
+        client.apiKey.purge({ id: nationKey.id }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(loggerModule.logWarn).toHaveBeenCalledWith(
+        "api.api_key.manage_denied",
+        {
+          apiKeyId: nationKey.id,
+          userId: regionAdminId,
+          viaApiKeyId: undefined,
+        },
+      );
+    });
+
+    it("only creates keys the caller can also manage", async () => {
+      await mockAuthWithSession(
+        regionAdminSession(false, [
+          {
+            orgId: tree.unrelatedBranch.ao.id,
+            orgName: tree.unrelatedBranch.ao.name,
+            roleName: "editor",
+          },
+        ]),
+      );
+      const client = createTestClient();
+
+      await expect(
+        client.apiKey.create({
+          name: `Scoped ${uniqueId()}`,
+          roles: [{ orgId: tree.unrelatedBranch.ao.id, roleName: "editor" }],
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      const created = await client.apiKey.create({
+        name: `Scoped ${uniqueId()}`,
+        roles: [{ orgId: tree.directBranch.ao.id, roleName: "editor" }],
+      });
+      scopedKeyIds.push(created.id);
+      const ids = (await client.apiKey.list()).apiKeys.map((k) => k.id);
+      expect(ids).toContain(created.id);
+    });
+
+    it("manages an in-scope key without ever returning its secret", async () => {
+      const inScope = await insertKey(otherUserId, [
+        { orgId: tree.directBranch.ao.id, roleName: "editor" },
+      ]);
+
+      await mockAuthWithSession(regionAdminSession());
+      const client = createTestClient();
+
+      const listed = await client.apiKey.list();
+      const revoked = await client.apiKey.revoke({
+        id: inScope.id,
+        revoke: true,
+      });
+      const restored = await client.apiKey.revoke({
+        id: inScope.id,
+        revoke: false,
+      });
+      const purged = await client.apiKey.purge({ id: inScope.id });
+
+      expect(revoked.apiKey?.revokedAt).not.toBeNull();
+      expect(restored.apiKey?.revokedAt).toBeNull();
+      expect(purged.apiKey?.id).toBe(inScope.id);
+      expect(
+        await db
+          .select()
+          .from(schema.rolesXApiKeysXOrg)
+          .where(eq(schema.rolesXApiKeysXOrg.apiKeyId, inScope.id)),
+      ).toEqual([]);
+      for (const response of [listed, revoked, restored, purged]) {
+        expect(JSON.stringify(response)).not.toContain(inScope.secret);
+      }
+      expect(revoked.apiKey).not.toHaveProperty("key");
+    });
+
+    it("lets a Nation admin manage any key", async () => {
+      const othersReadOnly = await insertKey(regionAdminId);
+
+      await mockAuthWithSession(nationAdminSession());
+      const client = createTestClient();
+      const { apiKeys } = await client.apiKey.list();
+
+      expect(apiKeys.find((k) => k.id === othersReadOnly.id)?.ownerEmail).toBe(
+        regionAdminEmail,
+      );
+      await expect(
+        client.apiKey.revoke({ id: othersReadOnly.id, revoke: true }),
+      ).resolves.toBeDefined();
     });
   });
 });

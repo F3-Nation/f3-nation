@@ -10,11 +10,17 @@
  */
 
 import { vi } from "vitest";
+import type { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { waitForRegionNotificationTasks } from "./request";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
 const mockLimit = vi.hoisted(() => vi.fn());
 const mockNotifyMapDataChange = vi.hoisted(() => vi.fn());
 const mockNotifyMapChangeRequest = vi.hoisted(() => vi.fn());
+const mockMaybeNotifyRegionInABox = vi.hoisted(() => vi.fn());
+const mockPermissionOrgId = vi.hoisted(() => ({
+  value: null as number | null,
+}));
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -30,8 +36,36 @@ vi.mock("../services/map-request-notification", () => ({
   notifyMapChangeRequest: mockNotifyMapChangeRequest,
 }));
 
-import { eq, schema } from "@acme/db";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+vi.mock("../lib/first-event-service", () => ({
+  maybeNotifyRegionInABox: mockMaybeNotifyRegionInABox,
+}));
+
+vi.mock("../check-has-role-on-org", async (importOriginal) => {
+  const original = await importOriginal<{
+    checkHasRoleOnOrg: typeof checkHasRoleOnOrg;
+  }>();
+  return {
+    ...original,
+    checkHasRoleOnOrg: async (
+      params: Parameters<typeof original.checkHasRoleOnOrg>[0],
+    ) => {
+      const result = await original.checkHasRoleOnOrg(params);
+      return params.orgId === mockPermissionOrgId.value
+        ? { ...result, success: true }
+        : result;
+    },
+  };
+});
+
+import { eq, schema, sql } from "@acme/db";
+import {
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -39,6 +73,7 @@ import {
   createTestClient,
   db,
   getOrCreateF3NationOrg,
+  getOrCreateRoles,
   mockAuthWithSession,
   uniqueId,
 } from "../__tests__/test-utils";
@@ -53,6 +88,7 @@ describe("Request Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPermissionOrgId.value = null;
     // Reset rate limiter to allow requests
     mockLimit.mockResolvedValue({
       success: true,
@@ -61,6 +97,7 @@ describe("Request Router", () => {
       reset: Date.now() + 60000,
     });
     mockNotifyMapChangeRequest.mockResolvedValue(undefined);
+    mockMaybeNotifyRegionInABox.mockResolvedValue(undefined);
   });
 
   afterAll(async () => {
@@ -177,6 +214,120 @@ describe("Request Router", () => {
   };
 
   describe("all", () => {
+    it("pages tied sort values without repeats or omissions and preserves sort precedence", async () => {
+      await getOrCreateRoles();
+      const nationOrg = await getOrCreateF3NationOrg();
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `${uniqueId()}@example.com`,
+          f3Name: "Pagination Admin",
+        })
+        .returning({ id: schema.users.id });
+      const [adminRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+      if (!user || !adminRole) throw new Error("Failed to seed nation admin");
+      onTestFinished(() => cleanup.user(user.id));
+      await db
+        .insert(schema.rolesXUsersXOrg)
+        .values({ userId: user.id, orgId: nationOrg.id, roleId: adminRole.id });
+      const session = await createAdminSession();
+      await mockAuthWithSession({
+        ...session,
+        id: user.id,
+        user: {
+          id: String(user.id),
+          email: session.email,
+          roles: session.roles ?? [],
+        },
+      });
+
+      const region = await createTestRegion();
+      const prefix = `Pagination ${uniqueId()}`;
+      const requests = await db
+        .insert(schema.updateRequests)
+        .values(
+          Array.from({ length: 40 }, (_, index) => ({
+            regionId: region.id,
+            requestType: "create_event" as const,
+            eventName: `${prefix} ${index % 2 ? "Alpha" : "Zulu"}`,
+            submittedBy: "pagination@example.com",
+            status: "pending" as const,
+          })),
+        )
+        .returning({
+          id: schema.updateRequests.id,
+          name: schema.updateRequests.eventName,
+        });
+      createdRequestIds.push(...requests.map((request) => request.id));
+      // Move a tied tuple so physical row order cannot stand in for ID order.
+      await db
+        .update(schema.updateRequests)
+        .set({ eventName: sql`${schema.updateRequests.eventName}` })
+        .where(eq(schema.updateRequests.id, requests[0]!.id));
+      const byId = [...requests].sort((a, b) =>
+        a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+      );
+      const client = createTestClient();
+      const unsorted = await client.request.all({
+        searchTerm: prefix,
+        sorting: [],
+        pageSize: 50,
+      });
+      expect(unsorted.requests.map((request) => request.id)).toEqual(
+        byId.map((request) => request.id),
+      );
+      for (const desc of [false, true]) {
+        for (const id of ["status", "workoutName"]) {
+          const expected = [...byId]
+            .sort((a, b) =>
+              id === "status"
+                ? 0
+                : (a.name! < b.name! ? -1 : a.name! > b.name! ? 1 : 0) *
+                  (desc ? -1 : 1),
+            )
+            .map((request) => request.id);
+          for (const pageSize of [5, 7]) {
+            const paged: string[] = [];
+            for (
+              let pageIndex = 0;
+              pageIndex < Math.ceil(40 / pageSize);
+              pageIndex++
+            ) {
+              const page = await client.request.all({
+                searchTerm: prefix,
+                sorting: [{ id, desc }],
+                pageIndex,
+                pageSize,
+              });
+              expect(page.totalCount).toBe(40);
+              paged.push(...page.requests.map((request) => request.id));
+            }
+            expect(paged).toEqual(expected);
+            expect(new Set(paged).size).toBe(40);
+          }
+        }
+      }
+      for (const sorting of [
+        undefined,
+        [
+          { id: "status", desc: false },
+          { id: "id", desc: true },
+        ],
+      ]) {
+        const result = await client.request.all({
+          searchTerm: prefix,
+          sorting,
+          pageSize: 50,
+        });
+        expect(result.requests.map((request) => request.id)).toEqual(
+          byId.map((request) => request.id).reverse(),
+        );
+      }
+    });
+
     it("should return a list of update requests", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -221,17 +372,58 @@ describe("Request Router", () => {
     });
 
     it("should filter by status", async () => {
+      // request.all scopes by database roles, so seed a real nation admin.
+      await getOrCreateRoles();
+      const nationOrg = await getOrCreateF3NationOrg();
+      const [user] = await db
+        .insert(schema.users)
+        .values({ email: `${uniqueId()}@example.com`, f3Name: "Status Admin" })
+        .returning({ id: schema.users.id });
+      const [adminRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "admin"));
+      if (!user || !adminRole) throw new Error("Failed to seed nation admin");
+      onTestFinished(() => cleanup.user(user.id));
+      await db
+        .insert(schema.rolesXUsersXOrg)
+        .values({ userId: user.id, orgId: nationOrg.id, roleId: adminRole.id });
+
+      const region = await createTestRegion();
+      const eventName = `Status Filter ${uniqueId()}`;
+      const [pending] = await db
+        .insert(schema.updateRequests)
+        .values({
+          regionId: region.id,
+          requestType: "create_event",
+          eventName,
+          submittedBy: "submitter@example.com",
+          status: "pending",
+        })
+        .returning({ id: schema.updateRequests.id });
+      if (!pending) throw new Error("Failed to create request");
+      createdRequestIds.push(pending.id);
+
       const session = await createAdminSession();
-      await mockAuthWithSession(session);
+      await mockAuthWithSession({
+        ...session,
+        id: user.id,
+        user: {
+          id: String(user.id),
+          email: session.email,
+          roles: session.roles ?? [],
+        },
+      });
 
       const client = createTestClient();
       const result = await client.request.all({
         statuses: ["pending"],
+        searchTerm: eventName,
         pageIndex: 0,
         pageSize: 10,
       });
 
-      // All returned requests should have the specified status
+      expect(result.requests.map((r) => r.id)).toContain(pending.id);
       expect(result.requests.every((r) => r.status === "pending")).toBe(true);
     });
 
@@ -272,6 +464,27 @@ describe("Request Router", () => {
 
       if (!testRequest) throw new Error("Failed to create test request");
       createdRequestIds.push(testRequest.id);
+
+      // byId scopes by the caller's DB roles, so seed a real editor.
+      const [editor] = await db
+        .insert(schema.users)
+        .values({ email: `${uniqueId()}@example.com`, f3Name: "Editor" })
+        .returning({ id: schema.users.id });
+      const [editorRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"));
+      if (!editor || !editorRole) throw new Error("Failed to seed editor");
+      onTestFinished(() => cleanup.user(editor.id));
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: editor.id,
+        orgId: region.id,
+        roleId: editorRole.id,
+      });
+      await mockAuthWithSession({
+        ...createEditorSession({ orgId: region.id, orgName: region.name }),
+        id: editor.id,
+      });
 
       const client = createTestClient();
       const result = await client.request.byId({
@@ -360,7 +573,6 @@ describe("Request Router", () => {
     it("should check multiple orgs at once", async () => {
       const region1 = await createTestRegion();
       const region2 = await createTestRegion();
-      if (!region1 || !region2) return;
 
       // Only has permission on region1
       const session = createEditorSession({
@@ -484,6 +696,8 @@ describe("Request Router", () => {
 
       expect(result.status).toBe("pending");
       expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
+      await waitForRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
 
       // A pending row has no reviewer yet
       const [savedRequest] = await db
@@ -571,6 +785,39 @@ describe("Request Router", () => {
   });
 
   describe("approved request atomicity", () => {
+    it("does not notify when a qualifying event creation rolls back", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+      const location = await createTestLocation(ao.id);
+      const eventName = `Rolled back series ${uniqueId()}`;
+
+      // The handler inserts the event before its event-type association. An
+      // invalid type FK fails that later write and rolls the whole apply back.
+      await expect(
+        createTestClient().request.submitCreateEventRequest({
+          id: crypto.randomUUID(),
+          requestType: "create_event",
+          submittedBy: "admin@example.com",
+          originalRegionId: region.id,
+          originalAoId: ao.id,
+          originalLocationId: location.id,
+          eventName,
+          eventDayOfWeek: "monday",
+          eventStartTime: "0530",
+          eventEndTime: "0630",
+          eventTypeIds: [999_999_999],
+        }),
+      ).rejects.toThrow();
+
+      expect(
+        await db.query.events.findFirst({
+          where: eq(schema.events.name, eventName),
+        }),
+      ).toBeUndefined();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
     it("rolls back the applied change when recording the audit row fails", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -600,6 +847,7 @@ describe("Request Router", () => {
         .where(eq(schema.events.id, event.id));
       expect(unchangedEvent?.isActive).toBe(true);
       expect(mockNotifyMapDataChange).not.toHaveBeenCalled();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
     });
 
     it("applies a multi-write handler through the nested transactions", async () => {
@@ -676,6 +924,13 @@ describe("Request Router", () => {
       }
 
       expect(result.status).toBe("approved");
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          region.id,
+        ),
+      );
+      await waitForRegionNotificationTasks();
 
       // The approved row links to the event the handler just created
       const [savedRequest] = await db
@@ -736,9 +991,15 @@ describe("Request Router", () => {
           locationZip: "28607",
           locationCountry: "United States",
         });
-      createdRequestIds.push(result.updateRequest.id ?? "");
+      createdRequestIds.push(result.updateRequest.id);
 
       expect(result.status).toBe("approved");
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          region.id,
+        ),
+      );
 
       // The approved row links to all three entities the handler created — not
       // just the event (the create_event case above), but the AO and location
@@ -746,7 +1007,7 @@ describe("Request Router", () => {
       const [savedRequest] = await db
         .select()
         .from(schema.updateRequests)
-        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+        .where(eq(schema.updateRequests.id, result.updateRequest.id));
       expect(savedRequest?.aoId).toBeTruthy();
       expect(savedRequest?.locationId).toBeTruthy();
       expect(savedRequest?.eventId).toBeTruthy();
@@ -782,22 +1043,180 @@ describe("Request Router", () => {
   });
 
   describe("submitMoveEventToDifferentAoRequest", () => {
-    it("rejects a request without a destination AO instead of silently no-oping", async () => {
+    it("notifies the persisted destination region when newRegionId is omitted", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
 
+      const sourceRegion = await createTestRegion();
+      const destinationRegion = await createTestRegion();
+      const sourceAo = await createTestAO(sourceRegion.id);
+      const sourceLocation = await createTestLocation(sourceAo.id);
+      const event = await createTestEvent(sourceAo.id, sourceLocation.id);
+      const destinationAo = await createTestAO(destinationRegion.id);
+      const destinationLocation = await createTestLocation(destinationAo.id);
+
       const client = createTestClient();
-      await expect(
-        // @ts-expect-error -- deliberately omits the required newAoId
-        client.request.submitMoveEventToDifferentAoRequest({
+      const result = await client.request.submitMoveEventToDifferentAoRequest({
+        id: crypto.randomUUID(),
+        requestType: "move_event_to_different_ao",
+        submittedBy: "admin@example.com",
+        originalEventId: event.id,
+        originalAoId: sourceAo.id,
+        originalRegionId: sourceRegion.id,
+        newAoId: destinationAo.id,
+        newLocationId: destinationLocation.id,
+      });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("approved");
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          destinationRegion.id,
+        ),
+      );
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalledWith(
+        expect.anything(),
+        sourceRegion.id,
+      );
+    });
+
+    it("keeps the auto-applied destination region across a post-commit AO reparent", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const sourceRegion = await createTestRegion();
+      const destinationRegion = await createTestRegion();
+      const laterRegion = await createTestRegion();
+      const sourceAo = await createTestAO(sourceRegion.id);
+      const destinationAo = await createTestAO(destinationRegion.id);
+      const sourceLocation = await createTestLocation(sourceAo.id);
+      const destinationLocation = await createTestLocation(destinationAo.id);
+      const event = await createTestEvent(sourceAo.id, sourceLocation.id);
+
+      let notificationStarted!: () => void;
+      const notificationStartedPromise = new Promise<void>((resolve) => {
+        notificationStarted = resolve;
+      });
+      let releaseNotification!: () => void;
+      const notificationBarrier = new Promise<void>((resolve) => {
+        releaseNotification = resolve;
+      });
+      mockMaybeNotifyRegionInABox.mockImplementation(async (_db, regionId) => {
+        expect(regionId).toBe(destinationRegion.id);
+        notificationStarted();
+        await notificationBarrier;
+      });
+
+      const result =
+        await createTestClient().request.submitMoveEventToDifferentAoRequest({
           id: crypto.randomUUID(),
           requestType: "move_event_to_different_ao",
           submittedBy: "admin@example.com",
-          originalEventId: 1,
-          originalAoId: 1,
-          originalRegionId: 1,
+          originalEventId: event.id,
+          originalAoId: sourceAo.id,
+          originalRegionId: sourceRegion.id,
+          newAoId: destinationAo.id,
+          newLocationId: destinationLocation.id,
+        });
+      createdRequestIds.push(result.updateRequest.id);
+      expect(result.status).toBe("approved");
+      await notificationStartedPromise;
+
+      await db
+        .update(schema.orgs)
+        .set({ parentId: laterRegion.id })
+        .where(eq(schema.orgs.id, destinationAo.id));
+      releaseNotification();
+      await waitForRegionNotificationTasks();
+
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        destinationRegion.id,
+      );
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalledWith(
+        expect.anything(),
+        laterRegion.id,
+      );
+    });
+
+    it("leaves a pending request pending when review input has no destination AO", async () => {
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+
+      const source = await createTestRegion();
+      const destination = await createTestRegion();
+      const sourceAo = await createTestAO(source.id);
+      const location = await createTestLocation(sourceAo.id);
+      const event = await createTestEvent(sourceAo.id, location.id);
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+
+      await expect(
+        createTestClient().request.validateSubmissionByAdmin({
+          id,
+          requestType: "move_event_to_different_ao",
+          submittedBy: "admin@example.com",
+          originalEventId: event.id,
+          originalAoId: sourceAo.id,
+          originalRegionId: source.id,
+          newRegionId: destination.id,
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      const [request] = await db
+        .select({ status: schema.updateRequests.status })
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, id));
+      expect(request?.status).toBe("pending");
+      await waitForRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
+    it("returns NOT_FOUND and leaves a pending request untouched when the destination AO no longer exists", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const source = await createTestRegion();
+      const destination = await createTestRegion();
+      const sourceAo = await createTestAO(source.id);
+      const location = await createTestLocation(sourceAo.id);
+      const event = await createTestEvent(sourceAo.id, location.id);
+      const missingDestinationAoId = 999_999_999;
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+
+      // Simulate a stale destination AO id that passed the role preflight so
+      // the locked-AO existence check inside the transaction is exercised.
+      mockPermissionOrgId.value = missingDestinationAoId;
+      try {
+        await expect(
+          createTestClient().request.validateSubmissionByAdmin({
+            id,
+            requestType: "move_event_to_different_ao",
+            submittedBy: "admin@example.com",
+            originalEventId: event.id,
+            originalAoId: sourceAo.id,
+            originalRegionId: source.id,
+            newAoId: missingDestinationAoId,
+            newRegionId: destination.id,
+          }),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      } finally {
+        mockPermissionOrgId.value = null;
+      }
+
+      const [request] = await db
+        .select({ status: schema.updateRequests.status })
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, id));
+      expect(request?.status).toBe("pending");
+      await waitForRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
     });
 
     it("hydrates the destination AO's name and default location onto the approved request row", async () => {
@@ -843,14 +1262,14 @@ describe("Request Router", () => {
         // the backend to hydrate it from the destination AO's default
         // location instead.
       });
-      createdRequestIds.push(result.updateRequest.id ?? "");
+      createdRequestIds.push(result.updateRequest.id);
 
       expect(result.status).toBe("approved");
 
       const [savedRequest] = await db
         .select()
         .from(schema.updateRequests)
-        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+        .where(eq(schema.updateRequests.id, result.updateRequest.id));
 
       expect(savedRequest?.aoId).toBe(destinationAo.id);
       expect(savedRequest?.aoName).toBe(destinationAo.name);
@@ -922,14 +1341,14 @@ describe("Request Router", () => {
         locationZip: "28601",
         locationCountry: "United States",
       });
-      createdRequestIds.push(result.updateRequest.id ?? "");
+      createdRequestIds.push(result.updateRequest.id);
 
       expect(result.status).toBe("approved");
 
       const [savedRequest] = await db
         .select()
         .from(schema.updateRequests)
-        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+        .where(eq(schema.updateRequests.id, result.updateRequest.id));
       if (savedRequest?.locationId) {
         createdLocationIds.push(savedRequest.locationId);
       }
@@ -1042,7 +1461,7 @@ describe("Request Router", () => {
         orgName: region.name,
         roleName: "editor",
       });
-      session.user?.roles?.push({
+      session.user?.roles.push({
         orgId: region.id,
         orgName: region.name,
         roleName: "editor",
@@ -1063,6 +1482,8 @@ describe("Request Router", () => {
       expect(rejectedRequest?.status).toBe("rejected");
       expect(rejectedRequest?.reviewedBy).toBe("admin@example.com");
       expect(rejectedRequest?.reviewedAt).not.toBeNull();
+      await waitForRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
     });
 
     it("should require editor permission to reject", async () => {
@@ -1340,6 +1761,305 @@ describe("Request Router", () => {
     if (row) createdRequestIds.push(row.id);
     return row;
   };
+
+  describe("region notification on reviewed event moves", () => {
+    it("notifies only the destination for an auto-applied AO move with a qualifying destination event", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const source = await createTestRegion();
+      const destination = await createTestRegion();
+      const ao = await createTestAO(source.id);
+      const sourceLocation = await createTestLocation(source.id);
+      await createTestEvent(ao.id, sourceLocation.id);
+      const destinationAo = await createTestAO(destination.id);
+      const destinationLocation = await createTestLocation(destinationAo.id);
+      await createTestEvent(destinationAo.id, destinationLocation.id);
+
+      const result =
+        await createTestClient().request.submitMoveAOToDifferentRegionRequest({
+          id: crypto.randomUUID(),
+          requestType: "move_ao_to_different_region",
+          submittedBy: "admin@example.com",
+          originalAoId: ao.id,
+          originalRegionId: source.id,
+          newRegionId: destination.id,
+        });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("approved");
+      await waitForRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        destination.id,
+      );
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalledWith(
+        expect.anything(),
+        source.id,
+      );
+    });
+
+    it("hands off an auto-applied AO move to the empty destination region, not the old region", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const source = await createTestRegion();
+      const destination = await createTestRegion();
+      const ao = await createTestAO(source.id);
+      const sourceLocation = await createTestLocation(source.id);
+      await createTestEvent(ao.id, sourceLocation.id);
+
+      const result =
+        await createTestClient().request.submitMoveAOToDifferentRegionRequest({
+          id: crypto.randomUUID(),
+          requestType: "move_ao_to_different_region",
+          submittedBy: "admin@example.com",
+          originalAoId: ao.id,
+          originalRegionId: source.id,
+          newRegionId: destination.id,
+        });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("approved");
+      await waitForRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        destination.id,
+      );
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalledWith(
+        expect.anything(),
+        source.id,
+      );
+    });
+
+    it("does not notify for an auto-applied AO move within the same region", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const result =
+        await createTestClient().request.submitMoveAOToDifferentRegionRequest({
+          id: crypto.randomUUID(),
+          requestType: "move_ao_to_different_region",
+          submittedBy: "admin@example.com",
+          originalAoId: ao.id,
+          originalRegionId: region.id,
+          newRegionId: region.id,
+        });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("approved");
+      await waitForRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
+    it("does not notify for an auto-applied event move between AOs in the same region", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      const sourceAo = await createTestAO(region.id);
+      const destinationAo = await createTestAO(region.id);
+      const sourceLocation = await createTestLocation(sourceAo.id);
+      const destinationLocation = await createTestLocation(destinationAo.id);
+      const event = await createTestEvent(sourceAo.id, sourceLocation.id);
+
+      const result =
+        await createTestClient().request.submitMoveEventToDifferentAoRequest({
+          id: crypto.randomUUID(),
+          requestType: "move_event_to_different_ao",
+          submittedBy: "admin@example.com",
+          originalEventId: event.id,
+          originalAoId: sourceAo.id,
+          originalRegionId: region.id,
+          newAoId: destinationAo.id,
+          newLocationId: destinationLocation.id,
+        });
+      createdRequestIds.push(result.updateRequest.id);
+
+      expect(result.status).toBe("approved");
+      await waitForRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
+    it("returns NOT_FOUND and leaves a pending move-event request untouched when its event was deleted", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const source = await createTestRegion();
+      const destination = await createTestRegion();
+      const sourceAo = await createTestAO(source.id);
+      const destinationAo = await createTestAO(destination.id);
+      const location = await createTestLocation(sourceAo.id);
+      const event = await createTestEvent(sourceAo.id, location.id);
+
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+      await db.delete(schema.events).where(eq(schema.events.id, event.id));
+
+      await expect(
+        createTestClient().request.validateSubmissionByAdmin({
+          id,
+          requestType: "move_event_to_different_ao",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalAoId: sourceAo.id,
+          originalRegionId: source.id,
+          newAoId: destinationAo.id,
+          newRegionId: destination.id,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      const [request] = await db
+        .select({ status: schema.updateRequests.status })
+        .from(schema.updateRequests)
+        .where(eq(schema.updateRequests.id, id));
+      expect(request?.status).toBe("pending");
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
+    it("uses the event's current source region instead of the request's stale source", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const requestedSource = await createTestRegion();
+      const currentSource = await createTestRegion();
+      const destination = await createTestRegion();
+      const originalAo = await createTestAO(requestedSource.id);
+      const currentAo = await createTestAO(currentSource.id);
+      const destinationAo = await createTestAO(destination.id);
+      const location = await createTestLocation(originalAo.id);
+      const event = await createTestEvent(originalAo.id, location.id);
+      await db
+        .update(schema.events)
+        .set({ orgId: currentAo.id })
+        .where(eq(schema.events.id, event.id));
+
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+      const result = await createTestClient().request.validateSubmissionByAdmin(
+        {
+          id,
+          requestType: "move_event_to_different_ao",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalAoId: originalAo.id,
+          originalRegionId: requestedSource.id,
+          newAoId: destinationAo.id,
+          newRegionId: destination.id,
+        },
+      );
+
+      expect(result.status).toBe("approved");
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          destination.id,
+        ),
+      );
+    });
+
+    it("does not notify when the event already moved into the destination region", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const requestedSource = await createTestRegion();
+      const destination = await createTestRegion();
+      const originalAo = await createTestAO(requestedSource.id);
+      const destinationAo = await createTestAO(destination.id);
+      const location = await createTestLocation(originalAo.id);
+      const event = await createTestEvent(originalAo.id, location.id);
+      await db
+        .update(schema.events)
+        .set({ orgId: destinationAo.id })
+        .where(eq(schema.events.id, event.id));
+
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+      const result = await createTestClient().request.validateSubmissionByAdmin(
+        {
+          id,
+          requestType: "move_event_to_different_ao",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalAoId: originalAo.id,
+          originalRegionId: requestedSource.id,
+          newAoId: destinationAo.id,
+          newRegionId: destination.id,
+        },
+      );
+
+      expect(result.status).toBe("approved");
+      // Await the detached task's completion before asserting the negative;
+      // checking immediately after the mutation returned could race its import.
+      await waitForRegionNotificationTasks();
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalled();
+    });
+
+    it("keeps the committed destination when the destination AO is reparented before notification completes", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      let notificationStarted!: () => void;
+      const notificationStartedPromise = new Promise<void>((resolve) => {
+        notificationStarted = resolve;
+      });
+      let releaseNotification!: () => void;
+      const notificationBarrier = new Promise<void>((resolve) => {
+        releaseNotification = resolve;
+      });
+      const source = await createTestRegion();
+      const destination = await createTestRegion();
+      const laterRegion = await createTestRegion();
+      mockMaybeNotifyRegionInABox.mockImplementation(async (_db, regionId) => {
+        expect(regionId).toBe(destination.id);
+        notificationStarted();
+        await notificationBarrier;
+      });
+      const sourceAo = await createTestAO(source.id);
+      const destinationAo = await createTestAO(destination.id);
+      const location = await createTestLocation(sourceAo.id);
+      const event = await createTestEvent(sourceAo.id, location.id);
+      const id = crypto.randomUUID();
+      await insertPendingRequest({
+        id,
+        regionId: destination.id,
+        requestType: "move_event_to_different_ao",
+      });
+
+      const result = await createTestClient().request.validateSubmissionByAdmin(
+        {
+          id,
+          requestType: "move_event_to_different_ao",
+          submittedBy: "submitter@example.com",
+          originalEventId: event.id,
+          originalAoId: sourceAo.id,
+          originalRegionId: source.id,
+          newAoId: destinationAo.id,
+          newRegionId: destination.id,
+        },
+      );
+      expect(result.status).toBe("approved");
+      await notificationStartedPromise;
+
+      // The request transaction committed to `destination`; the AO is then
+      // reparented while detached work is held at a deterministic barrier.
+      // Notification must use the transaction's snapshot, not a post-commit AO lookup.
+      await db
+        .update(schema.orgs)
+        .set({ parentId: laterRegion.id })
+        .where(eq(schema.orgs.id, destinationAo.id));
+      releaseNotification();
+      await waitForRegionNotificationTasks();
+
+      expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+        expect.anything(),
+        destination.id,
+      );
+      expect(mockMaybeNotifyRegionInABox).not.toHaveBeenCalledWith(
+        expect.anything(),
+        laterRegion.id,
+      );
+    });
+  });
 
   describe("validateSubmissionByAdmin — originalLocationId preflight scoping", () => {
     // `handleMoveAOToNewLocation` always inserts a fresh location and moves the
@@ -1622,7 +2342,7 @@ describe("Request Router", () => {
         orgName: target.name,
         roleName: "editor",
       });
-      session.user?.roles?.push({
+      session.user?.roles.push({
         orgId: target.id,
         orgName: target.name,
         roleName: "editor",
@@ -1652,6 +2372,12 @@ describe("Request Router", () => {
         .from(schema.orgs)
         .where(eq(schema.orgs.id, ao.id));
       expect(movedAo?.parentId).toBe(target.id);
+      await vi.waitFor(() =>
+        expect(mockMaybeNotifyRegionInABox).toHaveBeenCalledWith(
+          expect.anything(),
+          target.id,
+        ),
+      );
     });
   });
 
@@ -1747,7 +2473,7 @@ describe("Request Router", () => {
         orgName: region.name,
         roleName: "editor",
       });
-      session.user?.roles?.push({
+      session.user?.roles.push({
         orgId: region.id,
         orgName: region.name,
         roleName: "editor",
@@ -1787,10 +2513,8 @@ describe("Request Router", () => {
       // Two DISTINCT locations in the source region, one event on each.
       const locA = await createTestLocation(source.id);
       const locB = await createTestLocation(source.id);
-      if (!locA || !locB) return;
       const eventA = await createTestEvent(ao.id, locA.id);
       const eventB = await createTestEvent(ao.id, locB.id);
-      if (!eventA || !eventB) return;
 
       const requestId = crypto.randomUUID();
       await insertPendingRequest({

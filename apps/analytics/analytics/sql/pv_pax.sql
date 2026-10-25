@@ -2,7 +2,7 @@ WITH params AS (
     SELECT ?::TIMESTAMPTZ AS refreshed_at, ?::DATE AS as_of_date
 ),
 user_base AS (
-    SELECT u.id AS user_id,
+    SELECT u.id AS user_id, u.email,
            COALESCE(NULLIF(u.f3_name, ''), CAST(u.id AS VARCHAR)) AS f3_name,
            u.home_region_id,
            u.avatar_url,
@@ -35,11 +35,28 @@ eligible_events AS (
         ELSE COALESCE(json_extract(CAST(ei.meta AS JSON), '$.exclude_from_pax_vault')::BOOLEAN, false)
       END = false
 ),
-observed AS (
-    SELECT DISTINCT a.user_id, e.event_id, e.region_id, e.ao_id, e.ao_name
+eligible_actual_attendance AS (
+    SELECT a.id AS attendance_id, a.user_id, e.event_id, e.region_id, e.ao_id, e.ao_name
     FROM pg.public.attendance a
     JOIN eligible_events e ON e.event_id = a.event_instance_id
-    WHERE a.user_id IS NOT NULL AND a.is_planned = false AND e.region_id IS NOT NULL
+    WHERE a.user_id IS NOT NULL AND a.is_planned = false
+),
+observed AS (
+    SELECT DISTINCT user_id, event_id, region_id, ao_id, ao_name
+    FROM eligible_actual_attendance
+    WHERE region_id IS NOT NULL
+),
+lifetime_counts AS (
+    SELECT aa.user_id,
+           COUNT(DISTINCT aa.event_id)::INTEGER AS lifetime_posts,
+           COUNT(DISTINCT CASE WHEN EXISTS (
+               SELECT 1
+               FROM pg.public.attendance_x_attendance_types ax
+               JOIN pg.public.attendance_types att_type ON att_type.id = ax.attendance_type_id
+               WHERE ax.attendance_id = aa.attendance_id AND att_type.type = 'Q'
+           ) THEN aa.event_id END)::INTEGER AS lifetime_qs
+    FROM eligible_actual_attendance aa
+    GROUP BY aa.user_id
 ),
 region_values AS (
     SELECT u.*, hr.name AS home_region_name,
@@ -58,7 +75,7 @@ region_values AS (
     FROM user_base u LEFT JOIN pg.public.orgs hr ON hr.id = u.home_region_id
 )
 SELECT p.refreshed_at, r.user_id, r.f3_name, r.home_region_id, r.home_region_name,
-       r.avatar_url, r.status, r.start_date_override, r.regions, r.aos,
+       r.avatar_url, r.email, r.status, r.start_date_override, r.regions, r.aos,
        COALESCE((SELECT list(struct_pack(type_id := x.id, type_name := x.name) ORDER BY x.name, x.id)
                  FROM (SELECT DISTINCT et.id, COALESCE(et.name, CAST(et.id AS VARCHAR)) AS name
                        FROM observed o JOIN pg.public.event_instances_x_event_types xt ON xt.event_instance_id = o.event_id
@@ -70,6 +87,27 @@ SELECT p.refreshed_at, r.user_id, r.f3_name, r.home_region_id, r.home_region_nam
                        FROM observed o JOIN pg.public.event_tags_x_event_instances xt ON xt.event_instance_id = o.event_id
                        JOIN pg.public.event_tags t ON t.id = xt.event_tag_id
                        WHERE o.user_id = r.user_id) x),
-                []::STRUCT(tag_id INTEGER, tag_name VARCHAR)[]) AS tags
-FROM region_values r CROSS JOIN params p
+                 []::STRUCT(tag_id INTEGER, tag_name VARCHAR)[]) AS tags,
+        COALESCE((SELECT list(struct_pack(role_id := x.role_id, role_name := x.role_name,
+                                         org_id := x.org_id, org_name := x.org_name,
+                                         org_type := x.org_type)
+                              ORDER BY x.org_id, x.role_id)
+                  FROM (SELECT assignments.role_id,
+                               COALESCE(role.name, CAST(assignments.role_id AS VARCHAR)) AS role_name,
+                               assignments.org_id,
+                               COALESCE(o.name, CAST(assignments.org_id AS VARCHAR)) AS org_name,
+                               o.org_type
+                        FROM (SELECT DISTINCT user_id, role_id, org_id
+                              FROM pg.public.roles_x_users_x_org
+                              WHERE user_id = r.user_id
+                                AND user_id IS NOT NULL AND role_id IS NOT NULL AND org_id IS NOT NULL) assignments
+                        LEFT JOIN pg.public.roles role ON role.id = assignments.role_id
+                        LEFT JOIN pg.public.orgs o ON o.id = assignments.org_id) x),
+                  []::STRUCT(role_id INTEGER, role_name VARCHAR, org_id INTEGER,
+                             org_name VARCHAR, org_type VARCHAR)[]) AS roles,
+        COALESCE(lc.lifetime_posts, 0)::INTEGER AS lifetime_posts,
+        COALESCE(lc.lifetime_qs, 0)::INTEGER AS lifetime_qs
+FROM region_values r
+LEFT JOIN lifetime_counts lc ON lc.user_id = r.user_id
+CROSS JOIN params p
 ORDER BY r.f3_name, r.user_id

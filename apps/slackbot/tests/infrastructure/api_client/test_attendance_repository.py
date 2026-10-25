@@ -27,7 +27,7 @@ class ApiAttendanceRepositoryTest(unittest.TestCase):
             ]
         }
         result = self.repo.get_planned_for_event_instance(10)
-        self.client.get.assert_called_once_with("/v1/attendance/event-instance/10", params={"isPlanned": True})
+        self.client.get.assert_called_once_with("/v1/attendance/event-instance/10", params={"isPlanned": "true"})
         self.assertEqual(result[0].attendance_type_ids, [2])
         self.assertEqual(result[0].f3_name, "Dredd")
 

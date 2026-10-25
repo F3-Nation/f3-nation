@@ -37,6 +37,7 @@ export interface SparseF3Marker {
 //   };
 
 export interface F3RegionMapSearchResult {
+  key: string;
   header: string;
   type: "region";
   destination: {
@@ -51,6 +52,7 @@ export interface F3RegionMapSearchResult {
 }
 
 export interface F3LocationMapSearchResult {
+  key: string;
   header: string;
   type: "location";
   destination: {
@@ -68,6 +70,7 @@ export interface F3LocationMapSearchResult {
 }
 
 export interface GeoMapSearchResult {
+  key: string;
   header: string;
   type: "geo";
   description: string;

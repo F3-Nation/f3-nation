@@ -15,12 +15,13 @@ import {
 
 const mocks = vi.hoisted(() => {
   vi.stubEnv("NEXT_PUBLIC_AUTH_URL", "https://auth.example.test");
-  return { key: vi.fn(), limit: vi.fn(), warn: vi.fn() };
+  return { key: vi.fn(), limit: vi.fn(), warn: vi.fn(), error: vi.fn() };
 });
 
 vi.mock("../../logger", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiLogger>()),
   logWarn: mocks.warn,
+  logError: mocks.error,
 }));
 
 // Keep real JWT signature/issuer/expiry checks, replacing only JWKS retrieval.
@@ -275,6 +276,50 @@ describe("Personal operations authentication", () => {
       }
     }
     expect(await state(ownerId)).toEqual(before);
+  });
+
+  it("reports an unreachable signing-key set instead of failing silently into 401s", async () => {
+    mocks.error.mockClear();
+    const down = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("connect ECONNREFUSED"), {
+        code: "ECONNREFUSED",
+      }),
+    });
+    mocks.key.mockRejectedValueOnce(down);
+    await expect(clientFor(userToken).identity()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    expect(mocks.error).toHaveBeenCalledWith(
+      "api.auth.jwks_unavailable",
+      { reason: "ECONNREFUSED" },
+      down,
+    );
+  });
+
+  it("stays silent for a token whose key id isn't in the set", async () => {
+    mocks.error.mockClear();
+    mocks.key.mockRejectedValueOnce(
+      Object.assign(new Error("no applicable key found"), {
+        code: "ERR_JWKS_NO_MATCHING_KEY",
+      }),
+    );
+    await expect(clientFor(userToken).identity()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    expect(
+      mocks.error.mock.calls.map(([event]) => String(event)),
+    ).not.toContain("api.auth.jwks_unavailable");
+  });
+
+  it("stays silent for an ordinary bad token or an API key on the JWT path", async () => {
+    mocks.error.mockClear();
+    await expect(clientFor(expiredToken).identity()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await clientFor(keys.unprivileged).identity();
+    expect(
+      mocks.error.mock.calls.map(([event]) => String(event)),
+    ).not.toContain("api.auth.jwks_unavailable");
   });
 
   it.each(["session", "jwt", "session-and-key"] as const)(

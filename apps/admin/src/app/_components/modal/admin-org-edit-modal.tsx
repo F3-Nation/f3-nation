@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
+import { IsActiveStatus } from "@acme/shared/app/enums";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import {
@@ -60,19 +61,25 @@ import {
   openModal,
 } from "~/utils/store/modal";
 
-export default function AdminOrgEditModal({
-  orgType,
-  id,
-  isProd = true,
-}: {
+interface AdminOrgEditModalProps {
   orgType: EditableOrgType;
   id?: number | null;
   isProd?: boolean;
-}) {
+}
+
+export default function AdminOrgEditModal(props: AdminOrgEditModalProps) {
+  return (
+    <OrgEditForm key={`${props.orgType}:${props.id ?? "new"}`} {...props} />
+  );
+}
+
+function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
   const config = orgEditorConfig[orgType];
   const label = orgTypeDisplay[orgType].label;
   const { parentTypes } = config;
   const hasParent = parentTypes.length > 0;
+  const isRegionEditor = orgType === "region";
+  const isEditingRegion = isRegionEditor && id != null && id >= 0;
   const parentLabel = parentTypes
     .map((parentType) => orgTypeDisplay[parentType].label)
     .join(" or ");
@@ -80,19 +87,58 @@ export default function AdminOrgEditModal({
   const fieldClass = config.compactLayout
     ? "mb-4 w-1/2 px-2"
     : "mb-4 w-full px-2 sm:w-1/2";
-  const { data: orgResponse } = useQuery(
-    orpc.org.byId.queryOptions({
+  const {
+    data: orgResponse,
+    isPending: orgPending,
+    isError: orgError,
+  } = useQuery({
+    ...orpc.org.byId.queryOptions({
       input: { id: id ?? -1, orgType },
       enabled: gte(id, 0),
     }),
-  );
+    ...(isRegionEditor ? { throwOnError: false } : {}),
+  });
   const org = orgResponse?.org;
-  const { data: parents } = useFetchAllPages({
+  const {
+    data: sourceAccess,
+    isPending: sourceAccessPending,
+    isError: sourceAccessError,
+  } = useQuery({
+    ...orpc.request.canEditRegions.queryOptions({
+      input: { orgIds: id != null ? [id] : [] },
+      enabled: isEditingRegion,
+    }),
+    throwOnError: false,
+  });
+  const regionRecordUnavailable = isEditingRegion && !org;
+  const sourceAccessDenied =
+    isEditingRegion && sourceAccess?.results[0]?.success === false;
+  const canChangeRegionParent =
+    !isEditingRegion ||
+    (!regionRecordUnavailable &&
+      !sourceAccessPending &&
+      !sourceAccessError &&
+      sourceAccess.results[0]?.success === true);
+  const { data: currentParentResponse, isPending: currentParentPending } =
+    useQuery({
+      ...orpc.org.byId.queryOptions({
+        input: { id: org?.parentId ?? -1 },
+        enabled: isRegionEditor && org?.parentId != null,
+      }),
+      throwOnError: false,
+    });
+  const {
+    data: parents,
+    isPending: parentsPending,
+    isError: parentsError,
+  } = useFetchAllPages({
     path: ["org", "all"],
-    queryKey: ["org.all.everyParent", parentTypes],
+    queryKey: ["org.all.everyParent", parentTypes, isRegionEditor],
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { orgs, total } = await client.org.all({
         orgTypes: parentTypes,
+        statuses: IsActiveStatus,
+        ...(isRegionEditor ? { onlyMine: true } : {}),
         pageIndex,
         pageSize,
       });
@@ -101,19 +147,90 @@ export default function AdminOrgEditModal({
     enabled: hasParent,
   });
   const router = useRouter();
+  const currentParent = currentParentResponse?.org;
   const parentOptions = (parents ?? [])
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter((parent) => parent.isActive || parent.id === org?.parentId)
+    .map(({ id, name, orgType, isActive }) => ({
+      id,
+      name,
+      orgType,
+      isActive,
+    }));
+  if (
+    isRegionEditor &&
+    currentParent &&
+    parentTypes.includes(currentParent.orgType) &&
+    !parentOptions.some((parent) => parent.id === currentParent.id)
+  ) {
+    // Keeping the existing parent requires source access only, even when that
+    // parent is inactive or outside the caller's editable destination scope.
+    parentOptions.push(currentParent);
+  }
+  if (config.parentControl !== "combobox") {
+    parentOptions.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  const hasAlternativeParent = parents?.some(
+    (parent) => parent.isActive && parent.id !== org?.parentId,
+  );
+  const parentChangeDisabled =
+    isRegionEditor &&
+    (!canChangeRegionParent ||
+      parentsPending ||
+      parentsError ||
+      !hasAlternativeParent);
+  const regionRecordMessage =
+    !org && orgError
+      ? "Unable to load this Region. Try again before saving."
+      : orgPending
+        ? "Loading Region details. Wait before saving."
+        : "This Region could not be found. Reload before saving.";
+  let parentHelp: string | undefined;
+  if (isRegionEditor) {
+    if (regionRecordUnavailable) {
+      parentHelp = regionRecordMessage;
+    } else if (sourceAccessDenied) {
+      parentHelp =
+        "You need editor or admin access to this Region to change its parent.";
+    } else if (isEditingRegion && sourceAccessError) {
+      parentHelp =
+        "Unable to verify Region access. You can save other changes with the current parent; parent changes are unavailable.";
+    } else if (isEditingRegion && sourceAccessPending) {
+      parentHelp =
+        "Checking Region access. You can save other changes with the current parent; parent changes are unavailable.";
+    } else if (parentsError) {
+      parentHelp =
+        "Unable to load editable parent choices. Try again before changing the parent.";
+    } else if (parentsPending) {
+      parentHelp = "Loading editable parent choices...";
+    } else if (!hasAlternativeParent) {
+      parentHelp = isEditingRegion
+        ? "No other editable Area or Territory is available. The current parent is retained, and you can save other Region details."
+        : "No active editable Area or Territory is available.";
+    } else {
+      parentHelp =
+        "You can change the parent to an Area or Territory where you have editor or admin access.";
+    }
+  }
   const renderParentItem = (parent: (typeof parentOptions)[number]) => (
     <SelectItem
       key={`${parent.orgType}-${parent.id}`}
       value={parent.id.toString()}
     >
       {parent.name}
+      {!parent.isActive && " (inactive)"}
     </SelectItem>
   );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saveCompleted, setSaveCompleted] = useState(false);
+  const submittingRef = useRef(false);
+  const createdOrgId = useRef<number | "unknown" | null>(null);
+  const [saveRecovery, setSaveRecovery] = useState<
+    | { step: "upload" | "update"; detail: string }
+    | "missing-id"
+    | "saved"
+    | null
+  >(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
@@ -181,9 +298,7 @@ export default function AdminOrgEditModal({
   const showDeactivateButton =
     config.deactivate === "active"
       ? org?.id != null && org.isActive
-      : config.deactivate === "existing" &&
-        isEditing &&
-        org?.isActive !== false;
+      : config.deactivate === "existing" && isEditing && org.isActive !== false;
 
   const onSuccess = async () => {
     const invalidation = invalidateQueries("org");
@@ -194,17 +309,18 @@ export default function AdminOrgEditModal({
     );
     router.refresh();
   };
-  const onError = (error: unknown) => {
-    toast.error(
-      config.rawErrorMessage
-        ? error instanceof Error
-          ? error.message
-          : `Failed to update ${orgType}`
-        : error instanceof ORPCError && error.code === "UNAUTHORIZED"
-          ? `You are not authorized to ${actionText} this ${orgType}`
-          : `Failed to ${actionText} ${orgType}`,
-    );
-  };
+  const errorDetail = (error: unknown, action = actionText) =>
+    config.rawErrorMessage
+      ? error instanceof Error
+        ? error.message
+        : `Failed to update ${orgType}`
+      : error instanceof ORPCError && error.code === "UNAUTHORIZED"
+        ? `You are not authorized to ${action} this ${orgType}`
+        : `Failed to ${action} ${orgType}`;
+  const onError = (error: unknown) => toast.error(errorDetail(error));
+  const partialSaveMessage = (step: "upload" | "update") =>
+    `This ${label} was created, but ${step === "upload" ? "uploading its logo" : "saving its remaining changes"} failed.`;
+  const savedRecoveryMessage = `This ${label} was saved, but the screen could not finish updating. Close this form, reload the page, and check the organization list before making more changes.`;
   const crupdateOrg = useMutation(
     orpc.org.crupdate.mutationOptions(
       config.logoPosition ? {} : { onSuccess, onError },
@@ -269,7 +385,7 @@ export default function AdminOrgEditModal({
       >
         <DialogHeader>
           <DialogTitle className="text-center">
-            {org?.id ? "Edit" : "Add"} {label}
+            {org?.id || isEditingRegion ? "Edit" : "Add"} {label}
           </DialogTitle>
         </DialogHeader>
 
@@ -277,7 +393,55 @@ export default function AdminOrgEditModal({
           <form
             onSubmit={form.handleSubmit(
               async (data) => {
+                if (submittingRef.current || createdOrgId.current === "unknown")
+                  return;
+                if (isRegionEditor) {
+                  if (regionRecordUnavailable) {
+                    toast.error(regionRecordMessage);
+                    return;
+                  }
+                  if (isEditingRegion && data.id !== org?.id) {
+                    toast.error(
+                      "Region details are not ready. Reload before saving.",
+                    );
+                    return;
+                  }
+                  if (sourceAccessDenied) {
+                    toast.error("You are not authorized to update this region");
+                    return;
+                  }
+                  // Let the API check unchanged-parent updates if the advisory
+                  // source lookup is unavailable. Moves need verified access.
+                  if (!isEditingRegion || data.parentId !== org?.parentId) {
+                    if (!canChangeRegionParent) {
+                      toast.error(
+                        "Region access must be verified before changing the parent",
+                      );
+                      return;
+                    }
+                    if (parentsError || parentsPending) {
+                      toast.error(
+                        "Unable to load editable parent choices. Try again before changing the parent.",
+                      );
+                      return;
+                    }
+                    if (
+                      !parents.some(
+                        (parent) =>
+                          parent.id === data.parentId && parent.isActive,
+                      )
+                    ) {
+                      toast.error(
+                        "You need editor or admin access to the selected Area or Territory",
+                      );
+                      return;
+                    }
+                  }
+                }
+                submittingRef.current = true;
                 setIsSubmitting(true);
+                let saved = false;
+                let step: "upload" | "update" = "update";
                 try {
                   const payload = {
                     ...data,
@@ -285,35 +449,61 @@ export default function AdminOrgEditModal({
                     orgType,
                   };
                   if (config.logoPosition) {
-                    let orgId = data.id;
+                    let orgId = createdOrgId.current ?? data.id;
                     if (!orgId) {
                       const result = await crupdateOrg.mutateAsync(payload);
                       orgId = result.org?.id;
+                      if (
+                        typeof orgId !== "number" ||
+                        !Number.isSafeInteger(orgId) ||
+                        orgId <= 0
+                      ) {
+                        createdOrgId.current = "unknown";
+                        setSaveRecovery("missing-id");
+                        return;
+                      }
+                      createdOrgId.current = orgId;
+                      form.setValue("id", orgId);
                     }
                     let logoUrl: string | undefined;
                     if (selectedLogoFile && orgId) {
+                      step = "upload";
                       setIsUploadingLogo(true);
                       logoUrl = await uploadLogo({
                         file: selectedLogoFile,
                         orgId,
                       });
                     }
+                    step = "update";
                     await crupdateOrg.mutateAsync({
                       ...payload,
                       id: orgId,
                       ...(logoUrl ? { logoUrl } : {}),
                     });
+                    saved = true;
+                    setSaveCompleted(true);
+                    setSaveRecovery(null);
                     await onSuccess();
                   } else {
                     await crupdateOrg.mutateAsync(payload);
                   }
                 } catch (error) {
-                  if (config.logoPosition) onError(error);
+                  if (config.logoPosition) {
+                    if (saved) {
+                      setSaveRecovery("saved");
+                      toast.error(savedRecoveryMessage);
+                    } else if (createdOrgId.current != null) {
+                      const detail = errorDetail(error, "update");
+                      toast.error(`${partialSaveMessage(step)} ${detail}`);
+                      setSaveRecovery({ step, detail });
+                    } else onError(error);
+                  }
                   if (config.submitErrorToast)
                     toast.error(`Failed to update ${orgType}`);
                 } finally {
                   setIsUploadingLogo(false);
                   setIsSubmitting(false);
+                  if (!saved) submittingRef.current = false;
                 }
               },
               () => {
@@ -333,7 +523,12 @@ export default function AdminOrgEditModal({
                     <FormItem>
                       <FormLabel>ID</FormLabel>
                       <FormControl>
-                        <Input placeholder="ID" disabled {...field} />
+                        <Input
+                          placeholder="ID"
+                          disabled
+                          {...field}
+                          value={field.value ?? ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -351,6 +546,7 @@ export default function AdminOrgEditModal({
                         <Input
                           placeholder="Name"
                           {...field}
+                          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                           value={field.value ?? ""}
                         />
                       </FormControl>
@@ -373,19 +569,17 @@ export default function AdminOrgEditModal({
                         {config.parentControl === "combobox" ? (
                           <VirtualizedCombobox
                             value={field.value?.toString()}
-                            options={
-                              parents
-                                ?.filter((org) =>
-                                  parentTypes.includes(org.orgType),
-                                )
-                                .map((region) => ({
-                                  value: region.id.toString(),
-                                  label: region.name,
-                                })) ?? []
-                            }
+                            options={parentOptions
+                              .filter((org) =>
+                                parentTypes.includes(org.orgType),
+                              )
+                              .map((region) => ({
+                                value: region.id.toString(),
+                                label: `${region.name}${region.isActive ? "" : " (inactive)"}`,
+                              }))}
                             searchPlaceholder={config.parentPlaceholder}
                             onSelect={(value) => {
-                              const orgId = safeParseInt(value as string);
+                              const orgId = safeParseInt(value);
                               if (orgId == null) {
                                 toast.error("Invalid orgId");
                                 return;
@@ -402,6 +596,7 @@ export default function AdminOrgEditModal({
                             }
                             defaultValue={field.value?.toString()}
                             data-testid={config.parentTestId}
+                            disabled={parentChangeDisabled}
                           >
                             <SelectTrigger>
                               <SelectValue
@@ -409,6 +604,17 @@ export default function AdminOrgEditModal({
                               />
                             </SelectTrigger>
                             <SelectContent>
+                              {isEditingRegion &&
+                                org?.parentId != null &&
+                                !parentOptions.some(
+                                  (parent) => parent.id === org.parentId,
+                                ) && (
+                                  <SelectItem value={org.parentId.toString()}>
+                                    {currentParentPending
+                                      ? "Loading current parent…"
+                                      : "Current parent"}
+                                  </SelectItem>
+                                )}
                               {parentTypes.length > 1
                                 ? parentTypes.map((parentType) => {
                                     const group = parentOptions.filter(
@@ -431,6 +637,26 @@ export default function AdminOrgEditModal({
                             </SelectContent>
                           </Select>
                         )}
+                        {isRegionEditor && (
+                          <p className="text-sm text-muted-foreground">
+                            {parentHelp}
+                          </p>
+                        )}
+                        {isEditingRegion &&
+                          !regionRecordUnavailable &&
+                          !sourceAccessDenied &&
+                          org?.parentId != null &&
+                          field.value !== org.parentId && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={isSubmitting}
+                              onClick={() => field.onChange(org.parentId)}
+                            >
+                              Keep current parent
+                            </Button>
+                          )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -650,6 +876,15 @@ export default function AdminOrgEditModal({
                     : "mb-4 w-full px-2"
                 }
               >
+                {saveRecovery && (
+                  <p role="status" className="mb-4 text-sm">
+                    {saveRecovery === "missing-id"
+                      ? `This ${label} may have been created, but its ID was not returned. Close this form, reload the page, and check the organization list before trying again. Saving is disabled to avoid creating a duplicate.`
+                      : saveRecovery === "saved"
+                        ? savedRecoveryMessage
+                        : `${partialSaveMessage(saveRecovery.step)} ${saveRecovery.detail} Your entries are kept. Save Changes will retry the same ${label} (ID ${createdOrgId.current}).`}
+                  </p>
+                )}
                 <div
                   className={
                     config.compactLayout
@@ -665,7 +900,18 @@ export default function AdminOrgEditModal({
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" className="w-full">
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={
+                      isSubmitting ||
+                      saveCompleted ||
+                      saveRecovery === "missing-id" ||
+                      saveRecovery === "saved" ||
+                      (isRegionEditor &&
+                        (regionRecordUnavailable || sourceAccessDenied))
+                    }
+                  >
                     {isSubmitting ? (
                       <div className="flex items-center gap-2">
                         Saving... <Spinner className="size-4" />
@@ -679,11 +925,14 @@ export default function AdminOrgEditModal({
                       type="button"
                       className="w-full bg-black hover:bg-black/80"
                       onClick={() => {
+                        const activeParents = parentOptions.filter(
+                          (parent) => parent.isActive,
+                        );
                         form.setValue("name", `Fake ${label}`);
                         form.setValue(
                           "parentId",
-                          parents?.[
-                            Math.floor(Math.random() * (parents?.length ?? 0))
+                          activeParents[
+                            Math.floor(Math.random() * activeParents.length)
                           ]?.id ?? -1,
                         );
                         form.setValue("website", `https://fake${orgType}.com`);

@@ -1,10 +1,10 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "2.2.7",
+  "version": "2.3.1",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3003",
+    "dev": "next dev --port ${F3_ME_PORT:-3003}",
     "build": "next build",
     "start": "next start --port 3003",
     "lint": "eslint . --max-warnings 0",
@@ -19,6 +19,7 @@
   "dependencies": {
     "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/observability": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/storage": "workspace:*",
     "@acme/ui": "workspace:*",
@@ -54,6 +55,7 @@
     "postcss": "catalog:",
     "postcss-load-config": "catalog:",
     "prettier": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

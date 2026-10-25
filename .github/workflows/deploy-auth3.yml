@@ -1,0 +1,74 @@
+name: Deploy Auth3
+
+# Better Auth's own Cloud Run service, standing up alongside
+# (not replacing) the existing f3-auth deployment that deploy-auth.yml
+# manages. Same Dockerfile, same GCP projects, separate service name
+# and URL — see apps/auth/scripts/cloud-run-env-auth3.sh for why this isn't
+# just a new input set on deploy-auth.yml.
+
+# workflow_dispatch only, deliberately: NOT a push-tag trigger. auth3 has
+# its own hand-made `auth3@x.y.z` tags (release-please doesn't manage it), so
+# it can ship newer Better Auth code without cutting an f3-auth release.
+# deploy-auth.yml's `auth@*` trigger doesn't match `auth3@` tags. To release:
+# tag a main commit whose CI is green (e.g. `git tag auth3@0.1.0 <sha> &&
+# git push origin auth3@0.1.0`), then dispatch this workflow with that tag.
+# First-time setup order: dispatch once to create the service (it fails
+# health checks until configured), then run
+# apps/auth/scripts/cloud-run-env-auth3.sh to set its env and secrets; that
+# script updates an existing service and can't create one. Once auth3
+# replaces f3-auth, fold it back into the auth@ release line.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing auth3 tag to (re-)deploy, e.g. auth3@0.1.0"
+        required: true
+        type: string
+
+# Prevent concurrent deploys of the same tag
+concurrency:
+  group: deploy-auth3-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+# Reusable workflows can't elevate GITHUB_TOKEN beyond what the caller grants.
+# id-token: write -> GCP OIDC (google-github-actions/auth); checks: read -> CI gate.
+permissions:
+  contents: read
+  id-token: write
+  checks: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_deploy-cloudrun.yml
+    with:
+      ref: ${{ inputs.tag }}
+      # Its own image: the image tag is the version after the prefix, so
+      # sharing f3-auth's image would let auth3@1.0.0 overwrite f3-auth:1.0.0,
+      # the image an f3-auth rollback to auth@1.0.0 uses.
+      image_name: f3-auth3
+      service_name: f3-auth3
+      staging_project: f3-authentication-staging
+      prod_project: f3-authentication
+      tag_prefix: auth3@
+      dockerfile: apps/auth/Dockerfile
+      # Reuses the existing auth-staging/auth-production GitHub Environments:
+      # auth3 deploys into the same GCP projects as f3-auth, so the same
+      # WIF_PROVIDER/WIF_SA (and prod approval gate) already apply.
+      staging_environment: auth-staging
+      prod_environment: auth-production
+      # Placeholder — update once DNS/domain mapping for auth3 exists (not
+      # automated in this repo; see apps/auth/scripts/cloud-run-env-auth3.sh).
+      staging_url: https://staging.auth3.f3nation.com
+      prod_url: https://auth3.f3nation.com
+      # Same rationale as deploy-auth.yml: in-memory rate limiter needs a
+      # single instance to stay authoritative until it moves to a shared
+      # store.
+      flags: "--min-instances=1 --max-instances=1"
+      # A brand-new service has no Cloud SQL attachment (f3-auth got its
+      # attachment when it was created by hand; see apps/auth/README.md), and
+      # auth reaches the database over the /cloudsql socket. --set (not --add)
+      # keeps redeploys idempotent. staging_flags/prod_flags replace `flags`,
+      # so they repeat the instance pinning.
+      staging_flags: "--min-instances=1 --max-instances=1 --set-cloudsql-instances=f3data:us-central1:f3data-nonprod"
+      prod_flags: "--min-instances=1 --max-instances=1 --set-cloudsql-instances=f3data:us-central1:f3data"

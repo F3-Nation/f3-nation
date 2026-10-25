@@ -70,7 +70,8 @@ export async function assertSelfOrEditorOnEventOrg({
 }): Promise<{ orgId: number }> {
   const orgId = await requireEventInstanceOrgId(ctx.db, eventInstanceId);
 
-  if (Number(ctx.session?.id) === targetUserId) {
+  // An API key's session.id is its owner, so keys never act as "self".
+  if (!ctx.session?.apiKey && Number(ctx.session?.id) === targetUserId) {
     return { orgId };
   }
 

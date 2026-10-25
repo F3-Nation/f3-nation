@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.2.11](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.10...pkg-auth@0.2.11) (2026-10-23)
+
+
+### Bug Fixes
+
+* **auth,map:** stop trusting client-supplied roles on JWT update ([#1341](https://github.com/F3-Nation/f3-nation/issues/1341)) ([f27c924](https://github.com/F3-Nation/f3-nation/commit/f27c9241d062ed417cd8701198cdc0583c7c4558))
+* **auth:** generate cryptographically secure OTP codes ([#1306](https://github.com/F3-Nation/f3-nation/issues/1306)) ([e5395f0](https://github.com/F3-Nation/f3-nation/commit/e5395f02d2b369627f401a5813e79d80448bb9e7))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.1
+    * @acme/shared bumped to 0.5.1
+
+## [0.2.10](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.9...pkg-auth@0.2.10) (2026-10-14)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.0
+    * @acme/shared bumped to 0.5.0
+
+## [0.2.9](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.8...pkg-auth@0.2.9) (2026-10-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.9.0
+    * @acme/logger bumped to 0.3.0
+
+## [0.2.8](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.7...pkg-auth@0.2.8) (2026-10-06)
+
+
+### Bug Fixes
+
+* **auth,map:** never register dev-mode sign-in in Production ([#1123](https://github.com/F3-Nation/f3-nation/issues/1123)) ([6d7f712](https://github.com/F3-Nation/f3-nation/commit/6d7f712c142016af41dd08b9544062e791bd746f))
+* **map,repo:** show the Dev Mode sign-in button on branch previews ([#1111](https://github.com/F3-Nation/f3-nation/issues/1111)) ([dcbb924](https://github.com/F3-Nation/f3-nation/commit/dcbb924178e63e741610e26ab3ae46a183ab1ad1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.8.0
+    * @acme/env bumped to 0.1.4
+    * @acme/shared bumped to 0.4.1
+
 ## [0.2.7](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.6...pkg-auth@0.2.7) (2026-09-23)
 
 

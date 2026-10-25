@@ -1,8 +1,10 @@
 <!-- BEGIN:nextjs-agent-rules -->
 
-# Next.js: ALWAYS read docs before coding
+# This is NOT the Next.js you know
 
-Before any Next.js work, find and read the relevant doc in `node_modules/next/dist/docs/`. Your training data is outdated — the docs are the source of truth.
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
 
@@ -12,7 +14,7 @@ Before any Next.js work, find and read the relevant doc in `node_modules/next/di
 
 The two most useful things to know up front:
 
-1. **In local development all outbound mail is caught by [Mailpit](https://mailpit.axllent.org/), started for you by `pnpm docker:up`.** Nothing leaves your machine, no SendGrid credentials are needed, and no real inbox has to be polled. Read messages at `http://localhost:8025` -- web UI for humans, REST API on the same port for agents.
+1. **In local development all outbound mail is caught by [Mailpit](https://mailpit.axllent.org/), started for you by `pnpm docker:up`.** Nothing leaves your machine, no SendGrid credentials are needed, and no real inbox has to be polled. Read messages at `$MAILPIT` (default `http://localhost:8025`) -- web UI for humans, REST API on the same port for agents.
 2. **Sign-in completes via NextAuth's standard CSRF + Credentials callback flow.** A `curl` of the magic link does **not** complete sign-in (the verify page is a client component that calls `signIn()` from a `useEffect`). For headless automation, POST `email + code` to `/api/auth/callback/email-mfa` with a CSRF token. See the recipe below.
 
 If you only read this section, you have enough to drive the auth flow programmatically. The rest of this doc is the recipe.
@@ -25,12 +27,12 @@ If you only read this section, you have enough to drive the auth flow programmat
 
 The MFA logic lives in `apps/auth/src/lib/email-mfa.ts`. There is **no environment branching in the transport** -- it is a single nodemailer transport built from the `EMAIL_SERVER` connection string, so which mail server receives a message is purely a matter of configuration:
 
-| Environment | `EMAIL_SERVER`                                | Where the mail lands                          |
-| ----------- | --------------------------------------------- | --------------------------------------------- |
-| Local dev   | `smtp://localhost:1025` (from `.env.example`) | Mailpit -- read it at `http://localhost:8025` |
-| Production  | SendGrid SMTP credentials                     | The recipient's real inbox                    |
+| Environment | `EMAIL_SERVER`                                | Where the mail lands                                               |
+| ----------- | --------------------------------------------- | ------------------------------------------------------------------ |
+| Local dev   | `smtp://localhost:1025` (from `.env.example`) | Mailpit -- read it at `$MAILPIT` (default `http://localhost:8025`) |
+| Production  | SendGrid SMTP credentials                     | The recipient's real inbox                                         |
 
-`smtp://localhost:1025` is the default in `apps/auth/.env.example`, and port 1025 is Mailpit's SMTP listener in `docker-compose.yml`. **Nothing is logged when a message is sent** -- retrieve mail from Mailpit, never from the auth server's stdout.
+`smtp://localhost:1025` is the default in `apps/auth/.env.example` (a slotted checkout gets `F3_MAILPIT_SMTP_PORT` instead), and port 1025 is Mailpit's SMTP listener in `docker-compose.yml`. **Nothing is logged when a message is sent** -- retrieve mail from Mailpit, never from the auth server's stdout.
 
 ---
 
@@ -86,13 +88,17 @@ From the monorepo root:
 pnpm dev   # turbo dev --parallel -- starts apps/auth, apps/api, apps/me, apps/map, ...
 ```
 
-Or run only what you need (see `docs/LOCAL_DEV_SETUP.md` for the minimum stack per app). For an apps/me QA run you need at least `apps/auth` (`:3004`) and `apps/api` (`:3001`) plus a Postgres DB.
+Or run only what you need. For an apps/me QA run you need at least `apps/auth` (default `:3004`) and `apps/api` (default `:3001`) plus a Postgres DB.
 
 Make sure the Docker services are up, since Mailpit is the only place sent mail can be read:
 
 ```bash
 pnpm docker:up
-curl -sf http://localhost:8025/api/v1/messages >/dev/null && echo "Mailpit is up"
+# Slotted checkout (`local:setup --slot N`)? Load its ports first: set -a; . ./.env; set +a
+MAILPIT="http://localhost:${F3_MAILPIT_UI_PORT:-8025}"
+AUTH="http://localhost:${F3_AUTH_PORT:-3004}"
+ME="http://localhost:${F3_ME_PORT:-3003}"
+curl -sf "$MAILPIT"/api/v1/messages >/dev/null && echo "Mailpit is up"
 ```
 
 ### 1. Get a CSRF token
@@ -100,7 +106,7 @@ curl -sf http://localhost:8025/api/v1/messages >/dev/null && echo "Mailpit is up
 NextAuth requires a CSRF token on every Credentials POST. Fetch it once and reuse the cookie jar:
 
 ```bash
-CSRF=$(curl -sc /tmp/jar http://localhost:3004/api/auth/csrf | jq -r .csrfToken)
+CSRF=$(curl -sc /tmp/jar $AUTH/api/auth/csrf | jq -r .csrfToken)
 echo "csrfToken: $CSRF"
 ```
 
@@ -112,7 +118,7 @@ Either drive a calling app's login route...
 
 ```bash
 # example: apps/me
-curl -sb /tmp/jar -L 'http://localhost:3003/api/auth/login?returnTo=/profile' >/dev/null
+curl -sb /tmp/jar -L "$ME/api/auth/login?returnTo=/profile" >/dev/null
 ```
 
 ...or hit the auth server's `POST /api/verify-email?action=send` endpoint directly with `{ email }` and skip the UI:
@@ -120,7 +126,7 @@ curl -sb /tmp/jar -L 'http://localhost:3003/api/auth/login?returnTo=/profile' >/
 ```bash
 curl -sb /tmp/jar -X POST -H 'Content-Type: application/json' \
   -d '{"email":"qa-bot@f3nation.test"}' \
-  'http://localhost:3004/api/verify-email?action=send'
+  "$AUTH/api/verify-email?action=send"
 ```
 
 Either way, `sendEmailCode()` runs and a new message appears in Mailpit.
@@ -130,8 +136,8 @@ Either way, `sendEmailCode()` runs and a new message appears in Mailpit.
 Mailpit's REST API lists messages newest-first, so read the newest ID and grep the `code=` parameter out of its HTML body:
 
 ```bash
-ID=$(curl -s http://localhost:8025/api/v1/messages | jq -r '.messages[0].ID')
-CODE=$(curl -s "http://localhost:8025/api/v1/message/$ID" \
+ID=$(curl -s "$MAILPIT"/api/v1/messages | jq -r '.messages[0].ID')
+CODE=$(curl -s "$MAILPIT/api/v1/message/$ID" \
   | jq -r '.HTML' \
   | grep -oE 'code=[0-9]{6}' | head -1 | cut -d= -f2)
 echo "MFA code: $CODE"
@@ -140,7 +146,7 @@ echo "MFA code: $CODE"
 Codes are single-use, and each new send invalidates the previous code for that address -- so reusing a stale message is the most common silent failure. The cheapest guard is to empty the mailbox before triggering the send, which makes "newest message" unambiguous:
 
 ```bash
-curl -s -X DELETE http://localhost:8025/api/v1/messages
+curl -s -X DELETE "$MAILPIT"/api/v1/messages
 ```
 
 ### 4. POST the code to NextAuth's Credentials callback
@@ -151,9 +157,9 @@ curl -sb /tmp/jar -c /tmp/jar -L -X POST \
   --data-urlencode "csrfToken=$CSRF" \
   --data-urlencode "email=qa-bot@f3nation.test" \
   --data-urlencode "code=$CODE" \
-  --data-urlencode "callbackUrl=http://localhost:3004/" \
+  --data-urlencode "callbackUrl=$AUTH/" \
   --data-urlencode "json=true" \
-  http://localhost:3004/api/auth/callback/email-mfa
+  $AUTH/api/auth/callback/email-mfa
 ```
 
 NextAuth runs the `email-mfa` provider's `authorize()` callback (see `apps/auth/src/lib/auth-options.ts`), which calls `verifyEmailCode(email, code)`. On success the response sets the session cookie (`next-auth.session-token` in dev) in `/tmp/jar`. The `json=true` form field makes the callback respond with JSON instead of an HTTP redirect, which is easier to assert on.
@@ -166,10 +172,10 @@ You now have a logged-in session in the cookie jar. Continue any OAuth callback 
 
 ```bash
 # Follow the calling-app callback to mint that app's session
-curl -sb /tmp/jar -c /tmp/jar -L 'http://localhost:3003/api/auth/callback?...' >/dev/null
+curl -sb /tmp/jar -c /tmp/jar -L "$ME/api/auth/callback?..." >/dev/null
 
 # Use the session
-curl -sb /tmp/jar http://localhost:3003/api/auth/me
+curl -sb /tmp/jar $ME/api/auth/me
 # -> {"user":{"id":...,"email":"qa-bot@f3nation.test",...}}
 ```
 
@@ -179,7 +185,7 @@ When you're driving a real browser and want to exercise the verify form's UI its
 
 ```bash
 # Drive the browser to /login/email, submit the email
-browser_navigate "http://localhost:3004/login/email"
+browser_navigate "$AUTH/login/email"
 browser_fill "[name=email]" "qa-bot@f3nation.test"
 browser_click "[type=submit]"
 
@@ -191,9 +197,9 @@ browser_click "[type=submit]"
 Or exercise the magic link in a JS-capable browser:
 
 ```bash
-MAGIC_LINK=$(curl -s "http://localhost:8025/api/v1/message/$ID" \
+MAGIC_LINK=$(curl -s "$MAILPIT/api/v1/message/$ID" \
   | jq -r '.HTML' \
-  | grep -oE 'http://localhost:3004/login/email/verify\?[^"]+' | head -1)
+  | grep -oE "$AUTH/login/email/verify\?[^\"]+" | head -1)
 browser_navigate "$MAGIC_LINK"
 # -> page renders, useEffect fires signIn("email-mfa", ...), session cookie is set
 ```
@@ -204,8 +210,8 @@ Form/magic-link modes are slower and only needed if you specifically want to QA 
 
 ## Failure modes worth knowing
 
-- **Mailpit's message list is empty.** Either the send never happened, or the mail went somewhere else. Check that Mailpit is running (`docker ps | grep f3-mailpit`, or `pnpm docker:up`) and that `EMAIL_SERVER` in `apps/auth/.env` is `smtp://localhost:1025` -- a stale value pointed at SendGrid will fail or, worse, deliver to a real address.
-- **You extracted a code but it's rejected.** You probably read a stale message. Codes are single-use and each send invalidates the prior one, so `.messages[0]` may be a previous run's email. Empty the mailbox (`curl -s -X DELETE http://localhost:8025/api/v1/messages`) before triggering the send.
+- **Mailpit's message list is empty.** Either the send never happened, or the mail went somewhere else. Check that Mailpit is running (`docker ps | grep mailpit`, or `pnpm docker:up`) and that `EMAIL_SERVER` in `apps/auth/.env` is `smtp://localhost:1025` -- a stale value pointed at SendGrid will fail or, worse, deliver to a real address.
+- **You extracted a code but it's rejected.** You probably read a stale message. Codes are single-use and each send invalidates the prior one, so `.messages[0]` may be a previous run's email. Empty the mailbox (`curl -s -X DELETE "$MAILPIT"/api/v1/messages`) before triggering the send.
 - **CSRF callback returns 200 but no session cookie is set.** `verifyEmailCode()` returned null -- likely the user doesn't exist (new user flow), the code was already consumed, or the code expired. Codes have a 10-minute TTL (`CODE_TTL_MINUTES` in `email-mfa.ts`). Each new send invalidates older codes for the same email. To unblock new-user testing, seed the user before driving the flow.
 - **CSRF callback redirects to `/login?error=...`.** Add `--data-urlencode "json=true"` to the curl invocation; without it, NextAuth returns an HTTP redirect instead of JSON, and `curl -L` may follow that redirect into the error page. With JSON mode you can inspect the body directly.
 - **Magic link "works" in a browser but `curl` gets HTML and no session.** Expected -- `/login/email/verify` is a client component. Use the CSRF + callback recipe instead. If you must exercise the magic link, drive a real browser.
@@ -226,7 +232,6 @@ The one thing to be careful about is the inverse of the old risk: a local `.env`
 ## See also
 
 - [`apps/auth/README.md`](README.md) -- full architecture, deployment, OAuth client registration
-- [`docs/LOCAL_DEV_SETUP.md`](../../docs/LOCAL_DEV_SETUP.md) -- monorepo-wide environment and credential bootstrap
 - [`docs/LOCAL_DEV_DOCKER.md`](../../docs/LOCAL_DEV_DOCKER.md) -- bringing up Mailpit and the rest of the Docker stack
 - [`apps/auth/src/lib/email-mfa.ts`](src/lib/email-mfa.ts) -- the source of truth for what gets emailed
 - [`apps/auth/src/lib/auth-options.ts`](src/lib/auth-options.ts) -- the NextAuth Credentials provider that the callback flow drives

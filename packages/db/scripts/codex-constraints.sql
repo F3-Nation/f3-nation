@@ -1,4 +1,4 @@
--- Owner-run companion to migration 0027_codex_schema.sql.
+-- Owner-run companion to migration 0033_codex_schema.sql.
 --
 -- The `codex` schema is externally provisioned and owned by `app_codex`; the
 -- Drizzle migration role cannot ALTER its tables. This script installs the

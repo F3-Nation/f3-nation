@@ -9,7 +9,13 @@
 import { vi } from "vitest";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
-const mockLimit = vi.hoisted(() => vi.fn());
+const { mockLimit, mockRegionNotification } = vi.hoisted(() => ({
+  mockLimit: vi.fn(),
+  mockRegionNotification: vi.fn(),
+}));
+const mockRoleCheckHook = vi.hoisted(() => ({
+  afterSuccess: null as null | (() => Promise<void>),
+}));
 
 vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   MemoryRatelimiter: vi.fn(function () {
@@ -17,12 +23,37 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { and, count, eq, gte, schema } from "@acme/db";
+vi.mock("../lib/first-event-service", () => ({
+  maybeNotifyRegionInABox: mockRegionNotification,
+}));
+
+import type { OrgType } from "@acme/shared/app/enums";
+vi.mock("../check-has-role-on-org", async (importOriginal) => {
+  const original = await importOriginal<typeof CheckHasRoleOnOrgModule>();
+  return {
+    ...original,
+    checkHasRoleOnOrg: async (
+      params: Parameters<typeof original.checkHasRoleOnOrg>[0],
+    ) => {
+      const result = await original.checkHasRoleOnOrg(params);
+      const afterSuccess = mockRoleCheckHook.afterSuccess;
+      if (result.success && afterSuccess) {
+        mockRoleCheckHook.afterSuccess = null;
+        await afterSuccess();
+      }
+      return result;
+    },
+  };
+});
+
+import type * as CheckHasRoleOnOrgModule from "../check-has-role-on-org";
+import { and, count, eq, gte, inArray, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
   createAdminSession,
   createEditorSession,
+  createOrgTree,
   createTestClient,
   db,
   getOrCreateF3NationOrg,
@@ -39,6 +70,7 @@ const nextFutureMonday = (n: number): string => {
 describe("Org Router", () => {
   // Track created orgs for cleanup
   const createdOrgIds: number[] = [];
+  const createdLocationIds: number[] = [];
   // Track created users for cleanup (only the accessible/non-nation-admin
   // tests need a real DB-backed user — everything else uses a purely mocked
   // session)
@@ -46,6 +78,7 @@ describe("Org Router", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRoleCheckHook.afterSuccess = null;
     // Reset rate limiter to allow requests
     mockLimit.mockResolvedValue({
       success: true,
@@ -53,6 +86,7 @@ describe("Org Router", () => {
       remaining: 9,
       reset: Date.now() + 60000,
     });
+    mockRegionNotification.mockResolvedValue(undefined);
   });
 
   afterAll(async () => {
@@ -62,6 +96,13 @@ describe("Org Router", () => {
     for (const userId of createdUserIds.reverse()) {
       try {
         await cleanup.user(userId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    for (const locationId of createdLocationIds.reverse()) {
+      try {
+        await cleanup.location(locationId);
       } catch {
         // Ignore errors during cleanup
       }
@@ -77,6 +118,84 @@ describe("Org Router", () => {
   });
 
   describe("all", () => {
+    describe("parent ID filtering", () => {
+      const tree = createOrgTree();
+
+      afterAll(async () => tree.cleanup());
+
+      it("accepts the no-match parent sentinel and returns no rows or matching total", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const prefix = `NoMatchParent-${uniqueId()}`;
+        const area = await tree.create({ orgType: "area" });
+        const region = await tree.create({
+          orgType: "region",
+          parentId: area.id,
+          name: `${prefix} Region`,
+        });
+        const client = createTestClient();
+        const input = { searchTerm: prefix, pageIndex: 0, pageSize: 1 };
+        const unfiltered = await client.org.all({
+          orgTypes: ["region"],
+          ...input,
+        });
+        expect(unfiltered.orgs.map((org) => org.id)).toEqual([region.id]);
+        expect(unfiltered.total).toBe(1);
+
+        const result = await client.org.all({
+          orgTypes: ["region"],
+          ...input,
+          parentOrgIds: [-1],
+        });
+        expect(result).toEqual({ orgs: [], total: 0 });
+      });
+
+      it("filters mixed Territory and Area parents before pagination and counting", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const prefix = `MixedParentPages-${uniqueId()}`;
+        const territory = await tree.create({ orgType: "territory" });
+        const area = await tree.create({
+          orgType: "area",
+          parentId: territory.id,
+        });
+        const siblingArea = await tree.create({
+          orgType: "area",
+          parentId: territory.id,
+        });
+        // The unrelated row sorts first, so filtering after LIMIT is observable.
+        await tree.create({
+          orgType: "region",
+          parentId: siblingArea.id,
+          name: `${prefix} Unrelated Region`,
+        });
+        const directRegion = await tree.create({
+          orgType: "region",
+          parentId: territory.id,
+          name: `${prefix} Direct Territory Region`,
+        });
+        const areaRegion = await tree.create({
+          orgType: "region",
+          parentId: area.id,
+          name: `${prefix} Area Region`,
+        });
+        const client = createTestClient();
+        const seenIds: number[] = [];
+        for (let pageIndex = 0; pageIndex < 2; pageIndex++) {
+          const page = await client.org.all({
+            orgTypes: ["region"],
+            searchTerm: prefix,
+            parentOrgIds: [territory.id, area.id],
+            sorting: [{ id: "id", desc: false }],
+            pageIndex,
+            pageSize: 1,
+          });
+          expect(page.orgs).toHaveLength(1);
+          expect(page.total).toBe(2);
+          seenIds.push(...page.orgs.map((org) => org.id));
+        }
+        expect(seenIds).toEqual([directRegion.id, areaRegion.id]);
+      });
+    });
+
     it("should return a list of orgs with required orgTypes", async () => {
       const client = createTestClient();
       const result = await client.org.all({
@@ -183,7 +302,7 @@ describe("Org Router", () => {
       result.orgs.forEach((org) => {
         const searchLower = "f3".toLowerCase();
         const matches =
-          org.name?.toLowerCase().includes(searchLower) ||
+          org.name.toLowerCase().includes(searchLower) ||
           org.description?.toLowerCase().includes(searchLower);
         expect(matches).toBe(true);
       });
@@ -581,6 +700,35 @@ describe("Org Router", () => {
       }
     });
 
+    it("strips the server-owned notification marker from new region metadata", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+
+      const result = await createTestClient().org.crupdate({
+        name: `Region with client metadata ${uniqueId()}`,
+        orgType: "region",
+        parentId: nation.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+        meta: { keepMe: "present", firstEventNotificationSent: true },
+      });
+
+      if (!result.org) throw new Error("Failed to create region");
+      createdOrgIds.push(result.org.id);
+      expect(result.org.meta).toEqual({ keepMe: "present" });
+      const [createdRegion] = await db
+        .select({ meta: schema.orgs.meta })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, result.org.id));
+      expect(createdRegion?.meta).toEqual({ keepMe: "present" });
+    });
+
     it("should require parentId or id", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -645,6 +793,876 @@ describe("Org Router", () => {
 
       expect(result.org?.id).toBe(testOrg.id);
       expect(result.org?.name).toBe(updatedName);
+    });
+
+    it("notifies the destination region after moving an AO with another qualifying event there", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const nation = await getOrCreateF3NationOrg();
+      const [source, destination] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `AO source ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `AO destination ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!source || !destination) throw new Error("Failed to create regions");
+      createdOrgIds.push(source.id, destination.id);
+
+      const [movingAo, existingAo] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Empty moving AO ${uniqueId()}`,
+            orgType: "ao",
+            parentId: source.id,
+            isActive: true,
+          },
+          {
+            name: `Destination event AO ${uniqueId()}`,
+            orgType: "ao",
+            parentId: destination.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!movingAo || !existingAo) throw new Error("Failed to create AOs");
+      createdOrgIds.push(movingAo.id, existingAo.id);
+
+      await db.insert(schema.events).values({
+        name: `Destination recurring event ${uniqueId()}`,
+        orgId: existingAo.id,
+        locationId: null,
+        dayOfWeek: "monday",
+        startTime: "0530",
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        startDate: "2026-01-01",
+        isActive: true,
+        highlight: false,
+        isPrivate: false,
+      });
+
+      await client.org.crupdate({
+        id: movingAo.id,
+        name: movingAo.name,
+        orgType: "ao",
+        parentId: destination.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+      });
+
+      await vi.waitFor(() =>
+        expect(mockRegionNotification).toHaveBeenCalledWith(
+          expect.anything(),
+          destination.id,
+        ),
+      );
+      expect(mockRegionNotification).toHaveBeenCalledTimes(1);
+
+      // Another AO moved into the same region is independently evaluated by
+      // the region-scoped service, which owns the once-per-region marker.
+      const [secondMovingAo] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Second moving AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: source.id,
+          isActive: true,
+        })
+        .returning();
+      if (!secondMovingAo) throw new Error("Failed to create second AO");
+      createdOrgIds.push(secondMovingAo.id);
+      await client.org.crupdate({
+        id: secondMovingAo.id,
+        name: secondMovingAo.name,
+        orgType: "ao",
+        parentId: destination.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+      });
+      await vi.waitFor(() =>
+        expect(mockRegionNotification).toHaveBeenCalledTimes(2),
+      );
+      expect(mockRegionNotification.mock.calls[1]?.[1]).toBe(destination.id);
+    });
+
+    it("dispatches an eligibility check when an AO moves to an empty destination", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const nation = await getOrCreateF3NationOrg();
+      const [source, destination] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Empty source ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Empty destination ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!source || !destination) throw new Error("Failed to create regions");
+      createdOrgIds.push(source.id, destination.id);
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `AO to empty region ${uniqueId()}`,
+          orgType: "ao",
+          parentId: source.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create AO");
+      createdOrgIds.push(ao.id);
+
+      await client.org.crupdate({
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        parentId: destination.id,
+        isActive: true,
+        email: null,
+        phone: null,
+        description: null,
+        website: null,
+        twitter: null,
+        facebook: null,
+        instagram: null,
+      });
+
+      await vi.waitFor(() =>
+        expect(mockRegionNotification).toHaveBeenCalledWith(
+          expect.anything(),
+          destination.id,
+        ),
+      );
+    });
+
+    it("preserves an existing region notification marker for omitted or stale metadata", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const nation = await getOrCreateF3NationOrg();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Flagged region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+          meta: { firstEventNotificationSent: true, keepMe: "present" },
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create region");
+      createdOrgIds.push(region.id);
+
+      const update = (meta?: Record<string, unknown> | null) =>
+        client.org.crupdate({
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+          email: null,
+          phone: null,
+          description: null,
+          website: null,
+          twitter: null,
+          facebook: null,
+          instagram: null,
+          ...(meta !== undefined && { meta }),
+        });
+
+      await update();
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta,
+      ).toMatchObject({ firstEventNotificationSent: true, keepMe: "present" });
+
+      await update({ firstEventNotificationSent: false, incoming: "kept" });
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta,
+      ).toMatchObject({
+        firstEventNotificationSent: true,
+        incoming: "kept",
+      });
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta,
+      ).not.toHaveProperty("keepMe");
+
+      await update(null);
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta,
+      ).toEqual({ firstEventNotificationSent: true });
+
+      // A previously claimed marker that was released after a send error must
+      // not be recreated by an editor submitting stale metadata.
+      await db
+        .update(schema.orgs)
+        .set({ meta: { incoming: "kept" } })
+        .where(eq(schema.orgs.id, region.id));
+      await update({ firstEventNotificationSent: true, incoming: "kept" });
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta?.firstEventNotificationSent,
+      ).not.toBe(true);
+
+      await update(null);
+      expect(
+        (
+          await db.query.orgs.findFirst({
+            where: eq(schema.orgs.id, region.id),
+          })
+        )?.meta?.firstEventNotificationSent,
+      ).not.toBe(true);
+    });
+
+    it("rejects an update when the org hierarchy changes before its row lock", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+      const regions = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Stale Read Source Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Stale Read Concurrent Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Stale Read Destination Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      const [sourceRegion, concurrentRegion, destinationRegion] = regions;
+      if (!sourceRegion || !concurrentRegion || !destinationRegion) {
+        throw new Error("Failed to create stale-read test regions");
+      }
+      createdOrgIds.push(
+        sourceRegion.id,
+        concurrentRegion.id,
+        destinationRegion.id,
+      );
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Stale Read AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: sourceRegion.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create stale-read test AO");
+      createdOrgIds.push(ao.id);
+
+      let signalLockHeld!: (pid: number) => void;
+      let releaseLock!: () => void;
+      const lockHeld = new Promise<number>((resolve) => {
+        signalLockHeld = resolve;
+      });
+      const waitToReleaseLock = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+      });
+      const lockTransaction = db.transaction(async (tx) => {
+        await tx
+          .update(schema.orgs)
+          .set({ parentId: concurrentRegion.id })
+          .where(eq(schema.orgs.id, ao.id));
+        const lockPidRow = (
+          await tx.execute<{ pid: number }>(sql`
+          SELECT pg_backend_pid() AS pid
+        `)
+        )[0];
+        if (!lockPidRow) throw new Error("Failed to identify lock holder");
+        signalLockHeld(lockPidRow.pid);
+        await waitToReleaseLock;
+      });
+
+      const blockerPid = await lockHeld;
+      const update = createTestClient().org.crupdate({
+        ...blankFields,
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        parentId: destinationRegion.id,
+      });
+
+      let isWaitingForRowLock = false;
+      let pollingError: unknown;
+      try {
+        // Wait until crupdate has completed its pre-lock reads and is blocked
+        // on the row lock held above. This makes the stale-read ordering
+        // deterministic rather than relying on a timing delay.
+        for (
+          let attempt = 0;
+          attempt < 500 && !isWaitingForRowLock;
+          attempt++
+        ) {
+          const activity = (await db.execute(sql`
+            SELECT wait_event_type, query
+            FROM pg_stat_activity
+            WHERE pid <> pg_backend_pid()
+              AND wait_event_type = 'Lock'
+              AND query ILIKE '%for update%'
+              AND pg_blocking_pids(pid) @> ARRAY[${blockerPid}]::int[]
+          `)) as unknown as {
+            wait_event_type: string | null;
+            query: string;
+          }[];
+          isWaitingForRowLock = activity.some(
+            ({ wait_event_type, query }) =>
+              wait_event_type === "Lock" && /for update/i.test(query),
+          );
+          if (!isWaitingForRowLock) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+        }
+      } catch (error) {
+        pollingError = error;
+      } finally {
+        releaseLock();
+      }
+
+      const [lockResult, updateResult] = await Promise.allSettled([
+        lockTransaction,
+        update,
+      ]);
+      expect(pollingError).toBeUndefined();
+      expect(lockResult.status).toBe("fulfilled");
+      expect(isWaitingForRowLock).toBe(true);
+      expect(updateResult).toMatchObject({
+        status: "rejected",
+        reason: {
+          code: "CONFLICT",
+          message:
+            "Organization hierarchy changed while this update was being prepared. Reload and retry.",
+        },
+      });
+
+      const [unchangedAo] = await db
+        .select({ parentId: schema.orgs.parentId })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(unchangedAo?.parentId).toBe(concurrentRegion.id);
+    });
+
+    it("rechecks editor access after the org's parent changes before its first read", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const [authorizedRegion, movedRegion] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Pre-read Authorized Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+          {
+            name: `Pre-read Moved Region ${uniqueId()}`,
+            orgType: "region",
+            parentId: nation.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!authorizedRegion || !movedRegion) {
+        throw new Error("Failed to create pre-read race test regions");
+      }
+      createdOrgIds.push(authorizedRegion.id, movedRegion.id);
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Pre-read Race AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: authorizedRegion.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create pre-read race test AO");
+      createdOrgIds.push(ao.id);
+
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Pre-read Race Location ${uniqueId()}`,
+          orgId: ao.id,
+          isActive: true,
+          latitude: 35.5,
+          longitude: -80.5,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create pre-read race location");
+      createdLocationIds.push(location.id);
+      await db
+        .update(schema.orgs)
+        .set({ defaultLocationId: location.id })
+        .where(eq(schema.orgs.id, ao.id));
+
+      await mockAuthWithSession(
+        createEditorSession({
+          orgId: authorizedRegion.id,
+          orgName: authorizedRegion.name,
+        }),
+      );
+      mockRoleCheckHook.afterSuccess = async () => {
+        await db
+          .update(schema.orgs)
+          .set({ parentId: movedRegion.id })
+          .where(eq(schema.orgs.id, ao.id));
+      };
+
+      await expect(
+        createTestClient().org.crupdate({
+          ...blankFields,
+          id: ao.id,
+          name: `Unauthorized mutation ${uniqueId()}`,
+          orgType: "ao",
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const [unchangedAo] = await db
+        .select({
+          name: schema.orgs.name,
+          parentId: schema.orgs.parentId,
+          defaultLocationId: schema.orgs.defaultLocationId,
+        })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(unchangedAo).toEqual({
+        name: ao.name,
+        parentId: movedRegion.id,
+        defaultLocationId: location.id,
+      });
+      const [unchangedLocation] = await db
+        .select({ orgId: schema.locations.orgId })
+        .from(schema.locations)
+        .where(eq(schema.locations.id, location.id));
+      expect(unchangedLocation).toEqual({ orgId: ao.id });
+    });
+
+    it("cascades an active AO status update to its series and future instances only", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+      const client = createTestClient();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `Status Cascade Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create test region");
+      createdOrgIds.push(region.id);
+
+      const [ao, otherAo] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `Status Cascade AO ${uniqueId()}`,
+            orgType: "ao",
+            parentId: region.id,
+            isActive: true,
+          },
+          {
+            name: `Unrelated Status Cascade AO ${uniqueId()}`,
+            orgType: "ao",
+            parentId: region.id,
+            isActive: true,
+          },
+        ])
+        .returning();
+      if (!ao || !otherAo) throw new Error("Failed to create test AOs");
+      createdOrgIds.push(ao.id, otherAo.id);
+
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `Status Cascade Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [otherSeries] = await db
+        .insert(schema.events)
+        .values({
+          name: `Unrelated Status Cascade Series ${uniqueId()}`,
+          orgId: otherAo.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [weeklySeriesWithoutPattern] = await db
+        .insert(schema.events)
+        .values({
+          name: `Status Cascade Weekly Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "wednesday",
+          startTime: "0530",
+          recurrencePattern: null,
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series || !otherSeries || !weeklySeriesWithoutPattern) {
+        throw new Error("Failed to create series");
+      }
+
+      const [pastInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: series.name,
+          orgId: ao.id,
+          seriesId: series.id,
+          startDate: "2025-01-06",
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [futureInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: series.name,
+          orgId: ao.id,
+          seriesId: series.id,
+          startDate: nextFutureMonday(2),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [otherFutureInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: otherSeries.name,
+          orgId: otherAo.id,
+          seriesId: otherSeries.id,
+          startDate: nextFutureMonday(2),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      const [weeklyFutureInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: weeklySeriesWithoutPattern.name,
+          orgId: ao.id,
+          seriesId: weeklySeriesWithoutPattern.id,
+          startDate: nextFutureMonday(2),
+          isActive: true,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (
+        !pastInstance ||
+        !futureInstance ||
+        !otherFutureInstance ||
+        !weeklyFutureInstance
+      ) {
+        throw new Error("Failed to create test instances");
+      }
+
+      await client.org.crupdate({
+        ...blankFields,
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        isActive: false,
+      });
+
+      const [updatedAo] = await db
+        .select({ isActive: schema.orgs.isActive })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      const [updatedSeries] = await db
+        .select({ isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.id, series.id));
+      const [updatedWeeklySeriesWithoutPattern] = await db
+        .select({ isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.id, weeklySeriesWithoutPattern.id));
+      const [updatedPast] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, pastInstance.id));
+      const [updatedFuture] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, futureInstance.id));
+      const [untouchedSeries] = await db
+        .select({ isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.id, otherSeries.id));
+      const [untouchedFuture] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, otherFutureInstance.id));
+      const [updatedWeeklyFuture] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, weeklyFutureInstance.id));
+
+      expect(updatedAo?.isActive).toBe(false);
+      expect(updatedSeries?.isActive).toBe(false);
+      expect(updatedWeeklySeriesWithoutPattern?.isActive).toBe(false);
+      expect(updatedPast?.isActive).toBe(true);
+      expect(updatedFuture?.isActive).toBe(false);
+      expect(updatedWeeklyFuture?.isActive).toBe(false);
+      expect(untouchedSeries?.isActive).toBe(true);
+      expect(untouchedFuture?.isActive).toBe(true);
+
+      await db
+        .delete(schema.eventInstances)
+        .where(
+          inArray(schema.eventInstances.id, [
+            pastInstance.id,
+            futureInstance.id,
+            otherFutureInstance.id,
+            weeklyFutureInstance.id,
+          ]),
+        );
+      await db
+        .delete(schema.events)
+        .where(
+          inArray(schema.events.id, [
+            series.id,
+            otherSeries.id,
+            weeklySeriesWithoutPattern.id,
+          ]),
+        );
+    });
+
+    it("does not cascade for an unchanged or reactivated AO status", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      await mockAuthWithSession(await createAdminSession());
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `No Status Cascade Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create test region");
+      createdOrgIds.push(region.id);
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `No Status Cascade AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: region.id,
+          isActive: false,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create test AO");
+      createdOrgIds.push(ao.id);
+
+      const [series] = await db
+        .insert(schema.events)
+        .values({
+          name: `No Status Cascade Series ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: null,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          recurrencePattern: "weekly",
+          recurrenceInterval: 1,
+          startDate: "2026-01-01",
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!series) throw new Error("Failed to create test series");
+      const [futureInstance] = await db
+        .insert(schema.eventInstances)
+        .values({
+          name: series.name,
+          orgId: ao.id,
+          seriesId: series.id,
+          startDate: nextFutureMonday(2),
+          isActive: false,
+          highlight: false,
+          isPrivate: false,
+        })
+        .returning();
+      if (!futureInstance) throw new Error("Failed to create test instance");
+
+      const client = createTestClient();
+      await client.org.crupdate({
+        ...blankFields,
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        isActive: false,
+      });
+      await client.org.crupdate({
+        ...blankFields,
+        id: ao.id,
+        name: ao.name,
+        orgType: "ao",
+        isActive: true,
+      });
+
+      const [unchangedSeries] = await db
+        .select({ isActive: schema.events.isActive })
+        .from(schema.events)
+        .where(eq(schema.events.id, series.id));
+      const [unchangedFuture] = await db
+        .select({ isActive: schema.eventInstances.isActive })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, futureInstance.id));
+      expect(unchangedSeries?.isActive).toBe(false);
+      expect(unchangedFuture?.isActive).toBe(false);
+
+      await db
+        .delete(schema.eventInstances)
+        .where(eq(schema.eventInstances.id, futureInstance.id));
+      await db.delete(schema.events).where(eq(schema.events.id, series.id));
+    });
+
+    it("requires AO admin permission only for active-to-inactive status changes", async () => {
+      const nation = await getOrCreateF3NationOrg();
+      const [region] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `AO Status RBAC Region ${uniqueId()}`,
+          orgType: "region",
+          parentId: nation.id,
+          isActive: true,
+        })
+        .returning();
+      if (!region) throw new Error("Failed to create test region");
+      createdOrgIds.push(region.id);
+
+      const [ao] = await db
+        .insert(schema.orgs)
+        .values({
+          name: `AO Status RBAC AO ${uniqueId()}`,
+          orgType: "ao",
+          parentId: region.id,
+          isActive: true,
+        })
+        .returning();
+      if (!ao) throw new Error("Failed to create test AO");
+      createdOrgIds.push(ao.id);
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: ao.id, orgName: ao.name }),
+      );
+      const client = createTestClient();
+      await expect(
+        client.org.crupdate({
+          ...blankFields,
+          id: ao.id,
+          name: ao.name,
+          orgType: "ao",
+          isActive: false,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const [stillActive] = await db
+        .select({ isActive: schema.orgs.isActive })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, ao.id));
+      expect(stillActive?.isActive).toBe(true);
+
+      // An inactive-to-active edit remains available to an editor.
+      await db
+        .update(schema.orgs)
+        .set({ isActive: false })
+        .where(eq(schema.orgs.id, ao.id));
+      await expect(
+        client.org.crupdate({
+          ...blankFields,
+          id: ao.id,
+          name: ao.name,
+          orgType: "ao",
+          isActive: true,
+        }),
+      ).resolves.toMatchObject({ org: { isActive: true } });
     });
 
     it("should enforce editor permissions", async () => {
@@ -1159,6 +2177,307 @@ describe("Org Router", () => {
 
       expect(await aoCountOf(territory, "territory")).toBe(0);
       expect(await aoCountOf(sector, "sector")).toBe(1);
+    });
+
+    describe("Region Area and Territory parents", () => {
+      const createOrg = async (
+        client: ReturnType<typeof createTestClient>,
+        orgType: "area" | "region" | "ao",
+        parentId: number,
+        isActive = true,
+      ) => {
+        const result = await client.org.crupdate({
+          ...blankFields,
+          name: `Region parent ${orgType} ${uniqueId()}`,
+          orgType,
+          parentId,
+          isActive,
+        });
+        if (!result.org) throw new Error(`Failed to create ${orgType}`);
+        createdOrgIds.push(result.org.id);
+        return result.org;
+      };
+      const saveRegion = (
+        client: ReturnType<typeof createTestClient>,
+        region: { id: number; name: string },
+        parentId: number,
+      ) =>
+        client.org.crupdate({
+          ...blankFields,
+          id: region.id,
+          name: region.name,
+          orgType: "region",
+          parentId,
+        });
+      const listedCounts = async (
+        client: ReturnType<typeof createTestClient>,
+        named: Record<string, { id: number; name: string; orgType: OrgType }>,
+      ) =>
+        Object.fromEntries(
+          await Promise.all(
+            Object.entries(named).map(async ([label, org]) => {
+              const result = await client.org.all({
+                orgTypes: [org.orgType],
+                searchTerm: org.name,
+              });
+              return [
+                label,
+                result.orgs.find((candidate) => candidate.id === org.id)
+                  ?.aoCount,
+              ] as const;
+            }),
+          ),
+        );
+
+      it("persists both Region parent types, unchanged saves, and both move directions with mixed counts", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const client = createTestClient();
+        const source = await createSectorAndTerritory(client);
+        const destination = await createSectorAndTerritory(client);
+        const sourceArea = await createOrg(client, "area", source.territory.id);
+        const destinationArea = await createOrg(
+          client,
+          "area",
+          destination.territory.id,
+        );
+        const areaRegion = await createOrg(client, "region", sourceArea.id);
+        const directRegion = await createOrg(
+          client,
+          "region",
+          source.territory.id,
+        );
+        await createOrg(client, "ao", areaRegion.id);
+        await createOrg(client, "ao", directRegion.id);
+        await createOrg(client, "ao", directRegion.id, false);
+        const named = {
+          sourceSector: source.sector,
+          sourceTerritory: source.territory,
+          sourceArea,
+          destinationSector: destination.sector,
+          destinationTerritory: destination.territory,
+          destinationArea,
+          areaRegion,
+          directRegion,
+        };
+        const before = {
+          sourceSector: 2,
+          sourceTerritory: 2,
+          sourceArea: 1,
+          destinationSector: 0,
+          destinationTerritory: 0,
+          destinationArea: 0,
+          areaRegion: 1,
+          directRegion: 1,
+        };
+        expect(await listedCounts(client, named)).toEqual(before);
+
+        for (const [region, parentId] of [
+          [areaRegion, sourceArea.id],
+          [directRegion, source.territory.id],
+        ] as const) {
+          const saved = await saveRegion(client, region, parentId);
+          expect(saved.org?.parentId).toBe(parentId);
+          expect((await client.org.byId({ id: region.id })).org?.parentId).toBe(
+            parentId,
+          );
+        }
+        expect(await listedCounts(client, named)).toEqual(before);
+
+        const moved = await saveRegion(
+          client,
+          directRegion,
+          destinationArea.id,
+        );
+        expect(moved.org?.parentId).toBe(destinationArea.id);
+        expect(
+          (await client.org.byId({ id: directRegion.id })).org?.parentId,
+        ).toBe(destinationArea.id);
+        expect(await listedCounts(client, named)).toEqual({
+          ...before,
+          sourceSector: 1,
+          sourceTerritory: 1,
+          destinationSector: 1,
+          destinationTerritory: 1,
+          destinationArea: 1,
+        });
+
+        const restored = await saveRegion(
+          client,
+          directRegion,
+          source.territory.id,
+        );
+        expect(restored.org?.parentId).toBe(source.territory.id);
+        expect(
+          (await client.org.byId({ id: directRegion.id })).org?.parentId,
+        ).toBe(source.territory.id);
+        expect(await listedCounts(client, named)).toEqual(before);
+      });
+
+      it("allows a Region-only editor to change ordinary fields but denies moves to an Area or Territory", async () => {
+        await mockAuthWithSession(await createAdminSession());
+        const client = createTestClient();
+        const source = await createSectorAndTerritory(client);
+        const destination = await createSectorAndTerritory(client);
+        const sourceArea = await createOrg(client, "area", source.territory.id);
+        const destinationArea = await createOrg(
+          client,
+          "area",
+          destination.territory.id,
+        );
+        const region = await createOrg(client, "region", sourceArea.id);
+        await createOrg(client, "ao", region.id);
+        const editedRegion = {
+          ...region,
+          name: `Region-only edit ${uniqueId()}`,
+        };
+        const named = {
+          sourceSector: source.sector,
+          sourceTerritory: source.territory,
+          sourceArea,
+          destinationSector: destination.sector,
+          destinationTerritory: destination.territory,
+          destinationArea,
+          region: editedRegion,
+        };
+
+        await mockAuthWithSession(
+          createEditorSession({ orgId: region.id, orgName: region.name }),
+        );
+        const saved = await saveRegion(client, editedRegion, sourceArea.id);
+        expect(saved.org).toMatchObject({
+          id: region.id,
+          name: editedRegion.name,
+          parentId: sourceArea.id,
+        });
+
+        const snapshot = async () => {
+          const persisted = (await client.org.byId({ id: region.id })).org;
+          return {
+            name: persisted?.name,
+            parentId: persisted?.parentId,
+            counts: await listedCounts(client, named),
+          };
+        };
+        const unchanged = {
+          name: editedRegion.name,
+          parentId: sourceArea.id,
+          counts: {
+            sourceSector: 1,
+            sourceTerritory: 1,
+            sourceArea: 1,
+            destinationSector: 0,
+            destinationTerritory: 0,
+            destinationArea: 0,
+            region: 1,
+          },
+        };
+        expect(await snapshot()).toEqual(unchanged);
+
+        for (const parent of [destinationArea, destination.territory]) {
+          await expect(
+            saveRegion(
+              client,
+              { ...editedRegion, name: `Rejected Region edit ${uniqueId()}` },
+              parent.id,
+            ),
+          ).rejects.toMatchObject({
+            code: "UNAUTHORIZED",
+            message:
+              "You are not authorized to move this org to the destination parent organization",
+          });
+          expect(await snapshot()).toEqual(unchanged);
+        }
+      });
+
+      it.each([
+        { sourceType: "area", destinationType: "territory" },
+        { sourceType: "territory", destinationType: "area" },
+      ] as const)(
+        "requires both permissions for a Region move from $sourceType to $destinationType",
+        async ({ sourceType, destinationType }) => {
+          await mockAuthWithSession(await createAdminSession());
+          const client = createTestClient();
+          const sourceHierarchy = await createSectorAndTerritory(client);
+          const destinationHierarchy = await createSectorAndTerritory(client);
+          const source =
+            sourceType === "area"
+              ? await createOrg(client, "area", sourceHierarchy.territory.id)
+              : sourceHierarchy.territory;
+          const destination =
+            destinationType === "area"
+              ? await createOrg(
+                  client,
+                  "area",
+                  destinationHierarchy.territory.id,
+                )
+              : destinationHierarchy.territory;
+          const region = await createOrg(client, "region", source.id);
+          await createOrg(client, "ao", region.id);
+          const named = {
+            sourceSector: sourceHierarchy.sector,
+            sourceTerritory: sourceHierarchy.territory,
+            sourceParent: source,
+            destinationSector: destinationHierarchy.sector,
+            destinationTerritory: destinationHierarchy.territory,
+            destinationParent: destination,
+            region,
+          };
+          const snapshot = async () => ({
+            parentId: (await client.org.byId({ id: region.id })).org?.parentId,
+            counts: await listedCounts(client, named),
+          });
+          const before = await snapshot();
+          expect(before).toEqual({
+            parentId: source.id,
+            counts: {
+              sourceSector: 1,
+              sourceTerritory: 1,
+              sourceParent: 1,
+              destinationSector: 0,
+              destinationTerritory: 0,
+              destinationParent: 0,
+              region: 1,
+            },
+          });
+          const sourceSession = createEditorSession({
+            orgId: source.id,
+            orgName: source.name,
+          });
+          const destinationSession = createEditorSession({
+            orgId: destination.id,
+            orgName: destination.name,
+          });
+          for (const session of [sourceSession, destinationSession]) {
+            await mockAuthWithSession(session);
+            await expect(
+              saveRegion(client, region, destination.id),
+            ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+            expect(await snapshot()).toEqual(before);
+          }
+
+          sourceSession.roles = [
+            ...(sourceSession.roles ?? []),
+            ...(destinationSession.roles ?? []),
+          ];
+          if (sourceSession.user)
+            sourceSession.user.roles = sourceSession.roles;
+          await mockAuthWithSession(sourceSession);
+          const moved = await saveRegion(client, region, destination.id);
+          expect(moved.org?.parentId).toBe(destination.id);
+          expect(await snapshot()).toEqual({
+            parentId: destination.id,
+            counts: {
+              sourceSector: 0,
+              sourceTerritory: 0,
+              sourceParent: 0,
+              destinationSector: 1,
+              destinationTerritory: 1,
+              destinationParent: 1,
+              region: 1,
+            },
+          });
+        },
+      );
     });
 
     it("should accept creating an area parented directly to a sector (un-migrated case)", async () => {

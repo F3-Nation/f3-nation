@@ -15,7 +15,11 @@ import {
   schema,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
-import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
+import {
+  arrayOrSingle,
+  parseSorting,
+  queryBooleanSchema,
+} from "@acme/shared/app/functions";
 import { EventTagInsertSchema, EventTagSelectSchema } from "@acme/validators";
 
 import { checkHasRoleOnOrg } from "../check-has-role-on-org";
@@ -37,7 +41,7 @@ export const eventTagRouter = {
           ...paginationFields("event tags"),
           searchTerm: z.string().optional(),
           sorting: parseSorting(),
-          ignoreNationEventTags: z.coerce.boolean().optional(),
+          ignoreNationEventTags: queryBooleanSchema.optional(),
         })
         .optional(),
     )
@@ -95,6 +99,9 @@ export const eventTagRouter = {
         }
       }) ?? [desc(schema.eventTags.id)];
 
+      // Break tied sort values so rows cannot repeat or vanish between pages.
+      sortedColumns.push(asc(schema.eventTags.id));
+
       const select = {
         id: schema.eventTags.id,
         name: schema.eventTags.name,
@@ -108,14 +115,14 @@ export const eventTagRouter = {
       const where = and(
         input?.searchTerm
           ? or(
-              ilike(schema.eventTags.name, `%${input?.searchTerm}%`),
-              ilike(schema.eventTags.description, `%${input?.searchTerm}%`),
+              ilike(schema.eventTags.name, `%${input.searchTerm}%`),
+              ilike(schema.eventTags.description, `%${input.searchTerm}%`),
             )
           : undefined,
         input?.orgIds?.length
           ? or(
-              inArray(schema.eventTags.specificOrgId, input?.orgIds),
-              input?.ignoreNationEventTags
+              inArray(schema.eventTags.specificOrgId, input.orgIds),
+              input.ignoreNationEventTags
                 ? undefined
                 : isNull(schema.eventTags.specificOrgId),
             )
@@ -154,7 +161,7 @@ export const eventTagRouter = {
     .input(
       z.object({
         orgId: z.coerce.number(),
-        isActive: z.coerce.boolean().optional(),
+        isActive: queryBooleanSchema.optional(),
       }),
     )
     .route({
@@ -182,7 +189,7 @@ export const eventTagRouter = {
           ),
         );
 
-      return { eventTags: eventTags ?? null };
+      return { eventTags: eventTags };
     }),
   byId: protectedProcedure
     .input(z.object({ id: z.coerce.number() }))
@@ -210,7 +217,7 @@ export const eventTagRouter = {
         });
       }
 
-      return { eventTag: result ?? null };
+      return { eventTag: result };
     }),
   crupdate: editorProcedure
     .input(EventTagInsertSchema)
@@ -297,7 +304,7 @@ export const eventTagRouter = {
         })
         .returning();
 
-      return { eventTag: result ?? null };
+      return { eventTag: result };
     }),
   delete: editorProcedure
     .input(z.object({ id: z.coerce.number() }))

@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -115,6 +115,93 @@ describe("Event Tag Router", () => {
   };
 
   describe("all", () => {
+    it("provides stable pagination for tied values and preserves sort precedence", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const prefix = `Pagination ${uniqueId()}`;
+      const tags = await db
+        .insert(schema.eventTags)
+        .values(
+          Array.from({ length: 40 }, (_, index) => ({
+            name: `${prefix} ${index % 2 ? "Alpha" : "Zulu"}`,
+            specificOrgId: region.id,
+            isActive: true,
+            color: "#FF0000",
+          })),
+        )
+        .returning({ id: schema.eventTags.id, name: schema.eventTags.name });
+      createdEventTagIds.push(...tags.map((tag) => tag.id));
+      // Move a tied tuple so physical row order cannot stand in for ID order.
+      await db
+        .update(schema.eventTags)
+        .set({ name: sql`${schema.eventTags.name}` })
+        .where(eq(schema.eventTags.id, tags[0]!.id));
+
+      const byId = [...tags].sort((a, b) => a.id - b.id);
+      const cases: {
+        sorting: { id: string; desc: boolean }[] | undefined;
+        expected: number[];
+      }[] = [
+        { sorting: [], expected: byId.map((tag) => tag.id) },
+        {
+          sorting: undefined,
+          expected: byId.map((tag) => tag.id).reverse(),
+        },
+        {
+          sorting: [
+            { id: "specificOrgName", desc: false },
+            { id: "id", desc: true },
+          ],
+          expected: byId.map((tag) => tag.id).reverse(),
+        },
+      ];
+      for (const desc of [false, true]) {
+        for (const id of ["specificOrgName", "name"]) {
+          cases.push({
+            sorting: [{ id, desc }],
+            expected: [...byId]
+              .sort((a, b) =>
+                id === "specificOrgName"
+                  ? 0
+                  : (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) *
+                    (desc ? -1 : 1),
+              )
+              .map((tag) => tag.id),
+          });
+        }
+      }
+
+      const client = createTestClient();
+      for (const { sorting, expected } of cases) {
+        for (const pageSize of [5, 7]) {
+          const paged: number[] = [];
+          for (
+            let pageIndex = 0;
+            pageIndex < Math.ceil(40 / pageSize);
+            pageIndex++
+          ) {
+            const page = await client.eventTag.all({
+              searchTerm: prefix,
+              sorting,
+              pageIndex,
+              pageSize,
+            });
+            expect(page.totalCount).toBe(40);
+            paged.push(...page.eventTags.map((tag) => tag.id));
+          }
+          const context = `eventTag.all sorting=${JSON.stringify(sorting)}, pageSize=${pageSize}`;
+          expect
+            .soft({ context, ids: paged })
+            .toEqual({ context, ids: expected });
+          expect.soft({ context, uniqueCount: new Set(paged).size }).toEqual({
+            context,
+            uniqueCount: 40,
+          });
+        }
+      }
+    });
+
     it("should return a list of event tags", async () => {
       const session = await createAdminSession();
       await mockAuthWithSession(session);
@@ -316,7 +403,7 @@ describe("Event Tag Router", () => {
 
       expect(result).toHaveProperty("eventTag");
       expect(result.eventTag).not.toBeNull();
-      expect(result.eventTag?.id).toBe(eventTag.id);
+      expect(result.eventTag.id).toBe(eventTag.id);
     });
 
     it("should throw NOT_FOUND for non-existent event tag", async () => {

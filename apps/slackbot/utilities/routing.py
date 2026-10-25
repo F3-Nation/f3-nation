@@ -8,6 +8,8 @@ from features import (
     db_admin,
     downrange,
     emergency,
+    f3versary_announcements,
+    fng,
     help,
     paxminer_mapping,
     positions,
@@ -54,9 +56,11 @@ COMMAND_MAPPER = {
     "/tag-achievement": (achievements.build_tag_achievement_form, True, False),
     "/f3-calendar": (home.build_home_form, True, False),
     "/help": (help.build_help_menu, False, False),
+    "/fng": (fng.build_fng_form, True, False),
 }
 
 VIEW_MAPPER = {
+    fng.FNG_CALLBACK_ID: (fng.handle_fng_form, False, True),
     actions.BACKBLAST_CALLBACK_ID: (backblast.handle_backblast_post, False, False),
     actions.BACKBLAST_EDIT_CALLBACK_ID: (backblast.handle_backblast_post, False, False),
     actions.KOTTER_REPORT_CONFIG_CALLBACK_ID: (config.handle_kotter_report_config_post, False, True),
@@ -94,6 +98,11 @@ VIEW_MAPPER = {
     event_instance.EVENT_CLOSE_CALLBACK_ID: (event_instance.handle_event_instance_close, False, False),
     actions.EVENT_CLOSE_HOME_CALLBACK_ID: (home.handle_event_instance_close, False, False),
     actions.DOWNRANGE_CALLBACK_ID: (downrange.handle_downrange_settings, False, False),
+    actions.F3VERSARY_ANNOUNCEMENTS_CALLBACK_ID: (
+        f3versary_announcements.handle_f3versary_announcements_edit,
+        False,
+        False,
+    ),
 }
 
 ACTION_MAPPER = {
@@ -222,6 +231,7 @@ ACTION_MAPPER = {
     actions.MISSING_BACKBLASTS_BUTTON: (backblast.build_missing_backblasts_form, True, False),
     actions.MISSING_BACKBLASTS_AO_FILTER: (backblast.build_missing_backblasts_form, False, False),
     actions.MISSING_BACKBLASTS_EVENT: (backblast.handle_missing_backblasts_overflow, False, False),
+    actions.CONFIG_F3VERSARY_ANNOUNCEMENTS: (f3versary_announcements.build_f3versary_announcements_form, False, False),
 }
 
 ACTION_PREFIXES = [

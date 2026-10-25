@@ -19,6 +19,8 @@ set -euo pipefail
 #   - .env.cloud-run.prod / .env.cloud-run.staging populated
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/gcloud-env-vars.sh
+source "$SCRIPT_DIR/lib/gcloud-env-vars.sh"
 
 # ---------------------------------------------------------------------------
 # Environment → GCP project mapping
@@ -51,6 +53,8 @@ ENV_FILE_VARS=(
   NEXT_PUBLIC_AUTH_URL
   NEXT_PUBLIC_API_URL
   EMAIL_FROM
+  APPS_DIRECTORY_ENABLED
+  APPS_DIRECTORY_URL
 )
 
 # Plain env vars (hardcoded, same across environments)
@@ -95,7 +99,11 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Source the env file
+# Source the env file. APPS_DIRECTORY_ENABLED and APPS_DIRECTORY_URL are
+# removed from the service when the file leaves them out, so drop any value
+# the calling shell exported first: otherwise that value, not the file's,
+# would be applied.
+unset APPS_DIRECTORY_ENABLED APPS_DIRECTORY_URL
 set -a
 source "$ENV_FILE"
 set +a
@@ -159,6 +167,43 @@ push_secret() {
     --filter="state!=DESTROYED" --format='value(name)' 2>/dev/null)
 }
 
+# ---------------------------------------------------------------------------
+# Build the plain env-var argument first, so a value join_env_vars rejects
+# stops the script before any secret version is added or destroyed.
+# ---------------------------------------------------------------------------
+echo ""
+echo "Preparing Cloud Run env vars..."
+
+UPDATE_ARGS=()
+REMOVE_ARGS=()
+
+# Plain env vars (hardcoded)
+for var in "${!PLAIN_VARS[@]}"; do
+  echo " [$var] Setting to ${PLAIN_VARS[$var]}"
+  UPDATE_ARGS+=("${var}=${PLAIN_VARS[$var]}")
+done
+
+# Per-environment env vars (from env file, not secrets)
+for var in "${ENV_FILE_VARS[@]}"; do
+  value="${!var:-}"
+  if [[ -n "$value" ]]; then
+    echo " [$var] Setting to $value"
+    UPDATE_ARGS+=("${var}=${value}")
+  elif [[ "$var" == APPS_DIRECTORY_* ]]; then
+    # Optional with a default in code. Cloud Run keeps a variable that is
+    # left out of --update-env-vars, so remove it explicitly or deleting it
+    # from the env file would leave an old value in place.
+    echo " [$var] Unset, removing from the service"
+    REMOVE_ARGS+=("$var")
+  else
+    echo " [$var] Unset, leaving the service's value as is"
+  fi
+done
+
+# "|" instead of a comma join so a comma inside EMAIL_FROM stays in the value
+# (see lib/gcloud-env-vars.sh).
+ENV_VARS_ARG="$(join_env_vars "|" "${UPDATE_ARGS[@]}")"
+
 # Get the Cloud Run service account email to grant it access to secrets. If the service doesn't exist yet, we'll default to the Compute Engine default service account, which is what Cloud Run
 echo ""
 echo "Preparing Cloud Run service account email for granting secret permissions."
@@ -190,21 +235,6 @@ for pid in "${PIDS[@]}"; do wait "$pid"; done
 echo ""
 echo "Updating Cloud Run service env vars and secret references..."
 
-UPDATE_ARGS=()
-
-# Plain env vars (hardcoded)
-for var in "${!PLAIN_VARS[@]}"; do
-  echo " [$var] Setting to ${PLAIN_VARS[$var]}"
-  UPDATE_ARGS+=("${var}=${PLAIN_VARS[$var]}")
-done
-
-# Per-environment env vars (from env file, not secrets)
-for var in "${ENV_FILE_VARS[@]}"; do
-  value="${!var:-}"
-  echo " [$var] Setting to $value"
-  [[ -n "$value" ]] && UPDATE_ARGS+=("${var}=${value}")
-done
-
 # Secret-backed env vars
 SECRET_ARGS=()
 for var in "${!SECRET_MAP[@]}"; do
@@ -219,10 +249,15 @@ done
 
 echo ""
 echo "Pushing updates to Cloud Run service $SERVICE_NAME in project $PROJECT."
+REMOVE_FLAGS=()
+if [[ ${#REMOVE_ARGS[@]} -gt 0 ]]; then
+  REMOVE_FLAGS=(--remove-env-vars "$(IFS=,; echo "${REMOVE_ARGS[*]}")")
+fi
 gcloud run services update "$SERVICE_NAME" \
     --project "$PROJECT" \
     --region "$REGION" \
-    --update-env-vars "$(IFS=,; echo "${UPDATE_ARGS[*]}")" \
+    --update-env-vars "$ENV_VARS_ARG" \
+    ${REMOVE_FLAGS[@]+"${REMOVE_FLAGS[@]}"} \
     --update-secrets "$(IFS=,; echo "${SECRET_ARGS[*]}")" \
     --quiet
 

@@ -41,6 +41,31 @@ type WorkoutDetailsEvent = NonNullable<
 >;
 type UpcomingInstance =
   RouterOutputs["map"]["location"]["upcomingInstances"][number];
+type InstanceOrgs = NonNullable<
+  RouterOutputs["map"]["location"]["locationWorkout"]["location"]
+>["instanceOrgs"][number];
+
+const UNKNOWN_ORGS: Omit<InstanceOrgs, "instanceId"> = {
+  parentId: null,
+  parentLogo: null,
+  parentName: null,
+  parentWebsite: null,
+  parentEmail: null,
+  parentPhone: null,
+  parentTwitter: null,
+  parentFacebook: null,
+  parentInstagram: null,
+  regionId: null,
+  regionName: null,
+  regionLogo: null,
+  regionWebsite: null,
+  regionEmail: null,
+  regionPhone: null,
+  regionTwitter: null,
+  regionFacebook: null,
+  regionInstagram: null,
+  regionType: null,
+};
 
 export function createWorkoutEventFromInstance(
   instance: UpcomingInstance,
@@ -85,54 +110,30 @@ export const WorkoutDetailsContent = ({
     isUnavailable: isUpcomingInstancesError,
   } = useUpcomingInstances();
 
+  const locationInstances = useMemo(() => {
+    const currentLocation = results?.location;
+    if (!upcomingInstancesData || !currentLocation) return [];
+    // Match the API's location-level fallback order (startDate, startTime, id;
+    // Postgres ASC puts a null startTime last) so the default selection is the
+    // same instance whose orgs the location reports.
+    return upcomingInstancesData
+      .filter((instance) => instance.locationId === currentLocation.id)
+      .sort(
+        (a, b) =>
+          a.startDate.localeCompare(b.startDate) ||
+          (a.startTime == null ? 1 : 0) - (b.startTime == null ? 1 : 0) ||
+          (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
+          a.id - b.id,
+      );
+  }, [upcomingInstancesData, results?.location]);
+
   const selectedSeriesId = useMemo(() => {
     if (providedEventId == null) return null;
     if (providedEventId > 0) return providedEventId;
     return (
-      upcomingInstancesData?.find((i) => i.id === -providedEventId)?.seriesId ??
-      null
+      locationInstances.find((i) => i.id === -providedEventId)?.seriesId ?? null
     );
-  }, [providedEventId, upcomingInstancesData]);
-
-  const selectedEventId = useMemo(() => {
-    if (providedEventId) return providedEventId;
-    return results?.location?.events?.[0]?.id ?? null;
-  }, [providedEventId, results]);
-
-  const selectedInstance = useMemo(() => {
-    if (selectedEventId == null || selectedEventId >= 0) return undefined;
-    return upcomingInstancesData?.find(
-      (instance) => instance.id === -selectedEventId,
-    );
-  }, [selectedEventId, upcomingInstancesData]);
-
-  const locationInstances = useMemo(() => {
-    const currentLocation = results?.location;
-    if (!upcomingInstancesData || !currentLocation) return [];
-    return upcomingInstancesData.filter(
-      (instance) => instance.locationId === currentLocation.id,
-    );
-  }, [upcomingInstancesData, results?.location]);
-
-  const selectedEventUpdates = useMemo(() => {
-    if (selectedEventId == null || !upcomingInstancesData) return [];
-
-    const seriesId =
-      selectedEventId > 0
-        ? selectedEventId
-        : (selectedInstance?.seriesId ?? null);
-
-    const matches =
-      seriesId != null
-        ? upcomingInstancesData.filter((i) => i.seriesId === seriesId)
-        : selectedInstance
-          ? upcomingInstancesData.filter((i) => i.id === selectedInstance.id)
-          : [];
-
-    // The API returns these unordered, so sort for display — the list reads as
-    // a timeline, and the soonest change is the one that matters most.
-    return sortUpcomingInstancesByDate(matches);
-  }, [selectedEventId, upcomingInstancesData, selectedInstance]);
+  }, [providedEventId, locationInstances]);
 
   const baseEvents = useMemo(
     () => results?.location?.events ?? [],
@@ -181,6 +182,41 @@ export const WorkoutDetailsContent = ({
 
     return combined;
   }, [results, instanceEvents]);
+
+  // A location whose only workouts are upcoming instances has no series
+  // events, so fall back to the first displayed event rather than the first
+  // series event — otherwise a pin click with no eventId selects nothing.
+  const selectedEventId = useMemo(() => {
+    if (providedEventId) return providedEventId;
+    return displayedEvents[0]?.id ?? null;
+  }, [providedEventId, displayedEvents]);
+
+  const selectedInstance = useMemo(() => {
+    if (selectedEventId == null || selectedEventId >= 0) return undefined;
+    return locationInstances.find(
+      (instance) => instance.id === -selectedEventId,
+    );
+  }, [selectedEventId, locationInstances]);
+
+  const selectedEventUpdates = useMemo(() => {
+    if (selectedEventId == null || !upcomingInstancesData) return [];
+
+    const seriesId =
+      selectedEventId > 0
+        ? selectedEventId
+        : (selectedInstance?.seriesId ?? null);
+
+    const matches =
+      seriesId != null
+        ? upcomingInstancesData.filter((i) => i.seriesId === seriesId)
+        : selectedInstance
+          ? upcomingInstancesData.filter((i) => i.id === selectedInstance.id)
+          : [];
+
+    // The API returns these unordered, so sort for display — the list reads as
+    // a timeline, and the soonest change is the one that matters most.
+    return sortUpcomingInstancesByDate(matches);
+  }, [selectedEventId, upcomingInstancesData, selectedInstance]);
 
   // The parent-series lookup is a fallback, not a primary source: it only has
   // something to add when the selected id is absent from the location's own
@@ -236,7 +272,12 @@ export const WorkoutDetailsContent = ({
   // flash the deleted-workout warning mid-fetch. A failed query counts as
   // settled: the answer is never arriving.
   const isResolvingEvent = useMemo(() => {
-    const needsInstanceList = providedEventId != null && providedEventId < 0;
+    // With no series events, the default selection can only come from the
+    // instance list too.
+    const needsInstanceList =
+      providedEventId != null
+        ? providedEventId < 0
+        : results?.location != null && baseEvents.length === 0;
     if (
       needsInstanceList &&
       !upcomingInstancesData &&
@@ -249,6 +290,8 @@ export const WorkoutDetailsContent = ({
     );
   }, [
     providedEventId,
+    results?.location,
+    baseEvents.length,
     upcomingInstancesData,
     isUpcomingInstancesError,
     needsParentEventFallback,
@@ -256,7 +299,28 @@ export const WorkoutDetailsContent = ({
     isParentEventError,
   ]);
 
-  const location = useMemo(() => results?.location ?? null, [results]);
+  // Upcoming instances can belong to different orgs from each other and from
+  // recurring workouts at the same location. Follow the selected instance's
+  // AO/region context; recurring selections keep the location-level fields.
+  const location = useMemo(() => {
+    const baseLocation = results?.location;
+    if (!baseLocation) return null;
+    if (!selectedInstance) return baseLocation;
+    const selectedInstanceOrgs = baseLocation.instanceOrgs.find(
+      (orgs) => orgs.instanceId === selectedInstance.id,
+    );
+    // The queries can be cached at different times. A local series occurrence
+    // can retain its known orgs; one-offs and away occurrences cannot safely
+    // borrow another workout's AO or region.
+    if (!selectedInstanceOrgs) {
+      return selectedInstance.seriesId != null &&
+        baseEventIds.has(selectedInstance.seriesId)
+        ? baseLocation
+        : { ...baseLocation, ...UNKNOWN_ORGS };
+    }
+    const { instanceId: _instanceId, ...orgs } = selectedInstanceOrgs;
+    return { ...baseLocation, ...orgs };
+  }, [results, selectedInstance, baseEventIds]);
 
   // Update the search params when the panel is open
   useUpdateEventSearchParams(location?.id ?? null, selectedEventId);
@@ -323,7 +387,7 @@ export const WorkoutDetailsContent = ({
                 ) : null}
               </>
             ),
-            What: event?.eventTypes.map((type) => type.name).join(", "),
+            What: event.eventTypes.map((type) => type.name).join(", "),
             Where: [
               <Link
                 key="fullAddress"
@@ -359,7 +423,7 @@ export const WorkoutDetailsContent = ({
               hasAoContact && aoContact ? (
                 <ContactLinks contact={aoContact} iconSize="sm" />
               ) : null,
-            Notes: event?.description ? textLink(event.description) : null,
+            Notes: event.description ? textLink(event.description) : null,
           }
         : {},
     [
@@ -471,16 +535,16 @@ export const WorkoutDetailsContent = ({
               event={{
                 id: locEvent.id,
                 name: locEvent.name,
-                locationId: location?.id ?? 0,
+                locationId: location.id,
                 dayOfWeek: locEvent.dayOfWeek,
                 startTime: locEvent.startTime,
                 endTime: locEvent.endTime,
                 eventTypes: locEvent.eventTypes,
               }}
               location={{
-                lat: location?.lat ?? null,
-                lon: location?.lon ?? null,
-                id: location?.id ?? 0,
+                lat: location.lat,
+                lon: location.lon,
+                id: location.id,
               }}
               size={chipSize}
               hideName={displayedEvents.length === 1}

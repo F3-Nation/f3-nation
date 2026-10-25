@@ -10,12 +10,51 @@ import Image from "next/image";
 
 import { detectPhoneCountry } from "~/lib/phone";
 import { PhoneField } from "~/app/components/PhoneField";
+import { RegionPicker } from "~/app/components/region-picker";
+import type { Region } from "~/app/components/region-picker";
 import { isValidCallbackUrl } from "~/lib/callback-url";
 import { authClient } from "~/lib/better-auth-client";
 
-interface Region {
-  id: number;
-  name: string;
+// When the emailed code is rejected (usually because it expired while the
+// form was being filled in), the answers are kept for this tab so asking for
+// a fresh code doesn't mean typing them all again. Phone numbers and the
+// emergency contact stay out of it: browser storage is plain text, and those
+// are worth retyping rather than leaving behind on a shared computer.
+const DRAFT_KEY = "f3-register-draft";
+
+interface RegisterDraft {
+  email: string;
+  f3Name: string;
+  firstName: string;
+  lastName: string;
+  homeRegionId: number | "";
+  regionSearch: string;
+}
+
+function saveDraft(draft: RegisterDraft) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    /* storage unavailable — the form still works, just without a draft */
+  }
+}
+
+function loadDraft(email: string): RegisterDraft | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    const draft = raw ? (JSON.parse(raw) as RegisterDraft) : null;
+    return draft?.email === email ? draft : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* nothing to clear */
+  }
 }
 
 export default function RegisterForm({
@@ -55,9 +94,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
   const [needsSignInAgain, setNeedsSignInAgain] = useState(false);
   const [showEmergency, setShowEmergency] = useState(false);
   const [regionSearch, setRegionSearch] = useState("");
-  const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
-  const regionRef = useRef<HTMLDivElement>(null);
-  const regionSelectedRef = useRef(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     fetch("/api/regions")
@@ -74,20 +111,16 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     setEmergencyPhoneCountry(detectedCountry);
   }, []);
 
-  // Close region dropdown on outside click
+  // Restore the answers saved when an earlier code was rejected.
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (regionRef.current && !regionRef.current.contains(e.target as Node)) {
-        setRegionDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredRegions = regions.filter((r) =>
-    r.name.toLowerCase().includes(regionSearch.toLowerCase()),
-  );
+    const draft = loadDraft(email);
+    if (!draft) return;
+    setF3Name(draft.f3Name);
+    setFirstName(draft.firstName);
+    setLastName(draft.lastName);
+    setHomeRegionId(draft.homeRegionId);
+    setRegionSearch(draft.regionSearch);
+  }, [email]);
 
   // If no email or code, redirect back to login
   useEffect(() => {
@@ -96,11 +129,12 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     }
   }, [email, code, router]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submittingRef.current || needsSignInAgain) return;
+
     setLoading(true);
     setError("");
-    setNeedsSignInAgain(false);
 
     if (!firstName.trim() || !lastName.trim()) {
       setError("First name and last name are required.");
@@ -123,6 +157,9 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
       return;
     }
 
+    submittingRef.current = true;
+    let accountCreated = false;
+
     try {
       // Create user via API — backend-agnostic, creates the `users` row
       // through the F3 API regardless of which auth backend completes the
@@ -132,6 +169,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
+          code,
           f3Name: f3Name || undefined,
           firstName,
           lastName,
@@ -148,8 +186,24 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
           error?: string;
         };
         setError(data.error ?? "Registration failed. Please try again.");
+        // A rejected code can't be fixed from this form: keep the answers
+        // for this tab and offer a fresh code.
+        if (res.status === 401) {
+          saveDraft({
+            email,
+            f3Name,
+            firstName,
+            lastName,
+            homeRegionId,
+            regionSearch,
+          });
+          setNeedsSignInAgain(true);
+        }
         return;
       }
+      clearDraft();
+
+      accountCreated = true;
 
       // User created — now sign in with the original MFA code. The `users`
       // row exists now, so Better Auth's databaseHooks.user.create.before
@@ -180,6 +234,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
           redirect: false,
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth's signIn resolves undefined when it redirects
         if (result?.error) {
           setError(
             "Your account was created, but your code has expired. Please sign in again to continue.",
@@ -194,8 +249,16 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
         : "/";
       router.push(safeUrl);
     } catch {
-      setError("Something went wrong. Please try again.");
+      if (accountCreated) {
+        setError(
+          "Your account was created, but we couldn't sign you in. Please sign in again to continue.",
+        );
+        setNeedsSignInAgain(true);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }
@@ -277,76 +340,15 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
               />
             </div>
 
-            <div ref={regionRef} className="relative">
-              <label
-                htmlFor="homeRegion"
-                className="mb-2 block text-base font-medium"
-              >
-                Home Region
-              </label>
-              <input
-                id="homeRegion"
-                type="text"
-                value={regionSearch}
-                onChange={(e) => {
-                  setRegionSearch(e.target.value);
-                  setHomeRegionId("");
-                  setRegionDropdownOpen(true);
-                }}
-                onFocus={() => setRegionDropdownOpen(true)}
-                onBlur={() => {
-                  setTimeout(() => {
-                    if (!regionSelectedRef.current) {
-                      if (homeRegionId) {
-                        // Restore the selected region name if user didn't change selection
-                        const selected = regions.find(
-                          (r) => r.id === homeRegionId,
-                        );
-                        if (selected) {
-                          setRegionSearch(selected.name);
-                        }
-                      } else {
-                        setRegionSearch("");
-                      }
-                    }
-                    regionSelectedRef.current = false;
-                    setRegionDropdownOpen(false);
-                  }, 200);
-                }}
-                placeholder="Search for a region (optional)"
-                autoComplete="off"
-                className={inputClass}
-              />
-              {regionDropdownOpen && filteredRegions.length > 0 && (
-                <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-card shadow-lg">
-                  {filteredRegions.map((r) => (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        onMouseDown={() => {
-                          regionSelectedRef.current = true;
-                        }}
-                        onClick={() => {
-                          setHomeRegionId(r.id);
-                          setRegionSearch(r.name);
-                          setRegionDropdownOpen(false);
-                        }}
-                        className="w-full px-4 py-2 text-left text-base transition-colors hover:bg-accent"
-                      >
-                        {r.name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {regionDropdownOpen &&
-                regionSearch &&
-                filteredRegions.length === 0 && (
-                  <div className="absolute z-10 mt-1 w-full rounded-md border bg-card px-4 py-3 text-base text-muted-foreground shadow-lg">
-                    No regions found
-                  </div>
-                )}
-            </div>
+            <RegionPicker
+              regions={regions}
+              value={homeRegionId}
+              onChange={setHomeRegionId}
+              search={regionSearch}
+              onSearchChange={setRegionSearch}
+              inputClass={inputClass}
+              placeholder="Search for a region (optional)"
+            />
 
             <div>
               <PhoneField
@@ -441,7 +443,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || needsSignInAgain}
               className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {loading ? "Creating Account..." : "Create Account"}

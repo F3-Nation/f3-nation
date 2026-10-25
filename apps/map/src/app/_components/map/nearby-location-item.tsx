@@ -18,7 +18,7 @@ import {
 import { ImageWithFallback } from "@acme/ui/image-with-fallback";
 import { EventChip } from "./event-chip";
 
-const SHOW_ID = false;
+const SHOW_ID = false as boolean;
 
 export const NearbyLocationItem = (props: {
   item: LocationMarkerWithDistance;
@@ -138,7 +138,7 @@ export const NearbyLocationItem = (props: {
                 <span className="text-foreground/40">
                   {!isProduction && SHOW_ID ? <div>({item.id})</div> : null}
                 </span>
-                <span className="font-bold">{item.distance?.toFixed(1)}mi</span>
+                <span className="font-bold">{item.distance.toFixed(1)}mi</span>
               </div>
             ) : null}
           </div>

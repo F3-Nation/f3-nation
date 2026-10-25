@@ -17,7 +17,7 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
   }),
 }));
 
-import { eq, schema } from "@acme/db";
+import { eq, schema, sql } from "@acme/db";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -34,6 +34,7 @@ describe("Location Router", () => {
   // Track created locations for cleanup
   const createdLocationIds: number[] = [];
   const createdOrgIds: number[] = [];
+  const createdEventIds: number[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -47,6 +48,14 @@ describe("Location Router", () => {
   });
 
   afterAll(async () => {
+    // Clean up events first -- they reference locations via a FK.
+    for (const eventId of createdEventIds.reverse()) {
+      try {
+        await cleanup.event(eventId);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
     // Clean up all created locations in reverse order
     for (const locationId of createdLocationIds.reverse()) {
       try {
@@ -84,7 +93,108 @@ describe("Location Router", () => {
     return region;
   };
 
+  // Helper to create a test AO under a region
+  const createTestAO = async (regionId: number) => {
+    const [ao] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `Test AO ${uniqueId()}`,
+        orgType: "ao",
+        parentId: regionId,
+        isActive: true,
+      })
+      .returning();
+
+    if (ao) {
+      createdOrgIds.push(ao.id);
+    }
+    return ao;
+  };
+
   describe("all", () => {
+    it("pages tied sort values without repeats or omissions and preserves sort precedence", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const region = await createTestRegion();
+      if (!region) throw new Error("Failed to create test region");
+      const prefix = `Pagination ${uniqueId()}`;
+      const locations = await db
+        .insert(schema.locations)
+        .values(
+          Array.from({ length: 40 }, (_, index) => ({
+            name: `${prefix} ${index % 2 ? "Alpha" : "Zulu"}`,
+            orgId: region.id,
+            isActive: true,
+            latitude: 35.5,
+            longitude: -80.5,
+          })),
+        )
+        .returning({ id: schema.locations.id, name: schema.locations.name });
+      createdLocationIds.push(...locations.map((location) => location.id));
+      // Move a tied tuple so physical row order cannot stand in for ID order.
+      await db
+        .update(schema.locations)
+        .set({ name: sql`${schema.locations.name}` })
+        .where(eq(schema.locations.id, locations[0]!.id));
+
+      const byId = [...locations].sort((a, b) => a.id - b.id);
+      const client = createTestClient();
+      const unsorted = await client.location.all({
+        searchTerm: prefix,
+        sorting: [],
+        pageSize: 50,
+      });
+      expect(unsorted.locations.map((location) => location.id)).toEqual(
+        byId.map((location) => location.id),
+      );
+      for (const desc of [false, true]) {
+        for (const id of ["regionName", "locationName"]) {
+          const expected = [...byId]
+            .sort((a, b) =>
+              id === "regionName"
+                ? 0
+                : (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) *
+                  (desc ? -1 : 1),
+            )
+            .map((location) => location.id);
+          for (const pageSize of [5, 7]) {
+            const paged: number[] = [];
+            for (
+              let pageIndex = 0;
+              pageIndex < Math.ceil(40 / pageSize);
+              pageIndex++
+            ) {
+              const page = await client.location.all({
+                searchTerm: prefix,
+                sorting: [{ id, desc }],
+                pageIndex,
+                pageSize,
+              });
+              expect(page.totalCount).toBe(40);
+              paged.push(...page.locations.map((location) => location.id));
+            }
+            expect(paged).toEqual(expected);
+            expect(new Set(paged).size).toBe(40);
+          }
+        }
+      }
+      for (const sorting of [
+        undefined,
+        [
+          { id: "regionName", desc: false },
+          { id: "id", desc: true },
+        ],
+      ]) {
+        const result = await client.location.all({
+          searchTerm: prefix,
+          sorting,
+          pageSize: 50,
+        });
+        expect(result.locations.map((location) => location.id)).toEqual(
+          byId.map((location) => location.id).reverse(),
+        );
+      }
+    });
+
     it("should return a list of locations", async () => {
       const client = createTestClient();
       const result = await client.location.all({
@@ -205,6 +315,100 @@ describe("Location Router", () => {
       expect(result.locations.every((l) => l.regionId === region.id)).toBe(
         true,
       );
+    });
+
+    it("should hide a location whose only workout is private from anonymous callers, but not from a signed-in caller", async () => {
+      // The test harness defaults to a signed-in admin session; a prior
+      // test case may have left the auth mock on a specific session too,
+      // so explicitly reset to anonymous before the "anonymous" assertions.
+      await mockAuthWithSession(null);
+
+      const region = await createTestRegion();
+      if (!region) return;
+      const ao = await createTestAO(region.id);
+      if (!ao) return;
+
+      const [privateOnlyLocation] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Private Only Location ${uniqueId()}`,
+          orgId: region.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!privateOnlyLocation) return;
+      createdLocationIds.push(privateOnlyLocation.id);
+
+      const [privateEvent] = await db
+        .insert(schema.events)
+        .values({
+          name: `Private Workout ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: privateOnlyLocation.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: true,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: true,
+        })
+        .returning();
+      if (!privateEvent) return;
+      createdEventIds.push(privateEvent.id);
+
+      const [inactiveOnlyLocation] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Inactive Only Location ${uniqueId()}`,
+          orgId: region.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!inactiveOnlyLocation) return;
+      createdLocationIds.push(inactiveOnlyLocation.id);
+
+      const [inactiveEvent] = await db
+        .insert(schema.events)
+        .values({
+          name: `Inactive Workout ${uniqueId()}`,
+          orgId: ao.id,
+          locationId: inactiveOnlyLocation.id,
+          dayOfWeek: "monday",
+          startTime: "0530",
+          isActive: false,
+          highlight: false,
+          startDate: "2026-01-01",
+          isPrivate: false,
+        })
+        .returning();
+      if (!inactiveEvent) return;
+      createdEventIds.push(inactiveEvent.id);
+
+      const anonymousClient = createTestClient();
+      const anonymousResult = await anonymousClient.location.all({
+        statuses: ["active", "inactive"],
+        pageIndex: 0,
+        pageSize: 100,
+      });
+      const anonymousIds = anonymousResult.locations.map((l) => l.id);
+      expect(anonymousIds).not.toContain(privateOnlyLocation.id);
+      expect(anonymousIds).not.toContain(inactiveOnlyLocation.id);
+
+      const session = await createAdminSession();
+      await mockAuthWithSession(session);
+      const signedInClient = createTestClient();
+      const signedInResult = await signedInClient.location.all({
+        statuses: ["active", "inactive"],
+        pageIndex: 0,
+        pageSize: 100,
+      });
+      const signedInIds = signedInResult.locations.map((l) => l.id);
+      expect(signedInIds).toContain(privateOnlyLocation.id);
+      expect(signedInIds).toContain(inactiveOnlyLocation.id);
     });
   });
 
@@ -379,6 +583,209 @@ describe("Location Router", () => {
           isActive: true,
         }),
       ).rejects.toThrow();
+    });
+  });
+
+  describe("crupdate destination org", () => {
+    it("should reject moving a location to an org the caller can't edit", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) throw new Error("Failed to create regions");
+
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Rescope Location ${uniqueId()}`,
+          orgId: regionA.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create location");
+      createdLocationIds.push(location.id);
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+
+      await expect(
+        createTestClient().location.crupdate({
+          id: location.id,
+          name: location.name,
+          orgId: regionB.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const [stored] = await db
+        .select({ orgId: schema.locations.orgId })
+        .from(schema.locations)
+        .where(eq(schema.locations.id, location.id));
+      expect(stored?.orgId).toBe(regionA.id);
+    });
+
+    it("should reject pulling a location from an org the caller can't edit", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) throw new Error("Failed to create regions");
+
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Pulled Location ${uniqueId()}`,
+          orgId: regionB.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create location");
+      createdLocationIds.push(location.id);
+
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+
+      await expect(
+        createTestClient().location.crupdate({
+          id: location.id,
+          name: location.name,
+          orgId: regionA.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const [stored] = await db
+        .select({ orgId: schema.locations.orgId })
+        .from(schema.locations)
+        .where(eq(schema.locations.id, location.id));
+      expect(stored?.orgId).toBe(regionB.id);
+    });
+
+    it("should return NOT_FOUND for an org that doesn't exist", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      if (!regionA) throw new Error("Failed to create region");
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+
+      await expect(
+        createTestClient().location.crupdate({
+          name: `Orphan Location ${uniqueId()}`,
+          orgId: 999_999_999,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    it("should return NOT_FOUND for a location id that doesn't exist", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      if (!regionA) throw new Error("Failed to create region");
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+
+      await expect(
+        createTestClient().location.crupdate({
+          id: 2_000_000_000,
+          name: `Ghost Location ${uniqueId()}`,
+          orgId: regionA.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      const stored = await db
+        .select({ id: schema.locations.id })
+        .from(schema.locations)
+        .where(eq(schema.locations.id, 2_000_000_000));
+      expect(stored).toEqual([]);
+    });
+
+    it("should reject creating a location in an org the caller can't edit", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) throw new Error("Failed to create regions");
+      await mockAuthWithSession(
+        createEditorSession({ orgId: regionA.id, orgName: regionA.name }),
+      );
+      const name = `Planted Location ${uniqueId()}`;
+
+      await expect(
+        createTestClient().location.crupdate({
+          name,
+          orgId: regionB.id,
+          latitude: 35.0,
+          longitude: -80.0,
+          isActive: true,
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      const stored = await db
+        .select({ id: schema.locations.id })
+        .from(schema.locations)
+        .where(eq(schema.locations.name, name));
+      createdLocationIds.push(...stored.map(({ id }) => id));
+      expect(stored).toEqual([]);
+    });
+
+    it("should move a location when the caller edits both orgs", async () => {
+      await mockAuthWithSession(await createAdminSession());
+      const regionA = await createTestRegion();
+      const regionB = await createTestRegion();
+      if (!regionA || !regionB) throw new Error("Failed to create regions");
+      const [location] = await db
+        .insert(schema.locations)
+        .values({
+          name: `Moving Location ${uniqueId()}`,
+          orgId: regionA.id,
+          isActive: true,
+          latitude: 35.0,
+          longitude: -80.0,
+        })
+        .returning();
+      if (!location) throw new Error("Failed to create location");
+      createdLocationIds.push(location.id);
+
+      const session = createEditorSession({
+        orgId: regionA.id,
+        orgName: regionA.name,
+      });
+      await mockAuthWithSession({
+        ...session,
+        roles: [
+          ...session.roles!,
+          {
+            orgId: regionB.id,
+            orgName: regionB.name,
+            roleName: "editor" as const,
+          },
+        ],
+      });
+
+      const result = await createTestClient().location.crupdate({
+        id: location.id,
+        name: location.name,
+        orgId: regionB.id,
+        latitude: 35.0,
+        longitude: -80.0,
+        isActive: true,
+      });
+
+      expect(result.location?.orgId).toBe(regionB.id);
     });
   });
 

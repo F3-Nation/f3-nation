@@ -4,8 +4,10 @@ import { z } from "zod";
 import {
   aliasedTable,
   and,
+  asc,
   count,
   eq,
+  exists,
   gt,
   gte,
   ilike,
@@ -14,6 +16,7 @@ import {
   lte,
   or,
   schema,
+  sql,
 } from "@acme/db";
 import { IsActiveStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -25,11 +28,19 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
-import { adminProcedure, editorProcedure, protectedProcedure } from "../shared";
+import { orgAndAncestorsAreActive } from "../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
+import { requireEditorOnRescope } from "../require-editor-on-rescope";
+import {
+  adminProcedure,
+  editorProcedure,
+  protectedProcedure,
+  publicReadProcedure,
+} from "../shared";
 import { withPagination } from "../with-pagination";
 
 export const locationRouter = {
-  all: protectedProcedure
+  all: publicReadProcedure
     .input(
       z
         .object({
@@ -116,6 +127,11 @@ export const locationRouter = {
     )
     .handler(async ({ context: ctx, input }) => {
       const regionOrg = aliasedTable(schema.orgs, "region_org");
+      // resolvePagination already bounds the "omit both params"
+      // branch to a single default-sized page for every caller, so an
+      // anonymous caller reaching this endpoint can no longer scrape
+      // the whole table in one request — no anonymous-specific override
+      // needed here (unlike isActive/email/meta, which still is below).
       const { limit, offset, usePagination } = resolvePagination({
         pageSize: input?.pageSize,
         pageIndex: input?.pageIndex,
@@ -144,17 +160,28 @@ export const locationRouter = {
         }
       }
 
+      // Anonymous callers see only active locations. Signed-in callers keep
+      // the requested status filter, including no filter when omitted.
+      const isAnonymous = !ctx.session?.user;
+      const effectiveStatuses = isAnonymous
+        ? ["active" as const]
+        : input?.statuses;
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
+
       const where = and(
-        !input?.statuses?.length ||
-          input.statuses.length === IsActiveStatus.length
+        isAnonymous
+          ? orgAndAncestorsAreActive(schema.locations.orgId)
+          : undefined,
+        !effectiveStatuses?.length ||
+          effectiveStatuses.length === IsActiveStatus.length
           ? undefined
-          : input.statuses.includes("active")
+          : effectiveStatuses.includes("active")
             ? eq(schema.locations.isActive, true)
             : eq(schema.locations.isActive, false),
         input?.searchTerm
           ? or(
-              ilike(schema.locations.name, `%${input?.searchTerm}%`),
-              ilike(schema.locations.description, `%${input?.searchTerm}%`),
+              ilike(schema.locations.name, `%${input.searchTerm}%`),
+              ilike(schema.locations.description, `%${input.searchTerm}%`),
             )
           : undefined,
         input?.regionIds?.length
@@ -163,6 +190,28 @@ export const locationRouter = {
         // Filter by editable org IDs if onlyMine is true and not a nation admin
         input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
           ? inArray(schema.locations.orgId, editableOrgIds)
+          : undefined,
+        // A location can stay active while all its workouts are private,
+        // inactive, or owned by retired org branches. Require an eligible
+        // workout before returning its address to anonymous callers.
+        isAnonymous
+          ? exists(
+              ctx.db
+                // `count()` is an aggregate: with no GROUP BY, Postgres
+                // always returns exactly one row (0 when nothing matches),
+                // so EXISTS(...) would always be true. Select a constant
+                // instead so EXISTS actually tests for a matching row.
+                .select({ one: sql`1` })
+                .from(schema.events)
+                .where(
+                  and(
+                    eq(schema.events.locationId, schema.locations.id),
+                    eq(schema.events.isActive, true),
+                    eq(schema.events.isPrivate, false),
+                    orgAndAncestorsAreActive(schema.events.orgId),
+                  ),
+                ),
+            )
           : undefined,
       );
 
@@ -184,7 +233,7 @@ export const locationRouter = {
           created: schema.locations.created,
         },
         "id",
-      );
+      ).concat(asc(schema.locations.id));
 
       const select = {
         id: schema.locations.id,
@@ -221,7 +270,17 @@ export const locationRouter = {
         ? await withPagination(query.$dynamic(), sortedColumns, offset, limit)
         : await query.orderBy(...sortedColumns).limit(limit);
 
-      return { locations, totalCount: locationCount?.count ?? 0 };
+      // publicReadProcedure lets an anonymous caller reach this endpoint
+      // a location's contact email/metadata isn't part of the
+      // map's own public browse payload, so don't let it leak here either.
+      const maskedLocations = isAnonymous
+        ? locations.map((loc) => ({ ...loc, email: null, meta: null }))
+        : locations;
+
+      return {
+        locations: maskedLocations,
+        totalCount: locationCount?.count ?? 0,
+      };
     }),
 
   byId: protectedProcedure
@@ -379,17 +438,15 @@ export const locationRouter = {
           message: "Parent ID or ID is required",
         });
       }
-      const roleCheckResult = await checkHasRoleOnOrg({
-        orgId: existingLocation?.orgId ?? input.orgId,
-        session: ctx.session,
-        db: ctx.db,
-        roleName: "editor",
-      });
-      if (!roleCheckResult.success) {
-        throw new ORPCError("UNAUTHORIZED", {
-          message: "You are not authorized to update this Location",
-        });
+      if (input.id && !existingLocation) {
+        throw new ORPCError("NOT_FOUND", { message: "Location not found" });
       }
+      await requireEditorOnRescope({
+        ctx,
+        currentOrgId: existingLocation?.orgId,
+        targetOrgId: input.orgId,
+        entity: "Location",
+      });
       const locationToCrupdate: typeof schema.locations.$inferInsert = {
         ...input,
         meta: {

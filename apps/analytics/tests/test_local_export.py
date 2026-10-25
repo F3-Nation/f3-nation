@@ -95,7 +95,7 @@ def test_export_local_samples_each_materialization_independently(monkeypatch, tm
         parquet.write_bytes(b"synthetic parquet")
         return MaterializationArtifacts(root, (parquet,), 1)
 
-    monkeypatch.setattr(local_export_module, "select_materializations", lambda _names: definitions)
+    monkeypatch.setattr(local_export_module, "select_materializations", lambda _names, **_kwargs: definitions)
     monkeypatch.setattr(local_export_module, "attach_postgres", lambda *_args: None)
     monkeypatch.setattr(local_export_module, "materialize", materialize_with_inputs)
     export_local(
@@ -133,7 +133,7 @@ def test_export_local_removes_staging_on_multi_materialization_failure(monkeypat
         parquet.write_bytes(b"synthetic parquet")
         return MaterializationArtifacts(root, (parquet,), 1)
 
-    monkeypatch.setattr(local_export_module, "select_materializations", lambda _names: definitions)
+    monkeypatch.setattr(local_export_module, "select_materializations", lambda _names, **_kwargs: definitions)
     monkeypatch.setattr(local_export_module, "attach_postgres", lambda *_args: None)
     monkeypatch.setattr(local_export_module, "materialize", fail_second)
     with pytest.raises(RuntimeError, match="synthetic failure"):
@@ -284,7 +284,7 @@ def test_cli_export_local_success_never_enters_gcs_branch(monkeypatch, tmp_path:
     settings = _settings(tmp_path)
     calls = []
 
-    def fake_export(_settings, destination, materializations, run_id):
+    def fake_export(_settings, destination, materializations, run_id, product):
         calls.append((destination, materializations, run_id))
         (destination / run_id).mkdir(mode=0o700)
         return {}

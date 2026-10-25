@@ -89,14 +89,14 @@ export const getReadableDayOfWeek = (dayOfWeek: DayOfWeek | null) => {
 };
 
 export const convertHH_mmToHHmm = (value: string) => {
-  if (value?.length !== 5) {
+  if (value.length !== 5) {
     return "";
   }
   return value.replace(":", "");
 };
 
 export const convertHHmmToHH_mm = (value: string) => {
-  if (value?.length !== 4) {
+  if (value.length !== 4) {
     return "";
   }
   return value.slice(0, 2) + ":" + value.slice(2, 4);
@@ -172,6 +172,12 @@ export const arrayOrSingle = <T extends z.ZodType>(schema: T) =>
     z.array(schema),
   );
 
+// Parse query strings explicitly: Boolean("false") is true.
+// Accept only booleans and "true"/"false"/"1"/"0"; reject other values.
+export const queryBooleanSchema = z
+  .union([z.boolean(), z.enum(["true", "false", "1", "0"])])
+  .transform((value) => value === true || value === "true" || value === "1");
+
 // Helper to parse sorting parameter from query string (can be JSON stringified)
 export const parseSorting = () =>
   z.preprocess(
@@ -211,7 +217,7 @@ export const parseSorting = () =>
       .array(
         z.object({
           id: z.string(),
-          desc: z.boolean().optional().default(false),
+          desc: queryBooleanSchema.optional().default(false),
         }),
       )
       .optional(),

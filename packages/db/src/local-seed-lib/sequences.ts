@@ -65,3 +65,43 @@ export async function resetSequences(db: AppDb): Promise<void> {
     );
   }
 }
+
+/**
+ * Sets every sequence owned by a `public` table column (serial or identity)
+ * to the table's max id, or leaves it unused when the table is empty. Unlike
+ * `resetSequences` this covers tables a restored dump fills (`users`,
+ * `roles`, `event_instances`, ...), so it must run before anything inserts.
+ */
+export async function resetAllSequences(db: AppDb): Promise<number> {
+  const owned = await db.execute<{
+    seq: string;
+    table_name: string;
+    column_name: string;
+  }>(sql`
+    SELECT pg_get_serial_sequence(
+             format('%I.%I', n.nspname, c.relname), a.attname) AS seq,
+           c.relname AS table_name,
+           a.attname AS column_name
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_attribute a ON a.attrelid = c.oid
+    WHERE n.nspname = 'public'
+      AND c.relkind = 'r'
+      AND a.attnum > 0
+      AND NOT a.attisdropped
+  `);
+
+  let reset = 0;
+  for (const { seq, table_name, column_name } of owned) {
+    if (!seq) continue;
+    await db.execute(sql`
+      SELECT setval(
+        ${seq}::regclass,
+        coalesce(max(${sql.identifier(column_name)}), 1),
+        max(${sql.identifier(column_name)}) IS NOT NULL
+      ) FROM ${sql.identifier(table_name)}
+    `);
+    reset += 1;
+  }
+  return reset;
+}

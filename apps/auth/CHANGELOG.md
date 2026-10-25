@@ -1,5 +1,87 @@
 # Changelog
 
+## [2.6.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.5.0...auth@2.6.0) (2026-10-23)
+
+
+### Features
+
+* **auth,sso:** accept offline_access on legacy authorize and authenticate revoke ([#1327](https://github.com/F3-Nation/f3-nation/issues/1327)) ([8f1ac19](https://github.com/F3-Nation/f3-nation/commit/8f1ac19a5df001bf94bec6a87a70f1b0784929c8))
+* **auth:** ask for home region on first login and stamp when it was confirmed ([#1267](https://github.com/F3-Nation/f3-nation/issues/1267)) ([f26bb92](https://github.com/F3-Nation/f3-nation/commit/f26bb92fd74a79f811828c35500882a465b8e07c))
+
+
+### Bug Fixes
+
+* **auth:** include 999999 in email sign-in code range ([#1307](https://github.com/F3-Nation/f3-nation/issues/1307)) ([da54c16](https://github.com/F3-Nation/f3-nation/commit/da54c16df4b338b88a4027e7592725f92b0fac84))
+* **auth:** recover from sign-in failure after registration ([#1256](https://github.com/F3-Nation/f3-nation/issues/1256)) ([2a5560f](https://github.com/F3-Nation/f3-nation/commit/2a5560f89feab8be5ea869d113e94daf92344594))
+* **auth:** require the emailed code before /api/register creates a user ([#1238](https://github.com/F3-Nation/f3-nation/issues/1238)) ([5acafe8](https://github.com/F3-Nation/f3-nation/commit/5acafe8adf04f925cfea5f711f72e63f7d4bbdda))
+* **auth:** share one OTP guess budget between registration and Better Auth sign-in ([#1315](https://github.com/F3-Nation/f3-nation/issues/1315)) ([3a337f0](https://github.com/F3-Nation/f3-nation/commit/3a337f0b50c3861c8c648e87860c477710d84dec))
+* **auth:** stamp the nation owner on migrated oauth clients ([#1268](https://github.com/F3-Nation/f3-nation/issues/1268)) ([5a0e7bf](https://github.com/F3-Nation/f3-nation/commit/5a0e7bfae4c18b5a1995713c7ef046a73112c1a6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.1
+    * @acme/shared bumped to 0.5.1
+  * devDependencies
+    * @f3nation/sso bumped to 0.5.0
+
+## [2.5.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.4.1...auth@2.5.0) (2026-10-14)
+
+
+### Features
+
+* **repo,db:** run several checkouts side by side with local:setup --slot ([#1246](https://github.com/F3-Nation/f3-nation/issues/1246)) ([7a1377f](https://github.com/F3-Nation/f3-nation/commit/7a1377f3ba83dd5eccae3b322947994f3379205e))
+
+
+### Bug Fixes
+
+* **api,map:** public read tier for the map API ([#378](https://github.com/F3-Nation/f3-nation/issues/378)), plus [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3 groundwork ([#1149](https://github.com/F3-Nation/f3-nation/issues/1149)) ([f65d3d9](https://github.com/F3-Nation/f3-nation/commit/f65d3d9120131c4cbff8bcdb019bcc546b8a6464))
+* **auth,ci:** keep commas in Cloud Run env values and serialize deploys per service ([#1237](https://github.com/F3-Nation/f3-nation/issues/1237)) ([a8e8a46](https://github.com/F3-Nation/f3-nation/commit/a8e8a46a0e215a0e913eac641755b9524feb99f7))
+* **auth:** safely resume sign-in after onboarding ([#1215](https://github.com/F3-Nation/f3-nation/issues/1215)) ([90a6ed5](https://github.com/F3-Nation/f3-nation/commit/90a6ed59228bed4912d8e4dd8f583629c5b7ad25))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.0
+    * @acme/shared bumped to 0.5.0
+
+## [2.4.1](https://github.com/F3-Nation/f3-nation/compare/auth@2.4.0...auth@2.4.1) (2026-10-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.9.0
+    * @acme/logger bumped to 0.3.0
+
+## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.5...auth@2.4.0) (2026-10-06)
+
+
+### Features
+
+* **auth:** new-user registration hand-off for the Better Auth flow ([#1035](https://github.com/F3-Nation/f3-nation/issues/1035)) ([d888d2d](https://github.com/F3-Nation/f3-nation/commit/d888d2dd4e029885a17c4784df384f1c7dcd8e4f))
+* **auth:** resolve [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3's OAuth client-secret-issuance gap ([#1046](https://github.com/F3-Nation/f3-nation/issues/1046)) ([0bf5b66](https://github.com/F3-Nation/f3-nation/commit/0bf5b66daf882e7199643eb9d43ab28c2795087f))
+
+
+### Bug Fixes
+
+* **auth,db,api:** let Better Auth start and sign in against the Drizzle schema ([#1143](https://github.com/F3-Nation/f3-nation/issues/1143)) ([2a9026f](https://github.com/F3-Nation/f3-nation/commit/2a9026fe8f9124f68331bb024a160a27f1e26949))
+* **auth:** resolve apps/auth/.env relative to the script, not the cwd ([#1115](https://github.com/F3-Nation/f3-nation/issues/1115)) ([4996abd](https://github.com/F3-Nation/f3-nation/commit/4996abd65a70280381ce79af7e03f8a182dc1f71))
+* **auth:** stop greeting a user with no F3 name as "null" ([#1145](https://github.com/F3-Nation/f3-nation/issues/1145)) ([eb98b5d](https://github.com/F3-Nation/f3-nation/commit/eb98b5ddd6fb2595801d8b44a1023f466aa70da8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.8.0
+    * @acme/shared bumped to 0.4.1
+
 ## [2.3.5](https://github.com/F3-Nation/f3-nation/compare/auth@2.3.4...auth@2.3.5) (2026-09-27)
 
 

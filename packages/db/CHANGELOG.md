@@ -1,5 +1,74 @@
 # Changelog
 
+## [0.10.1](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.10.0...pkg-db@0.10.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **db:** say which proxy to start when db:migrate can't connect ([#1195](https://github.com/F3-Nation/f3-nation/issues/1195)) ([fa09a39](https://github.com/F3-Nation/f3-nation/commit/fa09a399ed3caa490f989d7305be387603aa82fa))
+* **scripts:** add the org chart api key to the seed script ([#1330](https://github.com/F3-Nation/f3-nation/issues/1330)) ([96a5ef0](https://github.com/F3-Nation/f3-nation/commit/96a5ef049880f978fc988e46b6ae6dc802899919))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.5.1
+
+## [0.10.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.9.0...pkg-db@0.10.0) (2026-10-14)
+
+
+### Features
+
+* **db,repo:** add db:load:snapshot to load the sanitized Prod snapshot ([#1231](https://github.com/F3-Nation/f3-nation/issues/1231)) ([95d89a8](https://github.com/F3-Nation/f3-nation/commit/95d89a8731ce52cee130ade667bc34a6cc33c770))
+* **db,shared,admin:** add password_manager and password_reader roles ([#1180](https://github.com/F3-Nation/f3-nation/issues/1180)) ([e69f45d](https://github.com/F3-Nation/f3-nation/commit/e69f45d92f88ed1248a86cdce716e05a66389b85))
+* **repo,db:** run several checkouts side by side with local:setup --slot ([#1246](https://github.com/F3-Nation/f3-nation/issues/1246)) ([7a1377f](https://github.com/F3-Nation/f3-nation/commit/7a1377f3ba83dd5eccae3b322947994f3379205e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.5.0
+
+## [0.9.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.8.0...pkg-db@0.9.0) (2026-10-10)
+
+
+### Features
+
+* **db:** add public-table audit history ([#1060](https://github.com/F3-Nation/f3-nation/issues/1060)) ([10454d8](https://github.com/F3-Nation/f3-nation/commit/10454d8ab47795b984a76b01768642860b7718b6))
+* **db:** drop hand-made event_instance_expanded and attendance_expanded views ([#1066](https://github.com/F3-Nation/f3-nation/issues/1066)) ([fd884ea](https://github.com/F3-Nation/f3-nation/commit/fd884ea1c9a5c5f8b8d73a3f02550b9e4eff3675))
+* **db:** guarded db:migrate:local|staging|prod commands ([#1183](https://github.com/F3-Nation/f3-nation/issues/1183)) ([b7e5b66](https://github.com/F3-Nation/f3-nation/commit/b7e5b665b3d2193f607e24ca96698411463f5d23))
+
+
+### Bug Fixes
+
+* **db:** keep Cloud SQL socket connections open between bursts ([#1196](https://github.com/F3-Nation/f3-nation/issues/1196)) ([db73b1d](https://github.com/F3-Nation/f3-nation/commit/db73b1dadd0c4bf4baabb6ce0b60c644531b10bd))
+
+## [0.8.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.7.0...pkg-db@0.8.0) (2026-10-06)
+
+
+### Features
+
+* **auth:** resolve [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3's OAuth client-secret-issuance gap ([#1046](https://github.com/F3-Nation/f3-nation/issues/1046)) ([0bf5b66](https://github.com/F3-Nation/f3-nation/commit/0bf5b66daf882e7199643eb9d43ab28c2795087f))
+* **db:** connect over a Cloud SQL Unix socket named in DATABASE_URL ([#1118](https://github.com/F3-Nation/f3-nation/issues/1118)) ([d32a88d](https://github.com/F3-Nation/f3-nation/commit/d32a88d79ee19981c9bc901becdaf9cbab292d14))
+* **slackbot:** add F3versary announcements ([#943](https://github.com/F3-Nation/f3-nation/issues/943)) ([65c080e](https://github.com/F3-Nation/f3-nation/commit/65c080e3f50114aaea520fca95c7a945938aa3a7))
+
+
+### Bug Fixes
+
+* **auth,db,api:** let Better Auth start and sign in against the Drizzle schema ([#1143](https://github.com/F3-Nation/f3-nation/issues/1143)) ([2a9026f](https://github.com/F3-Nation/f3-nation/commit/2a9026fe8f9124f68331bb024a160a27f1e26949))
+* **db:** clarify local and test database env usage ([#1148](https://github.com/F3-Nation/f3-nation/issues/1148)) ([b11dfe7](https://github.com/F3-Nation/f3-nation/commit/b11dfe79c1a28a90432fd343e3956c6c596425ad))
+* **db:** exit non-zero when a migration fails ([#1117](https://github.com/F3-Nation/f3-nation/issues/1117)) ([e636c7f](https://github.com/F3-Nation/f3-nation/commit/e636c7f6fe672510f315b9bad79c2c764c5f6cde))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/env bumped to 0.1.4
+    * @acme/shared bumped to 0.4.1
+
 ## [0.7.0](https://github.com/F3-Nation/f3-nation/compare/pkg-db@0.6.2...pkg-db@0.7.0) (2026-09-23)
 
 

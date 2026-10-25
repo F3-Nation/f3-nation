@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   aliasedTable,
   and,
+  asc,
   countDistinct,
   eq,
   ilike,
@@ -12,7 +13,7 @@ import {
   schema,
   sql,
 } from "@acme/db";
-import type { ActiveRequestType, OrgType } from "@acme/shared/app/enums";
+import type { ActiveRequestType } from "@acme/shared/app/enums";
 import { DayOfWeek } from "@acme/shared/app/enums";
 import { RequestType, UpdateRequestStatus } from "@acme/shared/app/enums";
 import { arrayOrSingle, parseSorting } from "@acme/shared/app/functions";
@@ -57,7 +58,7 @@ import {
   recordUpdateRequest,
 } from "../lib/update-request-handlers";
 import { notifyMapDataChange } from "../lib/webhook-events";
-import { logError } from "../logger";
+import { logDebug, logError } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import { editorProcedure, protectedProcedure } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -196,6 +197,20 @@ const updateRequestMutationOutput = z.object({
   }),
 });
 
+/**
+ * Requests visible to an editor of `orgIds`. `regionId` holds the destination
+ * of a move, so the source region and AO (kept in `meta`) count too.
+ */
+const requestScope = (orgIds: number[]) => {
+  const textIds = orgIds.map(String);
+  return or(
+    inArray(schema.updateRequests.regionId, orgIds),
+    inArray(schema.updateRequests.aoId, orgIds),
+    inArray(sql`${schema.updateRequests.meta}->>'originalRegionId'`, textIds),
+    inArray(sql`${schema.updateRequests.meta}->>'originalAoId'`, textIds),
+  );
+};
+
 export const requestRouter = {
   all: editorProcedure
     .input(
@@ -215,7 +230,7 @@ export const requestRouter = {
             .boolean()
             .optional()
             .describe(
-              "If true, only return requests from regions where the requester has editor or admin role.",
+              "Deprecated and ignored. Results are always limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
             ),
           statuses: arrayOrSingle(z.enum(UpdateRequestStatus))
             .optional()
@@ -231,7 +246,7 @@ export const requestRouter = {
       tags: ["request"],
       summary: "List all requests",
       description:
-        "Get a paginated list of map change requests with optional filtering and sorting",
+        "Get a paginated list of map change requests with optional filtering and sorting. Limited to requests affecting regions or AOs where the requester has editor or admin role, unless they hold a Nation-level role.",
     })
     .output(
       z.object({
@@ -376,7 +391,6 @@ export const requestRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const onlyMine = input?.onlyMine ?? false;
       const oldAoOrg = aliasedTable(schema.orgs, "old_ao_org");
       const oldRegionOrg = aliasedTable(schema.orgs, "old_region_org");
       const oldLocation = aliasedTable(schema.locations, "old_location");
@@ -389,56 +403,40 @@ export const requestRouter = {
         defaultPageSize: 10,
       });
 
-      // Determine if filter by region IDs is needed
-      let editableOrgs: { id: number; type: OrgType }[] = [];
-      let isNationAdmin = false;
-
-      if (onlyMine) {
-        const result = await getEditableOrgIdsForUser(ctx);
-        // Requests are scoped by non-AO regionId values, so retain the
-        // helper's non-AO editable set instead of expanding direct roots.
-        editableOrgs = result.editableOrgs;
-        isNationAdmin = result.isNationAdmin;
-
-        if (editableOrgs.length === 0 && !isNationAdmin) {
-          // User has no editable orgs and is not a nation admin
-          return { requests: [], totalCount: 0 };
-        }
+      // Requests carry submitter emails, so they're always scoped to the
+      // caller's orgs.
+      const { editableOrgs, isNationAdmin } =
+        await getEditableOrgIdsForUser(ctx);
+      if (editableOrgs.length === 0 && !isNationAdmin) {
+        return { requests: [], totalCount: 0 };
       }
 
       const where = and(
         input?.statuses?.length
-          ? inArray(schema.updateRequests.status, input?.statuses)
+          ? inArray(schema.updateRequests.status, input.statuses)
           : undefined,
         input?.searchTerm
           ? or(
-              ilike(
-                schema.updateRequests.submittedBy,
-                `%${input?.searchTerm}%`,
-              ),
-              ilike(schema.updateRequests.eventName, `%${input?.searchTerm}%`),
+              ilike(schema.updateRequests.submittedBy, `%${input.searchTerm}%`),
+              ilike(schema.updateRequests.eventName, `%${input.searchTerm}%`),
               ilike(
                 schema.updateRequests.eventDescription,
-                `%${input?.searchTerm}%`,
+                `%${input.searchTerm}%`,
               ),
-              ilike(schema.updateRequests.aoName, `%${input?.searchTerm}%`),
+              ilike(schema.updateRequests.aoName, `%${input.searchTerm}%`),
               ilike(
                 schema.updateRequests.locationName,
-                `%${input?.searchTerm}%`,
+                `%${input.searchTerm}%`,
               ),
               ilike(
                 schema.updateRequests.locationDescription,
-                `%${input?.searchTerm}%`,
+                `%${input.searchTerm}%`,
               ),
             )
           : undefined,
-        // Filter by editable orgs if onlyMine is true and not a nation admin
-        onlyMine && !isNationAdmin && editableOrgs.length > 0
-          ? inArray(
-              schema.updateRequests.regionId,
-              editableOrgs.map((org) => org.id),
-            )
-          : undefined,
+        isNationAdmin
+          ? undefined
+          : requestScope(editableOrgs.map((org) => org.id)),
       );
 
       const sortedColumns = getSortingColumns(
@@ -466,7 +464,7 @@ export const requestRouter = {
           created: schema.updateRequests.created,
         },
         "id",
-      );
+      ).concat(asc(schema.updateRequests.id));
 
       const select = {
         id: schema.updateRequests.id,
@@ -555,7 +553,7 @@ export const requestRouter = {
       tags: ["request"],
       summary: "Get request by ID",
       description:
-        "Retrieve detailed information about a specific map change request including the proposed changes and current status",
+        "Retrieve detailed information about a specific map change request including the proposed changes and current status. Returns null for requests that do not affect a region or AO where the requester has editor or admin role.",
     })
     .output(
       z.object({
@@ -656,10 +654,24 @@ export const requestRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
+      // Same scope as `all`; out-of-scope requests read as missing so their
+      // ids can't be probed.
+      const { editableOrgs, isNationAdmin } =
+        await getEditableOrgIdsForUser(ctx);
+      if (editableOrgs.length === 0 && !isNationAdmin) {
+        return { request: null };
+      }
       const [request] = await ctx.db
         .select()
         .from(schema.updateRequests)
-        .where(eq(schema.updateRequests.id, input.id));
+        .where(
+          and(
+            eq(schema.updateRequests.id, input.id),
+            isNationAdmin
+              ? undefined
+              : requestScope(editableOrgs.map((org) => org.id)),
+          ),
+        );
       return { request: request ?? null };
     }),
   canDeleteEvent: protectedProcedure
@@ -1160,20 +1172,18 @@ const notifyPendingRequest = async ({
   };
 }) => {
   // Notify admins and editors about the new request
-  if (result.status === "pending") {
-    try {
-      await notifyMapChangeRequest({
-        db: ctx.db,
-        requestId: result.updateRequest.id,
-      });
-    } catch (error) {
-      logError(
-        "api.request.notify_failed",
-        { requestId: result.updateRequest.id },
-        error,
-      );
-      // Don't fail the request if notification fails
-    }
+  try {
+    await notifyMapChangeRequest({
+      db: ctx.db,
+      requestId: result.updateRequest.id,
+    });
+  } catch (error) {
+    logError(
+      "api.request.notify_failed",
+      { requestId: result.updateRequest.id },
+      error,
+    );
+    // Don't fail the request if notification fails
   }
 };
 
@@ -1193,6 +1203,13 @@ const REQUEST_TYPE_TO_MAP_EVENT: Record<
   move_event_to_new_ao: "map.updated",
   delete_event: "map.deleted",
   delete_ao: "map.deleted",
+};
+
+const pendingRegionNotificationTasks = new Set<Promise<void>>();
+
+/** Wait for detached region notification work to finish (used by deterministic tests). */
+export const waitForRegionNotificationTasks = async () => {
+  await Promise.all([...pendingRegionNotificationTasks]);
 };
 
 type HandleableRequestInput = CheckRequestInput & {
@@ -1234,45 +1251,146 @@ const handleRequest = async <T extends HandleableRequestInput>({
     // Apply the change and record the audit row atomically, so a failure to
     // record can't leave an applied-but-unaudited change behind (and a retry
     // after such a failure can't apply the change twice).
-    const updateRequest = await ctx.db.transaction(async (tx) => {
-      const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
-      // Guard against re-applying an already-reviewed request (two reviewers
-      // racing to approve the same queue item, or an approve after the row was
-      // already resolved). Lock the stored row and require it to still be
-      // pending. A fresh submission has no matching row yet, so this is a no-op
-      // for the submit path. Without this, a second approve re-runs the apply
-      // handler — duplicating created entities — while onConflictDoUpdate reuses
-      // the same audit row. (#11)
-      const existingId = typeof input.id === "string" ? input.id : undefined;
-      if (existingId) {
-        const [existing] = await tx
-          .select({ status: schema.updateRequests.status })
-          .from(schema.updateRequests)
-          .where(eq(schema.updateRequests.id, existingId))
-          .for("update");
-        if (existing && existing.status !== "pending") {
-          throw new ORPCError("CONFLICT", {
-            message: `This request has already been ${existing.status}.`,
+    const { updateRequest, notificationRegionId } = await ctx.db.transaction(
+      async (tx) => {
+        const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
+        // Guard against re-applying an already-reviewed request (two reviewers
+        // racing to approve the same queue item, or an approve after the row was
+        // already resolved). Lock the stored row and require it to still be
+        // pending. A fresh submission has no matching row yet, so this is a no-op
+        // for the submit path. Without this, a second approve re-runs the apply
+        // handler — duplicating created entities — while onConflictDoUpdate reuses
+        // the same audit row. (#11)
+        const existingId = typeof input.id === "string" ? input.id : undefined;
+        if (existingId) {
+          const [existing] = await tx
+            .select({ status: schema.updateRequests.status })
+            .from(schema.updateRequests)
+            .where(eq(schema.updateRequests.id, existingId))
+            .for("update");
+          if (existing && existing.status !== "pending") {
+            throw new ORPCError("CONFLICT", {
+              message: `This request has already been ${existing.status}.`,
+            });
+          }
+        }
+        let notificationRegionId: number | null = null;
+        let eventSnapshot: { aoId: number } | undefined;
+        if (input.originalEventId) {
+          const [snapshot] = await tx
+            .select({ aoId: schema.events.orgId })
+            .from(schema.events)
+            .where(eq(schema.events.id, input.originalEventId));
+          if (!snapshot) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Failed to find event to update.",
+            });
+          }
+          eventSnapshot = snapshot;
+        }
+
+        // Lock every existing AO whose membership participates in the request
+        // (including the event's actual source) in stable ID order before
+        // locking the event. Rechecking permissions only after these locks
+        // prevents a concurrent AO reparent from making preflight authorization
+        // stale.
+        const aoIds = [input.originalAoId, input.newAoId, eventSnapshot?.aoId]
+          .filter((id): id is number => id != null)
+          .filter((id, index, ids) => ids.indexOf(id) === index)
+          .sort((a, b) => a - b);
+        const lockedAos = aoIds.length
+          ? await tx
+              .select({ id: schema.orgs.id, regionId: schema.orgs.parentId })
+              .from(schema.orgs)
+              .where(inArray(schema.orgs.id, aoIds))
+              .orderBy(asc(schema.orgs.id))
+              .for("no key update")
+          : [];
+
+        if (input.originalEventId && eventSnapshot) {
+          const [event] = await tx
+            .select({ aoId: schema.events.orgId })
+            .from(schema.events)
+            .where(eq(schema.events.id, input.originalEventId))
+            .for("update");
+          if (event?.aoId !== eventSnapshot.aoId) {
+            throw new ORPCError("CONFLICT", {
+              message:
+                "The event's AO changed while this request was being applied.",
+            });
+          }
+        }
+
+        const lockedPermissions = await checkUpdatePermissions({
+          input,
+          ctx: txCtx,
+        });
+        if (!lockedPermissions.success) {
+          throw new ORPCError("UNAUTHORIZED", {
+            message:
+              "You can't apply this request: you no longer have the editor role on every affected org.",
           });
         }
-      }
-      const created = (await handler(txCtx, input)) ?? {};
-      return await recordUpdateRequest({
-        ctx: txCtx,
-        updateRequest: {
-          ...updateRequestData,
-          reviewedBy: email,
-          // Link the audit row to the entities the handler just created;
-          // recordUpdateRequest maps new* ids onto the aoId/locationId columns
-          ...(created.eventId !== undefined && { eventId: created.eventId }),
-          ...(created.aoId !== undefined && { newAoId: created.aoId }),
-          ...(created.locationId !== undefined && {
-            newLocationId: created.locationId,
-          }),
-        },
-        status: "approved",
-      });
-    });
+
+        if (
+          input.requestType === "move_event_to_different_ao" &&
+          input.originalEventId
+        ) {
+          if (input.newAoId == null) {
+            throw new ORPCError("BAD_REQUEST", {
+              message: "A destination AO is required.",
+            });
+          }
+          const sourceAo = lockedAos.find(
+            (ao) => ao.id === eventSnapshot?.aoId,
+          );
+          const destinationAo = lockedAos.find((ao) => ao.id === input.newAoId);
+          if (!sourceAo) {
+            throw new ORPCError("CONFLICT", {
+              message:
+                "The source AO changed while this request was being applied.",
+            });
+          }
+          if (!destinationAo) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "Failed to find destination AO.",
+            });
+          }
+          if (sourceAo.regionId !== destinationAo.regionId) {
+            notificationRegionId = destinationAo.regionId;
+          }
+        } else if (input.requestType === "create_event" && input.originalAoId) {
+          notificationRegionId =
+            lockedAos.find((ao) => ao.id === input.originalAoId)?.regionId ??
+            null;
+        }
+        const created = (await handler(txCtx, input)) ?? {};
+        if (input.requestType === "move_ao_to_different_region") {
+          notificationRegionId =
+            created.notificationSourceRegionId === created.notificationRegionId
+              ? null
+              : (created.notificationRegionId ?? null);
+        } else if (input.requestType === "create_ao_and_location_and_event") {
+          notificationRegionId = input.originalRegionId ?? null;
+        }
+        const updateRequest = await recordUpdateRequest({
+          ctx: txCtx,
+          updateRequest: {
+            ...updateRequestData,
+            reviewedBy: email,
+            // Link the audit row to the entities the handler just created;
+            // recordUpdateRequest maps new* ids onto the aoId/locationId columns
+            ...(created.eventId !== undefined && { eventId: created.eventId }),
+            ...(created.aoId !== undefined && { newAoId: created.aoId }),
+            ...(created.locationId !== undefined && {
+              newLocationId: created.locationId,
+            }),
+          },
+          status: "approved",
+        });
+        return { updateRequest, notificationRegionId };
+      },
+    );
     // Notify webhooks and invalidate the map cache only after the commit
     notifyMapDataChange({
       // handleRequest is only ever invoked by the active-request approve
@@ -1284,6 +1402,46 @@ const handleRequest = async <T extends HandleableRequestInput>({
       locationId: updateRequest.locationId ?? undefined,
       orgId: updateRequest.aoId ?? updateRequest.regionId,
     });
+    if (
+      updateRequest.requestType === "create_ao_and_location_and_event" ||
+      updateRequest.requestType === "create_event" ||
+      updateRequest.requestType === "move_ao_to_different_region" ||
+      updateRequest.requestType === "move_event_to_different_ao"
+    ) {
+      // This side effect must run only after the transaction commits, and must
+      // never make an already-committed map change fail. The destination is
+      // captured inside the transaction (under the AO lock when an existing AO
+      // is involved); detached work must not resolve it after a possible reparent.
+      const notificationTask = (async () => {
+        try {
+          if (notificationRegionId == null) {
+            logDebug("api.request.region_in_a_box_no_region", {
+              requestId: updateRequest.id,
+              requestType: updateRequest.requestType,
+            });
+            return;
+          }
+
+          const { maybeNotifyRegionInABox } =
+            await import("../lib/first-event-service");
+          await maybeNotifyRegionInABox(ctx.db, notificationRegionId);
+        } catch (error) {
+          logError(
+            "api.request.region_in_a_box_notification_failed",
+            {
+              requestId: updateRequest.id,
+              requestType: updateRequest.requestType,
+              regionId: notificationRegionId,
+            },
+            error,
+          );
+        }
+      })();
+      pendingRegionNotificationTasks.add(notificationTask);
+      void notificationTask.finally(() =>
+        pendingRegionNotificationTasks.delete(notificationTask),
+      );
+    }
     const result = { status: "approved" as const, updateRequest };
     return result;
   } else {

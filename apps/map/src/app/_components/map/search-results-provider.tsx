@@ -4,8 +4,8 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { MIN_TEXT_LENGTH_FOR_SEARCH_RESULTS } from "@acme/shared/app/constants";
 import { RERENDER_LOGS } from "@acme/shared/common/constants";
-import { isTruthy } from "@acme/shared/common/functions";
 
+import { MAP_DATASET_STALE_TIME_MS } from "~/orpc/query-client";
 import { orpc, useQuery } from "~/orpc/react";
 import { useIsMobileWidth } from "~/utils/hooks/use-is-mobile-width";
 import { debouncedPlacesAutocomplete } from "~/utils/place-autocomplete";
@@ -17,6 +17,7 @@ import type {
   GeoMapSearchResult,
 } from "~/utils/types";
 import { useFilteredMapResults } from "./filtered-map-results-provider";
+import { buildF3LocationSearchResults } from "./search-results";
 
 const TextSearchResultsContext = createContext<{
   f3RegionResults: F3RegionMapSearchResult[];
@@ -49,6 +50,7 @@ export const TextSearchResultsProvider = ({
     orpc.map.location.regionsWithLocation.queryOptions({
       input: undefined,
       enabled: searchEngaged,
+      staleTime: MAP_DATASET_STALE_TIME_MS,
     }),
   );
   const regions = regionsResponse?.regionsWithLocation;
@@ -67,7 +69,7 @@ export const TextSearchResultsProvider = ({
   );
   const locationIdToRegionNameLookup =
     locationIdToRegionNameLookupResponse?.lookup;
-  const isMobileWidth = useIsMobileWidth();
+  const { isMobileWidth } = useIsMobileWidth();
   const { filteredLocationMarkers } = useFilteredMapResults();
 
   const [geoResults, setGeoResults] = useState<GeoMapSearchResult[]>([]);
@@ -85,6 +87,7 @@ export const TextSearchResultsProvider = ({
     const _f3RegionResults =
       regions
         ?.map((region) => ({
+          key: `region-${region.id}`,
           header: region.name,
           type: "region" as const,
           destination: {
@@ -103,81 +106,44 @@ export const TextSearchResultsProvider = ({
 
     setF3RegionResults(_f3RegionResults);
 
-    const _f3Results = [
-      ...(filteredLocationMarkers?.flatMap((location) => {
-        const matchingAoNames = new Set<string>();
-        for (const event of location.events) {
-          if (event.aoName?.toLowerCase().includes(text.toLowerCase())) {
-            matchingAoNames.add(event.aoName);
-          }
-        }
-        return Array.from(matchingAoNames).map((aoName) => {
-          const aoEvent = location.events.find((e) => e.aoName === aoName);
-          const searchResult: F3LocationMapSearchResult = {
-            type: "location",
-            header: aoName,
-            destination: {
-              id: location.id,
-              lat: location.lat ?? 0,
-              lng: location.lon ?? 0,
-              logo: aoEvent?.aoLogo ?? location.logo ?? "",
-              item: { eventId: null, locationId: location.id },
-              placeId: null,
-              regionName: locationIdToRegionNameLookup?.[location.id] ?? null,
-            },
-          };
-          return searchResult;
-        });
-      }) ?? []),
-      ...(filteredLocationMarkers
-        ?.flatMap((location) =>
-          location.events
-            .filter((event) =>
-              event.name.toLowerCase().includes(text.toLowerCase()),
-            )
-            .slice(0, 1)
-            .map((event) => ({ event, location })),
-        )
-        .map(({ event, location }) => {
-          const searchResult: F3LocationMapSearchResult = {
-            type: "location",
-            header: event.name,
-            destination: {
-              id: event.id,
-              lat: location.lat ?? 0,
-              lng: location.lon ?? 0,
-              logo: event.aoLogo ?? location.logo ?? "",
-              item: { eventId: event.id, locationId: location.id },
-              placeId: null,
-              regionName: eventIdToRegionNameLookup?.[event.id] ?? null,
-            },
-          };
-          return searchResult;
-        }) ?? []),
-    ].filter(isTruthy);
-
-    setF3LocationResults(_f3Results);
+    setF3LocationResults(
+      buildF3LocationSearchResults({
+        locationMarkers: filteredLocationMarkers,
+        text,
+        eventIdToRegionNameLookup,
+        locationIdToRegionNameLookup,
+      }),
+    );
 
     // Use debounced autocomplete to reduce API calls
     const cleanup = debouncedPlacesAutocomplete(
       text,
-      mapStore.get("center") ?? { lat: 37.7937, lng: -122.3965 },
+      mapStore.get("center"),
       mapStore.get("zoom"),
       (results) => {
         setGeoResults(
-          results.map((result) => ({
-            type: "geo",
-            header: result?.placePrediction?.structuredFormat?.mainText?.text,
-            description:
-              result?.placePrediction?.structuredFormat?.secondaryText?.text,
-            destination: {
-              id: result?.placePrediction?.placeId,
-              lat: null,
-              lng: null,
-              item: null,
-              placeId: result?.placePrediction?.placeId,
-            },
-          })) ?? [],
+          // Query predictions have no place to navigate to.
+          results.flatMap(({ placePrediction }) =>
+            placePrediction
+              ? [
+                  {
+                    key: `geo-${placePrediction.placeId}`,
+                    type: "geo" as const,
+                    header: placePrediction.structuredFormat.mainText.text,
+                    description:
+                      placePrediction.structuredFormat.secondaryText?.text ??
+                      "",
+                    destination: {
+                      id: placePrediction.placeId,
+                      lat: null,
+                      lng: null,
+                      item: null,
+                      placeId: placePrediction.placeId,
+                    },
+                  },
+                ]
+              : [],
+          ),
         );
       },
     );

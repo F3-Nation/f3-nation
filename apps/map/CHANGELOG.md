@@ -1,5 +1,103 @@
 # Changelog
 
+## [7.8.1](https://github.com/F3-Nation/f3-nation/compare/map@7.8.0...map@7.8.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **api:** validate region ID integer domain ([#1236](https://github.com/F3-Nation/f3-nation/issues/1236)) ([21c87c0](https://github.com/F3-Nation/f3-nation/commit/21c87c0451695a84e42523b79e775ec8b3396a69))
+* **auth,map:** stop trusting client-supplied roles on JWT update ([#1341](https://github.com/F3-Nation/f3-nation/issues/1341)) ([f27c924](https://github.com/F3-Nation/f3-nation/commit/f27c9241d062ed417cd8701198cdc0583c7c4558))
+* **auth:** generate cryptographically secure OTP codes ([#1306](https://github.com/F3-Nation/f3-nation/issues/1306)) ([e5395f0](https://github.com/F3-Nation/f3-nation/commit/e5395f02d2b369627f401a5813e79d80448bb9e7))
+* **map:** encode the OTP code in the sign-in callback URL ([#1299](https://github.com/F3-Nation/f3-nation/issues/1299)) ([d55d004](https://github.com/F3-Nation/f3-nation/commit/d55d004cdf0107ab7a4cacbaab1ea75100cc9f73))
+* **map:** give search results unique keys ([#1329](https://github.com/F3-Nation/f3-nation/issues/1329)) ([ae16de2](https://github.com/F3-Nation/f3-nation/commit/ae16de25e5581b8efd6267f11201749f8d7c00e5))
+* **map:** guard Cloud Run channel configuration ([#1298](https://github.com/F3-Nation/f3-nation/issues/1298)) ([099b295](https://github.com/F3-Nation/f3-nation/commit/099b295aba13087dbac296891ec26c169830a521))
+* **map:** link time input labels to their inputs ([#1283](https://github.com/F3-Nation/f3-nation/issues/1283)) ([3640306](https://github.com/F3-Nation/f3-nation/commit/3640306791e757c862e59c3992ea2e0e6a5c4049))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.15.0
+    * @acme/auth bumped to 0.2.11
+    * @acme/shared bumped to 0.5.1
+    * @acme/ui bumped to 0.2.3
+    * @acme/validators bumped to 0.5.1
+
+## [7.8.0](https://github.com/F3-Nation/f3-nation/compare/map@7.7.0...map@7.8.0) (2026-10-14)
+
+
+### Features
+
+* **repo,db:** run several checkouts side by side with local:setup --slot ([#1246](https://github.com/F3-Nation/f3-nation/issues/1246)) ([7a1377f](https://github.com/F3-Nation/f3-nation/commit/7a1377f3ba83dd5eccae3b322947994f3379205e))
+
+
+### Bug Fixes
+
+* **api,map:** public read tier for the map API ([#378](https://github.com/F3-Nation/f3-nation/issues/378)), plus [#876](https://github.com/F3-Nation/f3-nation/issues/876) Phase 3 groundwork ([#1149](https://github.com/F3-Nation/f3-nation/issues/1149)) ([f65d3d9](https://github.com/F3-Nation/f3-nation/commit/f65d3d9120131c4cbff8bcdb019bcc546b8a6464))
+* **auth:** safely resume sign-in after onboarding ([#1215](https://github.com/F3-Nation/f3-nation/issues/1215)) ([90a6ed5](https://github.com/F3-Nation/f3-nation/commit/90a6ed59228bed4912d8e4dd8f583629c5b7ad25))
+* **map,api:** use one-off organizations at shared locations ([#1243](https://github.com/F3-Nation/f3-nation/issues/1243)) ([381106a](https://github.com/F3-Nation/f3-nation/commit/381106a39f8f3f51f92916354fa8e81904cbfc21))
+* **map:** open the detail panel for instance-only map pins ([#1216](https://github.com/F3-Nation/f3-nation/issues/1216)) ([af265ea](https://github.com/F3-Nation/f3-nation/commit/af265ea940b6e83982ce8028b2cbeda81e891f0f))
+
+
+### Performance Improvements
+
+* **api,map:** fix regionsWithLocation, cache the map datasets, gzip the map proxy ([#1197](https://github.com/F3-Nation/f3-nation/issues/1197)) ([1747ec4](https://github.com/F3-Nation/f3-nation/commit/1747ec49fffa898f5ee70714a1f22244f677746a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.14.0
+    * @acme/auth bumped to 0.2.10
+    * @acme/shared bumped to 0.5.0
+    * @acme/ui bumped to 0.2.2
+    * @acme/validators bumped to 0.5.0
+
+## [7.7.0](https://github.com/F3-Nation/f3-nation/compare/map@7.6.0...map@7.7.0) (2026-10-10)
+
+
+### Features
+
+* **db:** add public-table audit history ([#1060](https://github.com/F3-Nation/f3-nation/issues/1060)) ([10454d8](https://github.com/F3-Nation/f3-nation/commit/10454d8ab47795b984a76b01768642860b7718b6))
+* **db:** guarded db:migrate:local|staging|prod commands ([#1183](https://github.com/F3-Nation/f3-nation/issues/1183)) ([b7e5b66](https://github.com/F3-Nation/f3-nation/commit/b7e5b665b3d2193f607e24ca96698411463f5d23))
+* **scripts:** add PII obfuscation script for staging refresh (F3-65) ([#768](https://github.com/F3-Nation/f3-nation/issues/768)) ([870d24a](https://github.com/F3-Nation/f3-nation/commit/870d24a966afd089687eb6967a05f2be16d61226))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.13.0
+    * @acme/auth bumped to 0.2.9
+    * @acme/logger bumped to 0.3.0
+    * @acme/validators bumped to 0.4.6
+
+## [7.6.0](https://github.com/F3-Nation/f3-nation/compare/map@7.5.0...map@7.6.0) (2026-10-06)
+
+
+### Features
+
+* **api,admin,map,slackbot:** tighten pageSize cap to 100, migrate unpaginated consumers ([#912](https://github.com/F3-Nation/f3-nation/issues/912)) ([b616753](https://github.com/F3-Nation/f3-nation/commit/b61675315b75d02164a3c0c891b4abb4424b870b))
+
+
+### Bug Fixes
+
+* **auth,map:** never register dev-mode sign-in in Production ([#1123](https://github.com/F3-Nation/f3-nation/issues/1123)) ([6d7f712](https://github.com/F3-Nation/f3-nation/commit/6d7f712c142016af41dd08b9544062e791bd746f))
+* **map,repo:** show the Dev Mode sign-in button on branch previews ([#1111](https://github.com/F3-Nation/f3-nation/issues/1111)) ([dcbb924](https://github.com/F3-Nation/f3-nation/commit/dcbb924178e63e741610e26ab3ae46a183ab1ad1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.12.0
+    * @acme/auth bumped to 0.2.8
+    * @acme/shared bumped to 0.4.1
+    * @acme/ui bumped to 0.2.1
+    * @acme/validators bumped to 0.4.5
+
 ## [7.5.0](https://github.com/F3-Nation/f3-nation/compare/map@7.4.0...map@7.5.0) (2026-09-27)
 
 

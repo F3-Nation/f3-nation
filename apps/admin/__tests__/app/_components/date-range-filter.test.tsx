@@ -9,6 +9,7 @@ import {
 
 // Radix's popper measures its trigger, and jsdom has no ResizeObserver.
 beforeAll(() => {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- jsdom has no ResizeObserver
   globalThis.ResizeObserver ??= class {
     observe() {
       // no-op

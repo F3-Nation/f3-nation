@@ -86,7 +86,6 @@ export const EventDetailsFields = () => {
           <ControlledTimeInput
             control={form.control}
             name="eventStartTime"
-            id="eventStartTime"
             label="Start Time"
           />
         </div>
@@ -94,7 +93,6 @@ export const EventDetailsFields = () => {
           <ControlledTimeInput
             control={form.control}
             name="eventEndTime"
-            id="eventEndTime"
             label="End Time"
           />
         </div>
@@ -114,9 +112,7 @@ export const EventDetailsFields = () => {
                   value={(field.value ?? []).map(String)}
                   options={
                     eventTypes?.map((type) => ({
-                      label: type.eventCategory
-                        ? `${type.name} (${EVENT_CATEGORY_LABEL_MAP[type.eventCategory] ?? type.eventCategory})`
-                        : type.name,
+                      label: `${type.name} (${EVENT_CATEGORY_LABEL_MAP[type.eventCategory] ?? type.eventCategory})`,
                       value: type.id.toString(),
                     })) ?? []
                   }
@@ -196,6 +192,7 @@ export const AoDetailsFields = ({
                   type="file"
                   accept="image/*"
                   onChange={(e) => {
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                     if (formRegionId == null || !(formRegionId > 0)) {
                       toast.error("Please select a region first");
                       return;
@@ -206,6 +203,7 @@ export const AoDetailsFields = ({
 
                     onAoLogoFileChange?.(file, URL.createObjectURL(file));
                   }}
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                   disabled={formRegionId == null || !(formRegionId > 0)}
                   className="flex-1"
                 />
@@ -263,6 +261,7 @@ export const RegionSelectField = ({
     <div className="space-y-2">
       <div className="text-sm font-medium text-muted-foreground">{label}</div>
       <VirtualizedCombobox
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
         key={formRegionId?.toString()}
         options={
           regions
@@ -272,6 +271,7 @@ export const RegionSelectField = ({
             }))
             .sort((a, b) => a.label.localeCompare(b.label)) ?? []
         }
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
         value={formRegionId?.toString()}
         onSelect={(item) => {
           const region = regions?.find(
@@ -372,6 +372,7 @@ export const LocationPickerField = ({
     <div className="space-y-2">
       <div className="text-sm font-medium text-muted-foreground">{label}</div>
       <VirtualizedCombobox
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
         key={`${formRegionId ?? "all"}-${formLocationId ?? value ?? "none"}`}
         options={locationOptions}
         value={value}
@@ -508,7 +509,7 @@ export const LocationDetailsFields = ({
           </div>
           <Input {...form.register("locationLat", { valueAsNumber: true })} />
           <p className="text-xs text-destructive">
-            {form.formState.errors.locationLat?.message?.toString?.()}
+            {form.formState.errors.locationLat?.message?.toString()}
           </p>
         </div>
 
@@ -518,7 +519,7 @@ export const LocationDetailsFields = ({
           </div>
           <Input {...form.register("locationLng", { valueAsNumber: true })} />
           <p className="text-xs text-destructive">
-            {form.formState.errors.locationLng?.message?.toString?.()}
+            {form.formState.errors.locationLng?.message?.toString()}
           </p>
         </div>
       </div>

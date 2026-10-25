@@ -1,4 +1,5 @@
 import os
+import re
 import ssl
 from logging import Logger
 
@@ -44,6 +45,39 @@ SEARCH_REGION = "search_region"
 MIGRATION_DATE = "connect_migration_date"
 APPROVE_CONNECTION = "approve_connection"
 DENY_CONNECTION = "deny_connection"
+SLACK_TEAM_ID_PATTERN = re.compile(r"T[A-Z0-9]+\Z")
+
+
+def _get_requester_slack_space(team_id):
+    """Resolve the install credentials from the DB, never from Slack metadata."""
+    if not isinstance(team_id, str) or not SLACK_TEAM_ID_PATTERN.fullmatch(team_id):
+        return None
+    slack_space = DbManager.find_first_record(SlackSpace, [SlackSpace.team_id == team_id])
+    if not slack_space or not safe_get(slack_space, "bot_token"):
+        return None
+    return slack_space
+
+
+def _notify_admin_request_unverified(body: dict, logger: Logger):
+    channel_id = (
+        safe_get(body, "container", "channel_id")
+        or safe_get(body, "channel", "id")
+        or safe_get(body, "channel", "channel_id")
+    )
+    user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
+    admin_token = os.environ.get("ADMIN_BOT_TOKEN")
+    if not channel_id or not user_id or not admin_token:
+        return
+    try:
+        WebClient(token=admin_token).chat_postEphemeral(
+            channel=channel_id,
+            user=user_id,
+            text=(
+                "The requester workspace could not be verified. Please ask them to resubmit; this request needs review."
+            ),
+        )
+    except Exception:
+        logger.info("Could not display unverified connection request feedback")
 
 
 def build_connect_options_form(
@@ -172,7 +206,6 @@ def handle_existing_region_selection(
         "event_type": "region_connection_request",
         "event_payload": {
             "user_id": safe_get(body, "user", "id"),
-            "requestor_bot_token": region_record.bot_token,
             "region_id": region_select.selected_option.get("value"),
             "region_name": region_select.selected_option.get("text").get("text"),
             "migration_date": date_select.selected_date,
@@ -306,12 +339,28 @@ def handle_approve_connection(
     metadata = safe_get(body, "message", "metadata") or {}
     metadata = metadata.get("event_payload") or {}
     team_id = metadata.get("team_id")
+    slack_space_record = _get_requester_slack_space(team_id)
+    if not slack_space_record:
+        logger.warning("Unable to resolve requester workspace credentials for connection approval.")
+        _notify_admin_request_unverified(body, logger)
+        return
+    workspace_settings = safe_get(slack_space_record, "settings")
+    if not isinstance(workspace_settings, dict) or workspace_settings.get("team_id") != team_id:
+        logger.warning("Unable to resolve requester workspace settings for connection approval.")
+        _notify_admin_request_unverified(body, logger)
+        return
+    try:
+        region_record = SlackSettings(**workspace_settings)
+    except (TypeError, ValueError):
+        logger.warning("Unable to parse requester workspace settings for connection approval.")
+        _notify_admin_request_unverified(body, logger)
+        return
+    region_record.bot_token = slack_space_record.bot_token
+    requester_client = WebClient(token=slack_space_record.bot_token)
     org_record = DbManager.get(Org, metadata.get("region_id"))
 
     # Connect the slack space to the new org
     if team_id:
-        slack_space_record = DbManager.find_first_record(SlackSpace, [SlackSpace.team_id == team_id])
-        region_record = get_region_record(team_id, body, context, client, logger)
         if slack_space_record:
             connect_record = Org_x_SlackSpace(
                 org_id=org_record.id,
@@ -328,7 +377,7 @@ def handle_approve_connection(
         )
     # Make the current user an admin of the new org
     slack_user_id = metadata.get("user_id")
-    user_id = get_user(slack_user_id, region_record, client, logger).user_id
+    user_id = get_user(slack_user_id, region_record, requester_client, logger).user_id
     admin_role_id = DbManager.find_first_record(Role, filters=[Role.name == "admin"]).id
     try:
         DbManager.create_record(
@@ -364,9 +413,9 @@ def handle_approve_connection(
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
-    if metadata.get("user_id") and metadata.get("requestor_bot_token"):
+    if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=metadata.get("requestor_bot_token"), ssl=ssl_context)
+            send_client = WebClient(token=slack_space_record.bot_token, ssl=ssl_context)
             send_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Approved",
@@ -411,6 +460,10 @@ def handle_approve_connection(
 def handle_deny_connection(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     metadata = safe_get(body, "message", "metadata") or {}
     metadata = metadata.get("event_payload") or {}
+    slack_space_record = _get_requester_slack_space(metadata.get("team_id"))
+    if not slack_space_record:
+        logger.warning("Unable to resolve requester workspace credentials for connection denial.")
+        return
     blocks = [
         HeaderBlock(text="Region Connection Request Denied"),
         SectionBlock(
@@ -420,9 +473,9 @@ def handle_deny_connection(body: dict, client: WebClient, logger: Logger, contex
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
-    if metadata.get("user_id") and metadata.get("requestor_bot_token"):
+    if metadata.get("user_id"):
         try:
-            send_client = WebClient(token=metadata.get("requestor_bot_token"), ssl=ssl_context)
+            send_client = WebClient(token=slack_space_record.bot_token, ssl=ssl_context)
             send_client.chat_postMessage(
                 channel=metadata.get("user_id"),
                 text="Region Connection Request Denied",

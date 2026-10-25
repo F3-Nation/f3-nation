@@ -44,20 +44,20 @@ import {
   invalidateQueries,
   orpc,
   useMutation,
+  useQueries,
   useQuery,
 } from "~/orpc/react";
 import { useFetchAllPages } from "~/utils/hooks/use-fetch-all-pages";
 import type { DataType } from "~/utils/store/modal";
+import { isAdminRoleName, toGrantableRoleEntries } from "~/lib/auth/session";
 import type { AdminSessionRole } from "~/lib/auth/session";
 import { useAdminSession } from "~/lib/auth/client";
 import { ModalType, closeModal, openModal } from "~/utils/store/modal";
 import { AdminScopeOrgTypes } from "~/app/_components/org/org-ancestry";
-
-function isAdminSessionRoleName(
-  roleName: string | null,
-): roleName is AdminSessionRole["roleName"] {
-  return roleName === "admin" || roleName === "editor" || roleName === "user";
-}
+import {
+  canEditUserProfile,
+  roleOrgIdsNeedingParent,
+} from "./user-editor-config";
 
 export default function UserModal({
   data,
@@ -122,26 +122,26 @@ export default function UserModal({
     return { orgs: adminOrgs };
   }, [accessibleOrgsData]);
 
-  const isAdmin = useMemo(() => {
-    return session?.roles?.some((r) => r.roleName === "admin") ?? false;
-  }, [session?.roles]);
+  const roleOrgParentQueries = useQueries({
+    queries: roleOrgIdsNeedingParent({
+      user,
+      editableOrgs: orgs.orgs,
+    }).map((id) => orpc.org.byId.queryOptions({ input: { id } })),
+  });
+  const roleOrgParentIds = new Map(
+    roleOrgParentQueries.flatMap(({ data }) =>
+      data?.org ? [[data.org.id, data.org.parentId] as const] : [],
+    ),
+  );
 
-  const canEditUser = useMemo(() => {
-    if (!user?.id) return true;
-    if (session?.id === user.id) return true;
-    if (user.homeRegionId == null) return isAdmin;
+  const canEditUser = canEditUserProfile({
+    user,
+    sessionUserId: session?.id,
+    editableOrgs: orgs.orgs,
+    roleOrgParentIds,
+  });
 
-    const accessibleOrgIds = new Set((orgs?.orgs ?? []).map((org) => org.id));
-    return accessibleOrgIds.has(user.homeRegionId);
-  }, [user?.id, user?.homeRegionId, orgs?.orgs, session?.id, isAdmin]);
-
-  const isHomeRegionDisabled = useMemo(() => {
-    if (session?.id === user?.id) return false;
-    if (user?.homeRegionId == null) return !isAdmin;
-
-    const accessibleOrgIds = new Set((orgs?.orgs ?? []).map((org) => org.id));
-    return !accessibleOrgIds.has(user.homeRegionId);
-  }, [session?.id, user?.id, user?.homeRegionId, orgs?.orgs, isAdmin]);
+  const isHomeRegionDisabled = !canEditUser;
 
   const form = useForm({
     schema: CrupdateUserSchema.extend({
@@ -153,7 +153,7 @@ export default function UserModal({
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
       email: user?.email ?? "",
-      roles: user?.roles ?? [],
+      roles: toGrantableRoleEntries(user?.roles),
       homeRegionId: user?.homeRegionId ?? null,
       status: user?.status ?? "active",
     },
@@ -163,15 +163,15 @@ export default function UserModal({
     if (!user) return;
 
     form.reset({
-      id: user.id ?? undefined,
-      f3Name: user?.f3Name ?? "",
-      firstName: user?.firstName ?? "",
-      lastName: user?.lastName ?? "",
-      email: user?.email ?? "",
-      roles: user?.roles,
-      homeRegionId: user?.homeRegionId ?? null,
-      status: user?.status ?? "active",
-      phone: user?.phone ?? "",
+      id: user.id,
+      f3Name: user.f3Name ?? "",
+      firstName: user.firstName ?? "",
+      lastName: user.lastName ?? "",
+      email: user.email ?? "",
+      roles: toGrantableRoleEntries(user.roles),
+      homeRegionId: user.homeRegionId ?? null,
+      status: user.status ?? "active",
+      phone: user.phone ?? "",
     });
   }, [form, user]);
 
@@ -180,8 +180,7 @@ export default function UserModal({
       onSuccess: async (data) => {
         await invalidateQueries("user");
         const roles: AdminSessionRole[] = data.roles.flatMap((role) => {
-          if (!role.orgName || !isAdminSessionRoleName(role.roleName))
-            return [];
+          if (!role.orgName || !isAdminRoleName(role.roleName)) return [];
           return [
             {
               orgId: role.orgId,
@@ -190,7 +189,11 @@ export default function UserModal({
             },
           ];
         });
-        if (session?.id === data.id && roles.length > 0) {
+        // Update the live session for self-edits even when the filtered
+        // visible-role list is now empty: if an admin edits themselves down to
+        // only dormant/hidden roles, the client must drop the stale visible
+        // grants it still holds rather than wait for a refetch.
+        if (session?.id === data.id) {
           await update({ ...session, roles });
         }
         closeModal();
@@ -199,8 +202,10 @@ export default function UserModal({
       },
       onError: (err) => {
         toast.error(
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
-            ? "You are not authorized to update this user"
+          err instanceof ORPCError
+            ? err.code === "UNAUTHORIZED"
+              ? "You are not authorized to update this user"
+              : err.message || "Failed to update user"
             : "Failed to update user",
         );
       },
@@ -261,7 +266,12 @@ export default function UserModal({
                     <FormItem>
                       <FormLabel>ID</FormLabel>
                       <FormControl>
-                        <Input placeholder="ID" disabled {...field} />
+                        <Input
+                          placeholder="ID"
+                          disabled
+                          {...field}
+                          value={field.value ?? ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -485,7 +495,7 @@ export default function UserModal({
                   <div className="w-full border-t border-border" />
                   <div className="mb-4 w-full px-2">
                     <div className="flex flex-col gap-2 pt-4">
-                      {user.roles && user.roles.length > 0 && (
+                      {user.roles.length > 0 && (
                         <div className="flex flex-col gap-2">
                           <p className="text-sm font-medium text-foreground">
                             Current Roles
@@ -510,6 +520,11 @@ export default function UserModal({
                                   editor: "Editor",
                                   user: "User",
                                 } as const;
+
+                                // Roles not surfaced in admin (e.g.
+                                // password_manager) are skipped.
+                                if (!isAdminRoleName(role.roleName))
+                                  return null;
 
                                 return (
                                   <span
