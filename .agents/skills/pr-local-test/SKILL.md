@@ -149,15 +149,18 @@ gh pr checks <N>
 # <BASE_SHA> is the sha in init's BASE= line.
 git -C "$RUN/wt" rev-list --count <MERGE_BASE>..<BASE_SHA>
 git -C "$RUN/wt" merge-tree --write-tree --name-only <BASE_SHA> HEAD
-# Open review conversations, for Phase 5's verdict. --paginate walks every page; count the lines.
+# Open review conversations, for Phase 5's verdict. --paginate walks every page; one line per
+# open thread. Save to a file first: piping straight into wc -l would print 0 on a failed call.
 gh api graphql --paginate -F n=<N> -f o='{owner}' -f r='{repo}' -f query='
   query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){
     pullRequest(number:$n){reviewThreads(first:100,after:$endCursor){
       nodes{isResolved} pageInfo{hasNextPage endCursor}}}}}' \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | 1' | wc -l
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | 1' \
+  > "$RUN/open-threads" && wc -l < "$RUN/open-threads"
 ```
 
-Record `BEHIND`, any conflicting files, and `OPEN_THREADS`. On git older than 2.38, use
+Record `BEHIND`, any conflicting files, and `OPEN_THREADS`. If the thread query fails,
+`OPEN_THREADS` is unknown, and an unknown count caps the verdict the same way an open one does. On git older than 2.38, use
 `gh pr view <N> --json mergeable` for conflicts instead. Being behind doesn't stop the run: test
 the PR as it is, and don't update its branch (ground rules).
 
@@ -315,7 +318,7 @@ first row whose condition is true:
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | ⏸️ **Can't recommend yet**                | A check of the PR's main purpose was skipped or blocked (a stop rule, or a 🙋 check still pending)                                       |
 | ❌ **Don't approve yet**                  | Any 🔴 or 🟠 problem caused by this PR; a check of the PR's main purpose failed; or the description claims something the code doesn't do |
-| ⏸️ **Can't recommend yet**                | Review conversations are still open on the PR (`OPEN_THREADS` above 0), so the code may still change                                     |
+| ⏸️ **Can't recommend yet**                | Review conversations are still open on the PR (`OPEN_THREADS` above 0, or unknown), so the code may still change                         |
 | ✅ **Approve, with optional suggestions** | Every proposed inline comment is 🟡: a small fix the PR works fine without                                                               |
 | ✅ **Approve**                            | Nothing to post but the summary                                                                                                          |
 
