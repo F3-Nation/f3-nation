@@ -54,7 +54,8 @@ export function ApiUnavailable(props: {
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-4 text-center">
         <p className="text-sm text-muted-foreground">
-          This page will retry automatically every 30 seconds or so.
+          This page will retry automatically every{" "}
+          {Math.round(RETRY_BASE_MS / 1000)} seconds or so.
         </p>
         <Button onClick={() => window.location.reload()}>Try again</Button>
       </CardContent>

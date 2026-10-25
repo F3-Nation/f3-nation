@@ -6,9 +6,13 @@ import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 // that what oRPC throws during a real outage is what the classifier expects,
 // including across oRPC upgrades.
 
-const { cookiesMock } = vi.hoisted(() => ({ cookiesMock: vi.fn() }));
+const { cookiesMock, logError } = vi.hoisted(() => ({
+  cookiesMock: vi.fn(),
+  logError: vi.fn(),
+}));
 
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
+vi.mock("@/lib/logging", () => ({ logError, logWarn: vi.fn() }));
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -26,6 +30,7 @@ describe("getMyProfile during an API outage", () => {
   beforeEach(() => {
     vi.resetModules();
     fetchMock.mockReset();
+    logError.mockReset();
     vi.stubEnv("F3_API_BASE_URL", "https://api.test.com");
     vi.stubGlobal("fetch", fetchMock);
     cookiesMock.mockResolvedValue({
@@ -57,8 +62,8 @@ describe("getMyProfile during an API outage", () => {
   });
 
   it("classifies a 502 with no content-type as unavailable", async () => {
-    // A bare load-balancer error page; without the guard in the RPCLink fetch
-    // oRPC fails to parse it and the 502 status is lost.
+    // A bare load-balancer error page with no content-type still keeps its
+    // 502 status.
     const response = new Response("<h1>Bad Gateway</h1>", { status: 502 });
     response.headers.delete("content-type");
     fetchMock.mockResolvedValue(response);
@@ -77,6 +82,46 @@ describe("getMyProfile during an API outage", () => {
     );
 
     expect(isApiUnavailableError(await profileError())).toBe(true);
+  });
+
+  it("reports a proxy's HTML 500 as SERVICE_UNAVAILABLE, not the API's own 500", async () => {
+    // Without the guard oRPC reports this as INTERNAL_SERVER_ERROR, the code
+    // the API uses for its own failures, which the profile page logs as an
+    // error.
+    fetchMock.mockResolvedValue(
+      new Response("<html>Internal Server Error</html>", {
+        status: 500,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    expect(await profileError()).toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+      status: 500,
+    });
+  });
+
+  it("logs a non-JSON 5xx once, as a warning, not as a request failure", async () => {
+    fetchMock.mockResolvedValue(
+      new Response("<html>Service Unavailable</html>", {
+        status: 503,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    await profileError();
+    expect(logError).not.toHaveBeenCalled();
+  });
+
+  it("logs a refused connection as a request failure", async () => {
+    fetchMock.mockRejectedValue(new TypeError("fetch failed"));
+
+    await profileError();
+    expect(logError).toHaveBeenCalledWith(
+      "me.api.upstream_request_failed",
+      expect.anything(),
+      expect.any(TypeError),
+    );
   });
 
   it("times out an API that never answers", async () => {
@@ -136,7 +181,7 @@ describe("getMyProfile during an API outage", () => {
   });
 
   it("classifies a JSON 5xx oRPC error as unavailable", async () => {
-    // A real oRPC 5xx is JSON, so it skips the guard and keeps its status.
+    // A real oRPC 5xx is JSON, so it passes the guard and keeps its status.
     fetchMock.mockResolvedValue(
       Response.json(
         {
@@ -152,5 +197,18 @@ describe("getMyProfile during an API outage", () => {
     );
 
     expect(isApiUnavailableError(await profileError())).toBe(true);
+  });
+
+  it("leaves no timer running after a fast response", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockResolvedValue(Response.json({ json: { user: {} } }));
+      const { getMyProfile } = await import("@/lib/api/client");
+
+      await getMyProfile();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

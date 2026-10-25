@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth/server";
 import { getMyProfile, getRegions, isNotFoundApiError } from "@/lib/api/client";
+import { ORPCError } from "@orpc/client";
 import Image from "next/image";
 import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 import { ApiUnavailable } from "@acme/ui/api-unavailable";
@@ -8,6 +9,26 @@ import { redirect } from "next/navigation";
 import { logError, logWarn } from "@/lib/logging";
 import { env } from "@/env";
 import { appsDirectoryUrl } from "@/lib/apps-directory";
+
+function logUnavailable(
+  sessionUserId: number,
+  lookup: "profile" | "regions",
+  err: unknown,
+) {
+  const context = {
+    sessionUserId,
+    apiBaseUrl: process.env.F3_API_BASE_URL,
+    lookup,
+  };
+  // A well-formed 500 is how the API reports both a database outage and its
+  // own bugs. Either way the outage screen is right, but keep it at error
+  // level so a bug still alerts.
+  if (err instanceof ORPCError && err.code === "INTERNAL_SERVER_ERROR") {
+    logError("me.profile.api_unavailable", context, err);
+  } else {
+    logWarn("me.profile.api_unavailable", { ...context, err });
+  }
+}
 
 export default async function ProfilePage() {
   const session = await requireAuth();
@@ -26,12 +47,7 @@ export default async function ProfilePage() {
       redirect("/?error=user_not_found");
     }
     if (isApiUnavailableError(err)) {
-      logWarn("me.profile.api_unavailable", {
-        sessionUserId: session.userId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
-        lookup: "profile",
-        err,
-      });
+      logUnavailable(session.userId, "profile", err);
       return <ProfileUnavailable />;
     }
 
@@ -50,12 +66,7 @@ export default async function ProfilePage() {
     regions = await getRegions();
   } catch (err) {
     if (isApiUnavailableError(err)) {
-      logWarn("me.profile.api_unavailable", {
-        sessionUserId: session.userId,
-        apiBaseUrl: process.env.F3_API_BASE_URL,
-        lookup: "regions",
-        err,
-      });
+      logUnavailable(session.userId, "regions", err);
       return <ProfileUnavailable />;
     }
     logError(

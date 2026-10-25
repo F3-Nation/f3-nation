@@ -26,8 +26,11 @@ vi.mock("@/components/profile-form", () => ({ ProfileForm: () => null }));
 vi.mock("next/image", () => ({
   default: (props: { alt: string }) => <span>{props.alt}</span>,
 }));
-const { logWarn } = vi.hoisted(() => ({ logWarn: vi.fn() }));
-vi.mock("@/lib/logging", () => ({ logError: vi.fn(), logWarn }));
+const { logError, logWarn } = vi.hoisted(() => ({
+  logError: vi.fn(),
+  logWarn: vi.fn(),
+}));
+vi.mock("@/lib/logging", () => ({ logError, logWarn }));
 
 function expectOutageScreen(page: Awaited<ReturnType<typeof renderPage>>) {
   render(page);
@@ -73,6 +76,19 @@ describe("ProfilePage", () => {
       "me.profile.api_unavailable",
       expect.objectContaining({ lookup: "regions", err }),
     );
+  });
+
+  it("logs a well-formed API 500 at error level, since it may be a bug", async () => {
+    const err = new ORPCError("INTERNAL_SERVER_ERROR", { status: 500 });
+    getMyProfile.mockRejectedValue(err);
+
+    expectOutageScreen(await renderPage());
+    expect(logError).toHaveBeenCalledWith(
+      "me.profile.api_unavailable",
+      expect.objectContaining({ lookup: "profile" }),
+      err,
+    );
+    expect(logWarn).not.toHaveBeenCalled();
   });
 
   it("still sends a missing user to the sign-in screen", async () => {

@@ -74,9 +74,8 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
           });
         }
 
-        // Read the body here, under the timeout: an API that sends headers and
-        // then stalls must not hang the page, and the timer can then always be
-        // cleared below instead of outliving the request.
+        // Read the body here, before `finally` clears the timer, so an API that
+        // sends headers and then stalls is still aborted by the timeout.
         const body = await response.text();
 
         // A 5xx that isn't a well-formed oRPC error (an HTML page from a proxy
@@ -95,6 +94,8 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
 
         return new Response(body, response);
       } catch (err) {
+        // The guard's outage error was already logged as upstream_http_error.
+        if (err instanceof ORPCError) throw err;
         logError(
           "me.api.upstream_request_failed",
           {
