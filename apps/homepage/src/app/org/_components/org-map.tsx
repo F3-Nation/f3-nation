@@ -57,9 +57,11 @@ const PIN_FAN_RADIUS_PX = 18;
 // Square tap target around each 14px pin dot — finger-sized on phones.
 const PIN_TAP_TARGET_PX = 32;
 
-// Matches Tailwind's `md` breakpoint, where the layout switches from the phone
-// overlay (floating search + bottom sheet) to the side-by-side sidebar.
-const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
+// Matches the `org-wide` custom variant in globals.css: where the layout
+// switches from the phone overlay (floating search + bottom sheet) to the
+// side-by-side sidebar.
+const DESKTOP_MEDIA_QUERY =
+  "(min-width: 768px), (max-height: 500px) and (orientation: landscape)";
 
 type InfoState =
   | { status: "idle" }
@@ -415,9 +417,9 @@ export default function OrgMap() {
     // +28 clears the tile attribution line that sits under the search card.
     const top = Math.max(0, searchBottom - mapRect.top) + 28;
     let bottom = Math.max(0, mapRect.bottom - sheetTop) + 12;
-    // An expanded sheet covers most of the map; don't squeeze the fit into
-    // the sliver above it.
-    if (mapRect.height - top - bottom < mapRect.height * 0.35) bottom = 12;
+    // Only an expanded sheet leaves less than this; don't squeeze the fit into
+    // the sliver above it. The collapsed sheet's padding is always kept.
+    if (mapRect.height - top - bottom < 96) bottom = 12;
     return { paddingTopLeft: [12, top], paddingBottomRight: [12, bottom] };
   }, []);
 
@@ -932,14 +934,14 @@ export default function OrgMap() {
 
   return (
     <div className="flex h-dvh flex-col bg-[#f6f3ea]">
-      {/* Header. Landscape phones get the desktop layout (they're ≥768px wide)
+      {/* Header. Landscape phones get the side-by-side layout (see `org-wide`)
           but are short, so the header and gutters tighten to leave map room. */}
-      <header className="flex flex-col gap-2 bg-[#0b0d12] px-3 py-2 text-[#f6f3ea] md:flex-row md:items-center md:justify-between md:gap-8 md:px-6 md:py-4 md:[@media(max-height:500px)]:py-2">
+      <header className="org-wide:flex-row org-wide:items-center org-wide:justify-between org-wide:gap-8 org-wide:px-6 org-wide:py-4 org-wide:[@media(max-height:500px)]:py-2 flex flex-col gap-2 bg-[#0b0d12] px-3 py-2 text-[#f6f3ea]">
         <div>
-          <h1 className="text-base font-bold md:text-lg">
+          <h1 className="org-wide:text-lg text-base font-bold">
             F3 Geographic Directory
           </h1>
-          <div className="hidden text-xs text-[rgba(215,38,56,0.85)] md:block md:[@media(max-height:500px)]:hidden">
+          <div className="org-wide:block org-wide:[@media(max-height:500px)]:hidden hidden text-xs text-[rgba(215,38,56,0.85)]">
             {presentLayers
               .slice()
               .reverse()
@@ -952,7 +954,7 @@ export default function OrgMap() {
         {/* Layer buttons — generated from data, depth-agnostic. One swipeable
             row on phones instead of wrapping onto extra lines. */}
         <nav
-          className="-mx-3 flex gap-2 overflow-x-auto px-3 md:mx-0 md:flex-wrap md:overflow-visible md:px-0"
+          className="org-wide:mx-0 org-wide:flex-wrap org-wide:overflow-visible org-wide:px-0 -mx-3 flex gap-2 overflow-x-auto px-3"
           aria-label="Map layers"
         >
           {presentLayers
@@ -963,7 +965,7 @@ export default function OrgMap() {
                 key={layer}
                 type="button"
                 onClick={() => navigateViaLevelButton(layer)}
-                className={`shrink-0 rounded-sm border px-3 py-1.5 text-xs font-medium tracking-wide uppercase transition-all md:px-4 md:py-2 md:[@media(max-height:500px)]:py-1 ${
+                className={`org-wide:px-4 org-wide:py-2 org-wide:[@media(max-height:500px)]:py-1 shrink-0 rounded-sm border px-3 py-1.5 text-xs font-medium tracking-wide uppercase transition-all ${
                   currentLevel === layer
                     ? "border-[#B70D06] bg-[#B70D06] text-[#1a1a1a]"
                     : "border-[#2c3648] bg-[#151a24] text-[#f8f4ea] hover:border-[#3b4a62] hover:bg-[#233046]"
@@ -977,7 +979,7 @@ export default function OrgMap() {
         {/* Breadcrumb — a single scrolling line on phones */}
         <nav
           ref={breadcrumbRef}
-          className="overflow-x-auto text-sm whitespace-nowrap md:flex-none md:overflow-visible md:whitespace-normal"
+          className="org-wide:flex-none org-wide:overflow-visible org-wide:whitespace-normal overflow-x-auto text-sm whitespace-nowrap"
           aria-label="Location breadcrumb"
         >
           {crumbs.map((crumb, idx) => {
@@ -1005,10 +1007,10 @@ export default function OrgMap() {
 
       {/* Main content. Phones: full-bleed map with the search card floating on
           top and the info panel as a bottom sheet. Desktop: map + sidebar. */}
-      <main className="relative min-h-0 flex-1 overflow-hidden md:grid md:grid-cols-[1fr_320px] md:gap-4 md:p-4 md:[@media(max-height:500px)]:gap-2 md:[@media(max-height:500px)]:p-2">
+      <main className="org-wide:grid org-wide:grid-cols-[1fr_320px] org-wide:gap-4 org-wide:p-4 org-wide:[@media(max-height:500px)]:gap-2 org-wide:[@media(max-height:500px)]:p-2 relative min-h-0 flex-1 overflow-hidden">
         {/* Map. `isolate` keeps Leaflet's high pane/control z-indexes from
             stacking above the phone overlays. */}
-        <div className="absolute inset-0 isolate overflow-hidden md:relative md:inset-auto md:rounded-2xl md:shadow-xl">
+        <div className="org-wide:relative org-wide:inset-auto org-wide:rounded-2xl org-wide:shadow-xl absolute inset-0 isolate overflow-hidden">
           {/* Loading overlay */}
           {!isLoaded && !loadError && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[rgba(11,13,18,0.4)] text-[#f8f4ea]">
@@ -1027,17 +1029,17 @@ export default function OrgMap() {
               just below the search card. */}
           <div
             ref={mapContainerRef}
-            className="h-full w-full max-md:[&_.leaflet-bottom.leaflet-right]:top-[4.25rem] max-md:[&_.leaflet-bottom.leaflet-right]:bottom-auto max-md:[&_.leaflet-control-zoom]:hidden"
+            className="org-overlay:[&_.leaflet-bottom.leaflet-right]:top-[4.25rem] org-overlay:[&_.leaflet-bottom.leaflet-right]:bottom-auto! org-overlay:[&_.leaflet-control-zoom]:hidden h-full w-full"
           />
         </div>
 
         {/* Sidebar. `contents` on phones lets its two cards position against
             <main> as overlays. */}
-        <aside className="contents md:flex md:flex-col md:gap-3 md:overflow-y-auto">
+        <aside className="org-wide:flex org-wide:flex-col org-wide:gap-3 org-wide:overflow-y-auto contents">
           {/* z-20: above the sheet so search results aren't covered by it. */}
           <div
             ref={searchCardRef}
-            className="absolute inset-x-2 top-2 z-20 rounded-2xl bg-white p-2 shadow-md md:static md:p-4"
+            className="org-wide:static org-wide:p-4 absolute inset-x-2 top-2 z-20 rounded-2xl bg-white p-2 shadow-md"
           >
             <SearchBox
               presentLayers={presentLayers}
@@ -1050,7 +1052,7 @@ export default function OrgMap() {
           <section
             ref={infoSheetRef}
             aria-label="Details"
-            className="absolute inset-x-0 bottom-0 z-10 flex max-h-[70%] flex-col rounded-t-2xl bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.15)] md:static md:max-h-none md:flex-1 md:rounded-2xl md:shadow-md"
+            className="org-wide:static org-wide:max-h-none org-wide:flex-1 org-wide:rounded-2xl org-wide:shadow-md absolute inset-x-0 bottom-0 z-10 flex max-h-[70%] flex-col rounded-t-2xl bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.15)]"
           >
             <button
               type="button"
@@ -1058,14 +1060,14 @@ export default function OrgMap() {
               aria-expanded={sheetExpanded}
               aria-controls="org-info-content"
               aria-label={sheetExpanded ? "Collapse details" : "Expand details"}
-              className="flex min-h-11 w-full shrink-0 items-center justify-center md:hidden"
+              className="org-wide:hidden flex min-h-11 w-full shrink-0 items-center justify-center"
             >
               <span className="h-1.5 w-10 rounded-full bg-muted-foreground/40" />
             </button>
             <div
               id="org-info-content"
-              className={`flex min-h-0 flex-col gap-3 overflow-y-auto px-5 pb-5 md:p-5 ${
-                sheetExpanded ? "" : "max-md:max-h-32"
+              className={`org-wide:p-5 flex min-h-0 flex-col gap-3 overflow-y-auto px-5 pb-5 ${
+                sheetExpanded ? "" : "org-overlay:max-h-32"
               }`}
             >
               {infoState.status === "loading-location" ||

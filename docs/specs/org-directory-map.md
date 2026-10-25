@@ -167,7 +167,8 @@ unpopulated tier for one branch requires no per-level code.
 
 ### Phone layout
 
-- **AC-23** — GIVEN a viewport narrower than 768px WHEN `/org` loads THEN the
+- **AC-23** — GIVEN a viewport narrower than 768px that is upright or taller
+  than 500px WHEN `/org` loads THEN the
   map fills the screen below a compact header (one swipeable row of layer
   buttons, a single-line breadcrumb), the search box floats over the top of the
   map, and the info panel is a bottom sheet that shows a peek of the selected
@@ -175,8 +176,9 @@ unpopulated tier for one branch requires no per-level code.
   tapping the map, a breadcrumb, a layer button, or another org collapses it.
   Map fits keep the focused orgs clear of the search box and the sheet, the
   tile attribution stays visible, and co-located pins fan out far enough that
-  each finger-sized tap target opens its own location. Wider-but-short screens
-  (landscape phones) keep the side-by-side layout with a tighter header.
+  each finger-sized tap target opens its own location. Landscape screens up to
+  500px tall (sideways phones, at any width) use the side-by-side layout with a
+  tighter header instead, since a bottom sheet would leave almost no map.
 
 ### API
 
