@@ -137,7 +137,8 @@ cd "$WORKTREE_PATH"
   revision.
 - `git merge-tree --write-tree` needs git 2.38 or newer. On older git, use
   `gh pr view <n> --repo {owner}/{name} --json mergeable` instead (`CONFLICTING` means
-  conflicts; `UNKNOWN` means GitHub hasn't computed it yet, so report it as unknown).
+  conflicts; `UNKNOWN` means GitHub hasn't computed it yet, so report it as unknown). This
+  fallback can't name the conflicting files, so the report says they weren't collected.
 - Being behind or conflicting doesn't stop the review. Review the PR as it is, and don't update
   the branch yourself (Overview: authors fix).
 - Stay in `$WORKTREE_PATH` until Step 10. Reviewers started in Step 6 must be given the absolute
