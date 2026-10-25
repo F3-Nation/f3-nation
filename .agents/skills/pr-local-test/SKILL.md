@@ -149,11 +149,12 @@ gh pr checks <N>
 # <BASE_SHA> is the sha in init's BASE= line.
 git -C "$RUN/wt" rev-list --count <MERGE_BASE>..<BASE_SHA>
 git -C "$RUN/wt" merge-tree --write-tree --name-only <BASE_SHA> HEAD
-# Open review conversations, for Phase 5's verdict.
-gh api graphql -F n=<N> -f o='{owner}' -f r='{repo}' -f query='
-  query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
-    reviewThreads(first:100){nodes{isResolved}}}}}' \
-  --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length'
+# Open review conversations, for Phase 5's verdict. --paginate walks every page; count the lines.
+gh api graphql --paginate -F n=<N> -f o='{owner}' -f r='{repo}' -f query='
+  query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){
+    pullRequest(number:$n){reviewThreads(first:100,after:$endCursor){
+      nodes{isResolved} pageInfo{hasNextPage endCursor}}}}}' \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | 1' | wc -l
 ```
 
 Record `BEHIND`, any conflicting files, and `OPEN_THREADS`. On git older than 2.38, use
@@ -298,8 +299,9 @@ Report what happened and go to Phase 5 with partial results. Don't improvise aro
 
 1. If there are 🙋 checks, show the Results so far with the 🙋 section (the apps stay up), give
    numbered steps with this run's URLs, and wait for the user's outcomes.
-2. Work out the **verdict** (table below), then draft the feedback and any issues (below). The
-   drafts need the worktree, so do this before step 3.
+2. Re-run Phase 2a's open-conversation count, since reviewers may have commented while the
+   checks ran, and use that `OPEN_THREADS`. Work out the **verdict** (table below), then draft
+   the feedback and any issues (below). The drafts need the worktree, so do this before step 3.
 3. **Tear down**, unless the run is keep-running: `<S> down $RUN --keep-drafts`. It stops this
    run's servers, removes its containers and volumes, worktree, and fetched refs, and frees its
    ports. Only the drafts, `notes.md`, and `evidence/` stay. If it reports something still
@@ -322,8 +324,8 @@ the verdict (for open conversations: "Resolve the N open review conversations, t
 If the PR is behind its base or has conflicts, add one more line: "<N> commits behind <base>
 <and conflicts in …>; this result is for the tested commit, so update the branch before
 merging." Never call the PR ready to merge while it is behind or conflicting. Problems "not
-caused by this PR" never change the verdict. ➖ rows count as passed when their tests pass. When the user's 🙋 results arrive, work out the verdict again and show
-it again.
+caused by this PR" never change the verdict. ➖ rows count as passed when their tests pass.
+When the user's 🙋 results arrive, work out the verdict again and show it again.
 
 **Draft feedback (don't post yet):**
 

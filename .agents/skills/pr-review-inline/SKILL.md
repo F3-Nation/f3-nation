@@ -297,7 +297,7 @@ finding postable.
 | Under ~150 changed lines | Run the brief yourself, in this session                                                                                                         |
 | ~150–400 changed lines   | One sub-agent reviewer for the whole diff                                                                                                       |
 | ~400 lines or more       | 2–3 sub-agent reviewers, each given one group of related files from the change inventory (and told the others exist)                            |
-| `--deep`                 | `pr-review-toolkit:review-pr` if installed (pass through any aspects the user named); otherwise one sub-agent seat per inventory group, up to 4 |
+| `--deep` or a gated PR   | `pr-review-toolkit:review-pr` if installed (pass through any aspects the user named); otherwise one sub-agent seat per inventory group, up to 4 |
 
 **`--deep` with pr-review-toolkit:** run `review-pr` from `$WORKTREE_PATH` and pass the filled
 brief's range, the PR additions, and any aspects as its arguments. Its agents report in their own
