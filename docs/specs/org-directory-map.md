@@ -172,8 +172,11 @@ unpopulated tier for one branch requires no per-level code.
   buttons, a single-line breadcrumb), the search box floats over the top of the
   map, and the info panel is a bottom sheet that shows a peek of the selected
   org or location and expands from its handle. Tapping a pin expands the sheet;
-  tapping the map or navigating to another org collapses it. Map fits keep the
-  focused orgs clear of the search box and the sheet.
+  tapping the map, a breadcrumb, a layer button, or another org collapses it.
+  Map fits keep the focused orgs clear of the search box and the sheet, the
+  tile attribution stays visible, and co-located pins fan out far enough that
+  each finger-sized tap target opens its own location. Wider-but-short screens
+  (landscape phones) keep the side-by-side layout with a tighter header.
 
 ### API
 

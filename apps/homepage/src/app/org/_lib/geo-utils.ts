@@ -154,3 +154,20 @@ export function computeFanOffsets(
   }
   return offsets;
 }
+
+/**
+ * Fan radius that keeps `count` markers' square tap targets (`targetPx` wide)
+ * from covering a neighbour's centre, so a tap on any visible dot hits that
+ * dot's own marker. Adjacent markers on the circle sit one chord apart; a chord
+ * of `targetPx` puts every neighbour outside the square in at least one axis.
+ * Never returns less than `minRadiusPx`.
+ */
+export function fanRadiusForTargets(
+  count: number,
+  targetPx: number,
+  minRadiusPx: number,
+): number {
+  if (count <= 1) return minRadiusPx;
+  const radius = targetPx / (2 * Math.sin(Math.PI / count));
+  return Math.max(minRadiusPx, radius);
+}

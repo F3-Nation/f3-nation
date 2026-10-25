@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeFanOffsets,
+  fanRadiusForTargets,
   fuzzyScore,
   convexHull,
   createCircleBuffer,
@@ -280,5 +281,35 @@ describe("computeFanOffsets", () => {
       expect(large[i]!.dx).toBeCloseTo(s.dx * 2, 6);
       expect(large[i]!.dy).toBeCloseTo(s.dy * 2, 6);
     });
+  });
+});
+
+describe("fanRadiusForTargets", () => {
+  it("uses the minimum radius for a lone marker", () => {
+    expect(fanRadiusForTargets(1, 32, 18)).toBe(18);
+  });
+
+  it("never goes below the minimum radius", () => {
+    // Two markers need only a 16px radius for a 32px chord.
+    expect(fanRadiusForTargets(2, 32, 18)).toBe(18);
+  });
+
+  it("keeps each tap target clear of its neighbours' centres", () => {
+    for (const count of [2, 3, 6, 12]) {
+      const target = 32;
+      const offsets = computeFanOffsets(
+        count,
+        fanRadiusForTargets(count, target, 18),
+      );
+      offsets.forEach((a, i) => {
+        offsets.forEach((b, j) => {
+          if (i === j) return;
+          const inside =
+            Math.abs(a.dx - b.dx) < target / 2 &&
+            Math.abs(a.dy - b.dy) < target / 2;
+          expect(inside).toBe(false);
+        });
+      });
+    }
   });
 });

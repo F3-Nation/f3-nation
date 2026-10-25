@@ -20,6 +20,7 @@ import { buildOrgHierarchy, LAYER_TYPES } from "../_lib/org-chart";
 import {
   computeFanOffsets,
   convexHull,
+  fanRadiusForTargets,
   createCircleBuffer,
   createStarPolygon,
   dedupePoints,
@@ -49,8 +50,12 @@ import { SearchBox } from "./search-box";
 
 // ─── types local to this component ───────────────────────────────────────────
 
-// Screen-pixel radius of the fan used to separate co-located location pins.
+// Minimum screen-pixel radius of the fan used to separate co-located location
+// pins; larger groups widen it so their tap targets don't overlap.
 const PIN_FAN_RADIUS_PX = 18;
+
+// Square tap target around each 14px pin dot — finger-sized on phones.
+const PIN_TAP_TARGET_PX = 32;
 
 // Matches Tailwind's `md` breakpoint, where the layout switches from the phone
 // overlay (floating search + bottom sheet) to the side-by-side sidebar.
@@ -407,7 +412,8 @@ export default function OrgMap() {
       searchCardRef.current?.getBoundingClientRect().bottom ?? mapRect.top;
     const sheetTop =
       infoSheetRef.current?.getBoundingClientRect().top ?? mapRect.bottom;
-    const top = Math.max(0, searchBottom - mapRect.top) + 12;
+    // +28 clears the tile attribution line that sits under the search card.
+    const top = Math.max(0, searchBottom - mapRect.top) + 28;
     let bottom = Math.max(0, mapRect.bottom - sheetTop) + 12;
     // An expanded sheet covers most of the map; don't squeeze the fit into
     // the sliver above it.
@@ -480,13 +486,12 @@ export default function OrgMap() {
         byCoord.set(key, group);
       }
 
-      // The visible dot is 14px; the transparent 32px box around it gives a
-      // finger-sized tap target.
+      // The visible dot is 14px; the transparent box around it is the tap target.
       const icon = L.divIcon({
         className: "",
-        html: `<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center"><div style="width:14px;height:14px;border-radius:50%;background:#B70D06;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)"></div></div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
+        html: `<div style="width:${PIN_TAP_TARGET_PX}px;height:${PIN_TAP_TARGET_PX}px;display:flex;align-items:center;justify-content:center"><div style="width:14px;height:14px;border-radius:50%;background:#B70D06;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)"></div></div>`,
+        iconSize: [PIN_TAP_TARGET_PX, PIN_TAP_TARGET_PX],
+        iconAnchor: [PIN_TAP_TARGET_PX / 2, PIN_TAP_TARGET_PX / 2],
       });
 
       const map = mapRef.current;
@@ -494,7 +499,14 @@ export default function OrgMap() {
       for (const group of byCoord.values()) {
         // Fan in screen pixels (not fixed degrees) so co-located pins stay
         // separated at every zoom level instead of collapsing when zoomed out.
-        const offsets = computeFanOffsets(group.length, PIN_FAN_RADIUS_PX);
+        const offsets = computeFanOffsets(
+          group.length,
+          fanRadiusForTargets(
+            group.length,
+            PIN_TAP_TARGET_PX,
+            PIN_FAN_RADIUS_PX,
+          ),
+        );
         group.forEach((loc, i) => {
           let latlng = L.latLng(loc.lat, loc.lng);
           if (group.length > 1 && map) {
@@ -504,7 +516,9 @@ export default function OrgMap() {
               base.add(L.point(offset.dx, offset.dy)),
             );
           }
-          const marker = L.marker(latlng, { icon });
+          // Keep pin taps from reaching the map's collapse-the-sheet handler.
+          // (Leaflet's marker default, made explicit since the sheet relies on it.)
+          const marker = L.marker(latlng, { icon, bubblingMouseEvents: false });
 
           marker.on("mouseover", () => {
             void loadLocationInfo(loc.locationId);
@@ -587,6 +601,7 @@ export default function OrgMap() {
 
   const navigateViaLevelButton = useCallback(
     (level: OrgType) => {
+      setSheetExpanded(false);
       pinsActiveRef.current = false;
       pinnedOrgRef.current = null;
       infoGuardRef.current.clearPins();
@@ -604,6 +619,7 @@ export default function OrgMap() {
 
   const navigateViaBreadcrumb = useCallback(
     (depth: number) => {
+      setSheetExpanded(false);
       pinsActiveRef.current = false;
       pinnedOrgRef.current = null;
       infoGuardRef.current.clearPins();
@@ -916,13 +932,14 @@ export default function OrgMap() {
 
   return (
     <div className="flex h-dvh flex-col bg-[#f6f3ea]">
-      {/* Header */}
-      <header className="flex flex-col gap-2 bg-[#0b0d12] px-3 py-2 text-[#f6f3ea] md:flex-row md:items-center md:justify-between md:gap-8 md:px-6 md:py-4">
+      {/* Header. Landscape phones get the desktop layout (they're ≥768px wide)
+          but are short, so the header and gutters tighten to leave map room. */}
+      <header className="flex flex-col gap-2 bg-[#0b0d12] px-3 py-2 text-[#f6f3ea] md:flex-row md:items-center md:justify-between md:gap-8 md:px-6 md:py-4 md:[@media(max-height:500px)]:py-2">
         <div>
           <h1 className="text-base font-bold md:text-lg">
             F3 Geographic Directory
           </h1>
-          <div className="hidden text-xs text-[rgba(215,38,56,0.85)] md:block">
+          <div className="hidden text-xs text-[rgba(215,38,56,0.85)] md:block md:[@media(max-height:500px)]:hidden">
             {presentLayers
               .slice()
               .reverse()
@@ -946,7 +963,7 @@ export default function OrgMap() {
                 key={layer}
                 type="button"
                 onClick={() => navigateViaLevelButton(layer)}
-                className={`shrink-0 rounded-sm border px-3 py-1.5 text-xs font-medium tracking-wide uppercase transition-all md:px-4 md:py-2 ${
+                className={`shrink-0 rounded-sm border px-3 py-1.5 text-xs font-medium tracking-wide uppercase transition-all md:px-4 md:py-2 md:[@media(max-height:500px)]:py-1 ${
                   currentLevel === layer
                     ? "border-[#B70D06] bg-[#B70D06] text-[#1a1a1a]"
                     : "border-[#2c3648] bg-[#151a24] text-[#f8f4ea] hover:border-[#3b4a62] hover:bg-[#233046]"
@@ -960,7 +977,7 @@ export default function OrgMap() {
         {/* Breadcrumb — a single scrolling line on phones */}
         <nav
           ref={breadcrumbRef}
-          className="overflow-x-auto text-sm whitespace-nowrap md:overflow-visible md:whitespace-normal"
+          className="overflow-x-auto text-sm whitespace-nowrap md:flex-none md:overflow-visible md:whitespace-normal"
           aria-label="Location breadcrumb"
         >
           {crumbs.map((crumb, idx) => {
@@ -988,7 +1005,7 @@ export default function OrgMap() {
 
       {/* Main content. Phones: full-bleed map with the search card floating on
           top and the info panel as a bottom sheet. Desktop: map + sidebar. */}
-      <main className="relative min-h-0 flex-1 overflow-hidden md:grid md:grid-cols-[1fr_320px] md:gap-4 md:p-4">
+      <main className="relative min-h-0 flex-1 overflow-hidden md:grid md:grid-cols-[1fr_320px] md:gap-4 md:p-4 md:[@media(max-height:500px)]:gap-2 md:[@media(max-height:500px)]:p-2">
         {/* Map. `isolate` keeps Leaflet's high pane/control z-indexes from
             stacking above the phone overlays. */}
         <div className="absolute inset-0 isolate overflow-hidden md:relative md:inset-auto md:rounded-2xl md:shadow-xl">
@@ -1005,19 +1022,22 @@ export default function OrgMap() {
             </div>
           )}
           {/* Phones pinch to zoom, and the +/- control would sit under the
-              floating search card. */}
+              floating search card. The bottom sheet would hide the tile
+              attribution (required by OSM/CARTO), so on phones it moves to
+              just below the search card. */}
           <div
             ref={mapContainerRef}
-            className="h-full w-full max-md:[&_.leaflet-control-zoom]:hidden"
+            className="h-full w-full max-md:[&_.leaflet-bottom.leaflet-right]:top-[4.25rem] max-md:[&_.leaflet-bottom.leaflet-right]:bottom-auto max-md:[&_.leaflet-control-zoom]:hidden"
           />
         </div>
 
         {/* Sidebar. `contents` on phones lets its two cards position against
             <main> as overlays. */}
         <aside className="contents md:flex md:flex-col md:gap-3 md:overflow-y-auto">
+          {/* z-20: above the sheet so search results aren't covered by it. */}
           <div
             ref={searchCardRef}
-            className="absolute inset-x-2 top-2 z-10 rounded-2xl bg-white p-2 shadow-md md:static md:p-4"
+            className="absolute inset-x-2 top-2 z-20 rounded-2xl bg-white p-2 shadow-md md:static md:p-4"
           >
             <SearchBox
               presentLayers={presentLayers}
