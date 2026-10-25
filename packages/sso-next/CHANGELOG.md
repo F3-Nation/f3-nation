@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.2](https://github.com/F3-Nation/f3-nation/compare/pkg-sso-next@0.2.1...pkg-sso-next@0.2.2) (2026-10-23)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @f3nation/sso bumped to 0.5.0
+
 ## [0.2.1](https://github.com/F3-Nation/f3-nation/compare/pkg-sso-next@0.2.0...pkg-sso-next@0.2.1) (2026-08-18)
 
 

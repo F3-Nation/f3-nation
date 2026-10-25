@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.8.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.8.0...homepage@1.8.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **scripts:** add the org chart api key to the seed script ([#1330](https://github.com/F3-Nation/f3-nation/issues/1330)) ([96a5ef0](https://github.com/F3-Nation/f3-nation/commit/96a5ef049880f978fc988e46b6ae6dc802899919))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.5.1
+    * @acme/ui bumped to 0.2.3
+
 ## [1.8.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.7.1...homepage@1.8.0) (2026-10-14)
 
 
