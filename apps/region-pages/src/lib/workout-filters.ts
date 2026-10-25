@@ -1,7 +1,9 @@
 import type { Workout } from "@/types/region";
 
 export const workoutTypesOf = (workout: Workout): string[] =>
-  workout.types.length > 0 ? workout.types : [workout.type];
+  (workout.types.length > 0 ? workout.types : [workout.type])
+    .map((type) => type.trim())
+    .filter(Boolean);
 
 /** The `?day=` and `?type=` filters, both applied (case-insensitive). */
 export function filterWorkouts(

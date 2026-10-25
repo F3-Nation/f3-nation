@@ -12,8 +12,7 @@ interface WorkoutFiltersProps {
 }
 
 export function WorkoutFilters({ workouts }: WorkoutFiltersProps) {
-  // Collapsed on mobile until opened (the legacy mount effect collapsed it
-  // immediately, so this matches what visitors saw).
+  // Collapsed on mobile until opened, so the workout list stays above the fold.
   const [isExpanded, setIsExpanded] = useState(false);
   const searchParams = useSearchParams();
   const selectedDay = searchParams.get("day");

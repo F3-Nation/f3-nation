@@ -9,8 +9,8 @@ export const nonEmpty = (value: string | undefined): string | undefined =>
   value?.trim() ? value.trim() : undefined;
 
 /**
- * Canonical origin for metadata and the sitemap. The legacy app fell back to
- * an unrelated domain when this was unset; fall back to production instead.
+ * Canonical origin for metadata and the sitemap. Falls back to production, the
+ * only correct public address, so an unset value never points links elsewhere.
  */
 export const getSiteUrl = (): string =>
   (nonEmpty(env.SITE_URL) ?? "https://regions.f3nation.com").replace(

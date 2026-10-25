@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
-/* Dark mode follows the OS setting (Tailwind's default media strategy), as in
-   the legacy app; there is no theme toggle. */
+/* Dark mode follows the OS setting (Tailwind's default media strategy); there
+   is no theme toggle. */
 
 :root {
   --background: #ffffff;

@@ -1,7 +1,6 @@
 # Region pages directory
 
-> Human designer: _TBD — acceptance criteria need human approval before merge
-> (see [AI_GUARDRAILS](../AI_GUARDRAILS.md))._
+> Human designer: Fortran (@dfoster42)
 
 ## 1. Summary
 
@@ -10,9 +9,8 @@ A public, crawlable directory of every active F3 region at
 page per region listing its public weekly workouts (day, time, type,
 address, notes, directions) plus region contact links and any hand-curated
 upcoming region events. It is the SEO-friendly, link-shareable counterpart to
-the map. It replaces the standalone `F3-Nation/f3-region-pages` repo, which
-copied this data nightly into its own Supabase database; this app reads the
-live F3 database through the public API instead.
+the map, and reads live F3 data through the public API, so edits show up
+without an import.
 
 ## 2. Context & links
 
@@ -59,8 +57,9 @@ live F3 database through the public API instead.
 ### Region page (`/<region-slug>`)
 
 - **AC-6** — GIVEN an active region named "Albany, GA" WHEN
-  `/albany-ga` loads THEN the page shows that region (the slug is the
-  lodash kebab-case of the name, unchanged from the legacy app).
+  `/albany-ga` loads THEN the page shows that region. The slug is the lodash
+  kebab-case of the name, and it must not change: it is the region's public
+  URL.
 - **AC-6a** — GIVEN two active regions whose names kebab-case to the same slug
   THEN only the lower org id is listed, and the slug resolves to it.
 - **AC-7** — GIVEN a region page THEN each listed workout is an active,
@@ -75,10 +74,11 @@ live F3 database through the public API instead.
   page shows the "just getting started" state instead of a workout list,
   with the region's website and contact links.
 - **AC-11** — GIVEN a slug that matches no active region THEN the response
-  is HTTP 404 with a "Region not found" page linking to `/` (the legacy app
-  redirected to `/`; a real 404 keeps retired regions out of search indexes).
-- **AC-12** — GIVEN a region page THEN its Open Graph URL and canonical link
-  use the deployment's `SITE_URL` origin (never an unrelated domain).
+  is HTTP 404 with a "Region not found" page linking to `/`. A real 404, not a
+  redirect, keeps retired regions out of search indexes.
+- **AC-12** — GIVEN a region page THEN the links it gives search engines and
+  link previews (its canonical URL and Open Graph URL) point to this
+  deployment's own address, set by `SITE_URL`.
 
 ### Freshness & SEO
 
@@ -103,7 +103,8 @@ fields and public workout schedules. No write paths.
 ## 6. Out of scope / non-goals
 
 - Editing region data here (it is edited in admin / slackbot).
-- Moving the curated `region-events.json` into the database.
+- Storing curated region events in the database. They stay in a JSON file in
+  the repo (`apps/region-pages/src/data/region-events.json`), edited by hand.
 - On-demand revalidation on edit (the hour-long window is the only freshness
   mechanism for now).
 

@@ -46,12 +46,14 @@ describe("useRegionDescription", () => {
     );
   });
 
-  it.each(['<a href="javascript:alert(1)"></a>', "<a></a>"])(
-    "uses the default when the only link would be dropped: %j",
-    (html) => {
-      expect(renderedText(html).textContent).toBe(defaultRegionDescription);
-    },
-  );
+  it.each([
+    '<a href="javascript:alert(1)"></a>',
+    "<a></a>",
+    // Not a real href: the sanitizer drops it, so this must not count.
+    '<a data-href="https://f3boone.com"></a>',
+  ])("uses the default when the only link would be dropped: %j", (html) => {
+    expect(renderedText(html).textContent).toBe(defaultRegionDescription);
+  });
 
   it("renders the sanitized description when it has text", () => {
     const container = renderedText(

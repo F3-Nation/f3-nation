@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { sortWorkoutsByDayAndTime } from "@/lib/workout-sorting";
+import {
+  sortWorkoutsByDayAndTime,
+  sortWorkoutsByWeek,
+} from "@/lib/workout-sorting";
 import type { Workout } from "@/types/region";
 
 // Thursday, 2024-02-01 10:30 local time.
@@ -107,5 +110,32 @@ describe("sortWorkoutsByDayAndTime", () => {
 
     // Sunday Feb 4 comes before Monday Feb 5 when counting from Thursday.
     expect(namesOf(sorted)).toEqual(["Sunday", "Monday"]);
+  });
+});
+
+describe("sortWorkoutsByWeek", () => {
+  it("orders Monday to Sunday, then by start time, unknown days last", () => {
+    const sorted = sortWorkoutsByWeek([
+      makeWorkout({ name: "Sun", group: "sunday", time: "7:00 AM" }),
+      makeWorkout({ name: "Mon late", group: "monday", time: "6:00 PM" }),
+      makeWorkout({ name: "Odd", group: "someday", time: "5:00 AM" }),
+      makeWorkout({ name: "Mon early", group: "monday", time: "5:30 AM" }),
+    ]);
+    expect(namesOf(sorted)).toEqual(["Mon early", "Mon late", "Sun", "Odd"]);
+  });
+
+  it("gives the same order whatever the clock says", () => {
+    const workouts = [
+      makeWorkout({ name: "Thu", group: "thursday", time: "5:30 AM" }),
+      makeWorkout({ name: "Fri", group: "friday", time: "5:30 AM" }),
+    ];
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-02-01T23:00:00Z"));
+    const late = namesOf(sortWorkoutsByWeek(workouts));
+    vi.setSystemTime(new Date("2024-02-01T04:00:00Z"));
+    const early = namesOf(sortWorkoutsByWeek(workouts));
+    vi.useRealTimers();
+    expect(late).toEqual(["Thu", "Fri"]);
+    expect(early).toEqual(late);
   });
 });

@@ -28,8 +28,8 @@ Public, anonymous directory of F3 regions and their weekly workouts at
 
 ## Rules
 
-1. **Slugs are public URLs.** A slug is lodash `kebabCase(region.name)`, the
-   same as the legacy app. Never change how slugs are built. When two names
+1. **Slugs are public URLs.** A slug is lodash `kebabCase(region.name)`. Never
+   change how slugs are built: existing links and search results use them. When two names
    produce one slug, the lowest org id wins everywhere.
 2. **Visibility rules live in the API and match the map** (active, non-private,
    current series, at an active location, under an active AO directly beneath
@@ -65,9 +65,9 @@ Public, anonymous directory of F3 regions and their weekly workouts at
 10. **Keep the directory payload small.** `/` sends `RegionSummary`
     (`src/types/region.ts`), not the full region. Add fields there only if the
     list renders them.
-11. **Tests pin behavior.** Coverage uses a buffered ratchet that trails
-    measured coverage by 5 points (`vitest.config.ts`). Never add a test just to
-    move the number; untested declarative files are excluded instead.
+11. **Tests pin behavior.** Never add a test just to move the coverage number.
+    Declarative files with no logic (layouts, error/not-found shells, env
+    schema, inline SVGs) are excluded from coverage in `vitest.config.ts`.
 12. **Release order:** ship the `api` release containing any `regionPages`
     change before the `region-pages` release that relies on it.
 

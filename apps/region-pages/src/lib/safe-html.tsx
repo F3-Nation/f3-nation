@@ -122,8 +122,10 @@ const sanitizeNode = (node: ChildNode, key: string): ReactNode[] => {
   return [];
 };
 
+// `href` as its own attribute (preceded by whitespace), so `data-href` and
+// similar don't count: the sanitizer only keeps a real `href`.
 const ANCHOR_HREF =
-  /<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  /<a\b[^>]*?\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
 
 /**
  * Whether `html` renders anything a visitor can see: text, or a link the

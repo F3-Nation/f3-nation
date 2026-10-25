@@ -16,7 +16,7 @@ interface Props {
 
 const KM_TO_MILES = 0.621371;
 
-// A–G, H–N, O–U, V–Z: four centered rows, as in the legacy layout.
+// A–G, H–N, O–U, V–Z: four centered rows of seven (the last has five).
 const LETTER_ROWS = [0, 7, 14, 21].map((start) =>
   ALL_LETTERS.slice(start, start + 7),
 );
@@ -174,6 +174,9 @@ export default function SearchableRegionList({
     (letter: string) => {
       setSearchQuery("");
       setSelectedIndex(-1);
+      // On this force-dynamic page, Next re-renders on the server for any URL
+      // change (native history calls included), so a letter click costs one
+      // server render. The letter stays in the query string so links share.
       router.push(`/?letter=${letter.toLowerCase()}`);
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
@@ -251,7 +254,13 @@ export default function SearchableRegionList({
                 setSearchQuery(e.target.value);
                 setSelectedIndex(-1);
                 if (!e.target.value) {
-                  router.push(`/?letter=${currentLetter.toLowerCase()}`);
+                  // replace, not push: clearing the box shouldn't add a
+                  // back-button entry each time.
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `/?letter=${currentLetter.toLowerCase()}`,
+                  );
                 }
               }}
               onKeyDown={handleKeyDown}

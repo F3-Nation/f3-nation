@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Suspense, useState } from "react";
 import { RegionHeader } from "@/components/region-header";
-import { WorkoutList } from "@/components/workout-list";
+import { WorkoutList, WorkoutListView } from "@/components/workout-list";
 import { WorkoutFilters } from "@/components/workout-filters";
 import { getMapUrl } from "@/lib/map-utils";
 import type { MapParameters } from "@/lib/map-utils";
@@ -16,6 +16,7 @@ import {
   formatEventTimeRange,
 } from "@/lib/region-events";
 import { useRegionDescription } from "@/lib/region-description";
+import { useUpcomingOrder } from "@/lib/use-upcoming-order";
 
 interface RegionContentProps {
   regionSlug: string;
@@ -33,18 +34,25 @@ interface RegionContentProps {
 }
 
 function FilteredContent({ sortedWorkouts }: { sortedWorkouts: Workout[] }) {
+  const workouts = useUpcomingOrder(sortedWorkouts);
   return (
     <>
       <div className="sticky top-4 z-20 mb-8 rounded-lg border border-gray-100 bg-white px-4 py-3 shadow-lg backdrop-blur-xs dark:border-gray-700/50 dark:bg-gray-800/95">
-        <Suspense fallback={<div>Loading filters...</div>}>
-          <WorkoutFilters workouts={sortedWorkouts} />
+        {/* Reading the query string defers these to the browser on an ISR page;
+            the server HTML gets the fallback, so it must hold real content. */}
+        <Suspense fallback={null}>
+          <WorkoutFilters workouts={workouts} />
         </Suspense>
       </div>
 
       <div className="mb-8">
         <h2 className="mb-4 text-2xl font-semibold">Workouts</h2>
-        <Suspense fallback={<div>Loading workouts...</div>}>
-          <WorkoutList workouts={sortedWorkouts} />
+        <Suspense
+          fallback={
+            <WorkoutListView workouts={workouts} day={null} type={null} />
+          }
+        >
+          <WorkoutList workouts={workouts} />
         </Suspense>
       </div>
     </>

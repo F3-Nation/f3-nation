@@ -8,7 +8,8 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  // The server already logged the failure (with its digest); don't echo raw
+  // Server render errors are logged server-side (matched by digest). Errors
+  // thrown in client components are not reported anywhere. Don't echo raw
   // error messages to visitors.
   return (
     <div className="flex min-h-screen items-center justify-center p-8">

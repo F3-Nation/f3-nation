@@ -25,6 +25,15 @@ describe("filterWorkouts", () => {
   });
 });
 
+describe("filterWorkouts with untrimmed type names", () => {
+  it("matches a stored type that has surrounding spaces", () => {
+    const spaced = w("4", "monday", [" Bootcamp "]);
+    expect(filterWorkouts([spaced, monRun], { type: "bootcamp" })).toEqual([
+      spaced,
+    ]);
+  });
+});
+
 describe("groupByDayInOrder", () => {
   it("keeps next-occurrence order instead of Monday-first", () => {
     // Sorted for a Thursday: Friday comes before Monday.

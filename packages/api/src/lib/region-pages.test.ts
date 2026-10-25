@@ -48,7 +48,7 @@ const workout = (
 };
 
 describe("regionSlug", () => {
-  it("kebab-cases the region name like the legacy app", () => {
+  it("kebab-cases the region name", () => {
     expect(regionSlug("Albany, GA")).toBe("albany-ga");
     expect(regionSlug("ARCO")).toBe("arco");
     expect(regionSlug("Albuquerque")).toBe("albuquerque");
@@ -151,7 +151,7 @@ describe("time formatting", () => {
 });
 
 describe("toRegionPageWorkout", () => {
-  it("shapes a row like the legacy workouts table", () => {
+  it("shapes a query row as a workout", () => {
     expect(
       toRegionPageWorkout(row({ eventTypeNames: ["Run", "Ruck"] })),
     ).toEqual({
@@ -244,7 +244,7 @@ describe("summarizeRegionArea", () => {
     expect(area.zip).toBe("87111");
     expect(area.latitude).toBeCloseTo(35.1);
     expect(area.longitude).toBeCloseTo(-106.75);
-    // Legacy enrich-regions.ts: floor(15.5 - log2(0.5° * 1.4 padding * 111 km)).
+    // floor(15.5 - log2(0.5° span * 1.4 padding * 111 km/°)) = 9.
     expect(area.zoom).toBe(9);
   });
 

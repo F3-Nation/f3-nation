@@ -1,12 +1,8 @@
 import kebabCase from "lodash/kebabCase";
 
 /**
- * Pure shaping helpers for the public region pages (apps/region-pages).
- *
- * These were previously applied by the standalone f3-region-pages ingest job,
- * which copied orgs/events nightly into its own database. The pages now read
- * the live tables through `regionPages.*`, so the same transforms run at read
- * time instead.
+ * Pure shaping helpers for the public region pages (apps/region-pages). They
+ * run at read time on rows from the live tables, via `regionPages.*`.
  */
 
 export interface RegionPageWorkoutRow {
@@ -97,7 +93,7 @@ export function httpUrlOrNull(url: string | null): string | null {
   }
 }
 
-/** URL slug for a region, unchanged from the legacy app so links keep working. */
+/** URL slug for a region. Never change it: existing links and search results use it. */
 export const regionSlug = (name: string): string => kebabCase(name);
 
 /**
@@ -217,8 +213,8 @@ const formatAddress = (row: RegionPageWorkoutRow): string =>
     .join(", ");
 
 /**
- * Shape a query row as a workout. Returns null for rows the legacy ingest
- * skipped: no event type or no day of week.
+ * Shape a query row as a workout. Returns null for a row with no event type or
+ * no day of week: the page can't label or schedule it.
  */
 export function toRegionPageWorkout(
   row: RegionPageWorkoutRow,
@@ -257,8 +253,8 @@ const scheduleKey = (workout: RegionPageWorkout): string =>
 
 /**
  * Collapse workouts that share a schedule identity (region, name, day, time,
- * location), keeping the one with the highest event id. Mirrors the legacy
- * ingest's dedup so duplicate series don't render twice.
+ * location), keeping the one with the highest event id, so a series entered
+ * twice renders once.
  */
 export function dedupeWorkouts(
   workouts: RegionPageWorkout[],

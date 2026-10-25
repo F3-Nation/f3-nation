@@ -90,3 +90,22 @@ export const sortWorkoutsByDayAndTime = (workouts: Workout[]): Workout[] => {
     return (a.name || "").localeCompare(b.name || "");
   });
 };
+
+/**
+ * Monday-to-Sunday, then by start time, then name. Independent of any clock,
+ * so the server (UTC on Cloud Run) and the hydrating browser agree on it.
+ */
+export const sortWorkoutsByWeek = (workouts: Workout[]): Workout[] =>
+  [...workouts].sort((a, b) => {
+    const dayA = dayToIndex(a.group);
+    const dayB = dayToIndex(b.group);
+    const byDay =
+      (dayA === -1 ? Number.MAX_SAFE_INTEGER : dayA) -
+      (dayB === -1 ? Number.MAX_SAFE_INTEGER : dayB);
+    if (byDay !== 0) return byDay;
+    const startA = parseStartTime(a.time);
+    const startB = parseStartTime(b.time);
+    const byTime =
+      startA.hours * 60 + startA.minutes - (startB.hours * 60 + startB.minutes);
+    return byTime || (a.name || "").localeCompare(b.name || "");
+  });

@@ -123,15 +123,9 @@ follow
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
 - **Coverage thresholds ratchet upward.** `vitest.config.ts` being rewritten by a
   test run is expected — commit it. Never set `thresholds.autoUpdate` to `false`
-  or delete the key, and never lower a threshold to make a suite pass. Enforced
-  in `pnpm lint` and `pre-commit`. How coverage is measured and why:
-  [`docs/testing.md`](docs/testing.md).
-- **Tests exist to pin behavior, not to hit a number.** Never write a test only
-  to raise coverage. If a threshold fails, test the untested behavior that
-  matters. If none is missing (e.g. you deleted well-covered code), say so in
-  the PR and let a human decide. An app may use a buffered ratchet (see
-  `docs/testing.md` § Buffered ratchet) so that small drops like this don't
-  fail.
+  or delete the key, and never lower a threshold to make a suite pass; add tests
+  instead. Enforced in `pnpm lint` and `pre-commit`. How coverage is measured and
+  why: [`docs/testing.md`](docs/testing.md).
 
 ### Driving auth-bounded flows in local dev
 

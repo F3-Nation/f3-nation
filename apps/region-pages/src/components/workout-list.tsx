@@ -1,27 +1,23 @@
 "use client";
 
-import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 
 import type { Workout } from "@/types/region";
 import { WorkoutCard } from "@/components/workout-card";
 import { filterWorkouts, groupByDayInOrder } from "@/lib/workout-filters";
 
-interface WorkoutListProps {
-  /** Sorted by next occurrence; filtering and grouping preserve that order. */
+interface WorkoutListViewProps {
+  /** In display order; filtering and grouping preserve it. */
   workouts: Workout[];
+  day: string | null;
+  type: string | null;
 }
 
 const titleCase = (day: string) => day.charAt(0).toUpperCase() + day.slice(1);
 
-export function WorkoutList({ workouts }: WorkoutListProps) {
-  const searchParams = useSearchParams();
-  const day = searchParams.get("day");
-  const type = searchParams.get("type");
-  const filtered = useMemo(
-    () => filterWorkouts(workouts, { day, type }),
-    [workouts, day, type],
-  );
+/** The list for given filters. Pure, so it can also be a Suspense fallback. */
+export function WorkoutListView({ workouts, day, type }: WorkoutListViewProps) {
+  const filtered = filterWorkouts(workouts, { day, type });
 
   if (filtered.length === 0) {
     return (
@@ -56,5 +52,17 @@ export function WorkoutList({ workouts }: WorkoutListProps) {
         </div>
       ))}
     </div>
+  );
+}
+
+/** The list filtered by `?day=` and `?type=`. */
+export function WorkoutList({ workouts }: { workouts: Workout[] }) {
+  const searchParams = useSearchParams();
+  return (
+    <WorkoutListView
+      workouts={workouts}
+      day={searchParams.get("day")}
+      type={searchParams.get("type")}
+    />
   );
 }

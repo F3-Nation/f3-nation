@@ -9,7 +9,7 @@ import { getRegion } from "@/lib/data";
 import { regionMapParameters } from "@/lib/map-utils";
 import { formatEventDate, getUpcomingRegionEvents } from "@/lib/region-events";
 import { SITE_TITLE } from "@/lib/site";
-import { sortWorkoutsByDayAndTime } from "@/lib/workout-sorting";
+import { sortWorkoutsByWeek } from "@/lib/workout-sorting";
 
 interface RegionPageProps {
   params: Promise<{ regionSlug: string }>;
@@ -109,7 +109,7 @@ export default async function RegionPage({ params }: RegionPageProps) {
       twitter={region.twitter ?? undefined}
       instagram={region.instagram ?? undefined}
       image={region.image ?? undefined}
-      sortedWorkouts={sortWorkoutsByDayAndTime(workouts)}
+      sortedWorkouts={sortWorkoutsByWeek(workouts)}
       mapParams={regionMapParameters(region)}
       upcomingEvents={getUpcomingRegionEvents(regionSlug, { limit: 3 })}
     />

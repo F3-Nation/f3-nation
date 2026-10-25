@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Region, Workout } from "@/types/region";
 import RegionPage, { generateMetadata } from "@/app/[regionSlug]/page";
@@ -26,6 +27,10 @@ const workout = { location: "1 Main St, Albuquerque, NM" } as Workout;
 const params = Promise.resolve({ regionSlug: "albuquerque" });
 
 describe("region page", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("titles a region with workouts by name and city, with its own canonical/og url", async () => {
     vi.mocked(getRegion).mockResolvedValue({ region, workouts: [workout] });
 
@@ -55,5 +60,25 @@ describe("region page", () => {
 
     expect((await generateMetadata({ params })).title).toBe("Region Not Found");
     await expect(RegionPage({ params })).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
+  it("renders a region with no workouts as getting started, with its contact links", async () => {
+    vi.mocked(getRegion).mockResolvedValue({
+      region: { ...region, website: "https://f3abq.com", email: "a@b.com" },
+      workouts: [],
+    });
+
+    render(await RegionPage({ params }));
+
+    expect(
+      screen.getByText("This region is just getting started!"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Visit Region Website" }),
+    ).toHaveAttribute("href", "https://f3abq.com");
+    expect(screen.getByTitle("F3 Albuquerque Email")).toHaveAttribute(
+      "href",
+      "mailto:a@b.com",
+    );
   });
 });

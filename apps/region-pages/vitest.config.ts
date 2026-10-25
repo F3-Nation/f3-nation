@@ -25,19 +25,14 @@ export default defineConfig({
         "src/app/robots.ts",
         "src/env.ts",
         "src/lib/logging.ts",
-        "src/components/google-analytics.tsx",
         "src/components/svgs/**",
       ],
       thresholds: {
-        // Ratchets 5 points below measured coverage, never down: big
-        // regressions fail, but deleting well-covered code or a small refactor
-        // doesn't demand filler tests. See docs/testing.md § Thresholds.
-        autoUpdate: (newThreshold, previousThreshold) =>
-          Math.max(previousThreshold, Math.floor(newThreshold) - 5),
-        statements: 53,
-        branches: 43,
-        functions: 52,
-        lines: 52,
+        autoUpdate: true,
+        statements: 70.63,
+        branches: 57.98,
+        functions: 71.09,
+        lines: 69.9,
       },
     },
   },

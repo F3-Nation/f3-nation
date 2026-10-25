@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Region } from "@/types/region";
 import { RegionsClient } from "@/components/regions-client";
+import { calculateHaversineDistance } from "@/lib/map-utils";
 import { toRegionSummary } from "@/types/region";
 
 let letterParam: string | null = null;
@@ -95,5 +96,96 @@ describe("RegionsClient", () => {
     ).toBeInTheDocument();
     fireEvent.keyDown(input, { key: "Enter" });
     expect(push).toHaveBeenCalledWith("/boone");
+  });
+});
+
+describe("near me", () => {
+  const HERE = { latitude: 35.1, longitude: -106.6 };
+
+  const stubGeolocation = (
+    getCurrentPosition: (
+      ok: (position: GeolocationPosition) => void,
+      err: (error: GeolocationPositionError) => void,
+    ) => void,
+  ) => {
+    Object.defineProperty(globalThis.navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition },
+    });
+  };
+
+  afterEach(() => {
+    cleanup();
+    delete (globalThis.navigator as { geolocation?: unknown }).geolocation;
+  });
+
+  it("lists only regions within 200 miles, with their distance in miles", () => {
+    stubGeolocation((ok) =>
+      ok({ coords: HERE } as unknown as GeolocationPosition),
+    );
+    const nearLat = 35.82; // ~50 miles north
+    const farLat = 38.72; // ~250 miles north
+    const regions = [
+      makeRegion({
+        id: "10",
+        name: "Near Town",
+        slug: "near-town",
+        latitude: nearLat,
+        longitude: HERE.longitude,
+      }),
+      makeRegion({
+        id: "11",
+        name: "Far Town",
+        slug: "far-town",
+        latitude: farLat,
+        longitude: HERE.longitude,
+      }),
+      makeRegion({
+        id: "12",
+        name: "Nowhere",
+        slug: "nowhere",
+        latitude: null,
+        longitude: null,
+      }),
+    ].map(toRegionSummary);
+
+    render(<RegionsClient regions={regions} />);
+    fireEvent.click(screen.getByLabelText("Find regions near me"));
+
+    expect(screen.getByRole("link", { name: /Near Town/ })).toHaveAttribute(
+      "href",
+      "/near-town",
+    );
+    expect(screen.queryByRole("link", { name: /Far Town/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Nowhere/ })).toBeNull();
+    expect(
+      screen.getByText(
+        `${(calculateHaversineDistance(HERE.latitude, HERE.longitude, nearLat, HERE.longitude) * 0.621371).toFixed(1)} miles away`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a permission message and returns to alphabetical navigation when location is denied", () => {
+    stubGeolocation((_ok, err) =>
+      err({
+        code: 1,
+        PERMISSION_DENIED: 1,
+        POSITION_UNAVAILABLE: 2,
+        TIMEOUT: 3,
+      } as GeolocationPositionError),
+    );
+    const regions = [makeRegion()].map(toRegionSummary);
+
+    render(<RegionsClient regions={regions} />);
+    fireEvent.click(screen.getByLabelText("Find regions near me"));
+
+    expect(
+      screen.getByText(
+        "Location access denied. Please enable location services.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Alphabetical navigation"),
+    ).toBeInTheDocument();
   });
 });
