@@ -12,6 +12,11 @@ Build a throwaway sandbox for one PR, test what the code actually changed, post 
 user approves, and delete the sandbox. The user keeps working in their own checkout, with their
 own Docker services and dev servers, the whole time, and several runs can go at once.
 
+This is the **final check** in the review flow: pr-review-inline, the author's fixes,
+address-pr-comments for what's still open, then this skill once review feedback is resolved.
+It can run earlier, but while review conversations are still open its verdict is capped at
+⏸️ **Can't recommend yet** (Phase 5).
+
 Ground rules:
 
 - **The sandbox is the only place anything happens.** Each run gets its own git worktree, its
@@ -29,7 +34,12 @@ Ground rules:
 - **Clean up on every exit** once `init` has succeeded, including aborts and failures, unless
   the run is in keep-running mode.
 - **Nothing reaches GitHub without approval.** Draft the review and any new issues, show them,
-  and publish only when the user says "post".
+  and publish only when the user says "post". The one exception is claiming the PR with the
+  assignee field (Phase 1), which the user asked for by starting the run.
+- **Reviewers suggest, authors fix.** Never push to the PR's branch, update it from the base
+  branch, or edit its description, unless the user explicitly asks for that change on this PR.
+  A temporary change in the sandbox to observe something (a debug log, a lowered timeout) is
+  reverted before the results, and the results name it.
 - **The PR review is only about the PR.** Bugs that already existed before the PR become GitHub
   issues. They never go in the review.
 - **Test data stays on this machine.** Never send test traffic to real outside services (the
@@ -52,6 +62,7 @@ The run doesn't wait for a "go" after the plan. It pauses only here, using `temp
 | When                    | Why the run pauses                                                                                                                                       |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Phase 0 / `init`        | A missing tool, Docker not running, unsupported platform, the PR's Node version not installed, or the PR isn't open. **All problems go in one message.** |
+| Phase 1, claim          | Someone else is already assigned to the PR: say who, and ask whether to continue.                                                                        |
 | Phase 3, gated PRs only | A PR from a fork or from outside the team needs an explicit **"go, run it"** before any of its code runs.                                                |
 | Phase 5                 | 🙋 manual checks (only if there are any), then the proposed GitHub feedback: wait for "post", edits, or "skip".                                          |
 
@@ -109,6 +120,20 @@ from the PR's Dockerfiles, claims a free port block, and creates a detached work
 - `WARN=` lines and a `.nvmrc` fallback note go in the plan's mismatch box.
 - `ACTIVE_RUNS` of 4 or more: say in the plan that the machine may be slow.
 
+**Claim the PR** (skip if `CAN_POST` is false). The assignee field is how the team sees who has
+a PR, and `scripts/pr-triage.sh` shows it. Run from `$RUN/wt`:
+
+```bash
+gh pr view <N> --json author,assignees --jq '{author: .author.login, assignees: [.assignees[].login]}'
+gh api user --jq .login
+```
+
+- **The user is the PR's author** (a self-test): don't assign.
+- **Someone else is already assigned:** say who and ask whether to continue (User
+  checkpoints). Never remove another assignee.
+- **Otherwise:** `gh pr edit <N> --add-assignee @me`. If it fails, say so in the plan and carry
+  on.
+
 ## Phase 2 — Understand the change
 
 ### 2a. Diff only
@@ -120,7 +145,20 @@ Run the `gh` commands in this phase from `$RUN/wt`; they need a checkout to find
 git -C "$RUN/wt" diff --stat <MERGE_BASE> HEAD
 git -C "$RUN/wt" diff <MERGE_BASE> HEAD
 gh pr checks <N>
+# Branch currency: commits the PR is behind its base, and conflicts (exit 1 lists the files).
+# <BASE_SHA> is the sha in init's BASE= line.
+git -C "$RUN/wt" rev-list --count <MERGE_BASE>..<BASE_SHA>
+git -C "$RUN/wt" merge-tree --write-tree --name-only <BASE_SHA> HEAD
+# Open review conversations, for Phase 5's verdict.
+gh api graphql -F n=<N> -f o='{owner}' -f r='{repo}' -f query='
+  query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
+    reviewThreads(first:100){nodes{isResolved}}}}}' \
+  --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length'
 ```
+
+Record `BEHIND`, any conflicting files, and `OPEN_THREADS`. On git older than 2.38, use
+`gh pr view <N> --json mergeable` for conflicts instead. Being behind doesn't stop the run: test
+the PR as it is, and don't update its branch (ground rules).
 
 Build an inventory:
 
@@ -275,12 +313,16 @@ first row whose condition is true:
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | ⏸️ **Can't recommend yet**                | A check of the PR's main purpose was skipped or blocked (a stop rule, or a 🙋 check still pending)                                       |
 | ❌ **Don't approve yet**                  | Any 🔴 or 🟠 problem caused by this PR; a check of the PR's main purpose failed; or the description claims something the code doesn't do |
+| ⏸️ **Can't recommend yet**                | Review conversations are still open on the PR (`OPEN_THREADS` above 0), so the code may still change                                     |
 | ✅ **Approve, with optional suggestions** | Every proposed inline comment is 🟡: a small fix the PR works fine without                                                               |
 | ✅ **Approve**                            | Nothing to post but the summary                                                                                                          |
 
 Under the verdict, add one plain sentence explaining it. For ❌ and ⏸️, add what would change
-the verdict. Problems "not caused by this PR" never change the verdict. ➖ rows count as passed
-when their tests pass. When the user's 🙋 results arrive, work out the verdict again and show
+the verdict (for open conversations: "Resolve the N open review conversations, then re-test.").
+If the PR is behind its base or has conflicts, add one more line: "<N> commits behind <base>
+<and conflicts in …>; this result is for the tested commit, so update the branch before
+merging." Never call the PR ready to merge while it is behind or conflicting. Problems "not
+caused by this PR" never change the verdict. ➖ rows count as passed when their tests pass. When the user's 🙋 results arrive, work out the verdict again and show
 it again.
 
 **Draft feedback (don't post yet):**
@@ -298,8 +340,11 @@ it again.
   the same verdict as the results report: `✅ **Recommend approving as-is.**`,
   `✅ **Recommend approving; the suggestions below are optional.**`,
   `❌ **Needs changes before approval:** <the blocking problem in a few words>.`, or
-  `⏸️ **Can't recommend yet:** <what wasn't tested>.` If the user authored the PR, leave this
-  line out.
+  `⏸️ **Can't recommend yet:** <what wasn't tested, or "N review conversations are still open">.`
+  If the user authored the PR, leave this line out. Below the table, add the branch-currency line if the PR is behind or conflicting, and one **How this was checked**
+  line: which tools ran the checks (browser automation, HTTP, database, the PR's own tests),
+  any temporary sandbox change and that it was reverted, and what was blocked or skipped and
+  why. Never put token or cost numbers on GitHub.
 - **Signature:** the one required by the repo's `github` skill (`.agents/skills/github/SKILL.md`:
   `_written by <model name>_` as the last line). It ends `summary.md` and every issue body.
 - **Hidden marker:** the line just above the signature in `summary.md` is
@@ -379,7 +424,9 @@ issues only"). Link every filed issue in the final report.
 4. Clear browser leftovers (`reference.md` → **Browser checks**).
 
 Report one line each for servers, containers, worktree, and ports, from the `down` output (the
-ports line comes from the earlier `down --keep-drafts`, if one ran).
+ports line comes from the earlier `down --keep-drafts`, if one ran). Add one line for the claim
+(assigned, skipped as a self-test, or failed), and token usage or cost only if the harness
+measured it; that line stays in the conversation.
 **End the final message with the verdict line again**, for example `✅ Recommendation: Approve, with optional suggestions`, so it's the last
 thing the user reads. If testing never ran, end with `No recommendation: testing didn't run.`
 
