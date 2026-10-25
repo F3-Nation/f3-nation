@@ -86,7 +86,8 @@ view`'s (e.g. a private GHSA security-advisory collaboration repo, `<org>/<repo>
 - **Gated PR:** the PR is **gated** if `fork` is true, or if `assoc` isn't `OWNER`, `MEMBER`, or
   `COLLABORATOR` (the same rule as pr-local-test's safety gate). A gated PR gets Step 3's safety
   checklist and is reviewed as if `--deep` were passed, unless the user says otherwise. It's a
-  reason to look closer, not a judgment of the author: most outside PRs are helpful.
+  reason to look closer, not a judgment of the author: most outside PRs are helpful. If the
+  `gh api` lookup fails, treat the PR as gated and say so in the report.
 
 **Claim the PR** (skip for `--dry-run`, which writes nothing). The assignee field is how the
 team sees who has a PR, and `scripts/pr-triage.sh` shows it. Compare `author.login` with the
@@ -135,6 +136,9 @@ cd "$WORKTREE_PATH"
 - **Verify the revision:** assert `git rev-parse HEAD` == `HEAD_SHA` (from Step 1). If they
   differ, remove the worktree (Step 10's cleanup command) and abort — do not review the wrong
   revision.
+- `git merge-tree --write-tree` exits 0 for a clean merge and 1 for conflicts (listing the
+  files). Exit 1 is a result, not a failure: record it and keep going. Any other exit status
+  means the check itself failed, so report the conflict state as unknown.
 - `git merge-tree --write-tree` needs git 2.38 or newer. On older git, use
   `gh pr view <n> --repo {owner}/{name} --json mergeable` instead (`CONFLICTING` means
   conflicts; `UNKNOWN` means GitHub hasn't computed it yet, so report it as unknown). This
@@ -200,7 +204,7 @@ machine or in CI, or change what our own agents do:
   `pull_request_target`
 - `AGENTS.md`, `CLAUDE.md`, `.agents/skills/`, `.github/copilot-instructions.md`, and other
   agent instructions, since they change what reviewers' and authors' agents do
-- new outbound URLs, `.npmrc`, `scripts/`, Docker and Next.js config
+- new or changed outbound URLs, `.npmrc`, `scripts/`, Docker and Next.js config
 
 A legitimate change in one of these is still recorded, so a human knows where to look. Only a
 real defect becomes an inline finding; the checklist itself is report content and is never
@@ -545,7 +549,9 @@ even when zero comments were posted:
    review covers:
    - which brief, how many reviewer seats, and which plugins or tools ran (and any you expected
      that weren't available)
-   - whether the PR was assigned to you, skipped as a self-review, or the assignment failed
+   - whether the PR was assigned to you, skipped as a self-review, left with its existing
+     assignee (name them, and that the user said to continue), skipped for `--dry-run`, or the
+     assignment failed
    - the reviewer's "Declined to judge" list in one line each (pre-existing problems there may
      deserve an issue)
    - what was blocked: permission refusals, missing tools, comments dropped for line-not-in-diff

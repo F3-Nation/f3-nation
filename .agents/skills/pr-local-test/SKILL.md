@@ -160,7 +160,9 @@ gh api graphql --paginate -F n=<N> -f o='{owner}' -f r='{repo}' -f query='
 ```
 
 Record `BEHIND`, any conflicting files, and `OPEN_THREADS`. If the thread query fails,
-`OPEN_THREADS` is unknown, and an unknown count caps the verdict the same way an open one does. On git older than 2.38, use
+`OPEN_THREADS` is unknown, and an unknown count caps the verdict the same way an open one does.
+`merge-tree` exits 1 when there are conflicts: that's a result, so record it and carry on; any
+other non-zero exit means the conflict state is unknown. On git older than 2.38, use
 `gh pr view <N> --json mergeable` for conflicts instead. Being behind doesn't stop the run: test
 the PR as it is, and don't update its branch (ground rules).
 
@@ -217,9 +219,10 @@ gh api repos/{owner}/{repo}/pulls/<N> --jq '{assoc: .author_association, fork: .
 ```
 
 A PR is **gated** if it comes from a fork, or if `assoc` isn't `OWNER`, `MEMBER`, or
-`COLLABORATOR`. For gated PRs, scan the diff for anything that runs code at install or start:
-`package.json` scripts, new or changed dependencies, `.npmrc`, `scripts/`, `turbo.json`,
-`docker-compose.yml`, Next.js or Docker config, and new outbound URLs. Summarize what you find
+`COLLABORATOR`. If the lookup fails, treat the PR as gated. For gated PRs, scan the diff for
+anything that runs code at install or start: `package.json` scripts, new or changed
+dependencies, `.npmrc`, `scripts/`, `turbo.json`, `docker-compose.yml`, Next.js or Docker
+config, and new or changed outbound URLs. Summarize what you find
 in the plan's safety box. Every step after `init` runs PR-controlled code or config (and `setup`
 copies the user's Maps key into the PR's folder), so a gated run does nothing past `init` until
 the user replies "go, run it".
