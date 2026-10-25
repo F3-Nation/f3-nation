@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+
+import { captureException } from "@acme/observability/browser";
 import { ErrorScreen } from "@acme/ui/status-screen";
 
 import "~/app/globals.css";
@@ -13,6 +16,10 @@ export default function GlobalError({
   error: unknown;
   retry: () => void;
 }) {
+  useEffect(() => {
+    captureException(error);
+  }, [error]);
+
   return (
     <html lang="en">
       <body className="bg-background font-sans text-foreground antialiased">

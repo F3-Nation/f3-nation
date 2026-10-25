@@ -36,6 +36,18 @@ describe("UserEditPage", () => {
     expect(mocks.byId).toHaveBeenCalledWith({ id: 7, includePii: true });
   });
 
+  it("calls the API for the largest int4 id", async () => {
+    mocks.byId.mockResolvedValue({
+      user: { id: 2147483647 },
+      includePii: true,
+    });
+    await renderPage("2147483647");
+    expect(mocks.byId).toHaveBeenCalledWith({
+      id: 2147483647,
+      includePii: true,
+    });
+  });
+
   it("renders the form for an existing user", async () => {
     const user = { id: 7 };
     mocks.byId.mockResolvedValue({ user, includePii: true });

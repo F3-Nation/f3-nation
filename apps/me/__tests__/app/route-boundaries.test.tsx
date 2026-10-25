@@ -7,8 +7,14 @@ import GlobalError from "@/app/global-error";
 import NotFound from "@/app/not-found";
 import ProfileLoading from "@/app/profile/loading";
 
+const { captureException } = vi.hoisted(() => ({ captureException: vi.fn() }));
+vi.mock("@acme/observability/browser", () => ({ captureException }));
+
 describe("me route boundaries", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
 
   it("error.tsx shows the digest and retries", () => {
     const retry = vi.fn();
@@ -25,6 +31,47 @@ describe("me route boundaries", () => {
     );
     expect(html).toMatch(/^<html lang="en">/);
     expect(html).toContain("Something went wrong");
+  });
+
+  it("error.tsx reports client errors but not server errors", () => {
+    const clientError = new Error("x");
+    render(<RouteError error={clientError} retry={vi.fn()} />);
+    expect(captureException).toHaveBeenCalledWith(clientError);
+    cleanup();
+    captureException.mockClear();
+    render(
+      <RouteError
+        error={Object.assign(new Error("y"), { digest: "d1" })}
+        retry={vi.fn()}
+      />,
+    );
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it("error.tsx never shows the message when there is no digest", () => {
+    render(
+      <RouteError
+        error={new Error("SECRET_INTERNAL_DETAIL")}
+        retry={vi.fn()}
+      />,
+    );
+    expect(document.body.textContent).not.toContain("SECRET_INTERNAL_DETAIL");
+  });
+
+  it("global-error.tsx reports every error", () => {
+    const serverError = Object.assign(new Error("y"), { digest: "d1" });
+    render(<GlobalError error={serverError} retry={vi.fn()} />);
+    expect(captureException).toHaveBeenCalledWith(serverError);
+  });
+
+  it.each([
+    new Error("SECRET_INTERNAL_DETAIL"),
+    Object.assign(new Error("SECRET_INTERNAL_DETAIL"), { digest: "d1" }),
+  ])("global-error.tsx never shows the message (%o)", (error) => {
+    const html = renderToStaticMarkup(
+      <GlobalError error={error} retry={vi.fn()} />,
+    );
+    expect(html).not.toContain("SECRET_INTERNAL_DETAIL");
   });
 
   it("not-found.tsx links home", () => {

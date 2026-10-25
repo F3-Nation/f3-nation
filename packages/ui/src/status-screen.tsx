@@ -9,9 +9,10 @@ import {
   CardTitle,
 } from "./card";
 
-// Next forwards Server Component errors with only an opaque `digest` that
-// matches the server-side log line; never render `message`, it can leak
-// internals in development builds.
+// In production Next swaps a Server Component error's message for a generic
+// one plus an opaque `digest` that matches the server-side log line; in
+// development the real message comes through. Client-side errors keep their
+// raw message in every build, so render only the digest, never `message`.
 function getErrorDigest(error: unknown): string | undefined {
   if (!(error instanceof Error) || !("digest" in error)) return undefined;
   return typeof error.digest === "string" ? error.digest : undefined;

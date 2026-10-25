@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 
+import { cn } from "@acme/ui";
 import { ErrorScreen } from "@acme/ui/status-screen";
 
 import "~/app/globals.css";
@@ -23,7 +26,13 @@ export default function GlobalError({
 
   return (
     <html lang="en">
-      <body className="bg-background font-sans text-foreground antialiased">
+      <body
+        className={cn(
+          "bg-background font-sans text-foreground antialiased",
+          GeistSans.variable,
+          GeistMono.variable,
+        )}
+      >
         <ErrorScreen error={error} onRetry={retry} className="h-dvh" />
       </body>
     </html>

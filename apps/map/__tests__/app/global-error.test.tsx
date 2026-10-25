@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import GlobalError from "../../src/app/global-error";
 
 const captureExceptionMock = vi.hoisted(() => vi.fn());
@@ -19,6 +20,9 @@ vi.mock("posthog-js", () => ({
 vi.mock("~/env", () => ({
   env: envMock,
 }));
+
+vi.mock("geist/font/sans", () => ({ GeistSans: { variable: "geist-sans" } }));
+vi.mock("geist/font/mono", () => ({ GeistMono: { variable: "geist-mono" } }));
 
 describe("GlobalError", () => {
   const mockError = new Error("Test error");
@@ -51,6 +55,22 @@ describe("GlobalError", () => {
     envMock.NEXT_PUBLIC_POSTHOG_KEY = undefined;
     render(<GlobalError error={mockError} retry={retry} />);
     expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new Error("SECRET_INTERNAL_DETAIL"),
+    Object.assign(new Error("SECRET_INTERNAL_DETAIL"), { digest: "d1" }),
+  ])("never shows the message (%o)", (error) => {
+    render(<GlobalError error={error} retry={retry} />);
+    expect(screen.queryByText(/SECRET_INTERNAL_DETAIL/)).toBeNull();
+  });
+
+  it("loads the app fonts", () => {
+    const html = renderToStaticMarkup(
+      <GlobalError error={mockError} retry={retry} />,
+    );
+    expect(html).toContain("geist-sans");
+    expect(html).toContain("geist-mono");
   });
 
   it("renders the shared error screen with a working retry", () => {

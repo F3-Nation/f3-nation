@@ -10,10 +10,10 @@ import {
   TableRow,
 } from "./table";
 
-// Mirrors MDTable's toolbar, row count and striped body (md-table.tsx) so the
-// page doesn't jump when the real table mounts.
+// Approximates MDTable's toolbar and striped body (md-table.tsx). Defaults to
+// the 20-row page size most admin tables use; column counts vary per table.
 function TableSkeleton({
-  rows = 10,
+  rows = 20,
   columns = 5,
 }: {
   rows?: number;
