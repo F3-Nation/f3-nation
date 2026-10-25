@@ -79,6 +79,47 @@ describe("useUserSearch search state", () => {
     expect(result.current.loading).toBe(false);
   });
 
+  describe.each([
+    ["the dropdown closes", { open: false, search: "dr" }],
+    ["the query drops below the minimum length", { open: true, search: "d" }],
+  ])("when %s while a request is in flight", (_label, nextProps) => {
+    it("clears loading, aborts the request and ignores its late response", async () => {
+      let resolveFetch: (value: unknown) => void = () => undefined;
+      let requestSignal: AbortSignal | undefined;
+      fetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+        requestSignal = init?.signal ?? undefined;
+        return new Promise((resolve) => {
+          resolveFetch = resolve;
+        });
+      });
+      const { result, rerender } = renderHook(
+        (props: { open: boolean; search: string }) =>
+          useUserSearch({ value: null, ...props }),
+        { initialProps: { open: true, search: "dr" } },
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.current.loading).toBe(true);
+      expect(requestSignal?.aborted).toBe(false);
+
+      rerender(nextProps);
+      expect(result.current.loading).toBe(false);
+      expect(result.current.results).toEqual([]);
+      expect(requestSignal?.aborted).toBe(true);
+
+      resolveFetch({
+        ok: true,
+        json: () => Promise.resolve({ users: [makeUser(1, "Dredd")] }),
+      });
+      await flush();
+      expect(result.current.results).toEqual([]);
+      expect(result.current.loading).toBe(false);
+    });
+  });
+
   it("does not fetch while closed", async () => {
     const { result } = renderHook(() =>
       useUserSearch({ value: null, open: false, search: "dredd" }),
