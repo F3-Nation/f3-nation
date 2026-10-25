@@ -38,7 +38,8 @@ or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
 — even if your tool does not load skills automatically.
 
-When asked to write or edit comments or markdown in this repo, use
+When asked to write or edit comments or markdown, or to review a PR that
+touches comments or markdown, use
 [`.agents/skills/durable-docs/SKILL.md`](.agents/skills/durable-docs/SKILL.md)
 for the repo's durable documentation rules.
 

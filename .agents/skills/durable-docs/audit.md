@@ -71,13 +71,15 @@ without their say-so.
 6. **Collect excised narrative** — anything you removed that someone still
    needs — into the draft PR body (or an issue, if they prefer). That is the
    durable home for it.
-7. **Check the diff, then format and commit.** Re-read `git diff` hunk by
-   hunk: every hunk that removes a why must show where its standing why went
-   — replacement text, an explicit "pure narrative, nothing durable" reason,
-   or it gets reverted. Then format only what you touched:
-   `pnpm exec prettier --write <files>`, and **before committing** verify
-   `git diff --stat` shows exactly the audit scope — once committed, that
-   command is empty. Commit per `AGENTS.md` Conventional Commits with the
+7. **Check the diff, validate, then format and commit.** Re-read `git diff`
+   hunk by hunk: every hunk that removes a why must show where its standing
+   why went — replacement text, an explicit "pure narrative, nothing durable"
+   reason, or it gets reverted. Then run the validation `AGENTS.md` requires
+   of every change — `pnpm lint:fix`, `pnpm format:fix`, `pnpm typecheck` —
+   which a Markdown-only audit runs like any other, and format what you
+   touched with `pnpm exec prettier --write <files>`. **Before committing**,
+   verify `git diff --stat` shows exactly the audit scope — once committed,
+   that command is empty. Commit per `AGENTS.md` Conventional Commits with the
    scope of the files touched (e.g.
    `docs(repo): make docs and comments durable`, `docs(auth): …`);
    afterwards `git show --stat HEAD` should list the same files.
