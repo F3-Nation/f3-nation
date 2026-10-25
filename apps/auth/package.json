@@ -1,6 +1,6 @@
 {
   "name": "f3-auth",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,6 +19,7 @@
   "dependencies": {
     "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/observability": "workspace:*",
     "@acme/shared": "workspace:*",
     "@auth/core": "catalog:",
     "@better-auth/core": "catalog:",

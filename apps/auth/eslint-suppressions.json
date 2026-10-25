@@ -1,0 +1,22 @@
+{
+  "src/app/components/region-picker.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/app/login/email/verify/verify-email-form.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/app/onboarding/page.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/app/register/register-form.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  }
+}
