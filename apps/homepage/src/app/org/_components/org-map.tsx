@@ -1058,7 +1058,7 @@ export default function OrgMap() {
               aria-expanded={sheetExpanded}
               aria-controls="org-info-content"
               aria-label={sheetExpanded ? "Collapse details" : "Expand details"}
-              className="flex w-full shrink-0 justify-center pt-2 pb-1 md:hidden"
+              className="flex min-h-11 w-full shrink-0 items-center justify-center md:hidden"
             >
               <span className="h-1.5 w-10 rounded-full bg-muted-foreground/40" />
             </button>

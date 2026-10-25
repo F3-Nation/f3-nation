@@ -290,11 +290,11 @@ describe("fanRadiusForTargets", () => {
   });
 
   it("never goes below the minimum radius", () => {
-    // Two markers need only a 16px radius for a 32px chord.
-    expect(fanRadiusForTargets(2, 32, 18)).toBe(18);
+    // Two 8px targets need only a ~5.7px radius.
+    expect(fanRadiusForTargets(2, 8, 18)).toBe(18);
   });
 
-  it("keeps each tap target clear of its neighbours' centres", () => {
+  it("keeps tap targets from overlapping", () => {
     for (const count of [2, 3, 6, 12]) {
       const target = 32;
       const offsets = computeFanOffsets(
@@ -304,10 +304,10 @@ describe("fanRadiusForTargets", () => {
       offsets.forEach((a, i) => {
         offsets.forEach((b, j) => {
           if (i === j) return;
-          const inside =
-            Math.abs(a.dx - b.dx) < target / 2 &&
-            Math.abs(a.dy - b.dy) < target / 2;
-          expect(inside).toBe(false);
+          const overlap =
+            Math.abs(a.dx - b.dx) < target - 1e-9 &&
+            Math.abs(a.dy - b.dy) < target - 1e-9;
+          expect(overlap).toBe(false);
         });
       });
     }
