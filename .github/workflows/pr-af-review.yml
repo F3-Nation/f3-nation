@@ -56,8 +56,11 @@ concurrency:
 
 jobs:
   gate:
+    # DISABLED: OpenRouter funds exhausted. Remove `false &&` to re-enable;
+    # `pr-af-review` is gated on this job, so it is skipped too.
     # Fork PRs get no secrets and would fail partway through; skip them.
     if: >-
+      false &&
       github.event.label.name == 'pr-af' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest

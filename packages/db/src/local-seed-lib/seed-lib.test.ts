@@ -98,6 +98,27 @@ describe("seedApiKeys", () => {
   });
 });
 
+describe("LOCAL_API_KEYS", () => {
+  // The staging obfuscator's --preserve-local-seed mode deletes api_keys rows
+  // whose key does not match local-% (tooling/scripts/src/obfuscate-db.ts), so
+  // a seed key without the prefix is silently dropped on a sandbox refresh and
+  // the app configured with it loses its credential.
+  it("gives every seed key the local- prefix the obfuscator preserves", () => {
+    const unprefixed = LOCAL_API_KEYS.filter(
+      (k) => !k.key.startsWith("local-"),
+    );
+    expect(unprefixed.map((k) => k.key)).toEqual([]);
+  });
+
+  it("seeds the homepage org-chart key read-only", () => {
+    const orgMap = LOCAL_API_KEYS.find((k) => k.key === "local-org-map-key");
+    expect(orgMap).toBeDefined();
+    // Read-only = no role association (see seedApiKeys); the homepage only
+    // needs the public directory reads.
+    expect(orgMap?.role).toBeNull();
+  });
+});
+
 // A drizzle-like fake: every builder step returns the same thenable, and each
 // `select()` resolves with the next queued result.
 function fakeDb(selectResults: unknown[][] = []) {

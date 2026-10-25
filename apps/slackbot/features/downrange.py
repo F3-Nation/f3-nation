@@ -1,10 +1,12 @@
 import copy
 import json
+import re
 import ssl
 from logging import Logger
 
 from f3_data_models.models import Org, Org_x_SlackSpace, SlackSpace, User
 from f3_data_models.utils import DbManager
+from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
 from utilities.constants import ALL_USERS_ARE_ADMINS
@@ -72,6 +74,42 @@ def _get_target_region_info(org_id: int, logger: Logger) -> tuple:
     return team_id, bot_token, settings
 
 
+def _get_space_for_team(team_id: str):
+    """Resolve a workspace credential from trusted server-side storage."""
+    if not team_id:
+        return None
+    slack_space = DbManager.find_first_record(SlackSpace, [SlackSpace.team_id == team_id])
+    return slack_space if slack_space and slack_space.bot_token else None
+
+
+def _log_slack_call_error(logger: Logger, event: str, error: Exception) -> None:
+    """Log only a bounded Slack error code or an exception class name."""
+    if isinstance(error, SlackApiError):
+        response = getattr(error, "response", None)
+        error_code = None
+        response_get = getattr(response, "get", None)
+        if callable(response_get):
+            try:
+                error_code = response_get("error")
+            except Exception:
+                pass
+        if (
+            isinstance(error_code, str)
+            and len(error_code) <= 64
+            and re.fullmatch(r"[a-z0-9_]+", error_code)
+            and not error_code.startswith(("xox", "xapp", "secret", "token"))
+        ):
+            logger.error(f"{event}: Slack API error ({error_code})")
+        else:
+            logger.error(f"{event}: Slack API error (unclassified)")
+        return
+
+    exception_type = type(error).__name__
+    if not re.fullmatch(r"[A-Za-z0-9_]{1,64}", exception_type):
+        exception_type = "UnknownException"
+    logger.error(f"{event}: unexpected exception type ({exception_type})")
+
+
 def _build_form_base(selected_org_id: int = None, selected_org_name: str = None) -> BlockView:
     """Build a fresh BlockView containing just the region search input."""
     return BlockView(
@@ -128,10 +166,9 @@ def _build_region_info_blocks(
     has_slack: bool,
     target_settings,
     target_team_id: str,
-    target_bot_token: str,
     target_org_id: int,
     selected_org_name: str,
-    requester_bot_token: str,
+    requester_team_id: str,
     requester_user_id: str,
     requester_name: str,
     requester_region_name: str,
@@ -149,10 +186,9 @@ def _build_region_info_blocks(
     payload = json.dumps(
         {
             "target_team_id": target_team_id,
-            "target_bot_token": target_bot_token,
             "target_org_id": target_org_id,
             "target_org_name": selected_org_name,
-            "requester_bot_token": requester_bot_token,
+            "requester_team_id": requester_team_id,
             "requester_user_id": requester_user_id,
             "requester_name": requester_name,
             "requester_region_name": requester_region_name,
@@ -267,6 +303,46 @@ def _get_text_value(state_values: dict, block_id: str):
 
 def _get_channel_value(state_values: dict, block_id: str):
     return safe_get(state_values, block_id, block_id, "selected_channel")
+
+
+def _tell_admin_to_resubmit(body: dict, client: WebClient, logger: Logger):
+    """Best-effort feedback when a Downrange request cannot be resolved."""
+    channel_id = safe_get(body, "channel", "id")
+    user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
+    if not channel_id or not user_id:
+        return
+    try:
+        client.chat_postEphemeral(
+            channel=channel_id,
+            user=user_id,
+            text="This request can't be completed. Please ask the requester to resubmit from Downrange.",
+        )
+    except Exception:
+        logger.info("Downrange unresolved-request feedback could not be delivered")
+
+
+def _update_request_modal_for_resubmit(body: dict, client: WebClient, logger: Logger):
+    """Replace a stale request modal with fixed resubmission guidance."""
+    view_id = safe_get(body, "view", "id")
+    if not view_id:
+        return
+    try:
+        form = BlockView(
+            blocks=[
+                SectionBlock(
+                    label="This request can't be completed. Please close this window and resubmit from Downrange."
+                )
+            ]
+        )
+        form.update_modal(
+            client=client,
+            view_id=view_id,
+            title_text="Downrange",
+            callback_id=actions.DOWNRANGE_CALLBACK_ID,
+            submit_button_text="None",
+        )
+    except Exception:
+        logger.info("Downrange resubmission guidance could not be displayed")
 
 
 def _ssl_context():
@@ -400,6 +476,9 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
 
     private_metadata = json.loads(safe_get(body, "view", "private_metadata") or "{}")
     is_admin_user = private_metadata.get("is_admin", False)
+    # Do not forward opaque client metadata from older views: it may contain
+    # serialized credentials from a legacy version of this feature.
+    safe_metadata = {"is_admin": bool(is_admin_user)}
 
     # Look up requester info
     requester_slack_user = get_user(user_id, region_record, client, logger)
@@ -426,10 +505,9 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
         has_slack=target_team_id is not None,
         target_settings=target_settings,
         target_team_id=target_team_id,
-        target_bot_token=target_bot_token,
         target_org_id=selected_org_id,
         selected_org_name=selected_org_name,
-        requester_bot_token=region_record.bot_token,
+        requester_team_id=region_record.team_id,
         requester_user_id=user_id,
         requester_name=requester_name,
         requester_region_name=requester_region_name,
@@ -469,7 +547,7 @@ def handle_region_select(body: dict, client: WebClient, logger: Logger, context:
         title_text="Downrange",
         callback_id=actions.DOWNRANGE_CALLBACK_ID,
         submit_button_text=submit_text,
-        parent_metadata=private_metadata,
+        parent_metadata=safe_metadata,
     )
 
 
@@ -477,10 +555,11 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
     """User clicked 'Send Request for Invite'. DM the target region's admins."""
     action_value = json.loads(safe_get(body, "actions", 0, "value") or "{}")
     target_team_id = action_value.get("target_team_id")
-    target_bot_token = action_value.get("target_bot_token")
     target_org_id = safe_convert(action_value.get("target_org_id"), int)
+    # Token-bearing legacy values are deliberately ignored. The requester
+    # workspace comes from the handler's server-resolved region_record.
+    requester_team_id = region_record.team_id
     target_org_name = action_value.get("target_org_name", "the region")
-    requester_bot_token = action_value.get("requester_bot_token") or region_record.bot_token
     requester_user_id = action_value.get("requester_user_id") or safe_get(body, "user", "id")
     requester_name = action_value.get("requester_name", "Unknown")
     requester_region_name = action_value.get("requester_region_name", "Unknown")
@@ -490,12 +569,20 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
     state_values = safe_get(body, "view", "state", "values") or {}
     intro_text = _get_text_value(state_values, actions.DOWNRANGE_INTRO_TEXT) or ""
 
-    if not target_team_id or not target_bot_token:
-        logger.error("handle_invite_request: missing target_team_id or target_bot_token")
+    if not target_team_id:
+        logger.info("handle_invite_request: invalid or legacy request; resubmit from Downrange")
+        _update_request_modal_for_resubmit(body, client, logger)
         return
 
     if not target_org_id:
-        logger.error("handle_invite_request: missing target_org_id")
+        logger.info("handle_invite_request: invalid or legacy request; resubmit from Downrange")
+        _update_request_modal_for_resubmit(body, client, logger)
+        return
+
+    resolved_team_id, target_bot_token, _ = _get_target_region_info(target_org_id, logger)
+    if resolved_team_id != target_team_id or not target_bot_token:
+        logger.info("handle_invite_request: workspace changed; resubmit from Downrange")
+        _update_request_modal_for_resubmit(body, client, logger)
         return
 
     # Find the target region's admin Slack users
@@ -532,7 +619,7 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
     metadata = {
         "event_type": "downrange_invite_request",
         "event_payload": {
-            "requester_bot_token": requester_bot_token,
+            "requester_team_id": requester_team_id,
             "requester_user_id": requester_user_id,
             "requester_name": requester_name,
             "requester_region_name": requester_region_name,
@@ -617,8 +704,8 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
             blocks=request_blocks,
             metadata=metadata,
         )
-    except Exception as e:
-        logger.error(f"handle_invite_request: error sending DM to target admins: {e}")
+    except Exception as exc:
+        _log_slack_call_error(logger, "handle_invite_request.target_admin_dm_error", exc)
         return
 
     # Update the requester's modal to confirm the request was sent
@@ -642,7 +729,7 @@ def handle_invite_request(body: dict, client: WebClient, logger: Logger, context
 def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     """Admin clicked 'Approve & Send Invite'. Send the invite link to the requester."""
     metadata = safe_get(body, "message", "metadata", "event_payload") or {}
-    requester_bot_token = metadata.get("requester_bot_token")
+    requester_team_id = metadata.get("requester_team_id")
     requester_user_id = metadata.get("requester_user_id")
     requester_name = metadata.get("requester_name", "the requester")
     target_org_name = metadata.get("target_org_name", "our region")
@@ -663,8 +750,8 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
                     "Go to `/f3-nation-settings` → Downrange, enter your invite link, then come back and approve."
                 ),
             )
-        except Exception as e:
-            logger.error(f"handle_invite_approve: error posting ephemeral: {e}")
+        except Exception as exc:
+            _log_slack_call_error(logger, "handle_invite_approve.ephemeral_error", exc)
         return
 
     # Build the approval DM blocks for the requester
@@ -680,7 +767,6 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
                     action=actions.DOWNRANGE_INVITE_LINK_BROKEN_BUTTON,
                     value=json.dumps(
                         {
-                            "target_bot_token": region_record.bot_token,
                             "target_team_id": region_record.team_id,
                             "target_org_id": region_record.org_id,
                             "target_org_name": target_org_name,
@@ -692,19 +778,21 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
         ).as_form_field(),
     ]
 
-    if not requester_bot_token or not requester_user_id:
-        logger.error("handle_invite_approve: missing requester_bot_token or requester_user_id in metadata")
+    requester_space = _get_space_for_team(requester_team_id) if requester_team_id else None
+    if not requester_space or not requester_user_id:
+        logger.info("handle_invite_approve: legacy or unresolved request; requester must resubmit")
+        _tell_admin_to_resubmit(body, client, logger)
         return
 
     try:
-        send_client = WebClient(token=requester_bot_token, ssl=_ssl_context())
+        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} has been approved!",
             blocks=approve_blocks,
         )
-    except Exception as e:
-        logger.error(f"handle_invite_approve: error sending invite to requester: {e}")
+    except Exception as exc:
+        _log_slack_call_error(logger, "handle_invite_approve.requester_dm_error", exc)
         return
 
     # Update the admin group DM to remove the action buttons
@@ -720,14 +808,14 @@ def handle_invite_approve(body: dict, client: WebClient, logger: Logger, context
                     ).as_form_field()
                 ],
             )
-        except Exception as e:
-            logger.error(f"handle_invite_approve: error updating admin message: {e}")
+        except Exception as exc:
+            _log_slack_call_error(logger, "handle_invite_approve.admin_message_update_error", exc)
 
 
 def handle_invite_deny(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     """Admin clicked 'Deny'. Notify the requester politely."""
     metadata = safe_get(body, "message", "metadata", "event_payload") or {}
-    requester_bot_token = metadata.get("requester_bot_token")
+    requester_team_id = metadata.get("requester_team_id")
     requester_user_id = metadata.get("requester_user_id")
     requester_name = metadata.get("requester_name", "the requester")
     target_org_name = metadata.get("target_org_name", "our region")
@@ -735,12 +823,14 @@ def handle_invite_deny(body: dict, client: WebClient, logger: Logger, context: d
     channel_id = safe_get(body, "channel", "id")
     message_ts = safe_get(body, "message", "ts")
 
-    if not requester_bot_token or not requester_user_id:
-        logger.error("handle_invite_deny: missing requester_bot_token or requester_user_id in metadata")
+    requester_space = _get_space_for_team(requester_team_id) if requester_team_id else None
+    if not requester_space or not requester_user_id:
+        logger.info("handle_invite_deny: legacy or unresolved request; requester must resubmit")
+        _tell_admin_to_resubmit(body, client, logger)
         return
 
     try:
-        send_client = WebClient(token=requester_bot_token, ssl=_ssl_context())
+        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite request to {target_org_name} was not approved at this time.",
@@ -751,8 +841,8 @@ def handle_invite_deny(body: dict, client: WebClient, logger: Logger, context: d
                 ).as_form_field()
             ],
         )
-    except Exception as e:
-        logger.error(f"handle_invite_deny: error sending denial to requester: {e}")
+    except Exception as exc:
+        _log_slack_call_error(logger, "handle_invite_deny.requester_dm_error", exc)
         return
 
     # Update the admin group DM
@@ -768,8 +858,8 @@ def handle_invite_deny(body: dict, client: WebClient, logger: Logger, context: d
                     ).as_form_field()
                 ],
             )
-        except Exception as e:
-            logger.error(f"handle_invite_deny: error updating admin message: {e}")
+        except Exception as exc:
+            _log_slack_call_error(logger, "handle_invite_deny.admin_message_update_error", exc)
 
 
 def handle_invite_link_broken(
@@ -777,7 +867,6 @@ def handle_invite_link_broken(
 ):
     """Requester clicked 'That link didn't work'. Notify the target region admins."""
     action_value = json.loads(safe_get(body, "actions", 0, "value") or "{}")
-    target_bot_token = action_value.get("target_bot_token")
     target_team_id = action_value.get("target_team_id")
     target_org_id = safe_convert(action_value.get("target_org_id"), int)
     target_org_name = action_value.get("target_org_name", "the region")
@@ -787,7 +876,11 @@ def handle_invite_link_broken(
     requester_user_id = safe_get(body, "user", "id")
 
     # Notify the target region admins that the link didn't work
-    if target_bot_token and target_team_id and target_org_id:
+    if target_org_id:
+        resolved_team_id, target_bot_token, _ = _get_target_region_info(target_org_id, logger)
+    else:
+        resolved_team_id, target_bot_token = None, None
+    if resolved_team_id == target_team_id and target_bot_token:
         admin_users = get_admin_users(target_org_id, target_team_id)
         admin_slack_ids = [
             au[1].slack_id for au in admin_users if au[1] and au[1].slack_id and au[1].slack_id != "USLACKBOT"
@@ -807,10 +900,11 @@ def handle_invite_link_broken(
                         ).as_form_field()
                     ],
                 )
-            except Exception as e:
-                logger.error(f"handle_invite_link_broken: error notifying target admins: {e}")
+            except Exception as exc:
+                _log_slack_call_error(logger, "handle_invite_link_broken.target_admin_dm_error", exc)
 
-    # Tell the requester their report was sent and suggest next steps
+    # Tell the requester whether the identifier resolved. Legacy button tokens
+    # are ignored and cannot substitute for a server-side workspace lookup.
     try:
         client.chat_postEphemeral(
             channel=channel_id,
@@ -818,16 +912,18 @@ def handle_invite_link_broken(
             text=(
                 f"We've notified the admins of *{target_org_name}* that the link didn't work. "
                 "They'll send you an updated link shortly."
+                if resolved_team_id == target_team_id and target_bot_token
+                else "This request could not be verified. Please resubmit it from the Downrange menu."
             ),
         )
-    except Exception as e:
-        logger.error(f"handle_invite_link_broken: error notifying requester: {e}")
+    except Exception as exc:
+        _log_slack_call_error(logger, "handle_invite_link_broken.requester_ephemeral_error", exc)
 
 
 def handle_invite_mark_done(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
     """Admin clicked 'Mark as Invited'. Update the DM and notify the requester to check their email."""
     metadata = safe_get(body, "message", "metadata", "event_payload") or {}
-    requester_bot_token = metadata.get("requester_bot_token")
+    requester_team_id = metadata.get("requester_team_id")
     requester_user_id = metadata.get("requester_user_id")
     requester_name = metadata.get("requester_name", "the requester")
     target_org_name = metadata.get("target_org_name", "our region")
@@ -835,12 +931,14 @@ def handle_invite_mark_done(body: dict, client: WebClient, logger: Logger, conte
     channel_id = safe_get(body, "channel", "id")
     message_ts = safe_get(body, "message", "ts")
 
-    if not requester_bot_token or not requester_user_id:
-        logger.error("handle_invite_mark_done: missing requester_bot_token or requester_user_id in metadata")
+    requester_space = _get_space_for_team(requester_team_id) if requester_team_id else None
+    if not requester_space or not requester_user_id:
+        logger.info("handle_invite_mark_done: legacy or unresolved request; requester must resubmit")
+        _tell_admin_to_resubmit(body, client, logger)
         return
 
     try:
-        send_client = WebClient(token=requester_bot_token, ssl=_ssl_context())
+        send_client = WebClient(token=requester_space.bot_token, ssl=_ssl_context())
         send_client.chat_postMessage(
             channel=requester_user_id,
             text=f"Your invite to {target_org_name} has been sent — check your email!",
@@ -851,8 +949,8 @@ def handle_invite_mark_done(body: dict, client: WebClient, logger: Logger, conte
                 ).as_form_field()
             ],
         )
-    except Exception as e:
-        logger.error(f"handle_invite_mark_done: error notifying requester: {e}")
+    except Exception as exc:
+        _log_slack_call_error(logger, "handle_invite_mark_done.requester_dm_error", exc)
         return
 
     # Update the admin group DM to mark as handled
@@ -868,8 +966,8 @@ def handle_invite_mark_done(body: dict, client: WebClient, logger: Logger, conte
                     ).as_form_field()
                 ],
             )
-        except Exception as e:
-            logger.error(f"handle_invite_mark_done: error updating admin message: {e}")
+        except Exception as exc:
+            _log_slack_call_error(logger, "handle_invite_mark_done.admin_message_update_error", exc)
 
 
 def handle_downrange_settings(
