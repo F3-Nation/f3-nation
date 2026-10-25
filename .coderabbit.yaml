@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# `inheritance: true` merges this file over the organization and repository UI
+# settings instead of replacing them.
+inheritance: true
+reviews:
+  # Repo decisions: docstrings aren't required, `.env` key order isn't
+  # enforced, and generated unit-test PRs add review noise.
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  tools:
+    dotenvLint:
+      enabled: false
+  finishing_touches:
+    unit_tests:
+      enabled: false
