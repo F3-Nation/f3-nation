@@ -225,6 +225,49 @@ export default function OrgMap() {
   // Layers actually present in the data (depth-agnostic)
   const [presentLayers, setPresentLayers] = useState<OrgType[]>(LAYER_TYPES);
 
+  // ── info loading ─────────────────────────────────────────────────────────
+
+  const loadOrgInfo = useCallback(async (org: Org) => {
+    // selectOrg returns true on a switch to a different org; drop the previous
+    // org's fallback in the same commit as the new detail, so a switch to an
+    // already-cached org can't render its admin for a frame. A still-pending
+    // pin fetch is invalidated by selectOrg clearing the location selection.
+    if (infoGuardRef.current.selectOrg(org.id)) {
+      setNearestAdminOrg(null);
+      setAdminLookupInconclusive(false);
+    }
+
+    const cached = orgInfoCacheRef.current.get(org.id);
+    if (cached) {
+      if (infoGuardRef.current.isOrgCurrent(org.id)) {
+        setInfoState({ status: "loaded", org, detail: cached });
+      }
+      return;
+    }
+
+    setInfoState({ status: "loading", org });
+
+    let pending = orgInfoPendingRef.current.get(org.id);
+    if (!pending) {
+      pending = fetchOrgById(org.id);
+      orgInfoPendingRef.current.set(org.id, pending);
+    }
+
+    try {
+      const detail = await pending;
+      orgInfoCacheRef.current.set(org.id, detail);
+      orgInfoPendingRef.current.delete(org.id);
+      if (infoGuardRef.current.isOrgCurrent(org.id)) {
+        setInfoState({ status: "loaded", org, detail });
+      }
+    } catch {
+      orgInfoPendingRef.current.delete(org.id);
+      if (infoGuardRef.current.isOrgCurrent(org.id)) {
+        setInfoState({ status: "error", org });
+      }
+    }
+  }, []);
+
   // ── initial data load ────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -328,49 +371,6 @@ export default function OrgMap() {
       mapRef.current = null;
       layerGroupRef.current = null;
     };
-  }, []);
-
-  // ── info loading ─────────────────────────────────────────────────────────
-
-  const loadOrgInfo = useCallback(async (org: Org) => {
-    // selectOrg returns true on a switch to a different org; drop the previous
-    // org's fallback in the same commit as the new detail, so a switch to an
-    // already-cached org can't render its admin for a frame. A still-pending
-    // pin fetch is invalidated by selectOrg clearing the location selection.
-    if (infoGuardRef.current.selectOrg(org.id)) {
-      setNearestAdminOrg(null);
-      setAdminLookupInconclusive(false);
-    }
-
-    const cached = orgInfoCacheRef.current.get(org.id);
-    if (cached) {
-      if (infoGuardRef.current.isOrgCurrent(org.id)) {
-        setInfoState({ status: "loaded", org, detail: cached });
-      }
-      return;
-    }
-
-    setInfoState({ status: "loading", org });
-
-    let pending = orgInfoPendingRef.current.get(org.id);
-    if (!pending) {
-      pending = fetchOrgById(org.id);
-      orgInfoPendingRef.current.set(org.id, pending);
-    }
-
-    try {
-      const detail = await pending;
-      orgInfoCacheRef.current.set(org.id, detail);
-      orgInfoPendingRef.current.delete(org.id);
-      if (infoGuardRef.current.isOrgCurrent(org.id)) {
-        setInfoState({ status: "loaded", org, detail });
-      }
-    } catch {
-      orgInfoPendingRef.current.delete(org.id);
-      if (infoGuardRef.current.isOrgCurrent(org.id)) {
-        setInfoState({ status: "error", org });
-      }
-    }
   }, []);
 
   const loadLocationInfo = useCallback(async (locationId: number) => {
