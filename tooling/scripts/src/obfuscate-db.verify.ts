@@ -2930,12 +2930,30 @@ async function main(): Promise<void> {
           ${sql.json({ owner: fixture.email, contact: "profile-contact@example.com" })})
         RETURNING id`;
       if (!user) throw new Error(`Failed to plant ${fixture.label} user`);
+      await sql`
+        INSERT INTO auth.better_auth_user (id, name, email, email_verified, image,
+          created_at, updated_at)
+        VALUES (${String(user.id)}, 'Preservation Fixture', ${fixture.email.toLowerCase()},
+          true, 'https://example.com/shadow-avatar.png', now(), now())`;
       const [request] = await sql<{ id: string }[]>`
-        INSERT INTO update_requests (region_id, event_name, request_type, submitted_by)
-        VALUES (${linkOrg.id}, 'Preservation Fixture', 'create_event', ${fixture.email})
+        INSERT INTO update_requests (region_id, event_name, request_type, submitted_by,
+          reviewed_by, event_contact_email, location_contact_email)
+        VALUES (${linkOrg.id}, 'Preservation Fixture', 'create_event', ${fixture.email},
+          ${fixture.email}, ${fixture.email}, ${fixture.email})
         RETURNING id`;
       if (!request) throw new Error(`Failed to plant ${fixture.label} contact`);
-      preserveUsers.push({ ...fixture, id: user.id, requestId: request.id });
+      const [org] = await sql<{ id: number }[]>`
+        INSERT INTO orgs (parent_id, name, is_active, org_type, email)
+        VALUES (${linkOrg.id}, 'Preservation Fixture', true, 'ao', ${fixture.email})
+        RETURNING id`;
+      if (!org)
+        throw new Error(`Failed to plant ${fixture.label} organization`);
+      preserveUsers.push({
+        ...fixture,
+        id: user.id,
+        requestId: request.id,
+        orgId: org.id,
+      });
     }
 
     const [preserveRole] = await sql<{ id: number }[]>`
@@ -3045,12 +3063,64 @@ async function main(): Promise<void> {
         preserveRun.status === 0 && profileOk,
         `exit ${preserveRun.status}; phone faked: ${user?.phone_faked === true}, sensitive fields cleared: ${user?.sensitive_cleared === true}, metadata scrubbed: ${user?.meta_owner === expectedEmail && !!user.meta_contact && isSinkAddress(user.meta_contact)}`,
       );
-      const [request] = await sql<{ submitted_by: string }[]>`
-        SELECT submitted_by FROM update_requests WHERE id = ${fixture.requestId}`;
+      const [shadow] = await sql<
+        {
+          id: string;
+          f3_user_id: number;
+          email: string;
+          name: string;
+          image: string | null;
+        }[]
+      >`
+        SELECT id, f3_user_id, email, name, image
+        FROM auth.better_auth_user WHERE id = ${String(fixture.id)}`;
+      const shadowIdentityOk =
+        !!shadow &&
+        shadow.id === String(fixture.id) &&
+        shadow.f3_user_id === fixture.id &&
+        shadow.email ===
+          (fixture.preserve ? fixture.email.toLowerCase() : expectedEmail);
       check(
-        `--preserve-local-seed ${fixture.label} contact allowlist`,
-        preserveRun.status === 0 && request?.submitted_by === expectedEmail,
-        `exit ${preserveRun.status}; row ${request ? "present" : "missing"}, expected contact ${request?.submitted_by === expectedEmail ? "matched" : "NOT matched"}`,
+        `--preserve-local-seed ${fixture.label} login identity`,
+        preserveRun.status === 0 && shadowIdentityOk,
+        `exit ${preserveRun.status}; row ${shadow ? "present" : "missing"}, expected identity ${shadowIdentityOk ? "matched" : "NOT matched"}`,
+      );
+      const shadowProfileOk =
+        !!shadow && shadow.name === `F3 ${fixture.id}` && shadow.image === null;
+      check(
+        `--preserve-local-seed ${fixture.label} login profile scrubbed`,
+        preserveRun.status === 0 && shadowProfileOk,
+        `exit ${preserveRun.status}; row ${shadow ? "present" : "missing"}, expected profile ${shadowProfileOk ? "matched" : "NOT matched"}`,
+      );
+      const [request] = await sql<
+        {
+          submitted_by: string;
+          reviewed_by: string | null;
+          event_contact_email: string | null;
+          location_contact_email: string | null;
+        }[]
+      >`
+        SELECT submitted_by, reviewed_by, event_contact_email, location_contact_email
+        FROM update_requests WHERE id = ${fixture.requestId}`;
+      for (const column of [
+        "submitted_by",
+        "reviewed_by",
+        "event_contact_email",
+        "location_contact_email",
+      ] as const) {
+        const contactOk = !!request && request[column] === expectedEmail;
+        check(
+          `--preserve-local-seed ${fixture.label} ${column} allowlist`,
+          preserveRun.status === 0 && contactOk,
+          `exit ${preserveRun.status}; row ${request ? "present" : "missing"}, expected contact ${contactOk ? "matched" : "NOT matched"}`,
+        );
+      }
+      const [org] = await sql<{ email: string }[]>`
+        SELECT email FROM orgs WHERE id = ${fixture.orgId}`;
+      check(
+        `--preserve-local-seed ${fixture.label} organization email allowlist`,
+        preserveRun.status === 0 && org?.email === expectedEmail,
+        `exit ${preserveRun.status}; row ${org ? "present" : "missing"}, expected email ${org?.email === expectedEmail ? "matched" : "NOT matched"}`,
       );
     }
     for (const fixture of preserveKeys) {
