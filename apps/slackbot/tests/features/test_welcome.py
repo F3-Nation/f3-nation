@@ -30,6 +30,18 @@ def test_team_join_tells_the_fngs_contacts(monkeypatch):
     notify.assert_called_once_with(client, record, team_join()["event"]["user"], notify.call_args.args[3])
 
 
+def test_fngs_contacts_hear_he_joined_even_if_the_welcome_dm_fails(monkeypatch):
+    notify = MagicMock()
+    monkeypatch.setattr(welcome, "notify_fng_joined", notify)
+    client = MagicMock()
+    client.chat_postMessage.side_effect = RuntimeError("channel_not_found")
+
+    with pytest.raises(RuntimeError):
+        welcome.handle_team_join(team_join(), client, MagicMock(), {}, region_record(welcome_dm_enable=1))
+
+    notify.assert_called_once()
+
+
 def test_team_join_survives_a_failed_fng_lookup(monkeypatch):
     monkeypatch.setattr(welcome, "notify_fng_joined", MagicMock(side_effect=RuntimeError("db down")))
     logger = MagicMock()

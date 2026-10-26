@@ -67,6 +67,14 @@ def test_third_reminder_is_the_last(monkeypatch):
     assert "This is the last reminder." in run(monkeypatch, [fng_created_days_ago(9)]).call_args.args[3]
 
 
+def test_days_count_in_central_dates_across_a_dst_change(monkeypatch):
+    # Created 23:30 CST the night before DST starts; a fixed CDT offset would put it on day 2 instead of 3.
+    central = pytz.timezone("US/Central")
+    created = central.localize(datetime(2026, 3, 7, 23, 30)).astimezone(pytz.utc).replace(tzinfo=None)
+    now = central.localize(datetime(2026, 3, 10, 17, 0))
+    assert run(monkeypatch, [fng_created_days_ago(0, created=created)], now=now).called
+
+
 @pytest.mark.parametrize("days", [0, 2, 4, 12])
 def test_no_reminder_off_schedule(monkeypatch, days):
     run(monkeypatch, [fng_created_days_ago(days)]).assert_not_called()
