@@ -449,6 +449,50 @@ def test_production_get_user_links_cached_user_without_f3_user(monkeypatch):
     assert helper_functions.SLACK_USERS["U_PROD"] is linked
 
 
+def test_production_get_user_matches_unlinked_cache_by_its_email_when_slack_omits_it(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS["U_PROD"] = SimpleNamespace(
+        slack_id="U_PROD", user_id=None, is_bot=False, email="member@example.invalid"
+    )
+    passed = []
+    client = SimpleNamespace(users_info=lambda **_kwargs: {"user": {"id": "U_PROD", "profile": {}}})
+    monkeypatch.setattr(helper_functions, "create_user", lambda info, *_args: passed.append(info) or SimpleNamespace())
+
+    helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), client, None)
+
+    assert passed[0]["profile"]["email"] == "member@example.invalid"
+
+
+def test_production_get_user_returns_unlinked_cache_when_slack_lookup_fails(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    helper_functions.SLACK_USERS.clear()
+    cached = SimpleNamespace(slack_id="U_PROD", user_id=None, is_bot=False, email="member@example.invalid")
+    helper_functions.SLACK_USERS["U_PROD"] = cached
+
+    def users_info(**_kwargs):
+        raise RuntimeError("slack down")
+
+    monkeypatch.setattr(helper_functions, "create_user", lambda *_args: pytest.fail("must not call create_user"))
+
+    assert (
+        helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), SimpleNamespace(users_info=users_info), None)
+        is cached
+    )
+
+
+def test_production_get_user_raises_when_slack_lookup_fails_for_an_uncached_user(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    monkeypatch.setattr(helper_functions, "update_local_slack_users", lambda: None)
+    helper_functions.SLACK_USERS.clear()
+
+    def users_info(**_kwargs):
+        raise RuntimeError("slack down")
+
+    with pytest.raises(RuntimeError):
+        helper_functions.get_user("U_NEW", SimpleNamespace(org_id=1), SimpleNamespace(users_info=users_info), None)
+
+
 def test_production_direct_create_user_keeps_email_matching_and_profile_fields(monkeypatch):
     monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
     existing_user = SimpleNamespace(id=42, email="synthetic.member@example.invalid")
