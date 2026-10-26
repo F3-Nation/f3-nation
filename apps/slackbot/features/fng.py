@@ -43,6 +43,7 @@ FNG_EMAIL = "fng_email"
 FNG_PHONE = "fng_phone"
 FNG_META_BATTLE_BUDDY = "battle_buddy"
 FNG_REMINDER_DEFAULT_DAYS = 3  # used until a region picks a frequency in Welcomebot settings
+FNG_REMINDER_CHOICES = (0, 2, 3, 7)  # the Welcomebot settings radio; 0 = off
 
 
 def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
@@ -150,7 +151,12 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
                 )
             )
         except Exception as exc:
-            logger.error("fng.create_user_failed error=%s", type(exc).__name__)  # the message can carry PII
+            # The message can carry PII, so only the type is logged.
+            logger.error(
+                "fng.create_user_failed error_type=%s",
+                type(exc).__name__,
+                extra={"json_fields": {"event": "fng.create_user_failed", "error_type": type(exc).__name__}},
+            )
             done(AlertLevel.ERROR, "I couldn't create his F3 Nation profile, so nothing was sent. Please try again.")
             return
 
@@ -176,7 +182,11 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
             )
             lines.append("I couldn't email him, so I DMed you his invite link to text him.")
         except SlackApiError as exc:
-            logger.warning("fng.invite_dm_failed error=%s", exc.response.get("error"))
+            logger.warning(
+                "fng.invite_dm_failed error=%s",
+                exc.response.get("error"),
+                extra={"json_fields": {"event": "fng.invite_dm_failed", "error": exc.response.get("error")}},
+            )
             lines.append(f"I couldn't email him; please text him {region_record.downrange_invite_link}")
     else:
         lines.append("No invite link is set in /f3-nation-settings > Downrange, so no email went out.")
@@ -207,7 +217,7 @@ def _send_welcome_email(email: str, first_name: str | None, region: str, invite_
 
 def fng_reminder_days(region_record: SlackSettings) -> int:
     days = region_record.fng_reminder_days
-    return FNG_REMINDER_DEFAULT_DAYS if days is None else days
+    return days if days in FNG_REMINDER_CHOICES else FNG_REMINDER_DEFAULT_DAYS
 
 
 def fng_display_name(user: User) -> str:
@@ -230,7 +240,11 @@ def dm_fng_contacts(client: WebClient, team_id: str, fng: User, text: str, logge
             client.chat_postMessage(channel=slack_user.slack_id, text=text)
             sent += 1
         except SlackApiError as exc:
-            logger.warning("fng.contact_dm_failed error=%s", exc.response.get("error"))
+            logger.warning(
+                "fng.contact_dm_failed error=%s",
+                exc.response.get("error"),
+                extra={"json_fields": {"event": "fng.contact_dm_failed", "error": exc.response.get("error")}},
+            )
     return sent
 
 

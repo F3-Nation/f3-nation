@@ -100,7 +100,11 @@ def handle_team_join(body: dict, client: WebClient, logger: Logger, context: dic
     try:
         notify_fng_joined(client, region_record, safe_get(body, "event", "user"), logger)
     except Exception as exc:
-        logger.error("welcome.fng_notify_failed error=%s", type(exc).__name__)
+        logger.error(
+            "welcome.fng_notify_failed error_type=%s",
+            type(exc).__name__,
+            extra={"json_fields": {"event": "welcome.fng_notify_failed", "error_type": type(exc).__name__}},
+        )
 
     if region_record.welcome_dm_enable:
         client.chat_postMessage(channel=user_id, blocks=[region_record.welcome_dm_template], text="Welcome!")

@@ -304,6 +304,6 @@ def test_contacts_not_in_this_workspace_or_failing_dms_are_skipped(monkeypatch):
     assert dm_targets(client) == ["U_EH"]
 
 
-@pytest.mark.parametrize("days, expected", [(None, 3), (0, 0), (7, 7)])
-def test_reminder_frequency_defaults_to_every_three_days(days, expected):
+@pytest.mark.parametrize("days, expected", [(None, 3), (0, 0), (2, 2), (7, 7), (5, 3), (-1, 3)])
+def test_reminder_frequency_defaults_to_every_three_days_unless_a_listed_choice(days, expected):
     assert fng.fng_reminder_days(region_record(fng_reminder_days=days)) == expected
