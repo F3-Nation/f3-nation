@@ -14,7 +14,7 @@ catalog:
   "@commitlint/types": ^21.2.3
   "@google-cloud/storage": ^8.4.0
   "@hono/node-server": ^2.1.5
-  "@hookform/resolvers": ^5.9.2
+  "@hookform/resolvers": ^6.0.0
   "@ianvs/prettier-plugin-sort-imports": ^4.7.1
   "@next/eslint-plugin-next": ^16.4.2
   "@opentelemetry/api": ^1.9.1
