@@ -30,8 +30,8 @@ jobs:
       ref: ${{ inputs.tag }}
       image_name: f3-region-pages
       service_name: f3-region-pages
-      staging_project: f3-region-pages-staging
-      prod_project: f3-region-pages
+      staging_project: f3-region-pages-app-staging
+      prod_project: f3-region-pages-app
       tag_prefix: region-pages@
       dockerfile: apps/region-pages/Dockerfile
       staging_environment: region-pages-staging
