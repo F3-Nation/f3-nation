@@ -56,14 +56,15 @@ describe("/.well-known/jwks.json", () => {
     expect(res.headers.get("Cache-Control")).toBe("public, max-age=3600");
   });
 
-  it("falls back to the hand-rolled key, uncached, when Better Auth's keys can't be read", async () => {
+  it("answers 503, uncached and logged, when Better Auth's keys can't be read", async () => {
     envMock.AUTH_USE_BETTER_AUTH = true;
     const err = new Error("connection refused");
     getJwksMock.mockRejectedValue(err);
 
     const res = await GET();
 
-    expect(await res.json()).toEqual({ keys: [legacyKey] });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "jwks_unavailable" });
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(logErrorMock).toHaveBeenCalledWith(
       "auth.jwks.better_auth_keys_failed",
@@ -72,14 +73,15 @@ describe("/.well-known/jwks.json", () => {
     );
   });
 
-  it("falls back the same way, under its own event, when the Better Auth instance can't be built", async () => {
+  it("answers 503 the same way, under its own event, when the Better Auth instance can't be built", async () => {
     envMock.AUTH_USE_BETTER_AUTH = true;
     const err = new Error("BETTER_AUTH_SECRET is not configured");
     getAuthMock.mockRejectedValueOnce(err);
 
     const res = await GET();
 
-    expect(await res.json()).toEqual({ keys: [legacyKey] });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "jwks_unavailable" });
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(getJwksMock).not.toHaveBeenCalled();
     expect(logErrorMock).toHaveBeenCalledWith(

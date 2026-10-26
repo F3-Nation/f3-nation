@@ -28,41 +28,41 @@ export async function GET() {
     legacy = await getJWKS();
   } catch (err) {
     logError("auth.jwks.legacy_key_failed", {}, err);
-    return NextResponse.json(
-      { error: "jwks_unavailable" },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
-    );
+    return unavailable();
   }
-  if (!env.AUTH_USE_BETTER_AUTH) return jwksResponse(legacy.keys, true);
+  if (!env.AUTH_USE_BETTER_AUTH) return jwksResponse(legacy.keys);
 
-  // Better Auth's keys live in the database. If they can't be served, still
-  // serve the legacy key so /api/oauth/* tokens keep verifying, but don't let
-  // a cache hold on to the partial set. A failure to construct the instance
-  // (e.g. BETTER_AUTH_SECRET unset) is a misconfiguration, not a read blip,
-  // so it gets its own event.
+  // Better Auth's keys live in the database. With the flag on, Better Auth
+  // signs every token this app issues, so a list without its keys verifies
+  // nothing new: answer 503 like the legacy failure above instead of a
+  // partial set. A failure to construct the instance (e.g. BETTER_AUTH_SECRET
+  // unset) is a misconfiguration, not a read blip, so it gets its own event.
   let auth: Awaited<ReturnType<typeof getAuth>>;
   try {
     auth = await getAuth();
   } catch (err) {
     logError("auth.jwks.better_auth_instance_failed", {}, err);
-    return jwksResponse(legacy.keys, false);
+    return unavailable();
   }
   try {
     const betterAuth = await auth.api.getJwks();
-    return jwksResponse([...legacy.keys, ...betterAuth.keys], true);
+    return jwksResponse([...legacy.keys, ...betterAuth.keys]);
   } catch (err) {
     logError("auth.jwks.better_auth_keys_failed", {}, err);
-    return jwksResponse(legacy.keys, false);
+    return unavailable();
   }
 }
 
-function jwksResponse(keys: JWK[], cacheable: boolean) {
+function jwksResponse(keys: JWK[]) {
   return NextResponse.json(
     { keys },
-    {
-      headers: {
-        "Cache-Control": cacheable ? "public, max-age=3600" : "no-store",
-      },
-    },
+    { headers: { "Cache-Control": "public, max-age=3600" } },
+  );
+}
+
+function unavailable() {
+  return NextResponse.json(
+    { error: "jwks_unavailable" },
+    { status: 503, headers: { "Cache-Control": "no-store" } },
   );
 }
