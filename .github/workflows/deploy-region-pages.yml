@@ -37,5 +37,5 @@ jobs:
       staging_environment: region-pages-staging
       prod_environment: region-pages-production
       staging_url: https://staging.regions.f3nation.com
-      prod_url: https://regions.f3nation.com
+      prod_url: https://regions2.f3nation.com
       flags: "--max-instances=10"

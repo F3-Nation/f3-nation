@@ -9,7 +9,7 @@ Before any Next.js work, find and read the relevant doc in `node_modules/next/di
 # F3 Region Pages — Agent Guide
 
 Public, anonymous directory of F3 regions and their weekly workouts at
-`regions.f3nation.com`. **Spec (source of truth for behavior):**
+`regions2.f3nation.com`. **Spec (source of truth for behavior):**
 [`docs/specs/region-pages-directory.md`](../../docs/specs/region-pages-directory.md).
 
 ## How it works

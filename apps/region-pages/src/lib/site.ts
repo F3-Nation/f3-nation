@@ -13,7 +13,7 @@ export const nonEmpty = (value: string | undefined): string | undefined =>
  * only correct public address, so an unset value never points links elsewhere.
  */
 export const getSiteUrl = (): string =>
-  (nonEmpty(env.SITE_URL) ?? "https://regions.f3nation.com").replace(
+  (nonEmpty(env.SITE_URL) ?? "https://regions2.f3nation.com").replace(
     /\/+$/,
     "",
   );

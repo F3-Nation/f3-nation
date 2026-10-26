@@ -24,9 +24,9 @@ describe("nonEmpty", () => {
 
 describe("getSiteUrl", () => {
   it("falls back to production when SITE_URL is unset or empty", () => {
-    expect(getSiteUrl()).toBe("https://regions.f3nation.com");
+    expect(getSiteUrl()).toBe("https://regions2.f3nation.com");
     mockEnv.SITE_URL = "";
-    expect(getSiteUrl()).toBe("https://regions.f3nation.com");
+    expect(getSiteUrl()).toBe("https://regions2.f3nation.com");
   });
 
   it("returns SITE_URL without trailing slashes", () => {
