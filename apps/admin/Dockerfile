@@ -49,6 +49,14 @@ ENV SKIP_ENV_VALIDATION=true
 # install above, so skip the redundant pre-run verification.
 RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
 
+# Next.js inlines NEXT_PUBLIC_* at `next build` time into both the client bundle
+# and the standalone server output (so the key ships in the image, as with the
+# map; it is a public client key). It must be a build arg (_deploy-cloudrun.yml
+# passes it); a Cloud Run runtime env var does nothing. Empty means a keyless
+# build: error reporting is simply off.
+ARG NEXT_PUBLIC_POSTHOG_KEY
+ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
+
 RUN pnpm turbo build --filter=f3-admin
 
 # Assert the next.config libvips tracing include landed (a zero-match glob is a silent no-op).

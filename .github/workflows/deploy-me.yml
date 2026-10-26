@@ -39,3 +39,5 @@ jobs:
       staging_url: https://staging.me.f3nation.com
       prod_url: https://me.f3nation.com
       flags: "--max-instances=25"
+    secrets:
+      posthog_key: ${{ secrets.POSTHOG_KEY }}
