@@ -56,6 +56,9 @@ if (env.NEXT_PUBLIC_POSTHOG_KEY) {
   // `environment` property — without it, errors from prod and previews are
   // indistinguishable in PostHog (the removed Sentry config tagged this too).
   posthog.register({
+    // `app` splits the shared project per app; admin/auth/me/homepage set it
+    // too (packages/observability/src/browser.ts).
+    app: "map",
     environment: environmentFromHostname(window.location.hostname),
   });
 }
