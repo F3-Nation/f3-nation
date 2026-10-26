@@ -6,7 +6,7 @@
   "engines": {
     "node": ">=24.22.1 <25"
   },
-  "packageManager": "pnpm@12.12.1+sha512.b7f98934c0b1f29a65f5da52f2d7f994e7faad573ffdddea1497fb4dcb5aec051590ee7c7d95a38172b4bfae103a5b83edf2ee866e11731c2cafa96063610ac5",
+  "packageManager": "pnpm@12.14.0+sha512.c18ba6d87993d3d164cb5e8948f32b2c06ee854487e06cd8d86781342fb3e5bb4634367034711e86802baa9c37bea906ce1929ad08d70884c97d801df13389a6",
   "scripts": {
     "build": "turbo build",
     "ci:local": "pnpm format && pnpm lint && pnpm lint:unused && pnpm typecheck && pnpm build && pnpm test",
@@ -38,6 +38,8 @@
     "lint": "bash scripts/lint.sh",
     "local:setup": "bash scripts/local-setup.sh",
     "postinstall": "bash scripts/postinstall-uv-sync.sh",
+    "pr:triage": "bash scripts/pr-triage.sh",
+    "pr:triage:html": "bash scripts/pr-triage.sh --html",
     "python:install": "uv sync --all-packages",
     "reset-test-db": "turbo run reset-test-db",
     "test": "turbo test",
