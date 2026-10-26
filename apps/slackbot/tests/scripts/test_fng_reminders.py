@@ -18,6 +18,7 @@ INVITE_LINK = "https://join.slack.com/t/f3boone/shared_invite/abc"
 def fng_created_days_ago(days, **overrides):
     created = NOW.astimezone(pytz.utc).replace(tzinfo=None) - timedelta(days=days)
     fields = {"id": 42, "first_name": "John", "last_name": "Smith", "f3_name": "Chip", "created": created}
+    fields.update(phone="828-555-0100", email="john@example.com")
     fields.update({"meta": {"battle_buddy": 7}}, **overrides)
     return SimpleNamespace(**fields)
 
@@ -54,6 +55,12 @@ def test_reminds_every_interval_until_he_joins(monkeypatch, days):
     text = dm.call_args.args[3]
     assert f"*Chip (John S.)* still hasn't joined Slack, {days} days after /fng." in text
     assert INVITE_LINK in text and "last reminder" not in text
+    assert "A text or call from you might help: 828-555-0100 · john@example.com." in text
+
+
+def test_reminder_without_contact_details_leaves_them_out(monkeypatch):
+    text = run(monkeypatch, [fng_created_days_ago(3, phone=None, email=None)]).call_args.args[3]
+    assert "A text from you might help. Here's the invite link" in text
 
 
 def test_third_reminder_is_the_last(monkeypatch):
@@ -90,4 +97,4 @@ def test_runs_only_at_the_reminder_hour_unless_forced(monkeypatch):
 
 def test_without_invite_link_the_reminder_still_goes_out(monkeypatch):
     text = run(monkeypatch, [fng_created_days_ago(3)], downrange_invite_link=None).call_args.args[3]
-    assert text.endswith("A text from you might help.")
+    assert text.endswith("might help: 828-555-0100 · john@example.com.")

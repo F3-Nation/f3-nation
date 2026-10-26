@@ -1,5 +1,6 @@
 """Remind an FNG's battle buddy and whoever brought him when he still hasn't joined Slack after /fng."""
 
+import html
 import logging
 import os
 import sys
@@ -50,11 +51,11 @@ def send_fng_reminders(force: bool = False):
                 SlackUser, filters=[SlackUser.user_id == fng.id, SlackUser.slack_team_id == space.team_id]
             ):
                 continue  # he joined
+            contact = html.escape(" · ".join(filter(None, (fng.phone, fng.email))), quote=False)
             text = f"*{fng_display_name(fng)}* still hasn't joined Slack, {days} days after /fng."
-            text += " A text from you might help"
-            text += (
-                f"; here's the invite link: {settings.downrange_invite_link}" if settings.downrange_invite_link else "."
-            )
+            text += f" A text or call from you might help: {contact}." if contact else " A text from you might help."
+            if settings.downrange_invite_link:
+                text += f" Here's the invite link to send him: {settings.downrange_invite_link}"
             if days // interval == MAX_REMINDERS:
                 text += " This is the last reminder."
             sent += dm_fng_contacts(client, space.team_id, fng, text, logger)
