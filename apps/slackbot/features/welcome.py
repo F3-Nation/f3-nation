@@ -6,9 +6,11 @@ from f3_data_models.models import Org, SlackSpace
 from f3_data_models.utils import DbManager
 from slack_sdk.web import WebClient
 
+from features.fng import FNG_REMINDER_DEFAULT_DAYS, fng_reminder_days, notify_fng_joined
 from utilities import constants
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
+    safe_convert,
     safe_get,
     update_local_region_records,
 )
@@ -26,6 +28,7 @@ def build_welcome_config_form(
             actions.WELCOME_DM_ENABLE: "enable" if region_record.welcome_dm_enable else "disable",
             actions.WELCOME_CHANNEL: region_record.welcome_channel or "",
             actions.WELCOME_CHANNEL_ENABLE: "enable" if region_record.welcome_channel_enable else "disable",
+            actions.WELCOME_FNG_REMINDER_DAYS: str(fng_reminder_days(region_record)),
         }
     )
 
@@ -51,6 +54,7 @@ def build_welcome_message_form(
             actions.WELCOME_DM_ENABLE: "enable" if region_record.welcome_dm_enable else "disable",
             actions.WELCOME_CHANNEL: region_record.welcome_channel or "",
             actions.WELCOME_CHANNEL_ENABLE: "enable" if region_record.welcome_channel_enable else "disable",
+            actions.WELCOME_FNG_REMINDER_DAYS: str(fng_reminder_days(region_record)),
         }
     )
 
@@ -74,6 +78,9 @@ def handle_welcome_message_config_post(
         1 if safe_get(welcome_config_data, actions.WELCOME_CHANNEL_ENABLE) == "enable" else 0
     )
     region_record.welcome_channel = safe_get(welcome_config_data, actions.WELCOME_CHANNEL) or ""
+    region_record.fng_reminder_days = safe_convert(
+        safe_get(welcome_config_data, actions.WELCOME_FNG_REMINDER_DAYS), int, default=FNG_REMINDER_DEFAULT_DAYS
+    )
 
     DbManager.update_records(
         cls=SlackSpace,
@@ -101,3 +108,8 @@ def handle_team_join(body: dict, client: WebClient, logger: Logger, context: dic
             channel=welcome_channel,
             text=random.choice(constants.WELCOME_MESSAGE_TEMPLATES).format(user=f"<@{user_id}>", region=org_name),
         )
+
+    try:
+        notify_fng_joined(client, region_record, safe_get(body, "event", "user"), logger)
+    except Exception as exc:
+        logger.error("welcome.fng_notify_failed error=%s", type(exc).__name__)

@@ -228,3 +228,82 @@ def test_form_asks_only_for_the_fngs_details():
     ]
     picker = next(b for b in view["view"]["blocks"] if b.get("block_id") == fng.USER_FORM_BROUGHT_BY)
     assert picker["optional"] is True
+
+
+def fng_user(**overrides):
+    fields = {
+        "id": 42,
+        "first_name": "John",
+        "last_name": "Smith",
+        "f3_name": "Chip",
+        "home_region_id": 8,
+        "meta": {"battle_buddy": 7, "brought_by": 9},
+    }
+    fields.update(overrides)
+    return SimpleNamespace(**fields)
+
+
+def patch_contacts(monkeypatch, fng_record=None, slack_users=None):
+    slack_users = {7: "U_BUDDY", 9: "U_EH"} if slack_users is None else slack_users
+
+    def find_first_record(cls, filters):
+        user_id = filters[0].right.value
+        return SimpleNamespace(slack_id=slack_users[user_id]) if user_id in slack_users else None
+
+    monkeypatch.setattr(fng.DbManager, "find_records", MagicMock(return_value=[fng_record] if fng_record else []))
+    monkeypatch.setattr(fng.DbManager, "find_first_record", find_first_record)
+
+
+def joined(email="john@example.com"):
+    return {"id": "U_FNG", "profile": {"email": email}}
+
+
+def dm_targets(client):
+    return [c.kwargs["channel"] for c in client.chat_postMessage.call_args_list]
+
+
+def test_join_dms_buddy_and_whoever_brought_him(monkeypatch):
+    patch_contacts(monkeypatch, fng_user())
+    client = MagicMock()
+
+    fng.notify_fng_joined(client, region_record(), joined(), MagicMock())
+
+    assert dm_targets(client) == ["U_BUDDY", "U_EH"]
+    assert "*Chip (John S.)* just joined Slack as <@U_FNG>" in client.chat_postMessage.call_args.kwargs["text"]
+
+
+def test_join_dms_once_when_buddy_brought_him(monkeypatch):
+    patch_contacts(monkeypatch, fng_user(meta={"battle_buddy": 7, "brought_by": 7}))
+    client = MagicMock()
+
+    fng.notify_fng_joined(client, region_record(), joined(), MagicMock())
+
+    assert dm_targets(client) == ["U_BUDDY"]
+
+
+@pytest.mark.parametrize(
+    "record",
+    [None, fng_user(meta=None), fng_user(meta={"brought_by": 9}), fng_user(home_region_id=99)],
+    ids=["unknown email", "no meta", "not added with /fng", "another region's FNG"],
+)
+def test_join_of_anyone_else_dms_nobody(monkeypatch, record):
+    patch_contacts(monkeypatch, record)
+    client = MagicMock()
+
+    fng.notify_fng_joined(client, region_record(), joined(), MagicMock())
+
+    client.chat_postMessage.assert_not_called()
+
+
+def test_contacts_not_in_this_workspace_or_failing_dms_are_skipped(monkeypatch):
+    patch_contacts(monkeypatch, slack_users={9: "U_EH"})  # the buddy has no Slack user here
+    client = MagicMock()
+    client.chat_postMessage.side_effect = SlackApiError("nope", {"error": "channel_not_found"})
+
+    assert fng.dm_fng_contacts(client, "T1", fng_user(), "hi", MagicMock()) == 0
+    assert dm_targets(client) == ["U_EH"]
+
+
+@pytest.mark.parametrize("days, expected", [(None, 3), (0, 0), (7, 7)])
+def test_reminder_frequency_defaults_to_every_three_days(days, expected):
+    assert fng.fng_reminder_days(region_record(fng_reminder_days=days)) == expected

@@ -4,14 +4,15 @@
 The bot creates the FNG's F3 Nation user (home region = this region, ``meta.battle_buddy`` = the PAX running
 /fng, ``meta.brought_by`` = whoever EH'd him, if given) and emails him the region's Slack invite link. The welcome
 post is left to the existing ``team_join`` handler, which fires when he actually joins Slack (posting here too would
-welcome him twice).
+welcome him twice). That handler also DMs his battle buddy and whoever brought him; until he joins,
+``scripts/fng_reminders.py`` reminds them every ``fng_reminder_days`` days.
 """
 
 import html
 import uuid
 from logging import Logger
 
-from f3_data_models.models import Org, User
+from f3_data_models.models import Org, SlackUser, User
 from f3_data_models.utils import DbManager
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
@@ -41,6 +42,7 @@ FNG_F3_NAME = "fng_f3_name"
 FNG_EMAIL = "fng_email"
 FNG_PHONE = "fng_phone"
 FNG_META_BATTLE_BUDDY = "battle_buddy"
+FNG_REMINDER_DEFAULT_DAYS = 3  # used until a region picks a frequency in Welcomebot settings
 
 
 def build_fng_form(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
@@ -200,4 +202,48 @@ def _send_welcome_email(email: str, first_name: str | None, region: str, invite_
     </html>
     """,
         from_email="F3 Nation Slackbot Support <support.slackbot@f3nation.com>",
+    )
+
+
+def fng_reminder_days(region_record: SlackSettings) -> int:
+    days = region_record.fng_reminder_days
+    return FNG_REMINDER_DEFAULT_DAYS if days is None else days
+
+
+def fng_display_name(user: User) -> str:
+    name = f"{user.first_name or ''} {(user.last_name or '')[:1]}.".strip()
+    return html.escape(f"{user.f3_name} ({name})" if user.f3_name else name, quote=False)
+
+
+def dm_fng_contacts(client: WebClient, team_id: str, fng: User, text: str, logger: Logger) -> int:
+    """DM the FNG's battle buddy and whoever brought him (once if they're the same PAX); returns how many got it."""
+    sent = 0
+    for user_id in dict.fromkeys(
+        filter(None, (safe_get(fng.meta, k) for k in (FNG_META_BATTLE_BUDDY, USER_META_BROUGHT_BY)))
+    ):
+        slack_user = DbManager.find_first_record(
+            SlackUser, filters=[SlackUser.user_id == user_id, SlackUser.slack_team_id == team_id]
+        )
+        if not slack_user:
+            continue
+        try:
+            client.chat_postMessage(channel=slack_user.slack_id, text=text)
+            sent += 1
+        except SlackApiError as exc:
+            logger.warning("fng.contact_dm_failed error=%s", exc.response.get("error"))
+    return sent
+
+
+def notify_fng_joined(client: WebClient, region_record: SlackSettings, slack_user: dict, logger: Logger):
+    """team_join: if the joiner was added with /fng, tell his battle buddy and whoever brought him."""
+    email = safe_get(slack_user, "profile", "email")
+    fng = safe_get(DbManager.find_records(User, filters=[User.email == email]), 0) if email else None
+    if not fng or fng.home_region_id != region_record.org_id or not safe_get(fng.meta, FNG_META_BATTLE_BUDDY):
+        return
+    dm_fng_contacts(
+        client,
+        region_record.team_id,
+        fng,
+        f"*{fng_display_name(fng)}* just joined Slack as <@{slack_user['id']}>. Go say hi!",
+        logger,
     )
