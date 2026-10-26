@@ -422,6 +422,33 @@ def test_production_get_user_keeps_slack_profile_lookup(monkeypatch):
     assert helper_functions.SLACK_USERS["U_PROD"] is expected
 
 
+def test_production_get_user_returns_linked_cache_without_slack_lookup(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    helper_functions.SLACK_USERS.clear()
+    cached = SimpleNamespace(slack_id="U_PROD", user_id=88)
+    helper_functions.SLACK_USERS[cached.slack_id] = cached
+    monkeypatch.setattr(helper_functions, "create_user", lambda *_args: pytest.fail("must not call create_user"))
+    client = SimpleNamespace(users_info=lambda **_kwargs: pytest.fail("users_info must not be called"))
+
+    assert helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), client, None) is cached
+
+
+def test_production_get_user_links_cached_user_without_f3_user(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS["U_PROD"] = SimpleNamespace(slack_id="U_PROD", user_id=None)
+    linked = SimpleNamespace(slack_id="U_PROD", user_id=88)
+    looked_up = []
+    client = SimpleNamespace(users_info=lambda **kwargs: looked_up.append(kwargs["user"]) or {"user": {"id": "U_PROD"}})
+    monkeypatch.setattr(helper_functions, "create_user", lambda *_args: linked)
+
+    result = helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), client, None)
+
+    assert looked_up == ["U_PROD"]
+    assert result is linked
+    assert helper_functions.SLACK_USERS["U_PROD"] is linked
+
+
 def test_production_direct_create_user_keeps_email_matching_and_profile_fields(monkeypatch):
     monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
     existing_user = SimpleNamespace(id=42, email="synthetic.member@example.invalid")

@@ -251,7 +251,8 @@ def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient
         update_local_slack_users()
 
     user: SlackUser | None = safe_get(SLACK_USERS, slack_user_id)
-    if not user:
+    # A cached row with no user_id has no F3 user yet; resolve it like a new member so create_user links it.
+    if not user or not safe_get(user, "user_id"):
         try:
             # check to see if this user's email is already in the db
             user_info = client.users_info(user=slack_user_id)
