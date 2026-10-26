@@ -19,6 +19,7 @@ from utilities.helper_functions import safe_get
 
 REMINDER_HOUR = 17  # US/Central, same as the home region nudge
 MAX_REMINDERS = 3
+FNG_META_REMINDERS_SENT = "fng_reminders_sent"
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ def send_fng_reminders(force: bool = False):
         interval = fng_reminder_days(settings)
         if not interval or not settings.bot_token:
             continue
-        # The schedule comes from when /fng created him, so nothing needs storing: remind on day N, 2N and 3N.
+        # Reminders are due on day N, 2N and 3N after /fng created him.
         cutoff = datetime.now(pytz.utc).replace(tzinfo=None) - timedelta(days=interval * MAX_REMINDERS + 1)
         fngs = DbManager.find_records(User, filters=[User.home_region_id == org_x_space.org_id, User.created >= cutoff])
         client = WebClient(token=settings.bot_token)
@@ -45,7 +46,10 @@ def send_fng_reminders(force: bool = False):
             if not safe_get(fng.meta, FNG_META_BATTLE_BUDDY):
                 continue
             days = (now.date() - pytz.utc.localize(fng.created).astimezone(now.tzinfo).date()).days
-            if days <= 0 or days % interval or days // interval > MAX_REMINDERS:
+            # Comparing against the count already sent, not the exact day, means a rerun sends nothing and a
+            # missed or failed run catches up the next day (once, even if several were missed).
+            due = min(days // interval, MAX_REMINDERS)
+            if due <= (safe_get(fng.meta, FNG_META_REMINDERS_SENT) or 0):
                 continue
             if DbManager.find_first_record(
                 SlackUser, filters=[SlackUser.user_id == fng.id, SlackUser.slack_team_id == space.team_id]
@@ -56,9 +60,12 @@ def send_fng_reminders(force: bool = False):
             text += f" A text or call from you might help: {contact}." if contact else " A text from you might help."
             if settings.downrange_invite_link:
                 text += f" Here's the invite link to send him: {settings.downrange_invite_link}"
-            if days // interval == MAX_REMINDERS:
+            if due == MAX_REMINDERS:
                 text += " This is the last reminder."
-            sent += dm_fng_contacts(client, space.team_id, fng, text, logger)
+            delivered = dm_fng_contacts(client, space.team_id, fng, text, logger)
+            if delivered:
+                DbManager.update_record(User, fng.id, {User.meta: {**fng.meta, FNG_META_REMINDERS_SENT: due}})
+            sent += delivered
     print(f"FNG reminders complete. Sent {sent} DMs.")
 
 

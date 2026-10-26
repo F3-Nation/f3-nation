@@ -23,7 +23,7 @@ def fng_created_days_ago(days, **overrides):
     return SimpleNamespace(**fields)
 
 
-def run(monkeypatch, fngs, joined=False, force=False, now=NOW, **settings):
+def run(monkeypatch, fngs, joined=False, force=False, now=NOW, delivered=1, **settings):
     class FakeDatetime(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -41,7 +41,8 @@ def run(monkeypatch, fngs, joined=False, force=False, now=NOW, **settings):
     monkeypatch.setattr(
         fng_reminders.DbManager, "find_first_record", MagicMock(return_value=SimpleNamespace() if joined else None)
     )
-    dm = MagicMock(return_value=1)
+    monkeypatch.setattr(fng_reminders.DbManager, "update_record", MagicMock())
+    dm = MagicMock(return_value=delivered)
     monkeypatch.setattr(fng_reminders, "dm_fng_contacts", dm)
     monkeypatch.setattr(fng_reminders, "WebClient", MagicMock())
     fng_reminders.send_fng_reminders(force=force)
@@ -75,9 +76,31 @@ def test_days_count_in_central_dates_across_a_dst_change(monkeypatch):
     assert run(monkeypatch, [fng_created_days_ago(0, created=created)], now=now).called
 
 
-@pytest.mark.parametrize("days", [0, 2, 4, 12])
-def test_no_reminder_off_schedule(monkeypatch, days):
-    run(monkeypatch, [fng_created_days_ago(days)]).assert_not_called()
+@pytest.mark.parametrize("days, already_sent", [(0, 0), (2, 0), (3, 1), (4, 1), (9, 3), (12, 3)])
+def test_no_reminder_until_the_next_one_is_due(monkeypatch, days, already_sent):
+    fng = fng_created_days_ago(days, meta={"battle_buddy": 7, "fng_reminders_sent": already_sent})
+    run(monkeypatch, [fng]).assert_not_called()
+
+
+def test_sent_reminder_is_recorded_so_a_rerun_sends_nothing(monkeypatch):
+    run(monkeypatch, [fng_created_days_ago(6, meta={"battle_buddy": 7, "fng_reminders_sent": 1})])
+
+    fng_reminders.DbManager.update_record.assert_called_once_with(
+        fng_reminders.User, 42, {fng_reminders.User.meta: {"battle_buddy": 7, "fng_reminders_sent": 2}}
+    )
+
+
+def test_missed_reminder_goes_out_the_next_day_once(monkeypatch):
+    text = run(monkeypatch, [fng_created_days_ago(7)]).call_args.args[3]
+
+    assert "7 days after /fng" in text
+    meta = fng_reminders.DbManager.update_record.call_args.args[2][fng_reminders.User.meta]
+    assert meta["fng_reminders_sent"] == 2
+
+
+def test_undelivered_reminder_is_retried(monkeypatch):
+    assert run(monkeypatch, [fng_created_days_ago(3)], delivered=0).called
+    fng_reminders.DbManager.update_record.assert_not_called()
 
 
 def test_region_frequency_is_used(monkeypatch):
