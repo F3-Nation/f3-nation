@@ -151,6 +151,7 @@ catalog:
   vitest-canvas-mock: ^1.2.0
   zod: ^4.6.6
   zustand: ^5.0.15
+  '@electric-sql/pglite': ^0.5.11
 overrides:
   "form-data@>=2.0.0 <2.5.6": "^4.0.6"
   "zod@<4.6.6": "^4.6.6" # GHSA-mrhx-c7xc-m3w5 (memory exhaustion on oversized constrained collections)
