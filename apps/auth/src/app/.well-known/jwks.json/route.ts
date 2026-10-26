@@ -13,6 +13,10 @@ import { env } from "~/env";
  * also serves Better Auth's keys, next to the hand-rolled f3-auth-1 key that
  * /api/oauth/* still signs with. Their kids never collide: Better Auth's are
  * generated ids.
+ *
+ * auth3 and auth2 share the f3-auth-1 key (same secret), so this document is
+ * only safe because every verifier pins `iss` exactly (packages/sso and
+ * packages/api). Don't loosen those issuer checks.
  */
 export async function GET() {
   // A bad or missing AUTH_JWT_PRIVATE_KEY fails the whole endpoint on
