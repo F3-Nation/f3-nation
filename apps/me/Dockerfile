@@ -1,6 +1,6 @@
 # ---------- Stage 1: Prune monorepo ----------
 ARG TURBO_VERSION=2
-FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS builder
+FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS builder
 ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -15,7 +15,7 @@ COPY . .
 RUN turbo prune f3-me --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS installer
+FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS installer
 ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -47,13 +47,21 @@ COPY --from=builder /app/out/full/ .
 # install above, so skip the redundant pre-run verification.
 RUN printf '\nverifyDepsBeforeRun: false\n' >> pnpm-workspace.yaml
 
+# Next.js inlines NEXT_PUBLIC_* at `next build` time into both the client bundle
+# and the standalone server output (so the key ships in the image, as with the
+# map; it is a public client key). It must be a build arg (_deploy-cloudrun.yml
+# passes it); a Cloud Run runtime env var does nothing. Empty means a keyless
+# build: error reporting is simply off.
+ARG NEXT_PUBLIC_POSTHOG_KEY
+ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
+
 RUN pnpm turbo build --filter=f3-me
 
 # Assert the next.config libvips tracing include landed (a zero-match glob is a silent no-op).
 RUN test -n "$(find apps/me/.next/standalone -name 'libvips-cpp*')"
 
 # ---------- Stage 3: Production runner ----------
-FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runner
+FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS runner
 
 RUN apk add --no-cache libc6-compat
 WORKDIR /app

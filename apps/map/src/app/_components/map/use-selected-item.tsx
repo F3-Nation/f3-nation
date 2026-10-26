@@ -41,10 +41,11 @@ export const useSelectedItem = () => {
     const modifiedLocationMarker = modifiedLocationMarkers[selectedLocation.id];
     if (!modifiedLocationMarker) return selectedLocation;
 
-    selectedLocation.lat = modifiedLocationMarker.lat;
-    selectedLocation.lon = modifiedLocationMarker.lng;
-
-    return selectedLocation;
+    return {
+      ...selectedLocation,
+      lat: modifiedLocationMarker.lat,
+      lon: modifiedLocationMarker.lng,
+    };
   }, [debouncedLocationId, locationId, data, modifiedLocationMarkers]);
 
   const position = useMemo(() => {
