@@ -148,9 +148,11 @@ git -C "$RUN/wt" diff --stat <MERGE_BASE> HEAD
 git -C "$RUN/wt" diff <MERGE_BASE> HEAD
 gh pr checks <N>
 # Branch currency: commits the PR is behind its base, and conflicts (exit 1 lists the files).
-# <BASE_SHA> is the run's base commit: `jq -r .base_sha "$RUN/state.json"` (kept current by `update`).
-git -C "$RUN/wt" rev-list --count <MERGE_BASE>..<BASE_SHA>
-git -C "$RUN/wt" merge-tree --write-tree --name-only <BASE_SHA> HEAD
+# Read the base from the fetched ref, not state.json: `update` refetches it even when the PR
+# head hasn't moved (NO_NEW_COMMITS), but only rewrites state.json when it has.
+BASE_SHA=$(git -C "$RUN/wt" rev-parse "$(jq -r .git_ref "$RUN/state.json")-base")
+git -C "$RUN/wt" rev-list --count "$(git -C "$RUN/wt" merge-base HEAD "$BASE_SHA")..$BASE_SHA"
+git -C "$RUN/wt" merge-tree --write-tree --name-only "$BASE_SHA" HEAD
 # Open review conversations, for Phase 5's verdict. --paginate walks every page; one line per
 # open thread. Save to a file first: piping straight into wc -l would print 0 on a failed call.
 gh api graphql --paginate -F n=<N> -F o='{owner}' -F r='{repo}' -f query='
