@@ -180,8 +180,12 @@ answers with a 308 redirect, which plain `curl` reports in place of the real res
   if the PR moved again meanwhile, it prints `NEEDS_APPROVAL` for the newer head. If it prints
   `EXISTING_MIGRATIONS_CHANGED`, rebuild the database: `<S> down-db $RUN`, then `setup` (with
   `--at-base` if 2a called for it). Then restart the servers you need, re-run the checks
-  touched by the new diff (`git -C "$RUN/wt" diff <old> <new>`), and produce fresh results and
-  drafts. Without `down --keep-drafts`, the drafts sit in `$RUN` beside the worktree.
+  touched by the new diff (`git -C "$RUN/wt" diff <old> <new>`), re-run every `SKILL.md` Phase 2a
+  command against the new `HEAD` (the merge-base diff, `gh pr checks`, branch currency, and open
+  conversations), update the test plan for anything new, and produce fresh results and drafts.
+  Without `down --keep-drafts`, the drafts sit in `$RUN` beside the worktree. On
+  `NO_NEW_COMMITS`, the base may still have moved (`update` refetches it), so re-run the Phase 2a
+  branch-currency commands and refresh the behind/conflict line before reporting.
 - **Done:** on "done" or "clean up", run Phase 6 → **Finish**.
 
 ## Cleanup
