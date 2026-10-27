@@ -48,25 +48,33 @@ export function useUserSearch({
 }: UseUserSearchOptions): UseUserSearchReturn {
   const [results, setResults] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UserListItem | null>(null);
+  const [selectedUserState, setSelectedUser] = useState<UserListItem | null>(
+    null,
+  );
   const abortRef = useRef<AbortController | null>(null);
+
+  const trimmed = search.trim();
+  const searchActive = open && trimmed.length >= MIN_SEARCH_LENGTH;
+
+  // Clear results/loading when search becomes inactive (dropdown closed or
+  // query too short). Adjusting state during render instead of in an effect
+  // avoids an extra render showing stale results.
+  const [prevSearchActive, setPrevSearchActive] = useState(searchActive);
+  if (searchActive !== prevSearchActive) {
+    setPrevSearchActive(searchActive);
+    if (!searchActive) {
+      setResults([]);
+      setLoading(false);
+    }
+  }
 
   // Debounced search: fires automatically after the user pauses typing
   useEffect(() => {
-    // Cancel any in-flight request immediately on dependency change.
+    // Cancel any in-flight request immediately on dependency change
+    // (this also covers the dropdown closing).
     abortRef.current?.abort();
 
-    if (!open) {
-      setLoading(false);
-      return;
-    }
-
-    const trimmed = search.trim();
-    if (trimmed.length < MIN_SEARCH_LENGTH) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
+    if (!searchActive) return;
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -99,55 +107,33 @@ export function useUserSearch({
         abortRef.current = null;
       }
     };
-  }, [open, search]);
+  }, [searchActive, trimmed]);
 
-  // Clear results when dropdown closes and cancel any in-flight request
-  useEffect(() => {
-    if (!open) {
-      abortRef.current?.abort();
-      setResults([]);
-    }
-  }, [open]);
+  // selectedUser is derived: it is only valid while it matches `value`.
+  const selectedUser =
+    value != null && selectedUserState?.id === value ? selectedUserState : null;
 
-  // Resolve selectedUser display label when value is set but user isn't loaded yet
-  const resolvedRef = useRef<number | null>(null);
+  // Resolve selectedUser display label when value is set but the matching user
+  // isn't loaded yet. Re-runs only when `value` or the derived `selectedUser`
+  // changes, so a failed fetch for the same value is not retried in a loop,
+  // while restoring a previously-seen value (whose user was replaced by a
+  // different selection) fetches it again.
   useEffect(() => {
+    if (value == null || selectedUser !== null) return;
+
     const controller = new AbortController();
-
-    if (value == null) {
-      resolvedRef.current = null;
-      if (selectedUser !== null) setSelectedUser(null);
-      return () => controller.abort();
-    }
-
-    if (selectedUser !== null && selectedUser.id !== value) {
-      setSelectedUser(null);
-      resolvedRef.current = null;
-      return;
-    }
-
-    if (selectedUser !== null || resolvedRef.current === value) return;
 
     void (async () => {
       try {
         const res = await fetch(`/api/users?userId=${value}`, {
           signal: controller.signal,
         });
-        if (!res.ok) {
-          if (resolvedRef.current === value) resolvedRef.current = null;
-          return;
-        }
+        if (!res.ok) return;
         const data = (await res.json()) as { users: UserListItem[] };
         if (controller.signal.aborted) return;
         const found = data.users.find((u) => u.id === value);
-        if (found) {
-          setSelectedUser(found);
-          resolvedRef.current = value;
-        } else if (resolvedRef.current === value) {
-          resolvedRef.current = null;
-        }
+        if (found) setSelectedUser(found);
       } catch {
-        if (resolvedRef.current === value) resolvedRef.current = null;
         // Silently fail — trigger will show fallback text
       }
     })();
