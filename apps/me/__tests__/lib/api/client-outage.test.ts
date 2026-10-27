@@ -190,6 +190,28 @@ describe("getMyProfile during an API outage", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
+  it("does not wait for a teed body's cancel to settle before timing out", async () => {
+    vi.stubEnv("F3_API_TIMEOUT_MS", "20");
+    fetchMock.mockImplementation(() => {
+      const source = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode('{"json":'));
+        },
+      });
+      // Cancelling one branch of a tee settles only once the other branch is
+      // cancelled too; nothing ever reads or cancels this one.
+      const [body] = source.tee();
+      return Promise.resolve(
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+
+    expect(isApiUnavailableError(await profileError())).toBe(true);
+  });
+
   it("does not classify a 403 oRPC error as unavailable", async () => {
     fetchMock.mockResolvedValue(
       Response.json(

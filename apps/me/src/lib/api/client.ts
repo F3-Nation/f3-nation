@@ -48,7 +48,9 @@ async function readBody(
       text += decoder.decode(value, { stream: true });
     }
   } catch (err) {
-    await reader.cancel(err).catch(() => undefined);
+    // Not awaited: cancelling one branch of a teed body settles only once the
+    // other branch is cancelled too, which would hold back the timeout error.
+    void reader.cancel(err).catch(() => undefined);
     throw err;
   } finally {
     signal.removeEventListener("abort", onAbort);
