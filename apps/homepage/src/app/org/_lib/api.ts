@@ -49,10 +49,10 @@ export async function fetchOrgChart(): Promise<OrgChartItem[]> {
   return data.orgs.filter((o): o is OrgChartItem => o !== null);
 }
 
-// The chart shows who to contact, so only admin and editor appear; the other
-// roles (user, password_*) are access grants, not leadership. This filters the
-// display only: /org-chart/:id still returns every role to anyone holding the
-// public API key.
+// The chart shows who to contact, so it lists only the roles allowed here. Any
+// other role is an access grant and stays hidden, including roles added later.
+// This hides roles from the page only: the public org-chart endpoint still
+// returns every role to anyone holding the public API key.
 const VISIBLE_ROLES: ReadonlySet<string> = new Set(["admin", "editor"]);
 
 export async function fetchOrgById(id: number): Promise<OrgDetail> {
