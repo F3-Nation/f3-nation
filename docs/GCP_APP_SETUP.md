@@ -348,7 +348,7 @@ gh variable set WIF_SA       --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$PRO
 
 ## 8. Push App Secrets to Cloud Run
 
-Ask AI to push environment variables and secrets to the Cloud Run service, or add them manually.
+See the app's own setup instructions for the environment variables and secrets its Cloud Run service needs, and how to set them.
 
 ---
 

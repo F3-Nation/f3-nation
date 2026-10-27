@@ -60,7 +60,7 @@ without their say-so.
    treat every hit as a candidate.
 
    ```bash
-   git grep -niE '(on|at|see) line [0-9]+|see (above|below)|(same|works|behaves) (as|like)|mirrors|(only )?called (from|by)|is used by' -- ':(exclude).agents/skills/durable-docs/' ':(exclude)packages/db/drizzle/*.sql' ':(exclude,glob)**/CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   git grep -niE '(on|at|see) line [0-9]+|see (above|below)|(same|works|behaves) (as|like)|mirrors|(only )?called (from|by)|used by' -- ':(exclude).agents/skills/durable-docs/' ':(exclude)packages/db/drizzle/*.sql' ':(exclude,glob)**/CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
    ```
 
 4. **Rewrite each finding** to present-tense what + standing why — for a
