@@ -487,7 +487,9 @@ def test_production_get_user_keeps_slack_profile_email_over_cached_email(monkeyp
 def test_production_get_user_does_not_fill_email_for_cached_bot(monkeypatch):
     monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
     helper_functions.SLACK_USERS.clear()
-    helper_functions.SLACK_USERS["B_PROD"] = SimpleNamespace(slack_id="B_PROD", user_id=None, is_bot=True, email="b_prod")
+    helper_functions.SLACK_USERS["B_PROD"] = SimpleNamespace(
+        slack_id="B_PROD", user_id=None, is_bot=True, email="b_prod"
+    )
     passed = []
     client = SimpleNamespace(users_info=lambda **_kwargs: {"user": {"id": "B_PROD", "profile": {}}})
     monkeypatch.setattr(helper_functions, "create_user", lambda info, *_args: passed.append(info) or SimpleNamespace())
