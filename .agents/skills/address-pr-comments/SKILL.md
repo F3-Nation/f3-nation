@@ -33,17 +33,17 @@ Check these before Step 1 and report everything missing in one message.
 
 Stop at the first failing check.
 
-**Check 0: Repo GitHub policy.** Read `.agents/skills/github/SKILL.md` and run its pre-flight.
+**Check 0: Repo GitHub policy.** Read the repo's [GitHub write rules](../../../AGENTS.md#writing-to-github) and run the pre-flight.
 Leave out `--require-write` here: it checks the current checkout's repository, which may be a
 read-only clone of a repository other than the one Step 5b pushes to. Check 1 runs the write check
 against the push target.
 
 ```bash
-bash .agents/skills/github/scripts/gh-check.sh
+bash scripts/gh-check.sh
 ```
 
-Adopt its mandatory directives — the `_written by <model_name>_` attribution signature and its
-safety rules — for the rest of this skill.
+Follow those rules — the `_written by <model_name>_` signature, draft PRs, never resolving
+threads — for the rest of this skill.
 
 **Check 1: Which PR?** Use the PR number or URL the user gave. If none was given, use the
 current branch's PR (`gh pr view` with no argument); if that finds nothing, ask for a number.
@@ -73,12 +73,12 @@ Then run the write pre-flight against the push target (`gh-check.sh` reads `gh r
 follows `GH_REPO`):
 
 ```bash
-GH_REPO=<HEAD_REPO> bash .agents/skills/github/scripts/gh-check.sh --require-write
+GH_REPO=<HEAD_REPO> bash scripts/gh-check.sh --require-write
 ```
 
 Stop if it fails, unless the PR is cross-repository (`isCrossRepository` is true),
 `maintainerCanModify` is true, and the viewer has write access to the base repository
-(`GH_REPO=<BASE_REPO> bash .agents/skills/github/scripts/gh-check.sh --require-write` passes):
+(`GH_REPO=<BASE_REPO> bash scripts/gh-check.sh --require-write` passes):
 GitHub then accepts an upstream maintainer's push to the fork branch without write access to the
 fork. For a same-repository PR, `HEAD_REPO` is `BASE_REPO`.
 
@@ -351,7 +351,7 @@ reply posted before the push makes them respond to code that isn't on GitHub yet
 ### 5c — Post replies
 
 After the push, post each planned reply in its existing thread (never as a new top-level comment
-when a thread exists). End every reply with the `github` skill's signature, `_written by
+when a thread exists). End every reply with the repo's signature, `_written by
 <model_name>_`, as its own final line, naming the model or agent that wrote it.
 
 Write each reply to its own file with a quoted heredoc (`<<'BODY'`), then pass the file — reply

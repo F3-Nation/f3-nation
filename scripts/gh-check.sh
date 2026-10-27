@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .agents/skills/github/scripts/gh-check.sh
+# scripts/gh-check.sh
 
 set -euo pipefail
 

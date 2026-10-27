@@ -86,8 +86,8 @@ The user can interrupt at any point; treat "stop" or "abort" as an exit, which m
    - Tools: `git`, `gh` (`gh auth status`), `jq`, `curl`, `openssl`, `docker`, and `lsof`
      (or `ss` on Linux). Install hints are in `reference.md`.
    - Docker running: `docker info` (fixes in `reference.md`).
-   - GitHub access, through the repo `github` skill's pre-flight:
-     `bash <repo root>/.agents/skills/github/scripts/gh-check.sh`. A failure here is a stop.
+   - GitHub access, through the repo's pre-flight:
+     `bash <repo root>/scripts/gh-check.sh`. A failure here is a stop.
      Then run it again with `--require-write`; if only that fails, it isn't a stop: set
      `CAN_POST=false`, and the plan says feedback is drafted but not posted.
 
@@ -300,8 +300,8 @@ it again.
   `❌ **Needs changes before approval:** <the blocking problem in a few words>.`, or
   `⏸️ **Can't recommend yet:** <what wasn't tested>.` If the user authored the PR, leave this
   line out.
-- **Signature:** the one required by the repo's `github` skill (`.agents/skills/github/SKILL.md`:
-  `_written by <model name>_` as the last line). It ends `summary.md` and every issue body.
+- **Signature:** the one required by the repo's [GitHub write rules](../../../AGENTS.md#writing-to-github)
+  (`_written by <model name>_` as the last line). It ends `summary.md` and every issue body.
 - **Hidden marker:** the line just above the signature in `summary.md` is
   `<!-- pr-local-test -->`, so the signature stays the last line. GitHub doesn't render it; triage tooling uses it to tell this
   skill's review apart from pr-review-inline's comments, which share the signature.
@@ -332,7 +332,7 @@ it again.
 
 Run this phase's `gh` commands from `<repo root>`: `down --keep-drafts` has already removed
 `$RUN/wt`, and `gh` needs a checkout to find the repo. First run the write pre-flight,
-`bash <repo root>/.agents/skills/github/scripts/gh-check.sh --require-write`; if it fails, hand
+`bash <repo root>/scripts/gh-check.sh --require-write`; if it fails, hand
 the user the drafted text instead of posting.
 
 Before posting, compare `gh pr view <N> --json headRefOid` with the run's `tested_sha`

@@ -88,8 +88,8 @@ Both are optional. The skill finds the release PR itself.
    lets them see what was judged in scope before anything is filed. **Stop
    until they approve** or request changes.
 
-7. **File the issue** only after approval, following the repo
-   [`github`](../github/SKILL.md) skill.
+7. **File the issue** only after approval, following the repo's
+   [GitHub write rules](../../../AGENTS.md#writing-to-github).
 
    ```bash
    gh issue create --title "Staging test plan: <short release name> (#<PR>)" \
