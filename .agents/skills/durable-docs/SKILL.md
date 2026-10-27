@@ -187,8 +187,8 @@ true today. Filing issues: the repo's [GitHub write rules](../../../AGENTS.md#wr
 1. Write the code first; let it speak. Comment only the non-obvious what and
    the standing why — what a reader would spend minutes of reading, or one
    wrong change, rediscovering.
-2. Before committing, run the test at the top on every comment and doc line
-   you added, and check each reference against
+2. Before committing, hold every comment and doc line you added to the test
+   every comment and doc must pass, and check each reference against
    [Drift](#drift-references-that-go-stale-silently). Cut what fails; move the
    memory to a PR/issue body.
 3. Docs in `docs/` describe how the system **is**, not what just changed.
@@ -220,8 +220,8 @@ When a PR adds or edits comments or markdown, review the text like code:
 Audit mode runs only on an explicit request to audit or sweep — never from a
 casual "clean up", and never from merely loading this skill. Read
 [`audit.md`](audit.md) before starting one: it carries the scope, base-branch,
-search, rewrite, and hand-over procedure, and it changes none of the rules
-above.
+search, rewrite, and hand-over procedure, and it changes none of this skill's
+rules.
 
 ## What to leave out of this skill's work
 

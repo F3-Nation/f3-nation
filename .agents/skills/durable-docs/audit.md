@@ -3,14 +3,15 @@
 This file carries audit mode of the [durable-docs skill](SKILL.md): the same
 rules, applied in bulk to files that already exist. Read
 [`SKILL.md`](SKILL.md) first — nothing here relaxes **Never in a committed
-file**, its exceptions, the drift rules, or the test at the top. An audit runs only when someone
-explicitly asks to audit or sweep; a casual "clean up" means apply the rules to
-the text at hand. Files that are out of scope entirely (generated changelogs,
-this skill's own files, the lockfile, migration history) are listed under
+file**, its exceptions, the drift rules, or the test every comment and doc
+must pass. An audit runs only when someone explicitly asks to audit or sweep;
+a casual "clean up" means apply the rules to the text at hand. Files that are
+out of scope entirely (generated changelogs, this skill's own files, the
+lockfile, migration history) are listed under
 [What to leave out of this skill's work](SKILL.md#what-to-leave-out-of-this-skills-work).
 
-Rewrites happen **in place on a clean branch** off the base chosen in step 2;
-the person who asked creates the PR. Nothing is pushed and no issue is filed
+Rewrites happen **in place on a clean branch** off the base picked with the
+person who asked; they create the PR. Nothing is pushed and no issue is filed
 without their say-so.
 
 1. **Confirm scope** — which trees: `apps/`, `packages/`, `docs/`,
@@ -47,7 +48,7 @@ without their say-so.
    git grep -niE 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' -- ':(exclude).agents/skills/durable-docs/' ':(exclude)packages/db/drizzle/*.sql' ':(exclude,glob)**/CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
    ```
 
-   Narrow to the confirmed scope from step 1 by appending its paths (e.g.
+   Narrow to the confirmed scope by appending its paths (e.g.
    `… -- apps docs`), keeping the `:(exclude)` pathspecs. Also flag files
    whose names declare them one-offs (`*one-off*`, `*onetime*`, `fix-*`,
    `tmp-*`).
@@ -97,5 +98,5 @@ without their say-so.
    `docs(repo): make docs and comments durable`, `docs(auth): …`);
    afterwards `git show --stat HEAD` should list the same files.
 8. **Stop and hand over**: a summary table (file → finding → what you did),
-   plus a drafted PR title and body (with the excised-narrative section from
-   step 6). Push and open a **draft** PR only if they ask.
+   plus a drafted PR title and body (with the excised-narrative section).
+   Push and open a **draft** PR only if they ask.
