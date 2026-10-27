@@ -2,15 +2,16 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { headers } from "next/headers";
+import Image from "next/image";
 
 import { cn } from "@acme/ui";
+import { ApiUnavailable } from "@acme/ui/api-unavailable";
 import { ThemeProvider } from "@acme/ui/theme";
 import { Toaster } from "@acme/ui/toast";
 import { TooltipProvider } from "@acme/ui/tooltip";
 
 import "~/app/globals.css";
 
-import { ApiUnavailable } from "~/app/_components/api-unavailable";
 import { ModalSwitcher } from "~/app/_components/modal/modal-switcher";
 import { env } from "~/env";
 import { AdminSessionProvider } from "~/lib/auth/client";
@@ -50,7 +51,15 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
       return (
         <html lang="en">
           <body className={bodyClassName}>
-            <ApiUnavailable />
+            <main className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
+              <ApiUnavailable
+                title="Admin is temporarily unavailable"
+                message="The F3 Nation API is not responding, so the admin portal cannot load right now."
+                logo={
+                  <Image src="/f3_logo.png" alt="F3" width={80} height={80} />
+                }
+              />
+            </main>
           </body>
         </html>
       );
