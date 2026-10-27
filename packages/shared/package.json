@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@orpc/client": "catalog:",
     "lodash": "catalog:",
     "next-auth": "catalog:",
     "zod": "catalog:",

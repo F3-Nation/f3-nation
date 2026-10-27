@@ -38,6 +38,11 @@ or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
 — even if your tool does not load skills automatically.
 
+When asked to write or edit comments or markdown, or to review a PR that
+touches comments or markdown, use
+[`.agents/skills/durable-docs/SKILL.md`](.agents/skills/durable-docs/SKILL.md)
+for the repo's durable documentation rules.
+
 To review a PR with inline comments, or to test one hands-on in a local
 sandbox, follow
 [`.agents/skills/pr-review-inline/SKILL.md`](.agents/skills/pr-review-inline/SKILL.md)
@@ -88,8 +93,8 @@ follow
   `lib/logging`. Reserve the raw `logger` for request-scoped children
   (`logger.child({ requestId })`).
   - One carve-out: the error-reporting pipeline's own failure paths —
-    `@acme/observability`, and `global-error.tsx`, which is browser-only
-    where pino does not run. `logError` there would re-enter the reporter
+    `@acme/observability`, and map's browser-only `report-client-error.ts`
+    (called from its error boundaries), where pino does not run. `logError` there would re-enter the reporter
     that just failed, so those sites use `console.error` deliberately and
     each says so in a comment. Nothing else gets this exemption; see
     [`docs/OBSERVABILITY_PLAN.md`](docs/OBSERVABILITY_PLAN.md).
@@ -166,6 +171,16 @@ How a commit type drives version bumps and changelogs — including the
 non-obvious rule that Release Please attributes a commit by **which files it
 changed, not by its scope** — is documented in
 [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
+
+## Writing to GitHub
+
+These rules cover everything an AI assistant writes to GitHub — issues, pull requests, comments, and review replies:
+
+- **Pre-flight:** run `bash scripts/gh-check.sh` before reading through `gh`, and `bash scripts/gh-check.sh --require-write` before writing. It confirms `gh` is signed in and can reach the repository with the access needed; set `GH_REPO=<owner>/<name>` to check a repository other than the current checkout. If it fails, show the user its message and stop.
+- **Signature:** end every issue body, PR body, and comment with `_written by <model_name>_`, exactly once, as its final line. Name the actual model or agent (`Claude Opus 5.5`, `Codex`), not a generic label like `AI`. A footer your tool adds on its own goes above it.
+- **Draft PRs:** open pull requests with `gh pr create --draft`; the author marks them ready for review. The hosted review apps skip drafts and start once a PR is marked ready, so work in progress doesn't use up their review runs. The `ai-review` workflow ignores draft status: it runs when its label is added and on every push while the label is on.
+- **Never resolve review threads.** The people reviewing resolve them.
+- **Reply to every review comment you act on**, in its thread, whether you changed code or decided not to, saying what you did and why.
 
 ## Pull Request Guidelines
 

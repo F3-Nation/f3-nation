@@ -81,8 +81,9 @@ Artifact Registry repository in `us-central1`; create it only if platform
 owners approve and it is confirmed absent. Never delete/recreate the repository.
 The image is named `analytics-etl` and is built/promoted by the tagged workflow.
 
-GitHub environments are `analytics-nonprod` and `analytics-production`; WIF
-environment variables are `WIF_PROVIDER` and `WIF_SA`. Do not store
+GitHub environments are `analytics-nonprod` and `analytics-production`; each
+sets its own `WIF_SA`, and `WIF_PROVIDER` comes from the organization-level
+variable shared by every app. Do not store
 service-account keys. Follow the shared setup guide for provider/repository
 conditions. Deployment identities are not runtime or Scheduler identities. The
 Analytics tagged workflow defaults to staging only (`deploy_prod=false`).
