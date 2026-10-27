@@ -62,7 +62,6 @@ apps/me/
 │   │       ├── auth/             # SSO auth routes
 │   │       └── profile/          # Profile CRUD routes
 │   ├── components/
-│   │   ├── ui/                   # shadcn/ui primitives
 │   │   ├── profile-form.tsx      # Main profile form
 │   │   ├── avatar-upload.tsx     # File upload component
 │   │   ├── region-select.tsx     # Searchable region picker
@@ -72,8 +71,7 @@ apps/me/
 │       ├── auth/                 # Auth utilities
 │       ├── api/client.ts         # F3 API client (server-side)
 │       ├── gcs.ts                # GCS upload helper
-│       ├── types.ts              # TypeScript interfaces
-│       └── utils.ts              # Utility functions
+│       └── types.ts              # TypeScript interfaces
 ├── __tests__/                    # Test suite
 ├── scripts/                      # Deployment scripts
 ├── Dockerfile                    # Production container build
