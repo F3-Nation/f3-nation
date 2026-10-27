@@ -543,9 +543,11 @@ even when zero comments were posted:
    downgraded in verification, and any dropped for line-not-in-diff.
 5. **Branch currency** — how many commits the PR is behind its base (`BEHIND`), and any
    conflicting files. Never call the PR ready to merge while it is behind or conflicting; say
-   the author should update the branch first. Gated PRs add the safety checklist (Step 3), one
-   line per item that the diff touches.
-6. **Provenance** — what actually ran and what didn't, so the user can judge how much the
+   the author should update the branch first.
+6. **Safety checklist** (gated PRs only) — one line per Step 3 checklist item the diff touches,
+   or "none touched". If the gated lookup failed, say the PR was treated as gated for that
+   reason.
+7. **Provenance** — what actually ran and what didn't, so the user can judge how much the
    review covers:
    - which brief, how many reviewer seats, and which plugins or tools ran (and any you expected
      that weren't available)
@@ -557,7 +559,7 @@ even when zero comments were posted:
    - what was blocked: permission refusals, missing tools, comments dropped for line-not-in-diff
    - token usage or cost, only if the harness measured it. This line stays in the report and
      never goes on GitHub.
-7. **Worktree cleanup** — confirmation, from `git worktree list`, that the worktree was removed;
+8. **Worktree cleanup** — confirmation, from `git worktree list`, that the worktree was removed;
    if it was not, the leftover path and the exact command for the user to run.
 
 Sections 1 and 2 are REQUIRED and lead the report; they stand whether or not any comments were

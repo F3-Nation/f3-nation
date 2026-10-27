@@ -222,10 +222,10 @@ A PR is **gated** if it comes from a fork, or if `assoc` isn't `OWNER`, `MEMBER`
 `COLLABORATOR`. If the lookup fails, treat the PR as gated. For gated PRs, scan the diff for
 anything that runs code at install or start: `package.json` scripts, new or changed
 dependencies, `.npmrc`, `scripts/`, `turbo.json`, `docker-compose.yml`, Next.js or Docker
-config, and new or changed outbound URLs. Summarize what you find
-in the plan's safety box. Every step after `init` runs PR-controlled code or config (and `setup`
-copies the user's Maps key into the PR's folder), so a gated run does nothing past `init` until
-the user replies "go, run it".
+config, and new or changed outbound URLs. Summarize what you find in the plan's safety box.
+Every step after `init` runs PR-controlled code or config (and `setup` copies the user's Maps
+key into the PR's folder), so a gated run does nothing past `init` until the user replies "go,
+run it".
 
 ## Phase 3 — Test plan (then keep going)
 
@@ -326,13 +326,13 @@ first row whose condition is true:
 | ✅ **Approve**                            | Nothing to post but the summary                                                                                                          |
 
 Under the verdict, add one plain sentence explaining it. For ❌ and ⏸️, add what would change
-the verdict (for open conversations: "Resolve the N open review conversations, then re-test.";
-if the count is unknown: "Couldn't check for open review conversations; re-run once GitHub
-answers.").
-If the PR is behind its base or has conflicts, add one more line: "<N> commits behind <base>
-<and conflicts in …>; this result is for the tested commit, so update the branch before
-merging." Never call the PR ready to merge while it is behind or conflicting. Problems "not
-caused by this PR" never change the verdict. ➖ rows count as passed when their tests pass.
+the verdict (for open conversations: "Resolve the <OPEN_THREADS> open review conversations,
+then re-test."; if the count is unknown: "Couldn't check for open review conversations; re-run
+once GitHub answers."). If the PR is behind its base or has conflicts, add one more line:
+"<BEHIND> commits behind <base>; conflicts in <files>; this result is for the tested commit, so
+update the branch before merging." Drop the conflicts clause when there are none. Never call
+the PR ready to merge while it is behind or conflicting. Problems "not caused by this PR" never
+change the verdict. ➖ rows count as passed when their tests pass.
 When the user's 🙋 results arrive, work out the verdict again and show it again.
 
 **Draft feedback (don't post yet):**
@@ -350,11 +350,12 @@ When the user's 🙋 results arrive, work out the verdict again and show it agai
   the same verdict as the results report: `✅ **Recommend approving as-is.**`,
   `✅ **Recommend approving; the suggestions below are optional.**`,
   `❌ **Needs changes before approval:** <the blocking problem in a few words>.`, or
-  `⏸️ **Can't recommend yet:** <what wasn't tested, or "N review conversations are still open">.`
-  If the user authored the PR, leave this line out. Below the table, add the branch-currency line if the PR is behind or conflicting, and one **How this was checked**
-  line: which tools ran the checks (browser automation, HTTP, database, the PR's own tests),
-  any temporary sandbox change and that it was reverted, and what was blocked or skipped and
-  why. Never put token or cost numbers on GitHub.
+  `⏸️ **Can't recommend yet:** <what wasn't tested, or "<OPEN_THREADS> review conversations are still open">.`
+  If the user authored the PR, leave this line out.
+- **Below the table:** the branch-currency line if the PR is behind or conflicting, and one
+  **How this was checked** line: which tools ran the checks (browser automation, HTTP, database,
+  the PR's own tests), any temporary sandbox change and that it was reverted, and what was
+  blocked or skipped and why. Never put token or cost numbers on GitHub.
 - **Signature:** the one required by the repo's `github` skill (`.agents/skills/github/SKILL.md`:
   `_written by <model name>_` as the last line). It ends `summary.md` and every issue body.
 - **Hidden marker:** the line just above the signature in `summary.md` is
