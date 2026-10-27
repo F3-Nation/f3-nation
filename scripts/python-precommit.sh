@@ -8,6 +8,8 @@ if (($# == 0)); then
   exit 0
 fi
 
-# Apply lint fixes first so import sorting cannot undo the final formatting.
-uv run --all-packages ruff check --fix -- "$@"
+# Apply import fixes before formatting, then check the final content so
+# formatter-fixable lint does not block the commit.
+uv run --all-packages ruff check --fix-only -- "$@"
 uv run --all-packages ruff format -- "$@"
+uv run --all-packages ruff check -- "$@"

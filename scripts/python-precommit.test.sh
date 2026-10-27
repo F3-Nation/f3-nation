@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Exercise the real Python Lefthook job through isolated Git commits. Only the
-# new job is copied, so the existing repository-wide typecheck is not replaced
-# or confused with the Python-only file filter under test.
+# python job is copied into each fixture, so the repository-wide typecheck job
+# cannot run there or be mistaken for the Python-only file filter under test.
 # Run directly: bash scripts/python-precommit.test.sh
 set -uo pipefail
 
@@ -12,6 +12,7 @@ git_bin="$(command -v git)"
 node_bin="$(command -v node)"
 uv_bin="$(command -v uv || true)"
 failures=0
+ruff_cases_skipped=0
 
 if [[ ! -x "$lefthook_bin" || -z "$git_bin" || -z "$node_bin" ]]; then
   echo "ERROR: Python hook regression tests require pnpm install, Git, and Node."
@@ -48,8 +49,8 @@ awk '
   in_hook && (!seen_job || selected) { print }
 ' "$repo_root/lefthook.yml" >"$tmp_dir/lefthook.yml"
 if ! grep -q '^    - name: python$' "$tmp_dir/lefthook.yml"; then
-  # The unchanged configuration remains a runnable negative control: commits
-  # succeed but cannot format, lint, or emit the required missing-uv notice.
+  # Without a python job the fixture hook must still run, so the suite fails on
+  # its assertions rather than erroring during fixture setup.
   printf '    - name: fixture-without-python-job\n      run: "true"\n' >>"$tmp_dir/lefthook.yml"
 fi
 
@@ -133,11 +134,27 @@ assert_eq "missing uv emits an explicit Python hook skip" "1" \
 assert_eq "skipped Python content is unchanged" "answer=42" \
   "$(fixture_git show HEAD:example.py)"
 
+# Empty selections must return before Ruff can scan or rewrite the repository.
+mkdir -p "$tmp_dir/recording-uv"
+cat >"$tmp_dir/recording-uv/uv" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$UV_RECORDING_LOG"
+EOF
+chmod +x "$tmp_dir/recording-uv/uv"
+: >"$tmp_dir/uv-calls.log"
+env -i PATH="$tmp_dir/recording-uv:$without_uv_path" \
+  UV_RECORDING_LOG="$tmp_dir/uv-calls.log" \
+  "$BASH" "$script_dir/python-precommit.sh"
+empty_status=$?
+assert_eq "empty Python selection succeeds" "0" "$empty_status"
+assert_eq "empty Python selection never invokes uv" "" "$(cat "$tmp_dir/uv-calls.log")"
+
 if [[ -z "$uv_bin" || ! -x "$repo_root/.venv/bin/ruff" ]]; then
   if [[ -n "${CI:-}" ]]; then
     echo "ERROR: CI requires uv and Ruff for the real Python hook commit cases."
     exit 1
   fi
+  ruff_cases_skipped=1
   echo "Skipping real Ruff commit cases: run pnpm python:install first."
 else
   new_fixture formatting
@@ -157,6 +174,18 @@ else
   assert_eq "fixable Python lint commit succeeds" "0" "$commit_status"
   assert_eq "lint autofix and formatting are both committed" "answer = 42" \
     "$(fixture_git show HEAD:example.py)"
+
+  new_fixture formatter-fixable-lint
+  mkdir -p "$fixture_repo/apps/narrow"
+  printf '[tool.ruff]\nline-length = 40\n\n[tool.ruff.lint]\nselect = ["E501"]\n' \
+    >"$fixture_repo/apps/narrow/pyproject.toml"
+  printf 'answer = max(first_value, second_value, third)\n' >"$fixture_repo/apps/narrow/example.py"
+  fixture_git add apps || exit 1
+  commit_fixture
+  assert_eq "a long line the formatter wraps does not block the commit" "0" "$commit_status"
+  assert_eq "wrapped line is committed" \
+    "$(printf 'answer = max(\n    first_value, second_value, third\n)')" \
+    "$(fixture_git show HEAD:apps/narrow/example.py)"
 
   new_fixture blocking-lint
   before_head="$(fixture_git rev-parse HEAD)"
@@ -178,7 +207,7 @@ else
   printf 'export const answer = 42;\n' >"$fixture_repo/example.ts"
   fixture_git add example.ts || exit 1
   commit_fixture
-  assert_eq "TypeScript-only commit skips the new Python job" "0" "$commit_status"
+  assert_eq "TypeScript-only commit skips the Python job" "0" "$commit_status"
   assert_eq "Lefthook reports the Python job as skipped" "1" \
     "$(grep -Ec 'python.*skip' "$fixture_repo/commit.log")"
   assert_eq "TypeScript-only commit has no Ruff output" "0" \
@@ -191,7 +220,7 @@ else
   fixture_git rm --quiet partial.py || exit 1
   commit_fixture
   assert_eq "Python deletion-only commit succeeds" "0" "$commit_status"
-  assert_eq "Python deletion-only commit skips the new job" "1" \
+  assert_eq "Python deletion-only commit skips the Python job" "1" \
     "$(grep -Ec 'python.*skip' "$fixture_repo/commit.log")"
   assert_eq "deleted Python file stays deleted" "" \
     "$(fixture_git ls-tree --name-only HEAD -- partial.py)"
@@ -247,4 +276,8 @@ if ((failures > 0)); then
   exit 1
 fi
 
-echo "All Python pre-commit regression tests passed."
+if ((ruff_cases_skipped)); then
+  echo "Python pre-commit checks passed; real Ruff cases were skipped."
+else
+  echo "All Python pre-commit regression tests passed."
+fi
