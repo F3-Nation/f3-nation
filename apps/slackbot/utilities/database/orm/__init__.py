@@ -29,6 +29,7 @@ class SlackSettings:
     welcome_dm_template: Optional[dict[str, Any]] = None
     welcome_channel_enable: Optional[int] = None
     welcome_channel: Optional[str] = None
+    fng_reminder_days: Optional[int] = None  # 0 = off; None = fng.FNG_REMINDER_DEFAULT_DAYS
     send_achievements: Optional[int] = None
     send_aoq_reports: Optional[int] = None
     achievement_channel: Optional[str] = None
