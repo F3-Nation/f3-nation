@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "uv run bash ./app_startup.sh",
     "format": "bash ../../scripts/python-task.sh format slackbot bash ./scripts/format.sh",
-    "test": "bash ../../scripts/python-task.sh test slackbot uv run pytest",
+    "test": "bash ../../scripts/python-task.sh test slackbot uv run pytest --cov --cov-config=pyproject.toml --cov-report=term:skip-covered --cov-report=json:coverage/coverage.json",
     "lint": "bash ../../scripts/python-task.sh lint slackbot uv run ruff check .",
     "typecheck": "bash ../../scripts/python-task.sh typecheck slackbot uv run mypy"
   },
