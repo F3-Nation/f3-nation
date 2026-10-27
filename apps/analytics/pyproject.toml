@@ -18,17 +18,18 @@ dev = ["pytest==9.1.1", "ruff==0.17.3", "mypy==2.4.0"]
 analytics-etl = "analytics.cli:main"
 
 [tool.ruff]
-line-length = 120
+extend = "../../pyproject.toml"
+
+[tool.ruff.lint.isort]
+# Keep Analytics' existing import ordering.
+relative-imports-order = "furthest-to-closest"
+extra-standard-library = []
 
 [tool.mypy]
 python_version = "3.13"
 files = ["analytics"]
 warn_unused_ignores = true
 warn_redundant_casts = true
-
-[tool.ruff.lint]
-select = ["E", "W", "F", "I", "C", "B"]
-ignore = ["C901"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
