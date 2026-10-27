@@ -103,6 +103,7 @@ def handle_team_join(body: dict, client: WebClient, logger: Logger, context: dic
         logger.error(
             "welcome.fng_notify_failed error_type=%s",
             type(exc).__name__,
+            exc_info=exc,
             extra={"json_fields": {"event": "welcome.fng_notify_failed", "error_type": type(exc).__name__}},
         )
 

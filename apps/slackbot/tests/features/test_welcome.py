@@ -46,9 +46,13 @@ def test_team_join_survives_a_failed_fng_lookup(monkeypatch):
     monkeypatch.setattr(welcome, "notify_fng_joined", MagicMock(side_effect=RuntimeError("db down")))
     logger = MagicMock()
 
-    welcome.handle_team_join(team_join(), MagicMock(), logger, {}, region_record())
+    client = MagicMock()
+    welcome.handle_team_join(
+        team_join(), client, logger, {}, region_record(welcome_dm_enable=1, welcome_dm_template={"type": "section"})
+    )
 
     logger.error.assert_called_once()
+    client.chat_postMessage.assert_called_once_with(channel="U_FNG", blocks=[{"type": "section"}], text="Welcome!")
 
 
 @pytest.mark.parametrize("picked, saved", [("7", 7), ("0", 0), (None, 3)])

@@ -244,11 +244,11 @@ def fng_user(**overrides):
 
 
 def patch_contacts(monkeypatch, fng_record=None, slack_users=None):
-    slack_users = {7: "U_BUDDY", 9: "U_EH"} if slack_users is None else slack_users
+    slack_users = {(7, "T1"): "U_BUDDY", (9, "T1"): "U_EH"} if slack_users is None else slack_users
 
     def find_first_record(cls, filters):
-        user_id = filters[0].right.value
-        return SimpleNamespace(slack_id=slack_users[user_id]) if user_id in slack_users else None
+        key = (filters[0].right.value, filters[1].right.value)
+        return SimpleNamespace(slack_id=slack_users[key]) if key in slack_users else None
 
     monkeypatch.setattr(fng.DbManager, "find_records", MagicMock(return_value=[fng_record] if fng_record else []))
     monkeypatch.setattr(fng.DbManager, "find_first_record", find_first_record)
@@ -270,6 +270,14 @@ def test_join_dms_buddy_and_whoever_brought_him(monkeypatch):
 
     assert dm_targets(client) == ["U_BUDDY", "U_EH"]
     assert "*Chip (John S.)* just joined Slack as <@U_FNG>" in client.chat_postMessage.call_args.kwargs["text"]
+
+
+def test_join_matches_a_slack_email_with_capitals(monkeypatch):
+    patch_contacts(monkeypatch, fng_user())
+
+    fng.notify_fng_joined(MagicMock(), region_record(), joined("John.Smith@Example.com"), MagicMock())
+
+    assert fng.DbManager.find_records.call_args.kwargs["filters"][0].right.value == "john.smith@example.com"
 
 
 def test_join_dms_once_when_buddy_brought_him(monkeypatch):
@@ -296,11 +304,31 @@ def test_join_of_anyone_else_dms_nobody(monkeypatch, record):
 
 
 def test_contacts_not_in_this_workspace_or_failing_dms_are_skipped(monkeypatch):
-    patch_contacts(monkeypatch, slack_users={9: "U_EH"})  # the buddy has no Slack user here
-    client = MagicMock()
+    patch_contacts(monkeypatch, slack_users={(9, "T1"): "U_EH"})  # the buddy has no Slack user here
+    client, logger = MagicMock(), MagicMock()
     client.chat_postMessage.side_effect = SlackApiError("nope", {"error": "channel_not_found"})
 
-    assert fng.dm_fng_contacts(client, "T1", fng_user(), "hi", MagicMock()) == 0
+    assert fng.dm_fng_contacts(client, "T1", fng_user(), "hi", logger) == []
+    assert dm_targets(client) == ["U_EH"]
+    logger.info.assert_called_once()
+    assert logger.info.call_args.args[0] == "fng.contact_not_in_workspace"
+
+
+def test_contact_only_in_another_workspace_is_not_dmed(monkeypatch):
+    patch_contacts(monkeypatch, slack_users={(7, "T_OTHER"): "U_BUDDY"})
+    client = MagicMock()
+
+    assert fng.dm_fng_contacts(client, "T1", fng_user(meta={"battle_buddy": 7}), "hi", MagicMock()) == []
+    client.chat_postMessage.assert_not_called()
+
+
+def test_dm_returns_who_got_it_and_can_target_some_contacts(monkeypatch):
+    patch_contacts(monkeypatch)
+    client = MagicMock()
+
+    assert fng.dm_fng_contacts(client, "T1", fng_user(), "hi", MagicMock()) == [7, 9]
+    client.reset_mock()
+    assert fng.dm_fng_contacts(client, "T1", fng_user(), "hi", MagicMock(), contact_ids=[9]) == [9]
     assert dm_targets(client) == ["U_EH"]
 
 
