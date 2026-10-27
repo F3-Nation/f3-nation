@@ -9,7 +9,7 @@ import { getAuth } from "~/lib/better-auth";
 import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
 import { logError } from "~/lib/logging";
-import { revokeAllUserTokens } from "~/lib/oauth";
+import { revokeUserOAuthTokens } from "~/lib/revoke-user-oauth-tokens";
 import { env } from "~/env";
 
 /**
@@ -73,14 +73,14 @@ export async function GET(request: NextRequest) {
     redirectUrl = new URL("/login", publicUrl);
   }
 
-  // Revoke tokens if user is authenticated
+  // Revoke tokens if user is authenticated. A failure deleting Better Auth's
+  // OAuth tokens doesn't skip the sign-out and cookie clearing below, which
+  // would strand the browser half-logged-out: it is reported as a 500 once
+  // those are done, so the logout never looks successful.
   const session = await getCurrentSession();
-  if (session?.user.id) {
-    const userId = Number(session.user.id);
-    if (userId) {
-      await revokeAllUserTokens(userId);
-    }
-  }
+  const { betterAuthError: tokenDeletionError } = session?.user.id
+    ? await revokeUserOAuthTokens(session.user.id)
+    : {};
 
   const response = NextResponse.redirect(redirectUrl);
 
@@ -133,6 +133,22 @@ export async function GET(request: NextRequest) {
           cookie.name.startsWith("__Secure-") || cookie.name === "__session",
       });
     }
+  }
+
+  if (tokenDeletionError) {
+    logError(
+      "auth.oauth_logout.better_auth_token_deletion_failed",
+      {},
+      tokenDeletionError,
+    );
+    const failure = NextResponse.json(
+      { error: "server_error" },
+      { status: 500 },
+    );
+    for (const setCookie of response.headers.getSetCookie()) {
+      failure.headers.append("set-cookie", setCookie);
+    }
+    return failure;
   }
 
   return response;
