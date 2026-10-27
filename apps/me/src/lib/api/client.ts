@@ -22,6 +22,40 @@ function getApiTimeoutMs(): number {
 }
 
 /**
+ * Reads the body as text, failing as soon as `signal` aborts. Aborting the
+ * request isn't enough on its own: Next's patched fetch returns a copied body
+ * that the abort never reaches, so `response.text()` would wait for the socket
+ * to close. Reading through our own reader also lets us cancel the body.
+ */
+async function readBody(
+  response: Response,
+  signal: AbortSignal,
+): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let onAbort: () => void = () => undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason as Error);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  });
+  let text = "";
+  try {
+    for (;;) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      if (done) return text + decoder.decode();
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch (err) {
+    await reader.cancel(err).catch(() => undefined);
+    throw err;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
+}
+
+/**
  * Per-request cached oRPC client factory.
  *
  * Reads the authenticated user's OAuth access token from cookies and creates
@@ -76,7 +110,7 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
 
         // Read the body here, before `finally` clears the timer, so an API that
         // sends headers and then stalls is still aborted by the timeout.
-        const body = await response.text();
+        const body = await readBody(response, controller.signal);
 
         // A 5xx that isn't a well-formed oRPC error (an HTML page from a proxy
         // or load balancer, or truncated JSON) would otherwise surface as a

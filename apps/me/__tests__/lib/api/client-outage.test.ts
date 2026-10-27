@@ -1,3 +1,7 @@
+// @vitest-environment node
+// Server code: under jsdom, Node's AbortController throws a DOMException from a
+// different realm than the global one, which no real server would see.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isApiUnavailableError } from "@acme/shared/common/api-availability";
@@ -160,6 +164,30 @@ describe("getMyProfile during an API outage", () => {
     });
 
     expect(isApiUnavailableError(await profileError())).toBe(true);
+  });
+
+  it("times out a stalled body that ignores the abort, as Next's copied body does", async () => {
+    vi.stubEnv("F3_API_TIMEOUT_MS", "20");
+    const cancel = vi.fn();
+    fetchMock.mockImplementation(() => {
+      // Next's patched fetch tees the response, so aborting the request never
+      // errors this copy: it just stops sending.
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode('{"json":'));
+        },
+        cancel,
+      });
+      return Promise.resolve(
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+
+    expect(isApiUnavailableError(await profileError())).toBe(true);
+    expect(cancel).toHaveBeenCalled();
   });
 
   it("does not classify a 403 oRPC error as unavailable", async () => {
