@@ -111,11 +111,13 @@ person changing it see this text?** If not, the text will drift. Describe the
 rule or the reason instead of the instance, or enforce the coupling in code.
 
 - **Enumerating a set that can change** — "the other roles (`user`,
-  `password_*`)", "used by map, admin and me", "the eight required checks".
+  `password_*`)", "used by map, admin and me", "the allowed commit scopes".
   The list is complete the day it's written and wrong the day someone adds a
   member, and that person won't look here. Write the rule that defines
   membership ("roles that grant access rather than name a contact"), or point
-  to the one place the set is defined.
+  to the one place the set is defined. When that place is outside the repo
+  (a GitHub setting, a vendor console), the copy is a coupling: keep it and
+  say what must change together.
 - **Naming what a reader can look up** — a function, variable, endpoint path,
   env var, or file that go-to-definition or a search finds. Renames and moves
   don't update comments. Describe the role it plays ("the caller", "the
