@@ -6,13 +6,13 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "duckdb==1.5.6",
-    "google-cloud-storage>=3.17.0,<3.18.0",
-    "psycopg[binary]>=3.2,<4.0",
-    "pytz>=2024.1,<2027.0",
+    "google-cloud-storage==3.17.1",
+    "psycopg[binary]==3.3.5",
+    "pytz==2026.3.post1",
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.0.3,<10.0.0", "ruff==0.16.3", "mypy>=2.4.0,<2.5.0"]
+dev = ["pytest==9.1.1", "ruff==0.17.3", "mypy==2.4.0"]
 
 [project.scripts]
 analytics-etl = "analytics.cli:main"

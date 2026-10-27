@@ -337,15 +337,12 @@ EOF
 
 > To add a team or additional reviewers, repeat the `gh api` call for prod with extra objects in the `reviewers` array (`"type": "Team"`, `"id": <team_id>`).
 
-Now set the environment variables. These are `vars.*` (not secrets) — no credentials are stored in GitHub; auth happens via WIF token exchange at runtime.
+Now set the environment variable. Each environment gets its own `WIF_SA`, the service account that environment deploys as. `WIF_PROVIDER` is an organization-level variable, because every app shares one WIF provider, so it is not set per environment. These are `vars.*` (not secrets) — no credentials are stored in GitHub; auth happens via WIF token exchange at runtime.
+
+If the organization doesn't have a `WIF_PROVIDER` variable yet (for example, because the pool was just created as part of the shared infrastructure setup), an organization admin sets it to `projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/providers/github`.
 
 ```bash
-WIF_PROVIDER_VALUE="projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/providers/github"
-
-gh variable set WIF_PROVIDER --env "$GH_STAGING_ENV" --repo "$GH_REPO" --body "$WIF_PROVIDER_VALUE"
 gh variable set WIF_SA       --env "$GH_STAGING_ENV" --repo "$GH_REPO" --body "$STAGING_SA"
-
-gh variable set WIF_PROVIDER --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$WIF_PROVIDER_VALUE"
 gh variable set WIF_SA       --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$PROD_SA"
 ```
 
@@ -353,20 +350,7 @@ gh variable set WIF_SA       --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$PRO
 
 ## 8. Push App Secrets to Cloud Run
 
-Each app has its own `.env.cloud-run.example` file and a helper script that pushes env vars to Cloud Run as secrets.
-
-```bash
-# Copy the example and populate with real values
-cp "apps/${APP_NAME}/.env.cloud-run.example" "apps/${APP_NAME}/.env.cloud-run.staging"
-cp "apps/${APP_NAME}/.env.cloud-run.example" "apps/${APP_NAME}/.env.cloud-run.prod"
-
-# Edit each file with the correct environment-specific values
-# Never commit these files
-
-# Push to Cloud Run
-bash "apps/${APP_NAME}/scripts/cloud-run-env.sh" --env staging
-bash "apps/${APP_NAME}/scripts/cloud-run-env.sh" --env prod
-```
+See the app's own setup instructions for the environment variables and secrets its Cloud Run service needs, and how to set them.
 
 ---
 
@@ -404,12 +388,12 @@ In the Firebase Console for each project → **App Hosting** → select the back
 - [ ] Required APIs enabled in staging and prod projects
 - [ ] Artifact Registry repos created (staging + prod)
 - [ ] Cloud Run services created with placeholder image
-- [ ] `f3-github` WIF pool/provider exists (skip creation if already present)
+- [ ] `f3-github` WIF pool/provider exists (skip creation if already present) and the organization-level `WIF_PROVIDER` variable points at it
 - [ ] Staging SA created, IAM roles granted, WIF binding added
 - [ ] Prod SA created, IAM roles granted (including cross-project AR read on staging), WIF binding added
 - [ ] Cloud SQL IAM granted to deploy/runtime SAs if the app uses Cloud SQL
 - [ ] Storage bucket IAM granted to runtime SAs if the app uses Cloud Storage buckets or volume mounts
-- [ ] GitHub environments created and `WIF_PROVIDER`/`WIF_SA` variables set (step 7)
+- [ ] GitHub environment setup complete, with `WIF_SA` set on each environment
 - [ ] Cloud Run env vars pushed for staging and prod
 - [ ] Custom domains mapped and DNS updated
 - [ ] Firebase App Hosting disconnected (if applicable)
