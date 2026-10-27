@@ -37,7 +37,8 @@ Ground rules:
   and publish only when the user says "post". The one exception is claiming the PR with the
   assignee field (Phase 1), which the user asked for by starting the run.
 - **Reviewers suggest, authors fix.** Never push to the PR's branch, update it from the base
-  branch, or edit its description, unless the user explicitly asks for that change on this PR.
+  branch, or edit its title or description, unless the user explicitly asks for that change on
+  this PR.
   A temporary change in the sandbox to observe something (a debug log, a lowered timeout) is
   reverted before the results, and the results name it.
 - **The PR review is only about the PR.** Bugs that already existed before the PR become GitHub
@@ -62,7 +63,7 @@ The run doesn't wait for a "go" after the plan. It pauses only here, using `temp
 | When                    | Why the run pauses                                                                                                                                       |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Phase 0 / `init`        | A missing tool, Docker not running, unsupported platform, the PR's Node version not installed, or the PR isn't open. **All problems go in one message.** |
-| Phase 1, claim          | Someone else is already assigned to the PR: say who, and ask whether to continue.                                                                        |
+| Phase 1, claim          | Another reviewer (not the author) is already assigned: say who, and ask whether to continue.                                                             |
 | Phase 3, gated PRs only | A PR from a fork or from outside the team needs an explicit **"go, run it"** before any of its code runs.                                                |
 | Phase 5                 | 🙋 manual checks (only if there are any), then the proposed GitHub feedback: wait for "post", edits, or "skip".                                          |
 
@@ -110,8 +111,9 @@ from the PR's Dockerfiles, claims a free port block, and creates a detached work
 `$RUN/wt`. Keep its output: `RUN_DIR`, `PR_SHA`, `MERGE_BASE`, and `ACTIVE_RUNS`.
 
 - Exit code 5 with `NEEDS_UPDATE_BRANCH`: the PR's branch predates the repo's per-checkout
-  ports (`pnpm local:setup --slot`). Stop and ask the user to press **Update branch** on the PR,
-  then run `init` again.
+  ports (`pnpm local:setup --slot`), so it needs **Update branch** before it can be tested.
+  Stop. If the user is the PR's author, ask them to press it; otherwise ask the author to
+  (ground rules: authors fix). Then run `init` again.
 - Exit code 3 with `NODE_MISSING=<v>`: the PR needs a Node version that isn't installed. Stop
   and give the install command for the user's version manager from `reference.md` → **Node**.
   Installing is enough; the user's default version stays as it is. `NODE_UNKNOWN`: ask which
@@ -129,8 +131,8 @@ gh api user --jq .login
 ```
 
 - **The user is the PR's author** (a self-test): don't assign.
-- **Someone else is already assigned:** say who and ask whether to continue (User
-  checkpoints). Never remove another assignee.
+- **Another reviewer is already assigned** (anyone besides the user and the PR's author):
+  say who and ask whether to continue (User checkpoints). Never remove another assignee.
 - **Otherwise:** `gh pr edit <N> --add-assignee @me`. If it fails, say so in the plan and carry
   on.
 
@@ -146,7 +148,7 @@ git -C "$RUN/wt" diff --stat <MERGE_BASE> HEAD
 git -C "$RUN/wt" diff <MERGE_BASE> HEAD
 gh pr checks <N>
 # Branch currency: commits the PR is behind its base, and conflicts (exit 1 lists the files).
-# <BASE_SHA> is the sha in init's BASE= line.
+# <BASE_SHA> is the run's base commit: `jq -r .base_sha "$RUN/state.json"` (kept current by `update`).
 git -C "$RUN/wt" rev-list --count <MERGE_BASE>..<BASE_SHA>
 git -C "$RUN/wt" merge-tree --write-tree --name-only <BASE_SHA> HEAD
 # Open review conversations, for Phase 5's verdict. --paginate walks every page; one line per
@@ -437,8 +439,8 @@ issues only"). Link every filed issue in the final report.
 Report one line each for servers, containers, worktree, and ports, from the `down` output (the
 ports line comes from the earlier `down --keep-drafts`, if one ran). Add one line for the claim
 (assigned, skipped as a self-test, skipped because posting isn't available, left to the
-existing assignee, or failed), and token usage or cost only if the harness
-measured it; that line stays in the conversation.
+existing assignee, or failed). If the harness measured token usage or cost, add one line for
+it; it stays in the conversation and never goes on GitHub.
 **End the final message with the verdict line again**, for example `✅ Recommendation: Approve, with optional suggestions`, so it's the last
 thing the user reads. If testing never ran, end with `No recommendation: testing didn't run.`
 

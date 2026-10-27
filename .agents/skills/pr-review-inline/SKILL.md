@@ -95,8 +95,8 @@ account you post as (`gh api user --jq .login`):
 
 - **You are the PR's author** (a self-review): don't assign. The author already owns the PR,
   and an assignee would read as someone else having claimed it.
-- **Someone else is already assigned:** tell the user who, and ask whether to continue before
-  going further. Never remove another assignee.
+- **Another reviewer is already assigned** (anyone besides you and the PR's author): tell the
+  user who, and ask whether to continue before going further. Never remove another assignee.
 - **Otherwise:** `gh pr edit <n> --repo {owner}/{name} --add-assignee @me`. If that fails (no
   write access, or a cross-repo target), say so in the report and carry on.
 
