@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Avatar } from "@/components/ui/avatar";
+import { cn } from "@acme/ui";
+import { Avatar, AvatarFallback, AvatarImage } from "@acme/ui/avatar";
+import { Button } from "@acme/ui/button";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
-import { cn } from "@/lib/utils";
 
 interface AvatarUploadProps {
   currentUrl: string | null;
@@ -28,6 +28,10 @@ export function AvatarUpload({
   } = useAvatarUpload({ currentUrl, onUploaded });
 
   const openFilePicker = () => inputRef.current?.click();
+  const trimmedName = fallbackName?.trim();
+  const initial = (trimmedName?.length ? trimmedName : "F3")
+    .charAt(0)
+    .toUpperCase();
 
   return (
     <div className="flex items-center gap-4">
@@ -45,12 +49,16 @@ export function AvatarUpload({
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
       >
-        <Avatar
-          src={previewUrl}
-          fallback={fallbackName}
-          size="lg"
-          className={uploading ? "opacity-50" : ""}
-        />
+        <Avatar className={cn("h-20 w-20", uploading && "opacity-50")}>
+          <AvatarImage
+            src={previewUrl ?? undefined}
+            alt=""
+            className="object-cover"
+          />
+          <AvatarFallback className="bg-slate-700 text-[32px] text-white dark:bg-slate-700">
+            {initial}
+          </AvatarFallback>
+        </Avatar>
         {uploading && (
           <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
