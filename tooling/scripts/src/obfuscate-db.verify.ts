@@ -2899,7 +2899,86 @@ async function main(): Promise<void> {
       `exit ${slackRestore.status}${slackRestore.status === 0 ? "" : ` (${slackRestore.stderr.toString().trim().split("\n")[0]})`}, ${slackAfter?.spaces ?? "?"} workspace, ${slackAfter?.members ?? "?"} member(s), ${slackAfter?.links ?? "?"} link, ${slackAfter?.nulled ?? "?"} unlinked + placeholder member(s), ${slackAfter?.real ?? "?"} real email(s), ${slackAfter?.runs ?? "?"} F3versary run(s) (${slackAfter?.pending ?? "?"} still planned) / ${slackAfter?.pages ?? "?"} page(s), stash ${slackAfter?.stash ? "LEFT BEHIND" : "dropped"}`,
     );
 
-    // --- 5e. --preserve-local-seed keeps *-local OAuth clients, all three kinds --
+    // --- 5e. --preserve-local-seed keeps local identities and credentials ------
+    // Plant fresh rows: the first run already obfuscated the original seed.
+    const preserveUsers = [];
+    for (const fixture of [
+      { label: "local", email: "preserve@f3local.dev", preserve: true },
+      {
+        label: "mixed-case local",
+        email: "MixedPreserve@F3LOCAL.DEV",
+        preserve: true,
+      },
+      { label: "nonlocal", email: "preserve@example.com", preserve: false },
+      {
+        label: "suffix lookalike",
+        email: "preserve@f3local.dev.example.com",
+        preserve: false,
+      },
+      {
+        label: "subdomain lookalike",
+        email: "preserve@sub.f3local.dev",
+        preserve: false,
+      },
+    ]) {
+      const [user] = await sql<{ id: number }[]>`
+        INSERT INTO users (f3_name, first_name, last_name, email, phone,
+          avatar_url, emergency_contact, emergency_phone, emergency_notes, meta)
+        VALUES ('Preservation Fixture', 'Synthetic', 'Person', ${fixture.email},
+          '704-555-1234', 'https://example.com/avatar.png', 'Synthetic Contact',
+          '704-555-9999', 'Call profile-contact@example.com',
+          ${sql.json({ owner: fixture.email, contact: "profile-contact@example.com" })})
+        RETURNING id`;
+      if (!user) throw new Error(`Failed to plant ${fixture.label} user`);
+      await sql`
+        INSERT INTO auth.better_auth_user (id, name, email, email_verified, image,
+          created_at, updated_at)
+        VALUES (${String(user.id)}, 'Preservation Fixture', ${fixture.email.toLowerCase()},
+          true, 'https://example.com/shadow-avatar.png', now(), now())`;
+      const [request] = await sql<{ id: string }[]>`
+        INSERT INTO update_requests (region_id, event_name, request_type, submitted_by,
+          reviewed_by, event_contact_email, location_contact_email)
+        VALUES (${linkOrg.id}, 'Preservation Fixture', 'create_event', ${fixture.email},
+          ${fixture.email}, ${fixture.email}, ${fixture.email})
+        RETURNING id`;
+      if (!request) throw new Error(`Failed to plant ${fixture.label} contact`);
+      const [org] = await sql<{ id: number }[]>`
+        INSERT INTO orgs (parent_id, name, is_active, org_type, email)
+        VALUES (${linkOrg.id}, 'Preservation Fixture', true, 'ao', ${fixture.email})
+        RETURNING id`;
+      if (!org)
+        throw new Error(`Failed to plant ${fixture.label} organization`);
+      preserveUsers.push({
+        ...fixture,
+        id: user.id,
+        requestId: request.id,
+        orgId: org.id,
+      });
+    }
+
+    const [preserveRole] = await sql<{ id: number }[]>`
+      SELECT id FROM roles WHERE name = 'editor' ORDER BY id LIMIT 1`;
+    if (!preserveRole) throw new Error("Seed data missing the editor role");
+    const preserveKeys = [];
+    for (const fixture of [
+      { label: "local", key: "local-preserve-fixture", preserve: true },
+      { label: "nonlocal", key: "external-fixture", preserve: false },
+      { label: "prefix lookalike", key: "not-local-fixture", preserve: false },
+      { label: "case lookalike", key: "Local-fixture", preserve: false },
+      { label: "hyphenless lookalike", key: "localfixture", preserve: false },
+    ]) {
+      const [key] = await sql<{ id: number }[]>`
+        INSERT INTO api_keys (key, name, owner_id)
+        VALUES (${fixture.key}, 'Preservation Fixture', ${userId}) RETURNING id`;
+      if (!key) throw new Error(`Failed to plant ${fixture.label} API key`);
+      const [grant] = await sql<{ api_key_id: number }[]>`
+        INSERT INTO roles_x_api_keys_x_org (role_id, api_key_id, org_id)
+        VALUES (${preserveRole.id}, ${key.id}, ${linkOrg.id}) RETURNING api_key_id`;
+      if (!grant)
+        throw new Error(`Failed to plant ${fixture.label} API key grant`);
+      preserveKeys.push({ ...fixture, id: key.id });
+    }
+
     // Legacy singular auth.oauth_client exists only on prod; create it as prod
     // has it (its columns are in the reviewed snapshot). Run last: it re-runs
     // the obfuscator over this already-obfuscated sandbox.
@@ -2938,6 +3017,131 @@ async function main(): Promise<void> {
       ],
       { cwd: repoRoot, env: { ...process.env, ...childEnv }, stdio: "pipe" },
     );
+    for (const fixture of preserveUsers) {
+      const [user] = await sql<
+        {
+          email: string;
+          f3_name: string;
+          first_name: string;
+          last_name: string;
+          phone_faked: boolean;
+          sensitive_cleared: boolean;
+          meta_owner: string | null;
+          meta_contact: string | null;
+        }[]
+      >`
+        SELECT email, f3_name, first_name, last_name,
+          phone ~ '^555-[2-9][0-9]{2}-[0-9]{4}$' AS phone_faked,
+          avatar_url IS NULL AND emergency_contact IS NULL
+            AND emergency_phone IS NULL AND emergency_notes IS NULL AS sensitive_cleared,
+          meta->>'owner' AS meta_owner, meta->>'contact' AS meta_contact
+        FROM users WHERE id = ${fixture.id}`;
+      const expectedEmail = fixture.preserve
+        ? fixture.email
+        : `${SINK_PREFIX}${fixture.id}${SINK_SUFFIX}`;
+      const identityOk =
+        !!user &&
+        user.email === expectedEmail &&
+        user.f3_name ===
+          (fixture.preserve ? "Preservation Fixture" : `F3 ${fixture.id}`) &&
+        user.first_name ===
+          (fixture.preserve ? "Synthetic" : `First ${fixture.id}`) &&
+        user.last_name === (fixture.preserve ? "Person" : `Last ${fixture.id}`);
+      check(
+        `--preserve-local-seed ${fixture.label} user identity`,
+        preserveRun.status === 0 && identityOk,
+        `exit ${preserveRun.status}; row ${user ? "present" : "missing"}, expected identity ${identityOk ? "matched" : "NOT matched"}`,
+      );
+      const profileOk =
+        user?.phone_faked === true &&
+        user.sensitive_cleared &&
+        user.meta_owner === expectedEmail &&
+        !!user.meta_contact &&
+        isSinkAddress(user.meta_contact);
+      check(
+        `--preserve-local-seed ${fixture.label} profile still scrubbed`,
+        preserveRun.status === 0 && profileOk,
+        `exit ${preserveRun.status}; phone faked: ${user?.phone_faked === true}, sensitive fields cleared: ${user?.sensitive_cleared === true}, metadata scrubbed: ${user?.meta_owner === expectedEmail && !!user.meta_contact && isSinkAddress(user.meta_contact)}`,
+      );
+      const [shadow] = await sql<
+        {
+          id: string;
+          f3_user_id: number;
+          email: string;
+          name: string;
+          image: string | null;
+        }[]
+      >`
+        SELECT id, f3_user_id, email, name, image
+        FROM auth.better_auth_user WHERE id = ${String(fixture.id)}`;
+      const shadowIdentityOk =
+        !!shadow &&
+        shadow.id === String(fixture.id) &&
+        shadow.f3_user_id === fixture.id &&
+        shadow.email ===
+          (fixture.preserve ? fixture.email.toLowerCase() : expectedEmail);
+      check(
+        `--preserve-local-seed ${fixture.label} login identity`,
+        preserveRun.status === 0 && shadowIdentityOk,
+        `exit ${preserveRun.status}; row ${shadow ? "present" : "missing"}, expected identity ${shadowIdentityOk ? "matched" : "NOT matched"}`,
+      );
+      const shadowProfileOk =
+        !!shadow && shadow.name === `F3 ${fixture.id}` && shadow.image === null;
+      check(
+        `--preserve-local-seed ${fixture.label} login profile scrubbed`,
+        preserveRun.status === 0 && shadowProfileOk,
+        `exit ${preserveRun.status}; row ${shadow ? "present" : "missing"}, expected profile ${shadowProfileOk ? "matched" : "NOT matched"}`,
+      );
+      const [request] = await sql<
+        {
+          submitted_by: string;
+          reviewed_by: string | null;
+          event_contact_email: string | null;
+          location_contact_email: string | null;
+        }[]
+      >`
+        SELECT submitted_by, reviewed_by, event_contact_email, location_contact_email
+        FROM update_requests WHERE id = ${fixture.requestId}`;
+      for (const column of [
+        "submitted_by",
+        "reviewed_by",
+        "event_contact_email",
+        "location_contact_email",
+      ] as const) {
+        const contactOk = !!request && request[column] === expectedEmail;
+        check(
+          `--preserve-local-seed ${fixture.label} ${column} allowlist`,
+          preserveRun.status === 0 && contactOk,
+          `exit ${preserveRun.status}; row ${request ? "present" : "missing"}, expected contact ${contactOk ? "matched" : "NOT matched"}`,
+        );
+      }
+      const [org] = await sql<{ email: string }[]>`
+        SELECT email FROM orgs WHERE id = ${fixture.orgId}`;
+      check(
+        `--preserve-local-seed ${fixture.label} organization email allowlist`,
+        preserveRun.status === 0 && org?.email === expectedEmail,
+        `exit ${preserveRun.status}; row ${org ? "present" : "missing"}, expected email ${org?.email === expectedEmail ? "matched" : "NOT matched"}`,
+      );
+    }
+    for (const fixture of preserveKeys) {
+      const [key] = await sql<{ key: string; owner_id: number }[]>`
+        SELECT key, owner_id FROM api_keys WHERE id = ${fixture.id}`;
+      const grants = await sql<{ role_id: number; org_id: number }[]>`
+        SELECT role_id, org_id FROM roles_x_api_keys_x_org WHERE api_key_id = ${fixture.id}`;
+      const keyOk = fixture.preserve
+        ? key?.key === fixture.key && key.owner_id === userId
+        : key === undefined;
+      const grantsOk = fixture.preserve
+        ? grants.length === 1 &&
+          grants[0]?.role_id === preserveRole.id &&
+          grants[0].org_id === linkOrg.id
+        : grants.length === 0;
+      check(
+        `--preserve-local-seed ${fixture.label} API key and grants`,
+        preserveRun.status === 0 && keyOk && grantsOk,
+        `exit ${preserveRun.status}; key ${key ? "present" : "absent"}, ${grants.length} grant(s); expected key/grants ${keyOk && grantsOk ? "matched" : "NOT matched"}`,
+      );
+    }
     const secrets = new Map(
       (
         await sql<{ k: string; s: string | null }[]>`
