@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 
+import { TableSkeleton } from "@acme/ui/page-skeleton";
+
 import Layout from "../../admin-layout";
 import { ManageAccessButton } from "../[id]/manage-access-button";
 import { MyUsersTable } from "./my-users-table";
@@ -20,7 +22,7 @@ const MyUsersPage = async () => {
             <ManageAccessButton />
           </div>
         </div>
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<TableSkeleton />}>
           <div className="flex w-full flex-col overflow-hidden">
             <MyUsersTable />
           </div>

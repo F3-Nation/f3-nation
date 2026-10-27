@@ -1,7 +1,7 @@
 {
   "name": "f3-me",
   "type": "module",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "private": true,
   "scripts": {
     "dev": "next dev --port ${F3_ME_PORT:-3003}",
@@ -19,6 +19,7 @@
   "dependencies": {
     "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
+    "@acme/observability": "workspace:*",
     "@acme/security-headers": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/storage": "workspace:*",
@@ -28,12 +29,10 @@
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
-    "clsx": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "server-only": "catalog:",
-    "tailwind-merge": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

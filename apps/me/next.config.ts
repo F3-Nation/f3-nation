@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   headers: nextSecurityHeaders({ frame: "deny" }),
-  transpilePackages: ["@acme/logger"],
+  transpilePackages: ["@acme/logger", "@acme/observability"],
   // pino-pretty relies on worker threads (thread-stream); keep pino external so
   // Next.js does not try to bundle it.
   serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],

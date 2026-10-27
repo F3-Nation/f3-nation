@@ -48,6 +48,7 @@ export async function setup(): Promise<void> {
   // import time; workers fork from this process, so it must be set here and
   // not in a setupFile.
   process.env.NEXT_PUBLIC_AUTH_URL = `http://127.0.0.1:${address.port}`;
+  process.env.AUTH_TRUSTED_ISSUERS = process.env.NEXT_PUBLIC_AUTH_URL;
   // Pin the API base so the `/` redirect target and the OpenAPI servers[0].url
   // are identical across developers and targets instead of leaking a per-dev
   // NEXT_PUBLIC_API_URL from apps/api/.env into goldens.

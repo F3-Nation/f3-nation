@@ -1,0 +1,17 @@
+{
+  "src/md-table.tsx": {
+    "react-hooks/refs": {
+      "count": 20
+    }
+  },
+  "src/server-md-table.tsx": {
+    "react-hooks/refs": {
+      "count": 20
+    }
+  },
+  "src/virtualized-combobox.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  }
+}
