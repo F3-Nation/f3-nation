@@ -151,6 +151,19 @@ def test_off_sends_nothing(monkeypatch):
     run(monkeypatch, [fng_created_days_ago(3)], fng_reminder_days=0).assert_not_called()
 
 
+@pytest.mark.parametrize("created, included", [((10, 9, 0), True), ((10, 0, 0), True), ((9, 23, 0), False)])
+def test_last_catch_up_day_is_a_whole_central_day(monkeypatch, created, included):
+    # Every 3 days: last due on day 9, retried through day 16 (Oct 26 is day 16 for anything created Oct 10).
+    day, hour, minute = created
+    central = pytz.timezone("US/Central")
+    created_utc = central.localize(datetime(2026, 10, day, hour, minute)).astimezone(pytz.utc).replace(tzinfo=None)
+
+    run(monkeypatch, [])
+
+    cutoff = fng_reminders.DbManager.find_records.call_args.kwargs["filters"][1].right.value
+    assert (created_utc >= cutoff) is included
+
+
 def test_no_reminder_once_he_joined(monkeypatch):
     run(monkeypatch, [fng_created_days_ago(3)], joined=True).assert_not_called()
 

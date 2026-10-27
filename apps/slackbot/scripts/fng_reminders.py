@@ -4,7 +4,7 @@ import html
 import logging
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 import pytz
 from f3_data_models.models import Org_x_SlackSpace, SlackSpace, SlackUser, User
@@ -66,7 +66,11 @@ def _remind_space(space: SlackSpace, org_x_space: Org_x_SlackSpace, now: datetim
     if not interval or not settings.bot_token:
         return 0
     # Reminders are due on day N, 2N and 3N after /fng created him, plus the catch-up window for a failed one.
-    cutoff = datetime.now(pytz.utc).replace(tzinfo=None) - timedelta(days=interval * MAX_REMINDERS + CATCH_UP_DAYS)
+    # Counted in Central calendar days, like `days` below, so the last catch-up day is whole whatever time he was
+    # created.
+    cutoff_day = now.date() - timedelta(days=interval * MAX_REMINDERS + CATCH_UP_DAYS)
+    central = pytz.timezone("US/Central")
+    cutoff = central.localize(datetime.combine(cutoff_day, time.min)).astimezone(pytz.utc).replace(tzinfo=None)
     fngs = DbManager.find_records(User, filters=[User.home_region_id == org_x_space.org_id, User.created >= cutoff])
     client = WebClient(token=settings.bot_token)
     sent = 0
