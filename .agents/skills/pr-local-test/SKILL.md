@@ -164,7 +164,8 @@ gh api graphql --paginate -F n=<N> -F o='{owner}' -F r='{repo}' -f query='
 Record `BEHIND`, any conflicting files, and `OPEN_THREADS`. If the thread query fails,
 `OPEN_THREADS` is unknown, and an unknown count caps the verdict the same way an open one does.
 `merge-tree` exits 1 when there are conflicts: that's a result, so record it and carry on; any
-other non-zero exit means the conflict state is unknown. On git older than 2.38, use
+other non-zero exit means the conflict state is unknown. The file list is best effort and can
+be empty on exit 1; report it as conflicting anyway. On git older than 2.38, use
 `gh pr view <N> --json mergeable` for conflicts instead. Being behind doesn't stop the run: test
 the PR as it is, and don't update its branch (ground rules).
 
