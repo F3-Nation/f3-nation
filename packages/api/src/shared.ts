@@ -1,7 +1,7 @@
 import { MemoryRatelimiter } from "@orpc/experimental-ratelimit/memory";
 import { ORPCError, os } from "@orpc/server";
 import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 
 import type { Session } from "@acme/auth";
 import { getSessionFromHeaders } from "@acme/auth";
@@ -15,6 +15,7 @@ import { Client, Header } from "@acme/shared/common/enums";
 
 import { jwksFetchFailure } from "./jwks-failure";
 import { logError, logWarn } from "./logger";
+import { trustedIssuers } from "./trusted-issuers";
 
 type BaseContext = RequestHeadersPluginContext;
 
@@ -55,15 +56,31 @@ const RATE_LIMIT_MAX_REQUESTS = isDevelopment ? 10000 : 500;
 // app-server clock skew and cross-check inconsistencies.
 const DB_NOW = sql`timezone('utc'::text, now())`;
 
-// The auth server's base URL (e.g. https://auth.f3nation.com).
-// Read from process.env to avoid t3-env client/server type mismatch.
-const authIssuer = process.env.NEXT_PUBLIC_AUTH_URL ?? null;
+// The auth servers whose access tokens are accepted: AUTH_TRUSTED_ISSUERS
+// (e.g. auth2 and auth3 during the Better Auth cutover). See
+// ./trusted-issuers. Read from process.env to avoid t3-env client/server
+// type mismatch.
+const authIssuers = trustedIssuers(process.env.AUTH_TRUSTED_ISSUERS);
+// An empty list rejects every bearer JWT, which in practice shows up only as
+// API-key 401s (e.g. a local apps/api/.env from before this variable), so
+// say so once at startup. A warning, not a throw: tests and API-key-only
+// setups run without it.
+if (authIssuers.length === 0) {
+  logWarn("api.auth.no_trusted_issuers", {
+    message:
+      "AUTH_TRUSTED_ISSUERS is empty, so no bearer JWT will be accepted. Set it to the auth server origin(s), e.g. http://localhost:3004 locally.",
+  });
+}
 
-// Cached JWKS fetcher for f3-nation-auth JWT verification.
-// jose caches the key set automatically after the first fetch.
-const authJwks = authIssuer
-  ? createRemoteJWKSet(new URL(`${authIssuer}/.well-known/jwks.json`))
-  : null;
+// Cached JWKS fetcher per trusted issuer for JWT verification, keyed by the
+// exact issuer string a token's `iss` must equal. jose caches each key set
+// automatically after its first fetch.
+const authJwksByIssuer = new Map(
+  authIssuers.map((issuer) => [
+    issuer,
+    createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`)),
+  ]),
+);
 
 const limiter = new MemoryRatelimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
@@ -361,18 +378,46 @@ const getSession = async ({ context }: { context: BaseContext }) => {
 
 /**
  * Resolve a session from an f3-nation-auth RS256 JWT access token.
- * Verifies the token signature via remote JWKS, then fetches the user's
- * roles from roles_x_users_x_org.
- * Returns null if JWKS is not configured, or the token is invalid/expired.
+ * Verifies the token signature via the remote JWKS of the trusted issuer it
+ * names, then fetches the user's roles from roles_x_users_x_org.
+ * Returns null if no issuer is configured, the token names an issuer that
+ * isn't trusted, or the token is invalid/expired.
  */
 async function getSessionFromJWT(token: string): Promise<Session | null> {
-  if (!authJwks) return null;
+  if (authJwksByIssuer.size === 0) return null;
+
+  // The unverified `iss` only picks which pre-configured key set to verify
+  // against; jwtVerify below then requires that same issuer. An issuer that
+  // isn't on the list is rejected here, before any key set is fetched, so a
+  // token can't make this service fetch keys from a URL it chose.
+  let claimedIssuer: unknown;
+  try {
+    claimedIssuer = decodeJwt(token).iss;
+  } catch {
+    // Not a JWT (e.g. an API key, which is tried here first) — expected.
+    return null;
+  }
+  // decodeJwt doesn't check claim types, so a non-string `iss` is possible.
+  const issuer = typeof claimedIssuer === "string" ? claimedIssuer : undefined;
+  const authJwks = issuer ? authJwksByIssuer.get(issuer) : undefined;
+  if (!issuer || !authJwks) {
+    // A well-formed JWT from an issuer that isn't trusted. During an issuer
+    // cutover this usually means the trusted list is misconfigured, so it is
+    // logged rather than disappearing into the API-key fallback's 401.
+    logWarn("api.auth.issuer_not_trusted", {
+      issuer: issuer?.slice(0, 200) ?? null,
+    });
+    return null;
+  }
 
   let payload;
   try {
     const result = await jwtVerify(token, authJwks, {
-      issuer: authIssuer ?? undefined,
+      issuer,
       algorithms: ["RS256"],
+      // jose only checks exp when it's present; both auth servers always set
+      // it, so a token without one is never legitimate.
+      requiredClaims: ["exp"],
     });
     payload = result.payload;
   } catch (err) {
@@ -382,7 +427,7 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
     // reported rather than disappearing into 401s.
     const reason = jwksFetchFailure(err);
     if (reason) {
-      logError("api.auth.jwks_unavailable", { reason }, err);
+      logError("api.auth.jwks_unavailable", { issuer, reason }, err);
     }
     return null;
   }
