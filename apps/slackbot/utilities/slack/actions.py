@@ -185,6 +185,7 @@ WELCOME_DM_TEMPLATE = "welcome-dm-template"
 WELCOME_DM_ENABLE = "welcome_dm_enable"
 WELCOME_CHANNEL_ENABLE = "welcome_channel_enable"
 WELCOME_CHANNEL = "welcome_channel"
+WELCOME_FNG_REMINDER_DAYS = "fng_reminder_days"
 
 STRAVA_CONNECT_BUTTON = "strava-connect"
 STRAVA_ACTIVITY_BUTTON = "strava-activity"

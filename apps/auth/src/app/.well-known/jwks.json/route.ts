@@ -1,12 +1,68 @@
 import { NextResponse } from "next/server";
+import type { JWK } from "jose";
 
+import { getAuth } from "~/lib/better-auth";
 import { getJWKS } from "~/lib/jwt";
+import { logError } from "~/lib/logging";
+import { env } from "~/env";
 
+/**
+ * Relying parties fetch keys from the origin root (packages/sso resolves
+ * "/.well-known/jwks.json" against the auth URL; packages/api appends it),
+ * never from Better Auth's own /api/auth2/jwks. So with the flag on, this
+ * also serves Better Auth's keys, next to the hand-rolled f3-auth-1 key that
+ * /api/oauth/* still signs with. Their kids never collide: Better Auth's are
+ * generated ids.
+ *
+ * auth3 and auth2 share the f3-auth-1 key (same secret), so this document is
+ * only safe because every verifier pins `iss` exactly (packages/sso and
+ * packages/api). Don't loosen those issuer checks.
+ */
 export async function GET() {
-  const jwks = await getJWKS();
-  return NextResponse.json(jwks, {
-    headers: {
-      "Cache-Control": "public, max-age=3600",
-    },
-  });
+  // A bad or missing AUTH_JWT_PRIVATE_KEY fails the whole endpoint on
+  // purpose: serving only Better Auth's keys would make every /api/oauth/*
+  // token look invalid to relying parties. A 5xx is the right signal, it
+  // just needs an event.
+  let legacy: Awaited<ReturnType<typeof getJWKS>>;
+  try {
+    legacy = await getJWKS();
+  } catch (err) {
+    logError("auth.jwks.legacy_key_failed", {}, err);
+    return unavailable();
+  }
+  if (!env.AUTH_USE_BETTER_AUTH) return jwksResponse(legacy.keys);
+
+  // Better Auth's keys live in the database. With the flag on, Better Auth
+  // signs every token this app issues, so a list without its keys verifies
+  // nothing new: answer 503 like the legacy failure above instead of a
+  // partial set. A failure to construct the instance (e.g. BETTER_AUTH_SECRET
+  // unset) is a misconfiguration, not a read blip, so it gets its own event.
+  let auth: Awaited<ReturnType<typeof getAuth>>;
+  try {
+    auth = await getAuth();
+  } catch (err) {
+    logError("auth.jwks.better_auth_instance_failed", {}, err);
+    return unavailable();
+  }
+  try {
+    const betterAuth = await auth.api.getJwks();
+    return jwksResponse([...legacy.keys, ...betterAuth.keys]);
+  } catch (err) {
+    logError("auth.jwks.better_auth_keys_failed", {}, err);
+    return unavailable();
+  }
+}
+
+function jwksResponse(keys: JWK[]) {
+  return NextResponse.json(
+    { keys },
+    { headers: { "Cache-Control": "public, max-age=3600" } },
+  );
+}
+
+function unavailable() {
+  return NextResponse.json(
+    { error: "jwks_unavailable" },
+    { status: 503, headers: { "Cache-Control": "no-store" } },
+  );
 }
