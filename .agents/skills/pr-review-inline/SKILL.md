@@ -21,7 +21,7 @@ Conventions:
 - **Every comment serves two readers.** A plain-language explanation for a human who may not
   read the code, then a `## For the coding agent` section with a self-contained spec an AI agent
   can execute without any other context.
-- **Follow the repo's `github` skill** for pre-flight, attribution, and safety rules (Step 1).
+- **Follow the repo's [GitHub write rules](../../../AGENTS.md#writing-to-github)** for pre-flight, signature, and thread handling (Step 1).
 - **Verify against the PR head SHA**, not the local working tree.
 - **The diff is the source of truth for what the PR does.** The report leads with a summary
   derived from the code, written before the title and description are read (Steps 3–4).
@@ -44,20 +44,12 @@ Check these before Step 1 and report everything missing in one message.
 
 ## Step 1 — Resolve the target PR and capture the head SHA
 
-**Repo GitHub policy first, before any `gh` call.** Read `.agents/skills/github/SKILL.md` and
-adopt its mandatory directives (attribution signature, safety rules) for the rest of this skill.
-Run its pre-flight: read-only for `--dry-run`, with write access otherwise. If it fails, stop
+**Repo GitHub policy first, before any `gh` call.** Follow the repo's
+[GitHub write rules](../../../AGENTS.md#writing-to-github) (signature, never resolving threads) for the rest of
+this skill. Run the pre-flight: read-only for `--dry-run`, with write access otherwise. If it fails, stop
 here — the review would be wasted work if the comments can't be posted. For a cross-repo target
-(below), resolve `OWNER` and `REPO` from the PR URL first and prefix it with `GH_REPO`, so it
-checks the target, not this checkout.
-
-```bash
-bash .agents/skills/github/scripts/gh-check.sh                    # --dry-run
-bash .agents/skills/github/scripts/gh-check.sh --require-write    # otherwise
-# Cross-repo target:
-GH_REPO="$OWNER/$REPO" bash .agents/skills/github/scripts/gh-check.sh                  # --dry-run
-GH_REPO="$OWNER/$REPO" bash .agents/skills/github/scripts/gh-check.sh --require-write  # otherwise
-```
+(below), resolve `OWNER` and `REPO` from the PR URL first and run it with `GH_REPO="$OWNER/$REPO"`,
+so it checks the target, not this checkout.
 
 ```bash
 # Repo context
@@ -381,7 +373,7 @@ review-summary comment, and do not use `POST .../reviews` with a body.
 
 **Clean review:** if no finding survives, post exactly one conversation comment instead, so
 the author and `scripts/pr-triage.sh` can see the review happened. Use this body, with the
-`github` skill's signature as the last line (`--dry-run`: show it as a draft instead):
+repo's signature as the last line (`--dry-run`: show it as a draft instead):
 
 ```markdown
 **pr-review-inline found no issues** at commit `<HEAD_SHA>`.
@@ -432,7 +424,7 @@ with a quoted heredoc (`<<'BODY'`) so nothing expands. Issue the calls as **plai
 commands, not a shell function** (see Harness notes).
 
 **Comment body format** (this exact shape — dual audience; the signature line is the one the
-repo's `github` skill requires):
+repo's GitHub write rules require):
 
 ````markdown
 **🔴 Critical** · code-reviewer
@@ -498,7 +490,7 @@ plus one verification line. Never omit a section, so every comment has the same 
 
 - Just above the signature, on its own line, add the hidden marker `<!-- pr-review-inline -->`.
   GitHub doesn't render it; `--rereview` and triage tooling use it to find this skill's comments.
-- End with the `github` skill's signature, exactly once, as the last line.
+- End with the repo's signature, exactly once, as the last line.
 
 **Line-not-in-diff (HTTP 422):** GitHub rejects comments on lines outside the PR diff. If a post
 returns 422, retry on the nearest changed line in that file; if that also fails, skip the finding

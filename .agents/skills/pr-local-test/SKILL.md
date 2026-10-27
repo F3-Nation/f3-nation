@@ -98,9 +98,9 @@ The user can interrupt at any point; treat "stop" or "abort" as an exit, which m
    - Tools: `git`, `gh` (`gh auth status`), `jq`, `curl`, `openssl`, `docker`, and `lsof`
      (or `ss` on Linux). Install hints are in `reference.md`.
    - Docker running: `docker info` (fixes in `reference.md`).
-   - GitHub access, through the repo `github` skill's pre-flight:
-     `bash <repo root>/.agents/skills/github/scripts/gh-check.sh`. A failure here is a stop.
-     Then run it again with `--require-write`; if only that fails, it isn't a stop: set
+   - GitHub access, through the repo's
+     [read pre-flight](../../../AGENTS.md#writing-to-github), run from `<repo root>`. A failure
+     here is a stop. Then run the write pre-flight; if only that fails, it isn't a stop: set
      `CAN_POST=false`, and the plan says feedback is drafted but not posted.
 
 ## Phase 1 — Create the sandbox
@@ -365,8 +365,8 @@ When the user's 🙋 results arrive, work out the verdict again and show it agai
   **How this was checked** line: which tools ran the checks (browser automation, HTTP, database,
   the PR's own tests), any temporary sandbox change and that it was reverted, and what was
   blocked or skipped and why. Never put token or cost numbers on GitHub.
-- **Signature:** the one required by the repo's `github` skill (`.agents/skills/github/SKILL.md`:
-  `_written by <model name>_` as the last line). It ends `summary.md` and every issue body.
+- **Signature:** the one required by the repo's [GitHub write rules](../../../AGENTS.md#writing-to-github)
+  (`_written by <model name>_` as the last line). It ends `summary.md` and every issue body.
 - **Hidden marker:** the line just above the signature in `summary.md` is
   `<!-- pr-local-test -->`, so the signature stays the last line. GitHub doesn't render it; triage tooling uses it to tell this
   skill's review apart from pr-review-inline's comments, which share the signature.
@@ -396,8 +396,8 @@ When the user's 🙋 results arrive, work out the verdict again and show it agai
 ## Phase 6 — Post (only after "post")
 
 Run this phase's `gh` commands from `<repo root>`: `down --keep-drafts` has already removed
-`$RUN/wt`, and `gh` needs a checkout to find the repo. First run the write pre-flight,
-`bash <repo root>/.agents/skills/github/scripts/gh-check.sh --require-write`; if it fails, hand
+`$RUN/wt`, and `gh` needs a checkout to find the repo. First run the write pre-flight
+from `<repo root>`; if it fails, hand
 the user the drafted text instead of posting.
 
 Before posting, compare `gh pr view <N> --json headRefOid` with the run's `tested_sha`
