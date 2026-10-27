@@ -200,8 +200,10 @@ machine or in CI, or change what our own agents do:
 
 - `package.json` scripts (`preinstall`, `postinstall`, `prepare`, and anything `dev`, `build`,
   or `test` now runs), and new or changed dependencies
-- lockfile changes that `package.json` doesn't explain (a new package, source, or resolved URL
-  with no matching `package.json` edit)
+- lockfile changes (`pnpm-lock.yaml`, `uv.lock`) that `package.json` or `pyproject.toml`
+  doesn't explain (a new package, source, or resolved URL with no matching edit)
+- `pnpm-workspace.yaml` (`allowBuilds`, `overrides`, catalogs) and `pyproject.toml`, which can
+  change what installs and which install scripts run
 - `.github/workflows/` and `.github/actions/`, especially new triggers, secrets, or
   `pull_request_target`
 - `AGENTS.md`, `CLAUDE.md`, `.agents/skills/`, `.github/copilot-instructions.md`, and other
@@ -295,9 +297,9 @@ finding postable.
   <one line per existing comment from Step 5: path:line — concern>
 - Skip Strengths and Recommendations; Issues, Declined to judge, and the Assessment are used.
 - Focus areas from the user, if any: <aspects>.
-- Gated PRs only: this PR comes from outside the team. Give security (priority 2) extra
-  attention, and report anything in the changed lines that runs at install, build, test, or CI
-  time, or that changes agent instructions.
+- Gated PRs only: this PR is gated (<reason: fork, author association, or failed lookup>).
+  Give security (priority 2) extra attention, and report anything in the changed lines that
+  runs at install, build, test, or CI time, or that changes agent instructions.
 ```
 
 **Size the review** by Step 3's changed-line count, ignoring mechanical changes:

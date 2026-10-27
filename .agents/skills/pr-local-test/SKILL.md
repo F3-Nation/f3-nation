@@ -168,7 +168,8 @@ Record `BEHIND`, any conflicting files, and `OPEN_THREADS`. If the thread query 
 `merge-tree` exits 1 when there are conflicts: that's a result, so record it and carry on; any
 other non-zero exit means the conflict state is unknown. The file list is best effort and can
 be empty on exit 1; report it as conflicting anyway. On git older than 2.38, use
-`gh pr view <N> --json mergeable` for conflicts instead. Being behind doesn't stop the run: test
+`gh pr view <N> --json mergeable` for conflicts instead; `UNKNOWN` there means conflict status
+is unknown, the same as an unexpected `merge-tree` exit. Being behind doesn't stop the run: test
 the PR as it is, and don't update its branch (ground rules).
 
 Build an inventory:
@@ -327,7 +328,7 @@ first row whose condition is true:
 | ⏸️ **Can't recommend yet**                | A check of the PR's main purpose was skipped or blocked (a stop rule, or a 🙋 check still pending)                                       |
 | ❌ **Don't approve yet**                  | Any 🔴 or 🟠 problem caused by this PR; a check of the PR's main purpose failed; or the description claims something the code doesn't do |
 | ⏸️ **Can't recommend yet**                | Review conversations are still open on the PR (`OPEN_THREADS` above 0, or unknown), so the code may still change                         |
-| ⏸️ **Can't recommend yet**                | Conflict status is unknown (`merge-tree` exited with something other than 0 or 1), so the branch may conflict with its base              |
+| ⏸️ **Can't recommend yet**                | Conflict status is unknown (`merge-tree` exited other than 0 or 1, or `mergeable` is `UNKNOWN`)                                          |
 | ✅ **Approve, with optional suggestions** | Every proposed inline comment is 🟡: a small fix the PR works fine without                                                               |
 | ✅ **Approve**                            | Nothing to post but the summary                                                                                                          |
 
@@ -335,11 +336,12 @@ Under the verdict, add one plain sentence explaining it. For ❌ and ⏸️, add
 the verdict (for open conversations: "Resolve the <OPEN_THREADS> open review conversations,
 then re-test."; if the count is unknown: "Couldn't check for open review conversations; re-run
 once GitHub answers."; if conflict status is unknown: "Couldn't check for conflicts; re-run once
-git can answer."). If the PR is behind its base or has conflicts, add one more line:
+git or GitHub can answer."). If the PR is behind its base or has conflicts, add one more line:
 "<BEHIND> commits behind <base>; conflicts in <files>; this result is for the tested commit, so
-update the branch before merging." Drop the conflicts clause when there are none. Never call
-the PR ready to merge while it is behind or conflicting. Problems "not caused by this PR" never
-change the verdict. ➖ rows count as passed when their tests pass.
+update the branch before merging." If the conflict file list is empty, write "conflicts in
+files git didn't name" instead. Drop the conflicts clause only when there are no conflicts.
+Never call the PR ready to merge while it is behind or conflicting. Problems "not caused by
+this PR" never change the verdict. ➖ rows count as passed when their tests pass.
 When the user's 🙋 results arrive, work out the verdict again and show it again.
 
 **Draft feedback (don't post yet):**
