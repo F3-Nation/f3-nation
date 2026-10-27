@@ -134,12 +134,34 @@ def _show_emergency_info_modal(
         accessing_user_name = safe_get(body, "user", "name") or safe_get(body, "user", "username") or "Unknown"
 
     notification_submitted = _notify_user_of_access(user, accessing_user_name, is_local, accessing_region_name)
+    if not notification_submitted:
+        reason = "no_email" if not user.email else "send_unconfirmed"
+        logger.warning(
+            "slackbot.emergency.access_notification_unconfirmed "
+            "reason=%s accessed_user_id=%s region_org_id=%s is_local=%s",
+            reason,
+            user.id,
+            region_record.org_id,
+            is_local,
+            extra={
+                "json_fields": {
+                    "event": "slackbot.emergency.access_notification_unconfirmed",
+                    "reason": reason,
+                    "accessed_user_id": user.id,
+                    "region_org_id": region_record.org_id,
+                    "is_local": is_local,
+                }
+            },
+        )
     if not user.email:
         notification_status = ":warning: No email notification was sent because this user has no email address on file."
     elif notification_submitted:
-        notification_status = ":warning: An email notification about this access was submitted for delivery."
+        notification_status = ":email: An email notification about this access was submitted for delivery."
     else:
-        notification_status = ":warning: Email notification about this access could not be confirmed."
+        notification_status = (
+            ":x: The email notification about this access may not have been sent. "
+            "Please let the member or your region leadership know you viewed their emergency info."
+        )
 
     blocks = [
         HeaderBlock(label=f"Emergency Info for {user.f3_name or 'Unknown'}").as_form_field(),
@@ -196,7 +218,13 @@ def _show_emergency_info_modal(
 
 
 def _notify_user_of_access(user: User, accessing_user_name: str, is_local: bool, accessing_region_name: str) -> bool:
-    """Attempt to email the user about access; report submission without guaranteeing delivery."""
+    """Attempt to email the user that their emergency info was accessed.
+
+    Return True when SMTP submission and cleanup finish without reported errors.
+    Return False for no email address or an unsuccessful attempt, including
+    partial refusal or cleanup failure after acceptance. Neither result proves
+    final inbox delivery.
+    """
     if not user.email:
         return False
 

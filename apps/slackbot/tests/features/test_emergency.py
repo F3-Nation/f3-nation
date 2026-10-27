@@ -1,9 +1,12 @@
+import json
+import logging
 import os
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from google.cloud.logging_v2.handlers import StructuredLogHandler
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -14,6 +17,7 @@ from utilities import sendmail
 @pytest.fixture
 def user():
     return SimpleNamespace(
+        id=42,
         email="emergency-test@example.invalid",
         f3_name="Synthetic PAX",
         emergency_contact="Synthetic Contact",
@@ -23,11 +27,57 @@ def user():
     )
 
 
-def test_unconfigured_transport_reports_no_submission(monkeypatch, user):
-    monkeypatch.delenv("SENDGRID_API_KEY", raising=False)
+def test_unconfigured_transport_keeps_emergency_details_and_reports_unconfirmed_notification(monkeypatch, user, caplog):
     monkeypatch.delenv("EMAIL_SERVER", raising=False)
+    smtp = MagicMock(side_effect=AssertionError("SMTP must not open without configuration"))
+    smtp_ssl = MagicMock(side_effect=AssertionError("SMTP_SSL must not open without configuration"))
+    monkeypatch.setattr(sendmail.smtplib, "SMTP", smtp)
+    monkeypatch.setattr(sendmail.smtplib, "SMTP_SSL", smtp_ssl)
+    monkeypatch.setattr(emergency, "add_loading_form", MagicMock(return_value="V_LOADING"))
+    monkeypatch.setattr(emergency, "get_user", MagicMock(return_value=SimpleNamespace(user_name="Synthetic Accessor")))
+    monkeypatch.setattr(emergency.DbManager, "get", MagicMock(return_value=SimpleNamespace(name="Test Region")))
+    client = MagicMock()
+    logger = logging.getLogger(__name__)
 
-    assert sendmail.send_via_sendgrid(user.email, "Synthetic subject", "Synthetic body") is False
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        emergency._show_emergency_info_modal(
+            client,
+            {"user": {"id": "U_SYNTHETIC"}},
+            user,
+            True,
+            SimpleNamespace(org_id=10),
+            logger,
+        )
+
+    smtp.assert_not_called()
+    smtp_ssl.assert_not_called()
+    client.views_update.assert_called_once()
+    assert client.views_update.call_args.kwargs["view_id"] == "V_LOADING"
+    view = client.views_update.call_args.kwargs["view"]
+    assert view["callback_id"] == emergency.EMERGENCY_INFO_CALLBACK_ID
+    contexts = [block["elements"][0]["text"] for block in view["blocks"] if block["type"] == "context"]
+    assert contexts == [
+        ":x: The email notification about this access may not have been sent. "
+        "Please let the member or your region leadership know you viewed their emergency info."
+    ]
+    assert all("submitted for delivery" not in status for status in contexts)
+    sections = [block["text"]["text"] for block in view["blocks"] if block["type"] == "section"]
+    assert sections == [
+        "*Emergency Contact:* Synthetic Contact",
+        "*Phone:* 202-555-0100",
+        "*Notes:* Synthetic emergency notes",
+    ]
+    client.views_push.assert_not_called()
+    records = [record for record in caplog.records if record.name == logger.name]
+    assert len(records) == 1
+    assert records[0].levelno == logging.WARNING
+    assert records[0].json_fields == {
+        "event": "slackbot.emergency.access_notification_unconfirmed",
+        "reason": "send_unconfirmed",
+        "accessed_user_id": 42,
+        "region_org_id": 10,
+        "is_local": True,
+    }
 
 
 @pytest.mark.parametrize("send_result", [True, False])
@@ -61,12 +111,13 @@ def test_missing_email_skips_notification(monkeypatch, user, email):
         (
             "emergency-test@example.invalid",
             True,
-            ":warning: An email notification about this access was submitted for delivery.",
+            ":email: An email notification about this access was submitted for delivery.",
         ),
         (
             "emergency-test@example.invalid",
             False,
-            ":warning: Email notification about this access could not be confirmed.",
+            ":x: The email notification about this access may not have been sent. "
+            "Please let the member or your region leadership know you viewed their emergency info.",
         ),
         (
             None,
@@ -81,7 +132,7 @@ def test_missing_email_skips_notification(monkeypatch, user, email):
     ],
 )
 def test_emergency_details_remain_available_with_truthful_notification_status(
-    monkeypatch, user, is_local, email, send_result, expected_status
+    monkeypatch, user, caplog, is_local, email, send_result, expected_status
 ):
     user.email = email
     send = MagicMock(return_value=send_result)
@@ -90,15 +141,17 @@ def test_emergency_details_remain_available_with_truthful_notification_status(
     monkeypatch.setattr(emergency, "get_user", MagicMock(return_value=SimpleNamespace(user_name="Synthetic Accessor")))
     monkeypatch.setattr(emergency.DbManager, "get", MagicMock(return_value=SimpleNamespace(name="Test Region")))
     client = MagicMock()
+    logger = logging.getLogger(__name__)
 
-    emergency._show_emergency_info_modal(
-        client,
-        {"user": {"id": "U_SYNTHETIC"}},
-        user,
-        is_local,
-        SimpleNamespace(org_id=10),
-        MagicMock(),
-    )
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        emergency._show_emergency_info_modal(
+            client,
+            {"user": {"id": "U_SYNTHETIC"}},
+            user,
+            is_local,
+            SimpleNamespace(org_id=10),
+            logger,
+        )
 
     client.views_update.assert_called_once()
     assert client.views_update.call_args.kwargs["view_id"] == "V_LOADING"
@@ -110,7 +163,8 @@ def test_emergency_details_remain_available_with_truthful_notification_status(
         "*Phone:* 202-555-0100",
         "*Notes:* Synthetic emergency notes",
     ]
-    assert view["blocks"][-1]["elements"][0]["text"] == expected_status
+    contexts = [block["elements"][0]["text"] for block in view["blocks"] if block["type"] == "context"]
+    assert contexts == [expected_status]
     client.views_push.assert_not_called()
     if email:
         send.assert_called_once()
@@ -119,6 +173,53 @@ def test_emergency_details_remain_available_with_truthful_notification_status(
         assert access_type in send.call_args.kwargs["html_content"]
     else:
         send.assert_not_called()
+
+    records = [record for record in caplog.records if record.name == logger.name]
+    if send_result:
+        assert records == []
+    else:
+        assert len(records) == 1
+        record = records[0]
+        reason = "send_unconfirmed" if email else "no_email"
+        expected_fields = {
+            "event": "slackbot.emergency.access_notification_unconfirmed",
+            "reason": reason,
+            "accessed_user_id": 42,
+            "region_org_id": 10,
+            "is_local": is_local,
+        }
+        expected_message = (
+            "slackbot.emergency.access_notification_unconfirmed "
+            f"reason={reason} accessed_user_id=42 region_org_id=10 is_local={is_local}"
+        )
+        assert record.levelno == logging.WARNING
+        assert record.getMessage() == expected_message
+        assert record.json_fields == expected_fields
+        assert record.exc_info is None
+        assert record.stack_info is None
+        recorded = json.dumps(record.__dict__, default=str)
+        handler = StructuredLogHandler()
+        try:
+            assert handler.filter(record)
+            serialized = handler.format(record)
+        finally:
+            handler.close()
+        payload = json.loads(serialized)
+        assert {field: payload[field] for field in expected_fields} == expected_fields
+        assert payload["message"] == expected_message
+        assert payload["severity"] == "WARNING"
+        for private_value in (
+            "emergency-test@example.invalid",
+            "Synthetic PAX",
+            "Synthetic Contact",
+            "202-555-0100",
+            "Synthetic emergency notes",
+            "Synthetic Accessor",
+            "Test Region",
+            "U_SYNTHETIC",
+        ):
+            assert private_value not in recorded
+            assert private_value not in serialized
 
 
 def test_search_warning_describes_notification_attempt():
