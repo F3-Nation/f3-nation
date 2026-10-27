@@ -255,7 +255,8 @@ def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient
     if not user or not safe_get(user, "user_id"):
         try:
             user_info = client.users_info(user=slack_user_id)
-            profile = user_info["user"].setdefault("profile", {})
+            # Slack may send "profile": null, which setdefault would keep.
+            profile = user_info["user"]["profile"] = user_info["user"].get("profile") or {}
             # Slack can leave out a member's email (e.g. Slack Connect); without one, create_user keys him like a
             # bot and makes a new F3 user instead of matching his existing one.
             if user and not safe_get(user, "is_bot") and safe_get(user, "email") and not safe_get(profile, "email"):

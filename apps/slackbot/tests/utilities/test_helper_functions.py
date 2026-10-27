@@ -467,6 +467,21 @@ def test_production_get_user_matches_unlinked_cache_by_its_email_when_slack_omit
     assert helper_functions.SLACK_USERS["U_PROD"] is linked
 
 
+def test_production_get_user_fills_email_when_slack_sends_a_null_profile(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS["U_PROD"] = SimpleNamespace(
+        slack_id="U_PROD", user_id=None, is_bot=False, email="member@example.invalid"
+    )
+    passed = []
+    linked = SimpleNamespace(slack_id="U_PROD", user_id=88)
+    client = SimpleNamespace(users_info=lambda **_kwargs: {"user": {"id": "U_PROD", "profile": None}})
+    monkeypatch.setattr(helper_functions, "create_user", lambda info, *_args: passed.append(info) or linked)
+
+    assert helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), client, None) is linked
+    assert passed[0]["profile"]["email"] == "member@example.invalid"
+
+
 def test_production_get_user_keeps_slack_profile_email_over_cached_email(monkeypatch):
     monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
     helper_functions.SLACK_USERS.clear()
