@@ -84,6 +84,22 @@ const openAPIHandler = new OpenAPIHandler(router, {
   ],
 });
 
+/**
+ * Every response here defaults to `private, no-store`. Responses from the
+ * public read procedures still vary by caller (signed-in callers get full
+ * rows, anonymous callers get masked ones), so a shared cache keyed on URL
+ * alone could hand one caller's data to another. Without an explicit header
+ * that decision would be left to whatever sits in front of the API. A
+ * procedure that sets its own Cache-Control keeps it; that is only safe for a
+ * response identical for every caller.
+ */
+function withDefaultCacheControl(response: Response): Response {
+  if (!response.headers.has("cache-control")) {
+    response.headers.set("Cache-Control", "private, no-store");
+  }
+  return response;
+}
+
 export async function handleRequest(request: Request): Promise<Response> {
   // Redirect to /docs if the request is for /
   if (new URL(request.url).pathname === "/") {
@@ -102,7 +118,9 @@ export async function handleRequest(request: Request): Promise<Response> {
     const { response } = await handler.handle(request, {
       prefix: API_PREFIX_V1,
     });
-    return response ?? new Response("Not found", { status: 404 });
+    return withDefaultCacheControl(
+      response ?? new Response("Not found", { status: 404 }),
+    );
   }
 
   // Use OpenAPI handler for REST-style calls (docs, curl, external clients)
@@ -110,5 +128,7 @@ export async function handleRequest(request: Request): Promise<Response> {
     prefix: "/",
   });
 
-  return openApiResponse ?? new Response("Not found", { status: 404 });
+  return withDefaultCacheControl(
+    openApiResponse ?? new Response("Not found", { status: 404 }),
+  );
 }
