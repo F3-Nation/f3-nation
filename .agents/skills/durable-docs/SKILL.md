@@ -48,10 +48,12 @@ mode** ([`audit.md`](audit.md)), which runs only on an explicit request.
 
 - **Names, not pointers** — when a reference is needed, cite a function,
   table, config key, or file path: symbols that live in the repo and resolve
-  by reading. Markdown links to other files **in this repo** are durable too
-  (use relative paths). A name still drifts when the thing it names is
-  renamed or changed, so reference only what the reader can't find from the
-  code itself — see [Drift](#drift-references-that-go-stale-silently).
+  by reading. For a file **in this repo**, prefer a relative Markdown link to
+  a bare name: a broken link shows up when someone follows it, and a stale
+  name doesn't. Links still break when a file or heading moves, so update
+  them in the same change. Any reference drifts when the thing it points at
+  is renamed or changed, so reference only what the reader can't find from
+  the code itself — see [Drift](#drift-references-that-go-stale-silently).
 
 ## Never in a committed file
 
