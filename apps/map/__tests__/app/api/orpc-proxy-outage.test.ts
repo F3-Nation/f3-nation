@@ -181,4 +181,21 @@ describe("withStallTimeout", () => {
 
     expect(cancel).toHaveBeenCalledWith("gone");
   });
+
+  it("doesn't report a failure when the browser goes away mid-read", async () => {
+    const { withStallTimeout } = await importRoute();
+    // Never sends anything, so a read is still pending when the cancel lands.
+    const source = new ReadableStream<Uint8Array>();
+    const onFailure = vi.fn();
+    const stream = withStallTimeout(source, 1_000, onFailure);
+    const reader = stream.getReader();
+
+    const pending = reader.read();
+    await sleep(10); // let the pull start waiting on the API
+    await reader.cancel("gone");
+
+    await expect(pending).resolves.toEqual({ done: true, value: undefined });
+    await sleep(10);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
 });

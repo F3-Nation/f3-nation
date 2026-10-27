@@ -112,6 +112,10 @@ export function withStallTimeout<T>(
   onFailure: (err: unknown) => void,
 ): ReadableStream<T> {
   const reader = body.getReader();
+  // Set when the browser goes away. Cancelling ends a pending read with
+  // `done`, and closing our already-cancelled stream would then throw and be
+  // logged as an API failure.
+  let cancelled = false;
   return new ReadableStream<T>({
     async pull(controller) {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -123,9 +127,11 @@ export function withStallTimeout<T>(
       });
       try {
         const { done, value } = await Promise.race([reader.read(), stalled]);
+        if (cancelled) return;
         if (done) controller.close();
         else controller.enqueue(value);
       } catch (err) {
+        if (cancelled) return;
         // Not awaited: cancelling one branch of a copied body settles only
         // once the other branch is cancelled too.
         void reader.cancel(err).catch(() => undefined);
@@ -136,6 +142,7 @@ export function withStallTimeout<T>(
       }
     },
     cancel(reason) {
+      cancelled = true;
       return reader.cancel(reason);
     },
   });
