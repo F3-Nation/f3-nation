@@ -1,18 +1,22 @@
+// @vitest-environment node
+// Server code: under jsdom, Node's AbortController throws a DOMException from a
+// different realm than the global one, which no real server would see.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isApiUnavailableError } from "@acme/shared/app/api-availability";
+
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
 // Unlike client.test.ts, this runs the real oRPC client: it pins the contract
 // that what oRPC throws during a real outage is what the classifier expects,
 // including across oRPC upgrades.
 
-vi.mock("server-only", () => ({}));
-
-const { cookiesMock } = vi.hoisted(() => ({ cookiesMock: vi.fn() }));
-vi.mock("next/headers", () => ({ cookies: cookiesMock }));
-vi.mock("@/lib/logging", () => ({
-  logWarn: vi.fn(),
+const { cookiesMock, logError } = vi.hoisted(() => ({
+  cookiesMock: vi.fn(),
   logError: vi.fn(),
 }));
+
+vi.mock("next/headers", () => ({ cookies: cookiesMock }));
+vi.mock("@/lib/logging", () => ({ logError, logWarn: vi.fn() }));
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -30,7 +34,8 @@ describe("getMyProfile during an API outage", () => {
   beforeEach(() => {
     vi.resetModules();
     fetchMock.mockReset();
-    vi.stubEnv("F3_API_BASE_URL", "https://api.test.com/v1");
+    logError.mockReset();
+    vi.stubEnv("F3_API_BASE_URL", "https://api.test.com");
     vi.stubGlobal("fetch", fetchMock);
     cookiesMock.mockResolvedValue({
       get: vi.fn().mockReturnValue({ value: "token" }),
@@ -38,7 +43,6 @@ describe("getMyProfile during an API outage", () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -62,8 +66,8 @@ describe("getMyProfile during an API outage", () => {
   });
 
   it("classifies a 502 with no content-type as unavailable", async () => {
-    // A bare load-balancer error page; without the guard in the RPCLink fetch
-    // oRPC fails to parse it and the 502 status is lost.
+    // A bare load-balancer error page with no content-type still keeps its
+    // 502 status.
     const response = new Response("<h1>Bad Gateway</h1>", { status: 502 });
     response.headers.delete("content-type");
     fetchMock.mockResolvedValue(response);
@@ -71,28 +75,142 @@ describe("getMyProfile during an API outage", () => {
     expect(isApiUnavailableError(await profileError())).toBe(true);
   });
 
-  it("classifies an API that never answers as unavailable", async () => {
-    vi.useFakeTimers();
+  it("classifies a 5xx with malformed JSON as unavailable", async () => {
+    // Labelled JSON but cut off (e.g. by a proxy); parsing it must not lose
+    // the 5xx status.
+    fetchMock.mockResolvedValue(
+      new Response('{"json":{"code":', {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    expect(isApiUnavailableError(await profileError())).toBe(true);
+  });
+
+  it("reports a proxy's HTML 500 as SERVICE_UNAVAILABLE, not the API's own 500", async () => {
+    // Without the guard oRPC reports this as INTERNAL_SERVER_ERROR, the code
+    // the API uses for its own failures, which the profile page logs as an
+    // error.
+    fetchMock.mockResolvedValue(
+      new Response("<html>Internal Server Error</html>", {
+        status: 500,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    expect(await profileError()).toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+      status: 500,
+    });
+  });
+
+  it("logs a non-JSON 5xx once, as a warning, not as a request failure", async () => {
+    fetchMock.mockResolvedValue(
+      new Response("<html>Service Unavailable</html>", {
+        status: 503,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    await profileError();
+    expect(logError).not.toHaveBeenCalled();
+  });
+
+  it("logs a refused connection as a request failure", async () => {
+    fetchMock.mockRejectedValue(new TypeError("fetch failed"));
+
+    await profileError();
+    expect(logError).toHaveBeenCalledWith(
+      "me.api.upstream_request_failed",
+      expect.anything(),
+      expect.any(TypeError),
+    );
+  });
+
+  it("times out an API that never answers", async () => {
     vi.stubEnv("F3_API_TIMEOUT_MS", "20");
-    // Never settles on its own; only the client's own timeout ends it.
     fetchMock.mockImplementation(
       (_input, init) =>
         new Promise((_resolve, reject) => {
-          const signal = init?.signal;
-          signal?.addEventListener("abort", () => {
-            reject(signal.reason as Error);
+          // Like fetch, reject with the signal's reason.
+          init?.signal?.addEventListener("abort", () => {
+            reject(init.signal?.reason as Error);
           });
         }),
     );
 
-    const pending = profileError();
-    await vi.advanceTimersByTimeAsync(20);
-    const error = await pending;
+    expect(isApiUnavailableError(await profileError())).toBe(true);
+  });
 
-    // The client's own timeout carries a TimeoutError reason, so it can be told
-    // apart from the caller cancelling the request.
-    expect((error as Error).name).toBe("TimeoutError");
-    expect(isApiUnavailableError(error)).toBe(true);
+  it("times out a body that stalls after the headers arrive", async () => {
+    vi.stubEnv("F3_API_TIMEOUT_MS", "20");
+    fetchMock.mockImplementation((_input, init) => {
+      const signal = init?.signal;
+      // Headers arrive, then the body stalls until the request is aborted.
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode('{"json":'));
+          signal?.addEventListener("abort", () => {
+            stream.error(signal.reason);
+          });
+        },
+      });
+      return Promise.resolve(
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+
+    expect(isApiUnavailableError(await profileError())).toBe(true);
+  });
+
+  it("times out a stalled body that ignores the abort, as Next's copied body does", async () => {
+    vi.stubEnv("F3_API_TIMEOUT_MS", "20");
+    const cancel = vi.fn();
+    fetchMock.mockImplementation(() => {
+      // Next's patched fetch tees the response, so aborting the request never
+      // errors this copy: it just stops sending.
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode('{"json":'));
+        },
+        cancel,
+      });
+      return Promise.resolve(
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+
+    expect(isApiUnavailableError(await profileError())).toBe(true);
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("does not wait for a teed body's cancel to settle before timing out", async () => {
+    vi.stubEnv("F3_API_TIMEOUT_MS", "20");
+    fetchMock.mockImplementation(() => {
+      const source = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode('{"json":'));
+        },
+      });
+      // Cancelling one branch of a tee settles only once the other branch is
+      // cancelled too; nothing ever reads or cancels this one.
+      const [body] = source.tee();
+      return Promise.resolve(
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+
+    expect(isApiUnavailableError(await profileError())).toBe(true);
   });
 
   it("does not classify a 403 oRPC error as unavailable", async () => {
@@ -114,7 +232,7 @@ describe("getMyProfile during an API outage", () => {
   });
 
   it("classifies a JSON 5xx oRPC error as unavailable", async () => {
-    // A real oRPC 5xx is JSON, so it skips the guard and keeps its status.
+    // A real oRPC 5xx is JSON, so it passes the guard and keeps its status.
     fetchMock.mockResolvedValue(
       Response.json(
         {
@@ -130,5 +248,18 @@ describe("getMyProfile during an API outage", () => {
     );
 
     expect(isApiUnavailableError(await profileError())).toBe(true);
+  });
+
+  it("leaves no timer running after a fast response", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockResolvedValue(Response.json({ json: { user: {} } }));
+      const { getMyProfile } = await import("@/lib/api/client");
+
+      await getMyProfile();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

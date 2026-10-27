@@ -1,101 +1,107 @@
-import { isValidElement } from "react";
 import { ORPCError } from "@orpc/client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiUnavailable } from "@/components/api-unavailable";
-import { ProfileForm } from "@/components/profile-form";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireAuthMock, getMyProfileMock, getRegionsMock, redirectMock } =
-  vi.hoisted(() => ({
-    requireAuthMock: vi.fn(),
-    getMyProfileMock: vi.fn(),
-    getRegionsMock: vi.fn(),
-    redirectMock: vi.fn((url: string) => {
-      throw new Error(`NEXT_REDIRECT:${url}`);
-    }),
-  }));
+import { cleanup, render, screen } from "@testing-library/react";
+import type * as ClientModule from "@/lib/api/client";
 
-vi.mock("next/navigation", () => ({ redirect: redirectMock }));
-vi.mock("@/lib/auth/server", () => ({ requireAuth: requireAuthMock }));
-vi.mock("@/lib/api/client", () => ({
-  getMyProfile: getMyProfileMock,
-  getRegions: getRegionsMock,
-  // Mirrors the real check in @/lib/api/client (code or status, by shape).
-  isNotFoundApiError: (err: unknown) =>
-    typeof err === "object" &&
-    err !== null &&
-    ((err as { code?: unknown }).code === "NOT_FOUND" ||
-      (err as { status?: unknown }).status === 404),
+const { getMyProfile, getRegions, redirect } = vi.hoisted(() => ({
+  getMyProfile: vi.fn(),
+  getRegions: vi.fn(),
+  redirect: vi.fn((url: string) => {
+    throw new Error(`NEXT_REDIRECT ${url}`);
+  }),
 }));
-vi.mock("@/lib/logging", () => ({ logWarn: vi.fn(), logError: vi.fn() }));
+
+vi.mock("@/lib/auth/server", () => ({
+  requireAuth: vi.fn().mockResolvedValue({ userId: 42 }),
+}));
+vi.mock("@/lib/api/client", async () => {
+  const { isNotFoundApiError } =
+    await vi.importActual<typeof ClientModule>("@/lib/api/client");
+  return { getMyProfile, getRegions, isNotFoundApiError };
+});
+vi.mock("next/headers", () => ({ cookies: vi.fn() }));
+vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/components/profile-form", () => ({ ProfileForm: () => null }));
-vi.mock("@/components/api-unavailable", () => ({ ApiUnavailable: () => null }));
+vi.mock("next/image", () => ({
+  default: (props: { alt: string }) => <span>{props.alt}</span>,
+}));
+const { logError, logWarn } = vi.hoisted(() => ({
+  logError: vi.fn(),
+  logWarn: vi.fn(),
+}));
+vi.mock("@/lib/logging", () => ({ logError, logWarn }));
+
+function expectOutageScreen(page: Awaited<ReturnType<typeof renderPage>>) {
+  render(page);
+  expect(
+    screen.getByRole("heading", {
+      level: 1,
+      name: /temporarily unavailable/i,
+    }),
+  ).toBeDefined();
+}
 
 async function renderPage() {
   const { default: ProfilePage } = await import("@/app/profile/page");
   return ProfilePage();
 }
 
-function typeOf(node: unknown): unknown {
-  return isValidElement(node) ? node.type : undefined;
-}
+afterEach(cleanup);
 
 describe("ProfilePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireAuthMock.mockResolvedValue({ userId: 42 });
-    getMyProfileMock.mockResolvedValue({ id: 42 });
-    getRegionsMock.mockResolvedValue([]);
+    getMyProfile.mockResolvedValue({ id: 42 });
+    getRegions.mockResolvedValue([]);
   });
 
-  it("renders the profile form when the API is up", async () => {
-    expect(typeOf(await renderPage())).toBe(ProfileForm);
-  });
+  it("shows the outage screen when the profile lookup cannot reach the API", async () => {
+    const err = new TypeError("fetch failed");
+    getMyProfile.mockRejectedValue(err);
 
-  const outages = [
-    ["is unreachable", new TypeError("fetch failed")],
-    ["times out", new DOMException("timed out", "TimeoutError")],
-    ["returns a 5xx", new ORPCError("SERVICE_UNAVAILABLE", { status: 503 })],
-  ] as const;
-
-  it.each(outages)(
-    "shows the outage screen when the profile request %s",
-    async (_l, err) => {
-      getMyProfileMock.mockRejectedValue(err);
-
-      expect(typeOf(await renderPage())).toBe(ApiUnavailable);
-    },
-  );
-
-  it.each(outages)(
-    "shows the outage screen when only the regions request %s",
-    async (_l, err) => {
-      getRegionsMock.mockRejectedValue(err);
-
-      expect(typeOf(await renderPage())).toBe(ApiUnavailable);
-    },
-  );
-
-  it("does not show the outage screen for a caller-cancelled request", async () => {
-    getMyProfileMock.mockRejectedValue(new DOMException("x", "AbortError"));
-
-    await expect(renderPage()).rejects.toThrow();
-  });
-
-  it("still redirects when the user is not found", async () => {
-    getMyProfileMock.mockRejectedValue(
-      new ORPCError("NOT_FOUND", { status: 404 }),
+    expectOutageScreen(await renderPage());
+    expect(logWarn).toHaveBeenCalledWith(
+      "me.profile.api_unavailable",
+      expect.objectContaining({ lookup: "profile", err }),
     );
+  });
+
+  it("shows the outage screen when the regions lookup cannot reach the API", async () => {
+    const err = new ORPCError("SERVICE_UNAVAILABLE", { status: 503 });
+    getRegions.mockRejectedValue(err);
+
+    expectOutageScreen(await renderPage());
+    expect(logWarn).toHaveBeenCalledWith(
+      "me.profile.api_unavailable",
+      expect.objectContaining({ lookup: "regions", err }),
+    );
+  });
+
+  it("logs a well-formed API 500 at error level, since it may be a bug", async () => {
+    const err = new ORPCError("INTERNAL_SERVER_ERROR", { status: 500 });
+    getMyProfile.mockRejectedValue(err);
+
+    expectOutageScreen(await renderPage());
+    expect(logError).toHaveBeenCalledWith(
+      "me.profile.api_unavailable",
+      expect.objectContaining({ lookup: "profile" }),
+      err,
+    );
+    expect(logWarn).not.toHaveBeenCalled();
+  });
+
+  it("still sends a missing user to the sign-in screen", async () => {
+    getMyProfile.mockRejectedValue(new ORPCError("NOT_FOUND", { status: 404 }));
 
     await expect(renderPage()).rejects.toThrow(
-      "NEXT_REDIRECT:/?error=user_not_found",
+      "NEXT_REDIRECT /?error=user_not_found",
     );
   });
 
-  it("still throws errors that are not an outage", async () => {
-    getMyProfileMock.mockRejectedValue(
-      new ORPCError("FORBIDDEN", { status: 403 }),
-    );
+  it("still throws errors that are not outages", async () => {
+    getMyProfile.mockRejectedValue(new Error("boom"));
 
-    await expect(renderPage()).rejects.toThrow();
+    await expect(renderPage()).rejects.toThrow("boom");
   });
 });

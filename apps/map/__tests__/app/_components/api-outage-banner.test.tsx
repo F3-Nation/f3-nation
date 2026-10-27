@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ORPCError } from "@orpc/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { API_RETRY_BASE_MS } from "@acme/shared/app/api-availability";
+import { RETRY_BASE_MS as API_RETRY_BASE_MS } from "@acme/ui/api-unavailable";
 
 import { ApiOutageBanner } from "~/app/_components/api-outage-banner";
 

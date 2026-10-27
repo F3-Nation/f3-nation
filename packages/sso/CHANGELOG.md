@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/F3-Nation/f3-nation/compare/pkg-sso@0.4.0...pkg-sso@0.5.0) (2026-10-23)
+
+
+### Features
+
+* **auth,sso:** accept offline_access on legacy authorize and authenticate revoke ([#1327](https://github.com/F3-Nation/f3-nation/issues/1327)) ([8f1ac19](https://github.com/F3-Nation/f3-nation/commit/8f1ac19a5df001bf94bec6a87a70f1b0784929c8))
+
 ## [0.4.0](https://github.com/F3-Nation/f3-nation/compare/pkg-sso@0.3.0...pkg-sso@0.4.0) (2026-08-18)
 
 

@@ -4,10 +4,8 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { Query, QueryClient } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 
-import {
-  apiRetryDelayMs,
-  isApiUnavailableError,
-} from "@acme/shared/app/api-availability";
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
+import { retryDelayMs } from "@acme/ui/api-unavailable";
 import { Button } from "@acme/ui/button";
 
 /** A query that is on screen and last failed because the API is down. */
@@ -60,7 +58,7 @@ export function ApiOutageBanner() {
           void retryFailedQueries(queryClient);
         }
         schedule();
-      }, apiRetryDelayMs());
+      }, retryDelayMs());
     };
     schedule();
     return () => clearTimeout(timer);

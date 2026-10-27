@@ -3,7 +3,7 @@ import { createORPCClient, onError, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 
 import type { router } from "@acme/api";
-import { isUpstreamFailureResponse } from "@acme/shared/app/api-availability";
+import { isUpstreamFailureResponse } from "@acme/shared/common/api-availability";
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 
 declare global {

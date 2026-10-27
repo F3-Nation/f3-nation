@@ -5,7 +5,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 
-import { isApiUnavailableError } from "@acme/shared/app/api-availability";
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
 const serializer = new StandardRPCJsonSerializer();
 

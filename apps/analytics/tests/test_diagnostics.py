@@ -1090,7 +1090,10 @@ def test_ctas_supervisor_contains_blocked_workspace_cleanup():
             }
         )
         monkeypatch = pytest.MonkeyPatch()
-        monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_CLEANUP_OPERATION_SECONDS", 2)
+        # The cleanup child is a fresh spawn that re-imports this module before
+        # it writes its markers. On a loaded CI runner that can take over 2s, so
+        # a 2s budget killed it first and the markers read below were missing.
+        monkeypatch.setattr(diagnostics, "_CTAS_EVENTS_CLEANUP_OPERATION_SECONDS", 8)
         try:
             result = diagnostics.run_ctas_events_diagnostic(
                 settings,

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { isApiUnavailableError } from "@acme/shared/app/api-availability";
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
 import { API_RESPONSE_TIMEOUT_MS, client } from "~/orpc/client";
 
