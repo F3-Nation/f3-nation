@@ -109,7 +109,7 @@ has a body-shaped home:
 If you catch yourself wanting to record history in a comment ("we should note
 that we tried this and it broke"), that is the signal to write the issue or PR
 body instead — after it exists, the committed file still says only what is
-true today. Filing issues: the repo [github](../github/SKILL.md) skill.
+true today. Filing issues: the repo's [GitHub write rules](../../../AGENTS.md#writing-to-github).
 
 ## Mode: writing new code or docs
 
@@ -139,7 +139,7 @@ When a PR adds or edits comments or markdown, review the text like code:
   pattern; its numeric examples use `#<n>` placeholders, so neither this
   skill's examples nor any file's quoted rule text count as real references.
 - Mechanical follow-ups (draft PRs, reply etiquette, attribution) belong to
-  the [github](../github/SKILL.md) skill.
+  the repo's [GitHub write rules](../../../AGENTS.md#writing-to-github).
 
 ## Mode: periodic audit
 

@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 
+import { TableSkeleton } from "@acme/ui/page-skeleton";
+
 import Layout from "../admin-layout";
 import { RequestsTable } from "./requests-table";
 
@@ -10,7 +12,7 @@ const RequestsPage = async () => {
         <div className="flex flex-row items-center justify-between">
           <h1 className="hidden text-2xl font-bold lg:block">Requests</h1>
         </div>
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<TableSkeleton />}>
           <RequestsTable />
         </Suspense>
       </div>

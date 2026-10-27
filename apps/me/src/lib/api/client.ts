@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { createORPCClient } from "@orpc/client";
+import { createORPCClient, ORPCError } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { RouterClient } from "@orpc/server";
 import type { router } from "@acme/api";
@@ -19,6 +19,42 @@ function getApiTimeoutMs(): number {
   const raw = process.env.F3_API_TIMEOUT_MS;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 10_000;
+}
+
+/**
+ * Reads the body as text, failing as soon as `signal` aborts. Aborting the
+ * request isn't enough on its own: Next's patched fetch returns a copied body
+ * that the abort never reaches, so `response.text()` would wait for the socket
+ * to close. Reading through our own reader also lets us cancel the body.
+ */
+async function readBody(
+  response: Response,
+  signal: AbortSignal,
+): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let onAbort: () => void = () => undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason as Error);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  });
+  let text = "";
+  try {
+    for (;;) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      if (done) return text + decoder.decode();
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch (err) {
+    // Not awaited: cancelling one branch of a teed body settles only once the
+    // other branch is cancelled too, which would hold back the timeout error.
+    void reader.cancel(err).catch(() => undefined);
+    throw err;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
 }
 
 /**
@@ -74,8 +110,28 @@ const getApiClient = cache(async (): Promise<RouterClient<typeof router>> => {
           });
         }
 
-        return response;
+        // Read the body here, before `finally` clears the timer, so an API that
+        // sends headers and then stalls is still aborted by the timeout.
+        const body = await readBody(response, controller.signal);
+
+        // A 5xx that isn't a well-formed oRPC error (an HTML page from a proxy
+        // or load balancer, or truncated JSON) would otherwise surface as a
+        // body-parse error with its status lost, and be mistaken for a bug
+        // rather than an outage.
+        if (response.status >= 500) {
+          try {
+            JSON.parse(body);
+          } catch {
+            throw new ORPCError("SERVICE_UNAVAILABLE", {
+              status: response.status,
+            });
+          }
+        }
+
+        return new Response(body, response);
       } catch (err) {
+        // The guard's outage error was already logged as upstream_http_error.
+        if (err instanceof ORPCError) throw err;
         logError(
           "me.api.upstream_request_failed",
           {
