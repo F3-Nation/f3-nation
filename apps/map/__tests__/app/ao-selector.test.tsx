@@ -1,7 +1,19 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { FormProvider, useForm } from "react-hook-form";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { RegionAndAOSelector } from "~/app/_components/forms/form-inputs/region-and-ao-selector";
 
@@ -81,6 +93,12 @@ function SelectorForm({
   );
 }
 
+// TanStack Query notifies observers on a setTimeout(0), which async act does
+// not wait for. Running it as a microtask lets `act` settle each fetch, so the
+// assertions below never race a findBy* timeout on a slow, cold CI worker.
+beforeAll(() => notifyManager.setScheduler(queueMicrotask));
+afterAll(() => notifyManager.setScheduler((cb) => setTimeout(cb, 0)));
+
 describe.each<RegionField>(["originalRegionId", "newRegionId"])(
   "AO selector using %s",
   (regionField) => {
@@ -109,17 +127,22 @@ describe.each<RegionField>(["originalRegionId", "newRegionId"])(
             />
           </QueryClientProvider>,
         );
+        await act(() => Promise.resolve());
 
-        await screen.findByRole("option", { name: "Test Region" });
+        expect(
+          screen.getByRole("option", { name: "Test Region" }),
+        ).toBeInTheDocument();
         expect(getAOsInRegion).not.toHaveBeenCalled();
 
-        fireEvent.change(
-          screen.getByRole("combobox", { name: "Select Region" }),
-          {
-            target: { value: "42" },
-          },
-        );
-        await screen.findByRole("option", { name: "Test AO" });
+        await act(async () => {
+          fireEvent.change(
+            screen.getByRole("combobox", { name: "Select Region" }),
+            { target: { value: "42" } },
+          );
+        });
+        expect(
+          screen.getByRole("option", { name: "Test AO" }),
+        ).toBeInTheDocument();
         expect(getAOsInRegion).toHaveBeenCalledExactlyOnceWith(
           { regionId: 42 },
           expect.anything(),
