@@ -134,8 +134,8 @@ Ask for anything missing before starting:
    scratch/temp directory (not in the repo). Show it to the person who asked
    and **stop until they approve** or request changes.
 
-7. **File the issue** only after approval, following the repo
-   [`github`](../github/SKILL.md) skill.
+7. **File the issue** only after approval, following the repo's
+   [GitHub write rules](../../../AGENTS.md#writing-to-github).
 
    ```bash
    gh issue create --title "Release plan: <short release name> to <Environment> (#<PR>)" \
