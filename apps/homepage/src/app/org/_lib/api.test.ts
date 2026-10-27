@@ -57,18 +57,26 @@ describe("fetchOrgById", () => {
     expect(result).toMatchObject({ id: 2, name: "Test" });
   });
 
-  it("keeps only admin and editor roles", async () => {
+  it("keeps only admin and editor roles and leaves the rest of the detail untouched", async () => {
     const role = (roleId: number, title: string) => ({
       roleId,
       title,
       userId: roleId,
-      f3Name: null,
+      f3Name: `F3-${roleId}`,
       avatarUrl: null,
     });
+    const nantan = {
+      positionId: 9,
+      title: "Nantan",
+      userId: 9,
+      f3Name: "Boss",
+      avatarUrl: null,
+    };
     mockFetch(200, {
       id: 2,
       name: "Test",
       orgType: "region",
+      email: "r@example.com",
       roles: [
         role(1, "admin"),
         role(2, "editor"),
@@ -76,10 +84,35 @@ describe("fetchOrgById", () => {
         role(4, "password_reader"),
         role(5, "user"),
       ],
-      positions: [],
+      positions: [nantan],
     });
     const result = await fetchOrgById(2);
-    expect(result.roles.map((r) => r.title)).toEqual(["admin", "editor"]);
+    expect(result.roles).toEqual([role(1, "admin"), role(2, "editor")]);
+    expect(result.positions).toEqual([nantan]);
+    expect(result).toMatchObject({
+      id: 2,
+      name: "Test",
+      email: "r@example.com",
+    });
+  });
+
+  it("returns an empty roles list when no role is public", async () => {
+    mockFetch(200, {
+      id: 3,
+      name: "AO",
+      orgType: "ao",
+      roles: [
+        {
+          roleId: 3,
+          title: "password_manager",
+          userId: 3,
+          f3Name: null,
+          avatarUrl: null,
+        },
+      ],
+      positions: [],
+    });
+    expect((await fetchOrgById(3)).roles).toEqual([]);
   });
 
   it("throws on a non-ok response", async () => {
