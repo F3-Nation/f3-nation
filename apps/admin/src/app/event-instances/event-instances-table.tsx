@@ -53,6 +53,7 @@ const getServerToday = () => null;
 
 // Keeps the first date it reads, so a table left open past midnight doesn't
 // move the filter (and the rows under the current page) on its next render.
+// Reset swaps in a new reader to pick up the current date.
 const createTodayReader = () => {
   let today: string | undefined;
   return () => (today ??= todayForwardDateRange().from);
@@ -71,7 +72,9 @@ export const EventInstancesTable = () => {
   // evening it's already tomorrow there and the filter label wouldn't match
   // during hydration. It's null for the server render and hydration, then
   // React re-renders with the browser's date.
-  const [getBrowserToday] = useState(() => createTodayReader());
+  const [getBrowserToday, setGetBrowserToday] = useState(() =>
+    createTodayReader(),
+  );
   const today = useSyncExternalStore(
     subscribeToToday,
     getBrowserToday,
@@ -114,6 +117,7 @@ export const EventInstancesTable = () => {
     setSelectedAos([]);
     setSelectedRegions([]);
     setStartDateRange(null);
+    setGetBrowserToday(() => createTodayReader());
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 

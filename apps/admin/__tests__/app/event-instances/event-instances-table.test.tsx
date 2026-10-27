@@ -170,4 +170,14 @@ describe("EventInstancesTable", () => {
     expect(screen.getByText("2026-01-15 → …")).toBeTruthy();
     expect(latestEnabledStartDate()).toBe("2026-01-15");
   });
+
+  it("reads today again when the filters are reset after midnight", () => {
+    render(<EventInstancesTable />);
+
+    vi.setSystemTime(new Date(2026, 0, 16, 0, 5));
+    fireEvent.click(screen.getByTitle("Reset Filters"));
+
+    expect(screen.getByText("2026-01-16 → …")).toBeTruthy();
+    expect(latestEnabledStartDate()).toBe("2026-01-16");
+  });
 });
