@@ -1,6 +1,6 @@
 ---
 name: durable-docs
-description: Rules for documentation that still makes sense in three months — inline comments and markdown that say what something does and why it protects or prevents, never change history, GitHub issue/PR links, or one-time instructions. Use whenever writing or editing code comments or any markdown in this repo (docs/, READMEs, specs, .agents/skills, app AGENTS.md), or whenever a PR touches comments or docs — even if durability is never mentioned. Audit mode, which rewrites existing files in bulk, runs only when the user explicitly asks to audit or sweep existing docs; a casual "clean up" or "make the docs less stale" means apply these rules to the text at hand, not run an audit.
+description: Rules for documentation that still makes sense in three months — inline comments and markdown that say what something does and why it protects or prevents, never change history, GitHub issue/PR links, one-time instructions, or references that could drift. Use whenever writing or editing code comments or any markdown in this repo (docs/, READMEs, specs, .agents/skills, app AGENTS.md), or whenever a PR touches comments or docs — even if durability is never mentioned. Audit mode, which rewrites existing files in bulk, runs only when the user explicitly asks to audit or sweep existing docs; a casual "clean up" or "make the docs less stale" means apply these rules to the text at hand, not run an audit.
 ---
 
 # Durable docs and comments
@@ -40,15 +40,18 @@ mode** ([`audit.md`](audit.md)), which runs only on an explicit request.
   // #<n>."
   const retries = 2;
 
-  // Durable — what + standing why, complete in itself: "Two attempts max: the
+  // Durable — standing why, complete in itself: "Keep retries low: the
   // upstream abuse filter bans the shared key for an hour after ~3 failures in
   // a minute, so retrying more costs more than failing."
   const retries = 2;
   ```
 
-- **Names, not pointers** — cite a function, table, config key, or file path:
-  symbols that live in the repo and resolve by reading. Markdown links to
-  other files **in this repo** are durable too (use relative paths).
+- **Names, not pointers** — when a reference is needed, cite a function,
+  table, config key, or file path: symbols that live in the repo and resolve
+  by reading. Markdown links to other files **in this repo** are durable too
+  (use relative paths). A name still drifts when the thing it names is
+  renamed or changed, so reference only what the reader can't find from the
+  code itself — see [Drift](#drift-references-that-go-stale-silently).
 
 ## Never in a committed file
 
@@ -69,7 +72,8 @@ the file, or meaning that won't be true later.
 - **Allusions** — "as discussed", "per @someone's request", "as agreed in the
   thread". Anything the reader can't resolve from the file alone gets cut.
 - **One-time instructions** — run-once scripts, "on staging run X then Y"
-  written for a single upcoming change, "delete after backfill". See below.
+  written for a single upcoming change, "delete after backfill". See
+  [Transient content](#transient-content-pr-and-issue-bodies-not-the-repo).
 
 ### Exceptions: content that stays
 
@@ -89,8 +93,69 @@ guarantees — stays:
   will add …") is not a constraint: that goes to an issue or milestone,
   never the file.
 - **Records** — merged ADRs and their `Date`/`Author(s)` headers are
-  append-only (see [`audit.md`](audit.md) step 5); rewriting one falsifies
-  the record.
+  append-only (see the ADR step of [`audit.md`](audit.md)); rewriting one
+  falsifies the record.
+
+## Drift: references that go stale silently
+
+A comment that describes something outside its own lines is a second copy of
+that fact. When the original changes, nothing fails — no test, type check, or
+lint rule reads comments — so the copy stays wrong until someone trusts it.
+Every such reference is upkeep, and it pays for itself only when it tells the
+reader something they can't get from the code or a quick search.
+
+Before keeping a reference, ask: **if the thing it points at changes, will the
+person changing it see this text?** If not, the text will drift. Describe the
+rule or the reason instead of the instance, or enforce the coupling in code.
+
+- **Enumerating a set that can change** — "the other roles (`user`,
+  `password_*`)", "used by map, admin and me", "the eight required checks".
+  The list is complete the day it's written and wrong the day someone adds a
+  member, and that person won't look here. Write the rule that defines
+  membership ("roles that grant access rather than name a contact"), or point
+  to the one place the set is defined.
+- **Naming what a reader can look up** — a function, variable, endpoint path,
+  env var, or file that go-to-definition or a search finds. Renames and moves
+  don't update comments. Describe the role it plays ("the caller", "the
+  public org-chart endpoint"); name it only when the reader can't reach it
+  from the code and needs it to act.
+- **Comparing to other code** — "behaves like X", "same as the map app's
+  version", "mirrors `foo()`". The two diverge, and the comment then asserts
+  something false about both. Describe the behavior itself. If the two must
+  stay identical, that is a constraint: share the code or add a test, and say
+  why they must match.
+- **Listing callers or consumers** — "only called from the settings page",
+  "the nightly job uses this". Callers come and go, and find-references
+  already answers the question correctly. Cut it, unless it is a constraint
+  on callers ("must not run during render, because …").
+- **Restating a value** — "retries 3 times" above a constant, "times out after
+  30s", "max 5 per page". The value changes and the comment doesn't. Say why
+  the value is what it is ("stays under the upstream's per-minute ban
+  threshold") instead of repeating it. An outside number the reason depends
+  on, such as the upstream's own limit, is part of the why and stays.
+- **Positions** — line numbers, "see above", "the function below", bare step
+  or section numbers. Code and docs get reordered. Use a name or heading link
+  that survives reordering ("the scope step of `audit.md`"), or nothing if the
+  reader will see it anyway.
+- **Another system's internals** — "the API already validates this", "a DB
+  trigger sets this column". The other system changes without knowing it has
+  a dependent. State the dependency as a present-tense constraint, and
+  enforce it where it can break — a test, a type, a runtime check — rather
+  than trusting the comment.
+- **Restating the signature** — doc-comment tags that repeat parameter names
+  and TypeScript types. The type is enforced; its prose copy isn't. Document
+  only what the type can't say: units, ranges, side effects, what `null`
+  means.
+
+The same applies to markdown. A doc that copies a list kept elsewhere —
+scripts, env vars, required checks, allowed scopes — should name the source
+of truth and send the reader there, not reproduce it.
+
+A reference earns its place when it is the **only** way the reader learns of
+a coupling the code doesn't show — two packages that must agree with no
+import between them, a value that must match an external system. Then say
+what must stay in sync and why, so the person who changes one side knows to
+change the other.
 
 ## Transient content: PR and issue bodies, not the repo
 
@@ -117,7 +182,9 @@ true today. Filing issues: the repo's [GitHub write rules](../../../AGENTS.md#wr
    the standing why — what a reader would spend minutes of reading, or one
    wrong change, rediscovering.
 2. Before committing, run the test at the top on every comment and doc line
-   you added. Cut what fails; move the memory to a PR/issue body.
+   you added, and check each reference against
+   [Drift](#drift-references-that-go-stale-silently). Cut what fails; move the
+   memory to a PR/issue body.
 3. Docs in `docs/` describe how the system **is**, not what just changed.
    Specs remain the source of truth for what a feature does and how it's
    verified (see [`AGENTS.md`](../../../AGENTS.md)); this skill governs how those
@@ -130,10 +197,11 @@ true today. Filing issues: the repo's [GitHub write rules](../../../AGENTS.md#wr
 
 When a PR adds or edits comments or markdown, review the text like code:
 
-- Flag every item under **Never in a committed file** and every text that
-  fails the test — each with a one-line reason and a rewrite you've actually
-  written. A suggested rewrite beats a rule citation; the author should be
-  able to paste it.
+- Flag every item under **Never in a committed file**, every reference that
+  will drift (see [Drift](#drift-references-that-go-stale-silently)), and every
+  text that fails the test — each with a one-line reason and a rewrite you've
+  actually written. A suggested rewrite beats a rule citation; the author
+  should be able to paste it.
 - **Instructional examples are not violations.** A phrase quoted inside a
   rule that bans it — this skill's own ban list included — illustrates the
   pattern; its numeric examples use `#<n>` placeholders, so neither this
@@ -161,4 +229,5 @@ above.
 - Merged ADRs, and the `Date`/`Author(s)` header of any ADR — records keep
   their identity.
 - Deleting `packages/db/drizzle/*.sql` migration history — never.
-- Anything outside the scope they confirmed in [`audit.md`](audit.md) step 1.
+- Anything outside the scope they confirmed in the scope step of
+  [`audit.md`](audit.md).
