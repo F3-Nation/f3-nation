@@ -339,7 +339,7 @@ EOF
 
 Now set the environment variable. Each environment gets its own `WIF_SA`, the service account that environment deploys as. `WIF_PROVIDER` is an organization-level variable, because every app shares one WIF provider, so it is not set per environment. These are `vars.*` (not secrets) — no credentials are stored in GitHub; auth happens via WIF token exchange at runtime.
 
-If the organization doesn't have a `WIF_PROVIDER` variable yet (for example, because step 5a created the pool), an organization admin sets it to `projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/providers/github`.
+If the organization doesn't have a `WIF_PROVIDER` variable yet (for example, because the pool was just created as part of the shared infrastructure setup), an organization admin sets it to `projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/providers/github`.
 
 ```bash
 gh variable set WIF_SA       --env "$GH_STAGING_ENV" --repo "$GH_REPO" --body "$STAGING_SA"
@@ -393,7 +393,7 @@ In the Firebase Console for each project → **App Hosting** → select the back
 - [ ] Prod SA created, IAM roles granted (including cross-project AR read on staging), WIF binding added
 - [ ] Cloud SQL IAM granted to deploy/runtime SAs if the app uses Cloud SQL
 - [ ] Storage bucket IAM granted to runtime SAs if the app uses Cloud Storage buckets or volume mounts
-- [ ] GitHub environments created and `WIF_SA` set on each (step 7)
+- [ ] GitHub environment setup complete, with `WIF_SA` set on each environment
 - [ ] Cloud Run env vars pushed for staging and prod
 - [ ] Custom domains mapped and DNS updated
 - [ ] Firebase App Hosting disconnected (if applicable)
