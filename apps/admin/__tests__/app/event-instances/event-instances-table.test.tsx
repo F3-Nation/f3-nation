@@ -1,8 +1,9 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import {
   afterEach,
+  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -45,6 +46,28 @@ const enabledStartDates = () =>
   eventInstancesQueries()
     .filter((query) => query.enabled !== false)
     .map((query) => query.input?.startDate);
+
+const latestEnabledStartDate = () => enabledStartDates().at(-1);
+
+const openStartDateFilter = (label: string) => {
+  fireEvent.click(screen.getByText(label));
+};
+
+// Radix's popper measures its trigger, and jsdom has no ResizeObserver.
+beforeAll(() => {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- jsdom has no ResizeObserver
+  globalThis.ResizeObserver ??= class {
+    observe() {
+      // no-op
+    }
+    unobserve() {
+      // no-op
+    }
+    disconnect() {
+      // no-op
+    }
+  };
+});
 
 describe("EventInstancesTable", () => {
   beforeEach(() => {
@@ -97,5 +120,54 @@ describe("EventInstancesTable", () => {
 
     expect(screen.getByText("2026-01-15 → …")).toBeTruthy();
     expect(enabledStartDates()).toEqual(["2026-01-15"]);
+  });
+
+  it("keeps the first date when the table stays open past midnight", () => {
+    render(<EventInstancesTable />);
+
+    vi.setSystemTime(new Date(2026, 0, 16, 0, 5));
+    fireEvent.change(screen.getByPlaceholderText(/^Search/), {
+      target: { value: "bootcamp" },
+    });
+
+    expect(screen.getByText("2026-01-15 → …")).toBeTruthy();
+    expect(new Set(enabledStartDates())).toEqual(new Set(["2026-01-15"]));
+  });
+
+  it("uses the range the user picks", () => {
+    render(<EventInstancesTable />);
+    openStartDateFilter("2026-01-15 → …");
+
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-02-01" },
+    });
+
+    expect(screen.getByText("2026-02-01 → …")).toBeTruthy();
+    expect(latestEnabledStartDate()).toBe("2026-02-01");
+  });
+
+  it("keeps the range cleared instead of going back to today", () => {
+    render(<EventInstancesTable />);
+    openStartDateFilter("2026-01-15 → …");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear dates" }));
+
+    expect(screen.getByText("Filter by start date")).toBeTruthy();
+    const latestQuery = eventInstancesQueries().at(-1);
+    expect(latestQuery?.enabled).toBe(true);
+    expect(latestQuery?.input?.startDate).toBeUndefined();
+  });
+
+  it("goes back to today when the filters are reset", () => {
+    render(<EventInstancesTable />);
+    openStartDateFilter("2026-01-15 → …");
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-02-01" },
+    });
+
+    fireEvent.click(screen.getByTitle("Reset Filters"));
+
+    expect(screen.getByText("2026-01-15 → …")).toBeTruthy();
+    expect(latestEnabledStartDate()).toBe("2026-01-15");
   });
 });

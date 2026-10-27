@@ -49,8 +49,14 @@ function seriesExceptionLabel(value: string): string {
 
 // Nothing to subscribe to, the date is only read when the table renders.
 const subscribeToToday = () => () => undefined;
-const getBrowserToday = () => todayForwardDateRange().from;
 const getServerToday = () => null;
+
+// Keeps the first date it reads, so a table left open past midnight doesn't
+// move the filter (and the rows under the current page) on its next render.
+const createTodayReader = () => {
+  let today: string | undefined;
+  return () => (today ??= todayForwardDateRange().from);
+};
 
 export const EventInstancesTable = () => {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -65,12 +71,13 @@ export const EventInstancesTable = () => {
   // evening it's already tomorrow there and the filter label wouldn't match
   // during hydration. It's null for the server render and hydration, then
   // React re-renders with the browser's date.
+  const [getBrowserToday] = useState(() => createTodayReader());
   const today = useSyncExternalStore(
     subscribeToToday,
     getBrowserToday,
     getServerToday,
   );
-  // null until the user picks a range.
+  // null means the default today-forward range, derived below.
   const [startDateRange, setStartDateRange] = useState<DateRange | null>(null);
   const dateRange =
     startDateRange ??
@@ -106,7 +113,7 @@ export const EventInstancesTable = () => {
     setSelectedStatuses(["active"]);
     setSelectedAos([]);
     setSelectedRegions([]);
-    setStartDateRange(todayForwardDateRange());
+    setStartDateRange(null);
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   };
 
