@@ -57,6 +57,31 @@ describe("fetchOrgById", () => {
     expect(result).toMatchObject({ id: 2, name: "Test" });
   });
 
+  it("keeps only admin and editor roles", async () => {
+    const role = (roleId: number, title: string) => ({
+      roleId,
+      title,
+      userId: roleId,
+      f3Name: null,
+      avatarUrl: null,
+    });
+    mockFetch(200, {
+      id: 2,
+      name: "Test",
+      orgType: "region",
+      roles: [
+        role(1, "admin"),
+        role(2, "editor"),
+        role(3, "password_manager"),
+        role(4, "password_reader"),
+        role(5, "user"),
+      ],
+      positions: [],
+    });
+    const result = await fetchOrgById(2);
+    expect(result.roles.map((r) => r.title)).toEqual(["admin", "editor"]);
+  });
+
   it("throws on a non-ok response", async () => {
     mockFetch(404, {});
     await expect(fetchOrgById(999)).rejects.toThrow("API 404");

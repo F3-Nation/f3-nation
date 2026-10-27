@@ -49,8 +49,17 @@ export async function fetchOrgChart(): Promise<OrgChartItem[]> {
   return data.orgs.filter((o): o is OrgChartItem => o !== null);
 }
 
+// The org chart is public, but most roles are internal permissions rather than
+// leadership. This allowlist keeps any other role, current or future, off the
+// chart.
+const VISIBLE_ROLES: ReadonlySet<string> = new Set(["admin", "editor"]);
+
 export async function fetchOrgById(id: number): Promise<OrgDetail> {
-  return orgMapFetch<OrgDetail>(`/org-chart/${id}`);
+  const detail = await orgMapFetch<OrgDetail>(`/org-chart/${id}`);
+  return {
+    ...detail,
+    roles: detail.roles.filter((r) => VISIBLE_ROLES.has(r.title)),
+  };
 }
 
 export async function fetchLocationById(
