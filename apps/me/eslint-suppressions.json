@@ -1,9 +1,4 @@
 {
-  "src/components/ui/avatar.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
   "src/hooks/useAvatarUpload.ts": {
     "react-hooks/set-state-in-effect": {
       "count": 1
