@@ -14,7 +14,7 @@ import {
 } from "vitest";
 
 const mocks = vi.hoisted(() => {
-  vi.stubEnv("NEXT_PUBLIC_AUTH_URL", "https://auth.example.test");
+  vi.stubEnv("AUTH_TRUSTED_ISSUERS", "https://auth.example.test");
   return { key: vi.fn(), limit: vi.fn(), warn: vi.fn(), error: vi.fn() };
 });
 
@@ -291,7 +291,7 @@ describe("Personal operations authentication", () => {
     });
     expect(mocks.error).toHaveBeenCalledWith(
       "api.auth.jwks_unavailable",
-      { reason: "ECONNREFUSED" },
+      { issuer: "https://auth.example.test", reason: "ECONNREFUSED" },
       down,
     );
   });
