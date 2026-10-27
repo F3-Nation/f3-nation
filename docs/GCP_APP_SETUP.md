@@ -337,11 +337,9 @@ EOF
 
 > To add a team or additional reviewers, repeat the `gh api` call for prod with extra objects in the `reviewers` array (`"type": "Team"`, `"id": <team_id>`).
 
-Now set the environment variables. These are `vars.*` (not secrets) — no credentials are stored in GitHub; auth happens via WIF token exchange at runtime.
+Now set the environment variable. Each environment gets its own `WIF_SA`, the service account that environment deploys as. `WIF_PROVIDER` is an organization-level variable, because every app shares one WIF provider, so it is not set per environment. These are `vars.*` (not secrets) — no credentials are stored in GitHub; auth happens via WIF token exchange at runtime.
 
 ```bash
-WIF_PROVIDER_VALUE="projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/providers/github"
-
 gh variable set WIF_SA       --env "$GH_STAGING_ENV" --repo "$GH_REPO" --body "$STAGING_SA"
 gh variable set WIF_SA       --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$PROD_SA"
 ```
@@ -393,7 +391,7 @@ In the Firebase Console for each project → **App Hosting** → select the back
 - [ ] Prod SA created, IAM roles granted (including cross-project AR read on staging), WIF binding added
 - [ ] Cloud SQL IAM granted to deploy/runtime SAs if the app uses Cloud SQL
 - [ ] Storage bucket IAM granted to runtime SAs if the app uses Cloud Storage buckets or volume mounts
-- [ ] GitHub environments created and `WIF_PROVIDER`/`WIF_SA` variables set (step 7)
+- [ ] GitHub environments created and `WIF_SA` set on each (step 7)
 - [ ] Cloud Run env vars pushed for staging and prod
 - [ ] Custom domains mapped and DNS updated
 - [ ] Firebase App Hosting disconnected (if applicable)
