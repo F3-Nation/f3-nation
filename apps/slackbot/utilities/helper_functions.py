@@ -255,16 +255,21 @@ def get_user(slack_user_id: str, region_record: SlackSettings, client: WebClient
     if not user or not safe_get(user, "user_id"):
         try:
             user_info = client.users_info(user=slack_user_id)
-        except Exception:
+            profile = user_info["user"].setdefault("profile", {})
+            # Slack can leave out a member's email (e.g. Slack Connect); without one, create_user keys him like a
+            # bot and makes a new F3 user instead of matching his existing one.
+            if user and not safe_get(user, "is_bot") and safe_get(user, "email") and not safe_get(profile, "email"):
+                profile["email"] = safe_get(user, "email")
+            slack_user_record = create_user(user_info["user"], region_record.org_id)
+        except Exception as exc:
             if user:
-                return user  # callers already handle an unlinked row; better than failing while Slack is down
+                # A Slack or database failure here must not break requests that used to get this cached row.
+                # It is still unlinked, so callers must cope with user_id being None.
+                logging.getLogger(__name__).warning(
+                    "Linking unlinked cached Slack user %s failed; returning it unlinked", slack_user_id, exc_info=exc
+                )
+                return user
             raise
-        profile = user_info["user"].setdefault("profile", {})
-        # Slack can leave out a member's email (e.g. Slack Connect); without one, create_user keys him like a bot
-        # and makes a new F3 user instead of matching his existing one.
-        if user and not safe_get(user, "is_bot") and safe_get(user, "email") and not safe_get(profile, "email"):
-            profile["email"] = safe_get(user, "email")
-        slack_user_record = create_user(user_info["user"], region_record.org_id)
 
         # Update SLACK_USERS with the new id
         SLACK_USERS[slack_user_id] = slack_user_record

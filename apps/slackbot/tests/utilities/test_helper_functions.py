@@ -456,15 +456,103 @@ def test_production_get_user_matches_unlinked_cache_by_its_email_when_slack_omit
         slack_id="U_PROD", user_id=None, is_bot=False, email="member@example.invalid"
     )
     passed = []
+    linked = SimpleNamespace(slack_id="U_PROD", user_id=88)
     client = SimpleNamespace(users_info=lambda **_kwargs: {"user": {"id": "U_PROD", "profile": {}}})
+    monkeypatch.setattr(helper_functions, "create_user", lambda info, *_args: passed.append(info) or linked)
+
+    result = helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), client, None)
+
+    assert passed[0]["profile"]["email"] == "member@example.invalid"
+    assert result is linked
+    assert helper_functions.SLACK_USERS["U_PROD"] is linked
+
+
+def test_production_get_user_keeps_slack_profile_email_over_cached_email(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS["U_PROD"] = SimpleNamespace(
+        slack_id="U_PROD", user_id=None, is_bot=False, email="stale@example.invalid"
+    )
+    passed = []
+    client = SimpleNamespace(
+        users_info=lambda **_kwargs: {"user": {"id": "U_PROD", "profile": {"email": "current@example.invalid"}}}
+    )
     monkeypatch.setattr(helper_functions, "create_user", lambda info, *_args: passed.append(info) or SimpleNamespace())
 
     helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), client, None)
 
-    assert passed[0]["profile"]["email"] == "member@example.invalid"
+    assert passed[0]["profile"]["email"] == "current@example.invalid"
 
 
-def test_production_get_user_returns_unlinked_cache_when_slack_lookup_fails(monkeypatch):
+def test_production_get_user_does_not_fill_email_for_cached_bot(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS["B_PROD"] = SimpleNamespace(slack_id="B_PROD", user_id=None, is_bot=True, email="b_prod")
+    passed = []
+    client = SimpleNamespace(users_info=lambda **_kwargs: {"user": {"id": "B_PROD", "profile": {}}})
+    monkeypatch.setattr(helper_functions, "create_user", lambda info, *_args: passed.append(info) or SimpleNamespace())
+
+    helper_functions.get_user("B_PROD", SimpleNamespace(org_id=1), client, None)
+
+    assert "email" not in passed[0]["profile"]
+
+
+def test_production_get_user_links_unlinked_row_through_real_create_user(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    existing_user = SimpleNamespace(id=42)
+    unlinked = SimpleNamespace(id=7, slack_id="U_PROD", user_id=None, is_bot=False, email="member@example.invalid")
+    helper_functions.SLACK_USERS.clear()
+    helper_functions.SLACK_USERS["U_PROD"] = unlinked
+    monkeypatch.setattr(
+        helper_functions.DbManager,
+        "find_records",
+        lambda model, *_args, **_kwargs: [existing_user] if model is helper_functions.User else [unlinked],
+    )
+    updates = []
+    monkeypatch.setattr(helper_functions.DbManager, "update_record", lambda *args: updates.append(args))
+    monkeypatch.setattr(helper_functions.DbManager, "create_record", lambda *_a: pytest.fail("must not create"))
+    client = SimpleNamespace(users_info=lambda **_kwargs: {"user": {"id": "U_PROD", "profile": {}}})
+
+    result = helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), client, None)
+
+    assert result is unlinked
+    assert result.user_id == 42
+    assert updates and updates[0][1] == 7
+    assert helper_functions.SLACK_USERS["U_PROD"] is unlinked
+
+
+def test_production_get_user_returns_unlinked_cache_when_create_user_fails(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    helper_functions.SLACK_USERS.clear()
+    cached = SimpleNamespace(slack_id="U_PROD", user_id=None, is_bot=False, email="member@example.invalid")
+    helper_functions.SLACK_USERS["U_PROD"] = cached
+    client = SimpleNamespace(users_info=lambda **_kwargs: {"user": {"id": "U_PROD", "profile": {}}})
+
+    def create_user(*_args):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(helper_functions, "create_user", create_user)
+
+    assert helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), client, None) is cached
+    assert helper_functions.SLACK_USERS["U_PROD"] is cached
+
+
+def test_production_get_user_raises_when_create_user_fails_for_an_uncached_user(monkeypatch):
+    monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
+    monkeypatch.setattr(helper_functions, "update_local_slack_users", lambda: None)
+    helper_functions.SLACK_USERS.clear()
+    client = SimpleNamespace(users_info=lambda **_kwargs: {"user": {"id": "U_NEW", "profile": {}}})
+
+    def create_user(*_args):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(helper_functions, "create_user", create_user)
+
+    with pytest.raises(RuntimeError):
+        helper_functions.get_user("U_NEW", SimpleNamespace(org_id=1), client, None)
+
+
+def test_production_get_user_returns_unlinked_cache_when_slack_lookup_fails(monkeypatch, caplog):
     monkeypatch.setattr(helper_functions.constants, "is_production_deployment", lambda: True)
     helper_functions.SLACK_USERS.clear()
     cached = SimpleNamespace(slack_id="U_PROD", user_id=None, is_bot=False, email="member@example.invalid")
@@ -475,10 +563,13 @@ def test_production_get_user_returns_unlinked_cache_when_slack_lookup_fails(monk
 
     monkeypatch.setattr(helper_functions, "create_user", lambda *_args: pytest.fail("must not call create_user"))
 
-    assert (
-        helper_functions.get_user("U_PROD", SimpleNamespace(org_id=1), SimpleNamespace(users_info=users_info), None)
-        is cached
-    )
+    with caplog.at_level("WARNING", logger=helper_functions.__name__):
+        result = helper_functions.get_user(
+            "U_PROD", SimpleNamespace(org_id=1), SimpleNamespace(users_info=users_info), None
+        )
+
+    assert result is cached
+    assert "returning it unlinked" in caplog.text
 
 
 def test_production_get_user_raises_when_slack_lookup_fails_for_an_uncached_user(monkeypatch):
