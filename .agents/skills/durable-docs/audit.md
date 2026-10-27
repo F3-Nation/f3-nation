@@ -11,7 +11,7 @@ lockfile, migration history) are listed under
 [What to leave out of this skill's work](SKILL.md#what-to-leave-out-of-this-skills-work).
 
 Rewrites happen **in place on a clean branch** off the base picked with the
-person who asked; they create the PR. Nothing is pushed and no issue is filed
+person who asked. Nothing is pushed, no PR is opened, and no issue is filed
 without their say-so.
 
 1. **Confirm scope** — which trees: `apps/`, `packages/`, `docs/`,
