@@ -49,7 +49,7 @@ def run(
     monkeypatch.setattr(
         fng_reminders.DbManager, "find_first_record", MagicMock(return_value=SimpleNamespace() if joined else None)
     )
-    monkeypatch.setattr(fng_reminders.DbManager, "update_record", MagicMock())
+    monkeypatch.setattr(fng_reminders, "save_reminders_sent", MagicMock())
     dm = MagicMock(return_value=list(delivered), side_effect=dm_side_effect)
     monkeypatch.setattr(fng_reminders, "dm_fng_contacts", dm)
     monkeypatch.setattr(fng_reminders, "WebClient", MagicMock())
@@ -94,22 +94,19 @@ def test_no_reminder_until_the_next_one_is_due(monkeypatch, days, already_sent):
 def test_sent_reminder_is_recorded_so_a_rerun_sends_nothing(monkeypatch):
     run(monkeypatch, [fng_created_days_ago(6, meta={"battle_buddy": 7, "fng_reminders_sent": {"7": 1}})])
 
-    fng_reminders.DbManager.update_record.assert_called_once_with(
-        fng_reminders.User, 42, {fng_reminders.User.meta: {"battle_buddy": 7, "fng_reminders_sent": {"7": 2}}}
-    )
+    fng_reminders.save_reminders_sent.assert_called_once_with(42, {"7": 2})
 
 
 def test_missed_reminder_goes_out_the_next_day_once(monkeypatch):
     text = run(monkeypatch, [fng_created_days_ago(7)]).call_args.args[3]
 
     assert "7 days later" in text
-    meta = fng_reminders.DbManager.update_record.call_args.args[2][fng_reminders.User.meta]
-    assert meta["fng_reminders_sent"] == {"7": 2}
+    assert fng_reminders.save_reminders_sent.call_args.args[1] == {"7": 2}
 
 
 def test_undelivered_reminder_is_retried(monkeypatch):
     assert run(monkeypatch, [fng_created_days_ago(3)], delivered=()).called
-    fng_reminders.DbManager.update_record.assert_not_called()
+    fng_reminders.save_reminders_sent.assert_not_called()
     fng_reminders.logger.warning.assert_called_once()
     assert fng_reminders.logger.warning.call_args.args[0] == "fng.reminder_undeliverable"
 
@@ -119,14 +116,13 @@ def test_contact_whose_dm_failed_is_retried_without_repeating_it_to_the_other(mo
     dm = run(monkeypatch, [fng_created_days_ago(3, meta=both)], delivered=(9,))
 
     assert dm.call_args.kwargs["contact_ids"] == [7, 9]
-    meta = fng_reminders.DbManager.update_record.call_args.args[2][fng_reminders.User.meta]
-    assert meta["fng_reminders_sent"] == {"9": 1}
+    received = fng_reminders.save_reminders_sent.call_args.args[1]
+    assert received == {"9": 1}
 
-    dm = run(monkeypatch, [fng_created_days_ago(4, meta=meta)], delivered=(7,))
+    dm = run(monkeypatch, [fng_created_days_ago(4, meta={**both, "fng_reminders_sent": received})], delivered=(7,))
 
     assert dm.call_args.kwargs["contact_ids"] == [7]
-    meta = fng_reminders.DbManager.update_record.call_args.args[2][fng_reminders.User.meta]
-    assert meta["fng_reminders_sent"] == {"9": 1, "7": 1}
+    assert fng_reminders.save_reminders_sent.call_args.args[1] == {"9": 1, "7": 1}
 
 
 def test_failed_last_reminder_is_retried_the_next_day(monkeypatch):
@@ -191,7 +187,7 @@ def test_a_failing_fng_does_not_stop_the_next_one(monkeypatch):
     dm = run(monkeypatch, fngs, dm_side_effect=[RuntimeError("slack timeout"), [7]])
 
     assert [c.args[2].id for c in dm.call_args_list] == [42, 43]
-    fng_reminders.DbManager.update_record.assert_called_once()
+    fng_reminders.save_reminders_sent.assert_called_once()
     fng_reminders.logger.error.assert_called_once()
     assert fng_reminders.logger.error.call_args.args[0].startswith("fng.reminder_failed")
 

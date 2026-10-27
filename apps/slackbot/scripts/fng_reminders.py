@@ -10,6 +10,8 @@ import pytz
 from f3_data_models.models import Org_x_SlackSpace, SlackSpace, SlackUser, User
 from f3_data_models.utils import DbManager
 from slack_sdk import WebClient
+from sqlalchemy import cast, func, literal
+from sqlalchemy.dialects.postgresql import JSONB
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -94,6 +96,23 @@ def _remind_space(space: SlackSpace, org_x_space: Org_x_SlackSpace, now: datetim
     return sent
 
 
+def save_reminders_sent(user_id: int, received: dict[str, int]) -> None:
+    """Sets only the reminder counts in ``User.meta``, merging in the database, so a profile edit saved while the DMs
+    went out isn't overwritten by the copy of ``meta`` this job read before sending. Only this job writes the key, so
+    replacing it whole is safe."""
+    DbManager.update_record(
+        User,
+        user_id,
+        {
+            # meta can be SQL NULL or JSON null (how the ORM stores None); either would turn the merge into NULL or
+            # an array.
+            User.meta: func.coalesce(func.nullif(User.meta, cast(literal("null"), JSONB)), literal({}, JSONB)).op("||")(
+                literal({FNG_META_REMINDERS_SENT: received}, JSONB)
+            )
+        },
+    )
+
+
 def _remind_fng(
     client: WebClient, space: SlackSpace, settings: SlackSettings, interval: int, fng: User, now: datetime
 ) -> int:
@@ -122,7 +141,7 @@ def _remind_fng(
     delivered = dm_fng_contacts(client, space.team_id, fng, text, logger, contact_ids=behind)
     if delivered:
         received = {**received, **{str(user_id): due for user_id in delivered}}
-        DbManager.update_record(User, fng.id, {User.meta: {**fng.meta, FNG_META_REMINDERS_SENT: received}})
+        save_reminders_sent(fng.id, received)
     else:
         logger.warning(
             "fng.reminder_undeliverable",
