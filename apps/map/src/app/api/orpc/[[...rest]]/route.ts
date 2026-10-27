@@ -211,15 +211,19 @@ async function proxyRequest(request: NextRequest) {
   const hasBody = method !== "GET" && method !== "HEAD";
   const body = hasBody ? await request.arrayBuffer() : undefined;
 
+  // Built before the try so a misconfigured F3_API_BASE_URL fails as a server
+  // error instead of being reported as the API being down.
+  const targetUrl = getTargetUrl(request, proxiedPath);
+  const forwardedHeaders = getForwardedHeaders(request);
   const timeoutMs = getUpstreamTimeoutMs();
   const upstream = new AbortController();
   const startedAt = Date.now();
   const timer = setTimeout(() => upstream.abort(), timeoutMs);
   let upstreamResponse: Response;
   try {
-    upstreamResponse = await fetch(getTargetUrl(request, proxiedPath), {
+    upstreamResponse = await fetch(targetUrl, {
       method,
-      headers: getForwardedHeaders(request),
+      headers: forwardedHeaders,
       body,
       signal: upstream.signal,
     });

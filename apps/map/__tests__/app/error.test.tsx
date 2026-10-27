@@ -68,6 +68,13 @@ describe("RouteError", () => {
     expect(captureExceptionMock).not.toHaveBeenCalled();
   });
 
+  it("shows the outage screen but still reports an API 500, which may be a bug", () => {
+    const error = new ORPCError("INTERNAL_SERVER_ERROR", { status: 500 });
+    render(<RouteError error={error} retry={retry} />);
+    expect(screen.getByText(/temporarily unavailable/)).toBeTruthy();
+    expect(captureExceptionMock).toHaveBeenCalledWith(error);
+  });
+
   it("keeps the generic error screen for an API error that isn't an outage", () => {
     const error = new ORPCError("BAD_REQUEST", { status: 400 });
     render(<RouteError error={error} retry={retry} />);

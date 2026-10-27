@@ -70,6 +70,17 @@ describe("oRPC proxy when the API is down", () => {
     expect(isApiUnavailableError(error)).toBe(true);
   });
 
+  it("fails a missing F3_API_BASE_URL as a server error, not an outage", async () => {
+    vi.stubEnv("F3_API_BASE_URL", "");
+    const { GET } = await importRoute();
+
+    await expect(GET(pingRequest())).rejects.toThrow(
+      "F3_API_BASE_URL is required",
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(logWarn).not.toHaveBeenCalled();
+  });
+
   it("times out an API that never answers instead of leaving the request pending", async () => {
     fetchSpy.mockImplementation(hangUntilAborted);
     const { GET } = await importRoute();

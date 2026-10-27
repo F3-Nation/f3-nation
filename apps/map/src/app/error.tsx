@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Image from "next/image";
+import { ORPCError } from "@orpc/client";
 
 import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 import { ApiUnavailable } from "@acme/ui/api-unavailable";
@@ -17,6 +18,11 @@ export default function RouteError({
   retry: () => void;
 }) {
   const apiUnavailable = isApiUnavailableError(error);
+  // A well-formed 500 is how the API reports both a database outage and its
+  // own bugs, and the proxy forwards it without logging. The outage screen is
+  // right either way, but keep reporting it so a bug still surfaces.
+  const apiInternalError =
+    error instanceof ORPCError && error.code === "INTERNAL_SERVER_ERROR";
 
   useEffect(() => {
     // Server Component errors carry a digest and were already captured with
@@ -24,9 +30,9 @@ export default function RouteError({
     if (error instanceof Error && "digest" in error) return;
     // The proxy already logged the outage server-side; every open tab
     // reporting it again on each automatic retry would only add noise.
-    if (apiUnavailable) return;
+    if (apiUnavailable && !apiInternalError) return;
     reportClientError(error);
-  }, [error, apiUnavailable]);
+  }, [error, apiUnavailable, apiInternalError]);
 
   if (apiUnavailable) {
     return (
