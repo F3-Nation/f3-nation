@@ -342,10 +342,7 @@ Now set the environment variables. These are `vars.*` (not secrets) — no crede
 ```bash
 WIF_PROVIDER_VALUE="projects/${WIF_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions/providers/github"
 
-gh variable set WIF_PROVIDER --env "$GH_STAGING_ENV" --repo "$GH_REPO" --body "$WIF_PROVIDER_VALUE"
 gh variable set WIF_SA       --env "$GH_STAGING_ENV" --repo "$GH_REPO" --body "$STAGING_SA"
-
-gh variable set WIF_PROVIDER --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$WIF_PROVIDER_VALUE"
 gh variable set WIF_SA       --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$PROD_SA"
 ```
 
@@ -353,20 +350,7 @@ gh variable set WIF_SA       --env "$GH_PROD_ENV" --repo "$GH_REPO" --body "$PRO
 
 ## 8. Push App Secrets to Cloud Run
 
-Each app has its own `.env.cloud-run.example` file and a helper script that pushes env vars to Cloud Run as secrets.
-
-```bash
-# Copy the example and populate with real values
-cp "apps/${APP_NAME}/.env.cloud-run.example" "apps/${APP_NAME}/.env.cloud-run.staging"
-cp "apps/${APP_NAME}/.env.cloud-run.example" "apps/${APP_NAME}/.env.cloud-run.prod"
-
-# Edit each file with the correct environment-specific values
-# Never commit these files
-
-# Push to Cloud Run
-bash "apps/${APP_NAME}/scripts/cloud-run-env.sh" --env staging
-bash "apps/${APP_NAME}/scripts/cloud-run-env.sh" --env prod
-```
+Ask AI to push environment variables and secrets to the Cloud Run service, or add them manually.
 
 ---
 
