@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  API_REQUEST_TIMEOUT_MS,
-  isApiUnavailableError,
-} from "~/lib/api/availability";
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
+
+import { API_REQUEST_TIMEOUT_MS } from "~/lib/api/availability";
 
 // Unlike client.test.ts, this runs the real oRPC client: it pins the contract
 // that what oRPC throws during a real outage is what the classifier expects,
