@@ -86,9 +86,9 @@ The user can interrupt at any point; treat "stop" or "abort" as an exit, which m
    - Tools: `git`, `gh` (`gh auth status`), `jq`, `curl`, `openssl`, `docker`, and `lsof`
      (or `ss` on Linux). Install hints are in `reference.md`.
    - Docker running: `docker info` (fixes in `reference.md`).
-   - GitHub access, through the repo's pre-flight:
-     `bash <repo root>/scripts/gh-check.sh`. A failure here is a stop.
-     Then run it again with `--require-write`; if only that fails, it isn't a stop: set
+   - GitHub access, through the repo's
+     [read pre-flight](../../../AGENTS.md#writing-to-github), run from `<repo root>`. A failure
+     here is a stop. Then run the write pre-flight; if only that fails, it isn't a stop: set
      `CAN_POST=false`, and the plan says feedback is drafted but not posted.
 
 ## Phase 1 — Create the sandbox
@@ -331,8 +331,8 @@ it again.
 ## Phase 6 — Post (only after "post")
 
 Run this phase's `gh` commands from `<repo root>`: `down --keep-drafts` has already removed
-`$RUN/wt`, and `gh` needs a checkout to find the repo. First run the write pre-flight,
-`bash <repo root>/scripts/gh-check.sh --require-write`; if it fails, hand
+`$RUN/wt`, and `gh` needs a checkout to find the repo. First run the write pre-flight
+from `<repo root>`; if it fails, hand
 the user the drafted text instead of posting.
 
 Before posting, compare `gh pr view <N> --json headRefOid` with the run's `tested_sha`

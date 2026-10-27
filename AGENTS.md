@@ -178,7 +178,7 @@ These rules cover everything an AI assistant writes to GitHub — issues, pull r
 
 - **Pre-flight:** run `bash scripts/gh-check.sh` before reading through `gh`, and `bash scripts/gh-check.sh --require-write` before writing. It confirms `gh` is signed in and can reach the repository with the access needed; set `GH_REPO=<owner>/<name>` to check a repository other than the current checkout. If it fails, show the user its message and stop.
 - **Signature:** end every issue body, PR body, and comment with `_written by <model_name>_`, exactly once, as its final line. Name the actual model or agent (`Claude Opus 5.5`, `Codex`), not a generic label like `AI`. A footer your tool adds on its own goes above it.
-- **Draft PRs:** open pull requests with `gh pr create --draft`, so automated reviewers run before people are asked to review.
+- **Draft PRs:** open pull requests with `gh pr create --draft`; the author marks them ready for review. Automated reviewers skip drafts and start once a PR is marked ready, so work in progress doesn't use up review runs.
 - **Never resolve review threads.** The people reviewing resolve them.
 - **Reply to every review comment you act on**, in its thread, whether you changed code or decided not to, saying what you did and why.
 

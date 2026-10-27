@@ -45,16 +45,8 @@ Check these before Step 1 and report everything missing in one message.
 [GitHub write rules](../../../AGENTS.md#writing-to-github) (signature, never resolving threads) for the rest of
 this skill. Run the pre-flight: read-only for `--dry-run`, with write access otherwise. If it fails, stop
 here — the review would be wasted work if the comments can't be posted. For a cross-repo target
-(below), resolve `OWNER` and `REPO` from the PR URL first and prefix it with `GH_REPO`, so it
-checks the target, not this checkout.
-
-```bash
-bash scripts/gh-check.sh                    # --dry-run
-bash scripts/gh-check.sh --require-write    # otherwise
-# Cross-repo target:
-GH_REPO="$OWNER/$REPO" bash scripts/gh-check.sh                  # --dry-run
-GH_REPO="$OWNER/$REPO" bash scripts/gh-check.sh --require-write  # otherwise
-```
+(below), resolve `OWNER` and `REPO` from the PR URL first and run it with `GH_REPO="$OWNER/$REPO"`,
+so it checks the target, not this checkout.
 
 ```bash
 # Repo context
