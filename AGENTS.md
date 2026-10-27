@@ -93,8 +93,8 @@ follow
   `lib/logging`. Reserve the raw `logger` for request-scoped children
   (`logger.child({ requestId })`).
   - One carve-out: the error-reporting pipeline's own failure paths —
-    `@acme/observability`, and `global-error.tsx`, which is browser-only
-    where pino does not run. `logError` there would re-enter the reporter
+    `@acme/observability`, and map's browser-only `report-client-error.ts`
+    (called from its error boundaries), where pino does not run. `logError` there would re-enter the reporter
     that just failed, so those sites use `console.error` deliberately and
     each says so in a comment. Nothing else gets this exemption; see
     [`docs/OBSERVABILITY_PLAN.md`](docs/OBSERVABILITY_PLAN.md).
