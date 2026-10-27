@@ -61,6 +61,16 @@ const DB_NOW = sql`timezone('utc'::text, now())`;
 // ./trusted-issuers. Read from process.env to avoid t3-env client/server
 // type mismatch.
 const authIssuers = trustedIssuers(process.env.AUTH_TRUSTED_ISSUERS);
+// An empty list rejects every bearer JWT, which in practice shows up only as
+// API-key 401s (e.g. a local apps/api/.env from before this variable), so
+// say so once at startup. A warning, not a throw: tests and API-key-only
+// setups run without it.
+if (authIssuers.length === 0) {
+  logWarn("api.auth.no_trusted_issuers", {
+    message:
+      "AUTH_TRUSTED_ISSUERS is empty, so no bearer JWT will be accepted. Set it to the auth server origin(s), e.g. http://localhost:3004 locally.",
+  });
+}
 
 // Cached JWKS fetcher per trusted issuer for JWT verification, keyed by the
 // exact issuer string a token's `iss` must equal. jose caches each key set

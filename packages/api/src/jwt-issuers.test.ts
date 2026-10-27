@@ -144,6 +144,21 @@ describe("JWT verification across trusted issuers", () => {
         expect(mocks.fetched).toEqual([]);
       },
     );
+
+    it("warns once at startup, and not when issuers are set", async () => {
+      const { logWarn } = await import("./logger");
+      const startupWarnings = async (env: { list?: string }) => {
+        vi.mocked(logWarn).mockClear();
+        await loadClient(env);
+        return vi
+          .mocked(logWarn)
+          .mock.calls.filter(
+            ([event]) => event === "api.auth.no_trusted_issuers",
+          );
+      };
+      expect(await startupWarnings({})).toHaveLength(1);
+      expect(await startupWarnings({ list: PRIMARY })).toHaveLength(0);
+    });
   });
 
   describe("with one issuer in AUTH_TRUSTED_ISSUERS", () => {
