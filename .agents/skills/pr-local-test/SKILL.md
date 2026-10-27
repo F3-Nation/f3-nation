@@ -151,7 +151,7 @@ git -C "$RUN/wt" rev-list --count <MERGE_BASE>..<BASE_SHA>
 git -C "$RUN/wt" merge-tree --write-tree --name-only <BASE_SHA> HEAD
 # Open review conversations, for Phase 5's verdict. --paginate walks every page; one line per
 # open thread. Save to a file first: piping straight into wc -l would print 0 on a failed call.
-gh api graphql --paginate -F n=<N> -f o='{owner}' -f r='{repo}' -f query='
+gh api graphql --paginate -F n=<N> -F o='{owner}' -F r='{repo}' -f query='
   query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){
     pullRequest(number:$n){reviewThreads(first:100,after:$endCursor){
       nodes{isResolved} pageInfo{hasNextPage endCursor}}}}}' \
