@@ -325,13 +325,15 @@ first row whose condition is true:
 | ⏸️ **Can't recommend yet**                | A check of the PR's main purpose was skipped or blocked (a stop rule, or a 🙋 check still pending)                                       |
 | ❌ **Don't approve yet**                  | Any 🔴 or 🟠 problem caused by this PR; a check of the PR's main purpose failed; or the description claims something the code doesn't do |
 | ⏸️ **Can't recommend yet**                | Review conversations are still open on the PR (`OPEN_THREADS` above 0, or unknown), so the code may still change                         |
+| ⏸️ **Can't recommend yet**                | Conflict status is unknown (`merge-tree` exited with something other than 0 or 1), so the branch may conflict with its base              |
 | ✅ **Approve, with optional suggestions** | Every proposed inline comment is 🟡: a small fix the PR works fine without                                                               |
 | ✅ **Approve**                            | Nothing to post but the summary                                                                                                          |
 
 Under the verdict, add one plain sentence explaining it. For ❌ and ⏸️, add what would change
 the verdict (for open conversations: "Resolve the <OPEN_THREADS> open review conversations,
 then re-test."; if the count is unknown: "Couldn't check for open review conversations; re-run
-once GitHub answers."). If the PR is behind its base or has conflicts, add one more line:
+once GitHub answers."; if conflict status is unknown: "Couldn't check for conflicts; re-run once
+git can answer."). If the PR is behind its base or has conflicts, add one more line:
 "<BEHIND> commits behind <base>; conflicts in <files>; this result is for the tested commit, so
 update the branch before merging." Drop the conflicts clause when there are none. Never call
 the PR ready to merge while it is behind or conflicting. Problems "not caused by this PR" never
