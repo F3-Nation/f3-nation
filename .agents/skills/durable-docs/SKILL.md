@@ -1,6 +1,6 @@
 ---
 name: durable-docs
-description: Rules for documentation that still makes sense in three months — inline comments and markdown that say what something does and why it protects or prevents, never change history, GitHub issue/PR links, one-time instructions, or references that could drift. Use whenever writing or editing code comments or any markdown in this repo (docs/, READMEs, specs, .agents/skills, app AGENTS.md), or whenever a PR touches comments or docs — even if durability is never mentioned. Audit mode, which rewrites existing files in bulk, runs only when the user explicitly asks to audit or sweep existing docs; a casual "clean up" or "make the docs less stale" means apply these rules to the text at hand, not run an audit.
+description: Rules for documentation that still makes sense in three months — inline comments and markdown that say what something does and why it protects or prevents, never change history, GitHub issue/PR links, one-time instructions, or references that go stale silently. Use whenever writing or editing code comments or any markdown in this repo (docs/, READMEs, specs, .agents/skills, app AGENTS.md), or whenever a PR touches comments or docs — even if durability is never mentioned. Audit mode, which rewrites existing files in bulk, runs only when the user explicitly asks to audit or sweep existing docs; a casual "clean up" or "make the docs less stale" means apply these rules to the text at hand, not run an audit.
 ---
 
 # Durable docs and comments
@@ -118,11 +118,13 @@ rule or the reason instead of the instance, or enforce the coupling in code.
   to the one place the set is defined. When that place is outside the repo
   (a GitHub setting, a vendor console), the copy is a coupling: keep it and
   say what must change together.
-- **Naming what a reader can look up** — a function, variable, endpoint path,
-  env var, or file that go-to-definition or a search finds. Renames and moves
-  don't update comments. Describe the role it plays ("the caller", "the
-  public org-chart endpoint"); name it only when the reader can't reach it
-  from the code and needs it to act.
+- **Naming what the comment doesn't need** — a function, variable, endpoint
+  path, env var, or file mentioned in passing, when the comment's point
+  stands without it. Renames and moves don't update comments. Describe the
+  role instead ("the caller", "the public org-chart endpoint"). Keep the
+  name when the reader needs it to act — the other side of a coupling, or the
+  place a change must also go — since a stale name can still be searched for
+  and a stale description can't.
 - **Comparing to other code** — "behaves like X", "same as the map app's
   version", "mirrors `foo()`". The two diverge, and the comment then asserts
   something false about both. Describe the behavior itself. If the two must
@@ -152,7 +154,7 @@ rule or the reason instead of the instance, or enforce the coupling in code.
   means.
 
 The same applies to markdown. A doc that copies a list kept elsewhere —
-scripts, env vars, required checks, allowed scopes — should name the source
+scripts, env vars, allowed scopes — should name the source
 of truth and send the reader there, not reproduce it.
 
 A reference earns its place when it is the **only** way the reader learns of
