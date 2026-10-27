@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { isValidElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiUnavailable } from "~/app/_components/api-unavailable";
+import { ApiUnavailable } from "@acme/ui/api-unavailable";
 
 const { headersMock, getSessionLookupMock, requireAdminPortalAccessMock } =
   vi.hoisted(() => ({
