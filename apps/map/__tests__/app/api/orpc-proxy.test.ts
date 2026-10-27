@@ -5,7 +5,8 @@ vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
 
 const fetchSpy = vi
   .fn<(url: URL, init: RequestInit) => Promise<Response>>()
-  .mockResolvedValue(new Response("ok"));
+  // A fresh Response per call: the proxy reads each body, which locks it.
+  .mockImplementation(() => Promise.resolve(new Response("ok")));
 vi.stubGlobal("fetch", fetchSpy);
 
 describe("oRPC proxy route", () => {

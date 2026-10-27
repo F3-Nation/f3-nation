@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { ORPCError } from "@orpc/client";
+import { StandardRPCJsonSerializer } from "@orpc/client/standard";
 
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { Client, Header } from "@acme/shared/common/enums";
@@ -65,6 +67,80 @@ function getApiBaseUrl(): string {
     : normalized;
 }
 
+// How long the API may take to send headers, and to send each next chunk of a
+// body. Without it, an API that accepts connections but never answers leaves
+// every map request pending forever.
+export const DEFAULT_UPSTREAM_TIMEOUT_MS = 10_000;
+
+function getUpstreamTimeoutMs(): number {
+  const parsed = Number(process.env.F3_API_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_UPSTREAM_TIMEOUT_MS;
+}
+
+const serializer = new StandardRPCJsonSerializer();
+
+/**
+ * A 503 in oRPC's error format, so the map's client reads it as an
+ * `ORPCError` with status 503 — which `isApiUnavailableError` treats as an
+ * outage — instead of a fetch failure it can't classify.
+ */
+function apiUnavailableResponse(): Response {
+  const [json, meta] = serializer.serialize(
+    new ORPCError("SERVICE_UNAVAILABLE", {
+      status: 503,
+      message: "The F3 Nation API is not responding.",
+    }).toJSON(),
+  );
+  return NextResponse.json(
+    { json, meta },
+    { status: 503, headers: { "Cache-Control": "no-store" } },
+  );
+}
+
+/**
+ * Passes `body` through, failing it if the API goes quiet for `timeoutMs`
+ * mid-body. The timer runs only while waiting on the API, not while the
+ * browser is slow to take the next chunk. Reads go through our own reader
+ * because Next's patched fetch can hand back a copied body that aborting the
+ * request never reaches.
+ */
+export function withStallTimeout<T>(
+  body: ReadableStream<T>,
+  timeoutMs: number,
+  onFailure: (err: unknown) => void,
+): ReadableStream<T> {
+  const reader = body.getReader();
+  return new ReadableStream<T>({
+    async pull(controller) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const stalled = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new DOMException("API stopped sending", "TimeoutError")),
+          timeoutMs,
+        );
+      });
+      try {
+        const { done, value } = await Promise.race([reader.read(), stalled]);
+        if (done) controller.close();
+        else controller.enqueue(value);
+      } catch (err) {
+        // Not awaited: cancelling one branch of a copied body settles only
+        // once the other branch is cancelled too.
+        void reader.cancel(err).catch(() => undefined);
+        onFailure(err);
+        controller.error(err);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+}
+
 function getProxiedPath(request: NextRequest): string {
   const sourceUrl = new URL(request.url);
   return sourceUrl.pathname.slice(PROXY_PREFIX.length) || API_PREFIX_V1;
@@ -128,11 +204,29 @@ async function proxyRequest(request: NextRequest) {
   const hasBody = method !== "GET" && method !== "HEAD";
   const body = hasBody ? await request.arrayBuffer() : undefined;
 
-  const upstreamResponse = await fetch(getTargetUrl(request, proxiedPath), {
-    method,
-    headers: getForwardedHeaders(request),
-    body,
-  });
+  const timeoutMs = getUpstreamTimeoutMs();
+  const upstream = new AbortController();
+  const startedAt = Date.now();
+  const timer = setTimeout(() => upstream.abort(), timeoutMs);
+  let upstreamResponse: Response;
+  try {
+    upstreamResponse = await fetch(getTargetUrl(request, proxiedPath), {
+      method,
+      headers: getForwardedHeaders(request),
+      body,
+      signal: upstream.signal,
+    });
+  } catch (err) {
+    logWarn("map.orpc_proxy.upstream_unavailable", {
+      path: proxiedPath,
+      timedOut: upstream.signal.aborted,
+      durationMs: Date.now() - startedAt,
+      err,
+    });
+    return apiUnavailableResponse();
+  } finally {
+    clearTimeout(timer);
+  }
 
   const headers = new Headers(upstreamResponse.headers);
   // fetch() already decoded the body; these describe the encoded bytes.
@@ -155,7 +249,18 @@ async function proxyRequest(request: NextRequest) {
   // PUBLIC_PATHS responses are compressed: SIGNED_IN_ONLY_PATHS carry the
   // caller's own data, and leaving them uncompressed rules out BREACH-style
   // length leaks for the price of a few small responses.
-  let responseBody = upstreamResponse.body;
+  let responseBody =
+    upstreamResponse.body &&
+    withStallTimeout(upstreamResponse.body, timeoutMs, (err) => {
+      // Headers already went out, so the browser sees a failed download
+      // rather than a 503; this log is the only record of why.
+      upstream.abort();
+      logWarn("map.orpc_proxy.upstream_body_failed", {
+        path: proxiedPath,
+        durationMs: Date.now() - startedAt,
+        err,
+      });
+    });
   headers.append("Vary", "Accept-Encoding");
   if (
     isPublic &&

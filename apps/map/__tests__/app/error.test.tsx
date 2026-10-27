@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { ORPCError } from "@orpc/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import RouteError from "../../src/app/error";
 import NotFound from "../../src/app/not-found";
@@ -49,6 +50,29 @@ describe("RouteError", () => {
     envMock.NEXT_PUBLIC_POSTHOG_KEY = undefined;
     render(<RouteError error={new Error("client")} retry={retry} />);
     expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the outage screen, unreported, when the API is unavailable", () => {
+    render(
+      <RouteError
+        error={new ORPCError("SERVICE_UNAVAILABLE", { status: 503 })}
+        retry={retry}
+      />,
+    );
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "The F3 Nation map is temporarily unavailable",
+      }),
+    ).toBeTruthy();
+    expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the generic error screen for an API error that isn't an outage", () => {
+    const error = new ORPCError("BAD_REQUEST", { status: 400 });
+    render(<RouteError error={error} retry={retry} />);
+    expect(screen.queryByText(/temporarily unavailable/)).toBeNull();
+    expect(captureExceptionMock).toHaveBeenCalledWith(error);
   });
 
   it("calls retry from Try again", () => {

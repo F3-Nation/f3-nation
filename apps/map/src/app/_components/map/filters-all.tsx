@@ -52,6 +52,9 @@ export const FiltersAll = (props: ComponentProps<"div">) => {
   const { data: nationalEventTypes, isLoading } = useFetchAllPages({
     path: ["eventType", "all"],
     queryKey: ["eventType.all.everyNational"],
+    // Without event types the drawer still shows its other filters; failing
+    // here shouldn't replace the whole map with an error screen.
+    throwOnError: false,
     fetchPage: async ({ pageIndex, pageSize }) => {
       const { eventTypes: items, totalCount } = await client.eventType.all({
         nationalOnly: true,

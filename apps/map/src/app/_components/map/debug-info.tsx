@@ -11,7 +11,7 @@ export const DebugInfo = () => {
   const zoom = mapStore.use.zoom();
   const center = mapStore.use.center();
   const { data: workoutCount } = useQuery(
-    orpc.map.location.workoutCount.queryOptions(),
+    orpc.map.location.workoutCount.queryOptions({ throwOnError: false }),
   );
   const { filteredLocationMarkers } = useFilteredMapResults();
 
