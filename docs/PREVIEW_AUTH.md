@@ -42,9 +42,15 @@ for every session hop:
 
 3. **The api accepts auth-server JWTs as bearer headers.** `getSession` in
    `packages/api/src/shared.ts` verifies `Authorization: Bearer <jwt>` as an
-   RS256 token against `${NEXT_PUBLIC_AUTH_URL}/.well-known/jwks.json` with an
-   issuer check (`shared.ts:57-63`, `:200-204`, `:303-363`), then loads roles
-   from the DB. Headers don't care about cookie domains.
+   RS256 token against `${AUTH_TRUSTED_ISSUERS}/.well-known/jwks.json` with an
+   issuer check (`authJwksByIssuer`, `getSession` and `getSessionFromJWT` in
+   `shared.ts`), then loads roles
+   from the DB. Headers don't care about cookie domains. Previews set
+   `AUTH_TRUSTED_ISSUERS` to the auth preview's URL. Outside previews it can
+   list more than one issuer; each token is checked against the JWKS of the
+   allowlisted issuer its `iss` names (`packages/api/src/trusted-issuers.ts`).
+   Entries are bare origins, so an auth server must sign `iss` as its bare
+   origin for its tokens to verify.
 
 4. **The admin app (not yet in previews) also needs no shared cookie.** It
    runs an OAuth authorization-code flow against `AUTH_PROVIDER_URL`, stores
@@ -72,7 +78,8 @@ seed-dump time.
 ### Recipe 1 — Direct api RBAC via seeded API keys (no browser, no auth app)
 
 The seed provides role-bearing API keys (`data.ts:197-218`). Send them as a
-bearer token with the `client` header (`packages/api/src/shared.ts:209-294`):
+bearer token with the `client` header (`getSession` in
+`packages/api/src/shared.ts`):
 
 ```bash
 API=https://pr-7-api-<project>.us-central1.run.app

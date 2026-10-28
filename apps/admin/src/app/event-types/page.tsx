@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 
+import { TableSkeleton } from "@acme/ui/page-skeleton";
+
 import Layout from "../admin-layout";
 import { AddEventTypeButton } from "./add-event-type-button";
 import { EventTypesTable } from "./event-types-table";
@@ -14,7 +16,7 @@ const EventTypesPage = async () => {
             <AddEventTypeButton />
           </div>
         </div>
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<TableSkeleton />}>
           <div className="flex w-full flex-col overflow-hidden">
             <EventTypesTable />
           </div>
