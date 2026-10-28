@@ -63,7 +63,7 @@ def run(
     rows = {fng.id: fng for fng in fngs} if locked is None else locked
     session = MagicMock()
     session.query.return_value.filter.side_effect = lambda clause: SimpleNamespace(
-        with_for_update=lambda: SimpleNamespace(one_or_none=lambda: rows.get(clause.right.value))
+        with_for_update=lambda **_: SimpleNamespace(one_or_none=lambda: rows.get(clause.right.value))
     )
 
     @contextmanager
@@ -245,7 +245,8 @@ def test_reminder_uses_the_locked_row(monkeypatch):
     assert dm.call_args.args[2] is locked
 
 
-def test_fng_deleted_before_the_lock_is_skipped(monkeypatch):
+def test_fng_locked_by_another_run_or_deleted_is_skipped(monkeypatch):
+    # skip_locked returns no row for both.
     run(monkeypatch, [fng_created_days_ago(3)], locked={}).assert_not_called()
 
 
