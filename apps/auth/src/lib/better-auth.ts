@@ -1,8 +1,9 @@
 /**
  * Better Auth instance for the F3 SSO server. With AUTH_USE_BETTER_AUTH on,
  * it backs first-party sign-in, registration, sign-out and session reads
- * (see lib/current-session.ts); /api/oauth/* token issuance still runs on
- * lib/oauth.ts either way.
+ * (see lib/current-session.ts), and /api/oauth/{authorize,token,userinfo,
+ * revoke} forward to its /oauth2/* endpoints (see lib/better-auth-oauth.ts).
+ * With the flag off, /api/oauth/* runs on lib/oauth.ts as before.
  *
  * This factory is deliberately adapter-injectable (see `createAuthInstance`
  * below) rather than exporting one hardwired instance:
@@ -18,25 +19,16 @@
  * accessTokenClaimShapePlugin -> bearer. accessTokenClaimShapePlugin must
  * come after oauthProvider() — extendOAuthProvider() throws otherwise.
  *
- * What this does NOT do (flagged, not silently skipped):
- *   - Does not touch `/api/oauth/*` — those routes still serve every
- *     request from the hand-rolled server in apps/auth/src/lib/oauth.ts,
- *     unconditionally, regardless of AUTH_USE_BETTER_AUTH. Rewiring the
- *     real OAuth endpoints to delegate here needs a path-mapping decision
- *     (oauth-provider's endpoints live under their own fixed /oauth2/*
- *     sub-path, not at /api/oauth/authorize directly) that's out of scope
- *     here.
- *   - Does not implement the onboarding-completed gate that
- *     apps/auth/src/app/api/oauth/authorize/route.ts enforces today
- *     (redirect to /onboarding when `meta.onboarding_completed` is unset).
- *     Better Auth's own authorize flow has no hook for this app-specific
- *     business rule out of the box. Nothing is lost while /api/oauth/*
- *     stays hand-rolled: that route reads the session through
- *     lib/current-session.ts, so the gate holds with the flag on too. It
- *     has to move here if those routes are ever rewired.
- *   - Does not migrate existing oauth_clients rows — see
- *     apps/auth/scripts/migrate-oauth-clients-to-better-auth.ts, provided
- *     but not run by anything here.
+ * The onboarding gate that apps/auth/src/app/api/oauth/authorize/route.ts
+ * enforces (redirect to /onboarding while `meta.onboarding_completed` is
+ * unset) runs here as oauthProvider's `signup.shouldRedirect`, which the
+ * plugin re-checks on every authorize pass, including /oauth2/continue and
+ * /oauth2/consent resumes. Login and onboarding both round-trip through
+ * /api/oauth/authorize (see app/oauth/login and app/oauth/onboarding).
+ *
+ * Existing oauth_clients rows are migrated by
+ * apps/auth/scripts/migrate-oauth-clients-to-better-auth.ts, which nothing
+ * here runs.
  *
  * Prefers Better Auth's own defaults over matching the hand-rolled server's
  * exact behavior, even where that means disruption at cutover (forced
@@ -204,6 +196,75 @@ export interface CreateAuthInstanceOptions {
       | "rotate"
       | "configure-client-credentials-scopes",
   ) => Promise<boolean>;
+  /**
+   * Reads the F3 `users` row behind a Better Auth user (whose id is the
+   * `users.id`, see databaseHooks below). Feeds the onboarding gate and the
+   * userinfo / id_token profile claims, which the hand-rolled server has
+   * always read from `users` (f3Name, avatarUrl), not from Better Auth's
+   * own `user.name` / `image` (empty for OTP sign-ups). Returns null when
+   * no row exists.
+   */
+  findF3Profile: (f3UserId: number) => Promise<F3Profile | null>;
+}
+
+export interface F3Profile {
+  f3Name: string | null;
+  avatarUrl: string | null;
+  email: string;
+  emailVerified: boolean;
+  onboardingCompleted: boolean;
+}
+
+/**
+ * Where oauthProvider sends the browser for login and for onboarding. Both
+ * are route handlers (app/oauth/login, app/oauth/onboarding) that turn the
+ * plugin's signed query back into an /api/oauth/authorize callbackUrl for
+ * the existing pages.
+ */
+export const OAUTH_LOGIN_PAGE = "/oauth/login";
+export const OAUTH_ONBOARDING_PAGE = "/oauth/onboarding";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Fills the default resource and drops an empty nonce on one authorize
+ * parameter object. Edits in place: a hook's returned context is merged
+ * with the original as defaults, so it can't remove a key.
+ */
+function normalizeAuthorizeParams(
+  params: Record<string, unknown>,
+  resource: string,
+) {
+  params.resource ??= resource;
+  if (params.nonce === "") delete params.nonce;
+}
+
+async function findProfileForUser(
+  options: CreateAuthInstanceOptions,
+  userId: string,
+): Promise<F3Profile | null> {
+  const f3UserId = Number(userId);
+  if (!Number.isInteger(f3UserId)) return null;
+  return options.findF3Profile(f3UserId);
+}
+
+/**
+ * Profile claims from the F3 `users` row, gated by scope the way the
+ * hand-rolled userinfo route and signIdToken gate them.
+ */
+function f3ProfileClaims(profile: F3Profile, scopes: string[]) {
+  const claims: Record<string, unknown> = {};
+  if (scopes.includes("profile")) {
+    claims.name = profile.f3Name;
+    claims.picture = profile.avatarUrl;
+  }
+  if (scopes.includes("email")) {
+    claims.email = profile.email;
+    claims.email_verified = profile.emailVerified;
+  }
+  return claims;
 }
 
 /**
@@ -258,7 +319,29 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
     database: options.database,
     emailAndPassword: { enabled: false },
     hooks: {
+      // Runs before every endpoint, so it also covers callers of the
+      // BA-native /api/auth2/oauth2/* paths advertised in discovery, not just
+      // the /api/oauth/* adapters.
       before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === "/oauth2/authorize") {
+          // Without a resource the plugin sets no `aud` and issues an opaque
+          // access token that no relying party can verify; packages/sso never
+          // sends one. An empty nonce gives no replay protection and would be
+          // echoed into the id_token as "nonce": ""; the hand-rolled
+          // authorize route treats it as omitted, and so does this.
+          //
+          // The plugin reads a POST's parameters from the form body and
+          // everything else (GET, and the consent/continue resumes, which
+          // replay the stored query) from the query, so both are covered.
+          for (const params of [ctx.query, ctx.body]) {
+            if (isRecord(params)) normalizeAuthorizeParams(params, resource);
+          }
+          return;
+        }
+        if (ctx.path === "/oauth2/token" && isRecord(ctx.body)) {
+          ctx.body.resource ??= resource;
+          return;
+        }
         if (!OTP_VERIFYING_PATHS.has(ctx.path)) return;
         const body = (ctx.body ?? {}) as {
           email?: unknown;
@@ -375,10 +458,51 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
       }),
       // Must precede accessTokenClaimShapePlugin — see that plugin's comment.
       oauthProvider({
-        loginPage: "/login/email",
+        loginPage: OAUTH_LOGIN_PAGE,
+        // There is no consent page: every migrated client has skipConsent
+        // (see scripts/migrate-oauth-clients-to-better-auth.ts), and
+        // production can't create new clients. A client without it, or a
+        // request with prompt=consent, lands on a 404 and gets no code.
         consentPage: "/consent",
+        signup: {
+          page: OAUTH_ONBOARDING_PAGE,
+          // Re-checked on every authorize pass, /oauth2/continue included,
+          // and answered with interaction_required under prompt=none. A
+          // missing users row counts as not onboarded, so the gate fails
+          // closed.
+          shouldRedirect: async ({ user }) =>
+            !(await findProfileForUser(options, user.id))?.onboardingCompleted,
+        },
         scopes: ["openid", "profile", "email", "offline_access"],
         accessTokenExpiresIn: 3600, // matches ACCESS_TOKEN_TTL in apps/auth/src/lib/oauth.ts
+        idTokenExpiresIn: 3600, // matches signIdToken's ACCESS_TOKEN_TTL lifetime in lib/oauth.ts
+        // Merged over Better Auth's own claims, which read better_auth_user.
+        customUserInfoClaims: async ({ user, scopes }) => {
+          const profile = await findProfileForUser(options, user.id);
+          // No users row (e.g. after a DB wipe): reject like the hand-rolled
+          // userinfo route instead of answering with a bare sub.
+          if (!profile) {
+            throw new APIError("UNAUTHORIZED", {
+              error: "invalid_token",
+              error_description: "user not found",
+            });
+          }
+          return f3ProfileClaims(profile, scopes);
+        },
+        // Better Auth puts no profile claims in the id_token. signIdToken
+        // does, omitting null ones, and marks the token token_use "id" so a
+        // verifier that requires token_use "access" never takes it as an
+        // access token.
+        customIdTokenClaims: async ({ user, scopes }) => {
+          const profile = await findProfileForUser(options, user.id);
+          const claims = profile ? f3ProfileClaims(profile, scopes) : {};
+          return {
+            token_use: "id",
+            ...Object.fromEntries(
+              Object.entries(claims).filter(([, value]) => value != null),
+            ),
+          };
+        },
         resources: [{ identifier: resource, signingAlgorithm: "RS256" }],
         clientRegistrationDefaultResources: [resource],
         // PKCE defaults to required per client already (oauth-provider's
@@ -459,6 +583,32 @@ export function createAuthInstance(options: CreateAuthInstanceOptions) {
   return betterAuth(buildBetterAuthOptions(options));
 }
 
+/**
+ * Deletes every OAuth access and refresh token row Better Auth holds for a
+ * user. Signing out only deletes the session, and the plugin's session
+ * delete hook deliberately spares offline_access refresh tokens, so logout
+ * calls this to end those too. Access token rows go first: they reference
+ * their refresh token.
+ */
+export async function deleteBetterAuthOAuthTokens(
+  auth: Pick<ReturnType<typeof createAuthInstance>, "$context">,
+  userId: string,
+) {
+  const { adapter } = await auth.$context;
+  const where = [{ field: "userId", value: userId }];
+  // Both are attempted even if the first fails, so one bad table doesn't
+  // leave the other's tokens alive; the first failure is then thrown.
+  const failures: unknown[] = [];
+  for (const model of ["oauthAccessToken", "oauthRefreshToken"]) {
+    try {
+      await adapter.deleteMany({ model, where });
+    } catch (err) {
+      failures.push(err);
+    }
+  }
+  if (failures.length > 0) throw failures[0];
+}
+
 // ---------------------------------------------------------------------------
 // Production wiring — constructed lazily so importing this module (e.g. from
 // a test that only wants the pure helpers above) doesn't require DATABASE_*
@@ -485,6 +635,9 @@ export const betterAuthDrizzleSchema = {
   oauthClientAssertion: betterAuthOauthClientAssertion,
 };
 
+/** Where app/api/auth2/[...all]/route.ts mounts the production instance. */
+export const BETTER_AUTH_BASE_PATH = "/api/auth2";
+
 let _auth: ReturnType<typeof createAuthInstance> | null = null;
 
 type AuthDb = typeof authDbType;
@@ -502,6 +655,34 @@ export async function isNationAdminForUser(
 ): Promise<boolean> {
   const userRoles = await getUserRoles(database, f3UserId);
   return isNationAdminFromSession({ roles: userRoles });
+}
+
+/** Production's findF3Profile, split out so it's testable with a stubbed db. */
+export async function findF3ProfileInDb(
+  database: AuthDb,
+  f3UserId: number,
+): Promise<F3Profile | null> {
+  const [row] = await database
+    .select({
+      f3Name: users.f3Name,
+      avatarUrl: users.avatarUrl,
+      email: users.email,
+      emailVerified: users.emailVerified,
+      meta: users.meta,
+    })
+    .from(users)
+    .where(eq(users.id, f3UserId))
+    .limit(1);
+  if (!row) return null;
+  const meta = (row.meta ?? {}) as Record<string, unknown>;
+  return {
+    f3Name: row.f3Name,
+    avatarUrl: row.avatarUrl,
+    email: row.email,
+    emailVerified: !!row.emailVerified,
+    // Same truthiness test as the hand-rolled authorize route.
+    onboardingCompleted: !!meta.onboarding_completed,
+  };
 }
 
 /**
@@ -528,9 +709,9 @@ export function allowProductionClientAction(
 
 /**
  * The production Better Auth instance, backed by the real database via
- * drizzleAdapter. Only constructed when first called — see
- * apps/auth/src/app/api/auth2/[...all]/route.ts, which is the only current
- * call site, and which itself only runs when AUTH_USE_BETTER_AUTH is set.
+ * drizzleAdapter. Only constructed when first called, and only called on
+ * paths that run while AUTH_USE_BETTER_AUTH is set (the /api/auth2 mount,
+ * the /api/oauth/* adapters, /.well-known/*, current-session.ts).
  */
 export async function getAuth() {
   if (_auth) return _auth;
@@ -546,16 +727,20 @@ export async function getAuth() {
     );
   }
 
-  const basePath = "/api/auth2";
-  // Distinct from NEXT_PUBLIC_AUTH_URL alone (the legacy issuer) so a token
-  // from this isolated, pre-cutover instance can never be mistaken for one
-  // the hand-rolled server signed, even though both currently share a
-  // baseURL origin.
-  const issuer = `${env.NEXT_PUBLIC_AUTH_URL}${basePath}`;
+  // The bare origin, same as the hand-rolled server's issuer. Relying
+  // parties (packages/sso, packages/api) expect iss === their auth URL and
+  // fetch keys from <origin>/.well-known/jwks.json, which also serves this
+  // instance's keys while the flag is on (see that route). The flag is only
+  // turned on for f3-auth3, which has its own origin (see
+  // scripts/cloud-run-env-auth3.sh), so no other service claims this issuer.
+  // Better Auth's own discovery hook only matches paths under the issuer's
+  // path, so its metadata isn't reachable at the origin; the origin-root
+  // /.well-known/openid-configuration route builds it instead (see that route).
+  const issuer = env.NEXT_PUBLIC_AUTH_URL;
 
   _auth = createAuthInstance({
     baseURL: env.NEXT_PUBLIC_AUTH_URL,
-    basePath,
+    basePath: BETTER_AUTH_BASE_PATH,
     // Deliberately separate from AUTH_SECRET (NextAuth's own signing key) —
     // see env.ts's comment on BETTER_AUTH_SECRET.
     secret: env.BETTER_AUTH_SECRET,
@@ -578,6 +763,7 @@ export async function getAuth() {
     claimOtpAttempt: claimEmailCode,
     isNationAdmin: (f3UserId) => isNationAdminForUser(db, f3UserId),
     allowClientAction: allowProductionClientAction,
+    findF3Profile: (f3UserId) => findF3ProfileInDb(db, f3UserId),
   });
 
   return _auth;

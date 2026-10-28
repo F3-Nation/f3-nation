@@ -34,7 +34,6 @@ src/
 │       ├── auth/           — OAuth login/callback/me/logout routes
 │       └── profile/        — Profile CRUD (GET/PATCH, avatar, roles, positions)
 ├── components/
-│   ├── ui/                 — shadcn/ui primitives (button, card, input, etc.)
 │   ├── profile-form.tsx    — Main profile editing form (client component)
 │   ├── avatar-upload.tsx   — Drag-and-drop avatar upload
 │   ├── region-select.tsx   — Searchable region dropdown
@@ -51,8 +50,7 @@ src/
     │   └── AuthProvider.tsx — Client-side auth context
     ├── api/client.ts       — Server-side F3 API client
     ├── gcs.ts              — Google Cloud Storage upload helper
-    ├── types.ts            — TypeScript interfaces
-    └── utils.ts            — cn() helper, fallback avatar
+    └── types.ts            — TypeScript interfaces
 ```
 
 ## API Reference
@@ -107,9 +105,11 @@ Tests use Vitest and are in `__tests__/`. Run with `pnpm test`.
 2. Create route handler in `src/app/api/`
 3. Add tests in `__tests__/api/`
 
-### Updating shadcn/ui components
+### Adding a shadcn/ui component
 
-Run `npx shadcn@latest add <component>` from `apps/me/`.
+Shared primitives live in `packages/ui`. Add the component there (see `packages/ui/README.md`) and import it from `@acme/ui/<component>`.
+
+### Auth proxy and sessions
 
 Auth proxy (`proxy.ts`) and session changes follow
 [`apps/auth/AGENTS.md` § Security rules](../auth/AGENTS.md#security-rules).

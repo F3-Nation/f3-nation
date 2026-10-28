@@ -14,6 +14,7 @@ def silence_other_jobs(monkeypatch, achievement_callback=lambda: None):
     monkeypatch.setattr(hourly_runner.q_lineups, "send_lineups", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.update_slack_users, "update_slack_users", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.update_slack_users, "update_home_regions", lambda *args, **kwargs: None)
+    monkeypatch.setattr(hourly_runner.fng_reminders, "send_fng_reminders", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.home_region_nudge, "send_home_region_nudges", lambda *args, **kwargs: None)
     monkeypatch.setattr(hourly_runner.award_achievements, "main", achievement_callback)
     monkeypatch.setattr(hourly_runner.requests, "post", lambda *args, **kwargs: None)
