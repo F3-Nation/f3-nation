@@ -127,6 +127,8 @@ export function SearchBox({
       >
         Search
       </label>
+      {/* 16px on touch screens: iOS Safari zooms the page when focusing a
+          smaller input. */}
       <input
         id="org-search"
         type="search"
@@ -137,7 +139,7 @@ export function SearchBox({
         placeholder={placeholder}
         disabled={disabled}
         autoComplete="off"
-        className="org-wide:text-sm w-full rounded-lg border border-border bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-muted disabled:text-muted-foreground"
+        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-muted disabled:text-muted-foreground [@media(pointer:fine)]:text-sm"
       />
       {open && (results.length > 0 || aoResults.length > 0 || aoLoading) && (
         <div

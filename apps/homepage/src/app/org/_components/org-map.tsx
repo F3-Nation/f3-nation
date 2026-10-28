@@ -417,9 +417,11 @@ export default function OrgMap() {
     // +28 clears the tile attribution line that sits under the search card.
     const top = Math.max(0, searchBottom - mapRect.top) + 28;
     let bottom = Math.max(0, mapRect.bottom - sheetTop) + 12;
-    // Only an expanded sheet leaves less than this; don't squeeze the fit into
-    // the sliver above it. The collapsed sheet's padding is always kept.
-    if (mapRect.height - top - bottom < 96) bottom = 12;
+    // Keep the sheet's padding unless the strip left above it is too thin to
+    // fit into — in practice only an expanded sheet, which navigation is about
+    // to collapse. Short portrait screens get a shorter collapsed sheet (below)
+    // so the collapsed one always leaves room.
+    if (mapRect.height - top - bottom < 48) bottom = 12;
     return { paddingTopLeft: [12, top], paddingBottomRight: [12, bottom] };
   }, []);
 
@@ -1067,7 +1069,9 @@ export default function OrgMap() {
             <div
               id="org-info-content"
               className={`org-wide:p-5 flex min-h-0 flex-col gap-3 overflow-y-auto px-5 pb-5 ${
-                sheetExpanded ? "" : "org-overlay:max-h-32"
+                sheetExpanded
+                  ? ""
+                  : "org-overlay:max-h-32 org-overlay:[@media(max-height:640px)]:max-h-16"
               }`}
             >
               {infoState.status === "loading-location" ||
