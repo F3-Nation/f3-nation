@@ -1286,5 +1286,91 @@ describe("Cascade Service", () => {
       expect(result.deleted).toBeGreaterThan(0);
       expect(result.created).toBeGreaterThan(0);
     });
+
+    it("should keep an every-other-month last-weekday series in phase when recreated off-cycle", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 2,
+        indexWithinInterval: 0,
+        startDate: "2026-01-01",
+        endDate: "2026-06-30",
+      });
+
+      await createEventInstancesForSeries(db, series, 4, "2026-01-01");
+
+      const result = await recreateFutureInstances(db, series, "2026-02-01", 4);
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(result.deleted).toBe(2);
+      expect(result.created).toBe(2);
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2026-01-26",
+        "2026-03-30",
+        "2026-05-25",
+      ]);
+    });
+
+    it("should keep a biweekly series in phase when recreated mid-cycle", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "wednesday",
+        recurrencePattern: "weekly",
+        recurrenceInterval: 2,
+        startDate: "2026-04-01",
+        endDate: "2026-05-31",
+      });
+
+      await createEventInstancesForSeries(db, series, 4, "2026-04-01");
+
+      await recreateFutureInstances(db, series, "2026-04-08", 4);
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2026-04-01",
+        "2026-04-15",
+        "2026-04-29",
+        "2026-05-13",
+        "2026-05-27",
+      ]);
+    });
+
+    it("should count a numbered occurrence that falls on the series start date once", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      // 2026-01-12 is the second Monday of January.
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 1,
+        indexWithinInterval: 2,
+        startDate: "2026-01-12",
+        endDate: "2026-03-31",
+      });
+
+      await createEventInstancesForSeries(db, series, 4, "2026-01-12");
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2026-01-12",
+        "2026-02-09",
+        "2026-03-09",
+      ]);
+    });
   });
 });
