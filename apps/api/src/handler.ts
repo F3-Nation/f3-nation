@@ -85,13 +85,14 @@ const openAPIHandler = new OpenAPIHandler(router, {
 });
 
 /**
- * Every response here defaults to `private, no-store`. Responses from the
- * public read procedures still vary by caller (signed-in callers get full
- * rows, anonymous callers get masked ones), so a shared cache keyed on URL
- * alone could hand one caller's data to another. Without an explicit header
- * that decision would be left to whatever sits in front of the API. A
- * procedure that sets its own Cache-Control keeps it; that is only safe for a
- * response identical for every caller.
+ * Marks a response uncacheable unless it already carries Cache-Control. A
+ * response can depend on who is asking (a signed-in caller may see fields an
+ * anonymous caller can't), so a shared cache keyed on the URL alone could hand
+ * one caller's data to another. Setting the header here keeps that decision
+ * away from whatever proxy or CDN sits in front of the API. Procedures can't
+ * set response headers until both handlers install oRPC's
+ * `ResponseHeadersPlugin`; once they can, a procedure should opt in to caching
+ * only for a response that is identical for every caller.
  */
 function withDefaultCacheControl(response: Response): Response {
   if (!response.headers.has("cache-control")) {
