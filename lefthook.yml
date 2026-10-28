@@ -11,6 +11,12 @@ pre-commit:
       run: node scripts/lint-staged.mjs {staged_files}
       stage_fixed: true
 
+    - name: python
+      # Lefthook's * also matches nested paths; **/*.py skips root files.
+      glob: "*.py"
+      run: bash scripts/python-task.sh pre-commit python bash scripts/python-precommit.sh {staged_files}
+      stage_fixed: true
+
     - name: vitest-thresholds
       glob: "**/vitest.config.{ts,mts}"
       run: node scripts/check-vitest-thresholds.mjs {staged_files}

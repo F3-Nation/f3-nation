@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { forwardToBetterAuth } from "~/lib/better-auth-oauth";
 import { validateAccessToken } from "~/lib/oauth";
 import { rateLimit } from "~/lib/rate-limit";
+import { env } from "~/env";
 
 export async function GET(request: NextRequest) {
   const ip =
@@ -11,6 +13,12 @@ export async function GET(request: NextRequest) {
   const { allowed } = rateLimit(`userinfo:${ip}`, 60, 60 * 1000);
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  // Profile claims still come from the users row — see
+  // customUserInfoClaims in lib/better-auth.ts.
+  if (env.AUTH_USE_BETTER_AUTH) {
+    return forwardToBetterAuth(request, "userinfo", { dropCookies: true });
   }
 
   const authHeader = request.headers.get("authorization");

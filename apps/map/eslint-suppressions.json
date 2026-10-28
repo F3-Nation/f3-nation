@@ -1,0 +1,32 @@
+{
+  "src/app/_components/debounced-image.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/app/_components/map/desktop-selected-item.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/app/_components/map/google-map.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/app/_components/map/initial-location-provider.tsx": {
+    "react-hooks/refs": {
+      "count": 4
+    }
+  },
+  "src/app/_components/map/map-searchbox-desktop.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/app/_components/map/search-results-provider.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  }
+}

@@ -150,6 +150,17 @@ describe("sendEmailCode", () => {
     });
   });
 
+  it("draws the code from the full 100000–999999 range", async () => {
+    const randomInt = vi.spyOn(crypto, "randomInt");
+    try {
+      await sendEmailCode("user@example.com");
+
+      expect(randomInt).toHaveBeenCalledWith(100000, 1000000);
+    } finally {
+      randomInt.mockRestore();
+    }
+  });
+
   it("embeds callbackUrl in magic link when callbackUrl is valid same-origin", async () => {
     await sendEmailCode(
       "user@example.com",
@@ -213,6 +224,41 @@ describe("verifyEmailCode", () => {
         ),
       ),
     );
+  });
+
+  it("normalizes surrounding whitespace in the email like the Better Auth path does", async () => {
+    const code = "654321";
+    const codeSelect = chain([
+      {
+        id: "code-1",
+        email: "user@example.com",
+        codeHash: hashCode(code),
+        attemptCount: 0,
+      },
+    ]);
+    const userSelect = chain([
+      { id: 42, email: "user@example.com", emailVerified: NOW, f3Name: "Ocho" },
+    ]);
+    dbMock.select
+      .mockReturnValueOnce(codeSelect)
+      .mockReturnValueOnce(userSelect);
+
+    await verifyEmailCode("  User@Example.com ", code);
+
+    expect(
+      toQuery((codeSelect.where as Mock).mock.calls[0]?.[0] as SQL),
+    ).toEqual(
+      toQuery(
+        and(
+          eq(emailMfaCodes.email, "user@example.com"),
+          isNull(emailMfaCodes.consumedAt),
+          gt(emailMfaCodes.expiresAt, NOW),
+        ),
+      ),
+    );
+    expect(
+      toQuery((userSelect.where as Mock).mock.calls[0]?.[0] as SQL),
+    ).toEqual(toQuery(eq(users.email, "user@example.com")));
   });
 
   it("returns null without comparing when no attempt is left to claim", async () => {
