@@ -28,7 +28,7 @@ flowchart TD
     J -- Yes --> K["Codeowner approves and merges"]
 ```
 
-Every push re-runs the AI bots, so their comments on the new code arrive on their own whenever the flow loops back. The bots whose threads count are listed in `BOT_LOGINS` in [`ready-for-human-review-label.cjs`](../.github/scripts/ready-for-human-review-label.cjs).
+Most of the AI bots review each new push as well, so their comments on the new code usually arrive on their own whenever the flow loops back. The bots whose threads count are listed in `BOT_LOGINS` in [`ready-for-human-review-label.cjs`](../.github/scripts/ready-for-human-review-label.cjs).
 
 ## Who does what
 
@@ -101,7 +101,7 @@ When the PR's author is a codeowner, have a different codeowner run at least one
 
 When `pr-local-test` recommends approval, the PR goes to a codeowner's final review.
 
-When it doesn't, its results say what has to change, and the author makes those fixes. Whether `pr-local-test` runs again afterward is the reviewer's call: a re-run is worth it when the fixes change how the app behaves, and not when a reviewer can confirm them by reading the diff. A large rework goes back through `pr-review-inline` first, since the earlier review no longer covers the code that's there now. `pnpm pr:triage` won't send a PR back to either skill once it has run, so the codeowner who asked for the fixes watches for the author's push.
+When it doesn't, its results say what has to change, and the author makes those fixes. Whether `pr-local-test` runs again afterward is the reviewer's call: a re-run is worth it when the fixes change how the app behaves, and not when a reviewer can confirm them by reading the diff. A large rework goes back through `pr-review-inline` first, since the earlier review no longer covers the code that's there now. `pnpm pr:triage` doesn't send a PR back to a skill that has already run, except a local test that couldn't recommend yet, which goes back to the local-test queue. So the codeowner who asked for the fixes watches for the author's push.
 
 ## Addressing feedback
 
