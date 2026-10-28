@@ -1,8 +1,8 @@
 # Pull request review process
 
-Every pull request goes through the same stages on its way to `main`: automated AI review, a deeper AI review run by a codeowner, the author's fixes, a hands-on local test, and a codeowner's approval. Most of the reviewing is done by AI, so the codeowners — all volunteers — spend their time on a PR that has already been checked, fixed, and tested.
+A pull request goes through these stages on its way to `main`: automated AI review, a deeper AI review run by a codeowner, the author's fixes, a hands-on local test, and a codeowner's approval. Most of the reviewing is done by AI, so the codeowners — all volunteers — spend their time on a PR that has already been checked, fixed, and tested. Small PRs may skip some stages; see [Small PRs](#small-prs).
 
-Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the review and test skills. If you're an author who isn't a codeowner, your part is opening the PR, marking it ready, and addressing the feedback.
+Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the review and test skills. If you're an author who isn't a codeowner, your part is opening the PR, marking it ready, and addressing the feedback, including resolving the review threads.
 
 ## The flow
 
@@ -15,11 +15,13 @@ flowchart TD
     E --> F{"All threads resolved?"}
     F -- "No: a question is waiting" --> Q["Author leaves the thread open<br/>and asks in it; nudge in Slack if it sits"]
     Q --> E
-    F -- Yes --> G["6. A codeowner runs pr-local-test"]
+    F -- Yes --> L{"Local test needed?"}
+    L -- "Not run yet, or the reviewer<br/>wants another run" --> G["6. A codeowner runs pr-local-test"]
+    L -- "Reviewer is satisfied<br/>without another run" --> I
     G --> H{"Local test result"}
-    H -- "Fails: small fix" --> E
-    H -- "Fails: large rework" --> D
-    H -- Passes --> I["7. A codeowner reviews the PR by hand"]
+    H -- "Not approved: fixes needed" --> E
+    H -- "Not approved: large rework" --> D
+    H -- "Recommends approval" --> I["7. A codeowner reviews the PR by hand"]
     I --> J{"Codeowner satisfied?"}
     J -- "No: new comments" --> E
     J -- Yes --> K["Codeowner approves and merges"]
@@ -41,7 +43,7 @@ Every push re-runs the AI bots, so their comments on the new code arrive on thei
 
 ### How to tell it's your turn
 
-Run `pnpm pr:triage` (or `pnpm pr:triage:html` for a board in your browser). It sorts every open PR by the stage it's waiting on — bots, `pr-review-inline`, the author, `pr-local-test`, or a codeowner — so you can pick up whatever needs you. See [For codeowners: finding PRs to review](CONTRIBUTING.md#for-codeowners-finding-prs-to-review) for setup.
+Run `pnpm pr:triage`. It sorts every open PR by the stage it's waiting on, so you can pick up whatever needs you. [For codeowners: finding PRs to review](CONTRIBUTING.md#for-codeowners-finding-prs-to-review) covers its setup and options.
 
 ## Running the review and test skills
 
@@ -49,29 +51,17 @@ Running either skill takes one command and a PR number. Both live in [`.agents/s
 
 ### Set up your machine (once)
 
-**Required.** Each skill checks its tools at the start and lists anything missing in one message.
+- **Use a frontier model** (the most capable Claude or Codex model available to you). These runs are the main line of review for the PR, and smaller models miss the subtle bugs this stage exists to catch.
+- **Install the tools each skill needs.** Each skill checks them at the start and lists anything missing in one message. The lists live in the skills themselves: the Requirements table in [`pr-review-inline`](../.agents/skills/pr-review-inline/SKILL.md#requirements), and the `compatibility` line at the top of [`pr-local-test`](../.agents/skills/pr-local-test/SKILL.md), which also needs Docker running. On Windows, work inside WSL 2, as [AGENTS.md](../AGENTS.md#environment-setup) describes for the whole repo.
+- **Add the recommended add-ons.** Each skill works without them and falls back on its own, but runs better with them:
 
-| What                                                                                             | Needed by       | Why                                                                                                           |
-| ------------------------------------------------------------------------------------------------ | --------------- | ------------------------------------------------------------------------------------------------------------- |
-| A **frontier model** in your assistant (the most capable Claude or Codex model available to you) | Both            | These runs are the main line of review for the PR, and smaller models miss the subtle bugs it exists to catch |
-| `git`, `jq`, and the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`        | Both            | Fetching the PR and posting the review                                                                        |
-| Docker, running                                                                                  | `pr-local-test` | Each run starts its own database and services                                                                 |
-| `curl`, `openssl`, and `lsof` (macOS) or `ss` (Linux and WSL)                                    | `pr-local-test` | Health checks, test secrets, and finding free ports                                                           |
-| [nvm](https://github.com/nvm-sh/nvm) or another Node version manager                             | `pr-local-test` | The run uses the Node version the PR asks for; if it's missing, the skill gives you the install command       |
-
-On Windows, run everything inside WSL 2, as for the rest of this repo.
-
-**Recommended add-ons.** Each skill works without these and falls back on its own.
-
-| Add-on                                                               | Helps                     | What you get                                                                                                                                                                                                | Claude Code install                                         |
-| -------------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `pr-review-toolkit` plugin                                           | `pr-review-inline --deep` | `--deep` hands the review to its specialist reviewers (silent failures, test coverage, type design, comments). Without it, `--deep` runs more general-purpose reviewers instead. Claude Code only.          | `/plugin install pr-review-toolkit@claude-plugins-official` |
-| [Superpowers](https://github.com/obra/superpowers)                   | `pr-review-inline`        | Its `requesting-code-review` skill writes the brief each reviewer works from. The skill ships its own copy of that brief and results are the same either way, so this one is the least important.           | `/plugin install superpowers@claude-plugins-official`       |
-| [Playwright MCP server](https://github.com/microsoft/playwright-mcp) | `pr-local-test`           | Lets the agent click through the running apps itself and take screenshots. Without it, the agent falls back to writing a Playwright script for each browser check, and hands you any check it can't script. | `/plugin install playwright@claude-plugins-official`        |
+| Add-on                                                               | Helps                     | What you get                                                                                                                                                                             | Claude Code install                                         |
+| -------------------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `pr-review-toolkit` plugin                                           | `pr-review-inline --deep` | Specialist reviewers for `--deep`. Claude Code only.                                                                                                                                     | `/plugin install pr-review-toolkit@claude-plugins-official` |
+| [Playwright MCP server](https://github.com/microsoft/playwright-mcp) | `pr-local-test`           | The agent clicks through the running apps itself and takes screenshots, instead of scripting each browser check ([details](../.agents/skills/pr-local-test/reference.md#browser-checks)) | `/plugin install playwright@claude-plugins-official`        |
+| [Superpowers](https://github.com/obra/superpowers)                   | `pr-review-inline`        | Least important: the skill ships its own copy of the reviewer brief this provides, and results are the same either way                                                                   | `/plugin install superpowers@claude-plugins-official`       |
 
 For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @playwright/mcp@latest`, and follow the Codex steps in the Superpowers README.
-
-Don't point `pr-local-test` at your own browser (such as Claude in Chrome): it holds your real sign-ins, so the skill always uses a separate browser.
 
 ### Run it
 
@@ -90,7 +80,7 @@ Don't point `pr-local-test` at your own browser (such as Claude in Chrome): it h
 
 3. **Let it work.** `pr-review-inline` posts its findings as line-level comments on the PR. `pr-local-test` shows you its results and a draft review, and posts only after you tell it to.
 
-`--deep` runs several specialized reviewers instead of one; use it for anything beyond a very minor PR. `pr-local-test` holds back a passing verdict while any review thread is still open, so run it after stage 5 is finished. Each skill file lists its other options: [`pr-review-inline`](../.agents/skills/pr-review-inline/SKILL.md), [`pr-local-test`](../.agents/skills/pr-local-test/SKILL.md).
+Use `--deep` for anything beyond a very minor PR. Run `pr-local-test` after stage 5 is finished: it won't recommend approval while any review thread is still open. Each skill file explains its options and verdicts: [`pr-review-inline`](../.agents/skills/pr-review-inline/SKILL.md), [`pr-local-test`](../.agents/skills/pr-local-test/SKILL.md).
 
 ### Your own work is never touched
 
@@ -106,23 +96,27 @@ Because every run has its own worktree, you can review or test several PRs at th
 
 When the PR's author is a codeowner, have a different codeowner run at least one of the two skills when you can. An author running both with their own assistant can carry the same blind spots through both. The final codeowner review still catches this, but a second person's run is cheaper.
 
+## After the local test
+
+When `pr-local-test` recommends approval, the PR goes to a codeowner's final review.
+
+When it doesn't, its results say what has to change, and the author makes those fixes. Whether `pr-local-test` runs again afterward is the reviewer's call: a re-run is worth it when the fixes change how the app behaves, and not when a reviewer can confirm them by reading the diff. A large rework goes back through `pr-review-inline` first, since the earlier review no longer covers the code that's there now.
+
 ## Addressing feedback
 
-For every review thread — from a bot, the inline review, the local test, or a codeowner:
+The PR's author is responsible for resolving its review threads. For every thread — from a bot, the inline review, the local test, or a codeowner:
 
 1. **Reply first.** Say what you changed, or why you're not changing it. The reply is the only record a reviewer has of how the comment was handled.
-2. **Then resolve it yourself.** Click **Resolve conversation** on GitHub once you believe the item is handled. Only people resolve threads: AI assistants post replies but never resolve threads, so each resolution means a person has read the reply and agrees it's done.
+2. **Then resolve it.** Click **Resolve conversation** on GitHub once you believe the item is handled. AI assistants post replies but never resolve threads, so each resolution means the author has read the reply and agrees it's done.
 3. **Out-of-scope suggestions** become a new Issue. Put the Issue number in your reply, then resolve the thread.
 4. **Still have a question?** Leave the thread open and make the question clear in a reply. Reviewers are volunteers with a lot of PRs, so an answer can take a while; it's perfectly fine to point someone at the waiting question in the F3 developers Slack.
 
 The [`address-pr-comments`](../.agents/skills/address-pr-comments/SKILL.md) skill walks your AI assistant through the open threads, makes the fixes, and drafts the replies. You still resolve the threads yourself.
 
-If a fix turns into a large rework, a codeowner runs `pr-review-inline` again before the PR moves on, since the earlier review no longer covers the code that's there now.
-
 ## The `ready for human review` label
 
-A scheduled workflow, [`ready-for-human-review-label.yml`](../.github/workflows/ready-for-human-review-label.yml), adds this label once the AI bots' threads are resolved, checks pass, and the PR has no merge conflicts, and removes it when any of those stop being true. Authors with `write` access can also add it by hand. It marks the end of the bot-feedback part of stage 5, not readiness for a codeowner's final review — use `pnpm pr:triage` to see which stage a PR is really in. [CONTRIBUTING.md](CONTRIBUTING.md#submitting-changes) has the label's full rules.
+The label marks the end of the bot feedback, not readiness for a codeowner's final review; `pnpm pr:triage` shows which stage a PR is really in. [CONTRIBUTING.md](CONTRIBUTING.md#submitting-changes) covers when it's added and removed.
 
 ## Small PRs
 
-Small, self-evident PRs — a one-line fix, a doc correction — don't need the full flow. A codeowner may approve and merge one directly, and `pr-review-inline` without `--deep` is enough for one that gets a review at all.
+A small, self-evident PR — a one-line fix, a doc correction — may not need every stage. The codeowners decide which stages it skips: one might get `pr-review-inline` without `--deep` and no local test, and another might be approved and merged directly.
