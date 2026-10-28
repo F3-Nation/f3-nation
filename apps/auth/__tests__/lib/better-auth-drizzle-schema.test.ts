@@ -32,7 +32,9 @@ describe("Better Auth against the @acme/db Drizzle schema", () => {
       database: factory,
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(1),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(false),
+      findF3Profile: () => Promise.resolve(null),
       allowClientAction: allowProductionClientAction,
     });
     const check = schemaCheckFor(factory(options));

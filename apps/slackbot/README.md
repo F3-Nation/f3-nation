@@ -111,6 +111,34 @@ pnpm test
 pnpm lint
 ```
 
+## Testing
+
+After installing the repository's Python dependencies, run the checked test task
+from the repository root:
+
+```bash
+pnpm --filter f3-slackbot test
+```
+
+Pytest discovers tests under `tests/` and rejects unknown configuration settings
+and unregistered markers. The default suite uses mocked services and needs no
+database. The existing PostgreSQL integration tests remain opt-in through
+`SLACKBOT_POSTGRES_TESTS=1` and require their documented disposable database.
+
+The task reports statement coverage for `application/`, `infrastructure/`,
+`utilities/`, and `features/`, including modules the tests never execute. Tests,
+deployment scripts, and the app entrypoint are outside that coverage scope.
+The fixed minimum is configured in `pyproject.toml`; it does not update itself.
+Raise it deliberately when the full suite establishes a higher baseline.
+
+Coverage is printed in the terminal and saved to `coverage/coverage.json`, with
+its measurement database at `coverage/.coverage`. These generated files are
+ignored by Git and included in Turbo's existing test outputs.
+
+For a focused test run without collecting coverage, run `uv run pytest` with a
+test path from this directory. Use the `pnpm` test task above to verify the
+coverage gate used by CI.
+
 ## Codebase notes
 
 - `main.py`: app entrypoint and Slack event handling

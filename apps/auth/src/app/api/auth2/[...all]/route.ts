@@ -4,9 +4,9 @@
  * Deliberately at /api/auth2/*, not /api/oauth/* or /api/auth/* — this must
  * not collide with either the hand-rolled OAuth server's routes or
  * NextAuth's own /api/auth/* callback routes, which stay live regardless of
- * AUTH_USE_BETTER_AUTH. See apps/auth/src/lib/better-auth.ts's file-level
- * comment for what rewiring the real /api/oauth/* endpoints to this instance
- * still needs.
+ * AUTH_USE_BETTER_AUTH. With the flag on, /api/oauth/{authorize,token,
+ * userinfo,revoke} forward here (see lib/better-auth-oauth.ts), and
+ * discovery advertises this mount's /oauth2/* endpoints directly.
  *
  * 404s entirely when the flag is off, rather than existing-but-erroring —
  * so there's no new attack surface or behavior change for anyone who hasn't
