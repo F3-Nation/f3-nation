@@ -11,8 +11,10 @@ TypeScript/Vitest test filename guidance; do not rename Python tests to
 
 These also apply to `apps/analytics` and `packages/db-python`.
 
-- Ruff owns lint and format; each package configures it in its own
-  `pyproject.toml` (the root has none), and its 120-column limit is real.
+- Ruff owns lint and format. The root `pyproject.toml` holds the shared
+  configuration, including the 120-column limit, which is real; each
+  package's `pyproject.toml` extends it (`extend = "../../pyproject.toml"`)
+  and adds only local overrides.
 - Tasks run through `scripts/python-task.sh`: it skips when `uv` is missing
   locally and fails in CI.
 - Dependencies are managed with uv; a dependency, `requires-python` or
