@@ -89,10 +89,12 @@ const openAPIHandler = new OpenAPIHandler(router, {
  * response can depend on who is asking (a signed-in caller may see fields an
  * anonymous caller can't), so a shared cache keyed on the URL alone could hand
  * one caller's data to another. Setting the header here keeps that decision
- * away from whatever proxy or CDN sits in front of the API. Procedures can't
- * set response headers until both handlers install oRPC's
- * `ResponseHeadersPlugin`; once they can, a procedure should opt in to caching
- * only for a response that is identical for every caller.
+ * away from whatever proxy or CDN sits in front of the API. A procedure can
+ * set its own Cache-Control by returning headers from an OpenAPI route with
+ * `outputStructure: "detailed"`, or through `context.resHeaders` once the
+ * handler serving it installs oRPC's `ResponseHeadersPlugin`. Either way, it
+ * should opt in to caching only for a response that is identical for every
+ * caller.
  */
 function withDefaultCacheControl(response: Response): Response {
   if (!response.headers.has("cache-control")) {
