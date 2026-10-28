@@ -3,14 +3,15 @@
 This file carries audit mode of the [durable-docs skill](SKILL.md): the same
 rules, applied in bulk to files that already exist. Read
 [`SKILL.md`](SKILL.md) first — nothing here relaxes **Never in a committed
-file**, its exceptions, or the test at the top. An audit runs only when someone
-explicitly asks to audit or sweep; a casual "clean up" means apply the rules to
-the text at hand. Files that are out of scope entirely (generated changelogs,
-this skill's own files, the lockfile, migration history) are listed under
+file**, its exceptions, the drift rules, or the test every comment and doc
+must pass. An audit runs only when someone explicitly asks to audit or sweep;
+a casual "clean up" means apply the rules to the text at hand. Files that are
+out of scope entirely (generated changelogs, this skill's own files, the
+lockfile, migration history) are listed under
 [What to leave out of this skill's work](SKILL.md#what-to-leave-out-of-this-skills-work).
 
-Rewrites happen **in place on a clean branch** off the base chosen in step 2;
-the person who asked creates the PR. Nothing is pushed and no issue is filed
+Rewrites happen **in place on a clean branch** off the base picked with the
+person who asked. Nothing is pushed, no PR is opened, and no issue is filed
 without their say-so.
 
 1. **Confirm scope** — which trees: `apps/`, `packages/`, `docs/`,
@@ -47,12 +48,24 @@ without their say-so.
    git grep -niE 'as discussed|per (review|request)|previously|used to be|as of (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|hotfix|for now|temporary|remove (this )?after|delete after' -- ':(exclude).agents/skills/durable-docs/' ':(exclude)packages/db/drizzle/*.sql' ':(exclude,glob)**/CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
    ```
 
-   Narrow to the confirmed scope from step 1 by appending its paths (e.g.
+   Narrow to the confirmed scope by appending its paths (e.g.
    `… -- apps docs`), keeping the `:(exclude)` pathspecs. Also flag files
    whose names declare them one-offs (`*one-off*`, `*onetime*`, `fix-*`,
    `tmp-*`).
 
-4. **Rewrite each finding** to present-tense what + standing why, or delete
+   Most drift has no fixed wording, so search alone won't find it: read each
+   comment and doc in scope against
+   [Drift](SKILL.md#drift-references-that-go-stale-silently). The phrasings
+   below are a starting point for the patterns that do repeat — positions,
+   comparisons, and caller lists. They match a lot of legitimate prose, so
+   treat every hit as a candidate.
+
+   ```bash
+   git grep -niE '(on|at|see) line [0-9]+|see (above|below)|(same|works|behaves) (as|like)|mirrors|(only )?called (from|by)|used by' -- ':(exclude).agents/skills/durable-docs/' ':(exclude)packages/db/drizzle/*.sql' ':(exclude,glob)**/CHANGELOG.md' ':(exclude)pnpm-lock.yaml'
+   ```
+
+4. **Rewrite each finding** to present-tense what + standing why — for a
+   drifting reference, the rule or reason it stood in for — or delete
    it outright when nothing durable is left — never when it is a constraint
    in force now or a date-anchored constraint (see
    [Exceptions: content that stays](SKILL.md#exceptions-content-that-stays)):
@@ -66,7 +79,8 @@ without their say-so.
    [`AGENTS.md`](../../../AGENTS.md)), and a bulk rewrite cannot preserve
    that behavioral contract — list findings for both in the summary instead
    of editing. Spec phrasing gets fixed deliberately during normal feature
-   work — writing mode, step 3 of [`SKILL.md`](SKILL.md). (New ADRs follow
+   work, under
+   [writing mode in `SKILL.md`](SKILL.md#mode-writing-new-code-or-docs). (New ADRs follow
    the rules from their first line.)
 6. **Collect excised narrative** — anything you removed that someone still
    needs — into the draft PR body (or an issue, if they prefer). That is the
@@ -84,5 +98,5 @@ without their say-so.
    `docs(repo): make docs and comments durable`, `docs(auth): …`);
    afterwards `git show --stat HEAD` should list the same files.
 8. **Stop and hand over**: a summary table (file → finding → what you did),
-   plus a drafted PR title and body (with the excised-narrative section from
-   step 6). Push and open a **draft** PR only if they ask.
+   plus a drafted PR title and body (with the excised-narrative section).
+   Push and open a **draft** PR only if they ask.
