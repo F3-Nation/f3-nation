@@ -1,17 +1,87 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { forwardToBetterAuth } from "~/lib/better-auth-oauth";
 import { exchangeAuthorizationCode, exchangeRefreshToken } from "~/lib/oauth";
 import { getCorsHeaders, handlePreflight } from "~/lib/cors";
 import { logError } from "~/lib/logging";
 import { rateLimit } from "~/lib/rate-limit";
+import { env } from "~/env";
 
 export async function OPTIONS(request: NextRequest) {
   const headers = await getCorsHeaders(request);
   return handlePreflight(headers);
 }
 
+/**
+ * The flag-on path: the same per-client rate limit and CORS handling as the
+ * hand-rolled route below, around Better Auth's /oauth2/token (which sends
+ * no CORS headers of its own).
+ */
+async function postToBetterAuth(request: NextRequest) {
+  const form = new URLSearchParams(await request.text());
+  const grantType = form.get("grant_type");
+
+  // Credentials sent only in a Basic header are merged into the body, as the
+  // hand-rolled route does, and the header is dropped so Better Auth sees one
+  // authentication method for the client the limits and CORS are keyed on.
+  // A Basic header with an empty secret is kept for Better Auth to reject,
+  // but its client id still keys the limits and CORS below.
+  let dropAuthorization = false;
+  let basicClientId: string | null = null;
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.startsWith("Basic ")) {
+    const decoded = Buffer.from(authHeader.slice(6), "base64").toString();
+    const separator = decoded.indexOf(":");
+    const id = decoded.slice(0, separator);
+    const secret = decoded.slice(separator + 1);
+    if (separator > 0) basicClientId = id;
+    if (separator > 0 && secret) {
+      if (!form.has("client_id")) form.set("client_id", id);
+      if (!form.has("client_secret")) form.set("client_secret", secret);
+      dropAuthorization = true;
+    }
+  }
+  const body = form.toString();
+  const clientId = form.get("client_id") ?? basicClientId;
+
+  // Better Auth rejects a request with no client_id itself.
+  if (clientId) {
+    const { allowed } = rateLimit(`token:${clientId}`, 60, 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "rate_limit_exceeded" },
+        { status: 429 },
+      );
+    }
+  }
+
+  const corsHeaders = clientId ? await getCorsHeaders(request, clientId) : {};
+
+  try {
+    const response = await forwardToBetterAuth(request, "token", {
+      body,
+      dropCookies: true,
+      dropAuthorization,
+    });
+    const withCors = new Response(response.body, response);
+    for (const [name, value] of Object.entries(corsHeaders)) {
+      withCors.headers.set(name, value);
+    }
+    return withCors;
+  } catch (err) {
+    // Same backstop as the hand-rolled path below.
+    logError("auth.oauth.token_endpoint_error", { grantType, clientId }, err);
+    return NextResponse.json(
+      { error: "server_error" },
+      { status: 500, headers: corsHeaders },
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
+  if (env.AUTH_USE_BETTER_AUTH) return postToBetterAuth(request);
+
   const formData = await request.formData();
   const grantType = formData.get("grant_type") as string | null;
   const clientId = formData.get("client_id") as string | null;

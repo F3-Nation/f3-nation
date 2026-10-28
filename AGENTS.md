@@ -38,6 +38,24 @@ or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
 — even if your tool does not load skills automatically.
 
+When asked to write or edit comments or markdown, or to review a PR that
+touches comments or markdown, use
+[`.agents/skills/durable-docs/SKILL.md`](.agents/skills/durable-docs/SKILL.md)
+for the repo's durable documentation rules.
+
+To review a PR with inline comments, or to test one hands-on in a local
+sandbox, follow
+[`.agents/skills/pr-review-inline/SKILL.md`](.agents/skills/pr-review-inline/SKILL.md)
+or
+[`.agents/skills/pr-local-test/SKILL.md`](.agents/skills/pr-local-test/SKILL.md).
+The review uses the [Superpowers](https://github.com/obra/superpowers)
+`requesting-code-review` skill when it is installed (optional; a bundled brief
+covers it otherwise).
+
+To address, respond to, or work through review feedback on a pull request,
+follow
+[`.agents/skills/address-pr-comments/SKILL.md`](.agents/skills/address-pr-comments/SKILL.md).
+
 ## Project Structure & Module Organization
 
 - Deployable apps live in `apps/`, shared code in `packages/`, config in `tooling/`, and Turbo generators in `turbo/`.
@@ -55,7 +73,7 @@ or
 - **Second checkout or worktree:** `pnpm local:setup --slot N` (N = 1–9) gives it its own ports, containers, and database so it can run next to the main one. See [Running several checkouts at once](docs/LOCAL_DEV_DOCKER.md#running-several-checkouts-at-once-git-worktrees).
 - **Docker services:** `pnpm docker:up` to start (Postgres, Adminer, GCS emulator, Mailpit), `pnpm docker:down` to stop.
 - Each app, `packages/env`, and `packages/db` has its own `.env` file (copied from `.env.example` by `pnpm local:setup`). Never commit `.env` files.
-- Code quality: always run `pnpm lint:fix` and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
+- Code quality: always run `pnpm lint:fix` (whole repo only; it takes no arguments) and `pnpm format:fix` (for the whole repo — or filter to a certain app/package) to ensure your code passes all lint and formatting checks. Also run `pnpm typecheck` to validate types.
 - `pnpm lint` does **not** cover dead-code detection: CI's `lint` job runs `pnpm lint` and `pnpm lint:unused` (knip) as two separate steps, so run `pnpm lint:unused` as well before pushing.
 - `pnpm ci:local` chains the whole CI sequence (`format` → `lint` → `lint:unused` → `typecheck` → `build` → `test`) and is the closest local predictor of the CI gate.
 - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
@@ -66,6 +84,7 @@ or
 - Use Prettier (`@acme/prettier-config`) and ESLint (`@acme/eslint-config` base/next/react) as the source of truth.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
+- Existing `react-hooks/refs` and `react-hooks/set-state-in-effect` violations are baselined in each workspace's `eslint-suppressions.json`. Fix them when you touch the file; never add entries (no `--suppress-rule`/`--suppress-all`); `pnpm lint` fails when a baseline grows. A stale entry fails `pnpm lint`; `pnpm lint:fix` and the pre-commit hook prune it.
 
 ## Logging
 
@@ -74,8 +93,8 @@ or
   `lib/logging`. Reserve the raw `logger` for request-scoped children
   (`logger.child({ requestId })`).
   - One carve-out: the error-reporting pipeline's own failure paths —
-    `@acme/observability`, and `global-error.tsx`, which is browser-only
-    where pino does not run. `logError` there would re-enter the reporter
+    `@acme/observability`, and map's browser-only `report-client-error.ts`
+    (called from its error boundaries), where pino does not run. `logError` there would re-enter the reporter
     that just failed, so those sites use `console.error` deliberately and
     each says so in a comment. Nothing else gets this exemption; see
     [`docs/OBSERVABILITY_PLAN.md`](docs/OBSERVABILITY_PLAN.md).
@@ -152,6 +171,16 @@ How a commit type drives version bumps and changelogs — including the
 non-obvious rule that Release Please attributes a commit by **which files it
 changed, not by its scope** — is documented in
 [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
+
+## Writing to GitHub
+
+These rules cover everything an AI assistant writes to GitHub — issues, pull requests, comments, and review replies:
+
+- **Pre-flight:** run `bash scripts/gh-check.sh` before reading through `gh`, and `bash scripts/gh-check.sh --require-write` before writing. It confirms `gh` is signed in and can reach the repository with the access needed; set `GH_REPO=<owner>/<name>` to check a repository other than the current checkout. If it fails, show the user its message and stop.
+- **Signature:** end every issue body, PR body, and comment with `_written by <model_name>_`, exactly once, as its final line. Name the actual model or agent (`Claude Opus 5.5`, `Codex`), not a generic label like `AI`. A footer your tool adds on its own goes above it.
+- **Draft PRs:** open pull requests with `gh pr create --draft`; the author marks them ready for review. The hosted review apps skip drafts and start once a PR is marked ready, so work in progress doesn't use up their review runs. The `ai-review` workflow ignores draft status: it runs when its label is added and on every push while the label is on.
+- **Never resolve review threads.** The people reviewing resolve them.
+- **Reply to every review comment you act on**, in its thread, whether you changed code or decided not to, saying what you did and why.
 
 ## Pull Request Guidelines
 
