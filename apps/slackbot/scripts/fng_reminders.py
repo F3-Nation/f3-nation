@@ -127,9 +127,11 @@ def _remind_fng(
     ):
         return 0  # he joined
     # A forced run during the scheduled one, or a redelivered run, would otherwise read the same counts and DM
-    # everyone twice. Locking his row until the counts are saved makes the overlapping run wait, then find them sent.
+    # everyone twice. His row stays locked until the counts are saved, and a run that finds it locked skips him: the
+    # run holding it is sending his reminder, and any other holder only delays it to the next day's catch-up. Skipping
+    # instead of waiting keeps a held lock from stalling the hourly scripts that run after this one.
     with session_scope() as session:
-        locked = session.query(User).filter(User.id == fng.id).with_for_update().one_or_none()
+        locked = session.query(User).filter(User.id == fng.id).with_for_update(skip_locked=True).one_or_none()
         if locked is None:
             return 0
         return _send_reminder(session, client, space, settings, locked, days, due)

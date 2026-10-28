@@ -162,8 +162,11 @@ def test_overlapping_runs_send_each_reminder_once(isolated_postgres, monkeypatch
     first = threading.Thread(target=remind)
     first.start()
     assert first_sending.wait(10)
+    started = time.monotonic()
     remind()
+    waited = time.monotonic() - started
     first.join(10)
 
     assert dm_mock.call_count == 1
+    assert waited < 0.5  # skipped him instead of waiting for the first run's lock
     assert _meta(isolated_postgres, user_id)["fng_reminders_sent"] == {"7": 1}
