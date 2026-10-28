@@ -45,13 +45,33 @@ Run `pnpm pr:triage` (or `pnpm pr:triage:html` for a board in your browser). It 
 
 ## Running the review and test skills
 
-Running either skill takes one command and a PR number. Both live in [`.agents/skills/`](../.agents/skills/) and work with any AI coding assistant that reads that folder, such as Claude Code or Codex.
+Running either skill takes one command and a PR number. Both live in [`.agents/skills/`](../.agents/skills/). Codex reads that folder directly; Claude Code gets a copy that the repo's session-start hook refreshes, so both see the same skills with nothing to install.
 
-### Before your first run
+### Set up your machine (once)
 
-- The [GitHub CLI](https://cli.github.com) is signed in (`gh auth login`) and `jq` is installed.
-- For `pr-local-test`, Docker is running.
-- Your assistant is set to a **frontier model** (the most capable Claude or Codex model available to you). These runs are the main line of review for the PR, and smaller models miss the subtle bugs this stage exists to catch.
+**Required.** Each skill checks its tools at the start and lists anything missing in one message.
+
+| What                                                                                             | Needed by       | Why                                                                                                           |
+| ------------------------------------------------------------------------------------------------ | --------------- | ------------------------------------------------------------------------------------------------------------- |
+| A **frontier model** in your assistant (the most capable Claude or Codex model available to you) | Both            | These runs are the main line of review for the PR, and smaller models miss the subtle bugs it exists to catch |
+| `git`, `jq`, and the [GitHub CLI](https://cli.github.com), signed in with `gh auth login`        | Both            | Fetching the PR and posting the review                                                                        |
+| Docker, running                                                                                  | `pr-local-test` | Each run starts its own database and services                                                                 |
+| `curl`, `openssl`, and `lsof` (macOS) or `ss` (Linux and WSL)                                    | `pr-local-test` | Health checks, test secrets, and finding free ports                                                           |
+| [nvm](https://github.com/nvm-sh/nvm) or another Node version manager                             | `pr-local-test` | The run uses the Node version the PR asks for; if it's missing, the skill gives you the install command       |
+
+On Windows, run everything inside WSL 2, as for the rest of this repo.
+
+**Recommended add-ons.** Each skill works without these and falls back on its own.
+
+| Add-on                                                               | Helps                     | What you get                                                                                                                                                                                                | Claude Code install                                         |
+| -------------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `pr-review-toolkit` plugin                                           | `pr-review-inline --deep` | `--deep` hands the review to its specialist reviewers (silent failures, test coverage, type design, comments). Without it, `--deep` runs more general-purpose reviewers instead. Claude Code only.          | `/plugin install pr-review-toolkit@claude-plugins-official` |
+| [Superpowers](https://github.com/obra/superpowers)                   | `pr-review-inline`        | Its `requesting-code-review` skill writes the brief each reviewer works from. The skill ships its own copy of that brief and results are the same either way, so this one is the least important.           | `/plugin install superpowers@claude-plugins-official`       |
+| [Playwright MCP server](https://github.com/microsoft/playwright-mcp) | `pr-local-test`           | Lets the agent click through the running apps itself and take screenshots. Without it, the agent falls back to writing a Playwright script for each browser check, and hands you any check it can't script. | `/plugin install playwright@claude-plugins-official`        |
+
+For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @playwright/mcp@latest`, and follow the Codex steps in the Superpowers README.
+
+Don't point `pr-local-test` at your own browser (such as Claude in Chrome): it holds your real sign-ins, so the skill always uses a separate browser.
 
 ### Run it
 
