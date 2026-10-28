@@ -9,10 +9,11 @@ Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the rev
 ```mermaid
 flowchart TD
     A["1. Author opens the PR as a Draft"] --> B["2. Author marks it Ready for review"]
-    B --> C["3. AI bots review automatically<br/>(CodeRabbit, Greptile, Qodo)"]
+    B --> C["3. AI bots review automatically"]
     C --> D["4. A codeowner runs pr-review-inline<br/>with --deep unless the PR is very minor"]
     D --> E["5. Author addresses all feedback<br/>(reply to each thread, then resolve it)"]
     E --> F{"All threads resolved?"}
+    F -- "No: not yet addressed" --> E
     F -- "No: a question is waiting" --> Q["Author leaves the thread open<br/>and asks in it; nudge in Slack if it sits"]
     Q --> E
     F -- Yes --> L{"Local test needed?"}
@@ -27,19 +28,19 @@ flowchart TD
     J -- Yes --> K["Codeowner approves and merges"]
 ```
 
-Every push re-runs the AI bots, so their comments on the new code arrive on their own whenever the flow loops back.
+Every push re-runs the AI bots, so their comments on the new code arrive on their own whenever the flow loops back. The bots whose threads count are listed in `BOT_LOGINS` in [`ready-for-human-review-label.cjs`](../.github/scripts/ready-for-human-review-label.cjs).
 
 ## Who does what
 
-| Stage                     | Who                        | What they do                                                                             |
-| ------------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
-| 1. Open as Draft          | Author                     | Opens the PR in **Draft** while the work is in progress                                  |
-| 2. Ready for review       | Author                     | Switches the PR to **Ready for review** once it's done and CI passes                     |
-| 3. Bot review             | CodeRabbit, Greptile, Qodo | Post review comments automatically; nothing to start                                     |
-| 4. Inline review          | A codeowner                | Runs the `pr-review-inline` skill once the bots have finished                            |
-| 5. Address feedback       | Author                     | Fixes, replies to, and resolves every thread; the `address-pr-comments` skill helps      |
-| 6. Local test             | A codeowner                | Runs the `pr-local-test` skill once every thread is resolved                             |
-| 7. Final review and merge | A codeowner                | Reviews by hand, then approves and merges, or leaves comments that send the PR back to 5 |
+| Stage                     | Who            | What they do                                                                                                                               |
+| ------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1. Open as Draft          | Author         | Opens the PR in **Draft** while the work is in progress                                                                                    |
+| 2. Ready for review       | Author         | Switches the PR to **Ready for review** once it's done and CI passes (on a first PR, once it's done: CI waits for a maintainer's approval) |
+| 3. Bot review             | AI review bots | Post review comments automatically; nothing to start                                                                                       |
+| 4. Inline review          | A codeowner    | Runs the `pr-review-inline` skill once the bots have finished                                                                              |
+| 5. Address feedback       | Author         | Fixes, replies to, and resolves every thread; the `address-pr-comments` skill helps                                                        |
+| 6. Local test             | A codeowner    | Runs the `pr-local-test` skill once every thread is resolved                                                                               |
+| 7. Final review and merge | A codeowner    | Reviews by hand, then approves and merges, or leaves comments that send the PR back to the author                                          |
 
 ### How to tell it's your turn
 
@@ -80,11 +81,11 @@ For Codex, add the Playwright MCP server with `codex mcp add playwright -- npx @
 
 3. **Let it work.** `pr-review-inline` posts its findings as line-level comments on the PR. `pr-local-test` shows you its results and a draft review, and posts only after you tell it to.
 
-Use `--deep` for anything beyond a very minor PR. Run `pr-local-test` after stage 5 is finished: it won't recommend approval while any review thread is still open. Each skill file explains its options and verdicts: [`pr-review-inline`](../.agents/skills/pr-review-inline/SKILL.md), [`pr-local-test`](../.agents/skills/pr-local-test/SKILL.md).
+Use `--deep` for anything beyond a very minor PR. Run `pr-local-test` once every review thread is resolved, since it won't recommend approval while any is still open. Each skill file explains its options and verdicts: [`pr-review-inline`](../.agents/skills/pr-review-inline/SKILL.md), [`pr-local-test`](../.agents/skills/pr-local-test/SKILL.md).
 
 ### Your own work is never touched
 
-It doesn't matter what branch you're on or what uncommitted changes you have. Each skill does its work in a **worktree**: a second, separate folder holding its own copy of the repository's files, linked to the same git history. The skill checks the PR out there, so your folder, branch, and changes stay exactly as they were. When the run ends, the skill deletes the worktree.
+It doesn't matter what branch you're on or what uncommitted changes you have. Each skill does its work in a **worktree**: a second, separate folder holding its own copy of the repository's files, linked to the same git history. The skill checks the PR out there, so your folder, branch, and changes stay exactly as they were. When the run ends, the skill deletes the worktree (unless you asked `pr-local-test` to keep its environment running).
 
 `pr-local-test` goes further: its run gets its own Docker containers, database, and ports, so your own local apps and database keep running alongside it.
 
@@ -100,7 +101,7 @@ When the PR's author is a codeowner, have a different codeowner run at least one
 
 When `pr-local-test` recommends approval, the PR goes to a codeowner's final review.
 
-When it doesn't, its results say what has to change, and the author makes those fixes. Whether `pr-local-test` runs again afterward is the reviewer's call: a re-run is worth it when the fixes change how the app behaves, and not when a reviewer can confirm them by reading the diff. A large rework goes back through `pr-review-inline` first, since the earlier review no longer covers the code that's there now.
+When it doesn't, its results say what has to change, and the author makes those fixes. Whether `pr-local-test` runs again afterward is the reviewer's call: a re-run is worth it when the fixes change how the app behaves, and not when a reviewer can confirm them by reading the diff. A large rework goes back through `pr-review-inline` first, since the earlier review no longer covers the code that's there now. `pnpm pr:triage` won't send a PR back to either skill once it has run, so the codeowner who asked for the fixes watches for the author's push.
 
 ## Addressing feedback
 
@@ -111,7 +112,7 @@ The PR's author is responsible for resolving its review threads. For every threa
 3. **Out-of-scope suggestions** become a new Issue. Put the Issue number in your reply, then resolve the thread.
 4. **Still have a question?** Leave the thread open and make the question clear in a reply. Reviewers are volunteers with a lot of PRs, so an answer can take a while; it's perfectly fine to point someone at the waiting question in the F3 developers Slack.
 
-The [`address-pr-comments`](../.agents/skills/address-pr-comments/SKILL.md) skill walks your AI assistant through the open threads, makes the fixes, and drafts the replies. You still resolve the threads yourself.
+The [`address-pr-comments`](../.agents/skills/address-pr-comments/SKILL.md) skill walks your AI assistant through the open threads and plans the fixes and replies; once you approve the plan, it pushes the fixes and posts the replies. You still resolve the threads yourself.
 
 ## The `ready for human review` label
 
