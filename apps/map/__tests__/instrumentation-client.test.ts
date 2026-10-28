@@ -96,6 +96,9 @@ describe("instrumentation-client", () => {
   ])("tags %s as environment=%s", async (hostname, expected) => {
     await loadWith({ NEXT_PUBLIC_POSTHOG_KEY: "phc_test" }, hostname);
 
-    expect(register).toHaveBeenCalledWith({ environment: expected });
+    expect(register).toHaveBeenCalledWith({
+      app: "map",
+      environment: expected,
+    });
   });
 });
