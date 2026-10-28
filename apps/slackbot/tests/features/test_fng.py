@@ -189,14 +189,17 @@ def test_unlinked_workspace_creates_nothing(monkeypatch):
 
 def test_failed_user_create_shows_error_and_sends_nothing(monkeypatch):
     db, send, view = patch_db(monkeypatch)
-    db.create_record.side_effect = RuntimeError("duplicate key")
-    client = MagicMock()
+    # A Postgres IntegrityError names the email, and a traceback would log its message.
+    db.create_record.side_effect = RuntimeError("Key (email)=(john@example.com) already exists")
+    client, logger = MagicMock(), MagicMock()
 
-    fng.handle_fng_form(submission(), client, MagicMock(), {}, region_record())
+    fng.handle_fng_form(submission(), client, logger, {}, region_record())
 
     send.assert_not_called()
     client.chat_postMessage.assert_not_called()
     assert view.call_args.kwargs["level"] == constants.AlertLevel.ERROR
+    call = logger.error.call_args
+    assert "exc_info" not in call.kwargs and "john@example.com" not in repr(call)
 
 
 def test_blank_names_create_nothing(monkeypatch):
