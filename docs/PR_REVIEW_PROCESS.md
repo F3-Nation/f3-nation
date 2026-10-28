@@ -9,9 +9,9 @@ Codeowners (listed in [`.github/CODEOWNERS`](../.github/CODEOWNERS)) run the rev
 ```mermaid
 flowchart TD
     A["1. Author opens the PR as a Draft"] --> B["2. Author marks it Ready for review"]
-    B --> C["3. AI bots review automatically<br/>CodeRabbit, Greptile, Qodo"]
+    B --> C["3. AI bots review automatically<br/>(CodeRabbit, Greptile, Qodo)"]
     C --> D["4. A codeowner runs pr-review-inline<br/>with --deep unless the PR is very minor"]
-    D --> E["5. Author addresses all feedback<br/>reply to each thread, then resolve it"]
+    D --> E["5. Author addresses all feedback<br/>(reply to each thread, then resolve it)"]
     E --> F{"All threads resolved?"}
     F -- "No: a question is waiting" --> Q["Author leaves the thread open<br/>and asks in it; nudge in Slack if it sits"]
     Q --> E
