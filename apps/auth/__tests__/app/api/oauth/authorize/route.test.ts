@@ -26,9 +26,12 @@ vi.mock("~/lib/oauth", () => ({
 vi.mock("~/lib/rate-limit", () => ({
   rateLimit: vi.fn(() => ({ allowed: true, remaining: 29 })),
 }));
-vi.mock("~/env", () => ({
-  env: { NEXT_PUBLIC_AUTH_URL: "https://auth.test.invalid" },
-}));
+const envMock = {
+  NEXT_PUBLIC_AUTH_URL: "https://auth.test.invalid",
+  AUTH_USE_BETTER_AUTH: false,
+};
+vi.mock("~/env", () => ({ env: envMock }));
+vi.mock("~/lib/better-auth-oauth", () => ({ forwardToBetterAuth: vi.fn() }));
 
 const { auth } = await import("~/lib/auth");
 const {
@@ -37,6 +40,8 @@ const {
   validateRedirectUri,
   validateScopes,
 } = await import("~/lib/oauth");
+const { forwardToBetterAuth } = await import("~/lib/better-auth-oauth");
+const { rateLimit } = await import("~/lib/rate-limit");
 const { GET } =
   await import("../../../../../src/app/api/oauth/authorize/route");
 
@@ -51,6 +56,8 @@ const AUTH_TIME = "2026-01-01T00:00:00.000Z";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(forwardToBetterAuth).mockReset();
+  envMock.AUTH_USE_BETTER_AUTH = false;
   vi.mocked(getClient).mockResolvedValue(CLIENT as never);
   vi.mocked(validateRedirectUri).mockReturnValue(true);
   vi.mocked(validateScopes).mockReturnValue(true);
@@ -96,6 +103,120 @@ describe("GET /authorize — nonce/authTime wiring", () => {
 
     expect(createAuthorizationCode).toHaveBeenCalledWith(
       expect.objectContaining({ nonce: undefined }),
+    );
+  });
+});
+
+describe("GET /authorize — AUTH_USE_BETTER_AUTH", () => {
+  const url =
+    "https://auth.test.invalid/api/oauth/authorize?response_type=code&client_id=some-client";
+
+  it("runs the hand-rolled flow, never Better Auth, while the flag is off", async () => {
+    await GET(
+      makeRequest(
+        `${url}&redirect_uri=https://example.com/callback&code_challenge=abc&code_challenge_method=S256`,
+      ),
+    );
+
+    expect(forwardToBetterAuth).not.toHaveBeenCalled();
+    expect(createAuthorizationCode).toHaveBeenCalled();
+  });
+
+  it("hands the request to Better Auth's authorize endpoint while the flag is on", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    const response = new Response(null, { status: 302 });
+    vi.mocked(forwardToBetterAuth).mockResolvedValue(response);
+    const request = makeRequest(url);
+
+    await expect(GET(request)).resolves.toBe(response);
+
+    expect(forwardToBetterAuth).toHaveBeenCalledWith(request, "authorize");
+    expect(getClient).not.toHaveBeenCalled();
+    expect(createAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it("forwards a bare URL verbatim, leaving validation to Better Auth", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    vi.mocked(forwardToBetterAuth).mockResolvedValue(new Response(null));
+    const request = makeRequest(
+      "https://auth.test.invalid/api/oauth/authorize?client_id=c&nonce=",
+    );
+
+    await GET(request);
+
+    expect(forwardToBetterAuth).toHaveBeenCalledWith(request, "authorize");
+    expect(request.url).toBe(
+      "https://auth.test.invalid/api/oauth/authorize?client_id=c&nonce=",
+    );
+    expect(getClient).not.toHaveBeenCalled();
+  });
+
+  it("keeps a per-IP rate limit in front of Better Auth, three times the hand-rolled one", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    vi.mocked(rateLimit).mockReturnValueOnce({ allowed: false, remaining: 0 });
+
+    const res = await GET(makeRequest(url));
+
+    expect(res.status).toBe(429);
+    expect(rateLimit).toHaveBeenCalledWith("authorize:unknown", 90, 60000);
+    expect(forwardToBetterAuth).not.toHaveBeenCalled();
+  });
+
+  it("keeps the hand-rolled limit of 30 while the flag is off", async () => {
+    await GET(makeRequest(url));
+    expect(rateLimit).toHaveBeenCalledWith("authorize:unknown", 30, 60000);
+  });
+});
+
+describe("GET /authorize — offline_access", () => {
+  const baseUrl =
+    "https://auth.test.invalid/api/oauth/authorize" +
+    "?response_type=code&client_id=some-client" +
+    "&redirect_uri=https://example.com/callback" +
+    "&code_challenge=abc&code_challenge_method=S256";
+
+  it("ignores offline_access: it isn't validated against the client or stored on the code", async () => {
+    const res = await GET(
+      makeRequest(
+        `${baseUrl}&scope=${encodeURIComponent("openid profile email offline_access")}`,
+      ),
+    );
+
+    expect(res.status).toBe(307);
+    expect(validateScopes).toHaveBeenCalledWith(CLIENT, "openid profile email");
+    expect(createAuthorizationCode).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: "openid profile email" }),
+    );
+  });
+
+  it("passes a scope without offline_access through unchanged", async () => {
+    await GET(makeRequest(`${baseUrl}&scope=openid`));
+
+    expect(validateScopes).toHaveBeenCalledWith(CLIENT, "openid");
+  });
+
+  it("validates an empty scope for offline_access alone, so it is rejected", async () => {
+    vi.mocked(validateScopes).mockReturnValue(false);
+    const res = await GET(makeRequest(`${baseUrl}&scope=offline_access`));
+
+    expect(validateScopes).toHaveBeenCalledWith(CLIENT, "");
+    expect(res.status).toBe(400);
+    expect(createAuthorizationCode).not.toHaveBeenCalled();
+  });
+
+  it("keeps offline_access for a client that registered it", async () => {
+    const optedIn = {
+      ...CLIENT,
+      scopes: "openid profile email offline_access",
+    };
+    vi.mocked(getClient).mockResolvedValue(optedIn as never);
+    const scope = "openid profile email offline_access";
+
+    await GET(makeRequest(`${baseUrl}&scope=${encodeURIComponent(scope)}`));
+
+    expect(validateScopes).toHaveBeenCalledWith(optedIn, scope);
+    expect(createAuthorizationCode).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: scope }),
     );
   });
 });

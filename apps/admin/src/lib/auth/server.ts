@@ -4,13 +4,13 @@ import { redirect } from "next/navigation";
 import { verifyAccessToken } from "@f3nation/sso-next";
 
 import { routes } from "@acme/shared/app/constants";
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
 import { ACCESS_TOKEN_COOKIE_NAME } from "./constants";
 import type { AdminSession } from "./session";
 import { isAdminRoleName } from "./session";
 import { env } from "~/env";
 import { logDebug, logWarn } from "~/lib/logging";
-import { isApiUnavailableError } from "~/lib/api/availability";
 import { getMyProfile } from "~/lib/api/client";
 
 const NO_ADMIN_ACCESS_PATH = `${routes.admin.noAccess.__path}?reason=no-admin-access`;

@@ -2,6 +2,26 @@
 
 <!-- version list -->
 
+## [2.10.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.9.0...slackbot@2.10.0) (2026-10-23)
+
+
+### Features
+
+* **slackbot:** add /fng to sign up a new PAX ([#1224](https://github.com/F3-Nation/f3-nation/issues/1224)) ([3ae6695](https://github.com/F3-Nation/f3-nation/commit/3ae6695bfc036e34d490c93ea3423140f4408b02))
+
+
+### Bug Fixes
+
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+* **deps:** update python dependencies and CA bundles ([#1325](https://github.com/F3-Nation/f3-nation/issues/1325)) ([3cc6edf](https://github.com/F3-Nation/f3-nation/commit/3cc6edf62b97c03a232523d65b99fa052f57b9fc))
+* **slackbot:** downrange and connect optimizations ([#1370](https://github.com/F3-Nation/f3-nation/issues/1370)) ([50ae512](https://github.com/F3-Nation/f3-nation/commit/50ae512496ed9b689fb13dbc5ac74e3f2eb1ffc8))
+* **slackbot:** route shared email through configured SMTP ([#1276](https://github.com/F3-Nation/f3-nation/issues/1276)) ([014c644](https://github.com/F3-Nation/f3-nation/commit/014c644982cf3a150d4db0249124b6f6cdcefd0f))
+
+
+### Performance Improvements
+
+* **slackbot:** addressing high db spikes on calendar query ([#1270](https://github.com/F3-Nation/f3-nation/issues/1270)) ([1715159](https://github.com/F3-Nation/f3-nation/commit/1715159fe6c5cd9d9df8e869ed2929a51ef0f338))
+
 ## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.8.0...slackbot@2.9.0) (2026-10-14)
 
 

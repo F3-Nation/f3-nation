@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { eq } from "@acme/db";
 import { users } from "@acme/db/schema/schema";
 
+import { forwardToBetterAuth } from "~/lib/better-auth-oauth";
 import { getCurrentSession } from "~/lib/current-session";
 import { db } from "~/lib/db";
 import {
@@ -12,6 +13,7 @@ import {
   validateRedirectUri,
   validateScopes,
 } from "~/lib/oauth";
+import { withoutOfflineAccess } from "~/lib/oauth-scope";
 import { rateLimit } from "~/lib/rate-limit";
 import { env } from "~/env";
 
@@ -19,9 +21,22 @@ export async function GET(request: NextRequest) {
   const ip =
     request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
     "unknown";
-  const { allowed } = rateLimit(`authorize:${ip}`, 30, 60 * 1000);
+  // With the flag on, each login or onboarding round trip re-enters this
+  // route (about three passes per sign-in), so the limit is three times
+  // higher; Better Auth's own authorize limiter still applies behind it.
+  const { allowed } = rateLimit(
+    `authorize:${ip}`,
+    env.AUTH_USE_BETTER_AUTH ? 90 : 30,
+    60 * 1000,
+  );
   if (!allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  // Better Auth runs the same checks (PKCE S256, client, redirect_uri,
+  // scopes, session, onboarding gate, empty nonce) — see lib/better-auth.ts.
+  if (env.AUTH_USE_BETTER_AUTH) {
+    return forwardToBetterAuth(request, "authorize");
   }
 
   const publicUrl = env.NEXT_PUBLIC_AUTH_URL;
@@ -30,7 +45,7 @@ export async function GET(request: NextRequest) {
   const responseType = searchParams.get("response_type");
   const clientId = searchParams.get("client_id");
   const redirectUri = searchParams.get("redirect_uri");
-  const scope = searchParams.get("scope") ?? "openid profile email";
+  const requestedScope = searchParams.get("scope") ?? "openid profile email";
   const state = searchParams.get("state");
   const nonce = searchParams.get("nonce");
   const codeChallenge = searchParams.get("code_challenge");
@@ -91,6 +106,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const scope = withoutOfflineAccess(requestedScope, client.scopes);
   if (!validateScopes(client, scope)) {
     return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
   }

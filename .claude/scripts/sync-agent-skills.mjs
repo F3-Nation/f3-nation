@@ -3,17 +3,26 @@
  * Mirror vendor-neutral agent skills from .agents/skills/ (canonical,
  * checked in — see https://agentskills.io) into gitignored .claude/skills/,
  * which is the only project location Claude Code scans. Copies overwrite but
- * never delete, so local-only skills in .claude/skills/ survive. Runs from a
+ * never delete, so local-only skills in .claude/skills/ survive; only the
+ * mirrors of skills listed in RETIRED_SKILLS are removed. Runs from a
  * SessionStart hook (see .claude/settings.json); plain file copies keep this
  * working on Windows, where git symlinks aren't reliable.
  */
-import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const source = join(repoRoot, ".agents", "skills");
 const target = join(repoRoot, ".claude", "skills");
+
+// Skills deleted from .agents/skills/. Their old mirrors would keep loading
+// with instructions that point at files which no longer exist.
+const RETIRED_SKILLS = ["github"];
+
+for (const name of RETIRED_SKILLS) {
+  rmSync(join(target, name), { recursive: true, force: true });
+}
 
 if (existsSync(source)) {
   mkdirSync(target, { recursive: true });
