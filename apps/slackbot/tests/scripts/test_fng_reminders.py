@@ -1,8 +1,9 @@
 import os
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 import pytz
@@ -31,7 +32,16 @@ def space(team_id="T1", **settings):
 
 
 def run(
-    monkeypatch, fngs, joined=False, force=False, now=NOW, delivered=(7,), spaces=None, dm_side_effect=None, **settings
+    monkeypatch,
+    fngs,
+    joined=False,
+    force=False,
+    now=NOW,
+    delivered=(7,),
+    spaces=None,
+    dm_side_effect=None,
+    locked=None,
+    **settings,
 ):
     class FakeDatetime(datetime):
         @classmethod
@@ -49,6 +59,18 @@ def run(
     monkeypatch.setattr(
         fng_reminders.DbManager, "find_first_record", MagicMock(return_value=SimpleNamespace() if joined else None)
     )
+    # The row read under the lock is the job's copy unless a test says an overlapping run already changed it.
+    rows = {fng.id: fng for fng in fngs} if locked is None else locked
+    session = MagicMock()
+    session.query.return_value.filter.side_effect = lambda clause: SimpleNamespace(
+        with_for_update=lambda: SimpleNamespace(one_or_none=lambda: rows.get(clause.right.value))
+    )
+
+    @contextmanager
+    def session_scope():
+        yield session
+
+    monkeypatch.setattr(fng_reminders, "session_scope", session_scope)
     monkeypatch.setattr(fng_reminders, "save_reminders_sent", MagicMock())
     dm = MagicMock(return_value=list(delivered), side_effect=dm_side_effect)
     monkeypatch.setattr(fng_reminders, "dm_fng_contacts", dm)
@@ -94,14 +116,14 @@ def test_no_reminder_until_the_next_one_is_due(monkeypatch, days, already_sent):
 def test_sent_reminder_is_recorded_so_a_rerun_sends_nothing(monkeypatch):
     run(monkeypatch, [fng_created_days_ago(6, meta={"battle_buddy": 7, "fng_reminders_sent": {"7": 1}})])
 
-    fng_reminders.save_reminders_sent.assert_called_once_with(42, {"7": 2})
+    fng_reminders.save_reminders_sent.assert_called_once_with(ANY, 42, {"7": 2})
 
 
 def test_missed_reminder_goes_out_the_next_day_once(monkeypatch):
     text = run(monkeypatch, [fng_created_days_ago(7)]).call_args.args[3]
 
     assert "7 days later" in text
-    assert fng_reminders.save_reminders_sent.call_args.args[1] == {"7": 2}
+    assert fng_reminders.save_reminders_sent.call_args.args[2] == {"7": 2}
 
 
 def test_undelivered_reminder_is_retried(monkeypatch):
@@ -116,13 +138,13 @@ def test_contact_whose_dm_failed_is_retried_without_repeating_it_to_the_other(mo
     dm = run(monkeypatch, [fng_created_days_ago(3, meta=both)], delivered=(9,))
 
     assert dm.call_args.kwargs["contact_ids"] == [7, 9]
-    received = fng_reminders.save_reminders_sent.call_args.args[1]
+    received = fng_reminders.save_reminders_sent.call_args.args[2]
     assert received == {"9": 1}
 
     dm = run(monkeypatch, [fng_created_days_ago(4, meta={**both, "fng_reminders_sent": received})], delivered=(7,))
 
     assert dm.call_args.kwargs["contact_ids"] == [7]
-    assert fng_reminders.save_reminders_sent.call_args.args[1] == {"9": 1, "7": 1}
+    assert fng_reminders.save_reminders_sent.call_args.args[2] == {"9": 1, "7": 1}
 
 
 def test_failed_last_reminder_is_retried_the_next_day(monkeypatch):
@@ -205,3 +227,37 @@ def test_runs_only_at_the_reminder_hour_unless_forced(monkeypatch):
 def test_without_invite_link_the_reminder_still_goes_out(monkeypatch):
     text = run(monkeypatch, [fng_created_days_ago(3)], downrange_invite_link=None).call_args.args[3]
     assert text.endswith("might help: 828-555-0100 · john@example.com.")
+
+
+def test_counts_are_reread_under_the_lock_so_an_overlapping_run_sends_nothing(monkeypatch):
+    # Both runs read him before either sent; by the time this one holds his row, the other has saved its counts.
+    already_sent = fng_created_days_ago(3, meta={"battle_buddy": 7, "fng_reminders_sent": {"7": 1}})
+
+    run(monkeypatch, [fng_created_days_ago(3)], locked={42: already_sent}).assert_not_called()
+    fng_reminders.save_reminders_sent.assert_not_called()
+
+
+def test_reminder_uses_the_locked_row(monkeypatch):
+    locked = fng_created_days_ago(3, f3_name="Locked")
+
+    dm = run(monkeypatch, [fng_created_days_ago(3)], locked={42: locked})
+
+    assert dm.call_args.args[2] is locked
+
+
+def test_fng_deleted_before_the_lock_is_skipped(monkeypatch):
+    run(monkeypatch, [fng_created_days_ago(3)], locked={}).assert_not_called()
+
+
+@pytest.mark.parametrize("failing", ["region", "fng"])
+def test_failure_logs_carry_no_traceback(monkeypatch, failing):
+    # A traceback renders the exception message, and a Postgres IntegrityError's names the email.
+    error = RuntimeError("Key (email)=(john@example.com) already exists")
+    if failing == "region":
+        monkeypatch.setattr(fng_reminders, "_remind_space", MagicMock(side_effect=error))
+        run(monkeypatch, [])
+    else:
+        run(monkeypatch, [fng_created_days_ago(3)], dm_side_effect=error)
+
+    call = fng_reminders.logger.error.call_args
+    assert "exc_info" not in call.kwargs and "john@example.com" not in repr(call)
