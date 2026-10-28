@@ -11,6 +11,7 @@ turbo_scope_status=0
 mirror_postgres_image_status=0
 pr_triage_status=0
 prt_status=0
+review_completion_status=0
 lint_fix_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
@@ -23,6 +24,7 @@ bash scripts/select-turbo-scope.test.sh || turbo_scope_status=$?
 bash scripts/mirror-postgres-image.test.sh || mirror_postgres_image_status=$?
 bash scripts/pr-triage.test.sh || pr_triage_status=$?
 bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
+bash .agents/skills/pr-review-inline/scripts/completion-gate.test.sh || review_completion_status=$?
 bash scripts/lint-fix.test.sh || lint_fix_status=$?
 
 if [ "$turbo_status" -ne 0 ]; then
@@ -59,6 +61,10 @@ fi
 
 if [ "$prt_status" -ne 0 ]; then
   exit "$prt_status"
+fi
+
+if [ "$review_completion_status" -ne 0 ]; then
+  exit "$review_completion_status"
 fi
 
 if [ "$lint_fix_status" -ne 0 ]; then

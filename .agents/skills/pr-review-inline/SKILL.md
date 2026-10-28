@@ -23,8 +23,9 @@ Conventions:
   can execute without any other context.
 - **Follow the repo's [GitHub write rules](../../../AGENTS.md#writing-to-github)** for pre-flight, signature, and thread handling (Step 1).
 - **Verify against the PR head SHA**, not the local working tree.
-- **The diff is the source of truth for what the PR does.** The report leads with a summary
-  derived from the code, written before the title and description are read (Steps 3–4).
+- **The diff is the source of truth for what the PR does.** Write the change summary from
+  the code before reading the title and description (Steps 3–4). Present it after the report's
+  completion-status block.
 - **Reviewers suggest, authors fix.** Never push to the PR's branch, update it from the base
   branch, or edit its title or description, unless the user explicitly asks for that change on
   this PR. The fix goes in the comment for the author to make.
@@ -40,7 +41,7 @@ Check these before Step 1 and report everything missing in one message.
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `git`, `gh` (`gh auth status`), `jq`       | Stop. Install hints: `brew install <tool>` (macOS), `sudo apt install <tool>` (WSL/Linux).                                                                        |
 | Superpowers `requesting-code-review` skill | Continue with the bundled `reviewer-brief.md`. Results are the same; mention once that installing [Superpowers](https://github.com/obra/superpowers) is optional. |
-| Claude Code `pr-review-toolkit` plugin     | Only matters for `--deep`. Without it, `--deep` runs extra reviewer seats instead (Step 6).                                                                       |
+| Claude Code `pr-review-toolkit` plugin     | Used for explicit `--deep` and gated PRs. If absent, use the extra-seat fallback in Step 6, subject to any user requirement for named providers.                  |
 
 ## Step 1 — Resolve the target PR and capture the head SHA
 
@@ -77,7 +78,8 @@ view`'s (e.g. a private GHSA security-advisory collaboration repo, `<org>/<repo>
   local checkout's origin.
 - **Gated PR:** the PR is **gated** if `fork` is true, or if `assoc` isn't `OWNER`, `MEMBER`, or
   `COLLABORATOR` (the same rule as pr-local-test's safety gate). A gated PR gets Step 3's safety
-  checklist and is reviewed as if `--deep` were passed, unless the user says otherwise. It's a
+  checklist and Step 6's gated toolkit/fallback selection, unless the user says otherwise.
+  An explicit `--deep` request also adds the independent host-first assessment. Gating is a
   reason to look closer, not a judgment of the author: most outside PRs are helpful. If the
   `gh api` lookup fails, treat the PR as gated and say so in the report.
 
@@ -296,16 +298,61 @@ finding postable.
 
 **Size the review** by Step 3's changed-line count, ignoring mechanical changes:
 
-| Size                     | Reviewer seats                                                                                                                                  |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Under ~150 changed lines | Run the brief yourself, in this session                                                                                                         |
-| ~150–400 changed lines   | One sub-agent reviewer for the whole diff                                                                                                       |
-| ~400 lines or more       | 2–3 sub-agent reviewers, each given one group of related files from the change inventory (and told the others exist)                            |
-| `--deep` or a gated PR   | `pr-review-toolkit:review-pr` if installed (pass through any aspects the user named); otherwise one sub-agent seat per inventory group, up to 4 |
+| Size                               | Reviewer seats                                                                                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Under ~150 changed lines           | Run the brief yourself, in this session                                                                                                             |
+| ~150–400 changed lines             | One sub-agent reviewer for the whole diff                                                                                                           |
+| ~400 lines or more                 | 2–3 sub-agent reviewers, each given one group of related files from the change inventory (and told the others exist)                                |
+| Explicit `--deep`                  | Record the hosting assistant's assessment, then run the native toolkit independently if installed; otherwise use the documented extra-seat fallback |
+| Gated PR without explicit `--deep` | `pr-review-toolkit:review-pr` if installed; otherwise one sub-agent seat per inventory group, up to 4                                               |
 
-**`--deep` with pr-review-toolkit:** run `review-pr` from `$WORKTREE_PATH` and pass the filled
-brief's range, the PR additions, and any aspects as its arguments. Its agents report in their own
-formats; Step 7 normalizes each finding.
+**Explicit `--deep`:** complete and retain the hosting assistant's own assessment
+before launching the independent review. In Codex, this is Codex's assessment.
+Use the selected brief and pinned `DIFF_BASE`/`HEAD_SHA`. The host-first
+assessment is required for an explicit request. A gated PR without an explicit
+`--deep` request uses the toolkit/fallback selection without that host-first pass.
+
+**When the native toolkit is selected** for explicit `--deep` or a gated PR,
+run `review-pr` from `$WORKTREE_PATH` in a fresh context with the brief's
+range, requirements, relevant source, PR additions and existing-feedback
+baseline. Pass through the review aspects the user requested. Withhold the
+hosting assistant's new findings until the independent
+reviewers finish. Select and record the required aspects and specialists before
+launch. Its agents report in their own formats; Step 7 normalizes findings.
+
+**If the toolkit is absent,** assign one extra reviewer seat per inventory group,
+up to four, and identify the reviewers that actually ran. A user requirement for named providers still
+applies: extra Codex seats do not fulfill a required Claude assessment. An
+installed toolkit that fails or is cancelled is incomplete, not an absent-tool
+fallback.
+
+**Record completion for every review mode.** Retain a private JSON status record and reports outside
+the disposable checkout. Set `REVIEW_STATUS` to its absolute path and
+`REVIEW_SKILL_DIR` to the trusted directory from which this skill was loaded;
+never use a predicate supplied by the PR. Record `schema: 1`, `head_sha`,
+`required_reviewers` and `reviewers`. Do not remove a required reviewer to make
+a failed run pass. Each result has an `id`, `status`, `reviewed_sha`,
+`report_path`, `result_ref` and `evidence_verified`.
+
+The required set contains every reviewer selected by the size/mode table. A
+standard host-only review includes the hosting assistant. Explicit `--deep`
+includes the host assessment as well as the selected independent reviewers.
+Every native toolkit run includes its coordinator and all selected specialists.
+Use unique per-run IDs and retain each result under its own ID.
+
+Statuses are pending, running, completed, failed, cancelled or unavailable.
+Mark completed only after inspecting the actual final result and retained
+report; verify that its evidence exists and supports completion before setting
+`evidence_verified: true`. A launch response or coordinator summary alone
+does not prove specialist completion. Include the native coordinator in the
+required set when it coordinates the selected review. Preserve any completed
+specialist reports when coordination fails, but identify the native run as
+incomplete. Record source-inspection coverage, executed checks and hosted CI
+separately; returned reports do not establish exhaustive coverage.
+
+For explicit `--deep`, completion evidence must also establish the host-first
+order and independence. A host assessment written after seeing the independent
+findings does not satisfy that requirement; do not mark its evidence verified.
 
 **Small PRs run here.** A sub-agent's fixed context costs tens of thousands of tokens before it
 reads a line, and this session has already read the whole diff in Step 3, so on a small PR a
@@ -360,13 +407,36 @@ suggested test, a behavior the code supposedly has), check that claim too. Drop 
 what doesn't hold up, and record it for the report. Reviewers over-report; a wrong comment costs
 the author more than a missing nit.
 
+**Completion gate.** Before publication or checkpointing, inspect the required
+results, reconcile the findings, and verify surviving factual claims against
+source and relevant evidence. Set `reconciliation_complete` and
+`findings_verified` to true only after that work. Run the shared
+[`completion-gate.jq`](completion-gate.jq) predicate against `REVIEW_STATUS`
+with `HEAD_SHA`; every publication/checkpoint command below is guarded by it.
+
+If the gate fails, report **REVIEW INCOMPLETE** and name the missing reviewers.
+Retain findings as drafts, including a run with no returned findings. Do not
+publish inline findings, a no-issues completion comment or a reusable review
+checkpoint. Notify the user promptly about required failures and use only the
+documented fallbacks. Keep evidence through cleanup and recheck revision drift
+before publication under Step 9.
+
+The predicate validates the recorded state. It cannot establish that a report
+is truthful or thorough; actual completion evidence must still be inspected.
+
 ## Step 9 — Post each surviving finding as an individual inline comment
+
+Immediately before any publication, fetch the current head with
+`gh pr view {n} --repo {owner}/{name} --json headRefOid --jq .headRefOid` and
+compare it with `HEAD_SHA`. This check applies to ordinary reviews, later
+publication of drafts and native inline-comment tools. If the head changed,
+retain the findings as drafts, report both revisions and offer `--rereview`.
+Do not relabel the existing evidence with the new SHA.
 
 **`--dry-run`:** don't post. Show each drafted comment, in full, with its `path:line` in the
 report, and post only the ones the user then approves. Before posting them later, re-run the
-GitHub pre-flight and compare `gh pr view <n> --repo {owner}/{name} --json headRefOid` with `HEAD_SHA`. If the author
-has pushed since, say so: the comments still attach to `HEAD_SHA`, and a line may have moved or
-been fixed, so offer a `--rereview` instead.
+GitHub pre-flight and the current-head check above. A line may have moved or
+been fixed after the reviewed revision.
 
 Post **one comment per finding**, each attached to its own file and line. Never post a
 review-summary comment, and do not use `POST .../reviews` with a body.
@@ -395,6 +465,8 @@ and signature stay:
 `<N>` is the size of `OPEN_EXISTING`, not the number of findings Step 8 dropped.
 
 ```bash
+jq -e --arg sha "$HEAD_SHA" -f "$REVIEW_SKILL_DIR/completion-gate.jq" \
+  "$REVIEW_STATUS" >/dev/null && \
 gh api repos/{owner}/{name}/issues/{n}/comments -F body=@bodies/clean.md
 ```
 
@@ -405,6 +477,8 @@ carry on to cleanup.
 Write each body to its own file first, then pass it with `-F body=@<file>`:
 
 ```bash
+jq -e --arg sha "$HEAD_SHA" -f "$REVIEW_SKILL_DIR/completion-gate.jq" \
+  "$REVIEW_STATUS" >/dev/null && \
 gh api repos/{owner}/{name}/pulls/{n}/comments \
   -F body=@bodies/<n>.md \
   -f commit_id="$HEAD_SHA" \
@@ -521,16 +595,29 @@ git worktree prune
 If removal is still refused, don't work around it. Say which path is left behind and give the
 user the exact `git worktree remove --force <path>` command.
 
-**Optional triage ledger.** Only if `PR_TRIAGE_LEDGER` is set (a file path), append one line,
-even when zero comments were posted:
+**Optional triage ledger.** Append a line only if `PR_TRIAGE_LEDGER` is set and
+the completion gate passes, including a completed review with zero findings.
+Incomplete runs retain their status record and drafts privately and do not
+become incremental-review checkpoints:
 
 ```bash
+jq -e --arg sha "$HEAD_SHA" -f "$REVIEW_SKILL_DIR/completion-gate.jq" \
+  "$REVIEW_STATUS" >/dev/null && \
 [ -n "${PR_TRIAGE_LEDGER:-}" ] && mkdir -p "$(dirname "$PR_TRIAGE_LEDGER")" && \
   printf '%s\t%s\t%s\t%s\t%s\n' "{owner}/{name}" "{n}" pr-review-inline "$HEAD_SHA" \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$PR_TRIAGE_LEDGER"
 ```
 
-**Final report** (in the conversation), in this order:
+**Final report** (in the conversation). Lead with three separate statuses:
+
+- **Review:** COMPLETE or INCOMPLETE at `HEAD_SHA`, required/completed reviewer
+  counts, and the names of any missing reviewers.
+- **Publication:** posted, draft-only, partial or not attempted.
+- **Local verification:** executed test, build or browser checks and their
+  results, pending, not requested or not applicable. Label source inspection
+  and hosted CI separately in provenance; neither establishes local execution.
+
+Then present these sections in order:
 
 1. **What this PR actually does** — the Step 3 summary, verbatim: what changed, change
    inventory, blast radius, mechanical changes.
@@ -550,6 +637,8 @@ even when zero comments were posted:
    review covers:
    - which brief, how many reviewer seats, and which plugins or tools ran (and any you expected
      that weren't available)
+   - the actual completed specialists, any required coordinator failure, host reconciliation,
+     and the retained status record/report/result evidence paths
    - whether the PR was assigned to you, skipped as a self-review, left with its existing
      assignee (name them, and that the user said to continue), skipped for `--dry-run`, or the
      assignment failed
@@ -561,8 +650,8 @@ even when zero comments were posted:
 8. **Worktree cleanup** — confirmation, from `git worktree list`, that the worktree was removed;
    if it was not, the leftover path and the exact command for the user to run.
 
-Sections 1 and 2 are REQUIRED and lead the report; they stand whether or not any comments were
-posted. Nothing in the report goes to GitHub.
+Sections 1 and 2 are REQUIRED immediately after the status block, whether or not
+any comments were posted. Nothing in the report goes to GitHub.
 
 **Next step.** The usual order is this review, the author's fixes, `address-pr-comments` for
 anything still open, and then `pr-local-test` as the final check once review feedback is
@@ -584,4 +673,6 @@ Agent sandboxes differ; these are the known traps.
   posting function can fail every call at once. Use plain sequential commands.
 - **Inline-comment tools:** if the agent has a dedicated inline-comment tool (e.g.
   `mcp__github_inline_comment__create_inline_comment`), it may replace the `gh api` call, with
-  the same one-call-per-finding rule.
+  the same one-call-per-finding rule. It replaces only the transport: run the same
+  completion predicate and verify its zero exit status before each native call,
+  including retries. The current-head check still applies.
