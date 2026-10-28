@@ -11,8 +11,14 @@
     },
     {
       "path": "apps/AGENTS.md",
-      "description": "Conventions for apps/.",
-      "scope": ["apps/**"]
+      "description": "Shared conventions for the Next.js apps (admin, auth, homepage, map, me).",
+      "scope": [
+        "apps/admin/**",
+        "apps/auth/**",
+        "apps/homepage/**",
+        "apps/map/**",
+        "apps/me/**"
+      ]
     },
     {
       "path": "apps/admin/AGENTS.md",
@@ -31,8 +37,15 @@
     },
     {
       "path": "apps/auth/AGENTS.md",
-      "description": "Conventions for apps/auth/.",
-      "scope": ["apps/auth/**"]
+      "description": "Conventions for apps/auth/, including the security rules for tokens, sessions and redirects that the SSO packages, app proxies and API session resolution follow.",
+      "scope": [
+        "apps/auth/**",
+        "packages/auth/**",
+        "packages/sso/**",
+        "packages/sso-next/**",
+        "apps/*/src/proxy.ts",
+        "packages/api/src/shared.ts"
+      ]
     },
     {
       "path": "apps/homepage/AGENTS.md",
@@ -68,6 +81,11 @@
       "path": "packages/db/AGENTS.md",
       "description": "Conventions for packages/db/.",
       "scope": ["packages/db/**"]
+    },
+    {
+      "path": "packages/sso-next/AGENTS.md",
+      "description": "Conventions for packages/sso-next/.",
+      "scope": ["packages/sso-next/**"]
     },
     {
       "path": "packages/sso/AGENTS.md",

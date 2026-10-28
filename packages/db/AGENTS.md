@@ -43,11 +43,11 @@ signs off on every schema migration (`docs/AI_GUARDRAILS.md`).
 
 ## Schema conventions
 
-- Timestamp columns in `public` and `slackbot` tables use
-  `timestamp({ mode: "string" })` without `withTimezone`, matching their
-  neighbours. The Better Auth tables in the `auth` schema use `mode: "date"`
-  (enforced by a test). Code reading a `mode: "string"` column normalizes the
-  naive string to UTC before `new Date()`.
+- Timestamp columns in `public` tables use `timestamp({ mode: "string" })`
+  without `withTimezone`, matching their neighbours; `slackbot` schema tables
+  use `{ withTimezone: true, mode: "string" }`. The Better Auth tables in the
+  `auth` schema use `mode: "date"` (enforced by a test). Code reading a naive
+  `mode: "string"` column normalizes it to UTC before `new Date()`.
 - A schema or enum change mirrored in
   `packages/db-python/f3_data_models/models.py` updates the Python model in
   the same PR (`test_enum_parity.py`).

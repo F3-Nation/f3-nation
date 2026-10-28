@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Regression tests for scripts/check-review-links.mjs: that it passes a
-# consistent fixture repo, and fails when a REVIEW.md link points at a missing
-# file or heading, when a nested AGENTS.md isn't listed in
-# .greptile/files.json or is scoped to the wrong directory, or when the
-# Greptile config lists a file that no longer exists.
+# consistent fixture repo (including underscore anchors and narrowed or widened
+# Greptile scopes), and fails when a REVIEW.md link (plain, titled or in-page)
+# points at a missing file or heading, when an anchor follows a directory link,
+# when a nested AGENTS.md isn't listed in .greptile/files.json or is scoped
+# outside its directory, or when the Greptile config lists a file that no
+# longer exists.
 # Run directly: bash scripts/check-review-links.test.sh
 set -uo pipefail
 
@@ -78,6 +80,37 @@ scope="$tmp_dir/scope"
 make_fixture "$scope"
 sed 's#"packages/api/\*\*"#"packages/**"#' "$scope/.greptile/files.json" >"$scope/files.tmp" && mv "$scope/files.tmp" "$scope/.greptile/files.json"
 expect "wrong Greptile scope" fail "$scope" "must be scoped to"
+
+underscore="$tmp_dir/underscore"
+make_fixture "$underscore"
+printf '# packages/api\n\n## `snake_case` names\n' >"$underscore/packages/api/AGENTS.md"
+printf '# Code review\n\n- [rule](packages/api/AGENTS.md#snake_case-names)\n' >"$underscore/REVIEW.md"
+expect "heading with an underscore keeps it in the anchor" pass "$underscore"
+
+titled="$tmp_dir/titled"
+make_fixture "$titled"
+printf '# Code review\n\n- [rule](packages/api/AGENTS.md#missing "Rule")\n' >"$titled/REVIEW.md"
+expect "titled link to a missing heading" fail "$titled" "no heading for #missing"
+
+in_page="$tmp_dir/in-page"
+make_fixture "$in_page"
+printf '# Code review\n\n## Checks\n\n- [ok](#checks) [bad](#missing)\n' >"$in_page/REVIEW.md"
+expect "in-page link to a missing heading" fail "$in_page" "REVIEW.md has no heading for #missing"
+
+dir_anchor="$tmp_dir/dir-anchor"
+make_fixture "$dir_anchor"
+printf '# Code review\n\n- [rule](packages/api#authorization)\n' >"$dir_anchor/REVIEW.md"
+expect "anchor on a directory link" fail "$dir_anchor" "anchor on a directory link"
+
+narrow="$tmp_dir/narrow"
+make_fixture "$narrow"
+sed 's#"packages/api/\*\*"#"packages/api/src/**", "packages/api/test/**"#' "$narrow/.greptile/files.json" >"$narrow/files.tmp" && mv "$narrow/files.tmp" "$narrow/.greptile/files.json"
+expect "scope narrowed to paths under the directory" pass "$narrow"
+
+wide="$tmp_dir/wide"
+make_fixture "$wide"
+sed 's#"packages/api/\*\*"#"packages/api/**", "apps/*/src/proxy.ts"#' "$wide/.greptile/files.json" >"$wide/files.tmp" && mv "$wide/files.tmp" "$wide/.greptile/files.json"
+expect "scope widened beyond the directory" pass "$wide"
 
 stale="$tmp_dir/stale"
 make_fixture "$stale"

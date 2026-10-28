@@ -49,7 +49,9 @@ with the fix or guard line deleted, it isn't doing its job.
 - Use `vi.hoisted` for anything a `vi.mock` factory references. Restore stubs
   (`vi.unstubAllGlobals`, `vi.unstubAllEnvs`, `vi.restoreAllMocks`) in
   `afterEach`, and prefer `resetAllMocks` to `clearAllMocks` when
-  implementations are set.
+  implementations are set. `resetAllMocks` also clears defaults a `vi.mock`
+  factory set with `mockResolvedValue` (`packages/api`'s admin session), so
+  re-apply them in `beforeEach`.
 - Create a fresh `Response` per mocked `fetch` call; a body can be read once.
 - Wait on a deterministic signal for fire-and-forget work, never a fixed sleep,
   and leave wall-clock budgets room for a loaded CI runner.

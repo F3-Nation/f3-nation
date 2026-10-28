@@ -9,6 +9,9 @@ needed. A bare `vitest` invocation or most editor test runners bypass
 of running. `apps/api`'s characterization suite is unaffected; it still resets
 through Turbo's `reset-test-db` task.
 
+Session resolution (`src/shared.ts`) follows
+[`apps/auth/AGENTS.md` § Security rules](../../apps/auth/AGENTS.md#security-rules).
+
 ## Error Handling
 
 Full rationale, the code-selection table, and the `catch`-block pattern:
@@ -53,9 +56,9 @@ A procedure tier is not authorization. `protectedProcedure` proves a session;
 - Verify every foreign id in input exists, is active, and belongs to an org
   the caller can edit, before writing.
 - Anonymous or `publicReadProcedure` paths:
-  - Force `isActive` and `!isPrivate` on the row, its series and its full
-    ancestor chain (`orgAndAncestorsAreActive` / `ancestorOrgsAreActive`),
-    whatever filters the caller sends.
+  - Force `isActive` on the row, its series and its full ancestor org chain
+    (`orgAndAncestorsAreActive` / `ancestorOrgsAreActive`), and `!isPrivate`
+    on the event or series, whatever filters the caller sends.
   - Select an explicit column allowlist (no emails, phones, `meta` or tokens).
   - Bound the page size.
 - Put a joined table's active/private predicate in the `LEFT JOIN`, not in
@@ -108,7 +111,10 @@ A procedure tier is not authorization. `protectedProcedure` proves a session;
 - REST query parameters: use `queryBooleanSchema`, never
   `z.coerce.boolean()` (`"false"` becomes `true`) or a bare
   `z.coerce.number()` (`""` becomes `0`). Bound integer ids to
-  `1..2147483647`. Validate date strings with `z.iso.date()` before comparing.
+  `1..2147483647`. Validate date strings with `z.iso.date()` before comparing. `queryBooleanSchema` rejects `"True"`/`"False"`, which the Slack bot's
+  Python client sends when it passes `True`/`False` in `params`; switching an
+  endpoint the bot calls also changes the bot to send `"true"`/`"false"` in
+  the same PR.
 - Every new or changed procedure has an `.output()` schema with `.describe()`
   on each field. Output schemas strip unknown keys, so diff the returned
   fields. Derive enum lists and limits in descriptions from the shared

@@ -238,10 +238,11 @@ client is hostile.
 
 ### Tokens and sessions
 
-- Verify with `jwtVerify` (or the shared `verifyAccessToken`), pinning the
+- Verify with the shared `verifyAccessToken` (it pins RS256 and the issuer
+  and rejects a token with no `exp`), or with `jwtVerify` pinning the
   algorithm and issuer and passing `requiredClaims: ["exp"]` (`jwtVerify`
-  accepts a token with no `exp`). Never trust a decoded payload or the mere
-  presence of a cookie.
+  alone accepts a token with no `exp`). Never trust a decoded payload or the
+  mere presence of a cookie.
 - Bearer verifiers check `token_use`: ID tokens share keys and issuer with
   access tokens and are not credentials.
 - Never copy roles or other privilege claims from client-supplied data
@@ -294,9 +295,10 @@ client is hostile.
   `advanced.ipAddress` (`trustedProxies` or `ipAddressHeaders`) to key on the
   real client IP.
 - Unauthenticated endpoints that accept credentials, codes or identifiers are
-  rate-limited, return generic errors that never echo `err.message`, and
-  never reveal whether an account exists (`/api/check-user` is the one
-  deliberate, rate-limited exception).
+  rate-limited or attempt-budgeted (see the attempt-budget rule above), return
+  generic errors that never echo `err.message`, and never reveal whether an
+  account exists (`/api/check-user` is the one deliberate, rate-limited
+  exception).
 - Parse request bodies in `try`/`catch` (400 on bad JSON), then `safeParse`
   with Zod; no `as` casts on bodies.
 - Encode every dynamic URL part with `encodeURIComponent`, and test with

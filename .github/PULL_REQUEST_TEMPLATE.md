@@ -59,7 +59,7 @@ Check what applies; delete lines that don't. Explain anything left unchecked.
 - [ ] Commands run: <!-- e.g. pnpm ci:local -->
 - [ ] Tests pin the new behavior and fail without this change
 - [ ] Docs updated with the code (specs, `AGENTS.md`, READMEs, `docs/` — see "Docs that change with the code" in `REVIEW.md`)
-- [ ] Database migration: none / included and follows the [`db-migration`](../.agents/skills/db-migration/SKILL.md) skill (lock risk, release steps, rollback)
+- [ ] Database migration: none / included and follows the [`db-migration`](https://github.com/F3-Nation/f3-nation/blob/main/.agents/skills/db-migration/SKILL.md) skill (lock risk, release steps, rollback)
 - [ ] Environment variables: none / added to every `.env*.example`, `cloud-run-env*.sh` and env docs
 - [ ] Deploy order: none / stated (e.g. `api` before an app that depends on it)
 - [ ] UI change: screenshots or recording attached

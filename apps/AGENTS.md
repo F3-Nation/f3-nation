@@ -15,11 +15,13 @@ apps (`api`, `slackbot`, `analytics`) have their own `AGENTS.md`.
 - Only public-read keys may be `NEXT_PUBLIC_*` or sit in the `apps/homepage`
   static bundle; never a privileged key or token.
 - Client code, including `instrumentation-client.ts`, imports the env module
-  only if every `NEXT_PUBLIC_*` schema is non-throwing (optional, no
-  refinements, as in `apps/map`). The browser has no `CI` or
-  `SKIP_ENV_VALIDATION`, so a rejected value throws on import and white-screens
-  the page. Where one is required (`apps/auth`), read
-  `process.env.NEXT_PUBLIC_X` directly.
+  only if no deployed value can fail a `NEXT_PUBLIC_*` schema. Optional,
+  unrefined strings are safe; an enum or URL throws on an unlisted value,
+  including `""` (`apps/map` imports it with one enum, kept safe only by its
+  Dockerfile default). The browser has no `CI` or `SKIP_ENV_VALIDATION`, so a
+  rejected value throws on import and white-screens the page. Otherwise
+  (`apps/auth`, `apps/me`, `apps/admin`) read `process.env.NEXT_PUBLIC_X`
+  directly.
 - Optional, cosmetic settings don't use a throwing validator in `env.ts`; a
   typo would fail every route that imports it.
 - Never import `@acme/logger` (pino, Node-only) into a `"use client"` module;

@@ -110,7 +110,8 @@ Repo decisions that review bots have repeatedly flagged by mistake.
 - A single timestamp column without `withTimezone`, seeded users without a
   role, or a missing `CREATE INDEX CONCURRENTLY` (migrations run in one
   transaction).
-- Existing `UNAUTHORIZED` for permission failures in `packages/api`.
+- `UNAUTHORIZED` (rather than `FORBIDDEN`) for permission failures in
+  `packages/api`, new or existing.
 - `*.spec.ts` files (the Playwright suffix), and Vitest's default stack-order
   cleanup hooks.
 - A missing test harness for a hand-run operator script or a short inline

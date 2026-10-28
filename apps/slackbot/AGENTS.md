@@ -34,7 +34,9 @@ The bot deploys independently of the TypeScript apps and calls the API over
 HTTP.
 
 - Treat a message `ts` as an opaque string; never round-trip it through
-  `float`.
+  `float`. The exception is `event_instances.preblast_ts` / `backblast_ts`,
+  stored as `double precision`: format them back with six decimals
+  (`f"{ts:.6f}"`) before passing them to Slack.
 - Call `ack()` before opening a loading modal, and make no blocking HTTP calls
   before `views.open`: `trigger_id` expires in seconds.
 - Read pickers by type, never `value`: `datepicker` → `selected_date`,

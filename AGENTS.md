@@ -17,9 +17,11 @@ files beneath it.
 Code-review rules live in [`REVIEW.md`](REVIEW.md): review priorities,
 critical checks, reviewer conduct and "do not flag" decisions. **When you
 review a diff** (any assistant or tool), apply `REVIEW.md` together with the
-`AGENTS.md` files above each changed file. Claude Code Review and Copilot
-read `REVIEW.md` natively (Qodo does once its `enable_review_md` setting is on); CodeRabbit and Greptile are pointed at it
-by [`.coderabbit.yaml`](.coderabbit.yaml) and
+`AGENTS.md` files above each changed file. Claude Code Review reads
+`REVIEW.md` natively (Qodo does once its `enable_review_md` setting is on);
+Copilot, CodeRabbit and Greptile are pointed at it by
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md),
+[`.coderabbit.yaml`](.coderabbit.yaml) and
 [`.greptile/files.json`](.greptile/files.json). `pnpm lint` runs
 `scripts/check-review-links.mjs`, which fails if a `REVIEW.md` link breaks or
 a nested `AGENTS.md` is missing from the Greptile list.

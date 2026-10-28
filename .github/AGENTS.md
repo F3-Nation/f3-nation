@@ -19,8 +19,10 @@ upkeep. These rules apply to new and changed workflows.
   into `run:`; pass them through `env:` and quote them.
 - Validate `workflow_dispatch` refs and tags against the workflow's tag prefix
   and an existing tag before checkout.
-- Workflow-level `permissions` are `{}` or `contents: read`; grant writes and
-  `id-token` per job with a comment, and drop grants a change no longer needs.
+- New workflows set workflow-level `permissions` to `{}` or `contents: read`
+  and grant writes and `id-token` per job with a comment. A change that edits
+  an existing `permissions` block moves toward that and drops grants it no
+  longer needs; other edits leave existing workflow-level grants alone.
 - Set `persist-credentials: false` on checkouts that only read. Scope secrets
   to the step that needs them, never job-level `env`. Minted tokens and keys
   expire no later than the job timeout.
