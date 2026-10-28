@@ -169,18 +169,19 @@ unpopulated tier for one branch requires no per-level code.
 
 - **AC-23** — GIVEN a viewport narrower than 768px that is upright or taller
   than 500px WHEN `/org` loads THEN the map fills the screen below a compact
-  header (one swipeable row of layer buttons, and a breadcrumb that stays on one
-  line and scrolls horizontally when the path is long), the search box floats
-  over the top of the map, and the info panel is a bottom sheet that shows a
-  peek of the selected org or location and expands from its handle. Tapping a
-  pin expands the sheet; tapping the map, a breadcrumb, a layer button, or
-  another org collapses it. Map fits keep the focused orgs clear of the search
-  box and the collapsed sheet, and the tile attribution stays visible. Each pin
-  has a 32px square tap target; co-located pins fan out so their targets do not
-  overlap and each opens its own location. On touch screens the search input
-  stays at 16px so iOS Safari does not zoom on focus. Landscape screens up to
-  500px tall (sideways phones, at any width) use the side-by-side layout with a
-  tighter header instead, since a bottom sheet would leave almost no map.
+  header (one swipeable row of layer buttons, and a breadcrumb that stays on
+  one line and scrolls horizontally when the path is long), the search box
+  floats over the top of the map, and the info panel is a bottom sheet that
+  shows a peek of the selected org or location and expands from its handle.
+  Tapping a pin expands the sheet; tapping the map, a breadcrumb, a layer
+  button, or another org collapses it. Map fits keep the focused orgs clear of
+  the search box and the collapsed sheet, and the tile attribution stays
+  visible. Each pin has a 32px square tap target; co-located pins fan out so
+  their targets do not overlap and each opens its own location. On any
+  touch-capable screen the search input stays at 16px so iOS Safari does not
+  zoom on focus. Landscape screens up to 500px tall (sideways phones, at any
+  width) use the side-by-side layout with a one-row header instead, since a
+  bottom sheet would leave almost no map.
 
 ### API
 

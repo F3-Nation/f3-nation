@@ -191,6 +191,7 @@ export default function OrgMap() {
   const searchCardRef = useRef<HTMLDivElement>(null);
   const infoSheetRef = useRef<HTMLElement>(null);
   const breadcrumbRef = useRef<HTMLElement>(null);
+  const layerNavRef = useRef<HTMLElement>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
 
   // Stable data refs — don't trigger re-renders
@@ -767,6 +768,13 @@ export default function OrgMap() {
     if (el) el.scrollLeft = el.scrollWidth;
   }, [selectedPath]);
 
+  // Likewise the active layer button, when the layer row scrolls sideways.
+  useEffect(() => {
+    layerNavRef.current
+      ?.querySelector('[aria-pressed="true"]')
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [currentLevel]);
+
   // After an AO search selection, once the region view has (re)rendered, show
   // its pins and open the selected AO's location. Declared after the polygon
   // render effect so it runs second — its pins survive that effect's clear.
@@ -937,10 +945,12 @@ export default function OrgMap() {
   return (
     <div className="flex h-dvh flex-col bg-[#f6f3ea]">
       {/* Header. Landscape phones get the side-by-side layout (see `org-wide`)
-          but are short, so the header and gutters tighten to leave map room. */}
-      <header className="org-wide:flex-row org-wide:items-center org-wide:justify-between org-wide:gap-8 org-wide:px-6 org-wide:py-4 org-wide:[@media(max-height:500px)]:py-2 flex flex-col gap-2 bg-[#0b0d12] px-3 py-2 text-[#f6f3ea]">
-        <div>
-          <h1 className="org-wide:text-lg text-base font-bold">
+          but are short, so the header collapses to one row — title, then the
+          layer buttons and breadcrumb sharing the rest, each scrolling
+          sideways — and the gutters tighten to leave map room. */}
+      <header className="org-wide:flex-row org-wide:items-center org-wide:justify-between org-wide:gap-8 org-wide:px-6 org-wide:py-4 org-wide:[@media(max-height:500px)]:gap-4 org-wide:[@media(max-height:500px)]:py-2 flex flex-col gap-2 bg-[#0b0d12] px-3 py-2 text-[#f6f3ea]">
+        <div className="org-wide:[@media(max-height:500px)]:shrink-0">
+          <h1 className="org-wide:text-lg org-wide:[@media(max-height:500px)]:text-base org-wide:[@media(max-height:500px)]:whitespace-nowrap text-base font-bold">
             F3 Geographic Directory
           </h1>
           <div className="org-wide:block org-wide:[@media(max-height:500px)]:hidden hidden text-xs text-[rgba(215,38,56,0.85)]">
@@ -956,7 +966,8 @@ export default function OrgMap() {
         {/* Layer buttons — generated from data, depth-agnostic. One swipeable
             row on phones instead of wrapping onto extra lines. */}
         <nav
-          className="org-wide:mx-0 org-wide:flex-wrap org-wide:overflow-visible org-wide:px-0 -mx-3 flex gap-2 overflow-x-auto px-3"
+          ref={layerNavRef}
+          className="org-wide:mx-0 org-wide:flex-wrap org-wide:overflow-visible org-wide:px-0 org-wide:[@media(max-height:500px)]:min-w-0 org-wide:[@media(max-height:500px)]:flex-1 org-wide:[@media(max-height:500px)]:flex-nowrap org-wide:[@media(max-height:500px)]:overflow-x-auto -mx-3 flex gap-2 overflow-x-auto px-3"
           aria-label="Map layers"
         >
           {presentLayers
@@ -967,6 +978,7 @@ export default function OrgMap() {
                 key={layer}
                 type="button"
                 onClick={() => navigateViaLevelButton(layer)}
+                aria-pressed={currentLevel === layer}
                 className={`org-wide:px-4 org-wide:py-2 org-wide:[@media(max-height:500px)]:py-1 shrink-0 rounded-sm border px-3 py-1.5 text-xs font-medium tracking-wide uppercase transition-all ${
                   currentLevel === layer
                     ? "border-[#B70D06] bg-[#B70D06] text-[#1a1a1a]"
@@ -978,10 +990,11 @@ export default function OrgMap() {
             ))}
         </nav>
 
-        {/* Breadcrumb — a single scrolling line on phones */}
+        {/* Breadcrumb — a single scrolling line on phones. Capped on short
+            landscape screens so it can't squeeze the layer buttons out. */}
         <nav
           ref={breadcrumbRef}
-          className="org-wide:flex-none org-wide:overflow-visible org-wide:whitespace-normal overflow-x-auto text-sm whitespace-nowrap"
+          className="org-wide:flex-none org-wide:overflow-visible org-wide:whitespace-normal org-wide:[@media(max-height:500px)]:max-w-[40%] org-wide:[@media(max-height:500px)]:min-w-0 org-wide:[@media(max-height:500px)]:flex-initial org-wide:[@media(max-height:500px)]:overflow-x-auto org-wide:[@media(max-height:500px)]:whitespace-nowrap overflow-x-auto text-sm whitespace-nowrap"
           aria-label="Location breadcrumb"
         >
           {crumbs.map((crumb, idx) => {
