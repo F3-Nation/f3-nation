@@ -19,7 +19,8 @@ export const getSiteUrl = (): string =>
   );
 
 /**
- * Freshness budget (spec AC-13: edits visible within 1 h). Worst case is
- * API cache (60 s) + DATA_TTL_SECONDS + region page ISR (3000 s) = 56 min.
+ * Freshness budget (spec AC-13: edits visible within 1 h). Worst case is the
+ * API cache (60 s) + DATA_TTL_SECONDS (300 s) + the page's ISR window, which
+ * Next sets to the shortest cache the page reads (300 s): about 11 min.
  */
 export const DATA_TTL_SECONDS = 300;

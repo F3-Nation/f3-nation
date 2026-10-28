@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 
 import type { Workout } from "@/types/region";
 import { WorkoutCard } from "@/components/workout-card";
-import { filterWorkouts, groupByDayInOrder } from "@/lib/workout-filters";
+import { filterWorkouts, groupByDayRuns } from "@/lib/workout-filters";
 
 interface WorkoutListViewProps {
   /** In display order; filtering and grouping preserve it. */
@@ -39,13 +39,14 @@ export function WorkoutListView({ workouts, day, type }: WorkoutListViewProps) {
 
   return (
     <div>
-      {groupByDayInOrder(filtered).map(([groupDay, dayWorkouts]) => (
-        <div key={groupDay} className="mb-6">
+      {groupByDayRuns(filtered).map((group) => (
+        <div key={group.key} className="mb-6">
           <h3 className="sticky top-16 z-10 mb-3 bg-white py-2 text-xl font-semibold dark:bg-gray-800">
-            {titleCase(groupDay)}
+            {titleCase(group.day)}
+            {group.repeat ? " (next week)" : ""}
           </h3>
           <div className="grid gap-4 md:grid-cols-2">
-            {dayWorkouts.map((workout) => (
+            {group.workouts.map((workout) => (
               <WorkoutCard key={workout.id} workout={workout} />
             ))}
           </div>

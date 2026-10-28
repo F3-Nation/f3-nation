@@ -20,19 +20,38 @@ export function filterWorkouts(
   );
 }
 
+export interface DayGroup {
+  /** Stable and unique, even when a day appears twice. */
+  key: string;
+  day: string;
+  /** This day already had an earlier group, i.e. this one is next week's. */
+  repeat: boolean;
+  workouts: Workout[];
+}
+
 /**
- * Group by day, keeping the incoming order: for a list already sorted by next
- * occurrence, the first group is the next day with a workout.
+ * Split an already-ordered list into runs of consecutive workouts on the same
+ * day, never reordering it. Grouping by weekday alone would merge today's
+ * later workouts with next week's same-day ones and pull those ahead of
+ * tomorrow's; a run per occurrence keeps next-occurrence order intact.
  */
-export function groupByDayInOrder(
-  workouts: Workout[],
-): [day: string, workouts: Workout[]][] {
-  const groups = new Map<string, Workout[]>();
+export function groupByDayRuns(workouts: Workout[]): DayGroup[] {
+  const groups: DayGroup[] = [];
+  const seen = new Set<string>();
   for (const workout of workouts) {
     const day = workout.group.toLowerCase();
-    const list = groups.get(day) ?? [];
-    list.push(workout);
-    groups.set(day, list);
+    const last = groups.at(-1);
+    if (last?.day === day) {
+      last.workouts.push(workout);
+      continue;
+    }
+    groups.push({
+      key: `${day}-${groups.length}`,
+      day,
+      repeat: seen.has(day),
+      workouts: [workout],
+    });
+    seen.add(day);
   }
-  return [...groups.entries()];
+  return groups;
 }

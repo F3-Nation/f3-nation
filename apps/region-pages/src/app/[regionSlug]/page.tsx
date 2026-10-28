@@ -15,9 +15,10 @@ interface RegionPageProps {
   params: Promise<{ regionSlug: string }>;
 }
 
-// Must be a literal. 50 min: with DATA_TTL_SECONDS and the API's 60 s cache,
-// edits show within an hour (see src/lib/site.ts).
-export const revalidate = 3000;
+// Must be a literal, and equal to DATA_TTL_SECONDS: Next refreshes a page at
+// the shortest cache window of anything it reads, so a longer value here would
+// only mislead. See the freshness budget in src/lib/site.ts.
+export const revalidate = 300;
 export const dynamicParams = true;
 
 // Rendered on first request and then served from the ISR cache, so neither

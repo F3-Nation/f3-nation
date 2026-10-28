@@ -105,8 +105,8 @@ fields and public workout schedules. No write paths.
 - Editing region data here (it is edited in admin / slackbot).
 - Storing curated region events in the database. They stay in a JSON file in
   the repo (`apps/region-pages/src/data/region-events.json`), edited by hand.
-- On-demand revalidation on edit (the hour-long window is the only freshness
-  mechanism for now).
+- On-demand revalidation on edit: the cache windows are the only freshness
+  mechanism.
 
 ## 7. Critical-path test cases
 

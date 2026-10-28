@@ -20,8 +20,9 @@ Public, anonymous directory of F3 regions and their weekly workouts at
   `packages/api/src/router/region-pages.ts`. Shaping (slugs, social URLs,
   time format, dedup, region area/zoom): `packages/api/src/lib/region-pages.ts`.
 - **Caching.** `src/lib/data.ts` caches API reads for `DATA_TTL_SECONDS`
-  (5 min); region pages use ISR with a 50 min window. Together with the API's
-  60 s cache, edits show within an hour (spec AC-13). Region pages are on-demand ISR; `/` and `/sitemap.xml` render per
+  (5 min), and region pages use ISR with the same 5 min window: Next refreshes
+  a page at the shortest cache window of anything it reads. With the API's
+  60 s cache, edits show within about 11 minutes (spec AC-13 allows an hour). Region pages are on-demand ISR; `/` and `/sitemap.xml` render per
   request from the cached data.
 - **Env** (`.env.example`): `F3_API_BASE_URL`, `F3_CHANNEL`, `SITE_URL`,
   `GA_MEASUREMENT_ID`. No secrets.
@@ -50,7 +51,7 @@ Public, anonymous directory of F3 regions and their weekly workouts at
    (`useRegionDescription`), never the raw string.
 6. **Nothing fetches at build time.** The Docker build has no API access.
    `generateStaticParams` returns `[]`, and `/` is `force-dynamic`.
-7. **Route segment config must be a literal**, e.g. `revalidate = 3000`. A
+7. **Route segment config must be a literal**, e.g. `revalidate = 300`. A
    constant fails the build. If you change any cache TTL, keep the total
    under 1 h (see the budget in `src/lib/site.ts`).
 8. **Config goes through `src/env.ts`** (validated), never raw `process.env`.
