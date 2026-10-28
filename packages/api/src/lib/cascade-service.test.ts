@@ -467,6 +467,127 @@ describe("Cascade Service", () => {
       ]);
     });
 
+    it("should omit a last weekday before fromDate for monthly series", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 1,
+        indexWithinInterval: 0,
+        startDate: "2026-01-27",
+        endDate: "2026-04-20",
+      });
+
+      const count = await createEventInstancesForSeries(
+        db,
+        series,
+        4,
+        "2026-01-27",
+      );
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(count).toBe(2);
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2026-02-23",
+        "2026-03-30",
+      ]);
+    });
+
+    it("should create every weekly occurrence when indexWithinInterval is 0", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "weekly",
+        recurrenceInterval: 1,
+        indexWithinInterval: 0,
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+      });
+
+      const count = await createEventInstancesForSeries(
+        db,
+        series,
+        4,
+        "2026-01-01",
+      );
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(count).toBe(4);
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2026-01-05",
+        "2026-01-12",
+        "2026-01-19",
+        "2026-01-26",
+      ]);
+    });
+
+    it("should create last weekdays across year boundaries and honor monthly intervals", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 1,
+        indexWithinInterval: 0,
+        startDate: "2025-12-01",
+        endDate: "2026-02-28",
+      });
+
+      const count = await createEventInstancesForSeries(
+        db,
+        series,
+        4,
+        "2025-12-01",
+      );
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(count).toBe(3);
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2025-12-29",
+        "2026-01-26",
+        "2026-02-23",
+      ]);
+
+      const intervalSeries = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 2,
+        indexWithinInterval: 0,
+        startDate: "2025-12-01",
+        endDate: "2026-02-28",
+      });
+
+      const intervalCount = await createEventInstancesForSeries(
+        db,
+        intervalSeries,
+        4,
+        "2025-12-01",
+      );
+      const intervalInstances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, intervalSeries.id));
+
+      expect(intervalCount).toBe(2);
+      expect(
+        intervalInstances.map(({ startDate }) => startDate).sort(),
+      ).toEqual(["2025-12-29", "2026-02-23"]);
+    });
+
     it("should preserve monthly interval stepping for last-weekday instances", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);
@@ -1041,6 +1162,46 @@ describe("Cascade Service", () => {
   });
 
   describe("recreateFutureInstances", () => {
+    it("should create expected last Mondays when recreating an empty monthly series", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "tuesday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 1,
+        indexWithinInterval: 0,
+        startDate: "2026-01-01",
+        endDate: "2026-04-30",
+      });
+
+      const beforeInstances = await db
+        .select({ id: schema.eventInstances.id })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+      expect(beforeInstances).toEqual([]);
+
+      const result = await recreateFutureInstances(
+        db,
+        { ...series, dayOfWeek: "monday" },
+        "2026-01-01",
+        4,
+      );
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(result.deleted).toBe(0);
+      expect(result.created).toBe(4);
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2026-01-26",
+        "2026-02-23",
+        "2026-03-30",
+        "2026-04-27",
+      ]);
+    });
+
     it("should delete and recreate instances for structural changes", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);
