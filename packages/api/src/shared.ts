@@ -178,10 +178,8 @@ export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
     // JWT, or an API key that doesn't match any row) — that's a rejected
     // credential, not "no credential", so the dev mock must not mask it.
     if (!hasBearerToken(context.reqHeaders) && isDevMockSessionAllowed()) {
-      // Loud on purpose: if this ever fires outside a laptop, the logs say so.
-      logWarn("api.auth.dev_mock_session_issued", {
-        channel: process.env.NEXT_PUBLIC_CHANNEL,
-      });
+      // Logged on every issuance, so an unexpected one shows up in the logs.
+      logWarn("api.auth.dev_mock_session_issued");
       return next({ context: { ...context, session: getDevMockSession() } });
     }
     throw new ORPCError("UNAUTHORIZED");
