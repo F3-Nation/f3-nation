@@ -157,6 +157,9 @@ The changelogs live alongside each app's source and can be referenced during rel
 2. Add the current version to `.release-please-manifest.json`
 3. Make sure the deploy workflow for that app triggers on the correct tag pattern (e.g. `newapp@*`)
 4. Add `newapp` to the `scope-enum` array in `commitlint.config.mjs`
+5. Add it to CI, the local port defaults in `scripts/lib/local-ports.sh` (if it runs locally), and the issue-form app options and `label-issues-by-app.yml`
+
+Removing an app cleans up the same places. A new package needs only the commitlint scope, plus release-please entries if it is versioned and released. Remove a `release-as` override in the release that consumes it, and use `fix`/`feat` when a change should deploy: `chore` and the other hidden types don't bump a version.
 
 ---
 

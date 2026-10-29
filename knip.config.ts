@@ -52,6 +52,7 @@ const config: KnipConfig = {
       // Run by scripts/lint.sh, which knip does not parse.
       entry: [
         "scripts/check-eslint-suppressions.mjs",
+        "scripts/check-review-links.mjs",
         "scripts/check-security-headers-coverage.mjs",
       ],
     },
