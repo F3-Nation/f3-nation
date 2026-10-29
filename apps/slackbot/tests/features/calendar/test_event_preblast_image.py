@@ -421,14 +421,25 @@ def _event(meta, preblast_ts=None):
     )
 
 
-def _send(meta, mode, warning=None, preblast_ts=None, client=None, channel="C_AO"):
+EVENT_SUMMARY = "*Preblast: The Grind*\n*Date:* Monday, November 02\n*Q:* <@U_Q>"
+PREBLAST_BODY = "Bring a coupon."
+SEND_PREBLAST_BLOCKS = [
+    {"type": "section", "text": {"type": "mrkdwn", "text": EVENT_SUMMARY}},
+    {
+        "type": "rich_text",
+        "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": PREBLAST_BODY}]}],
+    },
+]
+
+
+def _send(meta, mode, warning=None, preblast_ts=None, client=None, channel="C_AO", preblast_blocks=None):
     if client is None:
         client = MagicMock()
         client.chat_postMessage.return_value = {"ts": "1761800000.000100"}
     info = event_preblast.PreblastInfo(
         event_record=_event(meta, preblast_ts),
         attendance_records=[],
-        preblast_blocks=[{"type": "section", "text": {"type": "mrkdwn", "text": "Preblast"}}],
+        preblast_blocks=preblast_blocks if preblast_blocks is not None else SEND_PREBLAST_BLOCKS,
         action_blocks=[],
     )
     svc = MagicMock()
@@ -570,7 +581,7 @@ def test_rejected_post_falls_back_to_plain_text_when_retry_without_photo_is_reje
 
     last = client.chat_postMessage.call_args_list[-1]
     assert "blocks" not in last.kwargs
-    assert last.kwargs["text"] == "Event Preblast"
+    assert last.kwargs["text"] == f"{EVENT_SUMMARY}\n\n{PREBLAST_BODY}"
     assert last.kwargs["channel"] == "C_AO"
 
 
@@ -581,7 +592,30 @@ def test_rejected_post_without_photo_falls_back_straight_to_plain_text():
     _send({}, PostMode.POST_NEW, client=client)
 
     assert client.chat_postMessage.call_count == 2
-    assert "blocks" not in client.chat_postMessage.call_args_list[1].kwargs
+    second = client.chat_postMessage.call_args_list[1]
+    assert "blocks" not in second.kwargs
+    assert second.kwargs["text"] == f"{EVENT_SUMMARY}\n\n{PREBLAST_BODY}"
+
+
+def test_plain_text_fallback_is_capped_at_slack_text_limit():
+    client = MagicMock()
+    client.chat_postMessage.side_effect = [_slack_error("msg_too_long"), {"ts": "1761800000.000100"}]
+    long_summary = [{"type": "section", "text": {"type": "mrkdwn", "text": "x" * 5000}}]
+
+    _send({}, PostMode.POST_NEW, client=client, preblast_blocks=long_summary)
+
+    text = client.chat_postMessage.call_args_list[1].kwargs["text"]
+    assert len(text) == event_preblast.SLACK_TEXT_FALLBACK_MAX_CHARS
+    assert text.endswith("…")
+
+
+def test_plain_text_fallback_keeps_caller_text_when_blocks_hold_none():
+    client = MagicMock()
+    client.chat_postMessage.side_effect = [_slack_error("invalid_blocks"), {"ts": "1761800000.000100"}]
+
+    _send({}, PostMode.POST_NEW, client=client, preblast_blocks=[])
+
+    assert client.chat_postMessage.call_args_list[1].kwargs["text"] == "Event Preblast"
 
 
 def test_rejected_update_retries_without_photo_keeping_ts():
@@ -648,6 +682,7 @@ def _act(body, client):
     )
     with (
         patch.object(event_preblast, "get_user", return_value=MagicMock(user_id=7)),
+        patch.object(event_preblast, "_user_is_q", return_value=False),
         patch.object(event_preblast, "_build_preblast_service", return_value=MagicMock()),
         patch.object(event_preblast, "build_preblast_info", return_value=info),
         patch.object(event_preblast, "get_user_names", return_value=(["Q"], ["https://img/q.png"])),

@@ -817,14 +817,34 @@ def _insert_preblast_image(blocks: list[dict[str, Any]], meta: dict[str, Any] | 
 
 
 SLACK_BLOCK_REJECTION_ERRORS = {"invalid_blocks", "msg_blocks_too_long", "msg_too_long"}
+SLACK_TEXT_FALLBACK_MAX_CHARS = 4000
+
+
+def _preblast_plain_text(blocks: list[dict[str, Any]]) -> str:
+    """Return the readable text of a preblast's blocks, capped at Slack's recommended text length.
+
+    Collects each section's mrkdwn (the event summary) and each rich text block (the
+    preblast body); images and buttons carry no text and are skipped.
+    """
+    parts = []
+    for block in blocks:
+        if block.get("type") == "section":
+            parts.append(safe_get(block, "text", "text") or "")
+        elif block.get("type") == "rich_text":
+            parts.append(parse_rich_block(block))
+    text = "\n\n".join(p.strip() for p in parts if p and p.strip())
+    if len(text) > SLACK_TEXT_FALLBACK_MAX_CHARS:
+        text = text[: SLACK_TEXT_FALLBACK_MAX_CHARS - 1] + "…"
+    return text
 
 
 def _send_preblast_blocks(api_call, blocks: list[dict[str, Any]], logger: Logger, **kwargs):
     """Post or update a preblast message, degrading when Slack rejects its blocks.
 
     On a block rejection this retries once without the photo, which keeps the message's
-    content and buttons when Slack can't fetch the image, then falls back to plain ``text``.
-    Any other error is re-raised.
+    content and buttons when Slack can't fetch the image, then sends the preblast as plain
+    ``text`` (see ``_preblast_plain_text``), keeping the caller's ``text`` only when the
+    blocks hold none. Any other error is re-raised.
     """
     try:
         return api_call(blocks=blocks, **kwargs)
@@ -840,7 +860,7 @@ def _send_preblast_blocks(api_call, blocks: list[dict[str, Any]], logger: Logger
             if exc.response.get("error") not in SLACK_BLOCK_REJECTION_ERRORS:
                 raise
             logger.warning(f"Slack rejected preblast blocks without the photo: {exc.response.get('error')}")
-    return api_call(**kwargs)
+    return api_call(**{**kwargs, "text": _preblast_plain_text(blocks) or kwargs.get("text")})
 
 
 def _format_attendance_user(attendance: AttendanceData, attendance_slack_dict: dict[int, str]) -> str:
