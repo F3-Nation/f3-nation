@@ -1,3 +1,4 @@
+// @ts-check
 // Baseline HTTP security response headers shared by every F3 web app and the API.
 //
 // Plain JS (with JSDoc types) on purpose: `next.config.js` in apps/auth,
