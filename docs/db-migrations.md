@@ -3,7 +3,9 @@
 Guidance for writing and deploying database migrations, and for operating on
 the data they leave behind. Read the enum section before writing a migration
 that touches an enum such as `org_type`, and the deployment section before
-deploying a batch of pending migrations.
+deploying a batch of pending migrations. The step-by-step procedure for
+writing one (generate, check, renumber, PR body) is the
+[`db-migration`](../.agents/skills/db-migration/SKILL.md) skill.
 
 ## Changing enums
 

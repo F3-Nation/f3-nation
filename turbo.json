@@ -13,6 +13,7 @@
     "scripts/python-task.sh"
   ],
   "globalPassThroughEnv": [
+    "ALLOW_DEV_MOCK_SESSION",
     "F3_ADMIN_PORT",
     "F3_AUTH_PORT",
     "F3_CONTAINER_PREFIX",
