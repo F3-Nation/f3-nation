@@ -48,16 +48,17 @@ for tool in jq git python3; do
 done
 command -v lsof >/dev/null 2>&1 || command -v ss >/dev/null 2>&1 || { echo "FAIL: lsof or ss is required by this test" >&2; exit 1; }
 
+tmp_dir=""
+listener_pid=""
+cleanup() {
+  [ -z "$listener_pid" ] || kill "$listener_pid" 2>/dev/null
+  [ -z "$tmp_dir" ] || rm -rf "$tmp_dir"
+}
+trap cleanup EXIT
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/prt-test.XXXXXX")" || {
   echo "FAIL: could not create the test directory" >&2
   exit 1
 }
-listener_pid=""
-cleanup() {
-  [ -z "$listener_pid" ] || kill "$listener_pid" 2>/dev/null
-  rm -rf "$tmp_dir"
-}
-trap cleanup EXIT
 
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
@@ -118,6 +119,10 @@ export PATH="$bin:$PATH"
 init_out="$(cd "$tmp_dir/main" && bash "$prt" init 1 2>&1)"
 assert_eq "init succeeds" "0" "$?"
 run="$(printf '%s\n' "$init_out" | sed -n 's/^RUN_DIR=//p')"
+[ -n "$run" ] || {
+  echo "FAIL: init did not print RUN_DIR" >&2
+  exit 1
+}
 assert_eq "init leaves the symlink target untouched" "untouched" "$(cat "$victim")"
 assert_eq "init replaces a tracked .env symlink with a regular file" "no" "$([ -L "$run/wt/.env" ] && echo yes || echo no)"
 assert_contains "init writes the run's own .env" "COMPOSE_PROJECT_NAME=prt-" "$(cat "$run/wt/.env")"
@@ -271,7 +276,10 @@ s.listen()
 time.sleep(60)' "$busy_port" &
 listener_pid=$!
 sleep 1
-state_tmp="$(mktemp "$run/.state.XXXXXX")"
+state_tmp="$(mktemp "$run/.state.XXXXXX")" || {
+  echo "FAIL: could not create the state temporary file" >&2
+  exit 1
+}
 jq --argjson p "$busy_port" '.ports.map = $p' "$run/state.json" >"$state_tmp"
 mv "$state_tmp" "$run/state.json"
 out="$(bash "$prt" serve "$run" map 2>&1)"

@@ -13,8 +13,9 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 checker="${script_dir}/check-review-links.mjs"
 failures=0
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-review-links-test.XXXXXX")"
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=""
+trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-review-links-test.XXXXXX")" || exit 1
 
 # Builds a minimal repo with one nested AGENTS.md, a REVIEW.md linking to one
 # of its headings, and a matching .greptile/files.json.
