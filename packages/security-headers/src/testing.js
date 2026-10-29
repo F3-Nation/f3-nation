@@ -18,8 +18,22 @@ const MIN_HSTS_MAX_AGE = hstsMaxAge(HSTS_VALUE);
 /**
  * @typedef {object} NextConfigLike
  * @property {boolean} [poweredByHeader]
- * @property {() => Promise<{ source: string; headers: { key: string; value: string }[] }[]>} [headers]
+ * @property {() => Promise<{ source: string; has?: unknown[]; missing?: unknown[]; headers: { key: string; value: string }[] }[]>} [headers]
  */
+
+/**
+ * The value of a CSP's first `frame-ancestors` directive, the one browsers
+ * enforce; a repeated directive is ignored.
+ *
+ * @param {string} csp
+ */
+const frameAncestors = (csp) =>
+  csp
+    .split(";")
+    .map((d) => d.trim().split(/\s+/))
+    .find(([name]) => name?.toLowerCase() === "frame-ancestors")
+    ?.slice(1)
+    .join(" ");
 
 /**
  * Checks the baseline every app must meet, so an app may send a stricter
@@ -45,9 +59,14 @@ export async function nextSecurityHeaderProblems(
   if (rules.length !== 1 || rules[0]?.source !== "/:path*") {
     problems.push("headers() must return exactly one rule for /:path*");
   }
-  /** @type {Record<string, string | undefined>} */
-  const h = Object.fromEntries(
-    (rules[0]?.headers ?? []).map((x) => [x.key, x.value]),
+  if (rules[0]?.has?.length || rules[0]?.missing?.length) {
+    // Next would send the headers only to requests matching the condition.
+    problems.push("the /:path* rule must not have has/missing conditions");
+  }
+  // Header names are case-insensitive and Next sets each with Node's
+  // `setHeader`, so a later entry replaces an earlier one in any case.
+  const h = new Map(
+    (rules[0]?.headers ?? []).map((x) => [x.key.toLowerCase(), x.value]),
   );
 
   /**
@@ -56,8 +75,9 @@ export async function nextSecurityHeaderProblems(
    * @param {string} expected
    */
   const want = (key, ok, expected) => {
-    if (!ok(h[key] ?? "")) {
-      problems.push(`${key}: got ${JSON.stringify(h[key])}, want ${expected}`);
+    const value = h.get(key.toLowerCase());
+    if (!ok(value ?? "")) {
+      problems.push(`${key}: got ${JSON.stringify(value)}, want ${expected}`);
     }
   };
   want(
@@ -74,7 +94,7 @@ export async function nextSecurityHeaderProblems(
   // A structured-field dictionary: a repeated feature takes its last value, as
   // in the browser, so `microphone=(), microphone=*` allows the microphone.
   const permissions = new Map(
-    (h["Permissions-Policy"] ?? "").split(",").map((entry) => {
+    (h.get("permissions-policy") ?? "").split(",").map((entry) => {
       const [feature = "", ...value] = entry.trim().split("=");
       return [feature, value.join("=")];
     }),
@@ -101,8 +121,8 @@ export async function nextSecurityHeaderProblems(
     want("X-Frame-Options", (v) => v === "DENY", "DENY");
     want(
       "Content-Security-Policy",
-      (v) => v.split(";").some((d) => d.trim() === "frame-ancestors 'none'"),
-      "a frame-ancestors 'none' directive",
+      (v) => frameAncestors(v) === "'none'",
+      "a first frame-ancestors directive of 'none'",
     );
   }
   return problems;

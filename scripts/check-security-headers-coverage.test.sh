@@ -10,8 +10,9 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 checker="${script_dir}/check-security-headers-coverage.mjs"
 failures=0
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-security-headers-coverage-test.XXXXXX")"
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=""
+trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-security-headers-coverage-test.XXXXXX")" || exit 1
 
 # Adds apps/<name> to the fixture repo <dir> with the given Next config file
 # and config contents, plus a config test that calls the checker.

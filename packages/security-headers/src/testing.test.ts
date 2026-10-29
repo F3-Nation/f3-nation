@@ -12,6 +12,22 @@ const embeddable = {
   headers: nextSecurityHeaders({ frame: "embeddable", geolocation: true }),
 };
 
+/** Returns `config` with `extra` merged into its one rule. */
+function withRule(config: typeof deny, extra: Record<string, unknown>) {
+  return {
+    ...config,
+    headers: async () =>
+      (await config.headers()).map((rule) => ({
+        ...rule,
+        ...extra,
+        headers: [
+          ...rule.headers,
+          ...((extra.headers as typeof rule.headers | undefined) ?? []),
+        ],
+      })),
+  };
+}
+
 /** Returns `config` with one header's value replaced. */
 function withHeader(config: typeof deny, key: string, value: string) {
   return {
@@ -109,6 +125,54 @@ describe("nextSecurityHeaderProblems", () => {
         expect.stringContaining("want camera=()"),
         expect.stringContaining("want microphone=()"),
       ],
+    );
+  });
+
+  it("reports a /:path* rule that only applies under a condition", async () => {
+    for (const condition of ["has", "missing"]) {
+      const config = withRule(deny, {
+        [condition]: [{ type: "header", key: "x-preview" }],
+      });
+      expect(
+        await nextSecurityHeaderProblems(config, { frame: "deny" }),
+      ).toEqual(["the /:path* rule must not have has/missing conditions"]);
+    }
+  });
+
+  it("reads a later header in another case as replacing the first", async () => {
+    const config = withRule(deny, {
+      headers: [{ key: "strict-transport-security", value: "max-age=0" }],
+    });
+    expect(await nextSecurityHeaderProblems(config, { frame: "deny" })).toEqual(
+      [expect.stringMatching(/^Strict-Transport-Security: got "max-age=0"/)],
+    );
+  });
+
+  it("accepts header names in any case", async () => {
+    const config = {
+      ...deny,
+      headers: async () =>
+        (await deny.headers()).map((rule) => ({
+          ...rule,
+          headers: rule.headers.map((h) => ({
+            ...h,
+            key: h.key.toLowerCase(),
+          })),
+        })),
+    };
+    expect(await nextSecurityHeaderProblems(config, { frame: "deny" })).toEqual(
+      [],
+    );
+  });
+
+  it("reads only the first frame-ancestors directive", async () => {
+    const config = withHeader(
+      deny,
+      "Content-Security-Policy",
+      "frame-ancestors *; frame-ancestors 'none'",
+    );
+    expect(await nextSecurityHeaderProblems(config, { frame: "deny" })).toEqual(
+      [expect.stringMatching(/^Content-Security-Policy/)],
     );
   });
 
