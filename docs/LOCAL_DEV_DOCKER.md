@@ -263,15 +263,16 @@ The above command will install code if you don't have it already and then open y
 pnpm dev
 ```
 
-| App      | URL                     |
-| -------- | ----------------------- |
-| Map      | <http://localhost:3000> |
-| API      | <http://localhost:3001> |
-| Admin    | <http://localhost:3002> |
-| Me       | <http://localhost:3003> |
-| Auth     | <http://localhost:3004> |
-| Homepage | <http://localhost:3005> |
-| Slackbot | <http://localhost:3006> |
+| App          | URL                                                                       |
+| ------------ | ------------------------------------------------------------------------- |
+| Map          | <http://localhost:3000>                                                   |
+| API          | <http://localhost:3001>                                                   |
+| Admin        | <http://localhost:3002>                                                   |
+| Me           | <http://localhost:3003>                                                   |
+| Auth         | <http://localhost:3004>                                                   |
+| Homepage     | <http://localhost:3005>                                                   |
+| Region pages | <http://localhost:3006>                                                   |
+| Slackbot     | <http://localhost:3007> (health check; only with `pnpm dev --include-py`) |
 
 ---
 
@@ -324,7 +325,7 @@ A slot moves every port up by 100 × the slot number, and gives the checkout its
 
 | Service    | Default (slot 0) | Slot 1    | Slot N         |
 | ---------- | ---------------- | --------- | -------------- |
-| Apps       | 3000–3005        | 3100–3105 | 3000 + 100N, … |
+| Apps       | 3000–3007        | 3100–3107 | 3000 + 100N, … |
 | Postgres   | 5433             | 5533      | 5433 + 100N    |
 | Mailpit UI | 8025             | 8125      | 8025 + 100N    |
 | SMTP       | 1025             | 1125      | 1025 + 100N    |
@@ -336,7 +337,6 @@ The slot is saved in the root `.env` (gitignored), which `docker compose`, `pnpm
 - `pnpm dev` picks up the slot by itself. To start a single app with `pnpm --filter <app> dev`, export the slot's ports first: `set -a; . ./.env; set +a`.
 - To put a checkout back on the defaults, run `pnpm local:setup --slot 0`.
 - Homepage gets `NEXT_PUBLIC_API_URL` for the slot's API. Its landing-page app links and the status page's health targets still use the default ports.
-- Slackbot stays on 3006. To run it in two checkouts at once, set `LOCAL_HTTP_PORT` in the second checkout's `apps/slackbot/.env` by hand.
 - `pnpm docker:down` in a slotted checkout stops only that checkout's containers. Remove a worktree's data for good with `docker compose down -v` from inside it before deleting the worktree.
 
 ---
@@ -352,7 +352,7 @@ Each app and shared package has its own `.env` file, copied from a `.env.example
 | `apps/map/.env`      | Map app (Next.js on port 3000)                                                                                                     |
 | `apps/admin/.env`    | Admin app (Next.js on port 3002)                                                                                                   |
 | `apps/me/.env`       | Me app (Next.js on port 3003)                                                                                                      |
-| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                                                                                 |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app; health check on port 3007)                                                                   |
 | `packages/db/.env`   | Credentials for the `@acme/db` CLI scripts (migrations, resets, seeds, drizzle-kit, reset-test-db)                                 |
 | `packages/env/.env`  | Shared backend env read by the `@acme/api` package's test/script commands (`packages/api`); app services read their own app `.env` |
 
