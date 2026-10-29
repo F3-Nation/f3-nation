@@ -12,19 +12,37 @@ import { Button } from "@acme/ui/button";
 const isFailedByOutage = (query: Query) =>
   query.state.status === "error" && isApiUnavailableError(query.state.error);
 
+// Refetching a query that has no data resets it to `pending` and clears its
+// error, so the banner would vanish for every retry. Remember which queries
+// failed by outage to keep the banner up until they actually succeed.
+const outageQueries = new WeakSet<Query>();
+
+function isInOutage(query: Query): boolean {
+  if (isFailedByOutage(query)) {
+    outageQueries.add(query);
+    return true;
+  }
+  if (query.state.status === "pending" && outageQueries.has(query)) {
+    return true;
+  }
+  outageQueries.delete(query);
+  return false;
+}
+
 function hasApiOutage(queryClient: QueryClient): boolean {
   return (
     queryClient
       .getQueryCache()
-      .findAll({ type: "active", predicate: isFailedByOutage }).length > 0
+      .findAll({ type: "active", predicate: isInOutage }).length > 0
   );
 }
 
 function retryFailedQueries(queryClient: QueryClient) {
-  return queryClient.refetchQueries({
-    type: "active",
-    predicate: isFailedByOutage,
-  });
+  return queryClient.refetchQueries(
+    { type: "active", predicate: isFailedByOutage },
+    // Join a fetch already in flight instead of aborting and restarting it.
+    { cancelRefetch: false },
+  );
 }
 
 /**

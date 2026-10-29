@@ -18,8 +18,9 @@ function Consumer(props: { queryFn: () => Promise<string> }) {
   return null;
 }
 
-function setup(queryFn: () => Promise<string>) {
+function setup(queryFn: () => Promise<string>, cached?: string) {
   const queryClient = new QueryClient();
+  if (cached !== undefined) queryClient.setQueryData(["regions"], cached);
   render(
     <QueryClientProvider client={queryClient}>
       <Consumer queryFn={queryFn} />
@@ -106,6 +107,50 @@ describe("ApiOutageBanner", () => {
 
     expect(queryFn).toHaveBeenCalledTimes(2);
     expect(banner()).toBeNull();
+  });
+
+  it("stays up while a retry is still in flight", async () => {
+    let succeed: (value: string) => void = () => undefined;
+    const queryFn = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(outage())
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            succeed = resolve;
+          }),
+      );
+    setup(queryFn);
+    await vi.advanceTimersByTimeAsync(0);
+
+    await vi.advanceTimersByTimeAsync(API_RETRY_BASE_MS);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    // The query has no data, so the retry put it back to `pending`.
+    expect(banner()).not.toBeNull();
+
+    succeed("ok");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(banner()).toBeNull();
+  });
+
+  it("joins a retry already in flight instead of restarting it", async () => {
+    const queryFn = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(outage())
+      .mockImplementation(() => new Promise(() => undefined));
+    // With cached data, a failed refresh keeps the query in `error` while it
+    // refetches, so it still matches the retry filter.
+    setup(queryFn, "cached");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(banner()).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(API_RETRY_BASE_MS);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await vi.advanceTimersByTimeAsync(API_RETRY_BASE_MS);
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
   });
 
   it("keeps retrying while the outage lasts", async () => {

@@ -1,3 +1,4 @@
+import type { MockInstance } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isApiUnavailableError } from "@acme/shared/common/api-availability";
@@ -112,21 +113,86 @@ describe("map oRPC client during an API outage", () => {
     expect(isApiUnavailableError(await pending)).toBe(true);
   });
 
-  it("does not time out a response whose headers arrived", async () => {
+  it("lets a slow body finish as long as it keeps arriving", async () => {
     vi.useFakeTimers();
-    const body = new ReadableStream<Uint8Array>({ start: () => undefined });
+    const encoder = new TextEncoder();
+    const parts = ['{"json":', "[]}"];
+    // One chunk per pull, each just inside the timeout: slow overall, never idle.
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, API_RESPONSE_TIMEOUT_MS - 1),
+        );
+        const part = parts.shift();
+        if (part === undefined) controller.close();
+        else controller.enqueue(encoder.encode(part));
+      },
+    });
     fetchMock.mockResolvedValue(
-      new Response(body, {
-        headers: { "content-type": "application/json" },
-      }),
+      new Response(body, { headers: { "content-type": "application/json" } }),
     );
 
-    const pending = regionsError();
-    await vi.advanceTimersByTimeAsync(API_RESPONSE_TIMEOUT_MS * 2);
+    const pending = client.map.location.regionsWithLocation();
+    await vi.advanceTimersByTimeAsync(API_RESPONSE_TIMEOUT_MS * 3);
 
-    // The body is still downloading (a slow connection), which is not an error.
-    expect(vi.getTimerCount()).toBe(0);
-    void pending;
+    await expect(pending).resolves.toEqual([]);
+  });
+
+  it("classifies a body that stops arriving as unavailable", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation((_input, init) => {
+      // Like a real fetch body: never sends data, errors once aborted.
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          init?.signal?.addEventListener("abort", () => {
+            controller.error(init.signal?.reason);
+          });
+        },
+      });
+      return Promise.resolve(
+        new Response(body, { headers: { "content-type": "application/json" } }),
+      );
+    });
+
+    const pending = regionsError();
+    await vi.advanceTimersByTimeAsync(API_RESPONSE_TIMEOUT_MS);
+
+    expect(isApiUnavailableError(await pending)).toBe(true);
+  });
+
+  it("classifies a connection dropped mid-body as unavailable", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      // Chrome's wording for a body that fails after the headers arrived.
+      pull: (controller) => controller.error(new TypeError("network error")),
+    });
+    fetchMock.mockResolvedValue(
+      new Response(body, { headers: { "content-type": "application/json" } }),
+    );
+
+    expect(isApiUnavailableError(await regionsError())).toBe(true);
+  });
+
+  it("stops forwarding the caller's abort once the body is read", async () => {
+    let removed: MockInstance<AbortSignal["removeEventListener"]> | undefined;
+    fetchMock.mockImplementation((input) => {
+      removed = vi.spyOn((input as Request).signal, "removeEventListener");
+      return Promise.resolve(Response.json({ json: [] }));
+    });
+
+    await client.map.location.regionsWithLocation();
+
+    expect(removed).toHaveBeenCalledWith("abort", expect.any(Function));
+  });
+
+  it("keeps the 503 when discarding the error page fails", async () => {
+    const response = new Response("<h1>Bad Gateway</h1>", { status: 502 });
+    response.headers.delete("content-type");
+    vi.spyOn(response.body!, "cancel").mockRejectedValue(
+      new TypeError("network error"),
+    );
+    fetchMock.mockResolvedValue(response);
+
+    expect(await regionsError()).toMatchObject({ status: 502 });
   });
 
   it("does not report a cancelled query as an outage", async () => {

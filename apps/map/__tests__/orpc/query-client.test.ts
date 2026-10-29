@@ -49,6 +49,15 @@ describe("createQueryClient", () => {
     ).toBe(true);
   });
 
+  it("fails at once on an outage but retries other errors up to 3 times", () => {
+    const retry = queries().retry as (count: number, e: unknown) => boolean;
+    const down = new ORPCError("SERVICE_UNAVAILABLE", { status: 503 });
+    expect(retry(0, down)).toBe(false);
+    expect(retry(0, new Error("boom"))).toBe(true);
+    expect(retry(2, new Error("boom"))).toBe(true);
+    expect(retry(3, new Error("boom"))).toBe(false);
+  });
+
   // A failed background refresh (e.g. of the SSG-hydrated map datasets) must
   // not replace data the page is already showing with the error boundary.
   it("doesn't throw when the query already has data", () => {
