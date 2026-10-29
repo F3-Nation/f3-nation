@@ -28,10 +28,14 @@ interface Channels {
   NEXT_PUBLIC_CHANNEL?: string;
 }
 
+const PROXY_SECRET = "synthetic-proxy-secret-".padEnd(32, "x");
+
 function runScript(
   target: "prod" | "staging",
   channels: Channels,
   parentChannels: Channels = {},
+  proxySecret: string | null = PROXY_SECRET,
+  parentEnv: Record<string, string> = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "map-cloud-run-env-"));
   try {
@@ -47,6 +51,9 @@ function runScript(
       join(app, `.env.cloud-run.${target}`),
       [
         "API_KEY='synthetic-test-value'",
+        ...(proxySecret === null
+          ? []
+          : [`PROXY_CLIENT_IP_SECRET=${shellQuote(proxySecret)}`]),
         ...(["F3_CHANNEL", "NEXT_PUBLIC_CHANNEL"] as const).flatMap((name) => {
           const value = channels[name];
           return value === undefined ? [] : [`${name}=${shellQuote(value)}`];
@@ -81,6 +88,7 @@ if (args.slice(0, 3).join(" ") === "run services describe") {
         PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
         LC_ALL: "C",
         ...parentChannels,
+        ...parentEnv,
       },
       encoding: "utf8",
       timeout: 10_000,
@@ -270,6 +278,36 @@ describe("cloud-run-env channel guards", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("F3_CHANNEL");
     expect(result.stdout + result.stderr).not.toContain(unexpected);
+    expect(result.calls).toEqual([]);
+  });
+
+  it.each([null, "", "too-short"])(
+    "rejects a missing or short PROXY_CLIENT_IP_SECRET (%s) before any cloud command",
+    (secret) => {
+      const result = runScript(
+        "prod",
+        { F3_CHANNEL: "prod", NEXT_PUBLIC_CHANNEL: "prod" },
+        {},
+        secret,
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("PROXY_CLIENT_IP_SECRET");
+      expect(result.calls).toEqual([]);
+    },
+  );
+
+  it("requires PROXY_CLIENT_IP_SECRET in the file even when the parent sets it", () => {
+    const result = runScript(
+      "prod",
+      { F3_CHANNEL: "prod", NEXT_PUBLIC_CHANNEL: "prod" },
+      {},
+      null,
+      { PROXY_CLIENT_IP_SECRET: PROXY_SECRET },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("PROXY_CLIENT_IP_SECRET");
     expect(result.calls).toEqual([]);
   });
 });
