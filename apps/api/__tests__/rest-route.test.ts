@@ -149,25 +149,27 @@ describe("handleRequest", () => {
   });
 
   describe("oRPC client requests use the RPC handler", () => {
-    it.each([Client.ORPC, Client.ORPC_SSG, Client.F3_ME])(
-      "routes the %s client header to the RPC handler",
-      async (client) => {
-        const rpcResponse = new Response("rpc-ok");
-        rpcHandle.mockResolvedValue({ response: rpcResponse });
-        const { handleRequest } = await importHandler();
+    it.each([
+      Client.ORPC,
+      Client.ORPC_SSG,
+      Client.F3_ME,
+      Client.F3_REGION_PAGES,
+    ])("routes the %s client header to the RPC handler", async (client) => {
+      const rpcResponse = new Response("rpc-ok");
+      rpcHandle.mockResolvedValue({ response: rpcResponse });
+      const { handleRequest } = await importHandler();
 
-        const response = await handleRequest(
-          new Request("https://api.example.com/v1/ping", {
-            method: "POST",
-            headers: { [Header.Client]: client },
-          }),
-        );
+      const response = await handleRequest(
+        new Request("https://api.example.com/v1/ping", {
+          method: "POST",
+          headers: { [Header.Client]: client },
+        }),
+      );
 
-        expect(rpcHandle).toHaveBeenCalledTimes(1);
-        expect(openApiHandle).not.toHaveBeenCalled();
-        expect(response).toBe(rpcResponse);
-      },
-    );
+      expect(rpcHandle).toHaveBeenCalledTimes(1);
+      expect(openApiHandle).not.toHaveBeenCalled();
+      expect(response).toBe(rpcResponse);
+    });
 
     it("returns 404 when the RPC handler produces no response", async () => {
       rpcHandle.mockResolvedValue({ response: undefined });
@@ -209,6 +211,55 @@ describe("handleRequest", () => {
 
       expect(response.status).toBe(404);
       expect(await response.text()).toBe("Not found");
+    });
+  });
+
+  describe("Cache-Control", () => {
+    const rpcRequest = () =>
+      new Request("https://api.example.com/v1/ping", {
+        headers: { [Header.Client]: Client.ORPC },
+      });
+    const restRequest = () => new Request("https://api.example.com/v1/events");
+
+    it.each([
+      ["RPC", rpcRequest],
+      ["OpenAPI", restRequest],
+    ])(
+      "marks %s responses private, no-store by default",
+      async (_, request) => {
+        const { handleRequest } = await importHandler();
+
+        const response = await handleRequest(request());
+
+        expect(response.headers.get("cache-control")).toBe("private, no-store");
+      },
+    );
+
+    it.each([
+      ["RPC", rpcRequest],
+      ["OpenAPI", restRequest],
+    ])("marks the %s 404 fallback private, no-store", async (_, request) => {
+      rpcHandle.mockResolvedValue({ response: undefined });
+      openApiHandle.mockResolvedValue({ response: undefined });
+      const { handleRequest } = await importHandler();
+
+      const response = await handleRequest(request());
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+    });
+
+    it("keeps a Cache-Control the procedure set itself", async () => {
+      openApiHandle.mockResolvedValue({
+        response: new Response("rest", {
+          headers: { "cache-control": "public, s-maxage=60" },
+        }),
+      });
+      const { handleRequest } = await importHandler();
+
+      const response = await handleRequest(restRequest());
+
+      expect(response.headers.get("cache-control")).toBe("public, s-maxage=60");
     });
   });
 
