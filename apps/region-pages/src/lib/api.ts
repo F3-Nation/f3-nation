@@ -19,7 +19,9 @@ let client: ApiClient | undefined;
 
 /**
  * Anonymous oRPC client for the public `regionPages.*` endpoints on apps/api.
- * Pages are ISR-rendered, so this only runs at (re)generation time.
+ * Called only through the data caches in `src/lib/data.ts`, so requests reach
+ * the API when a cache entry expires (region pages, the directory and the
+ * sitemap share them), not on every page view.
  */
 function getApiClient(): ApiClient {
   if (client) return client;

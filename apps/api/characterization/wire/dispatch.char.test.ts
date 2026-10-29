@@ -68,8 +68,8 @@ describe("handler dispatch", () => {
     );
     expect(res.status).toBe(200);
     // Asserted against the SAME golden the `orpc` case pins above: every
-    // Client value must produce the byte-identical RPC envelope, `meta`
-    // type-preservation table included.
+    // client in this table must produce the byte-identical RPC envelope,
+    // `meta` type-preservation table included.
     await expect(
       stableStringify(
         await normalize(res, { paths: { "json.timestamp": "<TIMESTAMP>" } }),
@@ -92,9 +92,9 @@ describe("handler dispatch", () => {
     expect(typeof body.timestamp).toBe("string");
   });
 
-  // route.ts dispatches on strict equality against exactly three of the four
-  // Client values; scalar-api is excluded so the Scalar docs UI lands on the
-  // OpenAPI handler. Presence checks, `Object.values(Client).includes(v)`, and
+  // route.ts dispatches RPC-client values to the RPC handler by strict
+  // equality; scalar-api and unrecognized values fall through to the OpenAPI
+  // handler, so the Scalar docs UI lands there. Presence checks, `Object.values(Client).includes(v)`, and
   // case-insensitive compares are all plausible ports that break production
   // here, so pin the fall-through against the REST golden rather than status.
   it.each([

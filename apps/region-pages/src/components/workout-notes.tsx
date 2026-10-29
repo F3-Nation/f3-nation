@@ -6,11 +6,7 @@ import { useSanitizedHtml } from "@/lib/safe-html";
 const EMAIL_SPLIT_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
 const EMAIL_MATCH_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i;
 
-/**
- * @see http://localhost:3000/anaheim
- * @see https://github.com/F3-Nation/f3-region-pages/issues/35
- * @todo "Click here for detailed AO maps"
- **/
+/** Render sanitized notes and link bare email addresses. */
 export const WorkoutNotes = ({ notes }: { notes: string | null }) => {
   const sanitizedNotes = useSanitizedHtml(notes);
   if (!notes) return null;

@@ -91,9 +91,10 @@ without an import.
 ## 5. Roles & authorization (RBAC)
 
 Both procedures are `publicReadProcedure` (anonymous, session-agnostic,
-rate-limited per IP by the shared limiter). They return only data the public
-map already exposes (`map.location.eventsAndLocations`): region org contact
-fields and public workout schedules. No write paths.
+rate-limited per IP by the shared limiter). They return only public data: region org
+contact fields (already public through the map's procedures) and public
+workout schedules, under stricter visibility rules than the map (AC-7). No
+write paths.
 
 | Action                                       | Allowed | Explicitly denied        |
 | -------------------------------------------- | ------- | ------------------------ |

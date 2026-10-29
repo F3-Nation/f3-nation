@@ -3,10 +3,12 @@
 import Link from "next/link";
 
 export default function Error({
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  // `retry` refetches the failed segment from the server; `reset` would only
+  // re-render it and could show the same failed result after the API recovers.
+  retry: () => void;
 }) {
   // Server render errors are logged server-side (matched by digest). Errors
   // thrown in client components are not reported anywhere. Don't echo raw
@@ -20,7 +22,7 @@ export default function Error({
         </p>
         <div className="flex justify-center gap-4">
           <button
-            onClick={reset}
+            onClick={retry}
             className="rounded-lg bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600"
           >
             Try again

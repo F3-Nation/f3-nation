@@ -50,7 +50,7 @@ describe("fetchRegions", () => {
       new Response("", { status: 503 }),
     );
 
-    await fetchRegions().catch(() => undefined);
+    await expect(fetchRegions()).rejects.toThrow();
 
     expect(logWarn).toHaveBeenCalledWith(
       "region_pages.api.upstream_http_error",

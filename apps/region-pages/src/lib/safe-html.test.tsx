@@ -82,6 +82,22 @@ describe("sanitizeHtmlToReactNodes", () => {
     expect(container.textContent).toBe("click me");
   });
 
+  it("drops other non-allowlisted protocols, e.g. data:", () => {
+    const { container } = renderHtml('<a href="data:text/html,hello">see</a>');
+
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.textContent).toBe("see");
+  });
+
+  it.each([
+    ["tel:1234", "call"],
+    ["/example", "relative"],
+  ])("keeps allowlisted %s links", (href, text) => {
+    const { container } = renderHtml(`<a href="${href}">${text}</a>`);
+
+    expect(container.querySelector("a")).toHaveAttribute("href", href);
+  });
+
   it("drops links without an href but keeps their text", () => {
     const { container } = renderHtml("<a>no link</a>");
 

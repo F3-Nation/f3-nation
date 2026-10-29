@@ -150,7 +150,7 @@ export default function SearchableRegionList({
             region.longitude,
           ) * KM_TO_MILES,
       }))
-      .filter((region) => region.distance <= 200) // Within 200 miles (increased from 100)
+      .filter((region) => region.distance <= 200)
       .sort((a, b) => a.distance - b.distance); // Sort by proximity
 
     return regionsWithDistance;

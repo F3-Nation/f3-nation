@@ -345,6 +345,18 @@ describe("Region Pages Router", () => {
         city: "Albuquerque",
       });
       expect(regions.some((r) => r.id === String(inactive.id))).toBe(false);
+
+      // Only regions: an active AO or area is neither listed nor resolvable.
+      const area = await createOrg({ orgType: "area", parentId: nation.id });
+      clearMapDataCache();
+      const listed = await client.regionPages.regions();
+      for (const org of [ao, area]) {
+        expect(listed.some((r) => r.id === String(org.id))).toBe(false);
+        expect(
+          await client.regionPages.region({ slug: kebabCase(org.name) }),
+        ).toBeNull();
+      }
+
       const names = regions.map((r) => r.name);
       expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
     });

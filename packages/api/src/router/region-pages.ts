@@ -85,9 +85,10 @@ const selectActiveRegions = (db: Context["db"]) =>
     .orderBy(asc(schema.orgs.id));
 
 /**
- * Public workouts: active, non-private, current series at an active location,
- * owned by an active AO directly under an active region. Same visibility rules
- * as the map's eventsAndLocations, scoped to one region when `regionId` is set.
+ * Public workouts: active, non-private series in the current date window, with
+ * a day of week and at least one event type, at an active location, owned by
+ * an active AO whose parent is an active region with active ancestors. Scoped
+ * to one region when `regionId` is set.
  */
 async function selectWorkouts(
   db: Context["db"],

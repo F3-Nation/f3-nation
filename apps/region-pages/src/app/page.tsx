@@ -10,8 +10,7 @@ export const metadata: Metadata = {
   description: "Browse all F3 workout regions",
 };
 
-// The list is read per request from the (hour-long) data cache, so the image
-// build never needs API access.
+// Read the cached list per request so the image build needs no API access.
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {

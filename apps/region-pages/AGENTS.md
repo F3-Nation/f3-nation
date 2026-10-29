@@ -32,12 +32,14 @@ Public, anonymous directory of F3 regions and their weekly workouts at
 1. **Slugs are public URLs.** A slug is lodash `kebabCase(region.name)`. Never
    change how slugs are built: existing links and search results use them. When two names
    produce one slug, the lowest org id wins everywhere.
-2. **Visibility rules live in the API and match the map** (active, non-private,
-   current series, at an active location, under an active AO directly beneath
-   an active region with active ancestors). Change them only in the router,
+2. **Visibility rules live in the API** (`selectWorkouts` in the router):
+   active, non-private, current series with a day of week and an event type,
+   at an active location, under an active AO directly beneath an active region
+   with active ancestors. They are stricter than the map's. Change them only in the router,
    and update spec AC-7 and the router tests in the same PR.
-3. **The endpoints are anonymous.** Return nothing beyond what
-   `map.location.eventsAndLocations` already exposes. No user PII.
+3. **The endpoints are anonymous.** Return only public data: region org
+   contact fields (already public through the map's procedures) and public
+   workout schedules. No user PII.
 4. **Never key a cache or API call on unvalidated input.** `getRegion` checks
    the slug against the cached region list first, and the API resolves slugs
    against a fixed-key cache. Keep both checks, so made-up URLs never reach the
@@ -80,5 +82,5 @@ pnpm -F f3-region-pages dev
 
 Needs apps/api running, with `F3_API_BASE_URL` pointing at it (default
 `http://localhost:3001/v1`). Port: `F3_REGION_PAGES_PORT`, default 3006. Slotted
-checkouts (`local:setup --slot N`) don't assign this port yet. The curated
+checkouts assign it alongside the other app ports. The curated
 events in `src/data/region-events.json` are edited by hand.
