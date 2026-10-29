@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as OrpcServer from "@orpc/server";
+import type { CORSOptions } from "@orpc/server/plugins";
 import type { StandardHandlerInterceptorOptions } from "@orpc/server/standard";
 
 import { Client, Header } from "@acme/shared/common/enums";
@@ -148,25 +149,27 @@ describe("handleRequest", () => {
   });
 
   describe("oRPC client requests use the RPC handler", () => {
-    it.each([Client.ORPC, Client.ORPC_SSG, Client.F3_ME])(
-      "routes the %s client header to the RPC handler",
-      async (client) => {
-        const rpcResponse = new Response("rpc-ok");
-        rpcHandle.mockResolvedValue({ response: rpcResponse });
-        const { handleRequest } = await importHandler();
+    it.each([
+      Client.ORPC,
+      Client.ORPC_SSG,
+      Client.F3_ME,
+      Client.F3_REGION_PAGES,
+    ])("routes the %s client header to the RPC handler", async (client) => {
+      const rpcResponse = new Response("rpc-ok");
+      rpcHandle.mockResolvedValue({ response: rpcResponse });
+      const { handleRequest } = await importHandler();
 
-        const response = await handleRequest(
-          new Request("https://api.example.com/v1/ping", {
-            method: "POST",
-            headers: { [Header.Client]: client },
-          }),
-        );
+      const response = await handleRequest(
+        new Request("https://api.example.com/v1/ping", {
+          method: "POST",
+          headers: { [Header.Client]: client },
+        }),
+      );
 
-        expect(rpcHandle).toHaveBeenCalledTimes(1);
-        expect(openApiHandle).not.toHaveBeenCalled();
-        expect(response).toBe(rpcResponse);
-      },
-    );
+      expect(rpcHandle).toHaveBeenCalledTimes(1);
+      expect(openApiHandle).not.toHaveBeenCalled();
+      expect(response).toBe(rpcResponse);
+    });
 
     it("returns 404 when the RPC handler produces no response", async () => {
       rpcHandle.mockResolvedValue({ response: undefined });
@@ -211,15 +214,66 @@ describe("handleRequest", () => {
     });
   });
 
-  it("reflects the request origin in CORS (credentialed requests forbid *)", async () => {
+  describe("Cache-Control", () => {
+    const rpcRequest = () =>
+      new Request("https://api.example.com/v1/ping", {
+        headers: { [Header.Client]: Client.ORPC },
+      });
+    const restRequest = () => new Request("https://api.example.com/v1/events");
+
+    it.each([
+      ["RPC", rpcRequest],
+      ["OpenAPI", restRequest],
+    ])(
+      "marks %s responses private, no-store by default",
+      async (_, request) => {
+        const { handleRequest } = await importHandler();
+
+        const response = await handleRequest(request());
+
+        expect(response.headers.get("cache-control")).toBe("private, no-store");
+      },
+    );
+
+    it.each([
+      ["RPC", rpcRequest],
+      ["OpenAPI", restRequest],
+    ])("marks the %s 404 fallback private, no-store", async (_, request) => {
+      rpcHandle.mockResolvedValue({ response: undefined });
+      openApiHandle.mockResolvedValue({ response: undefined });
+      const { handleRequest } = await importHandler();
+
+      const response = await handleRequest(request());
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+    });
+
+    it("keeps a Cache-Control the procedure set itself", async () => {
+      openApiHandle.mockResolvedValue({
+        response: new Response("rest", {
+          headers: { "cache-control": "public, s-maxage=60" },
+        }),
+      });
+      const { handleRequest } = await importHandler();
+
+      const response = await handleRequest(restRequest());
+
+      expect(response.headers.get("cache-control")).toBe("public, s-maxage=60");
+    });
+  });
+
+  it("allows any origin in CORS but never with credentials", async () => {
     await importHandler();
 
-    const { origin, credentials } = corsCtor.mock.calls[0]![0] as {
-      origin: (origin: string) => string;
-      credentials: boolean;
-    };
-    expect(credentials).toBe(true);
-    expect(origin("https://map.f3nation.com")).toBe("https://map.f3nation.com");
+    // One plugin instance is shared by the RPC and OpenAPI handlers.
+    expect(corsCtor).toHaveBeenCalledTimes(1);
+    const { origin, credentials } = corsCtor.mock
+      .calls[0]![0] as CORSOptions<never>;
+    // Echoing the request origin with credentials allowed would let any web
+    // page make cookie-authenticated calls and read the response.
+    expect(credentials).toBe(false);
+    expect(origin).toBe("*");
   });
 
   describe("error interceptors log via logError", () => {
