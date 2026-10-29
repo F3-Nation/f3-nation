@@ -20,6 +20,7 @@
     "@acme/api": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/observability": "workspace:*",
+    "@acme/security-headers": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/storage": "workspace:*",
     "@acme/ui": "workspace:*",
@@ -28,12 +29,10 @@
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@t3-oss/env-nextjs": "catalog:",
-    "clsx": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "server-only": "catalog:",
-    "tailwind-merge": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

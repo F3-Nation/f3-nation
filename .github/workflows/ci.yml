@@ -556,6 +556,8 @@ jobs:
             dockerfile: apps/map/Dockerfile
           - app: me
             dockerfile: apps/me/Dockerfile
+          - app: region-pages
+            dockerfile: apps/region-pages/Dockerfile
           - app: slackbot
             dockerfile: apps/slackbot/Dockerfile
           - app: slackbot-scripts
@@ -644,6 +646,8 @@ jobs:
             dockerfile: apps/map/Dockerfile
           - app: me
             dockerfile: apps/me/Dockerfile
+          - app: region-pages
+            dockerfile: apps/region-pages/Dockerfile
           - app: slackbot
             dockerfile: apps/slackbot/Dockerfile
           - app: slackbot-scripts

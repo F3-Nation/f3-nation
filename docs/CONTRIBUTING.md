@@ -14,6 +14,7 @@ All the apps in this monorepo can be developed and tested locally. See [LOCAL_DE
 
 1. Fork the repository into your own account, then create a branch from `main`.
 1. Make something awesome. Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): subject`) — see [AGENTS.md](../AGENTS.md#commit-message-convention) for allowed types and scopes. This is enforced locally by a commit hook.
+   - For staged `.py` files, the Python pre-commit job applies Ruff lint fixes, formats the files, and stages the fixes. Unfixable lint errors block the commit. If `uv` is unavailable locally, this job prints a skip message; Python contributors should install `uv` and run `pnpm python:install`. The repository-wide `pnpm typecheck` hook runs on every commit.
 1. Submit a PR against the F3-Nation `main` branch in **DRAFT**. Your PR title must also follow Conventional Commits format (`type(scope): subject`) — it's checked by [pr-title.yml](../.github/workflows/pr-title.yml), since our release process parses the title rather than individual commits. Fill in the PR template with a plain-language summary up top — many reviewers are volunteers without deep context on your change.
    - First PR to this repo? GitHub holds the CI workflows at `action_required` until a maintainer approves the run. That's a GitHub setting for first-time contributors, not a problem with your PR — give it a day, then ask in the F3 developers Slack if it's still waiting.
 1. Run `pnpm ci:local` locally — it chains the same steps CI runs — then make sure all Checks pass once pushed. Catching issues locally is faster than waiting on CI.
@@ -35,6 +36,8 @@ It needs the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login
 ## Use of AI
 
 AI tools are welcome for writing code, tests, and PR descriptions. You're responsible for understanding, testing, and reviewing anything AI-generated before you submit it. See [AI_DEVELOPMENT_GUIDE.md](AI_DEVELOPMENT_GUIDE.md) and [AI_GUARDRAILS.md](AI_GUARDRAILS.md) for the guardrails our own AI agents follow.
+
+Conventions for writing code live in each area's `AGENTS.md`; rules for reviewing it live in [`REVIEW.md`](../REVIEW.md), which every AI reviewer loads. If a review bot keeps raising the same false positive, add a "do not flag" entry to `REVIEW.md`. If reviewers keep catching the same mistake, add a one-line rule to the matching `AGENTS.md`.
 
 ## Choosing which Issues to work on
 

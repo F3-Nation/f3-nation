@@ -9,8 +9,31 @@ guidance, put it in `AGENTS.md` (or `docs/` for deep topics and link it) and
 keep those pointer files thin. Per-app specifics belong in that app's
 `AGENTS.md`.
 
-Claude Code (v2.1.281+) reads `AGENTS.md` files directly, so there is no
-`CLAUDE.md`. Don't add one: a `CLAUDE.md` or `CLAUDE.local.md` in the
+Writing rules are scoped by directory: each area's own `AGENTS.md`
+(`apps/AGENTS.md` for the Next.js apps, `packages/api`, `packages/db`,
+`apps/auth`, `apps/slackbot`, `apps/analytics`, `.github`, …) applies to the
+files beneath it.
+
+Code-review rules live in [`REVIEW.md`](REVIEW.md): review priorities,
+critical checks, reviewer conduct and "do not flag" decisions. **When you
+review a diff** (any assistant or tool), apply `REVIEW.md` together with the
+`AGENTS.md` files above each changed file. Claude Code Review reads
+`REVIEW.md` natively (Qodo does once its `enable_review_md` setting is on);
+Copilot, CodeRabbit and Greptile are pointed at it by
+[`.github/copilot-instructions.md`](.github/copilot-instructions.md),
+[`.coderabbit.yaml`](.coderabbit.yaml) and
+[`.greptile/files.json`](.greptile/files.json). `pnpm lint` runs
+`scripts/check-review-links.mjs`, which fails if a `REVIEW.md` link breaks or
+a nested `AGENTS.md` is missing from the Greptile list.
+
+When writing agent guidance: short imperative bullets checkable from a diff,
+each rule in one place, nothing a linter or config already enforces, no
+version numbers or issue/PR references. Add a rule when reviewers catch the
+same mistake twice, and delete rules that no longer match the code.
+
+In its default instruction mode, Claude Code reads `AGENTS.md` files directly
+when no `CLAUDE.md` exists, so there is no `CLAUDE.md` (a `claude-md`-only
+mode would skip this file). Don't add one: a `CLAUDE.md` or `CLAUDE.local.md` in the
 working directory or above it makes Claude Code skip `AGENTS.md` entirely.
 
 Deeper guidance lives in [`docs/`](docs/) — scan the directory and read a doc's
@@ -36,7 +59,9 @@ recently merged release-please PR, follow
 [`.agents/skills/release-plan/SKILL.md`](.agents/skills/release-plan/SKILL.md)
 or
 [`.agents/skills/staging-test-plan/SKILL.md`](.agents/skills/staging-test-plan/SKILL.md)
-— even if your tool does not load skills automatically.
+— even if your tool does not load skills automatically. Likewise, follow
+[`.agents/skills/db-migration/SKILL.md`](.agents/skills/db-migration/SKILL.md)
+for any change to the database schema or migrations.
 
 When asked to write or edit comments or markdown, or to review a PR that
 touches comments or markdown, use
@@ -84,6 +109,7 @@ follow
 - Use Prettier (`@acme/prettier-config`) and ESLint (`@acme/eslint-config` base/next/react) as the source of truth.
 - Name React components in PascalCase, prefix hooks with `use`, and use kebab-case for files/directories (e.g., `apps/map/src`).
 - Co-locate feature-specific assets and tests near their sources (e.g., `apps/map/src/app/(feature)/`).
+- Comments and docs are durable and true: no change history, issue/PR links or one-time instructions, and every factual claim (what a library throws, what calls this, a default or limit) matches the code. Rules: [`durable-docs`](.agents/skills/durable-docs/SKILL.md).
 - Existing `react-hooks/refs` and `react-hooks/set-state-in-effect` violations are baselined in each workspace's `eslint-suppressions.json`. Fix them when you touch the file; never add entries (no `--suppress-rule`/`--suppress-all`); `pnpm lint` fails when a baseline grows. A stale entry fails `pnpm lint`; `pnpm lint:fix` and the pre-commit hook prune it.
 
 ## Logging
@@ -93,11 +119,15 @@ follow
   `lib/logging`. Reserve the raw `logger` for request-scoped children
   (`logger.child({ requestId })`).
   - One carve-out: the error-reporting pipeline's own failure paths —
-    `@acme/observability`, and `global-error.tsx`, which is browser-only
-    where pino does not run. `logError` there would re-enter the reporter
+    `@acme/observability`, and map's browser-only `report-client-error.ts`
+    (called from its error boundaries), where pino does not run. `logError` there would re-enter the reporter
     that just failed, so those sites use `console.error` deliberately and
-    each says so in a comment. Nothing else gets this exemption; see
+    each says so in a comment. No other runtime code gets this exemption; see
     [`docs/OBSERVABILITY_PLAN.md`](docs/OBSERVABILITY_PLAN.md).
+  - Developer/operator CLIs are not runtime code: `scripts/`,
+    `tooling/scripts/`, `apps/*/scripts/`, `packages/db` CLIs (`migrate*`,
+    `reset`) and `*.verify.ts` harnesses print with `console.*` and may read
+    `process.env` directly.
 - Signature is `(event, ctx, err)` — **`event` first**, unlike pino's native
   methods. `event` is a fixed dot-namespaced literal
   (`<area>.<feature>.<outcome>`, `snake_case` segments); per-occurrence data goes
@@ -114,13 +144,35 @@ follow
 - Drive the Node version from `.nvmrc` via `actions/setup-node` (`node-version-file: .nvmrc`) — `.nvmrc` is the single source of truth. Never hardcode `node-version:` in a workflow.
 - **Set the Docker target platform at build time, not in the `Dockerfile`.** Cloud Run only runs `linux/amd64`. The app `Dockerfile` `FROM` lines must **not** pin `--platform` (BuildKit's `FromPlatformFlagConstDisallowed` lint, and it forces emulation on arm64 dev machines). Instead pass the platform at the build invocation: `platforms: linux/amd64` on `docker/build-push-action` (CI) and `--platform=linux/amd64` on `docker build` (deploy). Building a **deployable** image locally on Apple Silicon therefore requires an explicit `docker build --platform=linux/amd64 …`. Do **not** switch to `$BUILDPLATFORM` cross-builds — `sharp`'s native binaries are platform-specific and would break in the amd64 runtime.
 - Share toolchain setup through the composite action [`.github/actions/setup`](.github/actions/setup/action.yml) (pnpm + Node + pnpm-store cache + frozen install) instead of repeating setup steps per job.
-- The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. The ruleset currently requires 8 checks (`format-check`, `lint`, `typecheck`, `build`, `test-coverage`, `security-audit`, `lint-title`, `db-schema-sync`). Each deploy workflow's `check-regexp` lists only 7 of those — `lint-title` is deliberately excluded from the deploy gate because it only runs on `pull_request` (`pr-title.yml` has no `push` trigger), so it never produces a check-run on a commit reached via tag push, and waiting on one that will never exist would hang the gate rather than deploy.
+- The `main` branch ruleset's required status checks and `check-regexp` in the deploy workflows (`_deploy-cloudrun.yml`, `_deploy-cloudrun-job.yml`, `deploy-homepage.yml`) are two independently-maintained lists — renaming or adding a required check needs both updated by hand, and they can drift apart if only one is updated. Every required check except `lint-title` belongs in each deploy workflow's `check-regexp` — `lint-title` is deliberately excluded from the deploy gate because it only runs on `pull_request` (`pr-title.yml` has no `push` trigger), so it never produces a check-run on a commit reached via tag push, and waiting on one that will never exist would hang the gate rather than deploy.
+
+## Scripts and operator CLIs
+
+- JS/TS operator CLIs may use `console.*` and `process.env` (see Logging). The runtime exceptions are `apps/slackbot/scripts/*.py` (Cloud Run Job code) and `apps/slackbot/app_startup.sh`.
+- Local-dev scripts in `scripts/` run on macOS bash 3.2 and WSL (no `declare -A`, `readlink -f`, `mapfile` or GNU-only flags); the `cloud-run-env*.sh` helpers require bash 4+.
+- Exit non-zero on any real failure; `|| true` only for best-effort teardown. Never print secrets, DB URLs or row values.
+- Install an `EXIT` trap before claiming a resource, use `mktemp` (never fixed `/tmp` paths), check a flag's value exists before `shift 2`, and resolve user-supplied relative paths against the caller's directory (`$INIT_CWD`).
+- Local-dev scripts are slot-aware: derive ports and container names from `F3_*_PORT` / `F3_CONTAINER_PREFIX` (`scripts/lib/local-ports.sh`); never hard-code `f3-postgres` or `:5433`.
+- Before loading an env file, clear inherited vars it's meant to supply: `dotenv` never overrides an exported var, and `source` leaves any var the file omits at its inherited value.
+- A new helper with branching logic ships a paired `*.test.sh` wired into `scripts/lint.sh` that fails (not skips) when a required tool is missing in CI. A hand-run, top-to-bottom operator script may skip tests if the PR says why.
+- Cloud Run env helpers (`apps/*/scripts/cloud-run-env*.sh`): pass unset optional vars to `--remove-env-vars` (`--update-env-vars` never removes keys), join values with gcloud's `^DELIM^` syntax and reject values containing the delimiter, validate the whole argument before pushing any secret or IAM binding, never rotate a secret another service shares, and require `F3_CHANNEL` / `NEXT_PUBLIC_CHANNEL` to equal `--env` before any cloud call.
+
+## Dependencies and environment variables
+
+- Every dependency version lives in the root `pnpm-workspace.yaml` catalog; `package.json` files use `catalog:` and internal deps `workspace:*`. Caret ranges are the default; keep lockstep families (`@better-auth/*`, `@orpc/*`) on one range. Each package declares every dependency and binary its own scripts use.
+- Never downgrade a dependency, runtime or tool to satisfy a resolver; upgrade the other side. Security overrides cover the advisory's full vulnerable range, with the advisory ids in the PR. `minimumReleaseAge: 0` is intentional (the `recent-package-watch` job covers new releases).
+- A Node or pnpm bump updates every pin together: `.nvmrc`, root `engines`/`packageManager` and every Dockerfile. Docker base images use `name:version@sha256:`. Major or runtime bumps list upstream behavior changes in the PR and are checked in `packages/ui` and in a built image that actually starts.
+- Cloud Run services read `PORT` at runtime (it overrides a Dockerfile's `ENV PORT`); don't hard-code a port.
+- Adding, renaming or removing an env var updates, in the same PR: the `env.ts` schema, `.env.example` (saying what unset does) and `.env.cloud-run.example`, the app's `scripts/cloud-run-env.sh`, the `ci.yml` mock env, `turbo.json` (build-affecting vars in `globalEnv`, test-only vars in that task's `env`, per-commit values like `GITHUB_SHA` only in `globalPassThroughEnv`), and any doc that lists it. Prefer existing config (`F3_CHANNEL`) over a new variable. A local-dev-only switch that a package script sets (never `.env` or a deployed env) is exempt; document it in the app `README.md` and list it in `turbo.json`.
+- Required production vars fail fast with no silent `localhost` fallback; URL vars use `z.url()`. `apps/api` uses `@t3-oss/env-core` with every var in `runtimeEnvStrict`; the Next apps use `@t3-oss/env-nextjs`.
+- New packages use `AGPL-3.0-or-later`. Registering or removing an app or package: [`docs/RELEASE_PROCESS.md` § Adding a New App to Release Please](docs/RELEASE_PROCESS.md#adding-a-new-app-to-release-please).
 
 ## Testing Guidelines
 
 - Use Vitest for unit and integration tests; name test files `*.test.ts[x]` and place under or near source code or in `__tests__`.
-- Reset databases before any suite that mutates data (`pnpm reset-test-db` or `pnpm -C packages/db reset-test-db`).
+- Suites that mutate the database run against a reset test DB. `packages/api`'s Vitest global setup resets it on every run (see [`packages/api/AGENTS.md`](packages/api/AGENTS.md)); other suites need `pnpm reset-test-db` (or `pnpm -C packages/db reset-test-db`) first.
 - Prefer fixtures in `apps/map/tests` or `packages/*/__mocks__` instead of live service calls.
+- A test must fail if the line it guards is deleted: assert values and persisted state (not `200` or `toBeDefined()`), assert the specific error code (`rejects.toMatchObject({ code })`), and cover both sides of every guard, including a cross-org authorization case. Details and isolation rules: [`docs/testing.md` § Writing tests that can fail](docs/testing.md#writing-tests-that-can-fail).
 - **Coverage thresholds ratchet upward.** `vitest.config.ts` being rewritten by a
   test run is expected — commit it. Never set `thresholds.autoUpdate` to `false`
   or delete the key, and never lower a threshold to make a suite pass; add tests
@@ -172,18 +224,31 @@ non-obvious rule that Release Please attributes a commit by **which files it
 changed, not by its scope** — is documented in
 [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
 
+## Writing to GitHub
+
+These rules cover everything an AI assistant writes to GitHub — issues, pull requests, comments, and review replies:
+
+- **Pre-flight:** run `bash scripts/gh-check.sh` before reading through `gh`, and `bash scripts/gh-check.sh --require-write` before writing. It confirms `gh` is signed in and can reach the repository with the access needed; set `GH_REPO=<owner>/<name>` to check a repository other than the current checkout. If it fails, show the user its message and stop.
+- **Signature:** end every issue body, PR body, and comment with `_written by <model_name>_`, exactly once, as its final line. Name the actual model or agent (`Claude Opus 5.5`, `Codex`), not a generic label like `AI`. A footer your tool adds on its own goes above it.
+- **Draft PRs:** open pull requests with `gh pr create --draft`; the author marks them ready for review. The hosted review apps skip drafts and start once a PR is marked ready, so work in progress doesn't use up their review runs. The `ai-review` workflow ignores draft status: it runs when its label is added and on every push while the label is on.
+- **Never resolve review threads.** The people reviewing resolve them.
+- **Reply to every review comment you act on**, in its thread, whether you changed code or decided not to, saying what you did and why.
+
 ## Pull Request Guidelines
 
 - Every pull request should:
-  - Include a clear summary, any related issue(s), commands run, and impact to DB/env.
+  - Fill in the PR template with a plain-language TL;DR first, related issue(s) (`Closes #<n>` or `Part of #<n>`), commands run, and DB, env-var and deploy-order impact. Remove template placeholders, and keep the body true to the diff as scope changes.
   - Add screenshots or screen recordings for UI changes in `apps/map`.
   - Highlight any new migrations or environment variables.
   - Never include secrets.
-- Before opening a pull request, ensure both `pnpm lint` and `pnpm format` pass with no errors or changes required.
+- Keep PRs small enough to review in one sitting (review bots skip very large PRs), with mechanical sweeps (lint, renames, dependency bumps) separate from behavior changes.
+- Before opening a pull request, run `pnpm ci:local` (at minimum `pnpm lint` and `pnpm format`) and commit any coverage-threshold rewrite.
+- Reply to every review thread with what changed (commit SHA) or why not; out-of-scope findings get a tracking issue linked in the reply. AI agents never resolve threads and sign what they write `_written by <model>_` (see [`.agents/skills/github/SKILL.md`](.agents/skills/github/SKILL.md)).
+- File pre-existing bugs found along the way as separate issues, not PR scope creep: search for duplicates, follow the issue templates, and lead with plain-language impact before the root cause and fix.
 
 ## Security & Environment
 
-- Store all secrets in per-directory `.env` files (one per app, `packages/env`, and `packages/db`). Always use `with-env` helpers to load environment variables and never commit `.env` files to the repo.
+- Store all secrets in per-directory `.env` files (one per app, `packages/env`, and `packages/db`). Package scripts load their `.env` through the `with-env` script prefix; app code reads configuration through its validated `env.ts` module. Never commit `.env` files to the repo.
 - Scope PostHog/analytics keys per environment and rotate if leaked. Run production DB changes only through scripts in `packages/db`.
 
 <!-- BEGIN:turborepo-agent-rules -->

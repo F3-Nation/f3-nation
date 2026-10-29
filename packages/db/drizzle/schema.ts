@@ -1000,6 +1000,17 @@ export const positionsXOrgsXUsers = pgTable(
     userId: integer("user_id").notNull(),
   },
   (table) => [
+    // The PK leads with position_id, so lookups by user (me.profile,
+    // position.getUserAssignments) or by org (position.getOrgAssignments)
+    // need their own indexes.
+    index("idx_positions_x_orgs_x_users_user_id").using(
+      "btree",
+      table.userId.asc().nullsLast().op("int4_ops"),
+    ),
+    index("idx_positions_x_orgs_x_users_org_id").using(
+      "btree",
+      table.orgId.asc().nullsLast().op("int4_ops"),
+    ),
     foreignKey({
       columns: [table.orgId],
       foreignColumns: [orgs.id],
@@ -1030,6 +1041,20 @@ export const rolesXUsersXOrg = pgTable(
     orgId: integer("org_id").notNull(),
   },
   (table) => [
+    // The PK leads with role_id, but the hot authorization paths filter by
+    // user_id (alone, or with org_id) or by org_id alone. The (user_id,
+    // org_id) index also serves user_id-only lookups.
+    index("idx_roles_x_users_x_org_user_id_org_id").using(
+      "btree",
+      table.userId.asc().nullsLast().op("int4_ops"),
+      table.orgId.asc().nullsLast().op("int4_ops"),
+    ),
+    // Keep: org_id-only lookups (e.g. map-request-notification) cannot use the
+    // (user_id, org_id) index above because it leads with user_id.
+    index("idx_roles_x_users_x_org_org_id").using(
+      "btree",
+      table.orgId.asc().nullsLast().op("int4_ops"),
+    ),
     foreignKey({
       columns: [table.orgId],
       foreignColumns: [orgs.id],
@@ -1734,7 +1759,7 @@ export const betterAuthOauthClientAssertion = authProviderSchema.table(
 // ─── codex schema ────────────────────────────────────────────────────────────
 // Mirrors the standalone Codex database's `codex` schema, plus a primary key
 // on every table: audit history's `audit.enable_tracking` derives row_id from
-// pg_constraint and refuses a table without one. Migration 0033 bootstraps the
+// pg_constraint and refuses a table without one. Migration 0034 bootstraps the
 // schema on a fresh database and only adds missing keys where it already
 // exists, since the tables are owned by the Codex app's role. The camelCase
 // columns on `tags` and the `references` table name are reproduced as-is.
