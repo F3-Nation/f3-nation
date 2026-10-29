@@ -10,11 +10,13 @@ import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
+import { getTrustedClientIp } from "@acme/shared/common/client-ip";
 import { isDevelopment } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import { jwksFetchFailure } from "./jwks-failure";
 import { logError, logWarn } from "./logger";
+import { getProxiedClientIp } from "./proxied-client-ip";
 import { trustedIssuers } from "./trusted-issuers";
 
 type BaseContext = RequestHeadersPluginContext;
@@ -113,19 +115,20 @@ const limiter = new MemoryRatelimiter({
 });
 
 /**
- * Extract client IP from request headers.
- * Handles x-forwarded-for chains by taking the first (client) IP.
+ * Extract the rate-limit key (client IP) from request headers.
+ *
+ * A request from the map or admin proxy carries the browser's IP with the
+ * shared proxy secret; that IP is used only when the secret matches. Otherwise
+ * this reads the x-forwarded-for entry our Cloud Run front end appended, never
+ * the caller-supplied leftmost one; see getTrustedClientIp for why. x-real-ip
+ * is only consulted when there is no x-forwarded-for at all (local dev — Cloud
+ * Run always sets one).
  */
-export const getClientIP = (headers: Headers | null): string => {
-  const forwarded = headers?.get("x-forwarded-for");
-  if (forwarded) {
-    // Take first IP in chain (closest to client)
-    // x-forwarded-for format: "client, proxy1, proxy2"
-    const firstIP = forwarded.split(",")[0]?.trim();
-    if (firstIP) return firstIP;
-  }
-  return headers?.get("x-real-ip") ?? "anonymous";
-};
+export const getClientIP = (headers: Headers | null): string =>
+  getProxiedClientIp(headers, env.PROXY_CLIENT_IP_SECRET) ??
+  getTrustedClientIp(headers) ??
+  headers?.get("x-real-ip") ??
+  "anonymous";
 
 const base = os.$context<BaseContext>().use(async ({ context, next }) => {
   const key = getClientIP(context.reqHeaders ?? null);
