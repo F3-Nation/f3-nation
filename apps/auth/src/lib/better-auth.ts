@@ -294,7 +294,13 @@ const OTP_VERIFYING_PATHS = new Set([
  * deletes an expired session, and an offline_access refresh token is meant
  * to outlive that.
  */
-const SIGN_OUT_PATHS = new Set(["/sign-out", "/oauth2/end-session"]);
+const SIGN_OUT_PATHS = new Set([
+  "/sign-out",
+  "/oauth2/end-session",
+  // Where /oauth2/end-session's confirmation page posts back to: without a
+  // usable id_token_hint, that's the request that ends the session.
+  "/oauth2/end-session/confirm",
+]);
 
 /**
  * Hops that may append themselves to X-Forwarded-For after the client's own

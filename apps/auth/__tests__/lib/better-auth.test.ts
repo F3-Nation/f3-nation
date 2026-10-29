@@ -785,6 +785,43 @@ describe("ending OAuth tokens at sign-out", () => {
     expect(memoryDb.oauthRefreshToken).toHaveLength(0);
   });
 
+  it("deletes the user's offline_access tokens on a confirmed /oauth2/end-session", async () => {
+    const { auth, memoryDb, sessionToken } = await signInWithOfflineToken();
+    const authHeaders = {
+      authorization: `Bearer ${sessionToken}`,
+      accept: "text/html",
+    };
+
+    // No id_token_hint, so Better Auth asks the browser to confirm first,
+    // and the session only ends at the confirm POST.
+    const confirmPage = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/end-session`, { headers: authHeaders }),
+    );
+    expect(confirmPage.status).toBe(200);
+    expect(memoryDb.session).toHaveLength(1);
+    const cookie = confirmPage.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+
+    const confirmed = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/end-session/confirm`, {
+        method: "POST",
+        headers: {
+          ...authHeaders,
+          cookie,
+          origin: BASE_URL,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: "action=confirm",
+      }),
+    );
+
+    expect(confirmed.status).toBe(200);
+    expect(memoryDb.session).toHaveLength(0);
+    expect(memoryDb.oauthRefreshToken).toHaveLength(0);
+  });
+
   it("keeps offline_access tokens when an expired session is cleaned up", async () => {
     const { auth, memoryDb, sessionToken } = await signInWithOfflineToken();
     for (const row of (memoryDb.session ?? []) as { expiresAt: Date }[]) {
