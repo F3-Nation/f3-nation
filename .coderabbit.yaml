@@ -3,6 +3,19 @@
 # settings instead of replacing them.
 inheritance: true
 reviews:
+  # Every push spends one review from the free OSS rate limit, which PRs here
+  # keep hitting. Review only Ready PRs, and pause after two reviewed commits;
+  # `@coderabbitai review` runs one more on demand.
+  auto_review:
+    drafts: false
+    auto_pause_after_reviewed_commits: 2
+  # Generated files: lockfiles, release-please changelogs, and drizzle-kit
+  # snapshots. Migration SQL is still reviewed.
+  path_filters:
+    - "!pnpm-lock.yaml"
+    - "!uv.lock"
+    - "!**/CHANGELOG.md"
+    - "!**/drizzle/meta/**"
   # Repo decisions: docstrings aren't required, `.env` key order isn't
   # enforced, and generated unit-test PRs add review noise.
   pre_merge_checks:
