@@ -19,6 +19,7 @@ turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.
 pnpm run lint:ws || ws_status=$?
 node scripts/check-vitest-thresholds.mjs || vitest_thresholds_status=$?
 node scripts/check-security-headers-coverage.mjs || security_headers_status=$?
+bash scripts/check-security-headers-coverage.test.sh || security_headers_status=$?
 node scripts/check-eslint-suppressions.mjs || eslint_suppressions_status=$?
 bash scripts/python-task.test.sh || python_task_status=$?
 bash scripts/python-precommit.test.sh || python_precommit_status=$?
