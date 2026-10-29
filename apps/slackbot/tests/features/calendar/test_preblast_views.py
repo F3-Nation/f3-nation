@@ -18,6 +18,7 @@ from features.calendar.event_preblast import (
     build_event_preblast_select_form,
     build_preblast_info,
     get_preblast_channel,
+    handle_event_preblast_action,
     handle_event_preblast_edit,
 )
 from features.calendar.preblast_views import PREBLAST_CHANNEL_SELECTOR, PreblastViews
@@ -692,6 +693,91 @@ class TestPreblastEditStartTimeIntegration(unittest.TestCase):
         kwargs = preblast_service.build_update_command.call_args.kwargs
         self.assertEqual(kwargs["start_time"], "0530")
         self.assertEqual(kwargs["name"], "The Gauntlet")
+
+
+def _hc_un_hc_body(user_slack_id: str = "U_ACTOR") -> dict:
+    return {
+        "user": {"id": user_slack_id},
+        "channel": {"id": "C_PREBLAST"},
+        "message": {
+            "ts": "1700000000.000100",
+            "metadata": {"event_payload": {"event_instance_id": 42, "attendees": [7], "qs": [7]}},
+        },
+        "actions": [{"action_id": actions.EVENT_PREBLAST_HC_UN_HC}],
+    }
+
+
+@pytest.mark.parametrize("q_type_id", [Q_TYPE_ID, CO_Q_TYPE_ID])
+def test_hc_un_hc_button_is_a_no_op_for_q(q_type_id):
+    preblast_service = MagicMock()
+    attendance_service = MagicMock()
+    attendance_service.get_planned_for_event_instance.return_value = [
+        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type_ids=[q_type_id, HC_TYPE_ID]),
+    ]
+    client = MagicMock()
+
+    with (
+        patch("features.calendar.event_preblast.get_user", return_value=SimpleNamespace(user_id=7)),
+        patch("features.calendar.event_preblast._build_preblast_service", return_value=preblast_service),
+        patch("features.calendar.event_preblast._build_attendance_service", return_value=attendance_service),
+        patch("features.calendar.event_preblast.build_preblast_info") as build_info,
+        patch("features.calendar.event_preblast.post_hc_thread_reply") as thread_reply,
+    ):
+        handle_event_preblast_action(_hc_un_hc_body(), client, MagicMock(), {}, MagicMock())
+
+    preblast_service.remove_hc.assert_not_called()
+    preblast_service.add_hc.assert_not_called()
+    build_info.assert_not_called()
+    thread_reply.assert_not_called()
+    client.chat_update.assert_not_called()
+    client.chat_postMessage.assert_not_called()
+
+
+def test_hc_un_hc_button_falls_back_to_message_qs_when_attendance_lookup_fails():
+    preblast_service = MagicMock()
+    attendance_service = MagicMock()
+    attendance_service.get_planned_for_event_instance.side_effect = RuntimeError("api down")
+
+    with (
+        patch("features.calendar.event_preblast.get_user", return_value=SimpleNamespace(user_id=7)),
+        patch("features.calendar.event_preblast._build_preblast_service", return_value=preblast_service),
+        patch("features.calendar.event_preblast._build_attendance_service", return_value=attendance_service),
+        patch("features.calendar.event_preblast.post_hc_thread_reply") as thread_reply,
+    ):
+        handle_event_preblast_action(_hc_un_hc_body(), MagicMock(), MagicMock(), {}, MagicMock())
+
+    preblast_service.remove_hc.assert_not_called()
+    thread_reply.assert_not_called()
+
+
+def test_hc_un_hc_button_still_un_hcs_a_non_q_attendee():
+    preblast_service = MagicMock()
+    attendance_service = MagicMock()
+    attendance_service.get_planned_for_event_instance.return_value = [
+        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type_ids=[Q_TYPE_ID, HC_TYPE_ID]),
+        AttendanceData(id=2, event_instance_id=42, user_id=8, attendance_type_ids=[HC_TYPE_ID]),
+    ]
+    body = _hc_un_hc_body()
+    body["message"]["metadata"]["event_payload"]["attendees"] = [7, 8]
+    preblast_info = SimpleNamespace(
+        attendance_records=[],
+        preblast_blocks=[],
+        event_record=SimpleNamespace(meta={}),
+    )
+
+    with (
+        patch("features.calendar.event_preblast.get_user", return_value=SimpleNamespace(user_id=8)),
+        patch("features.calendar.event_preblast._build_preblast_service", return_value=preblast_service),
+        patch("features.calendar.event_preblast._build_attendance_service", return_value=attendance_service),
+        patch("features.calendar.event_preblast.build_preblast_info", return_value=preblast_info),
+        patch("features.calendar.event_preblast.get_user_names", return_value=(["Actor"], [None])),
+        patch("features.calendar.event_preblast.get_preblast_channel", return_value="C_PREBLAST"),
+        patch("features.calendar.event_preblast.post_hc_thread_reply") as thread_reply,
+    ):
+        handle_event_preblast_action(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+    preblast_service.remove_hc.assert_called_once_with(42, 8)
+    assert thread_reply.call_args.kwargs["is_hc"] is False
 
 
 if __name__ == "__main__":

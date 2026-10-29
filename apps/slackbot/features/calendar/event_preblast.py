@@ -1178,6 +1178,22 @@ def route_preblast_overflow_action(
 # ---------------------------------------------------------------------------
 
 
+def _user_is_q(event_instance_id: int, user_id: int, metadata: dict, logger: Logger) -> bool:
+    """Return True if the user is the Q or a Co-Q of the event.
+
+    Reads live attendance, since the message's ``qs`` metadata is only refreshed
+    when the preblast message is rewritten; falls back to it if the lookup fails.
+    """
+    try:
+        attendance = _build_attendance_service().get_planned_for_event_instance(event_instance_id)
+    except Exception as e:
+        logger.warning(f"Q lookup failed for event {event_instance_id}, using message metadata: {e}")
+        return user_id in (safe_get(metadata, "qs") or [])
+    return any(
+        att.user_id == user_id and {Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids) for att in attendance
+    )
+
+
 def handle_event_preblast_action(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
@@ -1300,6 +1316,10 @@ def handle_event_preblast_action(
     else:
         # Message-embedded actions (outside modal)
         if action_id == actions.EVENT_PREBLAST_HC_UN_HC:
+            # A Q or Co-Q can't Un-HC their own event, so a click from one is
+            # ignored rather than stripping their HC and announcing it.
+            if _user_is_q(event_instance_id, user_id, metadata, logger):
+                return
             already_hcd = user_id in (safe_get(metadata, "attendees") or [])
             if already_hcd:
                 try:
