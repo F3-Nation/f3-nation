@@ -9,13 +9,6 @@
 
 import { HSTS_VALUE } from "./index.js";
 
-const DISABLED_FEATURES = [
-  "camera=()",
-  "microphone=()",
-  "payment=()",
-  "usb=()",
-];
-
 /** @param {string} value */
 const hstsMaxAge = (value) =>
   Number(/^max-age=(\d+)(;|$)/.exec(value)?.[1] ?? -1);
@@ -78,12 +71,27 @@ export async function nextSecurityHeaderProblems(
     (v) => v === "strict-origin-when-cross-origin",
     "strict-origin-when-cross-origin",
   );
-  const permissions = new Set(
-    (h["Permissions-Policy"] ?? "").split(",").map((d) => d.trim()),
+  // A structured-field dictionary: a repeated feature takes its last value, as
+  // in the browser, so `microphone=(), microphone=*` allows the microphone.
+  const permissions = new Map(
+    (h["Permissions-Policy"] ?? "").split(",").map((entry) => {
+      const [feature = "", ...value] = entry.trim().split("=");
+      return [feature, value.join("=")];
+    }),
   );
-  const allowed = geolocation ? "geolocation=(self)" : "geolocation=()";
-  for (const directive of [...DISABLED_FEATURES, allowed]) {
-    want("Permissions-Policy", () => permissions.has(directive), directive);
+  const wanted = {
+    camera: "()",
+    microphone: "()",
+    payment: "()",
+    usb: "()",
+    geolocation: geolocation ? "(self)" : "()",
+  };
+  for (const [feature, value] of Object.entries(wanted)) {
+    want(
+      "Permissions-Policy",
+      () => permissions.get(feature) === value,
+      `${feature}=${value}`,
+    );
   }
 
   if (frame === "embeddable") {

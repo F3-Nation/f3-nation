@@ -112,6 +112,17 @@ describe("nextSecurityHeaderProblems", () => {
     );
   });
 
+  it("reports a disabled feature re-enabled by a later duplicate", async () => {
+    const config = withHeader(
+      deny,
+      "Permissions-Policy",
+      "camera=(), microphone=(), payment=(), usb=(), geolocation=(), microphone=*",
+    );
+    expect(await nextSecurityHeaderProblems(config, { frame: "deny" })).toEqual(
+      [expect.stringContaining("want microphone=()")],
+    );
+  });
+
   it("reports a deny config checked as embeddable", async () => {
     expect(
       await nextSecurityHeaderProblems(deny, {
