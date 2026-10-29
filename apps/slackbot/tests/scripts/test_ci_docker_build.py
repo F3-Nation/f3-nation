@@ -8,7 +8,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[4]
 WORKFLOW = REPO_ROOT / ".github/workflows/ci.yml"
 SCRIPTS_IMAGE = {"app": "slackbot-scripts", "dockerfile": "apps/slackbot/scripts/Dockerfile"}
-EXISTING_IMAGES = {"admin", "api", "auth", "map", "me", "slackbot"}
+EXISTING_IMAGES = {"admin", "api", "auth", "map", "me", "region-pages", "slackbot"}
 
 
 @pytest.fixture

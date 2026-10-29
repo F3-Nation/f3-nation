@@ -8,6 +8,10 @@ import { logWarn } from "~/lib/logging";
 
 const PROXY_PREFIX = "/api/orpc";
 
+// How long to wait for the API to start answering before treating it as down.
+// Only the wait for response headers is bounded; the body streams afterwards.
+const UPSTREAM_TIMEOUT_MS = 20_000;
+
 // Anonymous-reachable paths the map calls — see docs/specs/map-browse-and-search.md
 // AC-1. These back onto `publicReadProcedure` (packages/api/src/shared.ts),
 // which requires no credential, so the proxy forwards them as-is. Cookies are
@@ -128,11 +132,38 @@ async function proxyRequest(request: NextRequest) {
   const hasBody = method !== "GET" && method !== "HEAD";
   const body = hasBody ? await request.arrayBuffer() : undefined;
 
-  const upstreamResponse = await fetch(getTargetUrl(request, proxiedPath), {
-    method,
-    headers: getForwardedHeaders(request),
-    body,
-  });
+  // Built outside the try below: a missing F3_API_BASE_URL is a misconfiguration
+  // and must surface as the 500 it is, not be reported as an API outage.
+  const targetUrl = getTargetUrl(request, proxiedPath);
+  const forwardedHeaders = getForwardedHeaders(request);
+
+  // Cleared once headers arrive, so a large body can still stream afterwards.
+  const upstreamTimeout = new AbortController();
+  const upstreamTimer = setTimeout(() => {
+    upstreamTimeout.abort(
+      new DOMException("API did not respond", "TimeoutError"),
+    );
+  }, UPSTREAM_TIMEOUT_MS);
+  let upstreamResponse: Response;
+  try {
+    upstreamResponse = await fetch(targetUrl, {
+      method,
+      headers: forwardedHeaders,
+      body,
+      signal: upstreamTimeout.signal,
+    });
+  } catch (err) {
+    // The API refused the connection or never answered (it, or its database,
+    // is down). Answer with a clean 503 rather than letting the throw become
+    // an opaque 500 page, so the map can tell an outage from a bug.
+    logWarn("map.orpc_proxy.upstream_unavailable", { err });
+    return new Response("The F3 Nation API is unavailable", {
+      status: 503,
+      headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" },
+    });
+  } finally {
+    clearTimeout(upstreamTimer);
+  }
 
   const headers = new Headers(upstreamResponse.headers);
   // fetch() already decoded the body; these describe the encoded bytes.
