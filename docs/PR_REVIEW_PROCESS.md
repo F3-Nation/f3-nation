@@ -22,7 +22,7 @@ flowchart TD
     G --> H{"Local test result"}
     H -- "❌ Don't approve yet:<br/>fixes needed" --> E
     H -- "❌ Don't approve yet:<br/>large rework" --> D
-    H -- "⏸️ Can't recommend yet:<br/>clear what it names" --> G
+    H -- "⏸️ Can't recommend yet:<br/>clear what it names" --> L
     H -- "✅ Recommends approval" --> I["7. A codeowner reviews the PR by hand"]
     I --> J{"Codeowner satisfied?"}
     J -- "No: new comments" --> E
@@ -107,7 +107,7 @@ When the PR's author is a codeowner, have a different codeowner run at least one
 
 When a codeowner decides a PR doesn't need a local test, or when `pr-local-test` recommends approval, the PR goes to a codeowner's final review.
 
-⏸️ **Can't recommend yet** means something kept the test from finishing — a review thread still open, a check it couldn't run, a merge status it couldn't confirm — not a problem in the code. Clear what it names, then run the local test again.
+⏸️ **Can't recommend yet** means something kept the test from finishing — a review thread still open, a check it couldn't run, a merge status it couldn't confirm — not a problem in the code. Clear what it names. Whether `pr-local-test` runs again afterward is the reviewer's call: a check it couldn't run needs another run before it counts, while threads that were only open may just need resolving.
 
 ❌ **Don't approve yet** means the PR caused a problem: its results say what has to change, and the author makes those fixes. Whether `pr-local-test` runs again afterward is the reviewer's call: a re-run is worth it when the fixes change how the app behaves, and not when a reviewer can confirm them by reading the diff. A large rework goes back through `pr-review-inline` first, since the earlier review no longer covers the code that's there now. `pnpm pr:triage` doesn't send a PR back to a skill that has already run, except a local test that couldn't recommend yet, which goes back to the local-test queue. So the codeowner who asked for the fixes watches for the author's push.
 

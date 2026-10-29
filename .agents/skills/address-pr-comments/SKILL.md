@@ -264,13 +264,14 @@ Within each bucket, group inline comments by file. Each entry:
 **Category:** Blocker | Required | Suggestion | Push back
 **Comment:** "<the reviewer's exact words>"
 **Action:** <what code change to make, or "no code change needed">
-**Reply:** "<exact text of the reply to post on GitHub>"
+**Reply:** "<exact text of the reply to post on GitHub> Fixed in <sha>."
 **Ready to resolve:** yes / no / n/a — informational only; conversation comments cannot be
 resolved, and this skill never resolves threads itself
 ```
 
-A reply for a comment that gets a code change ends with `Fixed in <sha>`. The commit doesn't
-exist until Step 5b, so the plan keeps the placeholder.
+`Fixed in <sha>` is the reply's last sentence, just above the signature, and only when the
+comment gets a code change. The commit doesn't exist until the fixes are committed, so the plan keeps the
+placeholder.
 
 Approving the plan also approves running the PR's own code: dependency install scripts and the
 commit hooks run with the user's normal credentials. If the PR changes `package.json`, the
@@ -345,7 +346,8 @@ reply posted before the push makes them respond to code that isn't on GitHub yet
 ### 5c — Post replies
 
 After the push, post each planned reply in its existing thread (never as a new top-level comment
-when a thread exists). Replace each `<sha>` with the pushed commit's SHA (`git rev-parse HEAD`),
+when a thread exists). Replace the `<sha>` in each planned reply (see the plan template in
+[Step 4](#step-4--present-the-plan-and-wait-for-approval)) with the pushed commit's SHA (`git rev-parse HEAD`),
 so the reviewer can open the fix in one click: GitHub links a bare SHA in a comment to that
 commit. End every reply with the repo's signature, `_written by <model_name>_`, as its own final
 line, naming the model or agent that wrote it.
