@@ -50,7 +50,10 @@ const config: KnipConfig = {
       // real repo file for knip's GitHub Actions plugin to resolve.
       ignoreUnresolved: ["./instrument.js"],
       // Run by scripts/lint.sh, which knip does not parse.
-      entry: ["scripts/check-eslint-suppressions.mjs"],
+      entry: [
+        "scripts/check-eslint-suppressions.mjs",
+        "scripts/check-review-links.mjs",
+      ],
     },
     "apps/api": {
       // The characterization suite runs under its own vitest config,
