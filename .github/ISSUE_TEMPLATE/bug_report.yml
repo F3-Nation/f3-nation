@@ -15,6 +15,7 @@ body:
         - apps/homepage
         - apps/map
         - apps/me
+        - apps/region-pages
         - apps/slackbot
         - packages (shared code)
         - repo / tooling / CI / deps

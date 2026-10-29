@@ -27,6 +27,7 @@ jobs:
               ['apps/homepage', 'app: homepage'],
               ['apps/map', 'app: map'],
               ['apps/me', 'app: me'],
+              ['apps/region-pages', 'app: region-pages'],
               ['apps/slackbot', 'app: slackbot'],
             ]);
 
