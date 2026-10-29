@@ -48,7 +48,7 @@ Run `pnpm pr:triage`. It sorts every open PR by the stage it's waiting on, so yo
 
 ## Running the review and test skills
 
-Running either skill takes one command and a PR number. Both live in [`.agents/skills/`](../.agents/skills/). Codex reads that folder directly; Claude Code gets a copy that the repo's session-start hook refreshes, so both see the same skills with nothing to install.
+Running either skill takes one command and a PR number. Both live in [`.agents/skills/`](../.agents/skills/).
 
 ### Set up your machine (once)
 
