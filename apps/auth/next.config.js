@@ -9,6 +9,7 @@ const config = {
     "@acme/logger",
     "@acme/observability",
     "@acme/shared",
+    "@acme/ui",
   ],
   // pino-pretty relies on worker threads (thread-stream); keep pino external so
   // Next.js does not try to bundle it.
