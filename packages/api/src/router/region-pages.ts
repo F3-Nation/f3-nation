@@ -60,6 +60,14 @@ const regionSchema = z.object({
   workoutCount: z.number().describe("Public workouts in the region"),
 });
 
+/**
+ * The directory list leaves out `email`: the directory never shows it, and
+ * listing every region's address in one anonymous call makes harvesting them
+ * trivial. A region's own page still gets it from `region`, as the legacy
+ * site and the map's workout details do.
+ */
+const directoryRegionSchema = regionSchema.omit({ email: true });
+
 /** Active regions whose ancestor chain is also active, ordered by id. */
 const selectActiveRegions = (db: Context["db"]) =>
   db
@@ -175,7 +183,7 @@ export const regionPagesRouter = os.router({
       description:
         "All active regions with their public workout count and an area (city/state and map center) derived from their workouts. Ordered by name.",
     })
-    .output(z.array(regionSchema))
+    .output(z.array(directoryRegionSchema))
     .handler(({ context: ctx }) =>
       // Always cached (not mapDataFor): honoring the spoofable orpc-ssg
       // client header here would let any caller force this nationwide
@@ -195,9 +203,13 @@ export const regionPagesRouter = os.router({
         }
 
         return uniqueBySlug(regions)
-          .map((org) =>
-            toRegionPageRegion(org, workoutsByRegion.get(String(org.id)) ?? []),
-          )
+          .map((org) => {
+            const { email: _email, ...region } = toRegionPageRegion(
+              org,
+              workoutsByRegion.get(String(org.id)) ?? [],
+            );
+            return region;
+          })
           .sort((a, b) => a.name.localeCompare(b.name));
       }),
     ),

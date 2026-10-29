@@ -344,6 +344,10 @@ describe("Region Pages Router", () => {
         workoutCount: 2,
         city: "Albuquerque",
       });
+      // The fixture region has an email; only its own page returns it.
+      expect(
+        regions.find((r) => r.id === String(region.id)),
+      ).not.toHaveProperty("email");
       expect(regions.some((r) => r.id === String(inactive.id))).toBe(false);
 
       // Only regions: an active AO or area is neither listed nor resolvable.
