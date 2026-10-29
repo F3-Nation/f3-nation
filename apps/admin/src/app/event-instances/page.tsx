@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 
+import { TableSkeleton } from "@acme/ui/page-skeleton";
+
 import Layout from "../admin-layout";
 import { AddEventInstanceButton } from "./add-event-instance-button";
 import { EventInstancesTable } from "./event-instances-table";
@@ -16,7 +18,7 @@ const EventInstancesPage = () => {
             <AddEventInstanceButton />
           </div>
         </div>
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<TableSkeleton />}>
           <div className="flex w-full flex-col overflow-hidden">
             <EventInstancesTable />
           </div>

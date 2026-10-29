@@ -1,31 +1,17 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-config", "--strict-markers"]
+
+[tool.coverage.run]
+source = ["application", "infrastructure", "utilities", "features"]
+data_file = "coverage/.coverage"
+
+[tool.coverage.report]
+fail_under = 62.19
+precision = 2
+
 [tool.ruff]
-line-length = 120
-
-[tool.ruff.lint]
-select = [
-    "E", # pycodestyle errors (settings from FastAPI, thanks, @tiangolo!)
-    "W", # pycodestyle warnings
-    "F", # pyflakes
-    "I", # isort
-    "C", # flake8-comprehensions
-    "B", # flake8-bugbear
-]
-ignore = [
-    "C901", # too complex
-]
-
-[tool.ruff.lint.isort]
-order-by-type = true
-relative-imports-order = "closest-to-furthest"
-extra-standard-library = ["typing"]
-section-order = [
-    "future",
-    "standard-library",
-    "third-party",
-    "first-party",
-    "local-folder",
-]
-known-first-party = []
+extend = "../../pyproject.toml"
 
 [tool.mypy]
 python_version = "3.13"
@@ -43,44 +29,45 @@ authors = [{ name = "Evan Petzoldt", email = "evan.petzoldt@protonmail.com" }]
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "slack-bolt>=1.18.1,<2.0.0",
-    "cryptography>=46.0.5",
-    "sqlalchemy>=2.0.28,<3.0.0",
-    "requests>=2.31.0,<3.0.0",
-    "requests-oauthlib>=2.0.0,<2.1.0",
-    "sqlalchemy-utils>=0.43.0,<0.44.0",
-    "psycopg2-binary>=2.9.9,<3.0.0",
-    "functions-framework>=3.8.1,<4.0.0",
-    "pg8000>=1.31.5,<2.0.0",
-    "cloud-sql-python-connector>=1.20.0,<2.0.0",
-    "google-cloud-logging>=3.11.0,<4.0.0",
+    "slack-bolt==1.30.0",
+    "cryptography==50.0.0",
+    "sqlalchemy==2.0.52",
+    "requests==2.34.2",
+    "requests-oauthlib==2.0.0",
+    "sqlalchemy-utils==0.43.0",
+    "psycopg2-binary==2.9.13",
+    "functions-framework==3.10.2",
+    "pg8000==1.31.5",
+    "cloud-sql-python-connector==1.21.0",
+    "google-cloud-logging==3.16.2",
     "f3-data-models",
-    "pillow>=12.2.0",
-    "pillow-heif>=1.8.0,<1.9.0",
-    "watchfiles>=1.1.1,<2.0.0",
-    "python-dotenv>=1.2.1,<2.0.0",
-    "pytz>=2026.2",
+    "pillow==13.0.0",
+    "pillow-heif==1.8.0",
+    "watchfiles==1.2.0",
+    "python-dotenv==1.2.2",
+    "pytz==2026.3.post1",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1,<9.2.0",
-    "pyyaml>=6.0.3,<7.0.0",
+    "pytest==9.1.1",
+    "pyyaml==6.0.3",
     "pandas==2.3.3",
-    "debugpy>=1.8.17,<2.0.0",
-    "ruff>=0.14.0,<1.0.0",
-    "mypy>=2.4.0,<2.5.0",
+    "debugpy==1.8.21",
+    "ruff==0.17.3",
+    "mypy==2.4.0",
+    "pytest-cov==7.1.0",
 ]
 scripts = [
-    "mplcyberpunk>=0.7.6,<0.8.0",
-    "matplotlib>=3.10.7,<4.0.0",
-    "playwright>=1.44.0,<2.0.0",
-    "dataframe-image>=0.2.7,<0.3.0",
+    "mplcyberpunk==0.7.6",
+    "matplotlib==3.11.1",
+    "playwright==1.62.0",
+    "dataframe-image==0.2.7",
     "pandas==2.3.3",
 ]
 
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools==84.2.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]

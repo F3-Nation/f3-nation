@@ -42,13 +42,15 @@ declare -A SECRET_MAP=(
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
-# Cloud Run env vars).
+# Cloud Run env vars). AUTH_TRUSTED_ISSUERS is required (checked after the
+# env file is sourced): without it the API accepts no JWT, so admin and me
+# can't call it.
 ENV_FILE_VARS=(
+  AUTH_TRUSTED_ISSUERS
   EMAIL_ADMIN_DESTINATIONS
   EMAIL_FROM
   NEXT_PUBLIC_ADMIN_URL
   NEXT_PUBLIC_API_URL
-  NEXT_PUBLIC_AUTH_URL
   NEXT_PUBLIC_CHANNEL
   NEXT_PUBLIC_MAP_URL
 )
@@ -99,6 +101,12 @@ fi
 set -a
 source "$ENV_FILE"
 set +a
+
+if [[ -z "${AUTH_TRUSTED_ISSUERS:-}" ]]; then
+  echo "Error: AUTH_TRUSTED_ISSUERS is empty in $ENV_FILE."
+  echo "Set it to the auth server origin(s) whose tokens the API accepts."
+  exit 1
+fi
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"

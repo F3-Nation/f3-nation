@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-// Migration 0033 has to behave differently depending on what it finds: no
+// Migration 0034 has to behave differently depending on what it finds: no
 // codex schema (bootstrap), a codex schema from the Codex dump that lacks keys
 // (repair), or a fully provisioned one (no-op). A real Postgres runs each path
 // so the catalog-guarded plpgsql is exercised as written. PGlite has a single
 // superuser, so the ownership rules the header describes are not modelled.
 const MIGRATION = readFileSync(
-  new URL("../drizzle/0033_codex_schema.sql", import.meta.url),
+  new URL("../drizzle/0034_codex_schema.sql", import.meta.url),
   "utf8",
 );
 const STATEMENTS = MIGRATION.split("--> statement-breakpoint");
@@ -109,7 +109,7 @@ beforeEach(async () => {
   await db.exec("DROP SCHEMA IF EXISTS codex CASCADE");
 });
 
-describe("migration 0033_codex_schema", () => {
+describe("migration 0034_codex_schema", () => {
   it("bootstraps a database without a codex schema", async () => {
     await migrate();
     expect(await tables()).toEqual([
@@ -161,7 +161,7 @@ describe("migration 0033_codex_schema", () => {
     await db.exec(LEGACY_SCHEMA);
     await db.exec("DROP TABLE codex.entry_tags, codex.tags");
     await expect(migrate()).rejects.toThrow(
-      /missing tables: entry_tags, tags\. Migration 0033 does not create tables/,
+      /missing tables: entry_tags, tags\. Migration 0034 does not create tables/,
     );
   });
 
@@ -171,7 +171,7 @@ describe("migration 0033_codex_schema", () => {
       "ALTER TABLE codex.entries ADD CONSTRAINT entries_id_key PRIMARY KEY (id)",
     );
     await expect(migrate()).rejects.toThrow(
-      /codex\.entries has primary key entries_id_key but migration 0033 expects entries_pkey\. Rename it/,
+      /codex\.entries has primary key entries_id_key but migration 0034 expects entries_pkey\. Rename it/,
     );
     // Nothing else was touched: the first failure aborts the block.
     expect(await indexes()).toEqual([]);
