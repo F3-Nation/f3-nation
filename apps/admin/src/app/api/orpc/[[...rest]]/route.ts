@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { API_PREFIX_V1 } from "@acme/shared/app/constants";
+import { setProxiedClientIp } from "@acme/shared/common/client-ip";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import { getAccessToken } from "~/lib/auth/server";
@@ -38,6 +39,11 @@ function getForwardedHeaders(
   headers.delete("content-length");
   headers.set(Header.Client, Client.ORPC);
   headers.set(Header.Authorization, `Bearer ${accessToken}`);
+  setProxiedClientIp(
+    headers,
+    request.headers,
+    process.env.PROXY_CLIENT_IP_SECRET,
+  );
   return headers;
 }
 

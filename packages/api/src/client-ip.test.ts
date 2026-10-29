@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   getTrustedClientIp,
+  PROXY_CLIENT_IP_HEADER,
+  PROXY_SECRET_HEADER,
+  setProxiedClientIp,
   TRUSTED_PROXY_HOPS,
 } from "@acme/shared/common/client-ip";
 
@@ -58,5 +61,43 @@ describe("getTrustedClientIp", () => {
     expect(getTrustedClientIp(xff(","))).toBeNull();
     expect(getTrustedClientIp(null)).toBeNull();
     expect(getTrustedClientIp(undefined)).toBeNull();
+  });
+});
+
+describe("setProxiedClientIp", () => {
+  const secret = "s".repeat(32);
+
+  it("reports the proxy's trusted hop with the secret", () => {
+    const outgoing = new Headers();
+    setProxiedClientIp(outgoing, xff("9.9.9.9, 198.51.100.7"), secret);
+    expect(outgoing.get(PROXY_CLIENT_IP_HEADER)).toBe("198.51.100.7");
+    expect(outgoing.get(PROXY_SECRET_HEADER)).toBe(secret);
+  });
+
+  it("replaces caller-sent copies of both headers", () => {
+    const outgoing = new Headers({
+      [PROXY_CLIENT_IP_HEADER]: "6.6.6.6",
+      [PROXY_SECRET_HEADER]: "guess",
+    });
+    setProxiedClientIp(outgoing, xff("198.51.100.7"), secret);
+    expect(outgoing.get(PROXY_CLIENT_IP_HEADER)).toBe("198.51.100.7");
+    expect(outgoing.get(PROXY_SECRET_HEADER)).toBe(secret);
+  });
+
+  it("removes caller-sent copies and sets nothing without a secret", () => {
+    const outgoing = new Headers({
+      [PROXY_CLIENT_IP_HEADER]: "6.6.6.6",
+      [PROXY_SECRET_HEADER]: "guess",
+    });
+    setProxiedClientIp(outgoing, xff("198.51.100.7"), undefined);
+    expect(outgoing.has(PROXY_CLIENT_IP_HEADER)).toBe(false);
+    expect(outgoing.has(PROXY_SECRET_HEADER)).toBe(false);
+  });
+
+  it("sets nothing when the proxy has no trusted hop (local dev)", () => {
+    const outgoing = new Headers();
+    setProxiedClientIp(outgoing, new Headers(), secret);
+    expect(outgoing.has(PROXY_CLIENT_IP_HEADER)).toBe(false);
+    expect(outgoing.has(PROXY_SECRET_HEADER)).toBe(false);
   });
 });

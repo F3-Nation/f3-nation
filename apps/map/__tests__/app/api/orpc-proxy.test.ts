@@ -206,6 +206,47 @@ describe("oRPC proxy route", () => {
     expect(headers.has("authorization")).toBe(false);
   });
 
+  it("reports the browser's trusted hop to the API with the proxy secret", async () => {
+    vi.stubEnv("PROXY_CLIENT_IP_SECRET", "s".repeat(32));
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
+      headers: {
+        "x-forwarded-for": "9.9.9.9, 198.51.100.7",
+        "x-f3-client-ip": "6.6.6.6",
+        "x-f3-proxy-secret": "guess",
+      },
+    });
+
+    await GET(request);
+
+    const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
+
+    expect(headers.get("x-f3-client-ip")).toBe("198.51.100.7");
+    expect(headers.get("x-f3-proxy-secret")).toBe("s".repeat(32));
+    vi.unstubAllEnvs();
+    vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
+  });
+
+  it("strips caller-sent proxy client-IP headers when no secret is configured", async () => {
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
+      headers: {
+        "x-forwarded-for": "198.51.100.7",
+        "x-f3-client-ip": "6.6.6.6",
+        "x-f3-proxy-secret": "guess",
+      },
+    });
+
+    await GET(request);
+
+    const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
+
+    expect(headers.has("x-f3-client-ip")).toBe(false);
+    expect(headers.has("x-f3-proxy-secret")).toBe(false);
+  });
+
   it("proxies to the correct upstream URL", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 

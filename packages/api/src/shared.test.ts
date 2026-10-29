@@ -219,6 +219,51 @@ describe("Rate Limiting Middleware", () => {
     expect(mockLimit).toHaveBeenNthCalledWith(2, "198.51.100.7");
   });
 
+  it("keys a proxied request on the client IP the proxy reports with a matching secret", async () => {
+    vi.stubEnv("PROXY_CLIENT_IP_SECRET", "s".repeat(32));
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: maxRequests,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+
+    // The API's trusted hop is the map proxy's egress IP (35.191.0.1).
+    const client = await createTestClientWithHeaders(
+      new Headers({
+        "x-forwarded-for": "198.51.100.7, 35.191.0.1",
+        "x-f3-client-ip": "198.51.100.7",
+        "x-f3-proxy-secret": "s".repeat(32),
+      }),
+    );
+    await client.test();
+
+    expect(mockLimit).toHaveBeenCalledWith("198.51.100.7");
+    vi.unstubAllEnvs();
+  });
+
+  it("ignores a reported client IP whose secret does not match", async () => {
+    vi.stubEnv("PROXY_CLIENT_IP_SECRET", "s".repeat(32));
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: maxRequests,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+
+    const client = await createTestClientWithHeaders(
+      new Headers({
+        "x-forwarded-for": "198.51.100.7",
+        "x-f3-client-ip": "6.6.6.6",
+        "x-f3-proxy-secret": "t".repeat(32),
+      }),
+    );
+    await client.test();
+
+    expect(mockLimit).toHaveBeenCalledWith("198.51.100.7");
+    vi.unstubAllEnvs();
+  });
+
   it("should handle x-forwarded-for with spaces and empty entries", async () => {
     mockLimit.mockResolvedValue({
       success: true,

@@ -52,6 +52,8 @@ spec:
               value: local-api-key
             - name: SUPER_ADMIN_API_KEY
               value: preview-super-admin-key
+            - name: PROXY_CLIENT_IP_SECRET
+              value: preview-proxy-client-ip-secret-placeholder
             - name: NEXT_PUBLIC_API_URL
               value: ${API_URL}
             - name: NEXT_PUBLIC_MAP_URL

@@ -8,7 +8,7 @@
  * `9.9.9.9, <real client IP>`. Everything left of the entries our own
  * infrastructure appended is caller-controlled: keying a rate limiter on the
  * leftmost entry lets a caller mint a fresh bucket per request just by
- * changing the header (#359).
+ * changing the header.
  *
  * With Cloud Run alone exactly one entry is ours (the rightmost). If a service
  * is ever put behind a Google HTTPS load balancer, that load balancer appends
@@ -47,4 +47,33 @@ export function getTrustedClientIp(
   return (
     entries[Math.max(0, entries.length - Math.max(1, trustedHops))] ?? null
   );
+}
+
+/**
+ * Headers our server-side proxies (the map and admin `/api/orpc` routes) use
+ * to tell the API which browser a request is for. The API's own trusted hop is
+ * the proxy's egress IP, so without these every proxied visitor would share
+ * one rate-limit bucket. The API trusts the client IP only when the secret
+ * matches its own copy.
+ */
+export const PROXY_CLIENT_IP_HEADER = "x-f3-client-ip";
+export const PROXY_SECRET_HEADER = "x-f3-proxy-secret";
+
+/**
+ * Sets the proxy client-IP headers on `outgoing`, using the trusted hop of the
+ * request the proxy received. Any copies the caller sent are always removed,
+ * and nothing is set without a secret or a trusted client IP, so the API then
+ * falls back to its own trusted hop.
+ */
+export function setProxiedClientIp(
+  outgoing: Headers,
+  incoming: Pick<Headers, "get">,
+  secret: string | undefined,
+): void {
+  outgoing.delete(PROXY_CLIENT_IP_HEADER);
+  outgoing.delete(PROXY_SECRET_HEADER);
+  const clientIp = getTrustedClientIp(incoming);
+  if (!secret || !clientIp) return;
+  outgoing.set(PROXY_CLIENT_IP_HEADER, clientIp);
+  outgoing.set(PROXY_SECRET_HEADER, secret);
 }
