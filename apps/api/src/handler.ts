@@ -84,6 +84,25 @@ const openAPIHandler = new OpenAPIHandler(router, {
   ],
 });
 
+/**
+ * Marks a response uncacheable unless it already carries Cache-Control. A
+ * response can depend on who is asking (a signed-in caller may see fields an
+ * anonymous caller can't), so a shared cache keyed on the URL alone could hand
+ * one caller's data to another. Setting the header here keeps that decision
+ * away from whatever proxy or CDN sits in front of the API. A procedure can
+ * set its own Cache-Control by returning headers from an OpenAPI route with
+ * `outputStructure: "detailed"`, or through `context.resHeaders` once the
+ * handler serving it installs oRPC's `ResponseHeadersPlugin`. Either way, it
+ * should opt in to caching only for a response that is identical for every
+ * caller.
+ */
+function withDefaultCacheControl(response: Response): Response {
+  if (!response.headers.has("cache-control")) {
+    response.headers.set("Cache-Control", "private, no-store");
+  }
+  return response;
+}
+
 export async function handleRequest(request: Request): Promise<Response> {
   // Redirect to /docs if the request is for /
   if (new URL(request.url).pathname === "/") {
@@ -95,14 +114,17 @@ export async function handleRequest(request: Request): Promise<Response> {
   const isOrpcClient =
     request.headers.get(Header.Client) === Client.ORPC ||
     request.headers.get(Header.Client) === Client.ORPC_SSG ||
-    request.headers.get(Header.Client) === Client.F3_ME;
+    request.headers.get(Header.Client) === Client.F3_ME ||
+    request.headers.get(Header.Client) === Client.F3_REGION_PAGES;
 
   if (isOrpcClient) {
     // Use RPC handler for oRPC client requests
     const { response } = await handler.handle(request, {
       prefix: API_PREFIX_V1,
     });
-    return response ?? new Response("Not found", { status: 404 });
+    return withDefaultCacheControl(
+      response ?? new Response("Not found", { status: 404 }),
+    );
   }
 
   // Use OpenAPI handler for REST-style calls (docs, curl, external clients)
@@ -110,5 +132,7 @@ export async function handleRequest(request: Request): Promise<Response> {
     prefix: "/",
   });
 
-  return openApiResponse ?? new Response("Not found", { status: 404 });
+  return withDefaultCacheControl(
+    openApiResponse ?? new Response("Not found", { status: 404 }),
+  );
 }
