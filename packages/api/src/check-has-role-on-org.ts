@@ -18,6 +18,9 @@ export interface RoleCheckRequest {
   roleName: UserRole;
 }
 
+const roleGrants = (roleName: UserRole) => (r: { roleName: UserRole }) =>
+  r.roleName === "admin" || r.roleName === roleName;
+
 /** Max org ids per hierarchy query (each is a bind parameter; Postgres caps one statement at 65535). */
 const ROLE_CHECK_ORG_CHUNK_SIZE = 10_000;
 
@@ -51,9 +54,6 @@ export const checkHasRolesOnOrgs = async ({
     }));
   }
 
-  const grants = (roleName: UserRole) => (r: { roleName: UserRole }) =>
-    r.roleName === "admin" || r.roleName === roleName;
-
   const outcomes: (RoleCheckOutcome | undefined)[] = checks.map(
     ({ orgId, roleName }) => {
       logDebug("api.role_check.checking", {
@@ -63,7 +63,7 @@ export const checkHasRolesOnOrgs = async ({
         roles: session.roles,
       });
       const hasDirectAccessForThisOrg = session.roles?.some(
-        (r) => grants(roleName)(r) && r.orgId === orgId,
+        (r) => roleGrants(roleName)(r) && r.orgId === orgId,
       );
       return hasDirectAccessForThisOrg
         ? {
@@ -155,7 +155,7 @@ export const checkHasRolesOnOrgs = async ({
     const allAncestorOrgIds = ancestorIdsByOrg.get(orgId);
     const matchingPermission = allAncestorOrgIds
       ? session.roles?.find(
-          (r) => grants(roleName)(r) && allAncestorOrgIds.has(r.orgId),
+          (r) => roleGrants(roleName)(r) && allAncestorOrgIds.has(r.orgId),
         )
       : undefined;
 
@@ -204,9 +204,18 @@ export const checkHasRoleOnAnyOrg = async ({
   db: Context["db"];
   roleName: UserRole;
 }): Promise<boolean> => {
+  // A direct role on any requested org already answers yes, with no query.
+  const requested = new Set(orgIds);
+  if (
+    session?.roles?.some(
+      (r) => roleGrants(roleName)(r) && requested.has(r.orgId),
+    )
+  ) {
+    return true;
+  }
   const outcomes = await checkHasRolesOnOrgs({
     session,
-    checks: [...new Set(orgIds)].map((orgId) => ({ orgId, roleName })),
+    checks: [...requested].map((orgId) => ({ orgId, roleName })),
     db,
   });
   return outcomes.some((outcome) => outcome.success);

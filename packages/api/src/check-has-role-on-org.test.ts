@@ -559,6 +559,18 @@ describe("batched role checks", () => {
       });
       expect(all.counter.executes).toBe(1);
     });
+
+    it("any-of issues no query when a direct role covers one org and others are unresolved", async () => {
+      const { db: counted, counter } = countingDb();
+      const result = await checkHasRoleOnAnyOrg({
+        session: sessions().regionAdminPlusAo,
+        orgIds: [orgs.territoryBranch.ao.id, orgs.directBranch.region.id],
+        db: counted,
+        roleName: "editor",
+      });
+      expect(result).toBe(true);
+      expect(counter.executes).toBe(0);
+    });
   });
 
   describe("any-of / all-of helpers", () => {
