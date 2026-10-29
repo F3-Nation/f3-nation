@@ -1555,6 +1555,9 @@ importers:
       '@acme/prettier-config':
         specifier: workspace:*
         version: link:../../tooling/prettier
+      '@acme/security-headers':
+        specifier: workspace:*
+        version: link:../../packages/security-headers
       '@acme/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript

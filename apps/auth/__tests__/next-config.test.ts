@@ -12,7 +12,7 @@ it("sets the baseline security headers", async () => {
   const path = fileURLToPath(new URL("../next.config.js", import.meta.url));
   const config = ((await import(path)) as { default: NextConfigLike }).default;
 
-  expect(
-    await nextSecurityHeaderProblems(config, { embeddable: false }),
-  ).toEqual([]);
+  expect(await nextSecurityHeaderProblems(config, { frame: "deny" })).toEqual(
+    [],
+  );
 });

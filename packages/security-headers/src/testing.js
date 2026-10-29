@@ -14,13 +14,19 @@
  */
 
 /**
+ * Checks the baseline every app must meet, so an app may send a stricter
+ * policy of its own (apps/region-pages sends a full CSP and a longer HSTS)
+ * and still pass.
+ *
  * @param {NextConfigLike} config
- * @param {{ embeddable: boolean }} options
- *   `embeddable` is the map: intentionally iframed by third-party sites, so it
- *   must send no framing header and keeps `geolocation=(self)`.
+ * @param {import("./index.js").SecurityHeadersOptions} options
+ *   The same options as `nextSecurityHeaders`: what the app is expected to send.
  * @returns {Promise<string[]>}
  */
-export async function nextSecurityHeaderProblems(config, { embeddable }) {
+export async function nextSecurityHeaderProblems(
+  config,
+  { frame, geolocation = false },
+) {
   /** @type {string[]} */
   const problems = [];
   if (config.poweredByHeader !== false) {
@@ -48,7 +54,7 @@ export async function nextSecurityHeaderProblems(config, { embeddable }) {
   };
   want(
     "Strict-Transport-Security",
-    (v) => /^max-age=\d+$/.test(v),
+    (v) => /^max-age=\d+(;|$)/.test(v),
     "max-age=<n>",
   );
   want("X-Content-Type-Options", (v) => v === "nosniff", "nosniff");
@@ -59,25 +65,18 @@ export async function nextSecurityHeaderProblems(config, { embeddable }) {
   );
   want("Permissions-Policy", (v) => v.includes("camera=()"), "camera=()");
 
-  if (embeddable) {
+  const allowed = geolocation ? "geolocation=(self)" : "geolocation=()";
+  want("Permissions-Policy", (v) => v.includes(allowed), allowed);
+
+  if (frame === "embeddable") {
     want("X-Frame-Options", (v) => v === "", "absent");
     want("Content-Security-Policy", (v) => v === "", "absent");
-    want(
-      "Permissions-Policy",
-      (v) => v.includes("geolocation=(self)"),
-      "geolocation=(self)",
-    );
   } else {
     want("X-Frame-Options", (v) => v === "DENY", "DENY");
     want(
       "Content-Security-Policy",
-      (v) => v === "frame-ancestors 'none'",
-      "frame-ancestors 'none'",
-    );
-    want(
-      "Permissions-Policy",
-      (v) => v.includes("geolocation=()"),
-      "geolocation=()",
+      (v) => v.split(";").some((d) => d.trim() === "frame-ancestors 'none'"),
+      "a frame-ancestors 'none' directive",
     );
   }
   return problems;

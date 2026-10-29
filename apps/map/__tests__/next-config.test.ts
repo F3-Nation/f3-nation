@@ -23,6 +23,9 @@ it("sets the baseline security headers", async () => {
   const config = ((await import(path)) as { default: NextConfigLike }).default;
 
   expect(
-    await nextSecurityHeaderProblems(config, { embeddable: true }),
+    await nextSecurityHeaderProblems(config, {
+      frame: "embeddable",
+      geolocation: true,
+    }),
   ).toEqual([]);
 });
