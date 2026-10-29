@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
-import { API_RESPONSE_TIMEOUT_MS, client } from "~/orpc/client";
+import { API_RESPONSE_TIMEOUT_MS, client, watchBody } from "~/orpc/client";
 
 // Unlike the other oRPC tests, this runs the real browser link: it pins the
 // contract that what oRPC throws during a real outage is what the classifier
@@ -158,6 +158,35 @@ describe("map oRPC client during an API outage", () => {
     await vi.advanceTimersByTimeAsync(API_RESPONSE_TIMEOUT_MS);
 
     expect(isApiUnavailableError(await pending)).toBe(true);
+  });
+
+  it("does not time out a body while its reader is the one pausing", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    // Like a real fetch body: fully downloaded, but errors if aborted first.
+    const source = new ReadableStream<Uint8Array>({
+      start(stream) {
+        controller.signal.addEventListener("abort", () => {
+          stream.error(controller.signal.reason);
+        });
+        stream.enqueue(new Uint8Array([1]));
+        stream.enqueue(new Uint8Array([2]));
+        stream.close();
+      },
+    });
+    const reader = watchBody(
+      source,
+      controller,
+      new AbortController().signal,
+      () => undefined,
+    ).getReader();
+
+    await vi.advanceTimersByTimeAsync(API_RESPONSE_TIMEOUT_MS * 2);
+
+    expect(controller.signal.aborted).toBe(false);
+    expect((await reader.read()).value).toEqual(new Uint8Array([1]));
+    expect((await reader.read()).value).toEqual(new Uint8Array([2]));
+    expect((await reader.read()).done).toBe(true);
   });
 
   it("classifies a connection dropped mid-body as unavailable", async () => {

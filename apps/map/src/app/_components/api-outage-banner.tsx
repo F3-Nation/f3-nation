@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Query, QueryClient } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
+import { X } from "lucide-react";
 
 import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 import { retryDelayMs } from "@acme/ui/api-unavailable";
@@ -53,6 +54,9 @@ function retryFailedQueries(queryClient: QueryClient) {
  * The outage is read off the query cache, so every query (not only the map
  * datasets) feeds it without each caller handling the error.
  *
+ * It can be dismissed for the rest of the outage, since it sits over map
+ * controls; retrying carries on, and the next outage shows it again.
+ *
  * It refetches the failed active queries instead of calling
  * `window.location.reload()` (as the me and admin outage screens do): a reload
  * would re-download the ~1.5 MB map datasets that are already on screen.
@@ -64,6 +68,8 @@ export function ApiOutageBanner() {
     () => hasApiOutage(queryClient),
     () => false,
   );
+  const [dismissed, setDismissed] = useState(false);
+  if (!outage && dismissed) setDismissed(false);
 
   useEffect(() => {
     if (!outage) return;
@@ -82,13 +88,13 @@ export function ApiOutageBanner() {
     return () => clearTimeout(timer);
   }, [outage, queryClient]);
 
-  if (!outage) return null;
+  if (!outage || dismissed) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-2 z-[100] flex justify-center px-2">
+    <div className="pointer-events-none fixed inset-x-0 top-2 z-[100] flex justify-center pr-14 pl-2 lg:top-12 lg:justify-end lg:pr-2">
       <div
         role="alert"
-        className="pointer-events-auto flex max-w-md flex-col gap-2 rounded-lg border bg-background p-3 text-sm shadow-lg sm:flex-row sm:items-center"
+        className="pointer-events-auto relative flex max-w-md flex-col gap-2 rounded-lg border bg-background p-3 pr-9 text-sm shadow-lg sm:flex-row sm:items-center lg:max-w-72 lg:flex-col lg:items-start"
       >
         <p>
           <span className="font-semibold">
@@ -102,6 +108,15 @@ export function ApiOutageBanner() {
           onClick={() => void retryFailedQueries(queryClient)}
         >
           Try again
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="absolute top-1 right-1 size-7"
+          aria-label="Dismiss"
+          onClick={() => setDismissed(true)}
+        >
+          <X className="size-4" />
         </Button>
       </div>
     </div>

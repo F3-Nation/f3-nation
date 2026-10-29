@@ -33,7 +33,7 @@ const unavailable = (cause: unknown) =>
  * Re-streams `body` so a stall or a dropped connection mid-download fails as
  * an outage, and runs `done` once the body ends, fails or is cancelled.
  */
-function watchBody(
+export function watchBody(
   body: ReadableStream<Uint8Array>,
   controller: AbortController,
   callerSignal: AbortSignal,
@@ -54,6 +54,8 @@ function watchBody(
       );
       try {
         const chunk = await reader.read();
+        // Until the next pull, the wait is on our own reader, not the API.
+        clearTimeout(idle);
         if (chunk.done) {
           finish();
           stream.close();

@@ -178,6 +178,37 @@ describe("ApiOutageBanner", () => {
     expect(queryFn).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps retrying after it is dismissed", async () => {
+    const queryFn = vi.fn<() => Promise<string>>().mockRejectedValue(outage());
+    setup(queryFn);
+    await vi.advanceTimersByTimeAsync(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(banner()).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(API_RETRY_BASE_MS);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    expect(banner()).toBeNull();
+  });
+
+  it("comes back for the next outage after a dismissed one ends", async () => {
+    const queryFn = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(outage())
+      .mockResolvedValueOnce("ok")
+      .mockRejectedValue(outage());
+    const queryClient = setup(queryFn);
+    await vi.advanceTimersByTimeAsync(0);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    await vi.advanceTimersByTimeAsync(API_RETRY_BASE_MS);
+    expect(queryFn).toHaveBeenCalledTimes(2);
+
+    await queryClient.refetchQueries();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(banner()).not.toBeNull();
+  });
+
   it("retries immediately on Try again", async () => {
     const queryFn = vi
       .fn<() => Promise<string>>()
