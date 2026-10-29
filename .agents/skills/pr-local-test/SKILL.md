@@ -333,15 +333,18 @@ first row whose condition is true:
 | ✅ **Approve**                            | Nothing to post but the summary                                                                                                          |
 
 Under the verdict, add one plain sentence explaining it. For ❌ and ⏸️, add what would change
-the verdict (for open conversations: "Resolve the <OPEN_THREADS> open review conversations,
-then re-test."; if the count is unknown: "Couldn't check for open review conversations; re-run
-once GitHub answers."; if conflict status is unknown: "Couldn't check for conflicts; re-run once
-git or GitHub can answer."). If the PR is behind its base or has conflicts, add one more line:
+the verdict (for open conversations: "The author resolves the <OPEN_THREADS> open review
+conversations."; if the count is unknown: "Couldn't check for open review conversations;
+re-run once GitHub answers."; if conflict status is unknown: "Couldn't check for conflicts;
+re-run once git or GitHub can answer."). If the PR is behind its base or has conflicts, add one more line:
 "<BEHIND> commits behind <base>; conflicts in <files>; this result is for the tested commit, so
 update the branch before merging." If the conflict file list is empty, write "conflicts in
 files git didn't name" instead. Drop the conflicts clause only when there are no conflicts.
-Never call the PR ready to merge while it is behind or conflicting. Problems "not caused by
-this PR" never change the verdict. ➖ rows count as passed when their tests pass.
+Don't say the PR must be re-tested: whether this skill runs again after a ❌ or ⏸️ is the
+reviewer's call, so name what would change the verdict and stop there. Never call the PR
+ready to merge while it is behind or conflicting.
+Problems "not caused by this PR" never change the verdict. ➖ rows count as passed when their
+tests pass.
 When the user's 🙋 results arrive, work out the verdict again and show it again.
 
 **Draft feedback (don't post yet):**

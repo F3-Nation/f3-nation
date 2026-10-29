@@ -21,6 +21,9 @@ export const env = createEnv({
     F3_GOOGLE_API_KEY: z.string().min(1),
     F3_MAP_BASE_URL: z.url(),
     SUPER_ADMIN_API_KEY: z.string().min(1),
+    // Shared with the API, which trusts the client IP this app's /api/orpc
+    // proxy reports only when it matches. Unset, the proxy reports none.
+    PROXY_CLIENT_IP_SECRET: z.string().min(32).optional(),
   },
   /**
    * Specify your client-side environment variables schema here.

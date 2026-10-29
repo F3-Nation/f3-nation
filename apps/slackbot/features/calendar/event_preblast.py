@@ -1250,6 +1250,18 @@ def route_preblast_overflow_action(
 # ---------------------------------------------------------------------------
 
 
+def _user_is_q(event_instance_id: int, user_id: int) -> bool:
+    """Return True if the user is the Q or a Co-Q of the event.
+
+    Reads live attendance rather than the message's ``qs`` metadata, which is
+    only refreshed when the preblast message is rewritten.
+    """
+    attendance = _build_attendance_service().get_planned_for_event_instance(event_instance_id)
+    return any(
+        att.user_id == user_id and {Q_TYPE_ID, CO_Q_TYPE_ID}.intersection(att.attendance_type_ids) for att in attendance
+    )
+
+
 def handle_event_preblast_action(
     body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings
 ):
@@ -1366,6 +1378,23 @@ def handle_event_preblast_action(
     else:
         # Message-embedded actions (outside modal)
         if action_id == actions.EVENT_PREBLAST_HC_UN_HC:
+            # A Q or Co-Q can't Un-HC their own event, so a click from one is
+            # ignored rather than stripping their HC and announcing it.
+            try:
+                if _user_is_q(event_instance_id, user_id):
+                    return
+            except Exception as e:
+                # Without confirmed Q status, an HC change could strip a Q's HC.
+                logger.warning(f"Error checking Q status for event {event_instance_id}: {e}")
+                post_hc_failure_ephemeral(
+                    body,
+                    client,
+                    logger,
+                    metadata,
+                    slack_user_id,
+                    "Sorry, we couldn't update your HC — please try again.",
+                )
+                return
             already_hcd = user_id in (safe_get(metadata, "attendees") or [])
             if already_hcd:
                 try:
