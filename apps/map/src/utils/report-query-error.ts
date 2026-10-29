@@ -19,7 +19,7 @@ const reportedErrors = new WeakSet<object>();
 export function reportQueryError(
   error: Error | null | undefined,
   event: string,
-) {
+): void {
   if (!error || reportedErrors.has(error)) return;
   reportedErrors.add(error);
   // Gate on the env flag — the same stable signal instrumentation-client.ts
