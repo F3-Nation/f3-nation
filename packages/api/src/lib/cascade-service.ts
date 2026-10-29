@@ -295,7 +295,10 @@ async function createEventInstancesForSeriesInTransaction(
 
   const instanceRecords: (typeof schema.eventInstances.$inferInsert)[] = [];
 
-  let currentDate = new Date(startDate);
+  // Walk from the series start, not from startDate, so the recurrenceInterval
+  // phase stays anchored to the series when generation begins at a later
+  // cutoff. Dates before startDate only advance the counters.
+  let currentDate = new Date(seriesStartDate);
   let currentInterval = 1;
   let currentIndex = 0;
 
@@ -306,16 +309,13 @@ async function createEventInstancesForSeriesInTransaction(
       currentDate.getMonth(),
       1,
     );
-    const actualStart = new Date(startDate);
 
-    while (currentDate <= actualStart) {
+    while (currentDate < seriesStartDate) {
       if (getDayOfWeek(currentDate) === series.dayOfWeek) {
         currentIndex++;
       }
       currentDate = addDays(currentDate, 1);
     }
-    // Reset to iterate from start
-    currentDate = new Date(startDate);
   }
 
   // Event creation algorithm
@@ -324,9 +324,12 @@ async function createEventInstancesForSeriesInTransaction(
       currentIndex++;
 
       const shouldCreate =
-        recurrencePattern === "weekly" || currentIndex === indexWithinInterval;
+        recurrencePattern === "weekly" ||
+        (indexWithinInterval === 0
+          ? addDays(currentDate, 7).getMonth() !== currentDate.getMonth()
+          : currentIndex === indexWithinInterval);
 
-      if (shouldCreate && currentInterval === 1) {
+      if (shouldCreate && currentInterval === 1 && currentDate >= startDate) {
         instanceRecords.push({
           name: series.name,
           description: series.description,
