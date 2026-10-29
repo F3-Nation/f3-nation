@@ -36,8 +36,9 @@ STRAVA_CLIENT_SECRET = "STRAVA_CLIENT_SECRET"
 LOW_REZ_IMAGE_SIZE = 1000
 
 # EventInstance.meta keys for the preblast photo. The URL keys point at copies in the
-# event_instance_images bucket; PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY is only read, as a
-# fallback for preblasts saved before photos moved to storage.
+# event_instance_images bucket, and PREBLAST_IMAGE_SOURCE_FILE_ID records the Slack file
+# they were copied from. PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY is only read, as a fallback
+# for preblasts whose photo exists only as a Slack file id.
 PREBLAST_IMAGE_URL = "preblast_image_url"
 PREBLAST_IMAGE_LOW_REZ_URL = "preblast_image_low_rez_url"
 PREBLAST_IMAGE_SOURCE_FILE_ID = "preblast_image_source_slack_file_id"

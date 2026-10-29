@@ -889,15 +889,19 @@ def upload_files_to_storage(
                     headers={"Authorization": f"Bearer {client.token}"},
                     params={"width": constants.LOW_REZ_IMAGE_SIZE, "height": constants.LOW_REZ_IMAGE_SIZE},
                 )
-                file_name_low_res = f"{file_id}_low_res.png"
-                file_path_low_res = f"/mnt/{bucket_name}/{file_name_low_res}"
+                # A failed thumbnail is skipped rather than raised, so the full image is still kept
+                if r_low_res.ok:
+                    file_name_low_res = f"{file_id}_low_res.png"
+                    file_path_low_res = f"/mnt/{bucket_name}/{file_name_low_res}"
 
-                with open(file_path_low_res, "wb") as f:
-                    f.write(r_low_res.content)
+                    with open(file_path_low_res, "wb") as f:
+                        f.write(r_low_res.content)
 
-                low_res_file_list.append(
-                    f"https://storage.googleapis.com/{constants.FILE_BUCKET_PREFIX}/{bucket_name}/{file_name_low_res}"
-                )
+                    low_res_file_list.append(
+                        f"https://storage.googleapis.com/{constants.FILE_BUCKET_PREFIX}/{bucket_name}/{file_name_low_res}"
+                    )
+                else:
+                    logger.warning(f"Thumbnail download for file {file['id']} failed with HTTP {r_low_res.status_code}")
 
             change_to_png = enforce_png and file["filetype"] != "png"
             if enforce_square or max_height or change_to_png:

@@ -20,6 +20,7 @@ from logging import Logger
 from typing import Any
 
 from f3_data_models.models import Attendance, AttendanceType, EventInstance, Org
+from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 from sqlalchemy import or_
 
@@ -639,6 +640,7 @@ def handle_event_preblast_edit(
     # multiselect field is present, its value is authoritative; an empty value
     # intentionally clears all Co-Qs while preserving the existing Q.
     if actions.EVENT_PREBLAST_COQS in form_data:
+        photo_note = f" {PREBLAST_IMAGE_UPLOAD_FAILED_TEXT}" if image_upload_failed else ""
         coq_slack_ids = form_data.get(actions.EVENT_PREBLAST_COQS) or []
         coq_user_ids: list[int | str] = []
         unresolved_coq_slack_ids: list[str] = []
@@ -658,7 +660,7 @@ def handle_event_preblast_edit(
                 text=(
                     "Preblast details were saved, but Co-Qs were not updated because "
                     f"these Slack users could not be resolved: {failed_coqs}. "
-                    "Please reopen the form and try again."
+                    f"Please reopen the form and try again.{photo_note}"
                 ),
                 level=constants.AlertLevel.ERROR,
                 logger=logger,
@@ -689,7 +691,7 @@ def handle_event_preblast_edit(
                 title="Co-Qs not saved",
                 text=(
                     "Preblast details were saved, but Co-Qs were not updated. "
-                    f"{coq_failure_detail} Please reopen the form and try again."
+                    f"{coq_failure_detail} Please reopen the form and try again.{photo_note}"
                 ),
                 level=constants.AlertLevel.ERROR,
                 logger=logger,
@@ -760,9 +762,13 @@ def _upload_preblast_image(
 ) -> dict[str, str] | None:
     """Copy a preblast photo from Slack into the event_instance_images bucket.
 
-    The object name carries a ``preblast_`` prefix so it never collides with the
-    backblast photo (named by event instance id alone), and the source file id so a
-    replacement photo gets a new URL instead of one Slack or a CDN has cached.
+    The object name starts with the event instance id, so it sorts next to the backblast
+    photo (named by event instance id alone), and ends with the source file id and a
+    ``_preblast`` suffix, so it never collides with the backblast photo and a replacement
+    photo gets a new URL instead of one Slack or a CDN has cached.
+
+    A GIF uses its full-size URL as the low-res URL: Slack's thumbnails are still images,
+    so the thumbnail would stop the GIF from animating.
 
     Returns the ``EventInstance.meta`` updates for the photo, or None if the upload failed.
     """
@@ -773,17 +779,20 @@ def _upload_preblast_image(
             client=client,
             logger=logger,
             bucket_name="event_instance_images",
-            file_name=f"preblast_{event_instance_id}_{source_file_id}",
+            file_name=f"{event_instance_id}_{source_file_id}_preblast",
         )
-    except Exception as e:
-        logger.error(f"Error uploading preblast image for event {event_instance_id}: {e}")
+    except Exception:
+        logger.exception("Error uploading preblast image for event %s", event_instance_id)
         return None
     if not file_list:
         logger.error(f"Preblast image upload for event {event_instance_id} produced no file")
         return None
+    is_gif = safe_get(file_obj, "filetype") == "gif"
     return {
         constants.PREBLAST_IMAGE_URL: file_list[0],
-        constants.PREBLAST_IMAGE_LOW_REZ_URL: low_rez_file_list[0] if low_rez_file_list else file_list[0],
+        constants.PREBLAST_IMAGE_LOW_REZ_URL: (
+            file_list[0] if is_gif or not low_rez_file_list else low_rez_file_list[0]
+        ),
         constants.PREBLAST_IMAGE_SOURCE_FILE_ID: source_file_id,
     }
 
@@ -805,6 +814,33 @@ def _insert_preblast_image(blocks: list[dict[str, Any]], meta: dict[str, Any] | 
     image_block = _preblast_image_block(meta)
     if image_block:
         blocks.insert(-1, image_block)
+
+
+SLACK_BLOCK_REJECTION_ERRORS = {"invalid_blocks", "msg_blocks_too_long", "msg_too_long"}
+
+
+def _send_preblast_blocks(api_call, blocks: list[dict[str, Any]], logger: Logger, **kwargs):
+    """Post or update a preblast message, degrading when Slack rejects its blocks.
+
+    On a block rejection this retries once without the photo, which keeps the message's
+    content and buttons when Slack can't fetch the image, then falls back to plain ``text``.
+    Any other error is re-raised.
+    """
+    try:
+        return api_call(blocks=blocks, **kwargs)
+    except SlackApiError as exc:
+        if exc.response.get("error") not in SLACK_BLOCK_REJECTION_ERRORS:
+            raise
+        logger.warning(f"Slack rejected preblast blocks: {exc.response.get('error')}")
+    without_image = [b for b in blocks if b.get("alt_text") != "Preblast Image"]
+    if len(without_image) < len(blocks):
+        try:
+            return api_call(blocks=without_image, **kwargs)
+        except SlackApiError as exc:
+            if exc.response.get("error") not in SLACK_BLOCK_REJECTION_ERRORS:
+                raise
+            logger.warning(f"Slack rejected preblast blocks without the photo: {exc.response.get('error')}")
+    return api_call(**kwargs)
 
 
 def _format_attendance_user(attendance: AttendanceData, attendance_slack_dict: dict[int, str]) -> str:
@@ -832,8 +868,9 @@ def send_preblast(
     """Post or update a preblast message in Slack.
 
     Uses ``PreblastService.decide_post_mode()`` and ``persist_posted_preblast()``
-    to handle all post-mode scenarios. A ``warning`` (a partial failure earlier in
-    the submission) is appended to the submitter's result and marks it an error.
+    to handle all post-mode scenarios. A ``warning`` (a failed photo upload earlier in
+    the submission) is appended to the submitter's result and the bot log, and shows the
+    result at error level, titled "Photo not saved" when the post itself succeeded.
     """
     logger = logger or logging.getLogger(__name__)
     outcome = "success"  # used for logging and user feedback
@@ -888,31 +925,29 @@ def send_preblast(
     # Desired channel: prefer form override saved in meta, else default
     desired_channel = str((event.meta or {}).get("preblast_channel_id") or default_channel)
 
-    if not desired_channel:
-        action_text = "saved (no channel)"
-        post_bot_log(
-            client=client,
-            region_record=region_record,
-            text=f":mega: Preblast {action_text}",
-            logger=logger,
+    if desired_channel:
+        decision = svc.decide_post_mode(
+            event,
+            desired_channel,
+            posted_channel_fallback_id=default_channel,
+            force_repost=repost,
         )
-        return
+        mode = decision.mode
+    else:
+        decision = None
+        mode = None
+        action_text = "saved (no channel)"
 
-    decision = svc.decide_post_mode(
-        event,
-        desired_channel,
-        posted_channel_fallback_id=default_channel,
-        force_repost=repost,
-    )
-
-    if decision.mode == PostMode.SAVE:
+    if mode == PostMode.SAVE:
         action_text = "saved"
-    if decision.mode in (PostMode.POST_NEW, PostMode.POST_NEW_CHANNEL):
-        action_text = "posted" if decision.mode == PostMode.POST_NEW else "posted in new channel"
+    if mode in (PostMode.POST_NEW, PostMode.POST_NEW_CHANNEL):
+        action_text = "posted" if mode == PostMode.POST_NEW else "posted in new channel"
         res = None
         try:
-            res = client.chat_postMessage(
-                blocks=blocks,
+            res = _send_preblast_blocks(
+                client.chat_postMessage,
+                blocks,
+                logger,
                 channel=desired_channel,
                 text="Event Preblast",
                 metadata={"event_type": "preblast", "event_payload": metadata_dict},
@@ -940,11 +975,13 @@ def send_preblast(
                 logger.error(f"Error persisting posted preblast for event {event_instance_id}: {e}")
                 action_text = "was posted but was not fully saved; it may not be marked as posted in the database."
                 outcome = "error"
-    elif decision.mode == PostMode.UPDATE_EXISTING:
+    elif mode == PostMode.UPDATE_EXISTING:
         posted_channel = decision.posted_channel_id or desired_channel
         try:
-            client.chat_update(
-                blocks=blocks,
+            _send_preblast_blocks(
+                client.chat_update,
+                blocks,
+                logger,
                 channel=posted_channel,
                 ts=f"{decision.existing_preblast_ts:.6f}",
                 text="Event Preblast",
@@ -960,14 +997,13 @@ def send_preblast(
 
     log_msg = f":mega: Preblast {action_text} for *{event.name}* on *{event.start_date}* by <@{slack_user_id or 'app'}>"
     user_msg = f"Preblast {action_text}"
-    if warning:
-        outcome = "error"
-    if outcome == "success":
+    if outcome == "success" and not warning:
         user_msg += " successfully!"
     if desired_channel and event.preblast_ts:
         log_msg += f" <slack://channel?team={region_record.team_id}&id={desired_channel}&ts={event.preblast_ts}|Link>\n"
         user_msg += f" <slack://channel?team={region_record.team_id}&id={desired_channel}&ts={event.preblast_ts}| Link>"
     if warning:
+        log_msg = f"{log_msg.rstrip()}\n:warning: {warning}"
         user_msg += f"\n{warning}"
     post_bot_log(
         client=client,
@@ -976,13 +1012,19 @@ def send_preblast(
         logger=logger,
     )
 
+    if outcome != "success":
+        title = "Error"
+    elif warning:
+        title = "Photo not saved"
+    else:
+        title = "Complete!"
     submission_view_id = safe_get(body, "submission_view_id") or safe_get(body, "view", "id")
     if submission_view_id:
         update_submission_wait_view(
             client=client,
-            title="Complete!" if outcome == "success" else "Error",
+            title=title,
             text=user_msg,
-            level=constants.AlertLevel.SUCCESS if outcome == "success" else constants.AlertLevel.ERROR,
+            level=constants.AlertLevel.SUCCESS if title == "Complete!" else constants.AlertLevel.ERROR,
             logger=logger,
             view_id=submission_view_id,
         )
@@ -1283,10 +1325,12 @@ def handle_event_preblast_action(
             q_url = q_url[0] if q_url else None
             preblast_channel = get_preblast_channel(region_record, preblast_info)
             try:
-                client.chat_update(
+                _send_preblast_blocks(
+                    client.chat_update,
+                    blocks,
+                    logger,
                     channel=preblast_channel,
                     ts=metadata["preblast_ts"],
-                    blocks=blocks,
                     text="Event Preblast",
                     metadata={"event_type": "preblast", "event_payload": metadata},
                     username=f"{q_name} (via F3 Nation)",
@@ -1374,10 +1418,12 @@ def handle_event_preblast_action(
             metadata["preblast_channel_id"] = preblast_channel
 
             try:
-                client.chat_update(
+                _send_preblast_blocks(
+                    client.chat_update,
+                    blocks,
+                    logger,
                     channel=preblast_channel,
                     ts=body["message"]["ts"],
-                    blocks=blocks,
                     text="Preblast",
                     metadata={"event_type": "preblast", "event_payload": metadata},
                     username=f"{q_name} (via F3 Nation)",
