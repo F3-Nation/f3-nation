@@ -119,6 +119,10 @@ export PATH="$bin:$PATH"
 init_out="$(cd "$tmp_dir/main" && bash "$prt" init 1 2>&1)"
 assert_eq "init succeeds" "0" "$?"
 run="$(printf '%s\n' "$init_out" | sed -n 's/^RUN_DIR=//p')"
+[ -n "$run" ] || {
+  echo "FAIL: init did not print RUN_DIR" >&2
+  exit 1
+}
 assert_eq "init leaves the symlink target untouched" "untouched" "$(cat "$victim")"
 assert_eq "init replaces a tracked .env symlink with a regular file" "no" "$([ -L "$run/wt/.env" ] && echo yes || echo no)"
 assert_contains "init writes the run's own .env" "COMPOSE_PROJECT_NAME=prt-" "$(cat "$run/wt/.env")"
