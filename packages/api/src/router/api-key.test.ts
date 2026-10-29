@@ -954,6 +954,34 @@ describe("API Key Router", () => {
       expect(ids).toContain(created.id);
     });
 
+    it("reports the first role it cannot grant, in request order, and creates nothing", async () => {
+      await mockAuthWithSession(regionAdminSession());
+      const client = createTestClient();
+      const name = `First denied ${uniqueId()}`;
+
+      const error: unknown = await client.apiKey
+        .create({
+          name,
+          roles: [
+            { orgId: tree.directBranch.ao.id, roleName: "editor" },
+            { orgId: tree.unrelatedBranch.ao.id, roleName: "editor" },
+            { orgId: tree.nation.id, roleName: "admin" },
+          ],
+        })
+        .catch((e: unknown) => e);
+
+      expect(error).toMatchObject({
+        code: "FORBIDDEN",
+        message: `You do not have permission to grant "editor" role on organization ${tree.unrelatedBranch.ao.id}`,
+      });
+
+      const rows = await db
+        .select({ id: schema.apiKeys.id })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.name, name));
+      expect(rows).toEqual([]);
+    });
+
     it("manages an in-scope key without ever returning its secret", async () => {
       const inScope = await insertKey(otherUserId, [
         { orgId: tree.directBranch.ao.id, roleName: "editor" },
