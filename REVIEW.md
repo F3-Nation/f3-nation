@@ -83,7 +83,7 @@ across `docs/`, `AGENTS.md` files, `README.md` files and `.agents/skills/`.
 | CI job or required check                  | `docs/CI_PIPELINE.md`, deploy `check-regexp`s                                                                                                                                              |
 | Release/deploy workflow                   | `docs/RELEASE_PROCESS.md`, `.agents/skills/release-plan/`                                                                                                                                  |
 | Local dev scripts, ports, Docker          | `docs/LOCAL_DEV_DOCKER.md`, `AGENTS.md` commands                                                                                                                                           |
-| Logging events or conventions             | `docs/LOGGING.md`                                                                                                                                                                          |
+| Logging conventions                       | `docs/LOGGING.md`                                                                                                                                                                          |
 | Test/coverage tooling                     | `docs/testing.md`                                                                                                                                                                          |
 | Analytics dataset contract                | `docs/duckdb-producer-contract.md`                                                                                                                                                         |
 | An app's structure, env or auth flow      | That app's `AGENTS.md` and `README.md`                                                                                                                                                     |
@@ -98,6 +98,9 @@ Repo decisions that review bots have repeatedly flagged by mistake.
   unrelated-looking PR. Do flag a threshold that goes **down**.
 - `console.*` and direct `process.env` in operator CLIs and verification
   harnesses (`AGENTS.md` § Logging lists them).
+- A new or renamed log event with no `docs/LOGGING.md` entry. That guide
+  documents conventions, not a catalog of events; an event is described where
+  it is logged.
 - Drizzle-generated filenames (`NNNN_snake_case.sql`, `NNNN_snapshot.json`),
   Next.js segment folders (`[orgSegment]`), and `SKILL.md`, `README.md`,
   `AGENTS.md`, `REVIEW.md` or uppercase `docs/*.md` names, as kebab-case
