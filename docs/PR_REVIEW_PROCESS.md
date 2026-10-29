@@ -105,7 +105,7 @@ When it doesn't, its results say what has to change, and the author makes those 
 
 ## Addressing feedback
 
-The PR's author is responsible for resolving its review threads. For every thread — from a bot, the inline review, the local test, or a codeowner:
+**The PR's author is responsible for resolving its review threads.** For every thread — from a bot, the inline review, the local test, or a codeowner:
 
 1. **Reply first.** Say what you changed, or why you're not changing it. The reply is the only record a reviewer has of how the comment was handled.
 2. **Then resolve it.** Click **Resolve conversation** on GitHub once you believe the item is handled. AI assistants post replies but never resolve threads, so each resolution means the author has read the reply and agrees it's done.
