@@ -116,7 +116,9 @@ walks the org hierarchy (AO → region → … → nation) so a region admin is
 authorized for its AOs. Never call it in a loop over many orgs (an N+1 on the
 auth path): use `checkHasRolesOnOrgs` (per-check results),
 `checkHasRoleOnAnyOrg` or `checkHasRoleOnAllOrgs` from the same file, which
-resolve every org's ancestors in a single query and return the same decisions.
+return the same decisions with one hierarchy query per chunk of up to 10,000
+orgs not already covered by a direct role (no query when direct roles cover
+every check).
 
 ### Reads expose PII too
 
