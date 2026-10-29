@@ -7,6 +7,21 @@
 // of a test-runner dependency and a test can `expect(problems).toEqual([])` to
 // see every miss at once.
 
+import { HSTS_VALUE } from "./index.js";
+
+const DISABLED_FEATURES = [
+  "camera=()",
+  "microphone=()",
+  "payment=()",
+  "usb=()",
+];
+
+/** @param {string} value */
+const hstsMaxAge = (value) =>
+  Number(/^max-age=(\d+)(;|$)/.exec(value)?.[1] ?? -1);
+
+const MIN_HSTS_MAX_AGE = hstsMaxAge(HSTS_VALUE);
+
 /**
  * @typedef {object} NextConfigLike
  * @property {boolean} [poweredByHeader]
@@ -54,8 +69,8 @@ export async function nextSecurityHeaderProblems(
   };
   want(
     "Strict-Transport-Security",
-    (v) => /^max-age=\d+(;|$)/.test(v),
-    "max-age=<n>",
+    (v) => hstsMaxAge(v) >= MIN_HSTS_MAX_AGE,
+    `max-age>=${MIN_HSTS_MAX_AGE}`,
   );
   want("X-Content-Type-Options", (v) => v === "nosniff", "nosniff");
   want(
@@ -63,10 +78,13 @@ export async function nextSecurityHeaderProblems(
     (v) => v === "strict-origin-when-cross-origin",
     "strict-origin-when-cross-origin",
   );
-  want("Permissions-Policy", (v) => v.includes("camera=()"), "camera=()");
-
+  const permissions = new Set(
+    (h["Permissions-Policy"] ?? "").split(",").map((d) => d.trim()),
+  );
   const allowed = geolocation ? "geolocation=(self)" : "geolocation=()";
-  want("Permissions-Policy", (v) => v.includes(allowed), allowed);
+  for (const directive of [...DISABLED_FEATURES, allowed]) {
+    want("Permissions-Policy", () => permissions.has(directive), directive);
+  }
 
   if (frame === "embeddable") {
     want("X-Frame-Options", (v) => v === "", "absent");

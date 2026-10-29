@@ -12,6 +12,18 @@ const embeddable = {
   headers: nextSecurityHeaders({ frame: "embeddable", geolocation: true }),
 };
 
+/** Returns `config` with one header's value replaced. */
+function withHeader(config: typeof deny, key: string, value: string) {
+  return {
+    ...config,
+    headers: async () =>
+      (await config.headers()).map((rule) => ({
+        ...rule,
+        headers: rule.headers.map((h) => (h.key === key ? { key, value } : h)),
+      })),
+  };
+}
+
 describe("nextSecurityHeaderProblems", () => {
   it("accepts the helper's own output for each framing mode", async () => {
     expect(await nextSecurityHeaderProblems(deny, { frame: "deny" })).toEqual(
@@ -39,7 +51,8 @@ describe("nextSecurityHeaderProblems", () => {
               },
               {
                 key: "Permissions-Policy",
-                value: "camera=(), geolocation=(self)",
+                value:
+                  "camera=(), microphone=(), payment=(), usb=(), geolocation=(self)",
               },
               { key: "X-Content-Type-Options", value: "nosniff" },
               {
@@ -71,7 +84,31 @@ describe("nextSecurityHeaderProblems", () => {
         "headers() must return exactly one rule for /:path*",
         expect.stringMatching(/^Strict-Transport-Security/),
         expect.stringMatching(/^X-Frame-Options/),
+        expect.stringMatching(/^X-Content-Type-Options/),
+        expect.stringMatching(/^Referrer-Policy/),
+        expect.stringContaining("want camera=()"),
       ]),
+    );
+  });
+
+  it("reports an HSTS max-age below the baseline", async () => {
+    const config = withHeader(deny, "Strict-Transport-Security", "max-age=0");
+    expect(await nextSecurityHeaderProblems(config, { frame: "deny" })).toEqual(
+      [expect.stringMatching(/^Strict-Transport-Security.*max-age>=31536000/)],
+    );
+  });
+
+  it("reports a missing or lookalike Permissions-Policy directive", async () => {
+    const config = withHeader(
+      deny,
+      "Permissions-Policy",
+      "not-camera=(), payment=(), usb=(), geolocation=()",
+    );
+    expect(await nextSecurityHeaderProblems(config, { frame: "deny" })).toEqual(
+      [
+        expect.stringContaining("want camera=()"),
+        expect.stringContaining("want microphone=()"),
+      ],
     );
   });
 
