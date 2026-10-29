@@ -318,9 +318,13 @@ client is hostile.
   test.
 - Enforce on the server anything the UI gates; a disabled button is not a
   control.
-- Dev-only auth providers are gated by a server-side runtime allowlist
-  (`F3_CHANNEL`) that fails closed, never by a `NEXT_PUBLIC_*` build-time
-  value.
+- Dev-only auth (a dev sign-in provider, the API's mock session) is gated on
+  the server by a channel allowlist that fails closed, never by a
+  `NEXT_PUBLIC_*` value alone: Next.js freezes one into the bundle when it is
+  set at build. Next.js-only code reads `F3_CHANNEL`. `packages/api/src/shared.ts`
+  also runs in `apps/api`, which has no `F3_CHANNEL`, so it reads
+  `NEXT_PUBLIC_CHANNEL` and also requires `NODE_ENV === "development"`, which
+  no deployed build has.
 
 ### Tests
 
