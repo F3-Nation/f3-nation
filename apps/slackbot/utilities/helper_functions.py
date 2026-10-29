@@ -964,47 +964,6 @@ def highest_resolution_thumb(file: Dict[str, Any]) -> str:
     return file[f"thumb_{thumb_size}"]
 
 
-def reupload_file_as_bot(
-    file: Dict[str, Any],
-    client: WebClient,
-    logger: Logger,
-    region_record: SlackSettings = None,
-    filename: str = None,
-) -> str | None:
-    """Download a user-uploaded Slack file and re-upload it as the bot to the bot log channel.
-
-    Uploading to the public bot log channel ensures the file is accessible workspace-wide,
-    allowing it to be referenced in slack_file image blocks in channel messages.
-
-    Returns the bot-owned file ID, or None on failure.
-    """
-    from utilities.bot_logger import _ensure_bot_in_channel, _find_or_create_log_channel  # noqa: PLC0415
-
-    try:
-        r = requests.get(file["url_private_download"], headers={"Authorization": f"Bearer {client.token}"})
-        r.raise_for_status()
-        fname = filename or f"{file['id']}.{file.get('filetype', 'bin')}"
-
-        # Resolve the bot log channel so the uploaded file is publicly accessible workspace-wide
-        channel_id = region_record.bot_log_channel if region_record else None
-        if not channel_id:
-            channel_id = _find_or_create_log_channel(client, logger)
-            if channel_id:
-                _ensure_bot_in_channel(client, channel_id, logger)
-
-        response = client.files_upload_v2(
-            filename=fname,
-            file=r.content,
-            channel=channel_id,
-        )
-        print(f"Re-uploaded file {file['id']} as bot with new file ID {safe_get(response, 'file', 'id')}")
-        print(f"Response from Slack API: {response}")
-        return safe_get(response, "files", 0, "id")
-    except Exception as e:
-        logger.error(f"Error re-uploading file {safe_get(file, 'id')} as bot: {e}")
-        return None
-
-
 # Helper function to sort by name, ignoring any prefixes we might want to ignore
 # Example: The Name, should just be sorted as Name
 def sort_by_name(extractor):

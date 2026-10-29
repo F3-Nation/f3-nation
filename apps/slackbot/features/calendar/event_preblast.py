@@ -15,13 +15,11 @@ from __future__ import annotations
 import json
 import logging
 import random
-import time
 from dataclasses import dataclass
 from logging import Logger
 from typing import Any
 
 from f3_data_models.models import Attendance, AttendanceType, EventInstance, Org
-from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 from sqlalchemy import or_
 
@@ -54,9 +52,9 @@ from utilities.helper_functions import (
     get_user_names,
     parse_rich_block,
     replace_user_channel_ids,
-    reupload_file_as_bot,
     safe_convert,
     safe_get,
+    upload_files_to_storage,
 )
 from utilities.slack import actions, orm
 
@@ -598,16 +596,15 @@ def handle_event_preblast_edit(
 
     # Handle image upload
     meta_updates: dict[str, Any] = {}
+    image_upload_failed = False
     image_data = form_data.get(actions.EVENT_PREBLAST_IMAGE)
     if image_data:
         file_obj = safe_get(image_data, 0) if isinstance(image_data, list) else image_data
-        try:
-            file_id = reupload_file_as_bot(file_obj, client, logger, region_record=region_record) or safe_get(
-                file_obj, "id"
-            )
-            meta_updates["preblast_image_slack_file_id"] = file_id
-        except Exception as e:
-            logger.error(f"Error reuploading preblast image for event {event_instance_id}: {e}")
+        image_meta = _upload_preblast_image(file_obj, event_instance_id, client, logger)
+        if image_meta:
+            meta_updates.update(image_meta)
+        else:
+            image_upload_failed = True
 
     # Resolve channel from form selector or existing meta
     desired_channel = form_data.get("preblast_channel_selector") or None
@@ -727,8 +724,18 @@ def handle_event_preblast_edit(
             region_record,
             event_instance_id,
             repost=repost,
+            warning=PREBLAST_IMAGE_UPLOAD_FAILED_TEXT if image_upload_failed else None,
         )
 
+    elif image_upload_failed:
+        update_submission_wait_view(
+            client=client,
+            title="Photo not saved",
+            text=f"Preblast saved. {PREBLAST_IMAGE_UPLOAD_FAILED_TEXT}",
+            level=constants.AlertLevel.ERROR,
+            logger=logger,
+            view_id=submission_view_id,
+        )
     else:
         update_submission_wait_view(
             client=client,
@@ -745,27 +752,59 @@ def handle_event_preblast_edit(
 # ---------------------------------------------------------------------------
 
 
-def _post_blocks(api_call, blocks: list, logger: Logger, max_retries: int = 3, **kwargs):
-    """Call a Slack API method with blocks, retrying on invalid slack file errors.
+PREBLAST_IMAGE_UPLOAD_FAILED_TEXT = "The photo could not be uploaded; reopen the preblast and try adding it again."
 
-    Slack occasionally needs a moment to process a freshly uploaded file before it
-    can be referenced in a slack_file image block.  On that specific error, this
-    retries with exponential back-off (1 s, 2 s, 4 s) rather than a fixed sleep.
-    All other errors are re-raised immediately.
+
+def _upload_preblast_image(
+    file_obj: dict[str, Any], event_instance_id: int, client: WebClient, logger: Logger
+) -> dict[str, str] | None:
+    """Copy a preblast photo from Slack into the event_instance_images bucket.
+
+    The object name carries a ``preblast_`` prefix so it never collides with the
+    backblast photo (named by event instance id alone), and the source file id so a
+    replacement photo gets a new URL instead of one Slack or a CDN has cached.
+
+    Returns the ``EventInstance.meta`` updates for the photo, or None if the upload failed.
     """
-    for attempt in range(max_retries):
-        try:
-            return api_call(blocks=blocks, **kwargs)
-        except SlackApiError as exc:
-            is_file_not_ready = exc.response.get("error") == "invalid_blocks" and any(
-                "slack file" in (e or "") for e in exc.response.get("errors", [])
-            )
-            if is_file_not_ready and attempt < max_retries - 1:
-                wait = 2**attempt  # 1 s, 2 s, 4 s …
-                logger.warning(f"Slack file not ready (attempt {attempt + 1}/{max_retries}), retrying in {wait}s")
-                time.sleep(wait)
-                continue
-            raise
+    source_file_id = safe_get(file_obj, "id")
+    try:
+        file_list, _, _, low_rez_file_list = upload_files_to_storage(
+            files=[file_obj],
+            client=client,
+            logger=logger,
+            bucket_name="event_instance_images",
+            file_name=f"preblast_{event_instance_id}_{source_file_id}",
+        )
+    except Exception as e:
+        logger.error(f"Error uploading preblast image for event {event_instance_id}: {e}")
+        return None
+    if not file_list:
+        logger.error(f"Preblast image upload for event {event_instance_id} produced no file")
+        return None
+    return {
+        constants.PREBLAST_IMAGE_URL: file_list[0],
+        constants.PREBLAST_IMAGE_LOW_REZ_URL: low_rez_file_list[0] if low_rez_file_list else file_list[0],
+        constants.PREBLAST_IMAGE_SOURCE_FILE_ID: source_file_id,
+    }
+
+
+def _preblast_image_block(meta: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return the image block for a preblast's stored photo, or None if it has none."""
+    meta = meta or {}
+    image_url = meta.get(constants.PREBLAST_IMAGE_LOW_REZ_URL) or meta.get(constants.PREBLAST_IMAGE_URL)
+    if image_url:
+        return {"type": "image", "image_url": image_url, "alt_text": "Preblast Image"}
+    legacy_file_id = meta.get(constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY)
+    if legacy_file_id:
+        return {"type": "image", "slack_file": {"id": legacy_file_id}, "alt_text": "Preblast Image"}
+    return None
+
+
+def _insert_preblast_image(blocks: list[dict[str, Any]], meta: dict[str, Any] | None) -> None:
+    """Insert the preblast photo, if it has one, just above the trailing action block."""
+    image_block = _preblast_image_block(meta)
+    if image_block:
+        blocks.insert(-1, image_block)
 
 
 def _format_attendance_user(attendance: AttendanceData, attendance_slack_dict: dict[int, str]) -> str:
@@ -788,11 +827,13 @@ def send_preblast(
     region_record: SlackSettings = None,
     event_instance_id: int = None,
     repost: bool = False,
+    warning: str | None = None,
 ):
     """Post or update a preblast message in Slack.
 
     Uses ``PreblastService.decide_post_mode()`` and ``persist_posted_preblast()``
-    to handle all post-mode scenarios.
+    to handle all post-mode scenarios. A ``warning`` (a partial failure earlier in
+    the submission) is appended to the submitter's result and marks it an error.
     """
     logger = logger or logging.getLogger(__name__)
     outcome = "success"  # used for logging and user feedback
@@ -817,18 +858,7 @@ def send_preblast(
         for b in get_preblast_action_blocks(has_q=len(q_list) > 0, event_instance_id=event_instance_id)
     )
 
-    # Image block from meta
-    if preblast_info.event_record.meta and preblast_info.event_record.meta.get("preblast_image_slack_file_id"):
-        blocks.insert(
-            -1,
-            {
-                "type": "image",
-                "slack_file": {
-                    "id": preblast_info.event_record.meta["preblast_image_slack_file_id"],
-                },
-                "alt_text": "Preblast Image",
-            },
-        )
+    _insert_preblast_image(blocks, preblast_info.event_record.meta)
 
     metadata_dict = {
         "event_instance_id": event_instance_id,
@@ -881,10 +911,8 @@ def send_preblast(
         action_text = "posted" if decision.mode == PostMode.POST_NEW else "posted in new channel"
         res = None
         try:
-            res = _post_blocks(
-                client.chat_postMessage,
-                blocks,
-                logger,
+            res = client.chat_postMessage(
+                blocks=blocks,
                 channel=desired_channel,
                 text="Event Preblast",
                 metadata={"event_type": "preblast", "event_payload": metadata_dict},
@@ -915,10 +943,8 @@ def send_preblast(
     elif decision.mode == PostMode.UPDATE_EXISTING:
         posted_channel = decision.posted_channel_id or desired_channel
         try:
-            _post_blocks(
-                client.chat_update,
-                blocks,
-                logger,
+            client.chat_update(
+                blocks=blocks,
                 channel=posted_channel,
                 ts=f"{decision.existing_preblast_ts:.6f}",
                 text="Event Preblast",
@@ -934,11 +960,15 @@ def send_preblast(
 
     log_msg = f":mega: Preblast {action_text} for *{event.name}* on *{event.start_date}* by <@{slack_user_id or 'app'}>"
     user_msg = f"Preblast {action_text}"
+    if warning:
+        outcome = "error"
     if outcome == "success":
         user_msg += " successfully!"
     if desired_channel and event.preblast_ts:
         log_msg += f" <slack://channel?team={region_record.team_id}&id={desired_channel}&ts={event.preblast_ts}|Link>\n"
         user_msg += f" <slack://channel?team={region_record.team_id}&id={desired_channel}&ts={event.preblast_ts}| Link>"
+    if warning:
+        user_msg += f"\n{warning}"
     post_bot_log(
         client=client,
         region_record=region_record,
@@ -1246,15 +1276,7 @@ def handle_event_preblast_action(
                     event_instance_id=event_instance_id,
                 )
             ]
-            if preblast_info.event_record.meta and preblast_info.event_record.meta.get("preblast_image_slack_file_id"):
-                blocks.insert(
-                    -1,
-                    {
-                        "type": "image",
-                        "slack_file": {"id": preblast_info.event_record.meta["preblast_image_slack_file_id"]},
-                        "alt_text": "Preblast Image",
-                    },
-                )
+            _insert_preblast_image(blocks, preblast_info.event_record.meta)
 
             q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
             q_name = (q_name or [""])[0]
@@ -1343,15 +1365,7 @@ def handle_event_preblast_action(
             }
             button_blocks = get_preblast_action_blocks(has_q=len(q_id_list) > 0, event_instance_id=event_instance_id)
             blocks = list(preblast_info.preblast_blocks) + [b.as_form_field() for b in button_blocks]
-            if preblast_info.event_record.meta and preblast_info.event_record.meta.get("preblast_image_slack_file_id"):
-                blocks.insert(
-                    -1,
-                    {
-                        "type": "image",
-                        "slack_file": {"id": preblast_info.event_record.meta["preblast_image_slack_file_id"]},
-                        "alt_text": "Preblast Image",
-                    },
-                )
+            _insert_preblast_image(blocks, preblast_info.event_record.meta)
 
             q_name, q_url = get_user_names([slack_user_id], logger, client, return_urls=True)
             q_name = (q_name or [""])[0]

@@ -35,6 +35,14 @@ STRAVA_CLIENT_ID = "STRAVA_CLIENT_ID"
 STRAVA_CLIENT_SECRET = "STRAVA_CLIENT_SECRET"
 LOW_REZ_IMAGE_SIZE = 1000
 
+# EventInstance.meta keys for the preblast photo. The URL keys point at copies in the
+# event_instance_images bucket; PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY is only read, as a
+# fallback for preblasts saved before photos moved to storage.
+PREBLAST_IMAGE_URL = "preblast_image_url"
+PREBLAST_IMAGE_LOW_REZ_URL = "preblast_image_low_rez_url"
+PREBLAST_IMAGE_SOURCE_FILE_ID = "preblast_image_source_slack_file_id"
+PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY = "preblast_image_slack_file_id"
+
 LOCAL_DEVELOPMENT = os.environ.get("LOCAL_DEVELOPMENT", "").lower() in ("1", "true", "yes")
 SOCKET_MODE = os.environ.get("SOCKET_MODE", "").lower() in ("1", "true", "yes")
 ENABLE_DEBUGGING = os.environ.get("ENABLE_DEBUGGING", "false").lower() == "true"
