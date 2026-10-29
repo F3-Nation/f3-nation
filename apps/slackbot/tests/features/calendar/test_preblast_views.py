@@ -733,21 +733,77 @@ def test_hc_un_hc_button_is_a_no_op_for_q(q_type_id):
     client.chat_postMessage.assert_not_called()
 
 
-def test_hc_un_hc_button_falls_back_to_message_qs_when_attendance_lookup_fails():
+def test_hc_un_hc_button_changes_nothing_when_q_status_lookup_fails():
     preblast_service = MagicMock()
     attendance_service = MagicMock()
     attendance_service.get_planned_for_event_instance.side_effect = RuntimeError("api down")
+    client = MagicMock()
+
+    # The clicker is absent from the message's qs list, so only the live lookup
+    # could confirm they aren't a Q.
+    with (
+        patch("features.calendar.event_preblast.get_user", return_value=SimpleNamespace(user_id=8)),
+        patch("features.calendar.event_preblast._build_preblast_service", return_value=preblast_service),
+        patch("features.calendar.event_preblast._build_attendance_service", return_value=attendance_service),
+        patch("features.calendar.event_preblast.post_hc_thread_reply") as thread_reply,
+    ):
+        handle_event_preblast_action(_hc_un_hc_body(), client, MagicMock(), {}, MagicMock())
+
+    preblast_service.remove_hc.assert_not_called()
+    preblast_service.add_hc.assert_not_called()
+    thread_reply.assert_not_called()
+    client.chat_update.assert_not_called()
+    client.chat_postEphemeral.assert_called_once_with(
+        channel="C_PREBLAST", user="U_ACTOR", text="Sorry, we couldn't update your HC — please try again."
+    )
+
+
+def test_hc_un_hc_button_is_a_no_op_for_q_missing_from_message_qs():
+    preblast_service = MagicMock()
+    attendance_service = MagicMock()
+    attendance_service.get_planned_for_event_instance.return_value = [
+        AttendanceData(id=2, event_instance_id=42, user_id=8, attendance_type_ids=[Q_TYPE_ID, HC_TYPE_ID]),
+    ]
+    body = _hc_un_hc_body()
+    body["message"]["metadata"]["event_payload"]["attendees"] = [7, 8]
+
+    with (
+        patch("features.calendar.event_preblast.get_user", return_value=SimpleNamespace(user_id=8)),
+        patch("features.calendar.event_preblast._build_preblast_service", return_value=preblast_service),
+        patch("features.calendar.event_preblast._build_attendance_service", return_value=attendance_service),
+        patch("features.calendar.event_preblast.post_hc_thread_reply") as thread_reply,
+    ):
+        handle_event_preblast_action(body, MagicMock(), MagicMock(), {}, MagicMock())
+
+    preblast_service.remove_hc.assert_not_called()
+    thread_reply.assert_not_called()
+
+
+def test_hc_un_hc_button_un_hcs_former_q_still_in_message_qs():
+    preblast_service = MagicMock()
+    attendance_service = MagicMock()
+    attendance_service.get_planned_for_event_instance.return_value = [
+        AttendanceData(id=1, event_instance_id=42, user_id=7, attendance_type_ids=[HC_TYPE_ID]),
+    ]
+    preblast_info = SimpleNamespace(
+        attendance_records=[],
+        preblast_blocks=[],
+        event_record=SimpleNamespace(meta={}),
+    )
 
     with (
         patch("features.calendar.event_preblast.get_user", return_value=SimpleNamespace(user_id=7)),
         patch("features.calendar.event_preblast._build_preblast_service", return_value=preblast_service),
         patch("features.calendar.event_preblast._build_attendance_service", return_value=attendance_service),
+        patch("features.calendar.event_preblast.build_preblast_info", return_value=preblast_info),
+        patch("features.calendar.event_preblast.get_user_names", return_value=(["Actor"], [None])),
+        patch("features.calendar.event_preblast.get_preblast_channel", return_value="C_PREBLAST"),
         patch("features.calendar.event_preblast.post_hc_thread_reply") as thread_reply,
     ):
         handle_event_preblast_action(_hc_un_hc_body(), MagicMock(), MagicMock(), {}, MagicMock())
 
-    preblast_service.remove_hc.assert_not_called()
-    thread_reply.assert_not_called()
+    preblast_service.remove_hc.assert_called_once_with(42, 7)
+    assert thread_reply.call_args.kwargs["is_hc"] is False
 
 
 def test_hc_un_hc_button_still_un_hcs_a_non_q_attendee():
