@@ -4,6 +4,7 @@ import {
   fanRadiusForTargets,
   fuzzyScore,
   convexHull,
+  panToContain,
   createCircleBuffer,
   createStarPolygon,
   dedupePoints,
@@ -311,5 +312,23 @@ describe("fanRadiusForTargets", () => {
         });
       });
     }
+  });
+});
+
+describe("panToContain", () => {
+  it("leaves a span that already fits", () => {
+    expect(panToContain(20, 80, 10, 100)).toBe(0);
+  });
+
+  it("pans toward the low edge when the span starts before it", () => {
+    expect(panToContain(-5, 40, 12, 378)).toBe(-17);
+  });
+
+  it("pans toward the high edge when the span ends past it", () => {
+    expect(panToContain(300, 400, 12, 378)).toBe(22);
+  });
+
+  it("does not pan a span wider than the range", () => {
+    expect(panToContain(0, 500, 12, 378)).toBe(0);
   });
 });

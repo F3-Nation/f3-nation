@@ -172,3 +172,20 @@ export function fanRadiusForTargets(
   const radius = (targetPx * Math.SQRT2) / (2 * Math.sin(Math.PI / count));
   return Math.max(minRadiusPx, radius);
 }
+
+/**
+ * Pixels to pan along one axis so the span `[min, max]` lies inside the
+ * visible range `[lo, hi]` — negative pans toward `lo`. Returns 0 when the
+ * span already fits, or when it is wider than the range and can't.
+ */
+export function panToContain(
+  min: number,
+  max: number,
+  lo: number,
+  hi: number,
+): number {
+  if (max - min > hi - lo) return 0;
+  if (min < lo) return min - lo;
+  if (max > hi) return max - hi;
+  return 0;
+}

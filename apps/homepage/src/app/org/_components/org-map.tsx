@@ -22,6 +22,7 @@ import {
   convexHull,
   fanRadiusForTargets,
   createCircleBuffer,
+  panToContain,
   createStarPolygon,
   dedupePoints,
   fuzzyScore,
@@ -222,6 +223,10 @@ export default function OrgMap() {
   );
   // True while location pins are displayed; suppresses polygon hover updates
   const pinsActiveRef = useRef(false);
+  // True from a fitBounds call until its moveend; a pin pan requested meanwhile
+  // waits for it (pendingPinPanRef) so it measures the settled view.
+  const fitInFlightRef = useRef(false);
+  const pendingPinPanRef = useRef(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [currentLevel, setCurrentLevel] = useState<OrgType>("sector");
@@ -405,10 +410,13 @@ export default function OrgMap() {
 
   // On phones the search card and info sheet float over the map, so pad fits
   // to land the focused orgs in the strip left visible between them.
-  const getFitOptions = useCallback((): L.FitBoundsOptions => {
+  const getFitOptions = useCallback((): {
+    paddingTopLeft: L.PointTuple;
+    paddingBottomRight: L.PointTuple;
+  } => {
     const container = mapContainerRef.current;
     if (!container || window.matchMedia(DESKTOP_MEDIA_QUERY).matches) {
-      return { padding: [24, 24] };
+      return { paddingTopLeft: [24, 24], paddingBottomRight: [24, 24] };
     }
     const mapRect = container.getBoundingClientRect();
     const searchBottom =
@@ -425,6 +433,58 @@ export default function OrgMap() {
     if (mapRect.height - top - bottom < 48) bottom = 12;
     return { paddingTopLeft: [12, top], paddingBottomRight: [12, bottom] };
   }, []);
+
+  const fitMapTo = useCallback(
+    (bounds: L.LatLngBounds) => {
+      const map = mapRef.current;
+      if (!map) return;
+      fitInFlightRef.current = true;
+      map.fitBounds(bounds, getFitOptions());
+    },
+    [getFitOptions],
+  );
+
+  // Fits frame the orgs' outlines, so a fanned-out pin group near an edge can
+  // spill past the visible strip (or under the sheet). When an org's pins first
+  // appear, nudge the map just enough to show every tap target. Re-fans on zoom
+  // don't call this: those zooms are the user's, and so is the view.
+  const panPinsIntoView = useCallback(() => {
+    const map = mapRef.current;
+    const pinLayer = pinLayerGroupRef.current;
+    if (!map || !pinLayer) return;
+    const points = pinLayer
+      .getLayers()
+      .map((layer) =>
+        map.latLngToContainerPoint((layer as L.Marker).getLatLng()),
+      );
+    if (points.length === 0) return;
+    const {
+      paddingTopLeft: [left, top],
+      paddingBottomRight: [right, bottom],
+    } = getFitOptions();
+    const size = map.getSize();
+    const half = PIN_TAP_TARGET_PX / 2;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const dx = panToContain(
+      Math.min(...xs) - half,
+      Math.max(...xs) + half,
+      left,
+      size.x - right,
+    );
+    const dy = panToContain(
+      Math.min(...ys) - half,
+      Math.max(...ys) + half,
+      top,
+      size.y - bottom,
+    );
+    if (dx !== 0 || dy !== 0) map.panBy([dx, dy]);
+  }, [getFitOptions]);
+
+  const schedulePinPan = useCallback(() => {
+    if (fitInFlightRef.current) pendingPinPanRef.current = true;
+    else panPinsIntoView();
+  }, [panPinsIntoView]);
 
   const loadLocationInfo = useCallback(async (locationId: number) => {
     infoGuardRef.current.selectLocation(locationId);
@@ -550,11 +610,22 @@ export default function OrgMap() {
         showPinsForOrg(pinnedOrgRef.current, { preserveLocation: true });
       }
     };
+    // zoomend (and the re-fan above) fires before moveend, so a pan waiting on
+    // a fit measures the re-fanned pins.
+    const onMoveEnd = () => {
+      fitInFlightRef.current = false;
+      if (pendingPinPanRef.current) {
+        pendingPinPanRef.current = false;
+        panPinsIntoView();
+      }
+    };
     map.on("zoomend", onZoomEnd);
+    map.on("moveend", onMoveEnd);
     return () => {
       map.off("zoomend", onZoomEnd);
+      map.off("moveend", onMoveEnd);
     };
-  }, [isLoaded, showPinsForOrg]);
+  }, [isLoaded, showPinsForOrg, panPinsIntoView]);
 
   // ── navigation helpers ───────────────────────────────────────────────────
 
@@ -582,13 +653,11 @@ export default function OrgMap() {
         pointsByIdRef.current,
         descendantCacheRef.current,
       );
-      if (bounds && mapRef.current) {
-        mapRef.current.fitBounds(bounds, getFitOptions());
-      }
+      if (bounds) fitMapTo(bounds);
 
       void loadOrgInfo(org);
     },
-    [loadOrgInfo, getFitOptions],
+    [loadOrgInfo, fitMapTo],
   );
 
   const navigateToAo = useCallback(
@@ -734,6 +803,7 @@ export default function OrgMap() {
           writeUrlState(currentLevel, org.id);
           void loadOrgInfo(org);
           showPinsForOrg(org);
+          schedulePinPan();
           return;
         }
         navigateToOrg(org);
@@ -743,7 +813,7 @@ export default function OrgMap() {
     }
 
     if (allLatLngs.length > 0) {
-      map.fitBounds(L.latLngBounds(allLatLngs), getFitOptions());
+      fitMapTo(L.latLngBounds(allLatLngs));
     }
 
     return () => {
@@ -759,7 +829,8 @@ export default function OrgMap() {
     loadOrgInfo,
     navigateToOrg,
     showPinsForOrg,
-    getFitOptions,
+    schedulePinPan,
+    fitMapTo,
   ]);
 
   // Keep the current (last) crumb in view when the phone breadcrumb scrolls.
@@ -783,8 +854,9 @@ export default function OrgMap() {
     const org = orgByIdRef.current.get(aoFocus.orgId);
     if (!org) return;
     showPinsForOrg(org);
+    schedulePinPan();
     void loadLocationInfo(aoFocus.locationId);
-  }, [aoFocus, isLoaded, showPinsForOrg, loadLocationInfo]);
+  }, [aoFocus, isLoaded, showPinsForOrg, schedulePinPan, loadLocationInfo]);
 
   // ── nearest parent admin lookup (for empty-roles message) ───────────────
 
