@@ -498,6 +498,71 @@ describe("Cascade Service", () => {
       ]);
     });
 
+    it("should start an every-other-month last-weekday series in the first month after its start date", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      // January's last Monday (2026-01-26) falls before the series start, so
+      // it must not consume the first interval slot.
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 2,
+        indexWithinInterval: 0,
+        startDate: "2026-01-27",
+        endDate: "2026-06-30",
+      });
+
+      const count = await createEventInstancesForSeries(
+        db,
+        series,
+        4,
+        "2026-01-27",
+      );
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(count).toBe(3);
+      expect(instances.map(({ startDate }) => startDate).sort()).toEqual([
+        "2026-02-23",
+        "2026-04-27",
+        "2026-06-29",
+      ]);
+    });
+
+    it("should create only the final weekday when a month ends on that weekday", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      // 2026-08-31 is a Monday, so 2026-08-24 is not the last Monday.
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 1,
+        indexWithinInterval: 0,
+        startDate: "2026-08-01",
+        endDate: "2026-08-31",
+      });
+
+      const count = await createEventInstancesForSeries(
+        db,
+        series,
+        4,
+        "2026-08-01",
+      );
+      const instances = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(count).toBe(1);
+      expect(instances.map(({ startDate }) => startDate)).toEqual([
+        "2026-08-31",
+      ]);
+    });
+
     it("should create every weekly occurrence when indexWithinInterval is 0", async () => {
       const region = await createTestRegion();
       const ao = await createTestAO(region.id);
@@ -1315,6 +1380,45 @@ describe("Cascade Service", () => {
         "2026-03-30",
         "2026-05-25",
       ]);
+    });
+
+    it("should keep an every-other-month numbered-occurrence series in phase when recreated off-cycle", async () => {
+      const region = await createTestRegion();
+      const ao = await createTestAO(region.id);
+
+      // Second Monday, every other month, starting on 2026-01-12.
+      const series = await createTestSeries(ao.id, null, {
+        dayOfWeek: "monday",
+        recurrencePattern: "monthly",
+        recurrenceInterval: 2,
+        indexWithinInterval: 2,
+        startDate: "2026-01-12",
+        endDate: "2026-06-30",
+      });
+
+      const expectedDates = ["2026-01-12", "2026-03-09", "2026-05-11"];
+
+      await createEventInstancesForSeries(db, series, 4, "2026-01-12");
+      const before = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(before.map(({ startDate }) => startDate).sort()).toEqual(
+        expectedDates,
+      );
+
+      const result = await recreateFutureInstances(db, series, "2026-02-01", 4);
+      const after = await db
+        .select({ startDate: schema.eventInstances.startDate })
+        .from(schema.eventInstances)
+        .where(eq(schema.eventInstances.seriesId, series.id));
+
+      expect(result.deleted).toBe(2);
+      expect(result.created).toBe(2);
+      expect(after.map(({ startDate }) => startDate).sort()).toEqual(
+        expectedDates,
+      );
     });
 
     it("should keep a biweekly series in phase when recreated mid-cycle", async () => {
