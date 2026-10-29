@@ -14,7 +14,10 @@ interface RoleInput {
   roleName: UserRole;
 }
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import {
+  checkHasRoleOnAllOrgs,
+  checkHasRoleOnOrg,
+} from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { logDebug, logError, logWarn } from "../logger";
 import {
@@ -153,21 +156,14 @@ export const userRouter = {
       let includePii = false;
 
       if (input.includePii) {
-        includePii = true;
         // Check if user is an admin for all of the specified parent orgs
         // (not all descendants, just the ones they requested)
-        for (const orgId of input.orgIds) {
-          const { success } = await checkHasRoleOnOrg({
-            orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "admin",
-          });
-          if (!success) {
-            includePii = false;
-            break;
-          }
-        }
+        includePii = await checkHasRoleOnAllOrgs({
+          session: ctx.session,
+          db: ctx.db,
+          orgIds: input.orgIds,
+          roleName: "admin",
+        });
       }
 
       // Update input to use all descendant org IDs
@@ -514,10 +510,15 @@ export const userRouter = {
       }
 
       const requireAdminOn = async (orgIds: number[], message: string) => {
-        for (const orgId of orgIds) {
-          if (!(await hasRoleOnAny(ctx, [orgId], "admin"))) {
-            throw new ORPCError("UNAUTHORIZED", { message });
-          }
+        if (
+          !(await checkHasRoleOnAllOrgs({
+            session: ctx.session,
+            db: ctx.db,
+            orgIds,
+            roleName: "admin",
+          }))
+        ) {
+          throw new ORPCError("UNAUTHORIZED", { message });
         }
       };
       await requireAdminOn(

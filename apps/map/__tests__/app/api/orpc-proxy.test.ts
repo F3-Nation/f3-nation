@@ -252,6 +252,104 @@ describe("oRPC proxy route", () => {
     expect(headers.has("x-f3-proxy-secret")).toBe(false);
   });
 
+  it("answers 503 when the upstream API is unreachable", async () => {
+    fetchSpy.mockRejectedValueOnce(new TypeError("fetch failed"));
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const response = await GET(
+      new NextRequest(
+        "http://localhost:3000/api/orpc/v1/map/location/regionsWithLocation",
+      ),
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    // Not JSON, so the client's outage guard (not oRPC's decoder) handles it.
+    expect(response.headers.get("content-type")).toBe("text/plain");
+  });
+
+  it("answers 503 when the upstream API never responds", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchSpy.mockImplementationOnce(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () => {
+              reject(init.signal?.reason as Error);
+            });
+          }),
+      );
+      const { GET } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+      const pending = GET(
+        new NextRequest(
+          "http://localhost:3000/api/orpc/v1/map/location/regionsWithLocation",
+        ),
+      );
+      // Still waiting just short of the bound, answered at it.
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(19_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect((await pending).status).toBe(503);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not time out a slow body once the headers have arrived", async () => {
+    vi.useFakeTimers();
+    try {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      const body = new ReadableStream<Uint8Array>({
+        start(c) {
+          controller = c;
+        },
+      });
+      fetchSpy.mockResolvedValueOnce(
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+      const { GET } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+      const response = await GET(
+        new NextRequest("http://localhost:3000/api/orpc/v1/ping"),
+      );
+      // The body only starts arriving after the header timeout has elapsed.
+      await vi.advanceTimersByTimeAsync(60_000);
+      controller.enqueue(new TextEncoder().encode("late but whole"));
+      controller.close();
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("late but whole");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports a missing F3_API_BASE_URL as an error, not as an outage", async () => {
+    vi.stubEnv("F3_API_BASE_URL", "");
+    try {
+      const { GET } =
+        await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+      await expect(
+        GET(new NextRequest("http://localhost:3000/api/orpc/v1/ping")),
+      ).rejects.toThrow(/F3_API_BASE_URL/);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
+    }
+  });
+
   it("proxies to the correct upstream URL", async () => {
     const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
 
