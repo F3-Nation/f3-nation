@@ -513,7 +513,10 @@ export const buildSingleUserQuery = async (
   };
 };
 
-/** `checkHasRoleOnAnyOrg` for the caller in `ctx`: one hierarchy query in total. */
+/**
+ * `checkHasRoleOnAnyOrg` for the caller in `ctx`: one hierarchy query per chunk
+ * of up to 10,000 unresolved orgs; a matching direct role avoids queries.
+ */
 export const hasRoleOnAny = (
   ctx: Context,
   orgIds: number[],

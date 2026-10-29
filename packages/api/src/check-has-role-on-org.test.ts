@@ -33,11 +33,11 @@ const mockLogError = vi.mocked(loggerModule.logError);
 
 /**
  * The batched role check must return exactly what the old one-org-at-a-time
- * check returned, while issuing at most one hierarchy query no matter how many
- * orgs are checked. The reference below is an independent, in-memory
- * re-statement of the per-org rule (self or any ancestor, within the depth
- * guard, no is_active filter; first matching session role wins), so the
- * comparison does not run the code under test against itself.
+ * check returned, while issuing one hierarchy query per chunk of up to 10,000
+ * orgs. The reference below is an independent, in-memory re-statement of the
+ * per-org rule (self or any ancestor, within the depth guard, no is_active
+ * filter; first matching session role wins), so the comparison does not run
+ * the code under test against itself.
  */
 describe("batched role checks", () => {
   const createdOrgIds: number[] = [];

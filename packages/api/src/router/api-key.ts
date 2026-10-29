@@ -318,7 +318,8 @@ export const apiKeyRouter = {
       const expiresAt = input.expiresAt ?? null;
 
       // Check permissions for each org-role combination (one hierarchy query
-      // for all of them; the first denied role in request order is reported).
+      // per chunk of up to 10,000 orgs; the first denied role in request
+      // order is reported).
       if (roles.length > 0) {
         const permissionChecks = await checkHasRolesOnOrgs({
           session: ctx.session,
