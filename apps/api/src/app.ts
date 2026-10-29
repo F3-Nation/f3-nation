@@ -3,6 +3,7 @@ import type { Context, Next } from "hono";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 
+import { securityHeadersRecord } from "@acme/security-headers";
 import { buildHealthResponse, runChecks } from "@f3nation/health";
 
 import { openApiJson } from "~/docs";
@@ -13,6 +14,30 @@ import { logError } from "~/lib/logging";
 import packageJson from "../package.json";
 
 export const app = new Hono();
+
+// Baseline security headers on every response (including the 308 below and
+// errors). The API is never legitimately framed. Registered first so it wraps
+// every other middleware. Headers are applied to a clone: responses built with
+// `Response.redirect()` or fetched from upstream have immutable headers.
+//
+// Two invariants this relies on (both pinned in __tests__/app.test.ts):
+// - The 500 path is covered because Hono's `compose` catches a handler's throw
+//   at the dispatch level, runs `onError`, and returns normally, so the code
+//   after `await next()` still runs. Verified on Hono 4.13.x; re-check after a
+//   Hono upgrade that touches `compose`.
+// - Every body is re-wrapped, and the clone references the body stream without
+//   reading it. Nothing here buffers or consumes `c.res.body`, so do not read
+//   it in a middleware registered after this one, and vet any future
+//   streaming/SSE handler against this clone.
+const SECURITY_HEADERS = securityHeadersRecord({ frame: "deny" });
+app.use("*", async (c, next) => {
+  await next();
+  const res = new Response(c.res.body, c.res);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    res.headers.set(name, value);
+  }
+  c.res = res;
+});
 
 // Next's file-system router unshifts an implicit 308 for `/:path+/` -> `/:path+`
 // ahead of every handler. Hono has no equivalent, so it's replicated here as the
