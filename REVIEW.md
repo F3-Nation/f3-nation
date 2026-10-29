@@ -101,6 +101,8 @@ Repo decisions that review bots have repeatedly flagged by mistake.
 - A new or renamed log event with no `docs/LOGGING.md` entry. That guide
   documents conventions, not a catalog of events; an event is described where
   it is logged.
+- A local-dev-only switch set by a package script, missing from `env.ts`,
+  `.env*.example`, Cloud Run helpers or `ci.yml`.
 - Drizzle-generated filenames (`NNNN_snake_case.sql`, `NNNN_snapshot.json`),
   Next.js segment folders (`[orgSegment]`), and `SKILL.md`, `README.md`,
   `AGENTS.md`, `REVIEW.md` or uppercase `docs/*.md` names, as kebab-case
