@@ -18,12 +18,15 @@ Different developers use different assistants. To keep one source of truth, this
 repo uses the **`AGENTS.md` standard** as canonical and adds thin pointer files
 so each tool resolves to the same content:
 
-| Tool                     | Entry point it reads                         | What it contains                          |
-| ------------------------ | -------------------------------------------- | ----------------------------------------- |
-| **All / standard**       | [`AGENTS.md`](../AGENTS.md) (root + per-app) | Canonical conventions                     |
-| **Claude** (Claude Code) | [`AGENTS.md`](../AGENTS.md) (root + per-app) | Read directly (v2.1.281+); no `CLAUDE.md` |
-| **GitHub Copilot**       | `.github/copilot-instructions.md`            | Pointer → `AGENTS.md` + this guide        |
-| **Cursor**               | `.cursor/rules/*.mdc`                        | Pointer → `AGENTS.md` + this guide        |
+| Tool                         | Entry point it reads                                                    | What it contains                    |
+| ---------------------------- | ----------------------------------------------------------------------- | ----------------------------------- |
+| **All / standard**           | [`AGENTS.md`](../AGENTS.md) (root + per-app)                            | Canonical conventions               |
+| **Claude** (Claude Code)     | [`AGENTS.md`](../AGENTS.md) (root + per-app)                            | Read directly; no `CLAUDE.md`       |
+| **Claude Code Review, Qodo** | `REVIEW.md` (Qodo: with `enable_review_md`)                             | Code-review rules                   |
+| **GitHub Copilot**           | `.github/copilot-instructions.md`                                       | Pointer → `AGENTS.md` + `REVIEW.md` |
+| **CodeRabbit**               | `AGENTS.md` (root + per-area) + `REVIEW.md` via `.coderabbit.yaml`      | Conventions + code-review rules     |
+| **Greptile**                 | `AGENTS.md` + per-area files and `REVIEW.md` via `.greptile/files.json` | Conventions + code-review rules     |
+| **Cursor**                   | `.cursor/rules/*.mdc`                                                   | Pointer → `AGENTS.md` + this guide  |
 
 **Rule of thumb:** put durable guidance in `AGENTS.md` (or, for deep topics, in
 `docs/` and link it). Keep the tool-specific pointer files thin so they never
@@ -244,12 +247,14 @@ violation is a `BAD_REQUEST`, not a 500.
   that, make the coupling explicit and tested.
 - **OAuth/OIDC:** enforce PKCE and reject `plain`; validate `state`/`nonce`;
   allow-list redirect URIs (no open redirect); rate-limit `revoke`/`userinfo`.
-- **Refresh-token rotation:** if the server single-uses (delete-on-use) refresh
-  tokens, the client must **not** refresh concurrently per-request, or
-  simultaneous requests at expiry will race, redeem the same token, and force
-  logouts. Either give rotation a short grace window with chain-linking on the
-  server, or single-flight the refresh on the client. See
-  [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md) and the `me`/`admin` middleware.
+- **Refresh-token rotation:** refresh tokens are single-use and the server
+  has no grace window. A reused rotated token revokes every refresh token for
+  that user and client, including the one the winning request just received.
+  So concurrent refreshes with the same token force a re-login: clients must
+  serialize refresh calls (single-flight). Not clearing cookies on a losing
+  non-navigation request (the `me`/`admin` proxies) avoids clobbering the
+  winner's cookies but does not prevent the revocation. See
+  [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md).
 - **MFA / email codes in local dev** are captured by Mailpit — see
   [`apps/auth/AGENTS.md`](../apps/auth/AGENTS.md). Don't disable verification to
   make flows pass; drive them properly.
@@ -281,7 +286,11 @@ violation is a `BAD_REQUEST`, not a 500.
   `Permissions-Policy`, and framing controls. Use `X-Frame-Options: DENY` /
   `frame-ancestors 'none'` for auth/admin surfaces; the map is intentionally
   embeddable and needs a `frame-ancestors` **allow-list**, not a blanket deny.
-  Disable `poweredByHeader`.
+  Disable `poweredByHeader`. The baseline (everything except a full CSP) comes
+  from `@acme/security-headers`; use it in new apps instead of hand-rolling
+  headers. `apps/homepage` is a static export on GitHub Pages, where
+  `headers()` does not apply. A full CSP is still a follow-up (ship it as
+  `Content-Security-Policy-Report-Only` first).
 - **Sanitize untrusted HTML.** `dangerouslySetInnerHTML` must run through
   DOMPurify; escape all user input interpolated into email templates.
 - **File uploads:** authenticate the endpoint, enforce a size cap (don't
