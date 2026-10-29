@@ -5,6 +5,7 @@ import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { setProxiedClientIp } from "@acme/shared/common/client-ip";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { env } from "~/env";
 import { logWarn } from "~/lib/logging";
 
 const PROXY_PREFIX = "/api/orpc";
@@ -88,11 +89,7 @@ function getForwardedHeaders(request: NextRequest): Headers {
   headers.delete("authorization");
   headers.delete("x-api-key");
   headers.set(Header.Client, Client.ORPC);
-  setProxiedClientIp(
-    headers,
-    request.headers,
-    process.env.PROXY_CLIENT_IP_SECRET,
-  );
+  setProxiedClientIp(headers, request.headers, env.PROXY_CLIENT_IP_SECRET);
 
   return headers;
 }

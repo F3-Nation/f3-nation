@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +19,8 @@ describe("admin oRPC proxy route", () => {
     vi.resetModules();
     fetchSpy.mockClear();
     vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
+    // CI exports a mock secret; each test sets the one it needs.
+    vi.stubEnv("PROXY_CLIENT_IP_SECRET", undefined);
   });
 
   afterEach(() => {

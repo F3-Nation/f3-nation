@@ -5,6 +5,7 @@ import { API_PREFIX_V1 } from "@acme/shared/app/constants";
 import { setProxiedClientIp } from "@acme/shared/common/client-ip";
 import { Client, Header } from "@acme/shared/common/enums";
 
+import { env } from "~/env";
 import { getAccessToken } from "~/lib/auth/server";
 
 const PROXY_PREFIX = "/api/orpc";
@@ -39,11 +40,7 @@ function getForwardedHeaders(
   headers.delete("content-length");
   headers.set(Header.Client, Client.ORPC);
   headers.set(Header.Authorization, `Bearer ${accessToken}`);
-  setProxiedClientIp(
-    headers,
-    request.headers,
-    process.env.PROXY_CLIENT_IP_SECRET,
-  );
+  setProxiedClientIp(headers, request.headers, env.PROXY_CLIENT_IP_SECRET);
   return headers;
 }
 

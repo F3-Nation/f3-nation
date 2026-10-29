@@ -1,7 +1,7 @@
-import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment node
 
-vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
+import { NextRequest } from "next/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchSpy = vi
   .fn<(url: URL, init: RequestInit) => Promise<Response>>()
@@ -12,6 +12,13 @@ describe("oRPC proxy route", () => {
   beforeEach(() => {
     vi.resetModules();
     fetchSpy.mockClear();
+    vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
+    // CI exports a mock secret; each test sets the one it needs.
+    vi.stubEnv("PROXY_CLIENT_IP_SECRET", undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("forwards cookies to the upstream API for a signed-in-only path", async () => {
@@ -224,8 +231,6 @@ describe("oRPC proxy route", () => {
 
     expect(headers.get("x-f3-client-ip")).toBe("198.51.100.7");
     expect(headers.get("x-f3-proxy-secret")).toBe("s".repeat(32));
-    vi.unstubAllEnvs();
-    vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
   });
 
   it("strips caller-sent proxy client-IP headers when no secret is configured", async () => {
