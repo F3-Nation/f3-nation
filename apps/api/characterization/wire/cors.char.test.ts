@@ -47,10 +47,10 @@ describe("CORS", () => {
   });
 
   it("never echoes the origin or allows credentials for an unknown origin", async () => {
-    // The API used to reflect any origin with credentials allowed, which let
-    // any web page make cookie-authenticated calls and read the response
-    // (#361). Bearer-token browser callers on any origin must keep working,
-    // so the answer is `*` without credentials, not an allow-list.
+    // Echoing the origin with credentials allowed would let any web page make
+    // cookie-authenticated calls and read the response. Bearer-token browser
+    // callers on any origin must keep working, so the answer is `*` without
+    // credentials, not an allow-list.
     const res = await target.invoke(
       req("/v1/ping", {
         method: "OPTIONS",
@@ -66,20 +66,20 @@ describe("CORS", () => {
     expect(res.headers.get("access-control-allow-credentials")).toBeNull();
   });
 
-  it("treats an opaque Origin: null the same, even with a cookie", async () => {
-    // Sandboxed iframes and file: pages send `Origin: null`. It must get `*`
-    // without credentials like any other origin, never an echoed `null`.
+  it("answers an opaque Origin: null GET with * and no credentials, even with a cookie", async () => {
+    // Sandboxed iframes and file: pages send `Origin: null`, and a simple GET
+    // can carry the session cookie. The response must be `*` without
+    // credentials, never an echoed `null`, so the page can't read it.
     const res = await target.invoke(
       req("/v1/ping", {
-        method: "OPTIONS",
         headers: {
           origin: "null",
           cookie: "session=ignored",
-          "access-control-request-method": "GET",
           "x-forwarded-for": "10.91.0.4",
         },
       }),
     );
+    expect(res.status).toBe(200);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
     expect(res.headers.get("access-control-allow-credentials")).toBeNull();
   });

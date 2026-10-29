@@ -54,25 +54,28 @@ export function reportHandlerError(
  * Public, non-credentialed CORS. Any origin may call the API from a browser,
  * but never with ambient credentials: there is no
  * `Access-Control-Allow-Credentials`, so a browser never lets a page on
- * another origin read the response to a request that carried the
- * `.f3nation.com` session cookie, and non-simple requests (JSON POSTs) are stopped at the preflight.
- * This is a browser-side rule, not a server-side one: a simple cross-origin
- * request (such as a GET) can still be sent with the cookie, so GET procedures
- * must stay free of side effects. Browser callers authenticate with an
+ * another origin read a response to a request that carried the session
+ * cookie, and a credentialed non-simple request (such as a JSON POST) fails
+ * its preflight. This is a browser-side rule, not a server-side one: a simple
+ * cross-origin request (a GET, or a POST with a form or text/plain body) is
+ * still sent with the cookie from any same-site `*.f3nation.com` page, since
+ * the cookie is SameSite=Lax. Procedures reachable that way must not change
+ * state on a cookie session alone. Browser callers authenticate with an
  * `Authorization: Bearer` header instead.
  *
  * Why `*` rather than an origin allow-list: this is a public Bearer-token API.
  * Browser apps outside our own app URLs call it directly with an API key
  * (apps/homepage on apps.f3nation.com, and regional F3 websites), and an
- * allow-list would break them. First-party cookie sessions never need CORS:
+ * allow-list would break them. First-party browser sessions never need CORS:
  * map and admin reach the API through their same-origin /api/orpc proxies,
- * which forward the cookie server-side.
+ * which call it server-side (map forwards the session cookie, admin swaps it
+ * for a Bearer token).
  *
- * Echoing the request origin while also allowing credentials (what this
- * replaced) let any web page act as a signed-in user and read the result.
+ * Never echo the request origin while also allowing credentials: that would
+ * let any web page act as a signed-in user and read the result.
  *
  * `*` is stamped on every response, including ones to requests with no
- * `Origin` header, and `Vary: Origin` is gone because the answer no longer
+ * `Origin` header, and there is no `Vary: Origin` because the answer never
  * depends on the origin. Both are intended.
  */
 const corsPlugin = new CORSPlugin({
