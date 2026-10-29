@@ -21,7 +21,14 @@ import type { OrgType } from "@acme/shared/app/enums";
 import { eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -316,6 +323,11 @@ describe("User Router - Grant Access", () => {
       if (!adminRegion || !otherRegion) {
         throw new Error("Failed to create test regions");
       }
+      onTestFinished(async () => {
+        await mockAuthWithSession(await createAdminSession());
+        await cleanup.org(adminRegion.id);
+        await cleanup.org(otherRegion.id);
+      });
 
       const testPhone = "555-333-4444";
       const [user] = await db
@@ -329,6 +341,7 @@ describe("User Router - Grant Access", () => {
       if (!user) {
         throw new Error("Failed to create test user");
       }
+      onTestFinished(() => cleanup.user(user.id));
       const [editorRole] = await db
         .select({ id: schema.roles.id })
         .from(schema.roles)
@@ -380,11 +393,6 @@ describe("User Router - Grant Access", () => {
       expect(listed).toMatchObject({ id: user.id });
       expect(listed).not.toHaveProperty("phone");
       expect(listed).not.toHaveProperty("email");
-
-      await mockAuthWithSession(await createAdminSession());
-      await cleanup.user(user.id);
-      await cleanup.org(adminRegion.id);
-      await cleanup.org(otherRegion.id);
     });
 
     it("byEmail includes email when searching by email", async () => {
