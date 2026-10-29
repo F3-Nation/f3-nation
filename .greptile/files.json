@@ -63,6 +63,11 @@
       "scope": ["apps/me/**"]
     },
     {
+      "path": "apps/region-pages/AGENTS.md",
+      "description": "Conventions for apps/region-pages/.",
+      "scope": ["apps/region-pages/**"]
+    },
+    {
       "path": "apps/slackbot/AGENTS.md",
       "description": "Conventions for apps/slackbot/.",
       "scope": ["apps/slackbot/**"]
