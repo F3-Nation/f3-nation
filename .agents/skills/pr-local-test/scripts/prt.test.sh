@@ -272,7 +272,10 @@ s.listen()
 time.sleep(60)' "$busy_port" &
 listener_pid=$!
 sleep 1
-state_tmp="$(mktemp "$run/.state.XXXXXX")"
+state_tmp="$(mktemp "$run/.state.XXXXXX")" || {
+  echo "FAIL: could not create the state temporary file" >&2
+  exit 1
+}
 jq --argjson p "$busy_port" '.ports.map = $p' "$run/state.json" >"$state_tmp"
 mv "$state_tmp" "$run/state.json"
 out="$(bash "$prt" serve "$run" map 2>&1)"
