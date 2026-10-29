@@ -12,7 +12,7 @@ Four Docker containers replace the cloud services you'd otherwise need access to
 | ---------------- | ------------------------------------------------ | ----------------------- |
 | **Postgres**     | The app's database, pre-loaded with seed data    | `localhost:5433`        |
 | **Adminer**      | A web UI to browse and query the database        | <http://localhost:8080> |
-| **GCS Emulator** | Emulates Google Cloud Storage for logo uploads   | <http://localhost:9023> |
+| **GCS Emulator** | Emulates Google Cloud Storage for image uploads  | <http://localhost:9023> |
 | **Mailpit**      | Catches all outbound emails so you can read them | <http://localhost:8025> |
 
 Your app servers (Map, API, Auth) still run natively on your machine with `pnpm dev`. Docker only manages the stateful infrastructure.
@@ -219,7 +219,7 @@ This script does everything automatically:
   `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, `apps/slackbot`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
-- Creates the `f3-public-images` bucket in the GCS emulator
+- Creates the GCS emulator buckets (`f3-public-images`, `f3-public-images-staging`, `f3nation-calendar-images`)
 - Runs all database migrations
 - Seeds the database with sample F3 org data
 
@@ -517,6 +517,17 @@ curl http://localhost:9023/storage/v1/b/f3-public-images-staging/o | jq '.items[
 ```
 
 Individual files are directly accessible at `http://localhost:9023/f3-public-images-staging/<filename>`.
+
+### Slackbot
+
+On Cloud Run the slackbot writes files under `/mnt`, where GCS buckets are mounted. When `GCS_EMULATOR_HOST` is set in `apps/slackbot/.env`, it stores them through the emulator's API instead:
+
+| Files                                                  | Emulator location                                                   |
+| ------------------------------------------------------ | ------------------------------------------------------------------- |
+| Backblast and preblast photos, user avatars, org logos | `FILE_BUCKET_PREFIX` bucket (`f3-public-images-staging`), by folder |
+| Generated calendar images                              | `f3nation-calendar-images` bucket                                   |
+
+Slack's servers download message images themselves and can't reach `localhost`, so a block with an emulator image URL would be rejected. Locally, the slackbot posts a link to each emulator image instead of embedding it; open the link in your browser to see the stored file. Deployed, URLs point at `storage.googleapis.com` and images embed as usual.
 
 ### Resetting uploaded files
 

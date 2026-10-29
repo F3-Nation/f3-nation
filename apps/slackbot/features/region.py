@@ -55,7 +55,8 @@ def build_region_form(
         if org_record.logo_url:
             try:
                 if requests.head(org_record.logo_url).status_code == 200:
-                    form.blocks.insert(2, orm.ImageBlock(image_url=org_record.logo_url, alt_text="Region Logo"))
+                    logo_block = orm.image_or_link_block(image_url=org_record.logo_url, alt_text="Region Logo")
+                    form.blocks.insert(2, logo_block)
             except requests.RequestException as e:
                 logger.error(f"Error fetching region logo: {e}")
 

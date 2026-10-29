@@ -41,7 +41,8 @@ if [ -n "$slot" ]; then
 fi
 load_local_ports
 
-BUCKETS=(f3-public-images f3-public-images-staging)
+# f3nation-calendar-images: the slackbot stores its generated calendar images there.
+BUCKETS=(f3-public-images f3-public-images-staging f3nation-calendar-images)
 GCS_PORT="${F3_GCS_PORT:-9023}"
 PG_PORT="${F3_POSTGRES_PORT:-5433}"
 PG_CONTAINER="${F3_CONTAINER_PREFIX:-f3}-postgres"

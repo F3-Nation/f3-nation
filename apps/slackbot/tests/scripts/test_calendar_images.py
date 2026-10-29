@@ -269,7 +269,7 @@ def calendar_generation(monkeypatch):
     monkeypatch.setattr(calendar_images, "LOCAL_DEVELOPMENT", False)
     monkeypatch.setattr(calendar_images, "DB_SCHEMA", "f3_staging")
     monkeypatch.setattr(calendar_images, "update_local_region_records", lambda: None)
-    monkeypatch.setattr(calendar_images.os, "remove", lambda path: None)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", lambda path: None)
     monkeypatch.setattr(pd.DataFrame, "to_csv", lambda *args, **kwargs: None)
     # An empty query still exposes its selected columns.
     event_row("Schema AO", now)
@@ -434,8 +434,8 @@ def overlapping_calendar_runs(calendar_generation, monkeypatch):
     monkeypatch.setattr(calendar_images, "DB_SCHEMA", "f3_prod")
     monkeypatch.setattr(calendar_images, "get_session", session_factory)
     monkeypatch.setattr(sys.modules["dataframe_image"], "export", export)
-    monkeypatch.setattr(calendar_images.shutil, "copyfile", copy)
-    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    monkeypatch.setattr(calendar_images.storage.shutil, "copyfile", copy)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     return state, run, row, settings
 
 
@@ -680,7 +680,7 @@ def test_legacy_image_without_metadata_rebuilds_once(calendar_generation, monkey
     legacy = "1-current-abcdefghij.png"
     settings["calendar_image_current"] = legacy
     remove = MagicMock()
-    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     rows = [row("One-time AO", now - timedelta(days=2))]
     assert len(run(rows, now)) == 1
     assert image_metadata(settings, now)[0] == now.replace(tzinfo=UTC)
@@ -736,7 +736,7 @@ def test_invalid_filename_regenerates_without_crashing_or_deletion(calendar_gene
     now = datetime(2026, 9, 30, 10)
     settings["calendar_image_current"] = filename
     remove = MagicMock()
-    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     assert len(run([row("One-time AO", now - timedelta(days=2))], now)) == 1
     assert image_metadata(settings, now)[0] == now.replace(tzinfo=UTC)
     remove.assert_not_called()
@@ -786,7 +786,7 @@ def test_generated_settings_refresh_region_cache(calendar_generation, monkeypatc
 
 @pytest.mark.parametrize("num_weeks", [1, 2])
 def test_stale_week_cleanup_removes_filename_with_metadata(monkeypatch, num_weeks):
-    monkeypatch.setattr(calendar_images, "LOCAL_DEVELOPMENT", True)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", lambda path: None)
     settings = {}
     for week in ("current", "next", "third"):
         settings[f"calendar_image_{week}"] = v1_filename(week=week)
@@ -907,7 +907,7 @@ def test_empty_week_never_deletes_unrecognized_backing_files(calendar_generation
         assert path in {f"/mnt/calendar-images/1-{week}.png" for week in ("current", "next", "third")}
 
     remove_mock = MagicMock(side_effect=remove)
-    monkeypatch.setattr(calendar_images.os, "remove", remove_mock)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove_mock)
     assert run([], datetime(2026, 9, 30, 10)) == []
     assert "calendar_image_current" not in settings
     session.commit.assert_called_once()
@@ -945,7 +945,7 @@ def test_empty_region_still_cleans_up_hidden_weeks(calendar_generation, monkeypa
         assert "calendar_image_third" not in settings
 
     remove_mock = MagicMock(side_effect=remove)
-    monkeypatch.setattr(calendar_images.os, "remove", remove_mock)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove_mock)
     post = MagicMock()
     monkeypatch.setattr(calendar_images, "post_calendar_to_slack", post)
     assert run([], datetime(2026, 9, 30, 10)) == []
@@ -981,7 +981,7 @@ def test_last_event_removal_refreshes_post_and_defers_deletion(calendar_generati
         assert "calendar_image_current" not in settings
 
     remove_mock = MagicMock(side_effect=remove)
-    monkeypatch.setattr(calendar_images.os, "remove", remove_mock)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove_mock)
     if commit_fails:
         session.commit.side_effect = RuntimeError("commit failed")
     assert run([], now + timedelta(hours=1)) == []
@@ -1020,7 +1020,7 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
     before = deepcopy(settings)
     monkeypatch.setattr(calendar_images, "DB_SCHEMA", "f3_prod")
     copy = MagicMock()
-    monkeypatch.setattr(calendar_images.shutil, "copyfile", copy)
+    monkeypatch.setattr(calendar_images.storage.shutil, "copyfile", copy)
     client = MagicMock()
     client.chat_update.return_value = {"ok": True}
     client.chat_postMessage.return_value = {"ok": True, "ts": "new-ts"}
@@ -1049,7 +1049,7 @@ def test_slack_posting_controls_calendar_persistence_and_deletion(
             assert settings != before
 
     remove_mock = MagicMock(side_effect=remove)
-    monkeypatch.setattr(calendar_images.os, "remove", remove_mock)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove_mock)
     changed_rows = [] if change == "empty" else [row("Changed AO", now - timedelta(days=1))]
     exports = run(changed_rows, now + timedelta(hours=1))
     assert len(exports) == (1 if change == "replacement" else 0)
@@ -1119,7 +1119,7 @@ def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, mon
 
     monkeypatch.setattr(sys.modules["dataframe_image"], "export", write_export)
     copy = MagicMock(side_effect=lambda source, destination: files.add(destination))
-    monkeypatch.setattr(calendar_images.shutil, "copyfile", copy)
+    monkeypatch.setattr(calendar_images.storage.shutil, "copyfile", copy)
 
     def remove(path):
         if path not in files:
@@ -1127,7 +1127,7 @@ def test_new_backing_cleanup_only_for_failed_slack_post(calendar_generation, mon
         files.remove(path)
 
     remove_mock = MagicMock(side_effect=remove)
-    monkeypatch.setattr(calendar_images.os, "remove", remove_mock)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove_mock)
     rows = [
         row(f"AO {i}", now - timedelta(days=1), start_date=date(2026, 10, 1) + timedelta(weeks=i))
         for i in range(num_weeks)
@@ -1233,7 +1233,7 @@ def test_failed_slack_post_does_not_delete_export_matching_a_persisted_filename(
         MagicMock(side_effect=calendar_images.CalendarSlackPostError(safe_to_discard=True)),
     )
     remove = MagicMock()
-    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     exports = run(rows, now, force=True)
     assert exports[0][0] == f"/mnt/calendar-images/{existing}"
     assert settings == before
@@ -1283,7 +1283,7 @@ def test_failed_stable_deletion_retries_without_settings_write_or_slack_post(
             raise FileNotFoundError(path)
         files.remove(path)
 
-    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     assert run(remaining, now + timedelta(hours=1)) == []
     assert stable_attempts == 1
     assert files == {stable_path}
@@ -1344,9 +1344,9 @@ def test_failure_preserves_all_persisted_images_and_rolls_back(calendar_generati
     before = deepcopy(settings)
     monkeypatch.setattr(calendar_images, "DB_SCHEMA", schema)
     copyfile = MagicMock()
-    monkeypatch.setattr(calendar_images.shutil, "copyfile", copyfile)
+    monkeypatch.setattr(calendar_images.storage.shutil, "copyfile", copyfile)
     remove = MagicMock()
-    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     if failure == "later_export":
         original = sys.modules["dataframe_image"].export
 
@@ -1380,7 +1380,7 @@ def test_old_images_deleted_only_after_commit(calendar_generation, monkeypatch):
         assert settings["calendar_image_current"] != old
         assert path.endswith(old)
 
-    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     run(rows, now + timedelta(hours=1), force=True)
 
 
@@ -1401,9 +1401,9 @@ def test_production_stable_copy_precedes_commit_and_failure_aborts_region(calend
             raise OSError("stable copy failed")
 
     copy_mock = MagicMock(side_effect=copy)
-    monkeypatch.setattr(calendar_images.shutil, "copyfile", copy_mock)
+    monkeypatch.setattr(calendar_images.storage.shutil, "copyfile", copy_mock)
     remove = MagicMock()
-    monkeypatch.setattr(calendar_images.os, "remove", remove)
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
     run(rows, now + timedelta(hours=1), force=True)
     copy_mock.assert_called_once()
     if copy_fails:
