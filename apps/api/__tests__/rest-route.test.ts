@@ -213,6 +213,55 @@ describe("handleRequest", () => {
     });
   });
 
+  describe("Cache-Control", () => {
+    const rpcRequest = () =>
+      new Request("https://api.example.com/v1/ping", {
+        headers: { [Header.Client]: Client.ORPC },
+      });
+    const restRequest = () => new Request("https://api.example.com/v1/events");
+
+    it.each([
+      ["RPC", rpcRequest],
+      ["OpenAPI", restRequest],
+    ])(
+      "marks %s responses private, no-store by default",
+      async (_, request) => {
+        const { handleRequest } = await importHandler();
+
+        const response = await handleRequest(request());
+
+        expect(response.headers.get("cache-control")).toBe("private, no-store");
+      },
+    );
+
+    it.each([
+      ["RPC", rpcRequest],
+      ["OpenAPI", restRequest],
+    ])("marks the %s 404 fallback private, no-store", async (_, request) => {
+      rpcHandle.mockResolvedValue({ response: undefined });
+      openApiHandle.mockResolvedValue({ response: undefined });
+      const { handleRequest } = await importHandler();
+
+      const response = await handleRequest(request());
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+    });
+
+    it("keeps a Cache-Control the procedure set itself", async () => {
+      openApiHandle.mockResolvedValue({
+        response: new Response("rest", {
+          headers: { "cache-control": "public, s-maxage=60" },
+        }),
+      });
+      const { handleRequest } = await importHandler();
+
+      const response = await handleRequest(restRequest());
+
+      expect(response.headers.get("cache-control")).toBe("public, s-maxage=60");
+    });
+  });
+
   it("reflects the request origin in CORS (credentialed requests forbid *)", async () => {
     await importHandler();
 
