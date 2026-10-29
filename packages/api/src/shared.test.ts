@@ -26,7 +26,7 @@ vi.mock("@acme/auth", () => ({
   getSessionFromHeaders: vi.fn(() => Promise.resolve(null)),
 }));
 
-const mockLogWarn = vi.fn();
+const { mockLogWarn } = vi.hoisted(() => ({ mockLogWarn: vi.fn() }));
 
 vi.mock("./logger", async (importOriginal) => ({
   ...(await importOriginal<typeof ApiLogger>()),

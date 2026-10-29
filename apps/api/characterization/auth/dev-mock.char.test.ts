@@ -16,19 +16,25 @@ vi.mock("@acme/shared/common/constants", async (importOriginal) => ({
   isDevelopment: true,
 }));
 
-// shared.ts reads these per request, so stubbing before the first request is
-// enough. CI runs this suite with NEXT_PUBLIC_CHANNEL=ci, which the mock gate
-// refuses, so the channel is pinned here too.
-vi.stubEnv("NEXT_PUBLIC_CHANNEL", "local");
-vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "true");
-
 const { req, target } = await import("../transport");
 const { expectAuthorized, expectUnauthorized } = await import("./verdict");
-const { describe, expect, it } = await import("vitest");
+const { afterEach, beforeEach, describe, expect, it } = await import("vitest");
 
 const IP = (n: number) => `10.71.0.${n}`;
 
 describe.runIf(target.inProcess)("dev-mock branch", () => {
+  // shared.ts reads these per request, so stubbing before each test is enough.
+  // CI runs this suite with NEXT_PUBLIC_CHANNEL=ci, which the mock gate
+  // refuses, so the channel is pinned here too.
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "local");
+    vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "true");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("reaches a protected handler on an unauthenticated request", async () => {
     // In test mode this same request is 401; the dev mock supplies a user.
     // The mock's claimed identity (dev@localhost, id 0) is NOT asserted: no
