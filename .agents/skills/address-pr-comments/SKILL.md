@@ -269,6 +269,9 @@ Within each bucket, group inline comments by file. Each entry:
 resolved, and this skill never resolves threads itself
 ```
 
+A reply for a comment that gets a code change ends with `Fixed in <sha>`. The commit doesn't
+exist until Step 5b, so the plan keeps the placeholder.
+
 Approving the plan also approves running the PR's own code: dependency install scripts and the
 commit hooks run with the user's normal credentials. If the PR changes `package.json`, the
 lockfile, hook config or scripts, say so in the plan so the user can decide.
@@ -342,8 +345,10 @@ reply posted before the push makes them respond to code that isn't on GitHub yet
 ### 5c — Post replies
 
 After the push, post each planned reply in its existing thread (never as a new top-level comment
-when a thread exists). End every reply with the repo's signature, `_written by
-<model_name>_`, as its own final line, naming the model or agent that wrote it.
+when a thread exists). Replace each `<sha>` with the pushed commit's SHA (`git rev-parse HEAD`),
+so the reviewer can open the fix in one click: GitHub links a bare SHA in a comment to that
+commit. End every reply with the repo's signature, `_written by <model_name>_`, as its own final
+line, naming the model or agent that wrote it.
 
 Write each reply to its own file with a quoted heredoc (`<<'BODY'`), then pass the file — reply
 text routinely contains backticks and `$`, which `-f body="..."` would let the shell mangle. Keep
