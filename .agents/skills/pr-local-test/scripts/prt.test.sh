@@ -48,16 +48,17 @@ for tool in jq git python3; do
 done
 command -v lsof >/dev/null 2>&1 || command -v ss >/dev/null 2>&1 || { echo "FAIL: lsof or ss is required by this test" >&2; exit 1; }
 
+tmp_dir=""
+listener_pid=""
+cleanup() {
+  [ -z "$listener_pid" ] || kill "$listener_pid" 2>/dev/null
+  [ -z "$tmp_dir" ] || rm -rf "$tmp_dir"
+}
+trap cleanup EXIT
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/prt-test.XXXXXX")" || {
   echo "FAIL: could not create the test directory" >&2
   exit 1
 }
-listener_pid=""
-cleanup() {
-  [ -z "$listener_pid" ] || kill "$listener_pid" 2>/dev/null
-  rm -rf "$tmp_dir"
-}
-trap cleanup EXIT
 
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1

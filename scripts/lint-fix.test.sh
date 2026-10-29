@@ -8,8 +8,9 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="${script_dir}/.."
 failures=0
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/lint-fix-test.XXXXXX")"
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=""
+trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/lint-fix-test.XXXXXX")" || exit 1
 
 # A fake turbo that records any invocation, so the test can prove it never ran.
 mkdir -p "$tmp_dir/bin"
