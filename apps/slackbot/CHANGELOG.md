@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## [2.11.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.10.0...slackbot@2.11.0) (2026-10-29)
+
+
+### Features
+
+* **region-pages:** migrate region pages into the monorepo ([#1355](https://github.com/F3-Nation/f3-nation/issues/1355)) ([4ecc49c](https://github.com/F3-Nation/f3-nation/commit/4ecc49cc1cf622d1397df4251f57128c4fe8b097))
+* **slackbot:** tell an FNG's battle buddy when he joins Slack, remind until he does ([#1388](https://github.com/F3-Nation/f3-nation/issues/1388)) ([fcd22dd](https://github.com/F3-Nation/f3-nation/commit/fcd22ddc2f8c72fcadd805b04d8f82fbf1e639d5))
+
+
+### Bug Fixes
+
+* **deps:** pin dependencies ([#1389](https://github.com/F3-Nation/f3-nation/issues/1389)) ([f16af61](https://github.com/F3-Nation/f3-nation/commit/f16af61d0dcd0869971d659e1cd5dd198c185570))
+* **slackbot:** /fng asks who brought the FNG instead of assuming the buddy ([#1353](https://github.com/F3-Nation/f3-nation/issues/1353)) ([35f2ce1](https://github.com/F3-Nation/f3-nation/commit/35f2ce1f9d00bf16d5b71a5acf3af6e5641545a0))
+* **slackbot:** ignore HC/Un-HC clicks from the event's Q or Co-Q ([#1416](https://github.com/F3-Nation/f3-nation/issues/1416)) ([f86e31f](https://github.com/F3-Nation/f3-nation/commit/f86e31fcc40e3b0c1123d48a87071e3d30bf01d9))
+* **slackbot:** link cached Slack users that have no F3 user in get_user ([#1396](https://github.com/F3-Nation/f3-nation/issues/1396)) ([98541f6](https://github.com/F3-Nation/f3-nation/commit/98541f64b64015121cf52d999b8f175d027a7264))
+* **slackbot:** report emergency notification outcomes ([#1362](https://github.com/F3-Nation/f3-nation/issues/1362)) ([efd8401](https://github.com/F3-Nation/f3-nation/commit/efd8401879ca61c5710e3bd878a53b7a5f7d1166))
+
 ## [2.10.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.9.0...slackbot@2.10.0) (2026-10-23)
 
 
