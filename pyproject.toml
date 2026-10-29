@@ -8,3 +8,17 @@ members = ["apps/slackbot", "apps/analytics", "packages/db-python"]
 
 [tool.uv.sources]
 f3-data-models = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "C", "B"]
+ignore = ["C901"]
+
+[tool.ruff.lint.isort]
+order-by-type = true
+relative-imports-order = "closest-to-furthest"
+extra-standard-library = ["typing"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+known-first-party = []
