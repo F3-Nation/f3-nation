@@ -1,7 +1,7 @@
 {
   "name": "f3-region-pages",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port ${F3_REGION_PAGES_PORT:-3006}",
