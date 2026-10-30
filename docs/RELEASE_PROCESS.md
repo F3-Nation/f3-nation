@@ -99,6 +99,11 @@ For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 1. Main Slackbot Cloud Run service deploy (`f3-slackbot` in `f3-slackbot-staging` and `f3-slackbot`)
 2. Scripts Cloud Run Job deploy (`f3-slackbot-scripts` in `f3-slackbot-staging` and `f3-slackbot`)
 
+The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes
+directly to GitHub Pages. Its emitted check names must stay distinct from the CI
+checks its gate waits on; see
+[Deploy pipeline (per app)](CI_PIPELINE.md#deploy-pipeline-per-app).
+
 #### Overlapping deploys
 
 Each deploy job is serialized by its **target**, not by its release tag. The
