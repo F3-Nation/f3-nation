@@ -100,11 +100,9 @@ For `slackbot@*`, the workflow runs two deploy tracks from one tag:
 2. Scripts Cloud Run Job deploy (`f3-slackbot-scripts` in `f3-slackbot-staging` and `f3-slackbot`)
 
 The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes
-directly to GitHub Pages through `ci-check` → `build-homepage` → `deploy`.
-Its build check has a distinct name because the
-[CI gate](CI_PIPELINE.md#deploy-pipeline-per-app) matches check names across
-workflows; a skipped Homepage check must not replace CI's successful `build`
-result and block the gate.
+directly to GitHub Pages. Its emitted check names must stay distinct from the CI
+checks its gate waits on; see
+[Deploy pipeline (per app)](CI_PIPELINE.md#deploy-pipeline-per-app).
 
 #### Overlapping deploys
 
