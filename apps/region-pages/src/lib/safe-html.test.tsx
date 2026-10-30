@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { act } from "react";
+import type { Root } from "react-dom/client";
+import { hydrateRoot } from "react-dom/client";
 import { cleanup, render } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { sanitizeHtmlToReactNodes, useSanitizedHtml } from "@/lib/safe-html";
@@ -166,5 +169,29 @@ describe("server text decoding", () => {
     expect(renderToString(<Text html={`${"a".repeat(9_999)}💪💪`} />)).toBe(
       `<p>${"a".repeat(9_999)}…</p>`,
     );
+  });
+
+  it("hydrates cut text without errors, then shows the full text", async () => {
+    // Escaped characters before the cut, an emoji straddling it.
+    const html = `${"&lt;".repeat(5_000)}${"a".repeat(4_999)}💪 and more`;
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(<Text html={html} />);
+    expect(container.textContent).toBe(
+      `${"<".repeat(5_000)}${"a".repeat(4_999)}…`,
+    );
+
+    const errors: unknown[] = [];
+    let root: Root | undefined;
+    await act(async () => {
+      root = hydrateRoot(container, <Text html={html} />, {
+        onRecoverableError: (error) => errors.push(error),
+      });
+    });
+
+    expect(errors).toEqual([]);
+    expect(container.textContent).toBe(
+      `${"<".repeat(5_000)}${"a".repeat(4_999)}💪 and more`,
+    );
+    act(() => root?.unmount());
   });
 });
