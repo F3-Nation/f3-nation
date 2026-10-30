@@ -28,6 +28,7 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { withAuditContext } from "../lib/with-audit-context";
 import { orgAndAncestorsAreActive } from "../org-activity";
 import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import { requireEditorOnRescope } from "../require-editor-on-rescope";
@@ -453,14 +454,16 @@ export const locationRouter = {
           ...(input.meta as Record<string, string>),
         },
       };
-      const [result] = await ctx.db
-        .insert(schema.locations)
-        .values(locationToCrupdate)
-        .onConflictDoUpdate({
-          target: [schema.locations.id],
-          set: locationToCrupdate,
-        })
-        .returning();
+      const [result] = await withAuditContext(ctx, async ({ db }) =>
+        db
+          .insert(schema.locations)
+          .values(locationToCrupdate)
+          .onConflictDoUpdate({
+            target: [schema.locations.id],
+            set: locationToCrupdate,
+          })
+          .returning(),
+      );
 
       // Notify webhooks and invalidate cache about the location change
       if (result) {
@@ -518,15 +521,17 @@ export const locationRouter = {
           message: "You are not authorized to delete this Location",
         });
       }
-      await ctx.db
-        .update(schema.locations)
-        .set({ isActive: false })
-        .where(
-          and(
-            eq(schema.locations.id, input.id),
-            eq(schema.locations.isActive, true),
+      await withAuditContext(ctx, async ({ db }) =>
+        db
+          .update(schema.locations)
+          .set({ isActive: false })
+          .where(
+            and(
+              eq(schema.locations.id, input.id),
+              eq(schema.locations.isActive, true),
+            ),
           ),
-        );
+      );
 
       // Notify webhooks and invalidate cache about the location deletion
       notifyMapDataChange({ type: "location.deleted", locationId: input.id });

@@ -211,6 +211,11 @@ Individual occurrences of events (can be standalone or part of a series).
 | `DELETE` | `/v1/attendance/remove-q`                                       | Remove Q status (keeps HC)                       |
 | `PUT`    | `/v1/attendance/assign-q`                                       | Assign Q + Co-Qs (demotes existing Q to HC)      |
 
+Successful attendance mutations return `success: true`. Creating planned or
+actual attendance and taking Q also return `attendanceId`. Deleting actual or
+planned attendance returns `deletedCount`, including zero when no rows match.
+Updating types, removing Q and assigning leaders return only `success`.
+
 ---
 
 ### user
@@ -223,6 +228,8 @@ Individual occurrences of events (can be standalone or part of a series).
 | `GET`    | `/v1/user/email/{email}` | User by email address                                |
 | `GET`    | `/v1/user/orgs`          | Users by org (includes descendants)                  |
 | `DELETE` | `/v1/user/delete/{id}`   | Permanent delete (nation admin only)                 |
+
+Successful user deletion returns `{ userId }`.
 
 **Role values:** `"user"` | `"editor"` | `"admin"`
 

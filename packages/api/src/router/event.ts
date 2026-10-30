@@ -37,6 +37,7 @@ import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { withAuditContext } from "../lib/with-audit-context";
 import { logError } from "../logger";
 import { orgAndAncestorsAreActive } from "../org-activity";
 import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
@@ -1009,9 +1010,8 @@ export const eventRouter = {
         destinationRegionId,
         movedAcrossRegions,
         shouldNotifyFirstEventForRegion,
-      } = await ctx.db.transaction(async (tx) => {
-        const transactionDb = tx as unknown as AppDb;
-        const transactionContext: Context = { ...ctx, db: transactionDb };
+      } = await withAuditContext(ctx, async (transactionContext) => {
+        const transactionDb = transactionContext.db;
         const lockedAoIds = [
           ...new Set(
             [existingEvent?.orgId, input.aoId].filter(
@@ -1594,17 +1594,22 @@ export const eventRouter = {
           message: "You are not authorized to delete this Event",
         });
       }
-      await ctx.db
-        .update(schema.events)
-        .set({ isActive: false })
-        .where(
-          and(eq(schema.events.id, input.id), eq(schema.events.isActive, true)),
-        );
+      await withAuditContext(ctx, async (auditCtx) => {
+        await auditCtx.db
+          .update(schema.events)
+          .set({ isActive: false })
+          .where(
+            and(
+              eq(schema.events.id, input.id),
+              eq(schema.events.isActive, true),
+            ),
+          );
 
-      // Cascade delete event instances for series events
-      const { softDeleteFutureInstancesForSeries } =
-        await import("../lib/cascade-service");
-      await softDeleteFutureInstancesForSeries(ctx.db, input.id);
+        // Cascade delete event instances for series events
+        const { softDeleteFutureInstancesForSeries } =
+          await import("../lib/cascade-service");
+        await softDeleteFutureInstancesForSeries(auditCtx.db, input.id);
+      });
 
       // Notify webhooks and invalidate cache about the event deletion
       notifyMapDataChange({ type: "event.deleted", eventId: input.id });
