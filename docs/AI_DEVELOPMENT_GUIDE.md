@@ -26,7 +26,13 @@ so each tool resolves to the same content:
 | **GitHub Copilot**           | `.github/copilot-instructions.md`                                       | Pointer → `AGENTS.md` + `REVIEW.md` |
 | **CodeRabbit**               | `AGENTS.md` (root + per-area) + `REVIEW.md` via `.coderabbit.yaml`      | Conventions + code-review rules     |
 | **Greptile**                 | `AGENTS.md` + per-area files and `REVIEW.md` via `.greptile/files.json` | Conventions + code-review rules     |
-| **Cursor**                   | `.cursor/rules/*.mdc`                                                   | Pointer → `AGENTS.md` + this guide  |
+
+`.coderabbit.yaml` also holds per-path review instructions and pre-merge
+checks, and `.greptile/config.json` holds Greptile's scoped rules. Both point
+at `REVIEW.md`'s `CC-*` and `KP-*` ids, so a rule changes in `REVIEW.md` and
+the bot configs name it. The `docs/specs/` files are Greptile context, scoped
+to the code each spec covers.
+| **Cursor** | `.cursor/rules/*.mdc` | Pointer → `AGENTS.md` + this guide |
 
 **Rule of thumb:** put durable guidance in `AGENTS.md` (or, for deep topics, in
 `docs/` and link it). Keep the tool-specific pointer files thin so they never
