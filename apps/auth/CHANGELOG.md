@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.7.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.6.0...auth@2.7.0) (2026-10-29)
+
+
+### Features
+
+* **admin,auth,me,homepage,observability:** report browser errors to PostHog ([#1313](https://github.com/F3-Nation/f3-nation/issues/1313)) ([502abd8](https://github.com/F3-Nation/f3-nation/commit/502abd8dcab6322eb849bf6879987e45d324fed0))
+* **ui,admin,map,me,auth,homepage:** add route error, not-found and loading boundaries ([#1316](https://github.com/F3-Nation/f3-nation/issues/1316)) ([9ecfb43](https://github.com/F3-Nation/f3-nation/commit/9ecfb43efbdbdb403aa3cf94dad261cb686d5996))
+
+
+### Bug Fixes
+
+* **admin,auth,map,me,api:** add baseline HTTP security headers ([#1339](https://github.com/F3-Nation/f3-nation/issues/1339)) ([2dd1548](https://github.com/F3-Nation/f3-nation/commit/2dd15485bf5c4174d913e5ed2905082a35e0ea39))
+* **api,auth,shared:** key rate limits on the Cloud Run-appended X-Forwarded-For hop ([#1340](https://github.com/F3-Nation/f3-nation/issues/1340)) ([ab85040](https://github.com/F3-Nation/f3-nation/commit/ab850404f1e78a5422173b53f0e2b35a857cb768))
+* **api:** require local channel and explicit opt-in for the dev mock session ([#1335](https://github.com/F3-Nation/f3-nation/issues/1335)) ([3342afe](https://github.com/F3-Nation/f3-nation/commit/3342afe12d7dd48bffa548f10c08f57c15d001d1))
+* **auth,me:** stop staging from linking to the production apps directory ([#1322](https://github.com/F3-Nation/f3-nation/issues/1322)) ([28bbe4f](https://github.com/F3-Nation/f3-nation/commit/28bbe4fdda91fdf178382a945d4ed0dcb8b448b3))
+* **auth:** let relying parties verify auth3's Better Auth tokens ([#1320](https://github.com/F3-Nation/f3-nation/issues/1320)) ([954b662](https://github.com/F3-Nation/f3-nation/commit/954b662dd0a792bb79aec87c672817d816538ac4))
+* **map,eslint:** enable React Compiler lint rules and stop marker moves leaking into the query cache ([#1295](https://github.com/F3-Nation/f3-nation/issues/1295)) ([f049283](https://github.com/F3-Nation/f3-nation/commit/f049283bf9d3c83a005475fac8f55a4e75cc4050))
+* **repo:** bump zod to 4.6.7 for GHSA-mrhx-c7xc-m3w5 ([#1373](https://github.com/F3-Nation/f3-nation/issues/1373)) ([4e680ab](https://github.com/F3-Nation/f3-nation/commit/4e680ab0d831a324f10645a8e7beb765b225dc79))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.2
+    * @acme/shared bumped to 0.6.0
+    * @acme/ui bumped to 0.3.0
+
 ## [2.6.0](https://github.com/F3-Nation/f3-nation/compare/auth@2.5.0...auth@2.6.0) (2026-10-23)
 
 

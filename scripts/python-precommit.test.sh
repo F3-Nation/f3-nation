@@ -19,8 +19,9 @@ if [[ ! -x "$lefthook_bin" || -z "$git_bin" || -z "$node_bin" ]]; then
   exit 1
 fi
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/python-precommit-test.XXXXXX")"
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=""
+trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/python-precommit-test.XXXXXX")" || exit 1
 mkdir -p "$tmp_dir/with-uv" "$tmp_dir/without-uv"
 for tools_dir in "$tmp_dir/with-uv" "$tmp_dir/without-uv"; do
   ln -s "$BASH" "$tools_dir/bash"
