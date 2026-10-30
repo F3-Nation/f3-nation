@@ -2069,17 +2069,22 @@ async function main(): Promise<void> {
         ao_website: string | null;
         event_meta_matches: boolean | null;
         token_changed: boolean;
+        token_unique: boolean;
       }[]
     >`
-      SELECT submitted_by, location_description, ao_website,
-        event_meta = ${sql.json({
+      SELECT r.submitted_by, r.location_description, r.ao_website,
+        r.event_meta = ${sql.json({
           contact: expectedUserEmail,
           nested: { note: `Email ${expectedUserEmail}` },
           count: 2,
           active: true,
         })}::jsonb AS event_meta_matches,
-        token <> ${SYNTHETIC_REQUEST_TOKEN}::uuid AS token_changed
-      FROM update_requests WHERE id = ${planted.requestId}`;
+        r.token <> ${SYNTHETIC_REQUEST_TOKEN}::uuid AS token_changed,
+        NOT EXISTS (
+          SELECT 1 FROM update_requests AS other
+          WHERE other.id <> r.id AND other.token = r.token
+        ) AS token_unique
+      FROM update_requests AS r WHERE r.id = ${planted.requestId}`;
     check(
       "deterministic cross-table email mapping",
       fakeUser?.email === request?.submitted_by &&
@@ -2087,8 +2092,15 @@ async function main(): Promise<void> {
       `users.email=${fakeUser?.email} vs update_requests.submitted_by=${request?.submitted_by}`,
     );
 
-    const [expansion] = await sql<{ user_lat: number; user_lon: number }[]>`
-      SELECT user_lat, user_lon FROM expansions
+    const [expansion] = await sql<
+      {
+        user_lat: number;
+        user_lon: number;
+        pinned_lat: number;
+        pinned_lon: number;
+      }[]
+    >`
+      SELECT user_lat, user_lon, pinned_lat, pinned_lon FROM expansions
       WHERE id = ${planted.expansionId}`;
     check(
       "expansion user latitude rounded to one decimal",
@@ -2099,6 +2111,13 @@ async function main(): Promise<void> {
       "expansion user longitude rounded to one decimal",
       !!expansion && expansion.user_lon === -81,
       `row ${expansion ? "present" : "missing"}; longitude ${expansion?.user_lon ?? "missing"}`,
+    );
+    check(
+      "expansion pinned coordinates preserved",
+      !!expansion &&
+        expansion.pinned_lat === 35.61234 &&
+        expansion.pinned_lon === -80.93456,
+      `row ${expansion ? "present" : "missing"}; pinned coordinates ${expansion?.pinned_lat ?? "missing"}, ${expansion?.pinned_lon ?? "missing"}`,
     );
 
     const [membership] = await sql<{ notes: string | null }[]>`
@@ -2165,9 +2184,11 @@ async function main(): Promise<void> {
       `row ${request ? "present" : "missing"}; metadata ${request?.event_meta_matches === true ? "matches" : "does not match"}`,
     );
     check(
-      "request capability token changed",
-      !!request && request.token_changed === true,
-      `row ${request ? "present" : "missing"}; token ${request?.token_changed === true ? "changed" : "unchanged"}`,
+      "request capability token changed and unique",
+      !!request &&
+        request.token_changed === true &&
+        request.token_unique === true,
+      `row ${request ? "present" : "missing"}; token ${request?.token_changed === true ? "changed" : "unchanged"}; unique ${request?.token_unique === true ? "yes" : "no"}`,
     );
 
     const [instance] = await sql<{ backblast: string | null }[]>`
