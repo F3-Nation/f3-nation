@@ -13,7 +13,8 @@ services=(
     "Me|3003|f3-me"
     "Auth|3004|f3-auth"
     "Homepage|3005|f3-homepage"
-    "Slackbot|3006|f3-slackbot"
+    "Region pages|3006|f3-region-pages"
+    "Slackbot|3007|f3-slackbot"
 )
 
 for entry in "${services[@]}"; do

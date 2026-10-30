@@ -15,7 +15,7 @@
 #
 # Running a second checkout (e.g. a git worktree) next to the first? Give it
 # its own ports, containers, and database with a slot number from 1 to 9:
-#   pnpm local:setup --slot 1    — apps on 3100–3105, Postgres on 5533, …
+#   pnpm local:setup --slot 1    — apps on 3100–3107, Postgres on 5533, …
 # The slot is saved in the root .env, so later runs and `pnpm dev` reuse it.
 # `--slot 0` goes back to the defaults.
 

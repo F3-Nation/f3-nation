@@ -277,8 +277,12 @@ if __name__ == "__main__":
             pass
     else:
         if LOCAL_DEVELOPMENT:
-            start_local_health_server(local_http_port)
-            logging.getLogger().info(f"Local HTTP health server listening on http://localhost:{local_http_port}")
+            # The health page is a local convenience; a busy port must not stop the bot.
+            try:
+                start_local_health_server(local_http_port)
+                logging.getLogger().info(f"Local HTTP health server listening on http://localhost:{local_http_port}")
+            except OSError as exc:
+                logging.getLogger().warning(f"Local HTTP health server could not bind port {local_http_port}: {exc}")
 
         logging.getLogger().info("Running in local Socket Mode.")
 

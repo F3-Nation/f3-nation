@@ -263,16 +263,16 @@ The above command will install code if you don't have it already and then open y
 pnpm dev
 ```
 
-| App          | URL                                                                       |
-| ------------ | ------------------------------------------------------------------------- |
-| Map          | <http://localhost:3000>                                                   |
-| API          | <http://localhost:3001>                                                   |
-| Admin        | <http://localhost:3002>                                                   |
-| Me           | <http://localhost:3003>                                                   |
-| Auth         | <http://localhost:3004>                                                   |
-| Homepage     | <http://localhost:3005>                                                   |
-| Region pages | <http://localhost:3006>                                                   |
-| Slackbot     | <http://localhost:3007> (health check; only with `pnpm dev --include-py`) |
+| App          | URL                                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| Map          | <http://localhost:3000>                                                                             |
+| API          | <http://localhost:3001>                                                                             |
+| Admin        | <http://localhost:3002>                                                                             |
+| Me           | <http://localhost:3003>                                                                             |
+| Auth         | <http://localhost:3004>                                                                             |
+| Homepage     | <http://localhost:3005>                                                                             |
+| Region pages | <http://localhost:3006>                                                                             |
+| Slackbot     | <http://localhost:3007> (health check; only with `pnpm dev --include-py` or `--filter f3-slackbot`) |
 
 ---
 
@@ -311,7 +311,7 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 ## Running several checkouts at once (git worktrees)
 
-Every checkout normally uses the same ports (apps on 3000–3005, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead:
+Every checkout normally uses the same ports (apps on 3000–3007, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead:
 
 ```bash
 git worktree add ../f3-nation-review some-branch
