@@ -866,7 +866,8 @@ def upload_files_to_storage(
 
     Returns the stored files' public URLs, email attachments (``content`` and ``meta``),
     the Slack file ids, and the public URLs of the low-resolution copies. A file that
-    fails is logged and left out of every list.
+    fails is logged, any copy of it already stored is deleted, and it is left out of
+    every list except the Slack file ids, which hold every input file.
     """
     file_list = []
     file_send_list = []
@@ -877,6 +878,7 @@ def upload_files_to_storage(
     bucket_name = bucket_name or "backblast-images"
 
     for file in files or []:
+        stored_names = []
         try:
             r_full = requests.get(file["url_private_download"], headers={"Authorization": f"Bearer {client.token}"})
             r_full.raise_for_status()
@@ -892,15 +894,15 @@ def upload_files_to_storage(
             available_thumbs = [size for size in thumb_sizes if f"thumb_{size}" in file]
             thumb_size = max(available_thumbs) if available_thumbs else None
 
+            low_res_content = None
             if thumb_size is not None:
                 r_low_res = requests.get(
                     file[f"thumb_{thumb_size}"],
                     headers={"Authorization": f"Bearer {client.token}"},
                     params={"width": constants.LOW_REZ_IMAGE_SIZE, "height": constants.LOW_REZ_IMAGE_SIZE},
                 )
-                low_res_file_list.append(
-                    storage.write_bytes(bucket_name, f"{file_id}_low_res.png", r_low_res.content, "image/png")
-                )
+                r_low_res.raise_for_status()
+                low_res_content = r_low_res.content
 
             change_to_png = enforce_png and file["filetype"] != "png"
             if enforce_square or max_height or change_to_png:
@@ -934,7 +936,19 @@ def upload_files_to_storage(
                     img.save(buffer, format=img_format, quality=95, optimize=True)
                     content = buffer.getvalue()
 
-            file_list.append(storage.write_bytes(bucket_name, current_file_name, content, file_mimetype))
+            # Nothing is added to the returned lists until every copy is stored, so a
+            # failure never returns a thumbnail without its full-size file.
+            file_url = storage.write_bytes(bucket_name, current_file_name, content, file_mimetype)
+            stored_names.append(current_file_name)
+            low_res_url = None
+            if low_res_content is not None:
+                low_res_name = f"{file_id}_low_res.png"
+                low_res_url = storage.write_bytes(bucket_name, low_res_name, low_res_content, "image/png")
+                stored_names.append(low_res_name)
+
+            file_list.append(file_url)
+            if low_res_url is not None:
+                low_res_file_list.append(low_res_url)
             file_send_list.append(
                 {
                     "content": content,
@@ -947,6 +961,13 @@ def upload_files_to_storage(
             )
         except Exception as e:
             logger.error(f"Error uploading file: {e}")
+            for name in stored_names:
+                try:
+                    storage.delete(bucket_name, name)
+                except FileNotFoundError:
+                    pass
+                except Exception as cleanup_error:
+                    logger.error(f"Error deleting partially uploaded file {name}: {cleanup_error}")
 
     return file_list, file_send_list, file_ids, low_res_file_list
 

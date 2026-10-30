@@ -67,6 +67,13 @@ def test_public_url_with_emulator_points_at_emulator(monkeypatch, host):
     )
 
 
+def test_public_url_encodes_object_name_but_keeps_folders(monkeypatch):
+    monkeypatch.setattr(constants, "FILE_BUCKET_PREFIX", "f3-public-images")
+    assert storage.public_url("backblast-images", "photo#1?.png") == (
+        "https://storage.googleapis.com/f3-public-images/backblast-images/photo%231%3F.png"
+    )
+
+
 def test_write_bytes_without_emulator_writes_to_mount(mount_root):
     url = storage.write_bytes("user-avatars", "U1.png", b"avatar", "image/png")
 
@@ -322,3 +329,34 @@ def test_upload_files_to_storage_leaves_failed_upload_out_of_results(emulator, s
     assert (file_list, send_list, low_res) == ([], [], [])
     assert file_ids == ["F4"]
     logger.error.assert_called_once()
+
+
+def test_upload_files_to_storage_deletes_stored_copy_when_a_later_write_fails(monkeypatch, slack_downloads):
+    slack_downloads["https://files.slack.com/F5"] = b"full"
+    slack_downloads["https://files.slack.com/F5/thumb_480"] = b"thumb"
+    written, deleted = [], []
+
+    def write_bytes(directory, name, data, content_type):
+        if name.endswith("_low_res.png"):
+            raise requests.HTTPError("503")
+        written.append((directory, name))
+        return f"https://storage.googleapis.com/f3-public-images/{directory}/{name}"
+
+    monkeypatch.setattr(storage, "write_bytes", write_bytes)
+    monkeypatch.setattr(storage, "delete", lambda directory, name: deleted.append((directory, name)))
+    file = {
+        "id": "F5",
+        "filetype": "jpg",
+        "mimetype": "image/jpeg",
+        "url_private_download": "https://files.slack.com/F5",
+        "thumb_480": "https://files.slack.com/F5/thumb_480",
+    }
+
+    file_list, send_list, file_ids, low_res = helper_functions.upload_files_to_storage(
+        [file], SimpleNamespace(token="xoxb"), MagicMock()
+    )
+
+    assert (file_list, send_list, low_res) == ([], [], [])
+    assert file_ids == ["F5"]
+    assert written == [("backblast-images", "F5.jpg")]
+    assert deleted == [("backblast-images", "F5.jpg")]

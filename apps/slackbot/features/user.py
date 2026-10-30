@@ -6,6 +6,7 @@ from f3_data_models.models import SlackUser, User
 from f3_data_models.utils import DbManager
 from slack_sdk import WebClient
 
+from utilities import storage
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import get_user, safe_convert, safe_get, upload_files_to_storage
 from utilities.slack import actions
@@ -25,6 +26,7 @@ from utilities.slack.orm import (
     InputBlock,
     PlainTextInputElement,
     as_selector_options,
+    image_or_link_block,
 )
 
 USER_FORM_USERNAME = "user_name"
@@ -81,8 +83,15 @@ def build_user_form(body: dict, client: WebClient, logger: Logger, context: dict
             "text": user.home_region_org.name,
             "value": str(user.home_region_id),
         }
-    if user.avatar_url:
+    if user.avatar_url and storage.is_publicly_reachable(user.avatar_url):
         initial_values[USER_FORM_IMAGE] = user.avatar_url
+    elif user.avatar_url:
+        form.blocks = [
+            image_or_link_block(image_url=user.avatar_url, alt_text="User Image")
+            if block.action == USER_FORM_IMAGE
+            else block
+            for block in form.blocks
+        ]
     else:
         form.delete_block(USER_FORM_IMAGE)
     form.set_initial_values(initial_values)

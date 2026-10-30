@@ -57,7 +57,7 @@ def mount_path(directory: str, name: str) -> str:
 def public_url(directory: str, name: str) -> str:
     """URL a browser can load the stored file from."""
     bucket, object_name = _bucket_and_object(directory, name)
-    return f"{_emulator_base() or PUBLIC_GCS_BASE}/{bucket}/{object_name}"
+    return f"{_emulator_base() or PUBLIC_GCS_BASE}/{bucket}/{quote(object_name)}"
 
 
 def is_publicly_reachable(url: str) -> bool:
