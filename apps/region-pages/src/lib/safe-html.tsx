@@ -61,13 +61,16 @@ const MAX_PLAIN_TEXT_LENGTH = 10_000;
 
 /**
  * Plain-text rendering of `html`; what the server (no DOMParser) shows. Text
- * longer than `MAX_PLAIN_TEXT_LENGTH` is cut and ends with `…`.
+ * longer than `MAX_PLAIN_TEXT_LENGTH` is cut and ends with `…`, which counts
+ * toward the limit.
  */
 const htmlToPlainText = (html: string | null | undefined): string => {
   const text = html ? stripHtml(html) : "";
   if (text.length <= MAX_PLAIN_TEXT_LENGTH) return text;
   // Drop a high surrogate left alone by the cut, so no broken character shows.
-  return `${text.slice(0, MAX_PLAIN_TEXT_LENGTH).replace(/[\uD800-\uDBFF]$/, "")}…`;
+  return `${text
+    .slice(0, MAX_PLAIN_TEXT_LENGTH - 1)
+    .replace(/[\uD800-\uDBFF]$/, "")}…`;
 };
 
 const sanitizeChildNodes = (

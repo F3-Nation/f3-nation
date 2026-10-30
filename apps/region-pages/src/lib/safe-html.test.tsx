@@ -153,9 +153,9 @@ describe("server text decoding", () => {
     ).toBe("<p>It’s 5—6 ❤ &amp;bogus;</p>");
   });
 
-  it("cuts text longer than 10,000 characters and ends it with an ellipsis", () => {
+  it("cuts text longer than 10,000 characters to 10,000 ending in an ellipsis", () => {
     expect(renderToString(<Text html={`<b>${"a".repeat(10_001)}</b>`} />)).toBe(
-      `<p>${"a".repeat(10_000)}…</p>`,
+      `<p>${"a".repeat(9_999)}…</p>`,
     );
   });
 
@@ -166,18 +166,18 @@ describe("server text decoding", () => {
   });
 
   it("doesn't leave half of an emoji at the cut", () => {
-    expect(renderToString(<Text html={`${"a".repeat(9_999)}💪💪`} />)).toBe(
-      `<p>${"a".repeat(9_999)}…</p>`,
+    expect(renderToString(<Text html={`${"a".repeat(9_998)}💪💪`} />)).toBe(
+      `<p>${"a".repeat(9_998)}…</p>`,
     );
   });
 
   it("hydrates cut text without errors, then shows the full text", async () => {
     // Escaped characters before the cut, an emoji straddling it.
-    const html = `${"&lt;".repeat(5_000)}${"a".repeat(4_999)}💪 and more`;
+    const html = `${"&lt;".repeat(5_000)}${"a".repeat(4_998)}💪 and more`;
     const container = document.createElement("div");
     container.innerHTML = renderToString(<Text html={html} />);
     expect(container.textContent).toBe(
-      `${"<".repeat(5_000)}${"a".repeat(4_999)}…`,
+      `${"<".repeat(5_000)}${"a".repeat(4_998)}…`,
     );
 
     const errors: unknown[] = [];
@@ -190,7 +190,7 @@ describe("server text decoding", () => {
 
     expect(errors).toEqual([]);
     expect(container.textContent).toBe(
-      `${"<".repeat(5_000)}${"a".repeat(4_999)}💪 and more`,
+      `${"<".repeat(5_000)}${"a".repeat(4_998)}💪 and more`,
     );
     act(() => root?.unmount());
   });
