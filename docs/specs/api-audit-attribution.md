@@ -126,6 +126,9 @@ Use the API's real migrated, isolated test database and synthetic users:
 Stored-history assertions use SQL/Vitest in the existing serial API test suite;
 the application flow supplies end-to-end evidence. Attribution must remain
 isolated when a transaction pooler reuses backend connections.
+Pooler compatibility requires verification through the deployed environment's
+active connection pooler; local tests alone do not satisfy that acceptance
+requirement.
 
 ## 8. Observability
 
