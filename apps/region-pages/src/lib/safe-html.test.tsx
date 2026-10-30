@@ -149,4 +149,22 @@ describe("server text decoding", () => {
       renderToString(<Text html="It&#8217;s 5&mdash;6 &#x2764; &bogus;" />),
     ).toBe("<p>It’s 5—6 ❤ &amp;bogus;</p>");
   });
+
+  it("cuts text longer than 10,000 characters and ends it with an ellipsis", () => {
+    expect(renderToString(<Text html={`<b>${"a".repeat(10_001)}</b>`} />)).toBe(
+      `<p>${"a".repeat(10_000)}…</p>`,
+    );
+  });
+
+  it("keeps text of exactly 10,000 characters whole", () => {
+    expect(renderToString(<Text html={"a".repeat(10_000)} />)).toBe(
+      `<p>${"a".repeat(10_000)}</p>`,
+    );
+  });
+
+  it("doesn't leave half of an emoji at the cut", () => {
+    expect(renderToString(<Text html={`${"a".repeat(9_999)}💪💪`} />)).toBe(
+      `<p>${"a".repeat(9_999)}…</p>`,
+    );
+  });
 });
