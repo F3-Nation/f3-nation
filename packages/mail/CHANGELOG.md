@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.6](https://github.com/F3-Nation/f3-nation/compare/pkg-mail@0.1.5...pkg-mail@0.1.6) (2026-10-29)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/env bumped to 0.2.0
+
 ## [0.1.5](https://github.com/F3-Nation/f3-nation/compare/pkg-mail@0.1.4...pkg-mail@0.1.5) (2026-10-06)
 
 
