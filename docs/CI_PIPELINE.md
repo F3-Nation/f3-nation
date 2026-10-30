@@ -163,12 +163,15 @@ that app's thin `deploy-<app>.yml` caller into the shared
 4. **`deploy-prod`** — requires staging success, then Cloud Run in the prod
    project.
 
-Deploy gates match check names across workflows on the tagged commit. Deploy
-jobs must keep names distinct from the CI checks matched by `check-regexp`,
-so a skipped deploy job cannot shadow a successful CI check. The
-[Homepage workflow](../.github/workflows/deploy-homepage.yml) uses
-`ci-check` → `build-homepage` → `deploy`; its build job is separate from CI's
-`build` check.
+Deploy gates match emitted check-run names across workflows on the tagged
+commit. Keep those names distinct from the CI checks matched by `check-regexp`,
+so a skipped deploy check cannot replace a successful CI result and block the
+gate. Reusable-workflow jobs include the caller in their check names, such as
+`deploy / build`, so their `build` job IDs do not collide with CI's `build`.
+
+The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes to
+GitHub Pages through `ci-check` → `build-homepage` → `deploy`. Its top-level
+build check is named `build-homepage` to stay distinct from CI's `build`.
 
 ## Observations
 

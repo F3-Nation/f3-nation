@@ -125,9 +125,6 @@ Ask for anything missing before starting:
 
    Do not summarize every PR.
 
-   For Homepage, distinguish its deployment result from CI's `build` check
-   using the [deploy gate guidance](../../../docs/CI_PIPELINE.md#deploy-pipeline-per-app).
-
 5. **Fill in [`template.md`](template.md).** Renumber the steps after
    dropping any that do not apply. Follow the rules below. Delete every
    `<!-- ... -->` comment and every block marked optional that does not
@@ -168,6 +165,12 @@ Ask for anything missing before starting:
 
 The template is written for Staging. For a Production release, use the
 Production column of each row while filling it in.
+
+When Homepage is included, confirm that the `deploy` job in its `Deploy Homepage`
+run succeeded for the release tag before reporting it as published. For a
+missing, pending, or failed deploy, replace the template's Homepage publication
+claim with that status. CI's `build` check proves only the CI build result; see the
+[deploy gate guidance](../../../docs/CI_PIPELINE.md#deploy-pipeline-per-app).
 
 |                             | Staging                                                                     | Production                                                                              |
 | --------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
