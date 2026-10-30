@@ -151,7 +151,8 @@ unpopulated tier for one branch requires no per-level code.
 
 - **AC-17** — GIVEN the leaf layer (e.g. a region) WHEN the visitor clicks a
   region polygon THEN its active AO locations render as pins layered above the
-  polygons; while pins are shown, polygon-hover no longer swaps the info panel,
+  polygons and the panel shows that region's info (touch has no hover to load
+  it first); while pins are shown, polygon-hover no longer swaps the info panel,
   and changing level, clicking a breadcrumb, or any polygon re-render clears the
   pins.
 - **AC-18** — GIVEN AO pins are shown WHEN the visitor hovers or clicks a pin
@@ -163,6 +164,24 @@ unpopulated tier for one branch requires no per-level code.
 - **AC-19** — GIVEN multiple distinct AO locations share identical coordinates
   THEN their pins are fanned out around a small circle so each remains
   individually hoverable and clickable.
+
+### Phone layout
+
+- **AC-23** — GIVEN a viewport narrower than 768px that is upright or taller
+  than 500px WHEN `/org` loads THEN the map fills the screen below a compact
+  header (one swipeable row of layer buttons, and a breadcrumb that stays on
+  one line and scrolls horizontally when the path is long), the search box
+  floats over the top of the map, and the info panel is a bottom sheet that
+  shows a peek of the selected org or location and expands from its handle.
+  Tapping a pin expands the sheet; tapping the map, a breadcrumb, a layer
+  button, or another org collapses it. Map fits keep the focused orgs clear of
+  the search box and the collapsed sheet, and the tile attribution stays
+  visible. Each pin has a 32px square tap target; co-located pins fan out so
+  their targets do not overlap and each opens its own location. On any
+  touch-capable screen the search input stays at 16px so iOS Safari does not
+  zoom on focus. Landscape screens up to 500px tall (sideways phones, at any
+  width) use the side-by-side layout with a one-row header instead, since a
+  bottom sheet would leave almost no map.
 
 ### API
 

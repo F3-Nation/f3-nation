@@ -4,6 +4,7 @@ set -uo pipefail
 turbo_status=0
 ws_status=0
 vitest_thresholds_status=0
+security_headers_status=0
 eslint_suppressions_status=0
 python_task_status=0
 python_precommit_status=0
@@ -12,10 +13,13 @@ mirror_postgres_image_status=0
 pr_triage_status=0
 prt_status=0
 lint_fix_status=0
+review_links_status=0
 
 turbo run lint "$@" --continue -- --cache --cache-location node_modules/.cache/.eslintcache || turbo_status=$?
 pnpm run lint:ws || ws_status=$?
 node scripts/check-vitest-thresholds.mjs || vitest_thresholds_status=$?
+node scripts/check-security-headers-coverage.mjs || security_headers_status=$?
+bash scripts/check-security-headers-coverage.test.sh || security_headers_status=$?
 node scripts/check-eslint-suppressions.mjs || eslint_suppressions_status=$?
 bash scripts/python-task.test.sh || python_task_status=$?
 bash scripts/python-precommit.test.sh || python_precommit_status=$?
@@ -24,6 +28,8 @@ bash scripts/mirror-postgres-image.test.sh || mirror_postgres_image_status=$?
 bash scripts/pr-triage.test.sh || pr_triage_status=$?
 bash .agents/skills/pr-local-test/scripts/prt.test.sh || prt_status=$?
 bash scripts/lint-fix.test.sh || lint_fix_status=$?
+node scripts/check-review-links.mjs || review_links_status=$?
+bash scripts/check-review-links.test.sh || review_links_status=$?
 
 if [ "$turbo_status" -ne 0 ]; then
   exit "$turbo_status"
@@ -35,6 +41,10 @@ fi
 
 if [ "$vitest_thresholds_status" -ne 0 ]; then
   exit "$vitest_thresholds_status"
+fi
+
+if [ "$security_headers_status" -ne 0 ]; then
+  exit "$security_headers_status"
 fi
 
 if [ "$eslint_suppressions_status" -ne 0 ]; then
@@ -63,6 +73,10 @@ fi
 
 if [ "$lint_fix_status" -ne 0 ]; then
   exit "$lint_fix_status"
+fi
+
+if [ "$review_links_status" -ne 0 ]; then
+  exit "$review_links_status"
 fi
 
 exit "$pr_triage_status"

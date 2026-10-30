@@ -1,6 +1,6 @@
 {
   "name": "f3-auth",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,6 +20,7 @@
     "@acme/db": "workspace:*",
     "@acme/logger": "workspace:*",
     "@acme/observability": "workspace:*",
+    "@acme/security-headers": "workspace:*",
     "@acme/shared": "workspace:*",
     "@acme/ui": "workspace:*",
     "@auth/core": "catalog:",

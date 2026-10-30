@@ -13,6 +13,7 @@
     "scripts/python-task.sh"
   ],
   "globalPassThroughEnv": [
+    "ALLOW_DEV_MOCK_SESSION",
     "F3_ADMIN_PORT",
     "F3_AUTH_PORT",
     "F3_CONTAINER_PREFIX",
@@ -49,6 +50,7 @@
     "CHAR_TEST_SHARED_DB",
     "CHAR_TEST_SIGNING_JWK",
     "SUPER_ADMIN_API_KEY",
+    "PROXY_CLIENT_IP_SECRET",
     "EMAIL_ADMIN_DESTINATIONS",
     "EMAIL_FROM",
     "EMAIL_SERVER",

@@ -108,3 +108,8 @@ Tests use Vitest and are in `__tests__/`. Run with `pnpm test`.
 ### Adding a shadcn/ui component
 
 Shared primitives live in `packages/ui`. Add the component there (see `packages/ui/README.md`) and import it from `@acme/ui/<component>`.
+
+### Auth proxy and sessions
+
+Auth proxy (`proxy.ts`) and session changes follow
+[`apps/auth/AGENTS.md` § Security rules](../auth/AGENTS.md#security-rules).

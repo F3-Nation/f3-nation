@@ -26,6 +26,7 @@ export default {
         "health",
         "mail",
         "observability",
+        "security-headers",
         "shared",
         "sso",
         "storage",

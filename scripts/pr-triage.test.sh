@@ -28,8 +28,9 @@ assert_eq() {
   fi
 }
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/pr-triage-test.XXXXXX")"
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=""
+trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/pr-triage-test.XXXXXX")" || exit 1
 
 # Every PR defaults to: ready, opened long ago, all three bots finished, no skill runs,
 # no threads. Each case overrides only what it tests.

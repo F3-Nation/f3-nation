@@ -29,6 +29,7 @@ env:
   # API (mocks)
   API_KEY: ci-api-key-placeholder
   SUPER_ADMIN_API_KEY: ci-super-admin-key-placeholder
+  PROXY_CLIENT_IP_SECRET: ci-proxy-client-ip-secret-placeholder
   # Next.js (mocks)
   NEXT_PUBLIC_API_URL: http://localhost:3001
   NEXT_PUBLIC_MAP_URL: http://localhost:3000

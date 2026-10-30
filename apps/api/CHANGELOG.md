@@ -1,5 +1,33 @@
 # Changelog
 
+## [6.13.0](https://github.com/F3-Nation/f3-nation/compare/api@6.12.1...api@6.13.0) (2026-10-29)
+
+
+### Features
+
+* **api:** trust a list of auth issuers (AUTH_TRUSTED_ISSUERS) ([#1321](https://github.com/F3-Nation/f3-nation/issues/1321)) ([b88c157](https://github.com/F3-Nation/f3-nation/commit/b88c157a6b4d009e735f5e3e4407a898add1e725))
+* **region-pages:** migrate region pages into the monorepo ([#1355](https://github.com/F3-Nation/f3-nation/issues/1355)) ([4ecc49c](https://github.com/F3-Nation/f3-nation/commit/4ecc49cc1cf622d1397df4251f57128c4fe8b097))
+
+
+### Bug Fixes
+
+* **admin,auth,map,me,api:** add baseline HTTP security headers ([#1339](https://github.com/F3-Nation/f3-nation/issues/1339)) ([2dd1548](https://github.com/F3-Nation/f3-nation/commit/2dd15485bf5c4174d913e5ed2905082a35e0ea39))
+* **api,auth,shared:** key rate limits on the Cloud Run-appended X-Forwarded-For hop ([#1340](https://github.com/F3-Nation/f3-nation/issues/1340)) ([ab85040](https://github.com/F3-Nation/f3-nation/commit/ab850404f1e78a5422173b53f0e2b35a857cb768))
+* **api:** default every API response to Cache-Control: private, no-store ([#1404](https://github.com/F3-Nation/f3-nation/issues/1404)) ([9159129](https://github.com/F3-Nation/f3-nation/commit/91591290595527fd5a7631c3a6ecdad73dd47ea9))
+* **api:** require local channel and explicit opt-in for the dev mock session ([#1335](https://github.com/F3-Nation/f3-nation/issues/1335)) ([3342afe](https://github.com/F3-Nation/f3-nation/commit/3342afe12d7dd48bffa548f10c08f57c15d001d1))
+* **api:** stop echoing the request origin with credentials in CORS ([#1336](https://github.com/F3-Nation/f3-nation/issues/1336)) ([2e21214](https://github.com/F3-Nation/f3-nation/commit/2e21214c91f5ec7a157d4d1b0e1e1538a55079a1))
+* **map,eslint:** enable React Compiler lint rules and stop marker moves leaking into the query cache ([#1295](https://github.com/F3-Nation/f3-nation/issues/1295)) ([f049283](https://github.com/F3-Nation/f3-nation/commit/f049283bf9d3c83a005475fac8f55a4e75cc4050))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.16.0
+    * @acme/shared bumped to 0.6.0
+  * devDependencies
+    * @acme/db bumped to 0.10.2
+
 ## [6.12.1](https://github.com/F3-Nation/f3-nation/compare/api@6.12.0...api@6.12.1) (2026-10-23)
 
 
