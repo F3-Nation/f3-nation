@@ -175,7 +175,7 @@ describe("server text decoding", () => {
     ).toBe("<p>alert(1)Hi</p>");
   });
 
-  it("strips deeply spliced blocks in linear time", () => {
+  it("strips deeply spliced blocks without a pass per nesting level", () => {
     // Without the block stand-in, remove-until-stable needs a pass per level.
     const n = 100_000;
     const html = `${"<scr".repeat(n)}<script></script>${"ipt></script>".repeat(n)}Hi`;

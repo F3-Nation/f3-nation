@@ -55,7 +55,7 @@ const BLOCK_GAP = "\u0000";
 /**
  * Plain text of `value`. The loops stop on their second pass: a block's
  * stand-in can't be part of a tag name, and removing a whole tag can't join
- * its neighbours into another, so the work stays linear in the input.
+ * its neighbours into another. A single regex pass can still rescan text.
  */
 const stripHtml = (value: string): string => {
   let text = value;
