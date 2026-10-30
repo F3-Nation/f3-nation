@@ -185,4 +185,8 @@ Repo decisions that review bots have repeatedly flagged by mistake.
   workflow step.
 - ADRs without a Status field (the template has none), and generated
   `CHANGELOG.md` files.
+- Wording, tone, grammar, formatting or structure preferences in docs,
+  Markdown and comments. Flag text only when it is wrong: a claim the code
+  contradicts, a broken link, or a command, path, env var or check name that
+  no longer exists.
 - Pre-existing problems the change doesn't touch or worsen.

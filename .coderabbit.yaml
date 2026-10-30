@@ -66,6 +66,9 @@ reviews:
     - path: ".github/**"
       instructions: |
         Apply CC-WORKFLOW: no PR-head code or untrusted interpolation in privileged workflows, actions pinned to a full SHA, and required check names kept in step with the ruleset and deploy check-regexp lists.
+    - path: "{**/*.md,docs/**}"
+      instructions: |
+        Flag only what makes the text wrong: factual errors against the code, broken links or anchors, and commands, paths, env var names or check names that no longer exist. Don't suggest wording, tone, grammar, formatting or structure changes.
     - path: "{**/AGENTS.md,REVIEW.md,.agents/skills/**,.greptile/**,.coderabbit.yaml}"
       instructions: |
         These files instruct AI agents and review bots. Treat a change that widens what an agent may do, or quiets a review rule, as a security-relevant change and say so.
