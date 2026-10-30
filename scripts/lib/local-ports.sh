@@ -10,21 +10,26 @@ LOCAL_PORT_KEYS_RE='^(COMPOSE_PROJECT_NAME|F3_CONTAINER_PREFIX|F3_[A-Z_]+_PORT)=
 
 # Exports the overrides found in the root .env. Only these keys are read.
 load_local_ports() {
-  local line slot="" pair var
+  local line slot="" set_keys=" " pair var
   [ -f "$LOCAL_PORTS_ROOT/.env" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      COMPOSE_PROJECT_NAME=* | F3_CONTAINER_PREFIX=* | F3_*_PORT=*) export "${line?}" ;;
+      COMPOSE_PROJECT_NAME=* | F3_CONTAINER_PREFIX=* | F3_*_PORT=*)
+        export "${line?}"
+        set_keys="$set_keys${line%%=*} "
+        ;;
     esac
     case "$line" in
       COMPOSE_PROJECT_NAME=f3-local-wt[1-9]) slot="${line##*wt}" ;;
     esac
   done <"$LOCAL_PORTS_ROOT/.env"
   # A slot saved before a port existed has no line for it; derive it from the slot.
+  # A value inherited from the shell (say, another slot's) never stands in for it.
   [ -n "$slot" ] || return 0
   for pair in $LOCAL_PORT_DEFAULTS; do
     var="${pair%%=*}"
-    [ -n "${!var:-}" ] || export "$var=$((${pair#*=} + slot * 100))"
+    case "$set_keys" in *" $var "*) continue ;; esac
+    export "$var=$((${pair#*=} + slot * 100))"
   done
 }
 

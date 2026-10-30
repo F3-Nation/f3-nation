@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Regression tests for load_local_ports in scripts/lib/local-ports.sh: a slot saved
-# before a port existed gets that port derived from the slot, a port the root .env
-# sets is kept, and no root .env leaves every port unset.
+# before a port existed gets that port derived from the slot, even over a value the
+# shell inherited, a port the root .env sets is kept, and no root .env leaves every
+# port unset.
 # Run directly: bash scripts/local-ports.test.sh
 set -euo pipefail
 
@@ -25,12 +26,14 @@ trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/local-ports-test.XXXXXX")"
 
 # Each case runs in a subshell with no inherited overrides, so cases can't leak into
-# each other and the caller's own slot ports don't mask a missing derivation.
+# each other and the caller's own slot ports don't mask a missing derivation. An
+# optional NAME=value third argument is exported first, as if the shell inherited it.
 load_in() {
-  local root="$1" var="$2"
+  local root="$1" var="$2" inherited="${3:-}"
   (
     unset COMPOSE_PROJECT_NAME F3_CONTAINER_PREFIX
     while IFS= read -r name; do unset "$name"; done < <(compgen -v | grep -E '^F3_[A-Z_]+_PORT$' || true)
+    [[ -z "$inherited" ]] || export "${inherited?}"
     # shellcheck source=lib/local-ports.sh
     . "$script_dir/lib/local-ports.sh"
     LOCAL_PORTS_ROOT="$root"
@@ -45,6 +48,8 @@ printf '%s\n' COMPOSE_PROJECT_NAME=f3-local-wt2 F3_CONTAINER_PREFIX=f3-wt2 \
   F3_MAP_PORT=3200 F3_REGION_PAGES_PORT=3206 >"$old_slot/.env"
 assert_eq "older slot .env derives the missing Slackbot port" 3207 "$(load_in "$old_slot" F3_SLACKBOT_PORT)"
 assert_eq "older slot .env derives the missing Postgres port" 5633 "$(load_in "$old_slot" F3_POSTGRES_PORT)"
+assert_eq "an inherited port doesn't mask the slot's derived port" 3207 \
+  "$(load_in "$old_slot" F3_SLACKBOT_PORT F3_SLACKBOT_PORT=3107)"
 
 custom="$tmp_dir/custom"
 mkdir "$custom"

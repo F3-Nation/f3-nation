@@ -68,7 +68,7 @@ Run the status check script from the repo root:
 .cursor/skills/f3-dev-servers/scripts/check-status.sh
 ```
 
-It uses `nc` (netcat) for fast port checking (~1 second) — checks all eight app ports (3000–3007).
+It uses `nc` (netcat) for fast port checking (~1 second) — checks all eight app ports: 3000–3007, or the checkout's slot ports after `pnpm local:setup --slot N`.
 
 Or check any port manually:
 
