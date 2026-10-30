@@ -961,7 +961,9 @@ def upload_files_to_storage(
             )
         except Exception as e:
             logger.error(f"Error uploading file: {e}")
-            for name in stored_names:
+            # A caller-chosen file_name replaces an object a saved URL may already point
+            # to, so only per-upload names (Slack file IDs) are safe to delete.
+            for name in stored_names if file_name is None else []:
                 try:
                     storage.delete(bucket_name, name)
                 except FileNotFoundError:
