@@ -124,9 +124,8 @@ Use the API's real migrated, isolated test database and synthetic users:
    application flow, with no new public history endpoint.
 
 Stored-history assertions use SQL/Vitest in the existing serial API test suite;
-the application flow supplies end-to-end evidence. Shared-environment rollout
-verification must separately confirm attribution through the deployed connection
-pooler. Local tests do not claim that staging verification has occurred.
+the application flow supplies end-to-end evidence. Attribution must remain
+isolated when a transaction pooler reuses backend connections.
 
 ## 8. Observability
 
