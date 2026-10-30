@@ -182,7 +182,6 @@ describe("server text decoding", () => {
 
     const rendered = renderToString(<Text html={html} />);
 
-    expect(rendered).not.toContain("&lt;");
-    expect(rendered.endsWith("Hi</p>")).toBe(true);
+    expect(rendered).toBe(`<p>${"ipt&gt;".repeat(n - 1)}Hi</p>`);
   });
 });
