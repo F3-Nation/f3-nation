@@ -14,21 +14,29 @@ All the apps in this monorepo can be developed and tested locally. See [LOCAL_DE
 
 1. Fork the repository into your own account, then create a branch from `main`.
 1. Make something awesome. Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): subject`) — see [AGENTS.md](../AGENTS.md#commit-message-convention) for allowed types and scopes. This is enforced locally by a commit hook.
+   - For staged `.py` files, the Python pre-commit job applies Ruff lint fixes, formats the files, and stages the fixes. Unfixable lint errors block the commit. If `uv` is unavailable locally, this job prints a skip message; Python contributors should install `uv` and run `pnpm python:install`. The repository-wide `pnpm typecheck` hook runs on every commit.
 1. Submit a PR against the F3-Nation `main` branch in **DRAFT**. Your PR title must also follow Conventional Commits format (`type(scope): subject`) — it's checked by [pr-title.yml](../.github/workflows/pr-title.yml), since our release process parses the title rather than individual commits. Fill in the PR template with a plain-language summary up top — many reviewers are volunteers without deep context on your change.
    - First PR to this repo? GitHub holds the CI workflows at `action_required` until a maintainer approves the run. That's a GitHub setting for first-time contributors, not a problem with your PR — give it a day, then ask in the F3 developers Slack if it's still waiting.
 1. Run `pnpm ci:local` locally — it chains the same steps CI runs — then make sure all Checks pass once pushed. Catching issues locally is faster than waiting on CI.
    - The test step can rewrite `vitest.config.ts` coverage thresholds in the workspaces it ran — apps and packages alike (they ratchet upward). That's expected — commit the updated config with your change, and never lower a threshold by hand. See [AGENTS.md](../AGENTS.md) for the rules.
 1. Mark the PR as **Ready for review**. At this point, a number of AI bots will run and provide feedback (see "Use of AI" below).
    - CodeRabbit doesn't review drafts. It posts a "Draft PR not reviewed" notice while your PR is still a draft — that's normal; its review arrives once you mark the PR ready.
-1. Address all review comments. Reply to each comment stating what you did to fix it or why you're not going to fix it.
-1. If AI suggests something that is out of the scope of the PR, create an Issue to track it, add the Issue number to the comment reply, and resolve it.
-1. Once all comments are resolved, add the `ready for human review` label if you have `write` access to the repo. A Codeowner will review.
-   - Don't have `write` access, or forgot to add it? A scheduled workflow ([`ready-for-human-review-label.yml`](../.github/workflows/ready-for-human-review-label.yml)) applies the label automatically once your PR is out of draft, has no merge conflicts with `main`, all required checks are green, and the AI review bots' threads are resolved — it runs daily, so there can be up to a day's delay. The same workflow also removes the label if any of those stop being true (e.g. a new commit resets checks to pending, or `main` moves ahead and your branch now has merge conflicts), even if you added it by hand. Only actual merge conflicts count: a branch that is merely behind `main`, or unresolved threads from human reviewers, won't remove the label. A maintainer can trigger it manually for a fresher check.
-   - Small, self-evident PRs (a one-line fix, a doc correction) are sometimes approved and merged by a codeowner before the label is ever applied. That's fine — the label is a review-queue signal, not a required check.
+1. Work the PR through the review stages in [PR_REVIEW_PROCESS.md](PR_REVIEW_PROCESS.md). As the author, you reply to and resolve the review threads; [Addressing feedback](PR_REVIEW_PROCESS.md#addressing-feedback) says how.
+   - Once the AI bots' review threads are resolved, add the `ready for human review` label if you have `write` access to the repo.
+     - Don't have `write` access, or forgot to add it? A scheduled workflow ([`ready-for-human-review-label.yml`](../.github/workflows/ready-for-human-review-label.yml)) applies the label automatically once your PR is out of draft, has no merge conflicts with `main`, all required checks are green, and the AI review bots' threads are resolved — it runs daily, so there can be up to a day's delay. The same workflow also removes the label if any of those stop being true (e.g. a new commit resets checks to pending, or `main` moves ahead and your branch now has merge conflicts), even if you added it by hand. Only actual merge conflicts count: a branch that is merely behind `main`, or unresolved threads from human reviewers, won't remove the label. A maintainer can trigger it manually for a fresher check.
+     - Small, self-evident PRs (a one-line fix, a doc correction) are sometimes approved and merged by a codeowner before the label is ever applied. That's fine — the label is a review-queue signal, not a required check.
+
+## Finding PRs that need you
+
+Run `pnpm pr:triage` to see every open PR sorted by what it needs next: waiting on the AI bots, needs the `pr-review-inline` skill, waiting on the author's unresolved threads, needs the `pr-local-test` skill, needs a codeowner's approval, or approved and waiting to merge. Your own PRs get their own section, since someone else has to approve them. Run `pnpm pr:triage:html` to open the same thing as a board in your browser; run it again to refresh.
+
+It needs the [GitHub CLI](https://cli.github.com) (signed in with `gh auth login`) and `jq`, and works on macOS, Linux and WSL. Drafts and Renovate and release-please PRs are left out. `scripts/pr-triage.sh --help` lists the options.
 
 ## Use of AI
 
 AI tools are welcome for writing code, tests, and PR descriptions. You're responsible for understanding, testing, and reviewing anything AI-generated before you submit it. See [AI_DEVELOPMENT_GUIDE.md](AI_DEVELOPMENT_GUIDE.md) and [AI_GUARDRAILS.md](AI_GUARDRAILS.md) for the guardrails our own AI agents follow.
+
+Conventions for writing code live in each area's `AGENTS.md`; rules for reviewing it live in [`REVIEW.md`](../REVIEW.md), which every AI reviewer loads. If a review bot keeps raising the same false positive, add a "do not flag" entry to `REVIEW.md`. If reviewers keep catching the same mistake, add a one-line rule to the matching `AGENTS.md`.
 
 ## Choosing which Issues to work on
 

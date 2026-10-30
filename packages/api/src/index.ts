@@ -16,6 +16,7 @@ import { oauthClientRouter } from "./router/oauth-client";
 import { orgChartRouter } from "./router/org-chart";
 import { orgRouter } from "./router/org";
 import { pingRouter } from "./router/ping";
+import { regionPagesRouter } from "./router/region-pages";
 import { positionRouter } from "./router/position";
 import { requestRouter } from "./router/request";
 import { slackRouter } from "./router/slack";
@@ -42,6 +43,7 @@ export const router = os.prefix(API_PREFIX_V1).router({
   orgChart: os.prefix("/org-chart").router(orgChartRouter),
   org: os.prefix("/org").router(orgRouter),
   position: os.prefix("/position").router(positionRouter),
+  regionPages: os.prefix("/region-pages").router(regionPagesRouter),
   request: os.prefix("/request").router(requestRouter),
   slack: os.prefix("/slack").router(slackRouter),
   status: os.router(statusRouter),

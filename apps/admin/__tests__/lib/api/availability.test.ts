@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/client";
 import { describe, expect, it } from "vitest";
 
-import { isApiUnavailableError } from "~/lib/api/availability";
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
 describe("isApiUnavailableError", () => {
   it.each([
@@ -11,7 +11,6 @@ describe("isApiUnavailableError", () => {
       new ORPCError("SERVICE_UNAVAILABLE", { status: 503 }),
     ],
     ["a request timeout", new DOMException("timed out", "TimeoutError")],
-    ["an aborted request", new DOMException("aborted", "AbortError")],
     // What Node's fetch rejects with on DNS, refused, or reset connections.
     ["a connection failure", new TypeError("fetch failed")],
     ["a connection dropped mid-body", new TypeError("terminated")],
@@ -37,6 +36,8 @@ describe("isApiUnavailableError", () => {
     ["a 401", new ORPCError("UNAUTHORIZED", { status: 401 })],
     ["a 404", new ORPCError("NOT_FOUND", { status: 404 })],
     ["a 429", new ORPCError("TOO_MANY_REQUESTS", { status: 429 })],
+    // The caller cancelled it (unmount, navigation); timeouts are TimeoutError.
+    ["an aborted request", new DOMException("aborted", "AbortError")],
     // A bug in our own code must not masquerade as an outage.
     [
       "an unrelated TypeError",

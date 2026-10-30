@@ -168,6 +168,13 @@ uv --version
 
 After installing `uv`, run `pnpm python:install` to sync the Slackbot Python dependencies.
 
+Python workspaces share Ruff settings from the root [`pyproject.toml`](../pyproject.toml).
+Each member explicitly extends that file in its own `pyproject.toml`, which also
+holds any package-specific overrides, including Analytics' existing relative-import
+ordering. Each member's `dev` dependency group pins the exact Ruff version, with
+the resolved version recorded in [`uv.lock`](../uv.lock). Renovate manages these
+pins alongside the other Python dependencies.
+
 </details>
 
 <details>
@@ -362,11 +369,12 @@ The `5433` port is where the Docker Postgres container is exposed on your machin
 
 ### Auth & API keys
 
-| Variable              | Value                   | Meaning                                               |
-| --------------------- | ----------------------- | ----------------------------------------------------- |
-| `AUTH_SECRET`         | (any long string)       | Signs authentication tokens. Any value works locally. |
-| `API_KEY`             | `local-api-key`         | Identifies internal API-to-API requests.              |
-| `SUPER_ADMIN_API_KEY` | `local-super-admin-key` | Admin-level API access key.                           |
+| Variable                 | Value                   | Meaning                                                                                                                                           |
+| ------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_SECRET`            | (any long string)       | Signs authentication tokens. Any value works locally.                                                                                             |
+| `API_KEY`                | `local-api-key`         | Identifies internal API-to-API requests.                                                                                                          |
+| `SUPER_ADMIN_API_KEY`    | `local-super-admin-key` | Admin-level API access key.                                                                                                                       |
+| `PROXY_CLIENT_IP_SECRET` | _(unset)_               | Optional. Lets the API trust the browser IP the map and admin proxies report, so rate limits apply per visitor. Same value in api, map and admin. |
 
 ### Email (Mailpit)
 

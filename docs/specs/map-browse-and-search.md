@@ -17,6 +17,8 @@ city X" to "this workout, this address, this time" in a few interactions.
 - Key code: `apps/map/src/app/page.tsx` (SSG + ISR),
   `apps/map/src/app/_components/map/` (Google map, search, panels, filters),
   `apps/map/src/app/_components/marker-clusters/`,
+  `apps/map/src/app/_components/api-outage-banner.tsx` and
+  `apps/map/src/orpc/client.ts` (API outage handling),
   `packages/api/src/router/map/location.ts`,
   `apps/map/src/app/api/orpc/[[...rest]]/route.ts` (allowlist proxy),
   `apps/map/src/app/api/revalidate/route.ts`.
@@ -91,6 +93,20 @@ city X" to "this workout, this address, this time" in a few interactions.
   denied permission leaves the map view unchanged and shows the control in a
   muted/disabled visual state rather than erroring.
 
+### API outage
+
+- **AC-15** — GIVEN the F3 Nation API is down or does not start answering in
+  time WHEN the map loads or a query runs THEN the map stays mounted, data
+  already on screen keeps showing, and a banner (`role="alert"`) says data may
+  be missing and is being retried, instead of the error page.
+- **AC-16** — GIVEN the outage banner is showing THEN the failed queries are
+  retried on their own while the tab is visible, and "Try again" retries them
+  at once; when they succeed the banner disappears and the data fills in
+  without a page reload.
+- **AC-17** — GIVEN the outage banner is showing WHEN the user dismisses it
+  THEN it stays hidden while retrying continues, and the next outage shows it
+  again.
+
 ## 5. Roles & authorization (RBAC)
 
 Browsing is anonymous by design, and (as of #378) that includes the API
@@ -140,6 +156,8 @@ shared "anonymous" bucket) — a per-instance limit, not a global cap.
 4. AM/PM filter visibly changes the pin/nearby set; reset restores it
    (AC-12/13).
 5. Copied event link reopens centered on that location (AC-10).
+6. With the API stopped, the map still renders and shows the outage banner;
+   restarting the API clears the banner and fills in the data (AC-15/16).
 
 ## 8. Observability
 

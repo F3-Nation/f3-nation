@@ -53,7 +53,7 @@ echo "  ────────────────────────
 # ── Step 1: Copy per-directory env files ─────────────────────────────────────
 echo "  → Copying .env.example files..."
 _env_ts=$(date +%Y%m%d%H%M%S)
-for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/slackbot packages/env packages/db; do
+for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/region-pages apps/slackbot packages/env packages/db; do
   if [ -f "$dir/.env" ]; then
     mv "$dir/.env" "$dir/.env.bak.$_env_ts"
     echo "     $dir/.env backed up → $dir/.env.bak.$_env_ts"
@@ -81,9 +81,14 @@ if grep -q '\.\.\.' apps/auth/.env 2>/dev/null; then
           openssl pkcs8 -topk8 -nocrypt -outform PEM | \
           awk 'NR>1{printf "\\n"} {printf "%s", $0}')
     KEY="${KEY%\\n}"
-    grep -v '^AUTH_JWT_PRIVATE_KEY=' apps/auth/.env > /tmp/auth_env_tmp
-    printf 'AUTH_JWT_PRIVATE_KEY="%s"\n' "$KEY" >> /tmp/auth_env_tmp
-    mv /tmp/auth_env_tmp apps/auth/.env
+    # Per-run temp file beside .env: parallel checkouts don't share it, and the rename is atomic.
+    AUTH_ENV_TMP=$(mktemp apps/auth/.env.tmp.XXXXXX)
+    if ! { grep -v '^AUTH_JWT_PRIVATE_KEY=' apps/auth/.env; printf 'AUTH_JWT_PRIVATE_KEY="%s"\n' "$KEY"; } > "$AUTH_ENV_TMP" \
+      || ! mv "$AUTH_ENV_TMP" apps/auth/.env; then
+      rm -f "$AUTH_ENV_TMP"
+      echo "     ERROR: could not write AUTH_JWT_PRIVATE_KEY to apps/auth/.env"
+      exit 1
+    fi
     echo "     Generated AUTH_JWT_PRIVATE_KEY in apps/auth/.env"
   else
     echo "     WARNING: openssl not found — AUTH_JWT_PRIVATE_KEY left as placeholder in apps/auth/.env"
@@ -163,7 +168,7 @@ echo "    Mailpit   → http://localhost:${F3_MAILPIT_UI_PORT:-8025}  (all outbo
 if [ -n "${F3_MAP_PORT:-}" ]; then
   echo ""
   echo "  This checkout uses its own ports (saved in the root .env):"
-  echo "    Map ${F3_MAP_PORT} · API ${F3_API_PORT} · Admin ${F3_ADMIN_PORT} · Me ${F3_ME_PORT} · Auth ${F3_AUTH_PORT} · Homepage ${F3_HOMEPAGE_PORT}"
+  echo "    Map ${F3_MAP_PORT} · API ${F3_API_PORT} · Admin ${F3_ADMIN_PORT} · Me ${F3_ME_PORT} · Auth ${F3_AUTH_PORT} · Homepage ${F3_HOMEPAGE_PORT} · Region pages ${F3_REGION_PAGES_PORT}"
   echo "    pnpm dev picks them up. When starting one app on its own, export them first:"
   echo "      set -a; . ./.env; set +a"
 fi

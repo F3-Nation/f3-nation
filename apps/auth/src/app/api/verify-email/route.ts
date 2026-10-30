@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { getTrustedClientIp } from "@acme/shared/common/client-ip";
+
 import { logError } from "~/lib/logging";
 import { sendEmailCode, verifyEmailCode } from "~/lib/email-mfa";
 import { rateLimit } from "~/lib/rate-limit";
@@ -12,9 +14,7 @@ export async function POST(request: NextRequest) {
   // so rate-limiting only blocks legitimate QA automation. See
   // apps/auth/AGENTS.md for the headless flow this enables.
   if (env.NODE_ENV === "production") {
-    const ip =
-      request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
-      "unknown";
+    const ip = getTrustedClientIp(request.headers) ?? "unknown";
     const { allowed } = rateLimit(`verify-email:${ip}`, 10, 60 * 1000);
     if (!allowed) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });

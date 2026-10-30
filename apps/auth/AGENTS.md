@@ -229,6 +229,112 @@ The one thing to be careful about is the inverse of the old risk: a local `.env`
 
 ---
 
+## Security rules
+
+These apply to `apps/auth`, `packages/auth`, `packages/sso*`, the app
+proxies (`proxy.ts`) and session resolution in `packages/api/src/shared.ts`.
+All of it is human-owned security work (`docs/AI_GUARDRAILS.md`): assume the
+client is hostile.
+
+### Tokens and sessions
+
+- Verify with the shared `verifyAccessToken` (it pins RS256 and the issuer
+  and rejects a token with no `exp`), or with `jwtVerify` pinning the
+  algorithm and issuer and passing `requiredClaims: ["exp"]` (`jwtVerify`
+  alone accepts a token with no `exp`). Never trust a decoded payload or the
+  mere presence of a cookie.
+- Bearer verifiers check `token_use`: ID tokens share keys and issuer with
+  access tokens and are not credentials.
+- Never copy roles or other privilege claims from client-supplied data
+  (session `update()` payloads, cookies, headers) into a token; re-read them
+  from the DB. A fix for forged or over-privileged tokens also invalidates
+  tokens already issued.
+- Fail closed when the user is missing or a lookup throws. A JWKS or
+  auth-server outage never authenticates a request, but it is
+  non-destructive: no forced logout and no cookie clearing on a transient
+  error.
+- Each trusted issuer's `iss` and JWKS location match what relying parties
+  compute (that issuer's bare origin and `/.well-known/jwks.json`), pinned by
+  a test that verifies a real token.
+- Classify `jose` errors by `err.code`, not `name` or message (minification
+  breaks names).
+
+### One-time secrets and codes
+
+- Generate codes and secrets with `crypto.randomInt` / `randomBytes`, never
+  `Math.random`. `randomInt`'s max is exclusive: a 6-digit code is
+  `randomInt(100000, 1000000)`.
+- Consume codes, auth codes and refresh tokens in one atomic statement
+  (`UPDATE … WHERE <used>_at IS NULL RETURNING`, or `DELETE … RETURNING`) and
+  reject an empty result.
+- Reusing a rotated refresh token revokes every refresh token for that user
+  and client, including the replacement just issued; there is no grace
+  window. Issued access tokens stay valid until they expire. Clients must
+  serialize refresh calls for a token, or concurrent refreshes force a
+  re-login.
+- Attempt budgets are shared by every entry point that accepts a code. In
+  Better Auth (`src/lib/better-auth.ts`), a new endpoint that checks an
+  emailed code joins `OTP_VERIFYING_PATHS`. Its plugin order (`emailOTP`,
+  `jwt`, `oauthProvider`, the claim-shape plugin, then `bearer`) is
+  load-bearing.
+- Compare secrets in constant time (`constantTimeEqual`, or `timingSafeEqual`
+  behind a length check). Store OAuth client secrets and email OTP codes
+  hashed, and show a generated secret once.
+- Normalize emails identically at store and lookup (`trim().toLowerCase()`).
+
+### Requests
+
+- Validate redirect targets (`callbackUrl`, `returnTo`, `redirect_uri`,
+  `post_logout_redirect_uri`): accept a same-origin relative path (`/x`, not
+  `//x`) or a match against the client's registered URIs or origins, and
+  re-validate wherever the target is consumed. `NextResponse.redirect` needs
+  an absolute URL.
+- Rate-limit keys use the proxy-appended (rightmost) `X-Forwarded-For` hop,
+  never the leftmost, which the caller controls. In-memory limiters are
+  per-instance. Better Auth's built-in limiter doesn't use our helper; it needs
+  `advanced.ipAddress` (`trustedProxies` or `ipAddressHeaders`) to key on the
+  real client IP.
+- Unauthenticated endpoints that accept credentials, codes or identifiers are
+  rate-limited or attempt-budgeted (see the attempt-budget rule above), return
+  generic errors that never echo `err.message`, and never reveal whether an
+  account exists (`/api/check-user` is the one deliberate, rate-limited
+  exception).
+- Parse request bodies in `try`/`catch` (400 on bad JSON), then `safeParse`
+  with Zod; no `as` casts on bodies.
+- Encode every dynamic URL part with `encodeURIComponent`, and test with
+  values containing `&`, `#` and `+`.
+- Never log codes, tokens, emails, magic links or query strings. Keep tokens,
+  codes, phone numbers and emergency contacts out of browser storage.
+
+### Proxies and gates
+
+- Use `proxy.ts`, not `middleware.ts`. Next finds it only beside the `app`
+  directory (`src/proxy.ts` when the app is `src/app`); a misplaced file is
+  silently never loaded.
+- Dead-session paths (invalid token, failed refresh) return 401 or a
+  redirect, never `NextResponse.next()`. The exception is a JWKS outage, which
+  passes through to the point-of-use verifier.
+- New public endpoints (health, status) join the proxy's public paths, with a
+  test.
+- Enforce on the server anything the UI gates; a disabled button is not a
+  control.
+- Dev-only auth (a dev sign-in provider, the API's mock session) is gated on
+  the server by a channel allowlist that fails closed, never by a
+  `NEXT_PUBLIC_*` value alone: Next.js freezes one into the bundle when it is
+  set at build. Next.js-only code reads `F3_CHANNEL`. `packages/api/src/shared.ts`
+  also runs in `apps/api`, which has no `F3_CHANNEL`, so it reads
+  `NEXT_PUBLIC_CHANNEL` and also requires `NODE_ENV === "development"`, which
+  no deployed build has.
+
+### Tests
+
+- Deny-path tests discriminate: wrong value **and** missing value, a
+  same-length wrong key, revoked **and** expired, a replayed token, and each
+  branch of an allowlist.
+- Don't mock away `jose` or `@f3nation/sso` in the only test of a verifier.
+
+---
+
 ## See also
 
 - [`apps/auth/README.md`](README.md) -- full architecture, deployment, OAuth client registration

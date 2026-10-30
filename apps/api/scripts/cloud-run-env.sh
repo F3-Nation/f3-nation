@@ -38,17 +38,20 @@ declare -A SECRET_MAP=(
   [AUTH_SECRET]="AUTH_SECRET"
   [DATABASE_URL]="DATABASE_URL"
   [EMAIL_SERVER]="EMAIL_SERVER"
+  [PROXY_CLIENT_IP_SECRET]="PROXY_CLIENT_IP_SECRET"
   [TEST_DATABASE_URL]="TEST_DATABASE_URL"
 )
 
 # Per-environment env vars read from the env file (not sensitive, set as plain
-# Cloud Run env vars).
+# Cloud Run env vars). AUTH_TRUSTED_ISSUERS is required (checked after the
+# env file is sourced): without it the API accepts no JWT, so admin and me
+# can't call it.
 ENV_FILE_VARS=(
+  AUTH_TRUSTED_ISSUERS
   EMAIL_ADMIN_DESTINATIONS
   EMAIL_FROM
   NEXT_PUBLIC_ADMIN_URL
   NEXT_PUBLIC_API_URL
-  NEXT_PUBLIC_AUTH_URL
   NEXT_PUBLIC_CHANNEL
   NEXT_PUBLIC_MAP_URL
 )
@@ -96,9 +99,25 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 # Source the env file.
+unset PROXY_CLIENT_IP_SECRET
 set -a
 source "$ENV_FILE"
 set +a
+
+if [[ -z "${AUTH_TRUSTED_ISSUERS:-}" ]]; then
+  echo "Error: AUTH_TRUSTED_ISSUERS is empty in $ENV_FILE."
+  echo "Set it to the auth server origin(s) whose tokens the API accepts."
+  exit 1
+fi
+
+# The API trusts the client IP the map and admin proxies report only with this
+# secret, so all three services need the same value.
+proxy_secret="${PROXY_CLIENT_IP_SECRET:-}"
+if [[ ${#proxy_secret} -lt 32 ]]; then
+  echo "Error: PROXY_CLIENT_IP_SECRET in $ENV_FILE must be at least 32 characters." >&2
+  echo "Use the same value in the api, map and admin env files." >&2
+  exit 1
+fi
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"
