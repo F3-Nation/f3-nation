@@ -889,15 +889,19 @@ def upload_files_to_storage(
                     headers={"Authorization": f"Bearer {client.token}"},
                     params={"width": constants.LOW_REZ_IMAGE_SIZE, "height": constants.LOW_REZ_IMAGE_SIZE},
                 )
-                file_name_low_res = f"{file_id}_low_res.png"
-                file_path_low_res = f"/mnt/{bucket_name}/{file_name_low_res}"
+                # A failed thumbnail is skipped rather than raised, so the full image is still kept
+                if r_low_res.ok:
+                    file_name_low_res = f"{file_id}_low_res.png"
+                    file_path_low_res = f"/mnt/{bucket_name}/{file_name_low_res}"
 
-                with open(file_path_low_res, "wb") as f:
-                    f.write(r_low_res.content)
+                    with open(file_path_low_res, "wb") as f:
+                        f.write(r_low_res.content)
 
-                low_res_file_list.append(
-                    f"https://storage.googleapis.com/{constants.FILE_BUCKET_PREFIX}/{bucket_name}/{file_name_low_res}"
-                )
+                    low_res_file_list.append(
+                        f"https://storage.googleapis.com/{constants.FILE_BUCKET_PREFIX}/{bucket_name}/{file_name_low_res}"
+                    )
+                else:
+                    logger.warning(f"Thumbnail download for file {file['id']} failed with HTTP {r_low_res.status_code}")
 
             change_to_png = enforce_png and file["filetype"] != "png"
             if enforce_square or max_height or change_to_png:
@@ -962,47 +966,6 @@ def highest_resolution_thumb(file: Dict[str, Any]) -> str:
         return None
     thumb_size = max(available_thumbs)
     return file[f"thumb_{thumb_size}"]
-
-
-def reupload_file_as_bot(
-    file: Dict[str, Any],
-    client: WebClient,
-    logger: Logger,
-    region_record: SlackSettings = None,
-    filename: str = None,
-) -> str | None:
-    """Download a user-uploaded Slack file and re-upload it as the bot to the bot log channel.
-
-    Uploading to the public bot log channel ensures the file is accessible workspace-wide,
-    allowing it to be referenced in slack_file image blocks in channel messages.
-
-    Returns the bot-owned file ID, or None on failure.
-    """
-    from utilities.bot_logger import _ensure_bot_in_channel, _find_or_create_log_channel  # noqa: PLC0415
-
-    try:
-        r = requests.get(file["url_private_download"], headers={"Authorization": f"Bearer {client.token}"})
-        r.raise_for_status()
-        fname = filename or f"{file['id']}.{file.get('filetype', 'bin')}"
-
-        # Resolve the bot log channel so the uploaded file is publicly accessible workspace-wide
-        channel_id = region_record.bot_log_channel if region_record else None
-        if not channel_id:
-            channel_id = _find_or_create_log_channel(client, logger)
-            if channel_id:
-                _ensure_bot_in_channel(client, channel_id, logger)
-
-        response = client.files_upload_v2(
-            filename=fname,
-            file=r.content,
-            channel=channel_id,
-        )
-        print(f"Re-uploaded file {file['id']} as bot with new file ID {safe_get(response, 'file', 'id')}")
-        print(f"Response from Slack API: {response}")
-        return safe_get(response, "files", 0, "id")
-    except Exception as e:
-        logger.error(f"Error re-uploading file {safe_get(file, 'id')} as bot: {e}")
-        return None
 
 
 # Helper function to sort by name, ignoring any prefixes we might want to ignore
