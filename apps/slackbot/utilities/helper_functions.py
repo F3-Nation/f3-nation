@@ -866,8 +866,10 @@ def upload_files_to_storage(
 
     Returns the stored files' public URLs, email attachments (``content`` and ``meta``),
     the Slack file ids, and the public URLs of the low-resolution copies. A file that
-    fails is logged, any copy of it already stored is deleted, and it is left out of
-    every list except the Slack file ids, which hold every input file.
+    fails is logged and left out of every list except the Slack file ids, which hold
+    every input file. Copies of it already stored are deleted only when ``file_name``
+    is unset; under a caller-chosen ``file_name`` they stay, because they replace an
+    object a saved URL may point to.
     """
     file_list = []
     file_send_list = []

@@ -95,7 +95,8 @@ def write_bytes(directory: str, name: str, data: bytes, content_type: str) -> st
 def writable_path(directory: str, name: str, content_type: str) -> Iterator[str]:
     """Yield a local path for a library that writes files itself; the file is stored as ``name`` on exit.
 
-    Nothing is stored if the block raises.
+    With the emulator, nothing is stored if the block raises. Without it, the path is
+    the mounted file itself, so anything written before an error stays stored.
     """
     if not _emulator_base():
         yield mount_path(directory, name)
