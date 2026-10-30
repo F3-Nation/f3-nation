@@ -163,6 +163,13 @@ that app's thin `deploy-<app>.yml` caller into the shared
 4. **`deploy-prod`** — requires staging success, then Cloud Run in the prod
    project.
 
+Deploy gates match check names across workflows on the tagged commit. Deploy
+jobs must keep names distinct from the CI checks matched by `check-regexp`,
+so a skipped deploy job cannot shadow a successful CI check. The
+[Homepage workflow](../.github/workflows/deploy-homepage.yml) uses
+`ci-check` → `build-homepage` → `deploy`; its build job is separate from CI's
+`build` check.
+
 ## Observations
 
 - `docker-build` runs on every PR but is **not** in the `main` ruleset's

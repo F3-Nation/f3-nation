@@ -125,6 +125,9 @@ Ask for anything missing before starting:
 
    Do not summarize every PR.
 
+   For Homepage, distinguish its deployment result from CI's `build` check
+   using the [deploy gate guidance](../../../docs/CI_PIPELINE.md#deploy-pipeline-per-app).
+
 5. **Fill in [`template.md`](template.md).** Renumber the steps after
    dropping any that do not apply. Follow the rules below. Delete every
    `<!-- ... -->` comment and every block marked optional that does not
