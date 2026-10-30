@@ -153,12 +153,36 @@ describe("server text decoding", () => {
   it.each([
     ["an end tag with whitespace", "<script>alert(1)</script >Hi"],
     ["an end tag with attributes", '<SCRIPT>alert(1)</script x="y">Hi'],
-    [
-      "a block spliced from a removed one",
-      "<scr<script></script>ipt>alert(1)</script>Hi",
-    ],
     ["a style block", "<style>p{}</style\n>Hi"],
+    ["a block with a lookalike end tag", "<script>a</script-x>b</script>Hi"],
+    ["a block with a punctuated end tag", "<script>a</script!>b</script>Hi"],
+    ["a style block with a lookalike end tag", "<style>a</style:x>b</style>Hi"],
   ])("drops script and style content in %s", (_, html) => {
     expect(renderToString(<Text html={html} />)).toBe("<p>Hi</p>");
+  });
+
+  it("keeps text inside custom elements named like script or style", () => {
+    expect(
+      renderToString(<Text html="<style-guide>Region info</style-guide>" />),
+    ).toBe("<p>Region info</p>");
+  });
+
+  it("doesn't join the text around a removed block into a new tag", () => {
+    expect(
+      renderToString(
+        <Text html="<scr<script></script>ipt>alert(1)</script>Hi" />,
+      ),
+    ).toBe("<p>alert(1)Hi</p>");
+  });
+
+  it("strips deeply spliced blocks in linear time", () => {
+    // Without the block stand-in, remove-until-stable needs a pass per level.
+    const n = 100_000;
+    const html = `${"<scr".repeat(n)}<script></script>${"ipt></script>".repeat(n)}Hi`;
+
+    const rendered = renderToString(<Text html={html} />);
+
+    expect(rendered).not.toContain("&lt;");
+    expect(rendered.endsWith("Hi</p>")).toBe(true);
   });
 });
