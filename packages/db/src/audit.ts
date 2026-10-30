@@ -13,7 +13,7 @@ export const withAuditUser = async <T>(
       SELECT set_config('app.user_id', ${context.userId?.toString() ?? ""}, true),
              set_config('app.source', ${context.source ?? ""}, true)
     `);
-    // Drizzle transactions support the queries and nested transactions used by
-    // write helpers; the connection-only $client property is not used here.
+    // Transactions lack AppDb's connection-only $client; callbacks and the
+    // write helpers they call must use only queries and nested transactions.
     return fn(tx as unknown as AppDb);
   });

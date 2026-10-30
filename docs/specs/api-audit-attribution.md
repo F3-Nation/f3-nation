@@ -38,7 +38,7 @@ non-transactional database client.
 - **AC-2** — GIVEN a mutation affecting another user or organization WHEN it is
   authorized THEN attribution uses the session actor, not an input user ID,
   email, request submitter, API client header or target record owner.
-- **AC-3** — GIVEN an API-key session, anonymous request, local mock identity or
+- **AC-3** — GIVEN an API-key session, anonymous request, API mock session or
   session without a positive integer user ID WHEN an otherwise permitted write
   succeeds THEN `changed_by` is NULL. Attribution grants no permission.
 - **AC-4** — GIVEN covered writes and related history WHEN their transaction
@@ -78,10 +78,11 @@ Existing procedure tiers and resource checks decide whether a write is allowed.
 Attribution neither adds roles nor substitutes an identity for authorization.
 API keys retain their existing scoped permissions, but their owners are not
 identified as the people who performed automated writes.
+Development credential sessions differ from the API mock fallback: attribution
+uses the account ID issued by that provider, not the email entered at sign-in.
 
-Covered mutations declare their response schemas. Attendance responses retain
-their existing fields. Successful user deletion returns `{ userId }`, matching
-the identifier response used by the other CRUD delete endpoints.
+Attendance mutations declare response schemas that retain their existing fields.
+Successful user deletion returns `{ userId }`.
 
 | Action                        | Allowed                                                    | Explicitly denied                                                         |
 | ----------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------- |

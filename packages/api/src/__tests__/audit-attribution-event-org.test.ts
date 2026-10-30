@@ -4,6 +4,7 @@ import { mail } from "@acme/mail";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as cascadeService from "../lib/cascade-service";
+import * as firstEventService from "../lib/first-event-service";
 import { notifyWebhooks } from "../lib/notify-webhooks";
 import { waitForEventRegionNotificationTasks } from "../router/event";
 import {
@@ -18,6 +19,7 @@ import {
 
 type HistoryTable =
   | "orgs"
+  | "locations"
   | "events"
   | "event_instances"
   | "events_x_event_types"
@@ -51,6 +53,7 @@ describe("event and organization audit attribution", () => {
   const eventIds: number[] = [];
   const eventTypeIds: number[] = [];
   const eventTagIds: number[] = [];
+  const locationIds: number[] = [];
   const orgIds: number[] = [];
 
   beforeEach(async () => {
@@ -71,6 +74,7 @@ describe("event and organization audit attribution", () => {
       await db.delete(schema.eventTags).where(eq(schema.eventTags.id, id));
     }
     for (const id of eventTypeIds.reverse()) await cleanup.eventType(id);
+    for (const id of locationIds.reverse()) await cleanup.location(id);
     for (const id of orgIds.reverse()) await cleanup.org(id);
     vi.restoreAllMocks();
   });
@@ -239,9 +243,11 @@ describe("event and organization audit attribution", () => {
   it("attributes event deletion and its future-instance cascade", async () => {
     const { input } = await fixture();
     const event = await createSeries(input);
+    vi.mocked(notifyWebhooks).mockClear();
     expect(await createTestClient().event.delete({ id: event.id })).toEqual({
       eventId: event.id,
     });
+    expect(notifyWebhooks).toHaveBeenCalledTimes(1);
     for (const [table, key] of [
       ["events", "id"],
       ["event_instances", "series_id"],
@@ -274,6 +280,104 @@ describe("event and organization audit attribution", () => {
     expect(rows[0]?.new_row?.name).toBe("Created audit AO");
   });
 
+  it("attributes an AO move and all location-helper writes to the same actor", async () => {
+    const { region, ao, input } = await fixture();
+    const [destination] = await db
+      .insert(schema.orgs)
+      .values({
+        name: `Audit destination ${uniqueId()}`,
+        orgType: "region",
+        parentId: region.parentId,
+        isActive: true,
+      })
+      .returning();
+    if (!destination) throw new Error("Missing destination region");
+    orgIds.unshift(destination.id);
+    const [oldLocation] = await db
+      .insert(schema.locations)
+      .values({
+        name: `Audit move location ${uniqueId()}`,
+        orgId: region.id,
+        latitude: 35.5,
+        longitude: -80.5,
+        isActive: true,
+      })
+      .returning();
+    if (!oldLocation) throw new Error("Missing source location");
+    locationIds.push(oldLocation.id);
+    const { event } = await createTestClient().event.crupdate({
+      ...input,
+      locationId: oldLocation.id,
+    });
+    if (!event) throw new Error("Missing located event");
+    eventIds.push(event.id);
+    await waitForEventRegionNotificationTasks();
+
+    const notifyRegion = vi
+      .spyOn(firstEventService, "maybeNotifyRegionInABox")
+      .mockResolvedValue();
+    await createTestClient().org.crupdate({
+      id: ao.id,
+      name: ao.name,
+      orgType: "ao",
+      parentId: destination.id,
+      isActive: true,
+      email: null,
+      phone: null,
+      description: null,
+      website: null,
+      twitter: null,
+      facebook: null,
+      instagram: null,
+    });
+    const copiedLocations = await db
+      .select()
+      .from(schema.locations)
+      .where(eq(schema.locations.orgId, destination.id));
+    locationIds.push(...copiedLocations.map((location) => location.id));
+    await vi.waitFor(() =>
+      expect(notifyRegion).toHaveBeenCalledWith(db, destination.id),
+    );
+    expect(notifyRegion).toHaveBeenCalledTimes(1);
+    expect(copiedLocations).toHaveLength(1);
+    const newLocation = copiedLocations[0];
+    if (!newLocation) throw new Error("Missing copied location");
+    expect(newLocation).toMatchObject({
+      name: oldLocation.name,
+      orgId: destination.id,
+      isActive: true,
+    });
+    expect(newLocation.id).not.toBe(oldLocation.id);
+
+    for (const [table, id, op, expected] of [
+      ["locations", newLocation.id, "I", { org_id: destination.id }],
+      ["locations", oldLocation.id, "U", { is_active: false }],
+      ["events", event.id, "U", { location_id: newLocation.id }],
+      ["orgs", ao.id, "U", { parent_id: destination.id }],
+    ] as const) {
+      const rows = await history(table, "id", id, op);
+      expect(rows).toHaveLength(1);
+      expectActor(rows);
+      expect(rows[0]?.new_row).toMatchObject(expected);
+    }
+
+    const [persistedEvent] = await db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, event.id));
+    const [persistedOrg] = await db
+      .select()
+      .from(schema.orgs)
+      .where(eq(schema.orgs.id, ao.id));
+    const [persistedOldLocation] = await db
+      .select()
+      .from(schema.locations)
+      .where(eq(schema.locations.id, oldLocation.id));
+    expect(persistedEvent?.locationId).toBe(newLocation.id);
+    expect(persistedOrg?.parentId).toBe(destination.id);
+    expect(persistedOldLocation?.isActive).toBe(false);
+  });
+
   it("attributes organization deactivation and its event cascades", async () => {
     const { ao, input } = await fixture();
     const event = await createSeries(input);
@@ -296,9 +400,11 @@ describe("event and organization audit attribution", () => {
   it("attributes organization deletion and its event cascades", async () => {
     const { ao, input } = await fixture();
     const event = await createSeries(input);
+    vi.mocked(notifyWebhooks).mockClear();
     expect(await createTestClient().org.delete({ id: ao.id })).toEqual({
       orgId: ao.id,
     });
+    expect(notifyWebhooks).toHaveBeenCalledTimes(1);
     await expectInactiveCascade(ao.id, event.id);
   });
 
