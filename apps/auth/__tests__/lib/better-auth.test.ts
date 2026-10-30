@@ -8,6 +8,7 @@ import {
   generateKeyPair,
 } from "jose";
 import { getAuthTables } from "@better-auth/core/db";
+import { getIP } from "@better-auth/core/utils/ip";
 import { isAccessTokenPayload, verifyAccessToken } from "@f3nation/sso";
 
 import {
@@ -59,8 +60,8 @@ function createTestAuth(
   f3UserId: number | null,
   claimOtpAttempt: CreateAuthInstanceOptions["claimOtpAttempt"] = () =>
     Promise.resolve(true),
+  memoryDb: MemoryDB = {},
 ) {
-  const memoryDb: MemoryDB = {};
   const options = {
     baseURL: BASE_URL,
     basePath: BASE_PATH,
@@ -744,6 +745,159 @@ describe("deleteBetterAuthOAuthTokens", () => {
       deleteBetterAuthOAuthTokens(fakeAuth(deleteMany), "42"),
     ).rejects.toThrow("refresh table down");
     expect(deleteMany).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("ending OAuth tokens at sign-out", () => {
+  const email = "signout@f3nation.test";
+
+  async function signInWithOfflineToken() {
+    const memoryDb: MemoryDB = {};
+    const auth = createTestAuth(42, undefined, memoryDb);
+    const sessionToken = await signInAndGetToken(auth, email);
+    const client = await createConfidentialClient(auth, sessionToken);
+    const tokens = (await authorizeAndExchange(auth, {
+      sessionToken,
+      clientId: client.client_id,
+      clientSecret: client.client_secret,
+      redirectUri: REDIRECT_URI,
+      scope: "openid offline_access",
+    })) as { refresh_token?: string };
+    expect(tokens.refresh_token).toBeTruthy();
+    // The access token is a JWT, so it has no row; only the refresh token
+    // does.
+    expect(memoryDb.oauthRefreshToken).toHaveLength(1);
+    return { auth, memoryDb, sessionToken };
+  }
+
+  it("deletes the user's offline_access tokens on a direct /sign-out", async () => {
+    const { auth, memoryDb, sessionToken } = await signInWithOfflineToken();
+
+    const response = await auth.handler(
+      new Request(`${ENDPOINT}/sign-out`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${sessionToken}` },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(memoryDb.session).toHaveLength(0);
+    expect(memoryDb.oauthRefreshToken).toHaveLength(0);
+  });
+
+  it("deletes the user's offline_access tokens on a confirmed /oauth2/end-session", async () => {
+    const { auth, memoryDb, sessionToken } = await signInWithOfflineToken();
+    const authHeaders = {
+      authorization: `Bearer ${sessionToken}`,
+      accept: "text/html",
+    };
+
+    // No id_token_hint, so Better Auth asks the browser to confirm first,
+    // and the session only ends at the confirm POST.
+    const confirmPage = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/end-session`, { headers: authHeaders }),
+    );
+    expect(confirmPage.status).toBe(200);
+    expect(memoryDb.session).toHaveLength(1);
+    const cookie = confirmPage.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+
+    const confirmed = await auth.handler(
+      new Request(`${ENDPOINT}/oauth2/end-session/confirm`, {
+        method: "POST",
+        headers: {
+          ...authHeaders,
+          cookie,
+          origin: BASE_URL,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: "action=confirm",
+      }),
+    );
+
+    expect(confirmed.status).toBe(200);
+    expect(memoryDb.session).toHaveLength(0);
+    expect(memoryDb.oauthRefreshToken).toHaveLength(0);
+  });
+
+  it("keeps offline_access tokens when an expired session is cleaned up", async () => {
+    const { auth, memoryDb, sessionToken } = await signInWithOfflineToken();
+    for (const row of (memoryDb.session ?? []) as { expiresAt: Date }[]) {
+      row.expiresAt = new Date(Date.now() - 1000);
+    }
+
+    const session = await auth.api.getSession({
+      headers: new Headers({ authorization: `Bearer ${sessionToken}` }),
+    });
+
+    expect(session).toBeNull();
+    expect(memoryDb.session).toHaveLength(0);
+    expect(memoryDb.oauthRefreshToken).toHaveLength(1);
+  });
+
+  it("lets the sign-out stand when deleting the tokens fails", async () => {
+    const { auth, memoryDb, sessionToken } = await signInWithOfflineToken();
+    const logError = vi.spyOn(logging, "logError").mockImplementation(() => {
+      // keep test output quiet
+    });
+    const { adapter } = await auth.$context;
+    const deleteMany = vi
+      .spyOn(adapter, "deleteMany")
+      .mockRejectedValue(new Error("token table down"));
+
+    try {
+      const response = await auth.handler(
+        new Request(`${ENDPOINT}/sign-out`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${sessionToken}` },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(memoryDb.session).toHaveLength(0);
+      expect(logError).toHaveBeenCalledWith(
+        "auth.better_auth.sign_out_token_deletion_failed",
+        expect.objectContaining({ errorName: "Error" }),
+      );
+    } finally {
+      deleteMany.mockRestore();
+      logError.mockRestore();
+    }
+  });
+});
+
+describe("client IP for Better Auth's rate limiter", () => {
+  const options = buildBetterAuthOptions({
+    baseURL: BASE_URL,
+    basePath: BASE_PATH,
+    secret: "test-only-not-a-real-secret",
+    issuer: ISSUER,
+    database: memoryAdapter({}),
+    sendVerificationOTP: () => Promise.resolve(),
+    findF3UserId: () => Promise.resolve(null),
+    claimOtpAttempt: () => Promise.resolve(true),
+    isNationAdmin: () => Promise.resolve(false),
+    findF3Profile: findOnboardedProfile,
+    allowClientAction: () => Promise.resolve(true),
+  });
+
+  it("keys on the Cloud Run-appended hop, not a forged leading entry", () => {
+    for (const forged of ["6.6.6.6", "127.0.0.1", "not-an-ip"]) {
+      expect(
+        getIP(
+          new Headers({ "x-forwarded-for": `${forged}, 203.0.113.7` }),
+          options,
+        ),
+      ).toBe("203.0.113.7");
+    }
+  });
+
+  it("still keys on a single-entry header", () => {
+    expect(
+      getIP(new Headers({ "x-forwarded-for": "203.0.113.7" }), options),
+    ).toBe("203.0.113.7");
   });
 });
 

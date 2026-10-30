@@ -47,6 +47,8 @@ import {
   extendOAuthProvider,
   oauthProvider,
 } from "@better-auth/oauth-provider";
+import type { GenericEndpointContext } from "@better-auth/core";
+import type { DBAdapter } from "@better-auth/core/db/adapter";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import type { MemoryDB } from "better-auth/adapters/memory";
@@ -285,6 +287,40 @@ const OTP_VERIFYING_PATHS = new Set([
 ]);
 
 /**
+ * Better Auth endpoints that end a session because the user signed out.
+ * Signing out here ends the user's OAuth tokens too (see
+ * databaseHooks.session.delete.after below), the same as /api/logout and
+ * /api/oauth/logout do. Every other session delete is left alone: getSession
+ * deletes an expired session, and an offline_access refresh token is meant
+ * to outlive that.
+ */
+const SIGN_OUT_PATHS = new Set([
+  "/sign-out",
+  "/oauth2/end-session",
+  // Where /oauth2/end-session's confirmation page posts back to: without a
+  // usable id_token_hint, that's the request that ends the session.
+  "/oauth2/end-session/confirm",
+]);
+
+/**
+ * Hops that may append themselves to X-Forwarded-For after the client's own
+ * address. On Cloud Run the front end appends exactly one entry, the client
+ * address it saw, and nothing after it, so the only hop listed is loopback.
+ * Better Auth walks the chain from the right, skips these, and takes the
+ * first entry left over: the Cloud Run-appended client address, which the
+ * caller can't forge. The same entry as the hand-written limiters' `.at(-1)`.
+ *
+ * Without this, Better Auth trusts X-Forwarded-For only when it holds a
+ * single entry. Any caller that sends its own header makes a longer chain,
+ * so it lands in one shared per-path bucket, which anyone can fill to
+ * rate-limit everyone else in it.
+ *
+ * Behind a Google HTTPS load balancer, its address is appended too and has
+ * to be added here.
+ */
+const TRUSTED_PROXIES = ["127.0.0.1", "::1"];
+
+/**
  * The SQLSTATE of a database error, if any. DrizzleQueryError carries the
  * driver's error (with `code`) as its `cause`, so look there first.
  */
@@ -318,6 +354,9 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
     secret: options.secret,
     database: options.database,
     emailAndPassword: { enabled: false },
+    advanced: {
+      ipAddress: { trustedProxies: TRUSTED_PROXIES },
+    },
     hooks: {
       // Runs before every endpoint, so it also covers callers of the
       // BA-native /api/auth2/oauth2/* paths advertised in discovery, not just
@@ -394,6 +433,35 @@ export function buildBetterAuthOptions(options: CreateAuthInstanceOptions) {
       }),
     },
     databaseHooks: {
+      session: {
+        delete: {
+          // Covers a direct /api/auth2/sign-out, which the logout routes
+          // don't see. The oauth-provider plugin's own session.delete hook
+          // spares offline_access refresh tokens, so without this they'd
+          // outlive a sign-out. Like those routes, this ends every OAuth
+          // token the user holds, on every device.
+          after: async (
+            session: { userId: string },
+            hookCtx: GenericEndpointContext | null,
+          ) => {
+            if (!hookCtx || !SIGN_OUT_PATHS.has(hookCtx.path)) return;
+            // The session is already gone and the cookie is being cleared.
+            // Failing here would turn a finished sign-out into an error, so
+            // log and let it stand.
+            try {
+              await deleteOAuthTokensForUser(
+                hookCtx.context.adapter,
+                session.userId,
+              );
+            } catch (err) {
+              logError("auth.better_auth.sign_out_token_deletion_failed", {
+                errorName: err instanceof Error ? err.name : typeof err,
+                code: sqlState(err),
+              });
+            }
+          },
+        },
+      },
       user: {
         create: {
           // Two jobs at once: (1) refuse to create a Better Auth user for
@@ -595,6 +663,13 @@ export async function deleteBetterAuthOAuthTokens(
   userId: string,
 ) {
   const { adapter } = await auth.$context;
+  await deleteOAuthTokensForUser(adapter, userId);
+}
+
+async function deleteOAuthTokensForUser(
+  adapter: Pick<DBAdapter, "deleteMany">,
+  userId: string,
+) {
   const where = [{ field: "userId", value: userId }];
   // Both are attempted even if the first fails, so one bad table doesn't
   // leave the other's tokens alive; the first failure is then thrown.
