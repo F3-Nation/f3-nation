@@ -2,7 +2,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Check, ChevronDownIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Z_INDEX } from "@acme/shared/app/constants";
 
@@ -216,9 +216,13 @@ export function VirtualizedCombobox<T>({
 
   const [buttonWidth, setButtonWidth] = useState(0);
 
-  useEffect(() => {
+  // Re-sync the selection when the `value` prop changes. Done during render
+  // (not in an effect) so we don't paint a stale selection or cascade renders.
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
     setSelectedOptions(typeof value === "string" ? [value] : (value ?? []));
-  }, [value]);
+  }
 
   const handleSelect = (currentValue: string) => {
     let newOptions: string[] = [];
