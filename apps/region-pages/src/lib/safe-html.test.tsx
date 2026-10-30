@@ -149,4 +149,16 @@ describe("server text decoding", () => {
       renderToString(<Text html="It&#8217;s 5&mdash;6 &#x2764; &bogus;" />),
     ).toBe("<p>It’s 5—6 ❤ &amp;bogus;</p>");
   });
+
+  it.each([
+    ["an end tag with whitespace", "<script>alert(1)</script >Hi"],
+    ["an end tag with attributes", '<SCRIPT>alert(1)</script x="y">Hi'],
+    [
+      "a block spliced from a removed one",
+      "<scr<script></script>ipt>alert(1)</script>Hi",
+    ],
+    ["a style block", "<style>p{}</style\n>Hi"],
+  ])("drops script and style content in %s", (_, html) => {
+    expect(renderToString(<Text html={html} />)).toBe("<p>Hi</p>");
+  });
 });

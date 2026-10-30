@@ -41,14 +41,31 @@ const decodeEntity = (entity: string, body: string): string => {
   return NAMED_ENTITIES[body.toLowerCase()] ?? entity;
 };
 
-const stripHtml = (value: string): string =>
-  value
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, decodeEntity)
-    .trim();
+// End tags allow whitespace and attributes (`</script >`, `</script x>`),
+// since browsers close the element on those too.
+const SCRIPT_BLOCK = /<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi;
+const STYLE_BLOCK = /<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi;
+const ANY_TAG = /<[^>]*>/g;
+
+/**
+ * Plain text of `value`. Each removal repeats until nothing changes: one pass
+ * can splice a new tag together from the text around the one it removed
+ * (`<scr<script></script>ipt>`).
+ */
+const stripHtml = (value: string): string => {
+  let text = value;
+  let previous: string;
+  do {
+    previous = text;
+    text = text.replace(SCRIPT_BLOCK, "").replace(STYLE_BLOCK, "");
+  } while (text !== previous);
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  do {
+    previous = text;
+    text = text.replace(ANY_TAG, "");
+  } while (text !== previous);
+  return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, decodeEntity).trim();
+};
 
 /** Plain-text rendering of `html`; what the server (no DOMParser) shows. */
 const htmlToPlainText = (html: string | null | undefined): string =>
