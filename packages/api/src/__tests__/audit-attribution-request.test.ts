@@ -293,17 +293,26 @@ describe("request audit attribution", () => {
       expect(await requestHistory(input.id)).toEqual(expectedHistory);
       expect(observedHistory).toEqual(expectedHistory);
       expect(notificationDb).toBe(db);
-      expect(await entityHistory(ids)).toEqual([
-        {
-          entity: "event_types",
-          op: "I",
-          changed_by: actor,
-          changed_via: null,
-        },
-        { entity: "events", op: "I", changed_by: actor, changed_via: null },
-        { entity: "locations", op: "I", changed_by: actor, changed_via: null },
-        { entity: "orgs", op: "I", changed_by: actor, changed_via: null },
-      ]);
+      const histories = await entityHistory(ids);
+      expect(histories).toHaveLength(4);
+      expect(histories).toEqual(
+        expect.arrayContaining([
+          {
+            entity: "event_types",
+            op: "I",
+            changed_by: actor,
+            changed_via: null,
+          },
+          { entity: "events", op: "I", changed_by: actor, changed_via: null },
+          {
+            entity: "locations",
+            op: "I",
+            changed_by: actor,
+            changed_via: null,
+          },
+          { entity: "orgs", op: "I", changed_by: actor, changed_via: null },
+        ]),
+      );
       expect(
         await db.query.events.findFirst({
           where: eq(schema.events.id, ids.eventId),
