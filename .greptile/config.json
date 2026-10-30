@@ -94,6 +94,12 @@
       "severity": "medium"
     },
     {
+      "id": "docs-facts-only",
+      "rule": "In Markdown and docs, flag only factual errors against the code, broken links or anchors, and commands, paths, env var names or check names that no longer exist. Don't comment on wording, tone, grammar, formatting or structure.",
+      "scope": ["**/*.md", "docs/**"],
+      "severity": "low"
+    },
+    {
       "id": "unrelated-revert",
       "rule": "KP-UNRELATED-REVERT: flag deletions or rewrites outside the PR's stated purpose, especially of tests or guards recently added on main; a stale branch can undo a merged fix.",
       "severity": "high"
