@@ -71,11 +71,40 @@ def test_creates_profile_and_emails_invite_without_posting_welcome(monkeypatch):
     assert user.home_region_id == 8 and user.phone == "828-555-0100"
     assert user.meta == {"battle_buddy": 7}  # running /fng doesn't mean he EH'd him
     assert send.call_args.kwargs["to_email"] == "john@example.com"
+    assert send.call_args.kwargs["subject"] == "Welcome to Boone"
     assert INVITE_LINK in send.call_args.kwargs["html_content"]
     client.chat_postMessage.assert_not_called()  # team_join welcomes him once he joins
     assert "Chip (John S.)" in view.call_args.kwargs["text"]
     assert view.call_args.kwargs["level"] == constants.AlertLevel.SUCCESS
     assert view.call_args.kwargs["view_id"] == "V1"
+
+
+@pytest.mark.parametrize(
+    "region_name, escaped_region",
+    [
+        ("O'Fallon", "O&#x27;Fallon"),
+        ("Rock & Roll", "Rock &amp; Roll"),
+        ('<Foothills> "West"', "&lt;Foothills&gt; &quot;West&quot;"),
+    ],
+)
+def test_welcome_email_preserves_subject_punctuation_and_escapes_html(monkeypatch, region_name, escaped_region):
+    db, send, _ = patch_db(monkeypatch)
+    db.get.return_value = SimpleNamespace(name=region_name)
+    invite_link = f"{INVITE_LINK}?source=fng&ref=welcome"
+
+    fng.handle_fng_form(
+        submission(**{fng.FNG_FIRST_NAME: "Riley <friend>"}),
+        MagicMock(),
+        MagicMock(),
+        {},
+        region_record(downrange_invite_link=invite_link),
+    )
+
+    send.assert_called_once()
+    message = send.call_args.kwargs
+    assert message["subject"] == f"Welcome to {region_name}"
+    assert f"<p>Welcome to {escaped_region}, Riley &lt;friend&gt;!</p>" in message["html_content"]
+    assert f'<a href="{INVITE_LINK}?source=fng&amp;ref=welcome">Join us here</a>' in message["html_content"]
 
 
 def test_brought_by_is_whoever_was_picked(monkeypatch):
