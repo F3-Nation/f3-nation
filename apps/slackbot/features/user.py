@@ -174,7 +174,8 @@ def handle_user_form(body: dict, client: WebClient, logger: Logger, context: dic
                     file_name=str(slack_user.user_id),
                     enforce_png=True,
                 )
-                update_fields[User.avatar_url] = file_list[0]
+                if file_list:
+                    update_fields[User.avatar_url] = file_list[0]
 
             DbManager.update_record(User, slack_user.user_id, update_fields)
 

@@ -784,15 +784,84 @@ def test_generated_settings_refresh_region_cache(calendar_generation, monkeypatc
         assert not hasattr(region, f"calendar_image_{week}_fingerprint")
 
 
-@pytest.mark.parametrize("num_weeks", [1, 2])
-def test_stale_week_cleanup_removes_filename_with_metadata(monkeypatch, num_weeks):
-    monkeypatch.setattr(calendar_images.storage.os, "remove", lambda path: None)
+@pytest.mark.parametrize("num_weeks,removed_weeks", [(1, ["next", "third"]), (2, ["third"])])
+def test_stale_week_cleanup_removes_filename_with_metadata(monkeypatch, num_weeks, removed_weeks):
+    removed = []
+    monkeypatch.setattr(calendar_images.storage.os, "remove", removed.append)
+    monkeypatch.setattr(calendar_images, "DB_SCHEMA", "f3_staging")
     settings = {}
     for week in ("current", "next", "third"):
         settings[f"calendar_image_{week}"] = v1_filename(week=week)
     assert calendar_images.remove_stale_week_images(settings, 1, num_weeks)
     for index, week in enumerate(("current", "next", "third")):
         assert (f"calendar_image_{week}" in settings) == (index < num_weeks)
+    assert removed == [f"/mnt/calendar-images/{v1_filename(week=week)}" for week in removed_weeks]
+
+
+def test_local_development_exports_to_mount_and_removes_replaced_image_after_commit(calendar_generation, monkeypatch):
+    run, row, settings, session = calendar_generation
+    monkeypatch.setattr(calendar_images, "LOCAL_DEVELOPMENT", True)
+    now = datetime(2026, 9, 30, 10)
+    rows = [row("AO", now - timedelta(days=1))]
+    [(path, _)] = run(rows, now)
+    old = settings["calendar_image_current"]
+    assert path == f"/mnt/calendar-images/{old}"
+
+    removed = []
+
+    def remove(path):
+        assert session.commit.call_count == 2
+        removed.append(path)
+
+    monkeypatch.setattr(calendar_images.storage.os, "remove", remove)
+    # LOCAL_DEVELOPMENT regenerates on every run, without force.
+    run(rows, now + timedelta(hours=1))
+
+    assert settings["calendar_image_current"] != old
+    assert removed == [f"/mnt/calendar-images/{old}"]
+
+
+def test_emulator_uploads_copies_and_deletes_calendar_images_over_http(calendar_generation, monkeypatch):
+    run, row, settings, session = calendar_generation
+    monkeypatch.setenv("GCS_EMULATOR_HOST", "localhost:9023")
+    monkeypatch.setattr(calendar_images, "DB_SCHEMA", "f3_prod")
+    calls = []
+
+    def export(style, filename, **kwargs):
+        with open(filename, "wb") as f:
+            f.write(b"png bytes")
+
+    def respond(method):
+        def call(url, **kwargs):
+            calls.append((method, url, kwargs))
+            response = calendar_images.storage.requests.Response()
+            response.status_code = 200
+            return response
+
+        return call
+
+    monkeypatch.setitem(sys.modules, "dataframe_image", SimpleNamespace(export=export))
+    monkeypatch.setattr(calendar_images.storage.requests, "post", respond("POST"))
+    monkeypatch.setattr(calendar_images.storage.requests, "delete", respond("DELETE"))
+    objects = "http://localhost:9023/storage/v1/b/f3nation-calendar-images/o"
+    now = datetime(2026, 9, 30, 10)
+
+    run([row("AO", now - timedelta(days=1))], now)
+
+    first = settings["calendar_image_current"]
+    posts = [(url, kwargs) for method, url, kwargs in calls if method == "POST"]
+    [(upload_url, upload), (copy_url, _)] = posts
+    assert upload_url == "http://localhost:9023/upload/storage/v1/b/f3nation-calendar-images/o"
+    assert upload["params"]["name"] == first
+    assert upload["headers"] == {"Content-Type": "image/png"}
+    assert upload["data"] == b"png bytes"
+    assert copy_url == f"{objects}/{first}/copyTo/b/f3nation-calendar-images/o/1-current.png"
+
+    calls.clear()
+    run([row("AO renamed", now)], now + timedelta(hours=1))
+
+    assert settings["calendar_image_current"] != first
+    assert f"{objects}/{first}" in [url for method, url, _ in calls if method == "DELETE"]
 
 
 @pytest.mark.parametrize("remaining", ["control", "empty", "q_removed", "moved", "ao_renamed", "ao_description"])

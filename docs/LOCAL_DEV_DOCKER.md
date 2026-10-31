@@ -522,10 +522,10 @@ Individual files are directly accessible at `http://localhost:9023/f3-public-ima
 
 On Cloud Run the slackbot writes files under `/mnt`, where GCS buckets are mounted. When `GCS_EMULATOR_HOST` is set in `apps/slackbot/.env`, it stores them through the emulator's API instead:
 
-| Files                                                  | Emulator location                                                   |
-| ------------------------------------------------------ | ------------------------------------------------------------------- |
-| Backblast and preblast photos, user avatars, org logos | `FILE_BUCKET_PREFIX` bucket (`f3-public-images-staging`), by folder |
-| Generated calendar images                              | `f3nation-calendar-images` bucket                                   |
+| Files                                     | Emulator location                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| Backblast photos, user avatars, org logos | `FILE_BUCKET_PREFIX` bucket (`f3-public-images-staging`), by folder |
+| Generated calendar images                 | `f3nation-calendar-images` bucket                                   |
 
 Slack's servers download message images themselves and can't reach `localhost`, so a block with an emulator image URL would be rejected. Locally, the slackbot posts a link to each emulator image instead of embedding it; open the link in your browser to see the stored file. Deployed, URLs point at `storage.googleapis.com` and images embed as usual.
 

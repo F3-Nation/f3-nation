@@ -84,7 +84,7 @@ def handle_region_edit(body: dict, client: WebClient, logger: Logger, context: d
             file_name=str(region_record.org_id),
             enforce_png=True,
         )
-        logo_url = file_list[0]
+        logo_url = file_list[0] if file_list else None
     else:
         logo_url = None
 

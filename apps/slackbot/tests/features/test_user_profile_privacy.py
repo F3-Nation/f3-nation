@@ -136,3 +136,25 @@ def test_production_user_form_updates_profile_and_uploads_photo(monkeypatch):
         user.USER_META_F3_NAME_ORIGIN: "Synthetic origin",
         user.USER_META_F3_WHY: "Synthetic why",
     }
+
+
+def test_user_form_keeps_avatar_and_saves_profile_when_photo_upload_fails(monkeypatch):
+    form_values = {
+        user.USER_FORM_USERNAME: "Synthetic Test Pax",
+        user.USER_FORM_HOME_REGION: 17,
+        user.USER_FORM_IMAGE_UPLOAD: [{"id": "SYNTHETIC_FILE"}],
+    }
+    monkeypatch.setattr(user.FORM, "get_selected_values", lambda body: form_values)
+    monkeypatch.setattr(user, "get_user", MagicMock(return_value=MagicMock(user_id=42)))
+    monkeypatch.setattr(user.DbManager, "get", MagicMock(return_value=MagicMock(meta={})))
+    update_record = MagicMock()
+    monkeypatch.setattr(user.DbManager, "update_record", update_record)
+    monkeypatch.setattr(user, "upload_files_to_storage", MagicMock(return_value=([], [], ["SYNTHETIC_FILE"], [])))
+
+    user.handle_user_form({}, MagicMock(), MagicMock(), {}, MagicMock())
+
+    update_record.assert_called_once()
+    _, user_id, fields = update_record.call_args.args
+    assert user_id == 42
+    assert fields[User.f3_name] == "Synthetic Test Pax"
+    assert User.avatar_url not in fields

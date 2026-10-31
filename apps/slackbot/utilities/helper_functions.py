@@ -903,8 +903,11 @@ def upload_files_to_storage(
                     headers={"Authorization": f"Bearer {client.token}"},
                     params={"width": constants.LOW_REZ_IMAGE_SIZE, "height": constants.LOW_REZ_IMAGE_SIZE},
                 )
-                r_low_res.raise_for_status()
-                low_res_content = r_low_res.content
+                # The thumbnail is optional: a failed download still stores the full-size file.
+                if r_low_res.ok:
+                    low_res_content = r_low_res.content
+                else:
+                    logger.error(f"Error downloading thumbnail for file {file['id']}: HTTP {r_low_res.status_code}")
 
             change_to_png = enforce_png and file["filetype"] != "png"
             if enforce_square or max_height or change_to_png:

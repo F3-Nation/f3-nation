@@ -186,6 +186,18 @@ def test_is_publicly_reachable(monkeypatch, url, reachable):
     assert storage.is_publicly_reachable(url) is reachable
 
 
+@pytest.mark.parametrize(
+    "url,reachable",
+    [
+        ("http://gcs-emulator:4443/f3-public-images-staging/org-logos/7.png", False),
+        ("http://gcs-emulator:44430/f3-public-images-staging/org-logos/7.png", True),
+    ],
+)
+def test_is_publicly_reachable_non_loopback_emulator(monkeypatch, url, reachable):
+    monkeypatch.setenv("GCS_EMULATOR_HOST", "gcs-emulator:4443")
+    assert storage.is_publicly_reachable(url) is reachable
+
+
 def test_orm_image_or_link_block_embeds_public_image():
     url = "https://storage.googleapis.com/f3-public-images/org-logos/7.png"
     block = orm.image_or_link_block(image_url=url, alt_text="Region Logo").as_form_field()
@@ -231,7 +243,13 @@ def slack_downloads(monkeypatch):
     downloads = {}
 
     def get(url, **kwargs):
-        return SimpleNamespace(content=downloads[url], raise_for_status=lambda: None)
+        content = downloads[url]
+        if isinstance(content, int):
+            response = requests.Response()
+            response.status_code = content
+            response.url = url
+            return response
+        return SimpleNamespace(content=content, ok=True, raise_for_status=lambda: None)
 
     monkeypatch.setattr(helper_functions.requests, "get", get)
     return downloads
@@ -260,6 +278,30 @@ def test_upload_files_to_storage_without_emulator_writes_mount_and_returns_gcs_u
     assert send_list == [{"content": b"full", "meta": {"filename": "F1.jpg", "maintype": "image", "subtype": "jpeg"}}]
     assert (mount_root / "backblast-images" / "F1.jpg").read_bytes() == b"full"
     assert (mount_root / "backblast-images" / "F1_low_res.png").read_bytes() == b"thumb"
+
+
+def test_upload_files_to_storage_stores_full_size_file_when_thumbnail_download_fails(mount_root, slack_downloads):
+    slack_downloads["https://files.slack.com/F7"] = b"full"
+    slack_downloads["https://files.slack.com/F7/thumb_480"] = 403
+    logger = MagicMock()
+    file = {
+        "id": "F7",
+        "filetype": "jpg",
+        "mimetype": "image/jpeg",
+        "url_private_download": "https://files.slack.com/F7",
+        "thumb_480": "https://files.slack.com/F7/thumb_480",
+    }
+    (mount_root / "backblast-images").mkdir()
+
+    file_list, send_list, _, low_res = helper_functions.upload_files_to_storage(
+        [file], SimpleNamespace(token="xoxb"), logger
+    )
+
+    assert file_list == ["https://storage.googleapis.com/f3-public-images/backblast-images/F7.jpg"]
+    assert low_res == []
+    assert send_list[0]["content"] == b"full"
+    assert [p.name for p in (mount_root / "backblast-images").iterdir()] == ["F7.jpg"]
+    logger.error.assert_called_once()
 
 
 def test_upload_files_to_storage_with_emulator_converts_logo_and_returns_emulator_url(emulator, slack_downloads):
