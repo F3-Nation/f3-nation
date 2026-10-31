@@ -7,6 +7,9 @@
 //   nothing that no longer exists. Each AGENTS.md is scoped to its own
 //   directory (`<dir>/**`, plus any other paths its rules govern) or to paths
 //   under it.
+// - every CC-* and KP-* rule id named in .coderabbit.yaml or
+//   .greptile/config.json is defined in REVIEW.md (`**CC-...` / `**KP-...`),
+//   so renaming or deleting a rule can't leave a bot pointing at nothing.
 // Run from the repo root, or pass a root directory as the first argument.
 
 import { execFileSync } from "node:child_process";
@@ -120,13 +123,37 @@ function checkGreptile() {
   }
 }
 
+function checkRuleIds() {
+  const reviewPath = join(root, "REVIEW.md");
+  if (!existsSync(reviewPath)) return;
+  const ruleId = /\b(?:CC|KP)-[A-Z]+(?:-[A-Z]+)*\b/g;
+  const defined = new Set(
+    [
+      ...readFileSync(reviewPath, "utf8").matchAll(
+        /\*\*((?:CC|KP)-[A-Z-]*[A-Z])/g,
+      ),
+    ].map((match) => match[1]),
+  );
+  for (const config of [".coderabbit.yaml", ".greptile/config.json"]) {
+    const configPath = join(root, config);
+    if (!existsSync(configPath)) continue;
+    const named = new Set(readFileSync(configPath, "utf8").match(ruleId) ?? []);
+    for (const id of named) {
+      if (!defined.has(id)) {
+        errors.push(`${config}: ${id} is not defined in REVIEW.md`);
+      }
+    }
+  }
+}
+
 checkLinks("REVIEW.md");
 checkGreptile();
+checkRuleIds();
 
 if (errors.length > 0) {
   for (const error of errors) console.error(error);
   console.error(
-    "Fix the links or update .greptile/files.json (one entry per nested AGENTS.md, scoped to its directory).",
+    "Fix the links, update .greptile/files.json (one entry per nested AGENTS.md, scoped to its directory), or rename the rule ids in the bot configs to match REVIEW.md.",
   );
   process.exit(1);
 }

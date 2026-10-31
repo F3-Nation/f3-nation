@@ -4,8 +4,8 @@
 # Greptile scopes), and fails when a REVIEW.md link (plain, titled or in-page)
 # points at a missing file or heading, when an anchor follows a directory link,
 # when a nested AGENTS.md isn't listed in .greptile/files.json or is scoped
-# outside its directory, or when the Greptile config lists a file that no
-# longer exists.
+# outside its directory, when the Greptile config lists a file that no
+# longer exists, or when a bot config names a rule id REVIEW.md doesn't define.
 # Run directly: bash scripts/check-review-links.test.sh
 set -uo pipefail
 
@@ -118,6 +118,14 @@ make_fixture "$stale"
 git -C "$stale" rm -qf packages/api/AGENTS.md
 printf '# Code review\n' >"$stale/REVIEW.md"
 expect "Greptile config lists a deleted file" fail "$stale" "packages/api/AGENTS.md does not exist"
+
+rule_ids="$tmp_dir/rule-ids"
+make_fixture "$rule_ids"
+printf '# Code review\n\n- **KP-ACTIVE:** Rule.\n- **CC-AUTHZ** Rule.\n' >"$rule_ids/REVIEW.md"
+printf 'path_instructions:\n  - instructions: Apply KP-ACTIVE and CC-AUTHZ.\n' >"$rule_ids/.coderabbit.yaml"
+expect "bot config names defined rule ids" pass "$rule_ids"
+printf '{ "rules": [{ "rule": "KP-RENAMED: check it." }] }\n' >"$rule_ids/.greptile/config.json"
+expect "bot config names an undefined rule id" fail "$rule_ids" ".greptile/config.json: KP-RENAMED is not defined in REVIEW.md"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} check-review-links test(s) failed"

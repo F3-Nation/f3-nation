@@ -29,12 +29,13 @@ so each tool resolves to the same content:
 | **Cursor**                   | `.cursor/rules/*.mdc`                                                   | Pointer → `AGENTS.md` + this guide  |
 
 `.coderabbit.yaml` also holds per-path review instructions and pre-merge
-checks, and `.greptile/config.json` holds Greptile's scoped rules. Both point
-at `REVIEW.md`'s `CC-*` and `KP-*` ids, so a rule changes in `REVIEW.md` and
-the bot configs name it. The one exception is `REVIEW.md`'s "How to review"
-list: CodeRabbit's `**/*` path instruction and Greptile's `instructions`
-restate it, because those are the prompts each bot applies to every file, so
-change all three together. The `docs/specs/` files are Greptile context,
+checks, and `.greptile/config.json` holds Greptile's scoped rules. Each names
+the `REVIEW.md` `CC-*` or `KP-*` id it applies and restates the rule briefly,
+because each bot applies that text to every file in scope and treats
+`REVIEW.md` only as background. CodeRabbit's `**/*` path instruction and
+Greptile's `instructions` restate the "How to review" list the same way. When
+a rule changes in `REVIEW.md`, `git grep` its id and update the copies;
+`pnpm lint` fails if a bot config names an id `REVIEW.md` doesn't define. The `docs/specs/` files are Greptile context,
 scoped to the code each spec covers.
 
 **Rule of thumb:** put durable guidance in `AGENTS.md` (or, for deep topics, in
