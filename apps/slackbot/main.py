@@ -257,7 +257,7 @@ def start_local_health_server(port: int):
 
 if __name__ == "__main__":
     port = 8080
-    local_http_port = int(os.environ.get("F3_SLACKBOT_PORT", "3007"))
+    local_http_port = int(os.environ.get("F3_SLACKBOT_PORT") or "3007")
 
     if LOCAL_DEVELOPMENT and not SOCKET_MODE:
         raise RuntimeError("Local development requires SOCKET_MODE=true.")

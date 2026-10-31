@@ -334,7 +334,7 @@ A slot moves every port up by 100 × the slot number, and gives the checkout its
 
 The slot is saved in the root `.env` (gitignored), which `docker compose`, `pnpm docker:up`, `pnpm dev`, and later `pnpm local:setup` runs all read. `local:setup` also writes the matching URLs into the checkout's per-app `.env` files and seeds the sign-in clients for Admin and Me with the slot's ports.
 
-- `pnpm dev` picks up the slot by itself. To start a single app with `pnpm --filter <app> dev`, export the slot's ports first: `set -a; . ./.env; set +a`.
+- `pnpm dev` picks up the slot by itself, including ports added after the slot was saved. To start a single app, use `pnpm dev --filter <app>`, which loads the slot the same way.
 - To put a checkout back on the defaults, run `pnpm local:setup --slot 0`.
 - Homepage gets `NEXT_PUBLIC_API_URL` for the slot's API. Its landing-page app links and the status page's health targets still use the default ports.
 - `pnpm docker:down` in a slotted checkout stops only that checkout's containers. Remove a worktree's data for good with `docker compose down -v` from inside it before deleting the worktree.

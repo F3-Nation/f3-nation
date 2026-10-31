@@ -9,6 +9,9 @@ STOPPING=false
 ENV_FILE=".env"
 SOCKET_MODE_VAR="SOCKET_MODE"
 
+# shellcheck source=../../scripts/lib/local-ports.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/lib/local-ports.sh"
+
 # Preflight checks for required CLIs
 assert_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "Required command not found: $1"; exit 1; }; }
 assert_cmd watchfiles
@@ -59,6 +62,9 @@ trap 'STOPPING=true; cleanup; exit 0' SIGINT SIGTERM
 trap cleanup EXIT
 
 ensure_socket_mode
+
+# Gives a slotted checkout its own F3_SLACKBOT_PORT when started outside `pnpm dev`.
+load_local_ports
 
 if [[ "${SOCKET_MODE}" != "true" ]]; then
   echo "SOCKET_MODE must be true for local development."
