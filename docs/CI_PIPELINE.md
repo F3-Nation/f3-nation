@@ -79,12 +79,7 @@ cache budget. The pnpm store remains a smaller co-tenant with Turbo artifacts
 in that budget and is still subject to GitHub's normal least-recently-used
 eviction. Cache adapter startup is non-blocking: if it fails, Turbo runs without
 remote caching rather than failing a required check and emits a workflow
-warning. `GITHUB_SHA` remains declared as a pass-through variable because the
-shared `eslint-config-turbo` rule `turbo/no-undeclared-env-vars` validates the
-CI-factory reference. The CI-factory review and triage commands run directly
-outside `turbo run`, so they inherit the runner-provided value normally, while
-excluding the SHA from Turbo's global hash inputs preserves cross-commit cache
-hits for every Turbo task.
+warning.
 
 Remote caching is enabled only for the five required CI checks during this
 rollout. Preview and deploy workflows continue to build without this adapter so
@@ -162,6 +157,16 @@ that app's thin `deploy-<app>.yml` caller into the shared
    post-deploy cache revalidation.
 4. **`deploy-prod`** — requires staging success, then Cloud Run in the prod
    project.
+
+Deploy gates match emitted check-run names across workflows on the tagged
+commit. Keep those names distinct from the CI checks matched by `check-regexp`,
+so a skipped deploy check cannot replace a successful CI result and block the
+gate. Reusable-workflow jobs include the caller in their check names, such as
+`deploy / build`, so their `build` job IDs do not collide with CI's `build`.
+
+The [Homepage workflow](../.github/workflows/deploy-homepage.yml) publishes to
+GitHub Pages through `ci-check` → `build-homepage` → `deploy`. Its top-level
+build check is named `build-homepage` to stay distinct from CI's `build`.
 
 ## Observations
 
