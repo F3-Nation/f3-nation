@@ -79,15 +79,34 @@ pattern whenever a diff touches its area.
 - **KP-ACTIVE:** Public and listing queries exclude inactive rows and rows
   under an inactive ancestor org. Sibling queries in the same router are the
   reference; a new query that filters differently is a finding.
-- **KP-ENV:** A new env var is read through the app's env schema, and a
-  missing or empty value fails at startup with a log line. An empty allowlist
-  that silently rejects everything, or a default that silently points at
-  another environment, is a finding.
+- **KP-ENV:** A new env var is read the same way as its siblings in that file
+  (through the app's env schema where the app has one), and a missing or empty
+  value fails at startup with a log line. An empty allowlist that silently
+  rejects everything, or a default that silently points at another
+  environment, is a finding. A guard against mixing staging and production
+  settings covers every variable that names the environment, including the
+  `NEXT_PUBLIC_*` twin of a server variable.
 - **KP-TOKENS:** Token issuer, audience and JWKS URLs match what every verifier
   (`packages/sso`, the API's session resolution) expects. A refresh grant
   reuses the scopes originally granted, not the client's full scope list. A
   proxy attaches a server-side API key only to routes that require a signed-in
-  caller.
+  caller. A fix that stops a path from forging or inflating a credential also
+  deals with the credentials that path already issued (a key rotation, a
+  version marker or forced revalidation); otherwise they stay valid until they
+  expire.
+- **KP-FAIL-SOFT:** A helper that every request passes through, and that
+  gains a network or database call, falls back to its previous behavior and
+  logs when that call fails. A best-effort step (a thumbnail, a notification,
+  a side call) that gains a status check or a raise must not discard the main
+  result.
+- **KP-BATCH:** A scheduled or batch job that loops over regions, workspaces
+  or users handles each item in its own `try`, logs a failure with the item's
+  id, continues with the rest, and exits non-zero if any item failed. One bad
+  item must not stop the work for every item after it.
+- **KP-IDENTITY:** Code that matches or creates a person from an external
+  profile uses the identifier already stored for that person when the profile
+  lacks the matching key (an email), and never creates a record keyed on a
+  placeholder such as the external id.
 - **KP-ASYNC-THROW:** An async function called without `await` (`void fn()`)
   catches throws that happen before its first `await` too. Otherwise a
   synchronous throw becomes an unhandled rejection.
@@ -99,6 +118,10 @@ pattern whenever a diff touches its area.
 - **KP-PII:** Staging obfuscation treats a row as private when it or any
   ancestor is private (a private series makes its locations private), and
   scrubs names and Slack mentions from free text and stored Slack blocks.
+  Outside production, every Slack bot path that stores contact details or
+  sends email or SMS goes through the same non-production handling as the
+  user-creation path, so staging and local runs never keep real contact data
+  or contact a real person.
 - **KP-SLACK:** Slack payload values can arrive as strings (`"True"`) and
   rich-text blocks can be empty or missing. Parse leniently, keep a fallback
   for empty text, and use the channel a region saved over the default.
@@ -106,6 +129,16 @@ pattern whenever a diff touches its area.
   PR's purpose may be a stale branch undoing a fix already on `main`, often
   with the tests that guarded it. Check whether those lines were added to
   `main` recently; if they were, it is blocking.
+- **KP-TOOLING:** A flag or option added to a shared script must be accepted
+  by every tool it reaches through `turbo`, `pnpm -r` and wrappers such as
+  `dotenv` or `pnpm exec`, in every language the workspaces use, and each
+  wrapper must pass trailing arguments through. A hook or fix script that runs
+  a tool in write mode and stages the result must not add files the tool
+  writes when it has nothing to change.
+- **KP-GUIDANCE:** A rule added to an `AGENTS.md`, skill or instruction file
+  is checked against the code it names and against sibling rules; a rule that
+  would break existing code if followed is a finding. A runbook's verification
+  step must be able to pass at that point in the normal flow.
 
 ## How to review
 
@@ -157,7 +190,8 @@ Repo decisions that review bots have repeatedly flagged by mistake.
 
 - Raised numbers and `thresholds.autoUpdate: true` in any `vitest.config.*`.
   The ratchet rewrites the file and the bump is committed, even in an
-  unrelated-looking PR. Do flag a threshold that goes **down**.
+  unrelated-looking PR. Do flag a threshold that goes **down** compared with
+  the base branch (not with an earlier commit in the same PR).
 - `console.*` and direct `process.env` in operator CLIs and verification
   harnesses (`AGENTS.md` § Logging lists them).
 - A new or renamed log event with no `docs/LOGGING.md` entry. That guide
@@ -189,4 +223,12 @@ Repo decisions that review bots have repeatedly flagged by mistake.
   Markdown and comments. Flag text only when it is wrong: a claim the code
   contradicts, a broken link, or a command, path, env var or check name that
   no longer exists.
+- A missing `docs/specs/` update when no spec covers the feature. The docs
+  table asks for an existing spec to be updated, not for a new one to be
+  written.
+- A relative link called broken before resolving it from the linking file's
+  own directory. A skill at `.agents/skills/<name>/SKILL.md` reaches `docs/`
+  with `../../../docs/`.
+- Requests to strengthen a test assertion that already fails when the line it
+  guards is deleted.
 - Pre-existing problems the change doesn't touch or worsen.

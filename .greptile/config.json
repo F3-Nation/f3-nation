@@ -23,7 +23,7 @@
     },
     {
       "id": "tokens",
-      "rule": "CC-TOKENS and KP-TOKENS: issuer, audience and JWKS URLs match every verifier; refresh grants keep the originally granted scopes; codes and sessions are consumed atomically and revoked on logout; a proxy forwards a server-side API key only on routes that require a signed-in caller.",
+      "rule": "CC-TOKENS and KP-TOKENS: issuer, audience and JWKS URLs match every verifier; refresh grants keep the originally granted scopes; codes and sessions are consumed atomically and revoked on logout; a proxy forwards a server-side API key only on routes that require a signed-in caller. A fix for a forged or inflated credential also handles the credentials already issued (rotation, a version marker or forced revalidation).",
       "scope": [
         "apps/auth/**",
         "packages/auth/**",
@@ -72,12 +72,12 @@
     },
     {
       "id": "env-vars",
-      "rule": "KP-ENV: a new environment variable is read through the app's env schema, listed in every .env*.example for that app and in the Cloud Run env helpers, and fails at startup with a log line when missing.",
+      "rule": "KP-ENV: a new environment variable is read the same way as its siblings in that file (through the app's env schema where one exists), listed in every .env*.example for that app and in the Cloud Run env helpers, and fails at startup with a log line when missing. A guard against mixing staging and production covers every variable that names the environment, including NEXT_PUBLIC_* twins.",
       "severity": "medium"
     },
     {
       "id": "slack-payloads",
-      "rule": "KP-SLACK: parse Slack payload values that can arrive as strings, handle empty or missing rich-text blocks, and use a region's saved channel over the default.",
+      "rule": "KP-SLACK, KP-IDENTITY and KP-PII: parse Slack payload values that can arrive as strings, handle empty or missing rich-text blocks, use a region's saved channel over the default, never create a person keyed on a placeholder when a profile lacks an email, and keep non-production runs from storing real contact data or messaging real people.",
       "scope": ["apps/slackbot/**"],
       "severity": "medium"
     },
@@ -95,9 +95,49 @@
     },
     {
       "id": "docs-facts-only",
-      "rule": "In Markdown and docs, flag only factual errors against the code, broken links or anchors, and commands, paths, env var names or check names that no longer exist. Don't comment on wording, tone, grammar, formatting or structure.",
+      "rule": "In Markdown and docs, flag only factual errors against the code, broken links or anchors (resolve relative links from the file's own directory first), commands, paths, env var names or check names that no longer exist, and verification steps whose expected result can't happen at that point in the flow. Don't comment on wording, tone, grammar, formatting or structure.",
       "scope": ["**/*.md", "docs/**"],
       "severity": "low"
+    },
+    {
+      "id": "fail-soft",
+      "rule": "KP-FAIL-SOFT: a helper that every request passes through and gains a network or database call falls back to its previous behavior and logs on failure; a best-effort step that gains a status check or raise must not discard the main result.",
+      "severity": "high"
+    },
+    {
+      "id": "batch-jobs",
+      "rule": "KP-BATCH: a job that loops over regions, workspaces, datasets or users handles each item in its own try, logs the failure with the item's id, continues, and exits non-zero if any item failed.",
+      "scope": [
+        "apps/slackbot/**",
+        "apps/analytics/**",
+        "scripts/**",
+        "tooling/scripts/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "tooling",
+      "rule": "KP-TOOLING: a flag added to a shared script is accepted by every tool it reaches through turbo, pnpm -r and wrappers such as dotenv or pnpm exec, in every language, and wrappers pass trailing arguments through; a write-mode hook that stages output must not add files when the tool has nothing to change.",
+      "scope": [
+        "package.json",
+        "**/package.json",
+        "turbo.json",
+        "lefthook.yml",
+        "scripts/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "guidance-vs-code",
+      "rule": "KP-GUIDANCE: a rule added to an AGENTS.md, skill or instruction file is checked against the code it names and its sibling rules; flag a rule that would break existing code if followed, or a runbook step whose expected result can't happen at that point.",
+      "scope": [
+        "**/AGENTS.md",
+        ".agents/skills/**",
+        ".github/copilot-instructions.md",
+        "REVIEW.md",
+        "docs/**"
+      ],
+      "severity": "medium"
     },
     {
       "id": "unrelated-revert",
