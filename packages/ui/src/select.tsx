@@ -188,7 +188,10 @@ const ControlledSelect = <T extends FieldValues>(
             <FormLabel>{props.label}</FormLabel>
             <FormControl>
               <Select
-                value={field.value}
+                // Forms that fill values with reset() render first with
+                // undefined; "" keeps Radix controlled and still shows the
+                // placeholder.
+                value={field.value ?? ""}
                 onValueChange={(value) => {
                   if (value) {
                     field.onChange(value);
