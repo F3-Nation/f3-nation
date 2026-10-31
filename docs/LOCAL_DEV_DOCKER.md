@@ -650,7 +650,7 @@ Make sure Docker is running and Postgres is healthy:
 
 ```bash
 docker ps                     # should show f3-postgres, f3-adminer, f3-gcs (f3-wtN-* in a slot)
-docker compose exec postgres pg_isready -U f3local   # should print "accepting connections"
+docker compose exec postgres pg_isready -U f3local -d f3nation   # should print "accepting connections"
 pnpm db:migrate:local
 ```
 
