@@ -34,8 +34,8 @@ merge to main (ruleset "main": PR required, the eight checks above required,
 release-please.yml ····· accumulates merges into per-app release PRs
   │
 tag push (e.g. map@1.2.3) → deploy-<app>.yml → _deploy-cloudrun.yml
-       ├─ ci-gate ······· waits for build/lint/typecheck/format-check/
-       │                  test-coverage on the tagged SHA
+       ├─ ci-gate ······· waits for the required CI checks matched by
+       │                  check-regexp on the tagged SHA
        ├─ build ········· container image built once, pushed to Artifact Registry
        ├─ deploy-staging  Cloud Run (staging project) [+ cache revalidate]
        └─ deploy-prod ··· needs staging success; Cloud Run (prod project)
@@ -148,9 +148,16 @@ per-app release PRs; merging one pushes a tag like `map@1.2.3`, which triggers
 that app's thin `deploy-<app>.yml` caller into the shared
 [`_deploy-cloudrun.yml`](../.github/workflows/_deploy-cloudrun.yml):
 
-1. **`ci-gate`** — waits (does not re-run) for
-   `build|lint|typecheck|format-check|test-coverage` to succeed on the tagged
-   SHA.
+1. **`ci-gate`** — waits (does not re-run) for the CI checks matched by its
+   `check-regexp` to succeed on the tagged SHA. That is every required check
+   except `lint-title`, which runs only on pull requests and so never reports
+   on a tagged commit. The same `check-regexp` appears in
+   [`_deploy-cloudrun.yml`](../.github/workflows/_deploy-cloudrun.yml),
+   [`_deploy-cloudrun-job.yml`](../.github/workflows/_deploy-cloudrun-job.yml)
+   and [`deploy-homepage.yml`](../.github/workflows/deploy-homepage.yml), and
+   is maintained separately from the `main` ruleset; see
+   [GitHub Actions Conventions](../AGENTS.md#github-actions-conventions) for
+   keeping them in step.
 2. **`build`** — the deploy image is built once and pushed to Artifact
    Registry.
 3. **`deploy-staging`** — Cloud Run in the staging project; optional
@@ -204,9 +211,6 @@ build check is named `build-homepage` to stay distinct from CI's `build`.
   status checks. The squash creates a new commit SHA whose push-to-`main` CI run
   performs full-workspace validation, so deploy gates on that full run rather
   than a PR-scoped `--affected` run.
-- The deploy `ci-gate` regexp waits on the five build/test checks but not
-  `security-audit` (the audit already gated the merge; a tag cut from an
-  unmerged or old SHA relies on that earlier gate).
 - The two reserved rungs below are the planned homes for end-to-end
   verification, which today has no rung at all.
 

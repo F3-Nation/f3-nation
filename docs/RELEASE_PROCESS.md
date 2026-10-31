@@ -124,8 +124,15 @@ What this does not guarantee:
   run shows as cancelled. A production job waiting for approval may hold its
   group until it is approved or rejected.
 
-The workflow-level `concurrency` in each `deploy-*.yml` is still keyed by tag;
-it only stops the same tag from building twice at once.
+The workflow-level `concurrency` in each Cloud Run `deploy-*.yml` caller is
+still keyed by tag; it only stops the same tag from building twice at once.
+
+The [Homepage workflow](../.github/workflows/deploy-homepage.yml) is the
+exception: it has no reusable deploy job, and its workflow-level group is the
+fixed name `deploy-homepage` rather than one keyed by tag. Every release tag
+publishes the same GitHub Pages site, so all Homepage runs, for any tag,
+queue in one group with `cancel-in-progress: false`. The two limits above
+apply to it as well.
 
 ---
 
