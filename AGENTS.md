@@ -105,6 +105,7 @@ follow
 - `pnpm ci:local` chains the whole CI sequence (`format` → `lint` → `lint:unused` → `typecheck` → `build` → `test`) and is the closest local predictor of the CI gate.
 - Database helpers: `pnpm db:pull`, `pnpm db:push`, and `pnpm reset-test-db`.
 - Every other build/dev/test command is a standard Turborepo invocation — see the root `package.json` scripts.
+- Python checks also run through pnpm/Turbo. See [How Python is checked](apps/slackbot/AGENTS.md#how-python-is-checked) for task discovery, local `uv` skips, CI behavior, and CodeQL.
 
 ## Coding Style & Naming Conventions
 

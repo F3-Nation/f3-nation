@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync Slackbot Python dependencies after Node dependencies install.
+# Sync Python workspace dependencies after Node dependencies install.
 
 set -euo pipefail
 
@@ -10,7 +10,7 @@ fi
 
 cat <<'EOF'
 
-WARNING: uv is not installed, so Slackbot Python dependencies were not synced.
+WARNING: uv is not installed, so Python workspace dependencies were not synced.
 
 Install uv:
   curl -LsSf https://astral.sh/uv/install.sh | sh
