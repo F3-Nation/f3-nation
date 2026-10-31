@@ -8,6 +8,7 @@ from f3_data_models.utils import DbManager
 from slack_sdk.web import WebClient
 
 from features import connect
+from utilities.builders import send_error_response
 from utilities.database.orm import SlackSettings
 from utilities.database.special_queries import get_admin_users
 from utilities.helper_functions import get_user, safe_get, upload_files_to_storage
@@ -151,6 +152,11 @@ def handle_region_edit(body: dict, client: WebClient, logger: Logger, context: d
         ],
     )
     DbManager.create_or_ignore(Role_x_User_x_Org, admin_records)
+
+    if file and not logo_url:
+        send_error_response(
+            body, client, "The region settings were saved, but the logo couldn't be uploaded. Please try again."
+        )
 
 
 REGION_FORM = orm.BlockView(

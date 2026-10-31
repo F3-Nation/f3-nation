@@ -138,23 +138,47 @@ def test_production_user_form_updates_profile_and_uploads_photo(monkeypatch):
     }
 
 
-def test_user_form_keeps_avatar_and_saves_profile_when_photo_upload_fails(monkeypatch):
-    form_values = {
-        user.USER_FORM_USERNAME: "Synthetic Test Pax",
-        user.USER_FORM_HOME_REGION: 17,
-        user.USER_FORM_IMAGE_UPLOAD: [{"id": "SYNTHETIC_FILE"}],
+PHOTO_FILE = {"id": "SYNTHETIC_FILE", "filetype": "jpg", "mimetype": "image/jpeg"}
+
+
+def _submit_user_form_with_photo(monkeypatch, uploaded_urls):
+    values = {
+        user.USER_FORM_USERNAME: {user.USER_FORM_USERNAME: {"type": "plain_text_input", "value": "Synthetic Test Pax"}},
+        user.USER_FORM_HOME_REGION: {
+            user.USER_FORM_HOME_REGION: {"type": "external_select", "selected_option": {"value": "17"}}
+        },
+        user.USER_FORM_IMAGE_UPLOAD: {user.USER_FORM_IMAGE_UPLOAD: {"type": "file_input", "files": [PHOTO_FILE]}},
     }
-    monkeypatch.setattr(user.FORM, "get_selected_values", lambda body: form_values)
+    body = {"user": {"id": "U_SYNTHETIC"}, "view": {"id": "V1", "state": {"values": values}, "blocks": []}}
     monkeypatch.setattr(user, "get_user", MagicMock(return_value=MagicMock(user_id=42)))
     monkeypatch.setattr(user.DbManager, "get", MagicMock(return_value=MagicMock(meta={})))
     update_record = MagicMock()
     monkeypatch.setattr(user.DbManager, "update_record", update_record)
-    monkeypatch.setattr(user, "upload_files_to_storage", MagicMock(return_value=([], [], ["SYNTHETIC_FILE"], [])))
+    upload = MagicMock(return_value=(uploaded_urls, [], ["SYNTHETIC_FILE"], []))
+    monkeypatch.setattr(user, "upload_files_to_storage", upload)
+    send_error = MagicMock()
+    monkeypatch.setattr(user, "send_error_response", send_error)
+    client = MagicMock()
 
-    user.handle_user_form({}, MagicMock(), MagicMock(), {}, MagicMock())
+    user.handle_user_form(body, client, MagicMock(), {}, MagicMock())
 
+    assert upload.call_args.args[0] == [PHOTO_FILE]
     update_record.assert_called_once()
     _, user_id, fields = update_record.call_args.args
     assert user_id == 42
     assert fields[User.f3_name] == "Synthetic Test Pax"
+    return fields, send_error, body, client
+
+
+def test_user_form_saves_uploaded_photo_without_error(monkeypatch):
+    fields, send_error, _, _ = _submit_user_form_with_photo(monkeypatch, ["https://example.test/user-avatars/42.png"])
+    assert fields[User.avatar_url] == "https://example.test/user-avatars/42.png"
+    send_error.assert_not_called()
+
+
+def test_user_form_keeps_avatar_saves_profile_and_tells_user_when_photo_upload_fails(monkeypatch):
+    fields, send_error, body, client = _submit_user_form_with_photo(monkeypatch, [])
     assert User.avatar_url not in fields
+    send_error.assert_called_once_with(
+        body, client, "Your profile was saved, but your photo couldn't be uploaded. Please try again."
+    )

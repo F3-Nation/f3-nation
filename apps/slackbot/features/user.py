@@ -7,6 +7,7 @@ from f3_data_models.utils import DbManager
 from slack_sdk import WebClient
 
 from utilities import storage
+from utilities.builders import send_error_response
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import get_user, safe_convert, safe_get, upload_files_to_storage
 from utilities.slack import actions
@@ -165,6 +166,7 @@ def handle_user_form(body: dict, client: WebClient, logger: Logger, context: dic
             }
 
             file = safe_get(form_data, USER_FORM_IMAGE_UPLOAD, 0)
+            photo_failed = False
             if file:
                 file_list, file_send_list, file_ids, low_rez_file_ids = upload_files_to_storage(
                     [file],
@@ -176,8 +178,14 @@ def handle_user_form(body: dict, client: WebClient, logger: Logger, context: dic
                 )
                 if file_list:
                     update_fields[User.avatar_url] = file_list[0]
+                else:
+                    photo_failed = True
 
             DbManager.update_record(User, slack_user.user_id, update_fields)
+            if photo_failed:
+                send_error_response(
+                    body, client, "Your profile was saved, but your photo couldn't be uploaded. Please try again."
+                )
 
 
 FORM = BlockView(
