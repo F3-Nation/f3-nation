@@ -221,3 +221,30 @@ describe("server text decoding", () => {
     expect(renderToString(<Text html={html} />)).toBe(`<p>${text}</p>`);
   });
 });
+
+describe("hasVisibleContent", () => {
+  it.each([
+    "<a href=https://f3boone.com></a>",
+    "<A HREF = 'https://f3boone.com'></A>",
+  ])("counts a kept link with no text: %j", (html) => {
+    expect(hasVisibleContent(html)).toBe(true);
+  });
+
+  it.each([
+    ["inside a comment", '<!-- <a href="https://f3boone.com"></a> -->'],
+    ["inside a script", '<script><a href="https://f3boone.com"></a></script>'],
+    ["on a custom element", '<a-b href="https://f3boone.com"></a-b>'],
+    [
+      "after an unsafe first href",
+      '<a href="javascript:x" href="https://f3boone.com"></a>',
+    ],
+    ["with an encoded unsafe scheme", '<a href="javascript&#58;x"></a>'],
+    ["in an unclosed tag", '<a href="https://f3boone.com"'],
+  ])("ignores a link %s", (_, html) => {
+    expect(hasVisibleContent(html)).toBe(false);
+  });
+
+  it("reads many unclosed tags in one pass", () => {
+    expect(hasVisibleContent("<a href".repeat(1e5))).toBe(false);
+  });
+});
