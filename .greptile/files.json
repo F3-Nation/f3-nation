@@ -105,17 +105,32 @@
     {
       "path": "docs/specs/admin-generic-org-management.md",
       "description": "Feature spec: Shared organization administration. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["apps/admin/**", "packages/api/**"]
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/shared/**",
+        "packages/validators/**"
+      ]
     },
     {
       "path": "docs/specs/admin-region-parent-filters.md",
       "description": "Feature spec: Region parents and ancestry filters. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["apps/admin/**", "packages/api/**"]
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/db/**",
+        "packages/shared/**"
+      ]
     },
     {
       "path": "docs/specs/admin-territory-management.md",
       "description": "Feature spec: Territory administration and depth-agnostic AO counts. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["apps/admin/**", "packages/api/**", "packages/db/**"]
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/db/**",
+        "packages/shared/**"
+      ]
     },
     {
       "path": "docs/specs/analytics-parquet-etl.md",
@@ -125,12 +140,18 @@
     {
       "path": "docs/specs/database-audit-history.md",
       "description": "Feature spec: Database audit-history foundation. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["packages/db/**", "packages/api/**"]
+      "scope": ["packages/db/**", "packages/api/**", "apps/map/**"]
     },
     {
       "path": "docs/specs/health-contract-and-status.md",
       "description": "Feature spec: Health contract and unified status dashboard. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["packages/health/**", "packages/api/**", "apps/homepage/**"]
+      "scope": [
+        "packages/health/**",
+        "packages/api/**",
+        "apps/homepage/**",
+        "apps/*/src/app/**/health/**",
+        "apps/api/src/app.ts"
+      ]
     },
     {
       "path": "docs/specs/map-browse-and-search.md",
@@ -140,12 +161,20 @@
     {
       "path": "docs/specs/map-update-request-flow.md",
       "description": "Feature spec: Map edit mode & update requests. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["apps/map/**", "packages/api/**", "packages/validators/**"]
+      "scope": [
+        "apps/map/**",
+        "packages/api/**",
+        "packages/validators/**",
+        "apps/admin/**",
+        "apps/api/**",
+        "packages/db/**",
+        "packages/mail/**"
+      ]
     },
     {
       "path": "docs/specs/mixed-hierarchy-seeds-map.md",
       "description": "Feature spec: Mixed hierarchy seeds and map verification. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["packages/db/**", "apps/map/**"]
+      "scope": ["packages/db/**", "apps/map/**", "packages/api/**"]
     },
     {
       "path": "docs/specs/org-directory-map.md",
@@ -170,7 +199,7 @@
     {
       "path": "docs/specs/region-pages-directory.md",
       "description": "Feature spec: Region pages directory. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["apps/region-pages/**", "packages/api/**"]
+      "scope": ["apps/region-pages/**", "packages/api/**", "apps/api/**"]
     },
     {
       "path": "docs/specs/series-status-cascade.md",
