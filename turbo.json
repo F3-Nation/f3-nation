@@ -149,6 +149,10 @@
         "CLOUD_RUN_JOB"
       ]
     },
+    "migrate:check": {
+      "cache": false,
+      "env": ["MIGRATE_CHECK_ADMIN_URL", "MIGRATE_CHECK_BASE"]
+    },
     "migrate:staging": {
       "cache": false,
       "env": [

@@ -21,8 +21,29 @@ or reordering values is the only case that needs the type recreated; avoid it.
 ### Views created outside the migrations
 
 Staging and Production can carry views that no repository migration creates.
-Local and CI databases are built only from migrations, so they don't have these
-views and won't catch a failure they cause.
+Local and test databases are built only from migrations, so they don't have
+these views and won't catch a failure they cause. CI's `migrate-check` job
+(`pnpm -F @acme/db migrate:check`) does: it applies the base commit's
+migrations, creates the views listed in `packages/db/prod-views.sql`, then
+applies the branch's new migrations as a non-superuser login set up like
+production's ([Database roles](#database-roles)). It is only as good as that
+file: when a view is created by hand, add it there; when a migration drops one,
+remove it in the same PR. To run it locally, point `MIGRATE_CHECK_ADMIN_URL` at
+a superuser on a disposable local Postgres 18.
+
+List every view and materialized view in a database (read-only), to compare
+with `prod-views.sql`:
+
+```sql
+SELECT n.nspname, c.relname, c.relkind, pg_get_userbyid(c.relowner) AS owner,
+  (SELECT e.extname FROM pg_depend d JOIN pg_extension e ON e.oid = d.refobjid
+    WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid
+      AND d.deptype = 'e') AS extension
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('v', 'm')
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+ORDER BY 1, 2;
+```
 
 Postgres refuses to change a column's type, or drop a type, while a view depends
 on it (`cannot alter type of a column used by a view or rule`). A migration that

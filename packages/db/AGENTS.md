@@ -23,7 +23,9 @@ signs off on every schema migration (`docs/AI_GUARDRAILS.md`).
 - Prefer `ALTER TYPE … ADD VALUE` to recreating an enum. If an enum or column
   type must be recreated, re-issue every function that references it, start
   with `SET LOCAL lock_timeout`, and account for views that exist only in
-  staging and prod (green CI proves nothing about them).
+  staging and prod. CI's `migrate-check` creates the ones listed in
+  `prod-views.sql`; add a view there when one is made by hand, and remove it
+  in the PR whose migration drops it.
 - Don't assume the migrating role owns the tables; prod and staging owners
   differ. `CREATE … IF NOT EXISTS` doesn't verify an existing object's shape.
 - `SECURITY DEFINER` functions set `search_path = pg_catalog, pg_temp` (plus
