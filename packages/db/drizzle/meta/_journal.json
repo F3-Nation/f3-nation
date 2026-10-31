@@ -239,6 +239,13 @@
       "when": 1792668047640,
       "tag": "0033_fk_junction_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793296780666,
+      "tag": "0034_codex_schema",
+      "breakpoints": true
     }
   ]
 }
