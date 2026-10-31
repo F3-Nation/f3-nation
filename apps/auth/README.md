@@ -387,6 +387,10 @@ after confirmed creation, a sign-in failure or a thrown navigation call offers
 **Sign in again** instead of submitting registration again. This behavior applies
 to both auth backends.
 
+The email and verification code identify a registration attempt. Changing either
+starts a fresh form; changing other URL parameters or rerendering the same
+attempt does not release its submission guard.
+
 All pages use Tailwind CSS with HSL CSS variables (light mode, F3 Nation color scheme: cream background, white cards, F3 red primary).
 
 ---

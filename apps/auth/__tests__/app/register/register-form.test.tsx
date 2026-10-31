@@ -89,7 +89,84 @@ afterEach(() => {
 // Each test renders the full form; on a loaded CI runner the slowest ones
 // exceed the 5s default.
 describe("registration", { timeout: 20_000 }, () => {
-  it("restores a matching draft when the email changes without resetting the selected country", async () => {
+  it.each([
+    {
+      useBetterAuth: false,
+      field: "email",
+      nextEmail: "second-pax@example.test",
+      nextCode: code,
+    },
+    {
+      useBetterAuth: true,
+      field: "email",
+      nextEmail: "second-pax@example.test",
+      nextCode: code,
+    },
+    {
+      useBetterAuth: false,
+      field: "code",
+      nextEmail: email,
+      nextCode: "654321",
+    },
+    {
+      useBetterAuth: true,
+      field: "code",
+      nextEmail: email,
+      nextCode: "654321",
+    },
+  ])(
+    "allows a changed $field after a completed registration (Better Auth: $useBetterAuth)",
+    async ({ useBetterAuth, nextEmail, nextCode }) => {
+      let view!: ReturnType<typeof render>;
+      await act(async () => {
+        view = render(<RegisterForm useBetterAuth={useBetterAuth} />);
+      });
+      change(/First Name/, "First");
+      change(/Last Name/, "PAX");
+      await act(async () => submit());
+      expect(router.push).toHaveBeenCalledExactlyOnceWith(callback);
+      searchParams.set("callbackUrl", "/account");
+      await act(async () =>
+        view.rerender(<RegisterForm useBetterAuth={useBetterAuth} />),
+      );
+      await act(async () => registrationForm().requestSubmit());
+      expect(
+        fetchMock.mock.calls.filter(([url]) => url === "/api/register"),
+      ).toHaveLength(1);
+
+      searchParams.set("email", nextEmail);
+      searchParams.set("code", nextCode);
+      fetchMock.mockResolvedValueOnce(Response.json(regions));
+      await act(async () =>
+        view.rerender(<RegisterForm useBetterAuth={useBetterAuth} />),
+      );
+      expect(
+        screen.getByRole("button", { name: "Create Account" }),
+      ).toHaveProperty("disabled", false);
+      expect(screen.getByLabelText(/First Name/)).toHaveProperty("value", "");
+      change(/First Name/, "Second");
+      change(/Last Name/, "PAX");
+      await act(async () => registrationForm().requestSubmit());
+      expect(
+        fetchMock.mock.calls.filter(([url]) => url === "/api/register"),
+      ).toHaveLength(2);
+      expect(fetchMock).toHaveBeenLastCalledWith("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: nextEmail,
+          code: nextCode,
+          firstName: "Second",
+          lastName: "PAX",
+        }),
+      });
+      expect(useBetterAuth ? emailOtp : signIn).toHaveBeenCalledTimes(2);
+      expect(router.push).toHaveBeenLastCalledWith("/account");
+    },
+  );
+
+  it("restores only the matching draft and resets phone defaults for a new email", async () => {
+    vi.spyOn(navigator, "language", "get").mockReturnValue("en-GB");
     let view!: ReturnType<typeof render>;
     await act(async () => {
       view = render(<RegisterForm useBetterAuth={false} />);
@@ -109,6 +186,7 @@ describe("registration", { timeout: 20_000 }, () => {
       }),
     );
     searchParams.set("email", nextEmail);
+    fetchMock.mockResolvedValueOnce(Response.json(regions));
     await act(async () =>
       view.rerender(<RegisterForm useBetterAuth={false} />),
     );
@@ -124,7 +202,10 @@ describe("registration", { timeout: 20_000 }, () => {
       "value",
       "Test South",
     );
-    expect(country).toHaveProperty("value", "CA");
+    expect(view.container.querySelector("#phoneCountry")).toHaveProperty(
+      "value",
+      "GB",
+    );
   });
 
   it("hydrates browser defaults without replacing edits on rerender", async () => {

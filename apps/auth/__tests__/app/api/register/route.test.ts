@@ -48,6 +48,17 @@ beforeEach(() => {
 });
 
 describe("POST /api/register", () => {
+  it("rejects rate-limited registration before checking the code or creating an account", async () => {
+    vi.mocked(rateLimit).mockReturnValueOnce({ allowed: false, remaining: 0 });
+
+    const res = await register(valid);
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "Too many requests" });
+    expect(checkEmailCode).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["no code", { ...valid, code: undefined }],
     ["a wrong or expired code", valid],

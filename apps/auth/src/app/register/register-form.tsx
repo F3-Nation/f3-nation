@@ -76,9 +76,18 @@ export default function RegisterForm({
 }) {
   return (
     <Suspense>
-      <RegisterFormInner useBetterAuth={useBetterAuth} />
+      <RegistrationAttempt useBetterAuth={useBetterAuth} />
     </Suspense>
   );
+}
+
+function RegistrationAttempt({ useBetterAuth }: { useBetterAuth: boolean }) {
+  const searchParams = useSearchParams();
+  const attemptKey = JSON.stringify([
+    searchParams.get("email"),
+    searchParams.get("code"),
+  ]);
+  return <RegisterFormInner key={attemptKey} useBetterAuth={useBetterAuth} />;
 }
 
 function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
@@ -113,17 +122,15 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     clientSnapshot,
     serverSnapshot,
   );
-  const [initializedEmail, setInitializedEmail] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   // Restore browser defaults after hydration without resetting user edits
   // on ordinary rerenders.
-  if (hydrated && initializedEmail !== email) {
-    setInitializedEmail(email);
-    if (initializedEmail === null) {
-      const detectedCountry = detectPhoneCountry(navigator.language);
-      setPhoneCountry(detectedCountry);
-      setEmergencyPhoneCountry(detectedCountry);
-    }
+  if (hydrated && !initialized) {
+    setInitialized(true);
+    const detectedCountry = detectPhoneCountry(navigator.language);
+    setPhoneCountry(detectedCountry);
+    setEmergencyPhoneCountry(detectedCountry);
     const draft = loadDraft(email);
     if (draft) {
       setF3Name(draft.f3Name);
