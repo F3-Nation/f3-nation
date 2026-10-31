@@ -41,14 +41,181 @@ const decodeEntity = (entity: string, body: string): string => {
   return NAMED_ENTITIES[body.toLowerCase()] ?? entity;
 };
 
-const stripHtml = (value: string): string =>
-  value
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, decodeEntity)
-    .trim();
+const isHtmlSpace = (char: string | undefined): boolean =>
+  char === " " ||
+  char === "\t" ||
+  char === "\n" ||
+  char === "\f" ||
+  char === "\r";
+
+/**
+ * Index just past the `>` that ends a tag, reading its attributes from `from`
+ * the way a browser does, or -1 if the input ends first. Only a quote that
+ * opens an attribute value hides `>`; a quote inside a name or an unquoted
+ * value (`data-label=don't`) is an ordinary character. Each attribute is
+ * passed to `onAttribute` with its lowercased name and raw value.
+ */
+const tagEnd = (
+  html: string,
+  from: number,
+  onAttribute?: (name: string, value: string) => void,
+): number => {
+  let state: "between" | "name" | "afterName" | "value" | "unquoted" =
+    "between";
+  let nameStart = 0;
+  let nameEnd = 0;
+  let valueStart = 0;
+  const emit = (value: string) =>
+    onAttribute?.(html.slice(nameStart, nameEnd).toLowerCase(), value);
+  for (let i = from; i < html.length; i++) {
+    const char = html[i];
+    if (char === ">") {
+      if (state === "name") nameEnd = i;
+      if (state === "unquoted") emit(html.slice(valueStart, i));
+      else if (state !== "between") emit("");
+      return i + 1;
+    }
+    if (state === "value") {
+      if (char === '"' || char === "'") {
+        const close = html.indexOf(char, i + 1);
+        if (close < 0) return -1;
+        emit(html.slice(i + 1, close));
+        i = close;
+        state = "between";
+      } else if (!isHtmlSpace(char)) {
+        valueStart = i;
+        state = "unquoted";
+      }
+    } else if (state === "unquoted") {
+      if (isHtmlSpace(char)) {
+        emit(html.slice(valueStart, i));
+        state = "between";
+      }
+    } else if (state === "between") {
+      if (char !== "/" && !isHtmlSpace(char)) {
+        nameStart = i;
+        state = "name";
+      }
+    } else {
+      if (
+        state === "name" &&
+        (char === "/" || char === "=" || isHtmlSpace(char))
+      ) {
+        nameEnd = i;
+      }
+      if (char === "=") {
+        state = "value";
+      } else if (char === "/") {
+        emit("");
+        state = "between";
+      } else if (isHtmlSpace(char)) {
+        state = "afterName";
+      } else if (state === "afterName") {
+        emit("");
+        nameStart = i;
+        state = "name";
+      }
+    }
+  }
+  return -1;
+};
+
+// An end tag's name ends at HTML whitespace, `/` or `>`, so `</script >` and
+// `</script x>` close the element but `</script-x>` doesn't.
+const BLOCK_END = new Map([
+  ["script", /<\/script(?=[\t\n\f\r />])/gi],
+  ["style", /<\/style(?=[\t\n\f\r />])/gi],
+]);
+const COMMENT_END = /--!?>/g;
+
+/** Index just past the end tag of a block whose content starts at `from`. */
+const blockEnd = (html: string, from: number, endTag: RegExp): number => {
+  endTag.lastIndex = from;
+  return endTag.exec(html) ? tagEnd(html, endTag.lastIndex) : -1;
+};
+
+/** Index just past a comment whose body starts at `from` (after `<!--`). */
+const commentEnd = (html: string, from: number): number => {
+  if (html.startsWith(">", from)) return from + 1;
+  if (html.startsWith("->", from)) return from + 2;
+  COMMENT_END.lastIndex = from;
+  return COMMENT_END.exec(html) ? COMMENT_END.lastIndex : -1;
+};
+
+const decodeEntities = (value: string): string =>
+  value.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, decodeEntity);
+
+/**
+ * Plain text of `value`, read in one pass the way a browser tokenizes HTML:
+ * tags and comments drop out, `<br>` becomes a newline, and script and style
+ * content is skipped up to its end tag. Text is never rescanned, so removing
+ * a tag can't join its neighbours into a new one. A tag, comment or block the
+ * input never closes takes the rest of the input with it, as in a browser.
+ * `hrefs` holds each `<a>` start tag's first `href`, entities decoded.
+ */
+const readHtml = (value: string): { text: string; hrefs: string[] } => {
+  const hrefs: string[] = [];
+  let text = "";
+  let i = 0;
+  while (i < value.length) {
+    const open = value.indexOf("<", i);
+    if (open < 0) {
+      text += value.slice(i);
+      break;
+    }
+    text += value.slice(i, open);
+    const isEndTag = value[open + 1] === "/";
+    const nameStart = isEndTag ? open + 2 : open + 1;
+    let next: number;
+    if (/[a-z]/i.test(value[nameStart] ?? "")) {
+      // A tag name runs to whitespace, `/` or `>`, so `<scr<script>` is one tag.
+      let nameEnd = nameStart;
+      while (
+        nameEnd < value.length &&
+        !isHtmlSpace(value[nameEnd]) &&
+        value[nameEnd] !== "/" &&
+        value[nameEnd] !== ">"
+      ) {
+        nameEnd++;
+      }
+      const name = value.slice(nameStart, nameEnd).toLowerCase();
+      let href: string | undefined;
+      next = tagEnd(
+        value,
+        nameEnd,
+        name === "a" && !isEndTag
+          ? (attribute, attributeValue) => {
+              if (attribute === "href") href ??= attributeValue;
+            }
+          : undefined,
+      );
+      if (next >= 0 && href !== undefined) hrefs.push(decodeEntities(href));
+      const endTag = BLOCK_END.get(name);
+      if (next >= 0 && !isEndTag && endTag) {
+        next = blockEnd(value, next, endTag);
+      } else if (next >= 0 && name === "br") {
+        text += "\n";
+      }
+    } else if (isEndTag && nameStart === value.length) {
+      text += "</";
+      next = nameStart;
+    } else if (value.startsWith("<!--", open)) {
+      next = commentEnd(value, open + 4);
+    } else if (isEndTag || value[open + 1] === "!" || value[open + 1] === "?") {
+      // `</>`, `<!DOCTYPE …>` and the like are dropped up to the next `>`.
+      const close = value.indexOf(">", open + 2);
+      next = close < 0 ? -1 : close + 1;
+    } else {
+      text += "<";
+      next = open + 1;
+    }
+    if (next < 0) break;
+    i = next;
+  }
+  return { text: decodeEntities(text).trim(), hrefs };
+};
+
+const stripHtml = (value: string): string => readHtml(value).text;
 
 /**
  * Longest plain text the server and the hydration pass render. A very long
@@ -141,11 +308,6 @@ const sanitizeNode = (node: ChildNode, key: string): ReactNode[] => {
   return [];
 };
 
-// `href` as its own attribute (preceded by whitespace), so `data-href` and
-// similar don't count: the sanitizer only keeps a real `href`.
-const ANCHOR_HREF =
-  /<a\b[^>]*?\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
-
 /**
  * Whether `html` renders anything a visitor can see: text, or a link the
  * sanitizer keeps. An empty-text link still shows, because the sanitizer
@@ -153,12 +315,8 @@ const ANCHOR_HREF =
  */
 export const hasVisibleContent = (html: string | null | undefined): boolean => {
   if (!html) return false;
-  if (htmlToPlainText(html).trim().length > 0) return true;
-  for (const match of html.matchAll(ANCHOR_HREF)) {
-    const href = match[1] ?? match[2] ?? match[3] ?? "";
-    if (isSafeHref(href)) return true;
-  }
-  return false;
+  const { text, hrefs } = readHtml(html);
+  return text.length > 0 || hrefs.some(isSafeHref);
 };
 
 export const sanitizeHtmlToReactNodes = (
