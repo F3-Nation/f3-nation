@@ -91,9 +91,11 @@ the globs there, not in individual app configs.
 ## Thresholds
 
 Coverage thresholds live in each app's `vitest.config.ts` under
-`test.coverage.thresholds`. Every app that declares thresholds sets
-**`autoUpdate: true`**, so Vitest ratchets the numbers up automatically as
-coverage improves — guarding against regressions without manual bookkeeping.
+`test.coverage.thresholds`. Every app that declares thresholds enables
+**`autoUpdate`**: either `true`, or the buffered function described in
+[Buffered ratchet](#buffered-ratchet). Either way, Vitest ratchets the numbers up
+automatically as coverage improves, guarding against regressions without manual
+bookkeeping.
 
 Note that Vitest 4's AST-aware v8 remapping counts branches and functions more
 granularly than v3, so whole-`src` branch/function coverage measures lower than
@@ -103,19 +105,44 @@ the source of truth — this doc deliberately doesn't repeat them.
 
 ### `autoUpdate` is not optional
 
-A side effect of `autoUpdate: true` is that **`pnpm test` rewrites
+A side effect of `autoUpdate` is that **`pnpm test` rewrites
 `vitest.config.ts`** whenever coverage has improved. That is working as
 intended: commit the updated numbers along with your tests. Do not "fix" the
-dirty config by setting `autoUpdate: false` or deleting the key — that silently
+dirty config by setting `autoUpdate: false`, deleting the key, or replacing an
+app's buffered function with `true` — that silently
 converts the ratchet into a fixed floor that never rises, which is the exact
 regression guard it exists to provide.
 
 [`scripts/check-vitest-thresholds.mjs`](../scripts/check-vitest-thresholds.mjs)
-enforces this. It fails any config with a `thresholds` block that lacks
-`autoUpdate: true`, and runs both as a `pre-commit` job (scoped to staged
+enforces this. It fails any config with a `thresholds` block whose `autoUpdate`
+is not `true` or an inline function (so `false`, `null` and named references
+fail), and runs both as a `pre-commit` job (scoped to staged
 `vitest.config.*` files) and inside `pnpm lint`, which is what the `lint` CI
 check executes. The pre-commit job is fast local feedback; the `lint` job is the
 backstop that `--no-verify` cannot skip.
+
+### Buffered ratchet
+
+`autoUpdate` may also be a function. Vitest calls it with the measured and the
+current threshold. An app opts in with:
+
+```ts
+autoUpdate: (newThreshold, previousThreshold) =>
+  Math.max(previousThreshold, Math.floor(newThreshold) - 5),
+```
+
+The floor still only rises, so it remains a ratchet. It trails measured
+coverage by 5 points, so deleting well-covered code or a small refactor doesn't
+fail the suite and push anyone, human or AI, into writing tests just to restore
+a number. A large regression still fails. Keep the function inline. The checker
+accepts `true` or an inline arrow/`function` expression, and rejects anything
+else.
+
+Pair the buffer with excludes for declarative files that have no logic to test
+(layouts, error/not-found shells, env schemas, inline SVG icons), so the
+percentage reflects behavior. Patterns that apply to every app go in
+`coverageExclude` (`tooling/vitest/coverage.ts`); an app's own one-off files go
+in its `coverage.exclude`, after `...coverageExclude`.
 
 ## Characterization suite (apps/api)
 
