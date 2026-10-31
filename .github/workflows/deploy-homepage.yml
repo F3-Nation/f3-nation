@@ -62,7 +62,8 @@ jobs:
           allowed-conclusions: success
 
   # ── Build static export ──
-  build:
+  # Keep deploy job names distinct from CI checks: the gate matches across workflows.
+  build-homepage:
     needs: ci-check
     runs-on: ubuntu-latest
     # Scope to github-pages so the build can read that environment's variables
@@ -96,7 +97,7 @@ jobs:
 
   # ── Deploy to GitHub Pages ──
   deploy:
-    needs: build
+    needs: build-homepage
     runs-on: ubuntu-latest
     permissions:
       pages: write
