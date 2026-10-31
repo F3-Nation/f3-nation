@@ -31,7 +31,9 @@ reviews:
     - "!**/drizzle/meta/*_snapshot.json"
   # Depth comes from these instructions rather than from more reviews: each
   # path gets the checks a specialist reviewer would run there. The KP-* and
-  # CC-* ids are defined in REVIEW.md.
+  # CC-* ids are defined in REVIEW.md. The `**/*` instruction restates
+  # REVIEW.md's "How to review" list, as Greptile's `instructions` does; change
+  # all three together.
   path_instructions:
     - path: "**/*"
       instructions: |
@@ -56,7 +58,7 @@ reviews:
         Apply CC-MIGRATION and KP-PG-OWNER. Migrations run in one transaction as a role that does not own the tables. Flag owner-only statements, type or column drops without handling dependent views, and journal entries that are missing or out of order.
     - path: "{apps/admin,apps/map,apps/me,apps/homepage,apps/region-pages}/**"
       instructions: |
-        Apply KP-QUERY-THROW, KP-ABORT and KP-SSR-TIME. For each query with its own error or empty state, check the app's query-client throwOnError default lets that state render. Check that cancelled requests never show outage UI, and that nothing computes the current date during a server render.
+        Apply KP-QUERY-THROW, KP-ABORT and KP-SSR-TIME. For each query with its own error or empty state, check the app's query-client throwOnError default lets that state render. Check that cancelled requests never show outage UI, and that no component rendering on both server and browser computes the current date during render (a server-computed timestamp passed unchanged as a prop is fine).
     - path: "apps/slackbot/**"
       instructions: |
         Apply KP-SLACK, KP-IDENTITY, KP-BATCH, KP-FAIL-SOFT and KP-PII. Check payload parsing for string booleans and missing or empty blocks, that saved per-region settings win over defaults, and that every caller of a changed handler or API client function still matches. Check that lookup-or-create code never keys a new person on a placeholder, that jobs looping over regions or users isolate each item's failure, that a new call in a shared helper fails soft, and that non-production runs never store real contact data or message a real person.

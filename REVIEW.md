@@ -67,9 +67,11 @@ pattern whenever a diff touches its area.
   banners or alerts for it. A timeout must cancel the response body read too,
   not only the wait for headers, or a stalled body hangs the page.
 - **KP-SSR-TIME:** Don't compute "now" or "today" during render, including in
-  `useState` initializers, in a component the server renders. The server runs
-  in UTC and the browser in local time, so the two disagree on the date for
-  part of every day and hydration fails.
+  `useState` initializers, in a component that renders on both the server and
+  the browser. The server runs in UTC and the browser in local time, so the two
+  disagree on the date for part of every day and hydration fails. A timestamp
+  computed once on the server and passed unchanged to the client, such as a
+  data-fetched-at prop, is fine.
 - **KP-PG-OWNER:** Migrations and database scripts run as a role that doesn't
   own the tables. `ALTER TABLE ... DISABLE TRIGGER`, `CREATE INDEX` on an
   existing table and other owner-only statements fail there even though they

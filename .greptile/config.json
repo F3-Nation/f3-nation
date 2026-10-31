@@ -55,7 +55,7 @@
     },
     {
       "id": "ssr-time",
-      "rule": "KP-SSR-TIME: nothing computes the current date or time during a server render, including useState initializers; the server runs in UTC and the browser in local time.",
+      "rule": "KP-SSR-TIME: a component that renders on both the server and the browser never computes the current date or time during render, including in useState initializers; the server runs in UTC and the browser in local time. A timestamp computed once on the server and passed unchanged to the client is fine.",
       "scope": [
         "apps/admin/**",
         "apps/map/**",
