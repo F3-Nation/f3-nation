@@ -275,6 +275,16 @@ export default function AdminRequestsModal({
     setSelectedAoLogoPreviewUrl(previewUrl);
   };
 
+  // A newly loaded request drops any logo picked for the previous one.
+  const [loadedRequest, setLoadedRequest] = useState(request);
+  if (request !== loadedRequest) {
+    setLoadedRequest(request);
+    if (request) {
+      setSelectedAoLogoFile(null);
+      setSelectedAoLogoPreviewUrl(null);
+    }
+  }
+
   useEffect(() => {
     if (!request) return;
     const requestMeta: Record<string, unknown> | null =
@@ -310,8 +320,6 @@ export default function AdminRequestsModal({
       aoWebsite: request.aoWebsite ?? "",
       submittedBy: request.submittedBy,
     });
-    setSelectedAoLogoFile(null);
-    setSelectedAoLogoPreviewUrl(null);
   }, [request, form]);
 
   useEffect(() => {

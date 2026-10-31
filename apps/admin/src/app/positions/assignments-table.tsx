@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 
 import { isValidF3Name } from "@acme/shared/app/functions";
@@ -74,11 +74,9 @@ export const AssignmentsTable = () => {
     [sortedOrgs],
   );
 
-  useEffect(() => {
-    if (!selectedOrg && sortedOrgs.length > 0) {
-      setSelectedOrg(sortedOrgs[0]!);
-    }
-  }, [sortedOrgs, selectedOrg]);
+  if (!selectedOrg && sortedOrgs.length > 0) {
+    setSelectedOrg(sortedOrgs[0]!);
+  }
 
   const { data: assignmentsData, isLoading: isLoadingAssignments } = useQuery(
     orpc.position.getAssignments.queryOptions({

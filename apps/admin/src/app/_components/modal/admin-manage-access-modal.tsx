@@ -291,14 +291,23 @@ export default function AdminManageAccessModal({
     setEmailPopoverOpen(false);
   };
 
+  // Select the user once their data loads (from data prop or selected user)
+  const [loadedUserByIdData, setLoadedUserByIdData] =
+    useState<typeof userByIdData>(undefined);
+  if (userByIdData !== loadedUserByIdData) {
+    setLoadedUserByIdData(userByIdData);
+    if (userByIdData?.user) {
+      setSelectedUserId(userByIdData.user.id);
+      setIsCreatingNew(false);
+    }
+  }
+
   // Populate form fields when user data is loaded (from data prop or selected user)
   useEffect(() => {
     if (userByIdData?.user) {
       const user = userByIdData.user;
       // Set user ID - this marks it as an update operation
       form.setValue("id", user.id);
-      setSelectedUserId(user.id);
-      setIsCreatingNew(false);
 
       // Set email if available (may not be available without PII access)
       // Don't check if already set - always update from API response
@@ -326,18 +335,11 @@ export default function AdminManageAccessModal({
   // Check if we can submit (either user selected or creating new)
   const canSubmit = selectedUserId !== null || isCreatingNew;
 
-  // Show popover when there are options, but don't auto-open it
-  // Let the user click to see options or they'll appear when typing a valid email
-  useEffect(() => {
-    // Only auto-open if we have options and the user hasn't selected anything yet
-    if (emailOptions.length > 0 && !selectedUserId && !isCreatingNew) {
-      // Don't force open - let it stay closed unless user focuses
-      // The popover will open on focus if there are options
-    } else if (emailOptions.length === 0) {
-      // Close if no options
-      setEmailPopoverOpen(false);
-    }
-  }, [emailOptions.length, selectedUserId, isCreatingNew]);
+  // Close the popover when there are no options; it opens again on focus or
+  // typing, never on its own
+  if (emailOptions.length === 0 && emailPopoverOpen) {
+    setEmailPopoverOpen(false);
+  }
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>

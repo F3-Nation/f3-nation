@@ -226,7 +226,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
   const submittingRef = useRef(false);
   const createdOrgId = useRef<number | "unknown" | null>(null);
   const [saveRecovery, setSaveRecovery] = useState<
-    | { step: "upload" | "update"; detail: string }
+    | { step: "upload" | "update"; detail: string; orgId: number }
     | "missing-id"
     | "saved"
     | null
@@ -234,6 +234,13 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  // A newly loaded org drops any logo picked for the previous one.
+  const [loadedOrg, setLoadedOrg] = useState(org);
+  if (org !== loadedOrg) {
+    setLoadedOrg(org);
+    setSelectedLogoFile(null);
+    setLogoPreviewUrl(null);
+  }
   const form = useForm({
     schema,
     defaultValues: {
@@ -281,8 +288,6 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
       lastAnnualReview: org?.lastAnnualReview ?? null,
       meta: org?.meta ?? null,
     });
-    setSelectedLogoFile(null);
-    setLogoPreviewUrl(null);
   }, [form, org, config]);
 
   useEffect(
@@ -391,127 +396,138 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
 
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit(
-              async (data) => {
-                if (submittingRef.current || createdOrgId.current === "unknown")
-                  return;
-                if (isRegionEditor) {
-                  if (regionRecordUnavailable) {
-                    toast.error(regionRecordMessage);
+            onSubmit={(event) =>
+              form.handleSubmit(
+                async (data) => {
+                  if (
+                    submittingRef.current ||
+                    createdOrgId.current === "unknown"
+                  )
                     return;
-                  }
-                  if (isEditingRegion && data.id !== org?.id) {
-                    toast.error(
-                      "Region details are not ready. Reload before saving.",
-                    );
-                    return;
-                  }
-                  if (sourceAccessDenied) {
-                    toast.error("You are not authorized to update this region");
-                    return;
-                  }
-                  // Let the API check unchanged-parent updates if the advisory
-                  // source lookup is unavailable. Moves need verified access.
-                  if (!isEditingRegion || data.parentId !== org?.parentId) {
-                    if (!canChangeRegionParent) {
+                  if (isRegionEditor) {
+                    if (regionRecordUnavailable) {
+                      toast.error(regionRecordMessage);
+                      return;
+                    }
+                    if (isEditingRegion && data.id !== org?.id) {
                       toast.error(
-                        "Region access must be verified before changing the parent",
+                        "Region details are not ready. Reload before saving.",
                       );
                       return;
                     }
-                    if (parentsError || parentsPending) {
+                    if (sourceAccessDenied) {
                       toast.error(
-                        "Unable to load editable parent choices. Try again before changing the parent.",
+                        "You are not authorized to update this region",
                       );
                       return;
                     }
-                    if (
-                      !parents.some(
-                        (parent) =>
-                          parent.id === data.parentId && parent.isActive,
-                      )
-                    ) {
-                      toast.error(
-                        "You need editor or admin access to the selected Area or Territory",
-                      );
-                      return;
-                    }
-                  }
-                }
-                submittingRef.current = true;
-                setIsSubmitting(true);
-                let saved = false;
-                let step: "upload" | "update" = "update";
-                try {
-                  const payload = {
-                    ...data,
-                    ...(!hasParent ? { parentId: undefined } : {}),
-                    orgType,
-                  };
-                  if (config.logoPosition) {
-                    let orgId = createdOrgId.current ?? data.id;
-                    if (!orgId) {
-                      const result = await crupdateOrg.mutateAsync(payload);
-                      orgId = result.org?.id;
-                      if (
-                        typeof orgId !== "number" ||
-                        !Number.isSafeInteger(orgId) ||
-                        orgId <= 0
-                      ) {
-                        createdOrgId.current = "unknown";
-                        setSaveRecovery("missing-id");
+                    // Let the API check unchanged-parent updates if the advisory
+                    // source lookup is unavailable. Moves need verified access.
+                    if (!isEditingRegion || data.parentId !== org?.parentId) {
+                      if (!canChangeRegionParent) {
+                        toast.error(
+                          "Region access must be verified before changing the parent",
+                        );
                         return;
                       }
-                      createdOrgId.current = orgId;
-                      form.setValue("id", orgId);
+                      if (parentsError || parentsPending) {
+                        toast.error(
+                          "Unable to load editable parent choices. Try again before changing the parent.",
+                        );
+                        return;
+                      }
+                      if (
+                        !parents.some(
+                          (parent) =>
+                            parent.id === data.parentId && parent.isActive,
+                        )
+                      ) {
+                        toast.error(
+                          "You need editor or admin access to the selected Area or Territory",
+                        );
+                        return;
+                      }
                     }
-                    let logoUrl: string | undefined;
-                    if (selectedLogoFile && orgId) {
-                      step = "upload";
-                      setIsUploadingLogo(true);
-                      logoUrl = await uploadLogo({
-                        file: selectedLogoFile,
-                        orgId,
+                  }
+                  submittingRef.current = true;
+                  setIsSubmitting(true);
+                  let saved = false;
+                  let step: "upload" | "update" = "update";
+                  try {
+                    const payload = {
+                      ...data,
+                      ...(!hasParent ? { parentId: undefined } : {}),
+                      orgType,
+                    };
+                    if (config.logoPosition) {
+                      let orgId = createdOrgId.current ?? data.id;
+                      if (!orgId) {
+                        const result = await crupdateOrg.mutateAsync(payload);
+                        orgId = result.org?.id;
+                        if (
+                          typeof orgId !== "number" ||
+                          !Number.isSafeInteger(orgId) ||
+                          orgId <= 0
+                        ) {
+                          createdOrgId.current = "unknown";
+                          setSaveRecovery("missing-id");
+                          return;
+                        }
+                        createdOrgId.current = orgId;
+                        form.setValue("id", orgId);
+                      }
+                      let logoUrl: string | undefined;
+                      if (selectedLogoFile && orgId) {
+                        step = "upload";
+                        setIsUploadingLogo(true);
+                        logoUrl = await uploadLogo({
+                          file: selectedLogoFile,
+                          orgId,
+                        });
+                      }
+                      step = "update";
+                      await crupdateOrg.mutateAsync({
+                        ...payload,
+                        id: orgId,
+                        ...(logoUrl ? { logoUrl } : {}),
                       });
+                      saved = true;
+                      setSaveCompleted(true);
+                      setSaveRecovery(null);
+                      await onSuccess();
+                    } else {
+                      await crupdateOrg.mutateAsync(payload);
                     }
-                    step = "update";
-                    await crupdateOrg.mutateAsync({
-                      ...payload,
-                      id: orgId,
-                      ...(logoUrl ? { logoUrl } : {}),
-                    });
-                    saved = true;
-                    setSaveCompleted(true);
-                    setSaveRecovery(null);
-                    await onSuccess();
-                  } else {
-                    await crupdateOrg.mutateAsync(payload);
+                  } catch (error) {
+                    if (config.logoPosition) {
+                      if (saved) {
+                        setSaveRecovery("saved");
+                        toast.error(savedRecoveryMessage);
+                      } else if (typeof createdOrgId.current === "number") {
+                        const detail = errorDetail(error, "update");
+                        toast.error(`${partialSaveMessage(step)} ${detail}`);
+                        setSaveRecovery({
+                          step,
+                          detail,
+                          orgId: createdOrgId.current,
+                        });
+                      } else onError(error);
+                    }
+                    if (config.submitErrorToast)
+                      toast.error(`Failed to update ${orgType}`);
+                  } finally {
+                    setIsUploadingLogo(false);
+                    setIsSubmitting(false);
+                    if (!saved) submittingRef.current = false;
                   }
-                } catch (error) {
-                  if (config.logoPosition) {
-                    if (saved) {
-                      setSaveRecovery("saved");
-                      toast.error(savedRecoveryMessage);
-                    } else if (createdOrgId.current != null) {
-                      const detail = errorDetail(error, "update");
-                      toast.error(`${partialSaveMessage(step)} ${detail}`);
-                      setSaveRecovery({ step, detail });
-                    } else onError(error);
-                  }
-                  if (config.submitErrorToast)
+                },
+                () => {
+                  if (config.validationToast)
                     toast.error(`Failed to update ${orgType}`);
-                } finally {
-                  setIsUploadingLogo(false);
                   setIsSubmitting(false);
-                  if (!saved) submittingRef.current = false;
-                }
-              },
-              () => {
-                if (config.validationToast)
-                  toast.error(`Failed to update ${orgType}`);
-                setIsSubmitting(false);
-              },
-            )}
+                },
+              )(event)
+            }
             className="space-y-4"
           >
             <div className="flex flex-wrap">
@@ -882,7 +898,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                       ? `This ${label} may have been created, but its ID was not returned. Close this form, reload the page, and check the organization list before trying again. Saving is disabled to avoid creating a duplicate.`
                       : saveRecovery === "saved"
                         ? savedRecoveryMessage
-                        : `${partialSaveMessage(saveRecovery.step)} ${saveRecovery.detail} Your entries are kept. Save Changes will retry the same ${label} (ID ${createdOrgId.current}).`}
+                        : `${partialSaveMessage(saveRecovery.step)} ${saveRecovery.detail} Your entries are kept. Save Changes will retry the same ${label} (ID ${saveRecovery.orgId}).`}
                   </p>
                 )}
                 <div
