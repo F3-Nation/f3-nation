@@ -50,10 +50,72 @@ says it's covered. Each links to the rule it checks.
 - **CC-WORKFLOW:** Does a privileged workflow run PR-head code, or interpolate
   untrusted input into `run:`? ([rule](.github/AGENTS.md#security))
 
+## Known failure patterns
+
+Defects of these kinds have reached `main` or nearly did, and a one-pass diff
+review tends to miss them because the cause sits in another file, in library
+behavior, or in an environment the diff doesn't show. Check the matching
+pattern whenever a diff touches its area.
+
+- **KP-QUERY-THROW:** The apps' query clients send query errors to the error
+  boundary by default. A query whose component renders its own fallback must
+  opt out (`throwOnError: false`, or a predicate that returns false for that
+  error), or the fallback never shows and the page is replaced by the error
+  screen.
+- **KP-ABORT:** A cancelled request (navigation, unmount, a superseded query)
+  raises an `AbortError`. It is not an outage: never show outage UI, retry
+  banners or alerts for it. A timeout must cancel the response body read too,
+  not only the wait for headers, or a stalled body hangs the page.
+- **KP-SSR-TIME:** Don't compute "now" or "today" during render, including in
+  `useState` initializers, in a component the server renders. The server runs
+  in UTC and the browser in local time, so the two disagree on the date for
+  part of every day and hydration fails.
+- **KP-PG-OWNER:** Migrations and database scripts run as a role that doesn't
+  own the tables. `ALTER TABLE ... DISABLE TRIGGER`, `CREATE INDEX` on an
+  existing table and other owner-only statements fail there even though they
+  pass locally. Dropping or recreating a type or column must also handle every
+  view that depends on it, including views that exist only in staging or
+  production.
+- **KP-ACTIVE:** Public and listing queries exclude inactive rows and rows
+  under an inactive ancestor org. Sibling queries in the same router are the
+  reference; a new query that filters differently is a finding.
+- **KP-ENV:** A new env var is read through the app's env schema, and a
+  missing or empty value fails at startup with a log line. An empty allowlist
+  that silently rejects everything, or a default that silently points at
+  another environment, is a finding.
+- **KP-TOKENS:** Token issuer, audience and JWKS URLs match what every verifier
+  (`packages/sso`, the API's session resolution) expects. A refresh grant
+  reuses the scopes originally granted, not the client's full scope list. A
+  proxy attaches a server-side API key only to routes that require a signed-in
+  caller.
+- **KP-ASYNC-THROW:** An async function called without `await` (`void fn()`)
+  catches throws that happen before its first `await` too. Otherwise a
+  synchronous throw becomes an unhandled rejection.
+- **KP-SHELL:** Scripts quote every path that comes from PR content, never
+  follow a symlink from PR content when copying files, tolerate a process that
+  already exited (`kill "$pid" || true` under `set -e`), exit non-zero on
+  failure, and don't let an inherited `DATABASE_URL` or `DATABASE_*` point a
+  local sandbox at a remote database.
+- **KP-PII:** Staging obfuscation treats a row as private when it or any
+  ancestor is private (a private series makes its locations private), and
+  scrubs names and Slack mentions from free text and stored Slack blocks.
+- **KP-SLACK:** Slack payload values can arrive as strings (`"True"`) and
+  rich-text blocks can be empty or missing. Parse leniently, keep a fallback
+  for empty text, and use the channel a region saved over the default.
+- **KP-UNRELATED-REVERT:** A diff that removes or rewrites lines outside the
+  PR's purpose may be a stale branch undoing a fix already on `main`, often
+  with the tests that guarded it. Check whether those lines were added to
+  `main` recently; if they were, it is blocking.
+
 ## How to review
 
+- Judge behavior against the `docs/specs/` file for the feature, when one
+  covers it, not against the PR description.
 - Trace the change into callers and siblings. Fixing one router while three
   siblings keep the same pattern is a finding.
+- For every new error path, say what the user or operator sees. For new
+  logic, say which test would fail if the change were reverted, or that none
+  would.
 - One comment per root cause, not per occurrence.
 - Skip anything Prettier, ESLint, Ruff, knip or `tsc` already enforces in CI.
 - Don't ask for refactors, abstractions or renames the change doesn't need.
@@ -123,4 +185,8 @@ Repo decisions that review bots have repeatedly flagged by mistake.
   workflow step.
 - ADRs without a Status field (the template has none), and generated
   `CHANGELOG.md` files.
+- Wording, tone, grammar, formatting or structure preferences in docs,
+  Markdown and comments. Flag text only when it is wrong: a claim the code
+  contradicts, a broken link, or a command, path, env var or check name that
+  no longer exists.
 - Pre-existing problems the change doesn't touch or worsen.
