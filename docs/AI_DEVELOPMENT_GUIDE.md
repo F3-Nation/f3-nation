@@ -35,8 +35,9 @@ because each bot applies that text to every file in scope and treats
 `REVIEW.md` only as background. CodeRabbit's `**/*` path instruction and
 Greptile's `instructions` restate the "How to review" list the same way. When
 a rule changes in `REVIEW.md`, `git grep` its id and update the copies;
-`pnpm lint` fails if a bot config names an id `REVIEW.md` doesn't define. The `docs/specs/` files are Greptile context,
-scoped to the code each spec covers.
+`pnpm lint` fails if a bot config names an id `REVIEW.md` doesn't define.
+The `docs/specs/` files are Greptile context, scoped to the code each spec
+covers.
 
 **Rule of thumb:** put durable guidance in `AGENTS.md` (or, for deep topics, in
 `docs/` and link it). Keep the tool-specific pointer files thin so they never
