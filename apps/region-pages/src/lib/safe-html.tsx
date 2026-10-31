@@ -41,42 +41,124 @@ const decodeEntity = (entity: string, body: string): string => {
   return NAMED_ENTITIES[body.toLowerCase()] ?? entity;
 };
 
-// A tag name ends at HTML whitespace, `/` or `>`, so `</script >` and
-// `</script x>` close the element but `</script-x>` and `<style-guide>` don't.
-// A quoted attribute value can hold `>`, so the tag ends at the first `>`
-// outside quotes (`<script data-x="</script>">`).
-const SCRIPT_BLOCK =
-  /<script(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?<\/script(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
-const STYLE_BLOCK =
-  /<style(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?<\/style(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
-const ANY_TAG = /<[^>]*>/g;
-// Stands in for a removed block so the text on either side can't join into a
-// new tag (`<scr<script></script>ipt>`); dropped once tags are stripped.
-const BLOCK_GAP = "\u0000";
+const isHtmlSpace = (char: string | undefined): boolean =>
+  char === " " ||
+  char === "\t" ||
+  char === "\n" ||
+  char === "\f" ||
+  char === "\r";
 
 /**
- * Plain text of `value`. The loops stop on their second pass: a block's
- * stand-in can't be part of a tag name, and removing a whole tag can't join
- * its neighbours into another. A single regex pass can still rescan text.
+ * Index just past the `>` that ends a tag, reading its attributes from `from`
+ * the way a browser does, or -1 if the input ends first. Only a quote that
+ * opens an attribute value hides `>`; a quote inside a name or an unquoted
+ * value (`data-label=don't`) is an ordinary character.
+ */
+const tagEnd = (html: string, from: number): number => {
+  // `name` also covers the space after a name, where `=` still starts a value.
+  let state: "between" | "name" | "value" | "unquoted" = "between";
+  for (let i = from; i < html.length; i++) {
+    const char = html[i];
+    if (char === ">") return i + 1;
+    if (state === "value") {
+      if (char === '"' || char === "'") {
+        i = html.indexOf(char, i + 1);
+        if (i < 0) return -1;
+        state = "between";
+      } else if (!isHtmlSpace(char)) {
+        state = "unquoted";
+      }
+    } else if (state === "unquoted") {
+      if (isHtmlSpace(char)) state = "between";
+    } else if (char === "/") {
+      state = "between";
+    } else if (char === "=" && state === "name") {
+      state = "value";
+    } else if (!isHtmlSpace(char)) {
+      state = "name";
+    }
+  }
+  return -1;
+};
+
+// An end tag's name ends at HTML whitespace, `/` or `>`, so `</script >` and
+// `</script x>` close the element but `</script-x>` doesn't.
+const BLOCK_END = new Map([
+  ["script", /<\/script(?=[\t\n\f\r />])/gi],
+  ["style", /<\/style(?=[\t\n\f\r />])/gi],
+]);
+const COMMENT_END = /--!?>/g;
+
+/** Index just past the end tag of a block whose content starts at `from`. */
+const blockEnd = (html: string, from: number, endTag: RegExp): number => {
+  endTag.lastIndex = from;
+  return endTag.exec(html) ? tagEnd(html, endTag.lastIndex) : -1;
+};
+
+/** Index just past a comment whose body starts at `from` (after `<!--`). */
+const commentEnd = (html: string, from: number): number => {
+  if (html.startsWith(">", from)) return from + 1;
+  if (html.startsWith("->", from)) return from + 2;
+  COMMENT_END.lastIndex = from;
+  return COMMENT_END.exec(html) ? COMMENT_END.lastIndex : -1;
+};
+
+/**
+ * Plain text of `value`, read in one pass the way a browser tokenizes HTML:
+ * tags and comments drop out, `<br>` becomes a newline, and script and style
+ * content is skipped up to its end tag. Text is never rescanned, so removing
+ * a tag can't join its neighbours into a new one. A tag, comment or block the
+ * input never closes takes the rest of the input with it, as in a browser.
  */
 const stripHtml = (value: string): string => {
-  let text = value;
-  let previous: string;
-  do {
-    previous = text;
-    text = text
-      .replace(SCRIPT_BLOCK, BLOCK_GAP)
-      .replace(STYLE_BLOCK, BLOCK_GAP);
-  } while (text !== previous);
-  text = text.replace(/<br\s*\/?>/gi, "\n");
-  do {
-    previous = text;
-    text = text.replace(ANY_TAG, "");
-  } while (text !== previous);
-  return text
-    .replaceAll(BLOCK_GAP, "")
-    .replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, decodeEntity)
-    .trim();
+  let text = "";
+  let i = 0;
+  while (i < value.length) {
+    const open = value.indexOf("<", i);
+    if (open < 0) {
+      text += value.slice(i);
+      break;
+    }
+    text += value.slice(i, open);
+    const isEndTag = value[open + 1] === "/";
+    const nameStart = isEndTag ? open + 2 : open + 1;
+    let next: number;
+    if (/[a-z]/i.test(value[nameStart] ?? "")) {
+      // A tag name runs to whitespace, `/` or `>`, so `<scr<script>` is one tag.
+      let nameEnd = nameStart;
+      while (
+        nameEnd < value.length &&
+        !isHtmlSpace(value[nameEnd]) &&
+        value[nameEnd] !== "/" &&
+        value[nameEnd] !== ">"
+      ) {
+        nameEnd++;
+      }
+      const name = value.slice(nameStart, nameEnd).toLowerCase();
+      next = tagEnd(value, nameEnd);
+      const endTag = BLOCK_END.get(name);
+      if (next >= 0 && !isEndTag && endTag) {
+        next = blockEnd(value, next, endTag);
+      } else if (next >= 0 && name === "br") {
+        text += "\n";
+      }
+    } else if (isEndTag && nameStart === value.length) {
+      text += "</";
+      next = nameStart;
+    } else if (value.startsWith("<!--", open)) {
+      next = commentEnd(value, open + 4);
+    } else if (isEndTag || value[open + 1] === "!" || value[open + 1] === "?") {
+      // `</>`, `<!DOCTYPE …>` and the like are dropped up to the next `>`.
+      const close = value.indexOf(">", open + 2);
+      next = close < 0 ? -1 : close + 1;
+    } else {
+      text += "<";
+      next = open + 1;
+    }
+    if (next < 0) break;
+    i = next;
+  }
+  return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, decodeEntity).trim();
 };
 
 /** Plain-text rendering of `html`; what the server (no DOMParser) shows. */

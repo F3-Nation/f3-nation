@@ -161,6 +161,8 @@ describe("server text decoding", () => {
     ["a block with a lookalike end tag", "<script>a</script-x>b</script>Hi"],
     ["a block with a punctuated end tag", "<script>a</script!>b</script>Hi"],
     ["a style block with a lookalike end tag", "<style>a</style:x>b</style>Hi"],
+    ["an unquoted value with a quote", "<script x=don't>alert(1)</script>Hi"],
+    ["a name with a quote", '<style a"b c=d>p{}</style>Hi'],
   ])("drops script and style content in %s", (_, html) => {
     expect(renderToString(<Text html={html} />)).toBe("<p>Hi</p>");
   });
@@ -181,21 +183,41 @@ describe("server text decoding", () => {
     expect(hasVisibleContent(html)).toBe(false);
   });
 
-  it("doesn't join the text around a removed block into a new tag", () => {
+  it("reads `<scr<script>` as one tag, as a browser does", () => {
     expect(
       renderToString(
         <Text html="<scr<script></script>ipt>alert(1)</script>Hi" />,
       ),
-    ).toBe("<p>alert(1)Hi</p>");
+    ).toBe("<p>ipt&gt;alert(1)Hi</p>");
   });
 
-  it("strips deeply spliced blocks without a pass per nesting level", () => {
-    // Without the block stand-in, remove-until-stable needs a pass per level.
-    const n = 100_000;
-    const html = `${"<scr".repeat(n)}<script></script>${"ipt></script>".repeat(n)}Hi`;
+  it("drops comments, declarations and stray end tags but keeps a bare `<` or `</`", () => {
+    expect(
+      renderToString(
+        <Text html="<!DOCTYPE html><!-- <b>x</b> -->1 < 2<!---->,</><?x?> ok</" />,
+      ),
+    ).toBe("<p>1 &lt; 2, ok&lt;/</p>");
+  });
 
-    const rendered = renderToString(<Text html={html} />);
+  it.each([
+    ["an unclosed script", "Hi<script>a"],
+    ["an unclosed tag", 'Hi<b title="a>b'],
+    ["an unclosed comment", "Hi<!-- a"],
+  ])("drops the rest of the input after %s", (_, html) => {
+    expect(renderToString(<Text html={html} />)).toBe("<p>Hi</p>");
+  });
 
-    expect(rendered).toBe(`<p>${"ipt&gt;".repeat(n - 1)}Hi</p>`);
+  // Each case rescans the rest of the input once per tag if a scan restarts.
+  it.each([
+    [
+      "spliced blocks",
+      `${"<scr".repeat(1e5)}<script></script>${"ipt></script>".repeat(1e5)}Hi`,
+      `${"ipt&gt;".repeat(1e5)}Hi`,
+    ],
+    ["unclosed blocks", `Hi${"<script>".repeat(1e5)}`, "Hi"],
+    ["unclosed tags", `Hi${"<style ".repeat(1e5)}`, "Hi"],
+    ["unclosed end tags", `Hi<script>${"</script".repeat(1e5)}`, "Hi"],
+  ])("reads %s in one pass", (_, html, text) => {
+    expect(renderToString(<Text html={html} />)).toBe(`<p>${text}</p>`);
   });
 });
