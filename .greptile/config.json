@@ -17,7 +17,7 @@
     },
     {
       "id": "inactive-rows",
-      "rule": "KP-ACTIVE: public and listing queries exclude inactive rows and rows under an inactive ancestor org, matching their sibling queries.",
+      "rule": "KP-ACTIVE: responses an anonymous caller can reach exclude inactive rows and rows under an inactive ancestor org, whatever status filter is passed; signed-in callers keep the status filters their sibling procedures offer.",
       "scope": ["packages/api/**"],
       "severity": "high"
     },
@@ -36,7 +36,7 @@
     },
     {
       "id": "migrations",
-      "rule": "CC-MIGRATION and KP-PG-OWNER: migrations run in one transaction as a role that does not own the tables. Flag owner-only statements such as ALTER TABLE ... DISABLE TRIGGER, type or column drops that don't handle dependent views, and migration files without a matching journal entry.",
+      "rule": "CC-MIGRATION and KP-PG-OWNER: migrations run in one transaction. Flag a new database script that issues owner-only statements (such as ALTER TABLE ... DISABLE TRIGGER) without first checking the login owns the objects, as the migration runner and staging refresh do; type or column drops that don't handle dependent views; and migration files without a matching journal entry.",
       "scope": ["packages/db/**", "**/*.sql"],
       "severity": "high"
     },
@@ -72,7 +72,7 @@
     },
     {
       "id": "env-vars",
-      "rule": "KP-ENV: a new environment variable is read the same way as its siblings in that file (through the app's env schema where one exists), listed in every .env*.example for that app and in the Cloud Run env helpers, and fails at startup with a log line when missing. A guard against mixing staging and production covers every variable that names the environment, including NEXT_PUBLIC_* twins.",
+      "rule": "KP-ENV: a new environment variable is read the same way as its siblings in that file (through the app's env schema where one exists), listed in every .env*.example for that app and in the Cloud Run env helpers. A required one fails at startup with a log line when missing; an optional one turns its feature off or uses a stated default. Local-dev switches set by a package script are exempt. A guard against mixing staging and production covers every variable that names the environment, including NEXT_PUBLIC_* twins.",
       "severity": "medium"
     },
     {

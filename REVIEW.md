@@ -72,18 +72,24 @@ pattern whenever a diff touches its area.
   disagree on the date for part of every day and hydration fails. A timestamp
   computed once on the server and passed unchanged to the client, such as a
   data-fetched-at prop, is fine.
-- **KP-PG-OWNER:** Migrations and database scripts run as a role that doesn't
-  own the tables. `ALTER TABLE ... DISABLE TRIGGER`, `CREATE INDEX` on an
-  existing table and other owner-only statements fail there even though they
-  pass locally. Dropping or recreating a type or column must also handle every
-  view that depends on it, including views that exist only in staging or
-  production.
-- **KP-ACTIVE:** Public and listing queries exclude inactive rows and rows
-  under an inactive ancestor org. Sibling queries in the same router are the
-  reference; a new query that filters differently is a finding.
+- **KP-PG-OWNER:** Owner-only statements (`ALTER TABLE ... DISABLE TRIGGER`,
+  `CREATE INDEX` on an existing table, `ALTER TYPE`) need the login to own the
+  object, directly or through role membership. The migration runner and the
+  staging refresh check ownership up front and refuse to start without it; a
+  new database script that issues owner-only statements needs the same check,
+  or it fails with "must be owner" partway through. Dropping or recreating a
+  type or column must also handle every view that depends on it, including
+  views that exist only in staging or production.
+- **KP-ACTIVE:** Responses an anonymous caller can reach exclude inactive rows
+  and rows under an inactive ancestor org, whatever status filter the caller
+  passes. Signed-in callers keep the status filters their sibling procedures
+  offer. Sibling queries in the same router are the reference; a new query
+  that filters differently is a finding.
 - **KP-ENV:** A new env var is read the same way as its siblings in that file
-  (through the app's env schema where the app has one), and a missing or empty
-  value fails at startup with a log line. An empty allowlist that silently
+  (through the app's env schema where the app has one). A required one that is
+  missing or empty fails at startup with a log line; an optional one turns its
+  feature off or uses a stated default without crashing (`apps/AGENTS.md`
+  covers optional settings). An empty allowlist that silently
   rejects everything, or a default that silently points at another
   environment, is a finding. A guard against mixing staging and production
   settings covers every variable that names the environment, including the

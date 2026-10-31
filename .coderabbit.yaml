@@ -52,10 +52,10 @@ reviews:
         Apply KP-TOKENS and CC-PUBLIC: a server-side API key or credential is forwarded only on routes that require a signed-in caller. List every route the matcher covers and check each.
     - path: "packages/api/**"
       instructions: |
-        Apply CC-AUTHZ, CC-PUBLIC and KP-ACTIVE. Compare each new or changed query with its sibling queries in the same router for org checks, inactive-row filters (including inactive ancestor orgs) and page bounds. A changed input, output or auth rule must update apps/api/characterization/__snapshots__/openapi.golden.json, and the Slack bot's Python client when it calls the procedure.
+        Apply CC-AUTHZ, CC-PUBLIC and KP-ACTIVE. Compare each new or changed query with its sibling queries in the same router for org checks, page bounds, and inactive-row filters (including inactive ancestor orgs) on anything an anonymous caller can reach; signed-in callers keep their status filters. A changed input, output or auth rule must update apps/api/characterization/__snapshots__/openapi.golden.json, and the Slack bot's Python client when it calls the procedure.
     - path: "packages/db/**"
       instructions: |
-        Apply CC-MIGRATION and KP-PG-OWNER. Migrations run in one transaction as a role that does not own the tables. Flag owner-only statements, type or column drops without handling dependent views, and journal entries that are missing or out of order.
+        Apply CC-MIGRATION and KP-PG-OWNER. Migrations run in one transaction. Flag a new database script that issues owner-only statements without first checking the login owns the objects (the migration runner and staging refresh do), type or column drops without handling dependent views, and journal entries that are missing or out of order.
     - path: "{apps/admin,apps/map,apps/me,apps/homepage,apps/region-pages}/**"
       instructions: |
         Apply KP-QUERY-THROW, KP-ABORT and KP-SSR-TIME. For each query with its own error or empty state, check the app's query-client throwOnError default lets that state render. Check that cancelled requests never show outage UI, and that no component rendering on both server and browser computes the current date during render (a server-computed timestamp passed unchanged as a prop is fine).
@@ -98,11 +98,11 @@ reviews:
       - name: "Migration and database script safety"
         mode: "warning"
         instructions: |
-          Only for PRs that change packages/db or SQL. Fail if a migration or database script uses an owner-only statement (for example ALTER TABLE ... DISABLE TRIGGER), drops or recreates a type or column without handling views that depend on it, or adds a migration file without a matching journal entry. Pass otherwise.
+          Only for PRs that change packages/db, tooling/scripts or SQL. Fail if a new database script issues an owner-only statement (for example ALTER TABLE ... DISABLE TRIGGER) without first checking the login owns the objects, if a migration drops or recreates a type or column without handling views that depend on it, or if a migration file has no matching journal entry. Pass otherwise.
       - name: "Env var wiring"
         mode: "warning"
         instructions: |
-          Fail if the PR reads a new environment variable that is missing from the app's env schema, from any .env*.example file for that app, or from the Cloud Run env helpers, or if a missing value would be silently treated as empty. Pass if no new variable is read.
+          Fail if the PR reads a new environment variable that is missing from the app's env schema, from any .env*.example file for that app, or from the Cloud Run env helpers, or if a missing required value would be silently treated as empty. An optional variable may turn its feature off when unset. Pass if no new variable is read, or the only new one is a local-dev switch set by a package script.
       - name: "Tests would catch a revert"
         mode: "warning"
         instructions: |
