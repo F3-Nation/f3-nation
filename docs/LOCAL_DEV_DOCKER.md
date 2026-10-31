@@ -543,10 +543,12 @@ Or, to keep other data but clear just the GCS volume:
 ```bash
 docker volume rm f3-local_gcs_data
 pnpm docker:up
-# then re-create the bucket:
-curl -X POST http://localhost:9023/storage/v1/b \
-  -H "Content-Type: application/json" \
-  -d '{"name": "f3-public-images-staging"}'
+# then re-create the buckets the local apps write to:
+for bucket in f3-public-images-staging f3nation-calendar-images; do
+  curl -X POST http://localhost:9023/storage/v1/b \
+    -H "Content-Type: application/json" \
+    -d "{\"name\": \"$bucket\"}"
+done
 ```
 
 ---
@@ -645,14 +647,16 @@ docker compose -f docker-compose.yml down -v
 pnpm local:setup
 ```
 
-### GCS bucket not found (404 on logo upload)
+### GCS bucket not found (404 on upload)
 
-The bucket needs to be created after the emulator starts. Run:
+The buckets need to be created after the emulator starts. Run:
 
 ```bash
-curl -X POST http://localhost:9023/storage/v1/b \
-  -H "Content-Type: application/json" \
-  -d '{"name": "f3-public-images-staging"}'
+for bucket in f3-public-images-staging f3nation-calendar-images; do
+  curl -X POST http://localhost:9023/storage/v1/b \
+    -H "Content-Type: application/json" \
+    -d "{\"name\": \"$bucket\"}"
+done
 ```
 
 ### Migrations failing
