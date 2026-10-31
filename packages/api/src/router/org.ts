@@ -35,6 +35,7 @@ import { logError } from "../logger";
 import { moveAOLocsToNewRegion } from "../lib/move-ao-locs-to-new-region";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { withAuditContext } from "../lib/with-audit-context";
 import { orgAndAncestorsAreActive } from "../org-activity";
 import { orgAncestorName } from "../org-ancestor-name";
 import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
@@ -871,13 +872,15 @@ export const orgRouter = {
               )
             : input.meta;
 
-        const [result] = await ctx.db
-          .insert(schema.orgs)
-          .values({
-            ...input,
-            meta: insertMeta as Record<string, string> | null | undefined,
-          })
-          .returning();
+        const [result] = await withAuditContext(ctx, async (auditCtx) =>
+          auditCtx.db
+            .insert(schema.orgs)
+            .values({
+              ...input,
+              meta: insertMeta as Record<string, string> | null | undefined,
+            })
+            .returning(),
+        );
 
         // Notify webhooks about the org creation
         if (result) {
@@ -979,7 +982,8 @@ export const orgRouter = {
         };
       }
 
-      const result = await ctx.db.transaction(async (tx) => {
+      const result = await withAuditContext(ctx, async (auditCtx) => {
+        const tx = auditCtx.db;
         const [lockedOrg] = await tx
           .select()
           .from(schema.orgs)
@@ -993,7 +997,7 @@ export const orgRouter = {
         const lockedRoleCheckResult = await checkHasRoleOnOrg({
           orgId: lockedOrg.id,
           session: ctx.session,
-          db: tx as unknown as AppDb,
+          db: tx,
           roleName: "editor",
         });
         if (!lockedRoleCheckResult.success) {
@@ -1021,7 +1025,7 @@ export const orgRouter = {
           const adminRoleCheck = await checkHasRoleOnOrg({
             orgId: lockedOrg.id,
             session: ctx.session,
-            db: tx as unknown as AppDb,
+            db: tx,
             roleName: "admin",
           });
           if (!adminRoleCheck.success) {
@@ -1040,14 +1044,11 @@ export const orgRouter = {
           destinationParentOrgId !== null &&
           lockedOrg.parentId !== null
         ) {
-          await moveAOLocsToNewRegion(
-            { ...ctx, db: tx as unknown as AppDb },
-            {
-              oldRegionId: lockedOrg.parentId,
-              newRegionId: destinationParentOrgId,
-              aoId: lockedOrg.id,
-            },
-          );
+          await moveAOLocsToNewRegion(auditCtx, {
+            oldRegionId: lockedOrg.parentId,
+            newRegionId: destinationParentOrgId,
+            aoId: lockedOrg.id,
+          });
         }
 
         const [updatedOrg] = await tx
@@ -1063,11 +1064,8 @@ export const orgRouter = {
           const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
             await import("../lib/cascade-service");
 
-          await softDeleteSeriesForOrg(tx as unknown as AppDb, existingOrg.id);
-          await softDeleteFutureInstancesForOrg(
-            tx as unknown as AppDb,
-            existingOrg.id,
-          );
+          await softDeleteSeriesForOrg(tx, existingOrg.id);
+          await softDeleteFutureInstancesForOrg(tx, existingOrg.id);
         }
 
         return updatedOrg;
@@ -1224,27 +1222,29 @@ export const orgRouter = {
         });
       }
 
-      // Perform the soft delete with .returning() to confirm success
-      const [deletedOrg] = await ctx.db
-        .update(schema.orgs)
-        .set({ isActive: false })
-        .where(eq(schema.orgs.id, input.id))
-        .returning();
+      await withAuditContext(ctx, async (auditCtx) => {
+        // Perform the soft delete with .returning() to confirm success
+        const [deletedOrg] = await auditCtx.db
+          .update(schema.orgs)
+          .set({ isActive: false })
+          .where(eq(schema.orgs.id, input.id))
+          .returning();
 
-      if (!deletedOrg) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Organization not found",
-        });
-      }
+        if (!deletedOrg) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Organization not found",
+          });
+        }
 
-      // If this is an AO, cascade soft-delete to series and event instances
-      if (org.orgType === "ao") {
-        const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
-          await import("../lib/cascade-service");
+        // If this is an AO, cascade soft-delete to series and event instances
+        if (org.orgType === "ao") {
+          const { softDeleteSeriesForOrg, softDeleteFutureInstancesForOrg } =
+            await import("../lib/cascade-service");
 
-        await softDeleteSeriesForOrg(ctx.db, input.id);
-        await softDeleteFutureInstancesForOrg(ctx.db, input.id);
-      }
+          await softDeleteSeriesForOrg(auditCtx.db, input.id);
+          await softDeleteFutureInstancesForOrg(auditCtx.db, input.id);
+        }
+      });
 
       // Notify webhooks about the org deletion
       notifyMapDataChange({ type: "org.deleted", orgId: input.id });

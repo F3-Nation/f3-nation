@@ -20,7 +20,7 @@ export default defineConfig({
         statements: 61.44,
         branches: 55.73,
         functions: 51.19,
-        lines: 62.92,
+        lines: 62.97,
       },
     },
     setupFiles: ["./vitest.setup.ts"],

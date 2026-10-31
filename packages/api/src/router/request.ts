@@ -61,6 +61,7 @@ import {
   recordUpdateRequest,
 } from "../lib/update-request-handlers";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { withAuditContext } from "../lib/with-audit-context";
 import { logDebug, logError } from "../logger";
 import { notifyMapChangeRequest } from "../services/map-request-notification";
 import { editorProcedure, protectedProcedure } from "../shared";
@@ -1077,20 +1078,22 @@ export const requestRouter = {
       // Only a pending request can be rejected. Guard atomically (status is in
       // the WHERE clause) so racing reviewers can't reject an already-applied
       // approval and leave the audit trail contradicting the live map. (#11)
-      const [rejected] = await ctx.db
-        .update(schema.updateRequests)
-        .set({
-          status: "rejected",
-          reviewedBy: ctx.session?.user?.email ?? null,
-          reviewedAt: new Date().toISOString(),
-        })
-        .where(
-          and(
-            eq(schema.updateRequests.id, input.id),
-            eq(schema.updateRequests.status, "pending"),
-          ),
-        )
-        .returning({ id: schema.updateRequests.id });
+      const [rejected] = await withAuditContext(ctx, async (auditCtx) =>
+        auditCtx.db
+          .update(schema.updateRequests)
+          .set({
+            status: "rejected",
+            reviewedBy: auditCtx.session?.user?.email ?? null,
+            reviewedAt: new Date().toISOString(),
+          })
+          .where(
+            and(
+              eq(schema.updateRequests.id, input.id),
+              eq(schema.updateRequests.status, "pending"),
+            ),
+          )
+          .returning({ id: schema.updateRequests.id }),
+      );
 
       if (!rejected) {
         // The row was pending when we read it above but the guarded UPDATE
@@ -1252,9 +1255,10 @@ const handleRequest = async <T extends HandleableRequestInput>({
     // Apply the change and record the audit row atomically, so a failure to
     // record can't leave an applied-but-unaudited change behind (and a retry
     // after such a failure can't apply the change twice).
-    const { updateRequest, notificationRegionId } = await ctx.db.transaction(
-      async (tx) => {
-        const txCtx: Context = { ...ctx, db: tx as unknown as Context["db"] };
+    const { updateRequest, notificationRegionId } = await withAuditContext(
+      ctx,
+      async (txCtx) => {
+        const tx = txCtx.db;
         // Guard against re-applying an already-reviewed request (two reviewers
         // racing to approve the same queue item, or an approve after the row was
         // already resolved). Lock the stored row and require it to still be
@@ -1463,11 +1467,13 @@ const handleRequest = async <T extends HandleableRequestInput>({
         });
       }
     }
-    const updateRequest = await recordUpdateRequest({
-      ctx,
-      updateRequest: updateRequestData,
-      status: "pending",
-    });
+    const updateRequest = await withAuditContext(ctx, (auditCtx) =>
+      recordUpdateRequest({
+        ctx: auditCtx,
+        updateRequest: updateRequestData,
+        status: "pending",
+      }),
+    );
     const result = { status: "pending" as const, updateRequest };
     await notifyPendingRequest({ ctx, result });
     return result;

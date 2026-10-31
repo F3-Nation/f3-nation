@@ -279,7 +279,9 @@ output free of real personal data and credentials.
 ## 6. Out of scope / non-goals
 
 - Codex/auth table activation, schema creation, key additions or data repairs.
-- Attribution middleware, app header changes or Python context integration.
+- Application attribution is specified separately in
+  [API audit user attribution](api-audit-attribution.md). App header changes and
+  Python context integration are outside this storage contract.
 - Audit UI/API, automatic restore, historical backfill, retention jobs,
   partitioning, or unrelated environment/tooling refactors.
 - Automatic activation for tables added later.
