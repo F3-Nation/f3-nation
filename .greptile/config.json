@@ -37,7 +37,7 @@
     {
       "id": "migrations",
       "rule": "CC-MIGRATION and KP-PG-OWNER: migrations run in one transaction. Flag a new database script that issues owner-only statements (such as ALTER TABLE ... DISABLE TRIGGER) without first checking the login owns the objects, as the migration runner and staging refresh do; type or column drops that don't handle dependent views; and migration files without a matching journal entry.",
-      "scope": ["packages/db/**", "**/*.sql"],
+      "scope": ["packages/db/**", "tooling/scripts/**", "**/*.sql"],
       "severity": "high"
     },
     {

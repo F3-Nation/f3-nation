@@ -126,11 +126,11 @@ function checkGreptile() {
 function checkRuleIds() {
   const reviewPath = join(root, "REVIEW.md");
   if (!existsSync(reviewPath)) return;
-  const ruleId = /\b(?:CC|KP)-[A-Z]+(?:-[A-Z]+)*\b/g;
+  const ruleId = /\b(?:CC|KP)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/g;
   const defined = new Set(
     [
       ...readFileSync(reviewPath, "utf8").matchAll(
-        /\*\*((?:CC|KP)-[A-Z-]*[A-Z])/g,
+        /\*\*((?:CC|KP)-[A-Z0-9]+(?:-[A-Z0-9]+)*)/g,
       ),
     ].map((match) => match[1]),
   );

@@ -126,6 +126,8 @@ printf 'path_instructions:\n  - instructions: Apply KP-ACTIVE and CC-AUTHZ.\n' >
 expect "bot config names defined rule ids" pass "$rule_ids"
 printf '{ "rules": [{ "rule": "KP-RENAMED: check it." }] }\n' >"$rule_ids/.greptile/config.json"
 expect "bot config names an undefined rule id" fail "$rule_ids" ".greptile/config.json: KP-RENAMED is not defined in REVIEW.md"
+printf '{ "rules": [{ "rule": "KP-ACTIVE-2: check it." }] }\n' >"$rule_ids/.greptile/config.json"
+expect "rule id with a numeric segment must match in full" fail "$rule_ids" "KP-ACTIVE-2 is not defined in REVIEW.md"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} check-review-links test(s) failed"

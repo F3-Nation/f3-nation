@@ -174,7 +174,12 @@
     {
       "path": "docs/specs/mixed-hierarchy-seeds-map.md",
       "description": "Feature spec: Mixed hierarchy seeds and map verification. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["packages/db/**", "apps/map/**", "packages/api/**"]
+      "scope": [
+        "packages/db/**",
+        "apps/map/**",
+        "packages/api/**",
+        "packages/shared/**"
+      ]
     },
     {
       "path": "docs/specs/org-directory-map.md",
@@ -194,7 +199,7 @@
     {
       "path": "docs/specs/region-in-a-box-notifications.md",
       "description": "Feature spec: Region-in-a-box notifications for AO and recurring-event changes. Acceptance criteria and RBAC to judge changed behavior against.",
-      "scope": ["packages/api/**", "apps/slackbot/**"]
+      "scope": ["packages/api/**", "apps/map/**", "apps/admin/**"]
     },
     {
       "path": "docs/specs/region-pages-directory.md",

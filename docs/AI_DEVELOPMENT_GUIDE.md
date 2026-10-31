@@ -32,8 +32,10 @@ so each tool resolves to the same content:
 checks, and `.greptile/config.json` holds Greptile's scoped rules. Each names
 the `REVIEW.md` `CC-*` or `KP-*` id it applies and restates the rule briefly,
 because each bot applies that text to every file in scope and treats
-`REVIEW.md` only as background. CodeRabbit's `**/*` path instruction and
-Greptile's `instructions` restate the "How to review" list the same way. When
+`REVIEW.md` only as background. CodeRabbit's pre-merge custom checks name
+their ids the same way. CodeRabbit's `**/*` path instruction, its "Tests would
+catch a revert" check and Greptile's `instructions` restate the "How to
+review" list. When
 a rule changes in `REVIEW.md`, `git grep` its id and update the copies;
 `pnpm lint` fails if a bot config names an id `REVIEW.md` doesn't define.
 The `docs/specs/` files are Greptile context, scoped to the code each spec
