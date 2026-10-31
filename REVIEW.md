@@ -89,7 +89,8 @@ pattern whenever a diff touches its area.
   (through the app's env schema where the app has one). A required one that is
   missing or empty fails at startup with a log line; an optional one turns its
   feature off or uses a stated default without crashing (`apps/AGENTS.md`
-  covers optional settings). An empty allowlist that silently
+  covers optional settings). A local-dev-only switch set by a package script is
+  exempt (see "Do not flag"). An empty allowlist that silently
   rejects everything, or a default that silently points at another
   environment, is a finding. A guard against mixing staging and production
   settings covers every variable that names the environment, including the
