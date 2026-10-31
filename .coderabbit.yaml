@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-# `inheritance: true` merges this file over the organization and repository UI
-# settings instead of replacing them.
+# `inheritance: true` fills any key not set here from the repository UI
+# settings, and from the organization's only if that level also inherits.
 #
 # CodeRabbit reads every AGENTS.md by default, scoped to its directory. It
 # doesn't read REVIEW.md by default; this pattern adds it, with the same
@@ -10,3 +10,28 @@ knowledge_base:
   code_guidelines:
     filePatterns:
       - "**/REVIEW.md"
+reviews:
+  # Every push spends one review from the free OSS rate limit, which PRs here
+  # keep hitting. Review only Ready PRs, and pause after two reviewed commits;
+  # `@coderabbitai review` runs one more on demand.
+  auto_review:
+    drafts: false
+    auto_pause_after_reviewed_commits: 2
+  # Generated files: release-please changelogs and drizzle-kit snapshots.
+  # Migration SQL and the migration journal are still reviewed. Lockfiles stay
+  # in, because exclusions also drop files from CodeRabbit's checkout and its
+  # OSV Scanner reads them.
+  path_filters:
+    - "!**/CHANGELOG.md"
+    - "!**/drizzle/meta/*_snapshot.json"
+  # Repo decisions: docstrings aren't required, `.env` key order isn't
+  # enforced, and generated unit-test PRs add review noise.
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  tools:
+    dotenvLint:
+      enabled: false
+  finishing_touches:
+    unit_tests:
+      enabled: false
