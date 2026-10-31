@@ -149,4 +149,39 @@ describe("server text decoding", () => {
       renderToString(<Text html="It&#8217;s 5&mdash;6 &#x2764; &bogus;" />),
     ).toBe("<p>It’s 5—6 ❤ &amp;bogus;</p>");
   });
+
+  it.each([
+    ["an end tag with whitespace", "<script>alert(1)</script >Hi"],
+    ["an end tag with attributes", '<SCRIPT>alert(1)</script x="y">Hi'],
+    ["a style block", "<style>p{}</style\n>Hi"],
+    ["a block with a lookalike end tag", "<script>a</script-x>b</script>Hi"],
+    ["a block with a punctuated end tag", "<script>a</script!>b</script>Hi"],
+    ["a style block with a lookalike end tag", "<style>a</style:x>b</style>Hi"],
+  ])("drops script and style content in %s", (_, html) => {
+    expect(renderToString(<Text html={html} />)).toBe("<p>Hi</p>");
+  });
+
+  it("keeps text inside custom elements named like script or style", () => {
+    expect(
+      renderToString(<Text html="<style-guide>Region info</style-guide>" />),
+    ).toBe("<p>Region info</p>");
+  });
+
+  it("doesn't join the text around a removed block into a new tag", () => {
+    expect(
+      renderToString(
+        <Text html="<scr<script></script>ipt>alert(1)</script>Hi" />,
+      ),
+    ).toBe("<p>alert(1)Hi</p>");
+  });
+
+  it("strips deeply spliced blocks without a pass per nesting level", () => {
+    // Without the block stand-in, remove-until-stable needs a pass per level.
+    const n = 100_000;
+    const html = `${"<scr".repeat(n)}<script></script>${"ipt></script>".repeat(n)}Hi`;
+
+    const rendered = renderToString(<Text html={html} />);
+
+    expect(rendered).toBe(`<p>${"ipt&gt;".repeat(n - 1)}Hi</p>`);
+  });
 });

@@ -41,14 +41,41 @@ const decodeEntity = (entity: string, body: string): string => {
   return NAMED_ENTITIES[body.toLowerCase()] ?? entity;
 };
 
-const stripHtml = (value: string): string =>
-  value
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
+// A tag name ends at HTML whitespace, `/` or `>`, so `</script >` and
+// `</script x>` close the element but `</script-x>` and `<style-guide>` don't.
+const SCRIPT_BLOCK =
+  /<script(?=[\t\n\f\r />])[^>]*>[\s\S]*?<\/script(?=[\t\n\f\r />])[^>]*>/gi;
+const STYLE_BLOCK =
+  /<style(?=[\t\n\f\r />])[^>]*>[\s\S]*?<\/style(?=[\t\n\f\r />])[^>]*>/gi;
+const ANY_TAG = /<[^>]*>/g;
+// Stands in for a removed block so the text on either side can't join into a
+// new tag (`<scr<script></script>ipt>`); dropped once tags are stripped.
+const BLOCK_GAP = "\u0000";
+
+/**
+ * Plain text of `value`. The loops stop on their second pass: a block's
+ * stand-in can't be part of a tag name, and removing a whole tag can't join
+ * its neighbours into another. A single regex pass can still rescan text.
+ */
+const stripHtml = (value: string): string => {
+  let text = value;
+  let previous: string;
+  do {
+    previous = text;
+    text = text
+      .replace(SCRIPT_BLOCK, BLOCK_GAP)
+      .replace(STYLE_BLOCK, BLOCK_GAP);
+  } while (text !== previous);
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  do {
+    previous = text;
+    text = text.replace(ANY_TAG, "");
+  } while (text !== previous);
+  return text
+    .replaceAll(BLOCK_GAP, "")
     .replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, decodeEntity)
     .trim();
+};
 
 /** Plain-text rendering of `html`; what the server (no DOMParser) shows. */
 const htmlToPlainText = (html: string | null | undefined): string =>
