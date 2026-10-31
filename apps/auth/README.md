@@ -380,6 +380,13 @@ GET /.well-known/openid-configuration
 | `/register`           | New user registration form. Collects First Name, Last Name, F3 Name, Home Region (searchable dropdown), Phone, Emergency Contact info. |
 | `/onboarding`         | Profile completion form (F3 Name, First Name, Last Name). For legacy users who haven't completed onboarding.                           |
 
+After registration and sign-in succeed, the form keeps submission disabled until
+navigation unmounts it, preventing another registration request while the next
+page loads. Failures before account creation is confirmed remain retryable;
+after confirmed creation, a sign-in failure or a thrown navigation call offers
+**Sign in again** instead of submitting registration again. This behavior applies
+to both auth backends.
+
 All pages use Tailwind CSS with HSL CSS variables (light mode, F3 Nation color scheme: cream background, white cards, F3 red primary).
 
 ---

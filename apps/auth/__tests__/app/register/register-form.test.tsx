@@ -9,6 +9,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 
 import RegisterForm from "~/app/register/register-form";
 
@@ -79,6 +81,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -86,6 +89,117 @@ afterEach(() => {
 // Each test renders the full form; on a loaded CI runner the slowest ones
 // exceed the 5s default.
 describe("registration", { timeout: 20_000 }, () => {
+  it("restores a matching draft when the email changes without resetting the selected country", async () => {
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(<RegisterForm useBetterAuth={false} />);
+    });
+    const country = view.container.querySelector("#phoneCountry")!;
+    fireEvent.change(country, { target: { value: "CA" } });
+    const nextEmail = "returning-pax@example.test";
+    sessionStorage.setItem(
+      "f3-register-draft",
+      JSON.stringify({
+        email: nextEmail,
+        f3Name: "Returning Runner",
+        firstName: "Returning",
+        lastName: "PAX",
+        homeRegionId: 2,
+        regionSearch: "Test South",
+      }),
+    );
+    searchParams.set("email", nextEmail);
+    await act(async () =>
+      view.rerender(<RegisterForm useBetterAuth={false} />),
+    );
+    expect(screen.getByLabelText(/First Name/)).toHaveProperty(
+      "value",
+      "Returning",
+    );
+    expect(screen.getByLabelText("F3 Name")).toHaveProperty(
+      "value",
+      "Returning Runner",
+    );
+    expect(screen.getByLabelText("Home Region")).toHaveProperty(
+      "value",
+      "Test South",
+    );
+    expect(country).toHaveProperty("value", "CA");
+  });
+
+  it("hydrates browser defaults without replacing edits on rerender", async () => {
+    vi.spyOn(navigator, "language", "get").mockReturnValue("en-GB");
+    sessionStorage.setItem(
+      "f3-register-draft",
+      JSON.stringify({
+        email,
+        f3Name: "Saved Runner",
+        firstName: "Saved",
+        lastName: "PAX",
+        homeRegionId: 2,
+        regionSearch: "Test South",
+      }),
+    );
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(
+      <RegisterForm useBetterAuth={false} />,
+    );
+    expect(container.querySelector<HTMLInputElement>("#firstName")?.value).toBe(
+      "",
+    );
+    expect(
+      container.querySelector<HTMLSelectElement>("#phoneCountry")?.value,
+    ).toBe("US");
+    document.body.append(container);
+    const recoverableError = vi.fn();
+    let root!: ReturnType<typeof hydrateRoot>;
+    try {
+      await act(async () => {
+        root = hydrateRoot(container, <RegisterForm useBetterAuth={false} />, {
+          onRecoverableError: recoverableError,
+        });
+      });
+      expect(screen.getByLabelText(/First Name/)).toHaveProperty(
+        "value",
+        "Saved",
+      );
+      expect(screen.getByLabelText("Home Region")).toHaveProperty(
+        "value",
+        "Test South",
+      );
+      expect(container.querySelector("#phoneCountry")).toHaveProperty(
+        "value",
+        "GB",
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: /Emergency Contact Info/ }),
+      );
+      expect(container.querySelector("#emergencyPhoneCountry")).toHaveProperty(
+        "value",
+        "GB",
+      );
+      change(/First Name/, "Edited");
+      fireEvent.change(container.querySelector("#phoneCountry")!, {
+        target: { value: "CA" },
+      });
+      await act(async () =>
+        root.render(<RegisterForm useBetterAuth={false} />),
+      );
+      expect(screen.getByLabelText(/First Name/)).toHaveProperty(
+        "value",
+        "Edited",
+      );
+      expect(container.querySelector("#phoneCountry")).toHaveProperty(
+        "value",
+        "CA",
+      );
+      expect(recoverableError).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
   it.each([false, true])(
     "creates the account before signing in (Better Auth: %s)",
     async (useBetterAuth) => {
@@ -169,6 +283,62 @@ describe("registration", { timeout: 20_000 }, () => {
         resolveSignIn({ error: null });
       });
       expect(router.push).toHaveBeenCalledExactlyOnceWith(callback);
+    },
+  );
+
+  describe.each([false, true])(
+    "successful navigation (Better Auth: %s)",
+    (useBetterAuth) => {
+      it.each(["click", "requestSubmit"])(
+        "ignores another %s while the completed form remains mounted",
+        async (method) => {
+          await fillForm(useBetterAuth);
+          const button = screen.getByRole("button", { name: "Create Account" });
+          await act(async () => submit());
+
+          expect(router.push).toHaveBeenCalledExactlyOnceWith(callback);
+          await act(async () => {
+            if (method === "click") fireEvent.click(button);
+            else registrationForm().requestSubmit();
+          });
+
+          expect(
+            fetchMock.mock.calls.filter(([url]) => url === "/api/register"),
+          ).toHaveLength(1);
+          expect(useBetterAuth ? emailOtp : signIn).toHaveBeenCalledTimes(1);
+          expect(router.push).toHaveBeenCalledExactlyOnceWith(callback);
+          expect(button).toHaveProperty("disabled", true);
+        },
+      );
+    },
+  );
+
+  it.each([false, true])(
+    "offers sign-in recovery if navigation throws after account creation (Better Auth: %s)",
+    async (useBetterAuth) => {
+      await fillForm(useBetterAuth);
+      router.push.mockImplementationOnce(() => {
+        throw new Error("Navigation failed");
+      });
+      await act(async () => submit());
+
+      expect(screen.getByText(/Your account was created/)).toBeDefined();
+      expect(
+        screen.getByRole("button", { name: "Create Account" }),
+      ).toHaveProperty("disabled", true);
+      expect(
+        screen.queryByRole("button", { name: "Creating Account..." }),
+      ).toBeNull();
+      await act(async () => registrationForm().requestSubmit());
+      expect(
+        fetchMock.mock.calls.filter(([url]) => url === "/api/register"),
+      ).toHaveLength(1);
+      expect(useBetterAuth ? emailOtp : signIn).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+      expect(router.push).toHaveBeenLastCalledWith(
+        `/login/email?callbackUrl=${encodeURIComponent(callback)}`,
+      );
     },
   );
 
