@@ -356,8 +356,8 @@ jobs:
   # Two-tier E2E model (F3-59/F3-60, docs/E2E_TIERS.md):
   #   - e2e-blocking: small, must-never-break suite. Red means no merge.
   #   - e2e-advisory: everything else. Runs and reports, never blocks
-  #     (continue-on-error at the job level); failures are triage input
-  #     (F3-61 auto-triage will consume them).
+  #     (continue-on-error at the job level); failures are triage input,
+  #     reviewed by hand (docs/E2E_TIERS.md).
   e2e-blocking:
     # Blocking-tier Playwright suite (F3-59) against the freshly deployed
     # preview environment. Same gating as deploy: PRs from this repo carrying

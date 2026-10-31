@@ -19,18 +19,23 @@ review, without a hosted pipeline or a separate API bill.
 
   ```sh
   gh api repos/F3-Nation/f3-nation/pulls/<number>/comments --paginate \
-    --jq '.[] | {id, in_reply_to_id, user: .user.login, path, line, body: .body[:600]}'
+    --jq '.[] | {id, in_reply_to_id, user: .user.login, path, line, body: (.body[:600] + (if (.body | length) > 600 then " [TRUNCATED]" else "" end))}'
   ```
 
-Read the surrounding code for any hunk you are unsure about. A finding about code
-you have not read is a guess.
+  Before dropping a finding as answered, read the full text of any
+  `[TRUNCATED]` reply (`gh api repos/F3-Nation/f3-nation/pulls/comments/<id>`).
+
+Read the surrounding code for any hunk you are unsure about. Don't report a
+finding about code you haven't opened and read: the diff alone often hides the
+guard or caller that makes it a non-issue.
 
 ## Pass 1: the code
 
-Find defects the diff introduces:
+Find defects the diff introduces. The kinds below are common examples, not a
+complete list:
 
 - **Logic bugs**: inverted conditions, off-by-one errors, wrong operators,
-  unhandled null/undefined, broken control flow, missing `await`.
+  unhandled null/undefined, broken control flow, missing `await`, etc.
 - **Injection and validation gaps**: unvalidated input reaching SQL, shell, HTML,
   URLs or file paths; loosened zod/schema validation; mutations without an
   authorization check.
@@ -41,8 +46,8 @@ Find defects the diff introduces:
 
 ## Pass 2: the specs
 
-If the diff touches `apps/map`, `apps/admin`, `apps/api` or `packages/api`, read
-the matching files in `specs/` and check the diff against them:
+Read the files in `docs/specs/` that cover the code the diff touches, and check
+the diff against them:
 
 - **Acceptance criteria** the change breaks or removes.
 - **Never-do rules** in the specs or `docs/AI_GUARDRAILS.md` the change violates.
