@@ -171,6 +171,12 @@ describe("server text decoding", () => {
     );
   });
 
+  it("keeps a whole emoji that ends at the cut, and the emoji before it", () => {
+    expect(renderToString(<Text html={`💪${"a".repeat(9_995)}💪💪`} />)).toBe(
+      `<p>💪${"a".repeat(9_995)}💪…</p>`,
+    );
+  });
+
   it("hydrates cut text without errors, then shows the full text", async () => {
     // Escaped characters before the cut, an emoji straddling it.
     const html = `${"&lt;".repeat(5_000)}${"a".repeat(4_998)}💪 and more`;

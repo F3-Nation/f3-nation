@@ -53,9 +53,9 @@ const stripHtml = (value: string): string =>
 /**
  * Longest plain text the server and the hydration pass render. A very long
  * text node can reach the browser split into several nodes, and hydration then
- * fails because React compares only the first one. At this length the text
- * stays under 64 KiB of HTML even if React escapes every character to a
- * six-byte entity such as `&quot;`.
+ * fails because React matches the string against only the first one. This cap
+ * keeps the text far below 65,536 characters, and below 64 KiB of HTML even
+ * if React escapes every character to a six-byte entity such as `&quot;`.
  */
 const MAX_PLAIN_TEXT_LENGTH = 10_000;
 
