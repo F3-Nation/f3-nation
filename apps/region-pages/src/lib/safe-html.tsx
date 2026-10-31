@@ -43,10 +43,12 @@ const decodeEntity = (entity: string, body: string): string => {
 
 // A tag name ends at HTML whitespace, `/` or `>`, so `</script >` and
 // `</script x>` close the element but `</script-x>` and `<style-guide>` don't.
+// A quoted attribute value can hold `>`, so the tag ends at the first `>`
+// outside quotes (`<script data-x="</script>">`).
 const SCRIPT_BLOCK =
-  /<script(?=[\t\n\f\r />])[^>]*>[\s\S]*?<\/script(?=[\t\n\f\r />])[^>]*>/gi;
+  /<script(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?<\/script(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
 const STYLE_BLOCK =
-  /<style(?=[\t\n\f\r />])[^>]*>[\s\S]*?<\/style(?=[\t\n\f\r />])[^>]*>/gi;
+  /<style(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>[\s\S]*?<\/style(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
 const ANY_TAG = /<[^>]*>/g;
 // Stands in for a removed block so the text on either side can't join into a
 // new tag (`<scr<script></script>ipt>`); dropped once tags are stripped.

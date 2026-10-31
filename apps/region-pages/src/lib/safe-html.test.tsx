@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
-import { sanitizeHtmlToReactNodes, useSanitizedHtml } from "@/lib/safe-html";
+import {
+  hasVisibleContent,
+  sanitizeHtmlToReactNodes,
+  useSanitizedHtml,
+} from "@/lib/safe-html";
 
 const renderHtml = (html: string | null | undefined) =>
   render(<>{sanitizeHtmlToReactNodes(html)}</>);
@@ -165,6 +169,16 @@ describe("server text decoding", () => {
     expect(
       renderToString(<Text html="<style-guide>Region info</style-guide>" />),
     ).toBe("<p>Region info</p>");
+    expect(
+      renderToString(<Text html="<script-x>Region</script-x> info</script>" />),
+    ).toBe("<p>Region info</p>");
+  });
+
+  it("ignores an end tag inside a quoted attribute", () => {
+    const html = `<script data-x="> </script >">alert(1)</script>`;
+
+    expect(renderToString(<Text html={html} />)).toBe("<p></p>");
+    expect(hasVisibleContent(html)).toBe(false);
   });
 
   it("doesn't join the text around a removed block into a new tag", () => {
