@@ -14,7 +14,10 @@ interface RoleInput {
   roleName: UserRole;
 }
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import {
+  checkHasRoleOnAllOrgs,
+  checkHasRoleOnOrg,
+} from "../check-has-role-on-org";
 import { getDescendantOrgIds } from "../get-descendant-org-ids";
 import { logDebug, logError, logWarn } from "../logger";
 import {
@@ -84,7 +87,7 @@ export const userRouter = {
       // Always set to false by default
       let includePii = false;
 
-      if (input?.includePii) {
+      if (input.includePii) {
         const [nation] = await ctx.db
           .select({ id: schema.orgs.id })
           .from(schema.orgs)
@@ -133,7 +136,7 @@ export const userRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      if (!input?.orgIds || input.orgIds.length === 0) {
+      if (!input.orgIds || input.orgIds.length === 0) {
         throw new ORPCError("BAD_REQUEST", {
           message: "At least one orgId is required",
         });
@@ -152,22 +155,15 @@ export const userRouter = {
       // Always set to false by default
       let includePii = false;
 
-      if (input?.includePii) {
-        includePii = true;
+      if (input.includePii) {
         // Check if user is an admin for all of the specified parent orgs
         // (not all descendants, just the ones they requested)
-        for (const orgId of input.orgIds) {
-          const { success } = await checkHasRoleOnOrg({
-            orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "admin",
-          });
-          if (!success) {
-            includePii = false;
-            break;
-          }
-        }
+        includePii = await checkHasRoleOnAllOrgs({
+          session: ctx.session,
+          db: ctx.db,
+          orgIds: input.orgIds,
+          roleName: "admin",
+        });
       }
 
       // Update input to use all descendant org IDs
@@ -210,7 +206,7 @@ export const userRouter = {
       }),
     )
     .handler(async ({ context: ctx, input }) => {
-      const includePii = input?.includePii
+      const includePii = input.includePii
         ? await checkUserPiiAccess({ ctx, userId: input.id })
         : false;
 
@@ -251,7 +247,7 @@ export const userRouter = {
     .handler(async ({ context: ctx, input }) => {
       const normalizedEmail = normalizeEmail(input.email);
       let includePii = false;
-      if (input?.includePii) {
+      if (input.includePii) {
         // First, get the user to check their orgs
         const [user] = await ctx.db
           .select({ id: schema.users.id })
@@ -419,6 +415,7 @@ export const userRouter = {
       if (existingUser) {
         const changedKeys = Object.entries(rest)
           .filter(([key, value]) => {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Object.entries drops undefined from optional props
             if (key === "id" || value === undefined) return false;
             if (PII_FIELDS.has(key) && value === "") return false;
             if (key === "email" && typeof value === "string") {
@@ -458,9 +455,7 @@ export const userRouter = {
       const dbRoles = await ctx.db.select().from(schema.roles);
       const roleNameToId = dbRoles.reduce(
         (acc, role) => {
-          if (role.name) {
-            acc[role.name] = role.id;
-          }
+          acc[role.name] = role.id;
           return acc;
         },
         {} as Record<string, number>,
@@ -515,10 +510,15 @@ export const userRouter = {
       }
 
       const requireAdminOn = async (orgIds: number[], message: string) => {
-        for (const orgId of orgIds) {
-          if (!(await hasRoleOnAny(ctx, [orgId], "admin"))) {
-            throw new ORPCError("UNAUTHORIZED", { message });
-          }
+        if (
+          !(await checkHasRoleOnAllOrgs({
+            session: ctx.session,
+            db: ctx.db,
+            orgIds,
+            roleName: "admin",
+          }))
+        ) {
+          throw new ORPCError("UNAUTHORIZED", { message });
         }
       };
       await requireAdminOn(

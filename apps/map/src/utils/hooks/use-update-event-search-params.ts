@@ -24,7 +24,7 @@ export const useUpdateEventSearchParams = (
     lastLocationId.current = locationId;
     lastEventId.current = eventId;
 
-    const params = new URLSearchParams(searchParams?.toString());
+    const params = new URLSearchParams(searchParams.toString());
 
     // Set the map position parameters
     if (eventId != null) {

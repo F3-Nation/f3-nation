@@ -10,7 +10,7 @@
  */
 
 import { vi } from "vitest";
-import type { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import type { checkHasRolesOnOrgs } from "../check-has-role-on-org";
 import { waitForRegionNotificationTasks } from "./request";
 
 // Use vi.hoisted to ensure mockLimit is available when vi.mock runs (mocks are hoisted)
@@ -42,17 +42,21 @@ vi.mock("../lib/first-event-service", () => ({
 
 vi.mock("../check-has-role-on-org", async (importOriginal) => {
   const original = await importOriginal<{
-    checkHasRoleOnOrg: typeof checkHasRoleOnOrg;
+    checkHasRolesOnOrgs: typeof checkHasRolesOnOrgs;
   }>();
   return {
     ...original,
-    checkHasRoleOnOrg: async (
-      params: Parameters<typeof original.checkHasRoleOnOrg>[0],
+    // checkUpdatePermissions (used by validateSubmissionByAdmin) resolves its
+    // orgs through the batched check, so the forced-success override lives here.
+    checkHasRolesOnOrgs: async (
+      params: Parameters<typeof original.checkHasRolesOnOrgs>[0],
     ) => {
-      const result = await original.checkHasRoleOnOrg(params);
-      return params.orgId === mockPermissionOrgId.value
-        ? { ...result, success: true }
-        : result;
+      const results = await original.checkHasRolesOnOrgs(params);
+      return results.map((result, i) =>
+        params.checks[i]?.orgId === mockPermissionOrgId.value
+          ? { ...result, success: true }
+          : result,
+      );
     },
   };
 });
@@ -573,7 +577,6 @@ describe("Request Router", () => {
     it("should check multiple orgs at once", async () => {
       const region1 = await createTestRegion();
       const region2 = await createTestRegion();
-      if (!region1 || !region2) return;
 
       // Only has permission on region1
       const session = createEditorSession({
@@ -992,7 +995,7 @@ describe("Request Router", () => {
           locationZip: "28607",
           locationCountry: "United States",
         });
-      createdRequestIds.push(result.updateRequest.id ?? "");
+      createdRequestIds.push(result.updateRequest.id);
 
       expect(result.status).toBe("approved");
       await vi.waitFor(() =>
@@ -1008,7 +1011,7 @@ describe("Request Router", () => {
       const [savedRequest] = await db
         .select()
         .from(schema.updateRequests)
-        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+        .where(eq(schema.updateRequests.id, result.updateRequest.id));
       expect(savedRequest?.aoId).toBeTruthy();
       expect(savedRequest?.locationId).toBeTruthy();
       expect(savedRequest?.eventId).toBeTruthy();
@@ -1067,7 +1070,7 @@ describe("Request Router", () => {
         newAoId: destinationAo.id,
         newLocationId: destinationLocation.id,
       });
-      createdRequestIds.push(result.updateRequest.id ?? "");
+      createdRequestIds.push(result.updateRequest.id);
 
       expect(result.status).toBe("approved");
       await vi.waitFor(() =>
@@ -1118,7 +1121,7 @@ describe("Request Router", () => {
           newAoId: destinationAo.id,
           newLocationId: destinationLocation.id,
         });
-      createdRequestIds.push(result.updateRequest.id ?? "");
+      createdRequestIds.push(result.updateRequest.id);
       expect(result.status).toBe("approved");
       await notificationStartedPromise;
 
@@ -1263,14 +1266,14 @@ describe("Request Router", () => {
         // the backend to hydrate it from the destination AO's default
         // location instead.
       });
-      createdRequestIds.push(result.updateRequest.id ?? "");
+      createdRequestIds.push(result.updateRequest.id);
 
       expect(result.status).toBe("approved");
 
       const [savedRequest] = await db
         .select()
         .from(schema.updateRequests)
-        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+        .where(eq(schema.updateRequests.id, result.updateRequest.id));
 
       expect(savedRequest?.aoId).toBe(destinationAo.id);
       expect(savedRequest?.aoName).toBe(destinationAo.name);
@@ -1342,14 +1345,14 @@ describe("Request Router", () => {
         locationZip: "28601",
         locationCountry: "United States",
       });
-      createdRequestIds.push(result.updateRequest.id ?? "");
+      createdRequestIds.push(result.updateRequest.id);
 
       expect(result.status).toBe("approved");
 
       const [savedRequest] = await db
         .select()
         .from(schema.updateRequests)
-        .where(eq(schema.updateRequests.id, result.updateRequest.id ?? ""));
+        .where(eq(schema.updateRequests.id, result.updateRequest.id));
       if (savedRequest?.locationId) {
         createdLocationIds.push(savedRequest.locationId);
       }
@@ -1462,7 +1465,7 @@ describe("Request Router", () => {
         orgName: region.name,
         roleName: "editor",
       });
-      session.user?.roles?.push({
+      session.user?.roles.push({
         orgId: region.id,
         orgName: region.name,
         roleName: "editor",
@@ -2343,7 +2346,7 @@ describe("Request Router", () => {
         orgName: target.name,
         roleName: "editor",
       });
-      session.user?.roles?.push({
+      session.user?.roles.push({
         orgId: target.id,
         orgName: target.name,
         roleName: "editor",
@@ -2474,7 +2477,7 @@ describe("Request Router", () => {
         orgName: region.name,
         roleName: "editor",
       });
-      session.user?.roles?.push({
+      session.user?.roles.push({
         orgId: region.id,
         orgName: region.name,
         roleName: "editor",
@@ -2514,10 +2517,8 @@ describe("Request Router", () => {
       // Two DISTINCT locations in the source region, one event on each.
       const locA = await createTestLocation(source.id);
       const locB = await createTestLocation(source.id);
-      if (!locA || !locB) return;
       const eventA = await createTestEvent(ao.id, locA.id);
       const eventB = await createTestEvent(ao.id, locB.id);
-      if (!eventA || !eventB) return;
 
       const requestId = crypto.randomUUID();
       await insertPendingRequest({

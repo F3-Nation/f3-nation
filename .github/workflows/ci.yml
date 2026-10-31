@@ -29,6 +29,7 @@ env:
   # API (mocks)
   API_KEY: ci-api-key-placeholder
   SUPER_ADMIN_API_KEY: ci-super-admin-key-placeholder
+  PROXY_CLIENT_IP_SECRET: ci-proxy-client-ip-secret-placeholder
   # Next.js (mocks)
   NEXT_PUBLIC_API_URL: http://localhost:3001
   NEXT_PUBLIC_MAP_URL: http://localhost:3000
@@ -527,11 +528,10 @@ jobs:
         if: failure()
         run: cat /tmp/bundle.log || true
 
-  # Builds each app's deploy image the same way the release pipeline does
-  # (turbo prune -> frozen install -> turbo build). The `build` job above is
-  # affected-scoped on PRs; it cannot catch breakage that is specific to the
-  # pruned Docker context (e.g. catalog mismatches or deps that resolve
-  # transitively in the workspace install but not under the isolated linker).
+  # Builds release Dockerfiles to catch container-specific failures that the
+  # affected-scoped workspace build cannot: pruned Node dependencies, Python
+  # dependencies installed by uv, and the Slackbot scripts image's system
+  # packages and Playwright/Chromium installation.
   # This surfaces those at PR time instead of at release. No image push —
   # building the image is the validation. PRs import the per-app GHCR layer
   # cache read-only; docker-cache-refresh updates it only from main.
@@ -544,7 +544,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [admin, analytics, api, auth, map, me, slackbot]
+        include:
+          - app: admin
+            dockerfile: apps/admin/Dockerfile
+          - app: analytics
+            dockerfile: apps/analytics/Dockerfile
+          - app: api
+            dockerfile: apps/api/Dockerfile
+          - app: auth
+            dockerfile: apps/auth/Dockerfile
+          - app: map
+            dockerfile: apps/map/Dockerfile
+          - app: me
+            dockerfile: apps/me/Dockerfile
+          - app: region-pages
+            dockerfile: apps/region-pages/Dockerfile
+          - app: slackbot
+            dockerfile: apps/slackbot/Dockerfile
+          - app: slackbot-scripts
+            dockerfile: apps/slackbot/scripts/Dockerfile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -555,9 +573,9 @@ jobs:
         env:
           APP: ${{ matrix.app }}
         run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
           repository_name="${GITHUB_REPOSITORY#*/}"
-          repository_name="${repository_name,,}"
+          repository_name="$(printf '%s' "$repository_name" | tr '[:upper:]' '[:lower:]')"
           echo "ref=ghcr.io/${owner}/${repository_name}-ci-cache-${APP}" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         id: login
@@ -576,7 +594,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           # Cloud Run only runs linux/amd64. The Dockerfile FROM lines no longer
           # pin --platform (BuildKit lint), so the target arch is set here.
           platforms: linux/amd64
@@ -592,7 +610,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
       # A cache import failure must not prevent an otherwise valid image build.
@@ -601,7 +619,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
 
@@ -618,7 +636,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [admin, api, auth, map, me, slackbot]
+        include:
+          - app: admin
+            dockerfile: apps/admin/Dockerfile
+          - app: api
+            dockerfile: apps/api/Dockerfile
+          - app: auth
+            dockerfile: apps/auth/Dockerfile
+          - app: map
+            dockerfile: apps/map/Dockerfile
+          - app: me
+            dockerfile: apps/me/Dockerfile
+          - app: region-pages
+            dockerfile: apps/region-pages/Dockerfile
+          - app: slackbot
+            dockerfile: apps/slackbot/Dockerfile
+          - app: slackbot-scripts
+            dockerfile: apps/slackbot/scripts/Dockerfile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -629,9 +663,9 @@ jobs:
         env:
           APP: ${{ matrix.app }}
         run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
           repository_name="${GITHUB_REPOSITORY#*/}"
-          repository_name="${repository_name,,}"
+          repository_name="$(printf '%s' "$repository_name" | tr '[:upper:]' '[:lower:]')"
           echo "ref=ghcr.io/${owner}/${repository_name}-ci-cache-${APP}" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         id: login
@@ -650,7 +684,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
           cache-from: type=registry,ref=${{ steps.cache.outputs.ref }}
@@ -662,7 +696,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
       # A cached build or export failure must not prevent image validation.
@@ -676,7 +710,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
           cache-to: type=registry,ref=${{ steps.cache.outputs.ref }},mode=max,oci-mediatypes=true,image-manifest=true
@@ -688,6 +722,6 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/${{ matrix.app }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false

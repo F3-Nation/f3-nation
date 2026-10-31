@@ -98,8 +98,10 @@ async function placesAutocomplete({
       throw new Error(`Places Autocomplete API error: ${response.status}`);
     }
 
-    const results = ((await response.json()) as { suggestions: PlaceResult[] })
-      .suggestions;
+    // The API omits `suggestions` when nothing matches.
+    const results =
+      ((await response.json()) as { suggestions?: PlaceResult[] })
+        .suggestions ?? [];
 
     // Cache the results
     autocompleteCache.set(cacheKey, {

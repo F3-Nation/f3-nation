@@ -39,6 +39,9 @@ export async function sessionCookie(
       email: opts.email ?? "char-cookie@example.com",
       name: opts.name ?? "Char Cookie User",
       roles: opts.roles ?? [],
+      // A current token: its roles came from sign-in. Without the marker the
+      // jwt callback re-reads roles from the database (packages/auth config).
+      rolesVersion: 1,
     },
   });
 

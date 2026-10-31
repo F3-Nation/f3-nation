@@ -17,6 +17,7 @@ set -euo pipefail
 # Requires:
 #   - gcloud CLI authenticated (`gcloud auth login`)
 #   - apps/map/.env.cloud-run.prod / apps/map/.env.cloud-run.staging populated
+#   - F3_CHANNEL and NEXT_PUBLIC_CHANNEL in the env file must match --env exactly
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -40,6 +41,7 @@ declare -A SECRET_MAP=(
   [EMAIL_SERVER]="EMAIL_SERVER"
   [F3_GOOGLE_API_KEY]="F3_GOOGLE_API_KEY"
   [NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED]="NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED"
+  [PROXY_CLIENT_IP_SECRET]="PROXY_CLIENT_IP_SECRET"
   [SUPER_ADMIN_API_KEY]="SUPER_ADMIN_API_KEY"
   [TEST_DATABASE_URL]="TEST_DATABASE_URL"
 )
@@ -103,10 +105,29 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Source the env file.
+# This operator-owned file is trusted shell code: sourcing can execute commands
+# and change script variables. The guard below validates only its channels.
+# Require both channels from the file, rather than inheriting the shell's values.
+unset F3_CHANNEL NEXT_PUBLIC_CHANNEL PROXY_CLIENT_IP_SECRET
 set -a
 source "$ENV_FILE"
 set +a
+
+for channel_var in F3_CHANNEL NEXT_PUBLIC_CHANNEL; do
+  if [[ "${!channel_var:-}" != "$ENV_NAME" ]]; then
+    echo "Error: $channel_var in $ENV_FILE must be '$ENV_NAME' for --env $ENV_NAME." >&2
+    exit 1
+  fi
+done
+
+# The API trusts the client IP the map and admin proxies report only with this
+# secret, so all three services need the same value.
+proxy_secret="${PROXY_CLIENT_IP_SECRET:-}"
+if [[ ${#proxy_secret} -lt 32 ]]; then
+  echo "Error: PROXY_CLIENT_IP_SECRET in $ENV_FILE must be at least 32 characters." >&2
+  echo "Use the same value in the api, map and admin env files." >&2
+  exit 1
+fi
 
 echo "Environment:  $ENV_NAME"
 echo "GCP Project:  $PROJECT"

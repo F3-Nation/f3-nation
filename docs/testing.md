@@ -17,6 +17,49 @@ Use Vitest for unit and integration tests. Name test files `*.test.ts[x]` and
 place them next to the source or under `__tests__`. Reset databases before any
 suite that mutates data (`pnpm reset-test-db`).
 
+## Writing tests that can fail
+
+A test exists to fail when the behavior it pins breaks. If it would still pass
+with the fix or guard line deleted, it isn't doing its job.
+
+- Assert values, identity and persisted DB state, not `200`, `toBeDefined()` or
+  `toHaveBeenCalled()`. Assert call content (SQL, params, payload).
+- Assert the specific error code (`rejects.toMatchObject({ code })`), never a
+  bare `rejects.toThrow()`, and after a rejection assert the DB is unchanged.
+- Cover both sides of every guard: allowed and denied, source and destination
+  org, wrong and missing claim, each boundary value. Authorization tests include
+  a cross-org case (editor on org A, rejected on org B).
+- Anonymous paths really run signed out. In `packages/api` tests the default
+  session is an admin; use `mockAuthWithSession(null)`.
+- Don't build the expected value from the code under test, mock the unit under
+  test, or use stubs that ignore `where()` (they can't verify a filter).
+- Order and tiebreak tests use fixtures whose insertion order differs from the
+  expected order, across more than one page.
+- Test schema-facing code against the real Drizzle schema and DB, not a mocked
+  parser.
+
+### Isolation and flakiness
+
+- Never `if (!fixture) return`; throw or assert instead.
+- DB-backed tests isolate data with unique per-test prefixes and clean up in
+  `finally`, `afterEach` or `onTestFinished`, registering each fixture for
+  cleanup as soon as it's created.
+- Generate dates relative to now or from the DB clock, and freeze time for
+  midnight and timezone cases.
+- Use `vi.hoisted` for anything a `vi.mock` factory references. Restore stubs
+  (`vi.unstubAllGlobals`, `vi.unstubAllEnvs`, `vi.restoreAllMocks`) in
+  `afterEach`, and prefer `resetAllMocks` to `clearAllMocks` when
+  implementations are set. `resetAllMocks` also clears defaults a `vi.mock`
+  factory set with `mockResolvedValue` (`packages/api`'s admin session), so
+  re-apply them in `beforeEach`.
+- Create a fresh `Response` per mocked `fetch` call; a body can be read once.
+- Wait on a deterministic signal for fire-and-forget work, never a fixed sleep,
+  and leave wall-clock budgets room for a loaded CI runner.
+- Env-schema tests run in the `node` environment (`// @vitest-environment node`
+  in jsdom apps); under jsdom they pass vacuously.
+- Use the shared `coverageInclude` / `coverageExclude` from
+  `@acme/vitest-config`, not per-file allowlists.
+
 ## Coverage measurement (Vitest 4)
 
 Vitest 4's v8 coverage provider removed the `coverage.all` option and, by
@@ -118,6 +161,33 @@ see use `target.sharesDatabase` instead: CI's bundle leg sets
 `CHAR_TEST_SHARED_DB=1` because the booted bundle and the test process share
 `f3_test`, which lets it exercise `cascade-service`'s dynamic import. Staging
 leaves it unset and skips those cases.
+
+### The auth-provider live target
+
+`auth/provider-live.char.test.ts` points at the token **producer**, a deployed
+`apps/auth` (auth2 today, auth3 at the #876 cutover), rather than at apps/api.
+It is configured separately from `CHAR_TEST_TARGET`, and the whole file is
+skipped unless `CHAR_TEST_AUTH_ISSUER` is set, so default and CI runs skip it.
+Verify each relying party's cutover against it.
+
+| Variable                                                      | Enables                                                                                      |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `CHAR_TEST_AUTH_ISSUER`                                       | discovery, JWKS shape and location, token-endpoint errors, forged-token reject               |
+| `CHAR_TEST_AUTH_CLIENT_ID` + `CHAR_TEST_AUTH_CLIENT_SECRET`   | a `client_credentials` token (Better Auth only), verified and claim-checked                  |
+| `CHAR_TEST_AUTH_USER_TOKEN` + `CHAR_TEST_AUTH_USER_CLIENT_ID` | a user access token from a real sign-in, verified and claim-checked                          |
+| `CHAR_TEST_AUTH_PROVIDER_URL` (optional)                      | the relying parties' `AUTH_PROVIDER_URL` for the apps' call; defaults to the issuer's origin |
+
+`CHAR_TEST_AUTH_ISSUER` is the issuer exactly as tokens state it in `iss`: the
+origin for the hand-rolled server, `<origin>/api/auth2` for the Better Auth
+instance. A user token expires after an hour, so mint it just before the run.
+The file's header comment lists what it can't cover headlessly (the
+email-OTP sign-in itself, among others). Claim checks read the frozen lists in
+`auth/access-token-contract.ts`, which the in-process fixture test also pins.
+
+```bash
+CHAR_TEST_AUTH_ISSUER=https://auth2.example.com \
+  pnpm -C apps/api test:characterization auth/provider-live
+```
 
 ### Golden files are frozen
 

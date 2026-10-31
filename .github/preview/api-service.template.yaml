@@ -40,6 +40,8 @@ spec:
               value: local-api-key
             - name: SUPER_ADMIN_API_KEY
               value: preview-super-admin-key
+            - name: PROXY_CLIENT_IP_SECRET
+              value: ${PROXY_CLIENT_IP_SECRET}
             - name: LOG_LEVEL
               value: info
             - name: NEXT_PUBLIC_API_URL
@@ -50,7 +52,7 @@ spec:
             # JWTs against ${AUTH_URL}/.well-known/jwks.json (issuer check
             # included), which is how E2E carries a signed-in identity to the
             # api across run.app hosts. See docs/PREVIEW_AUTH.md.
-            - name: NEXT_PUBLIC_AUTH_URL
+            - name: AUTH_TRUSTED_ISSUERS
               value: ${AUTH_URL}
             - name: NEXT_PUBLIC_CHANNEL
               value: branch

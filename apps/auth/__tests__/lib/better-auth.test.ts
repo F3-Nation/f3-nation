@@ -1,16 +1,24 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
-import { decodeJwt, decodeProtectedHeader } from "jose";
+import { describe, expect, it, vi } from "vitest";
+import {
+  decodeJwt,
+  decodeProtectedHeader,
+  exportJWK,
+  generateKeyPair,
+} from "jose";
 import { getAuthTables } from "@better-auth/core/db";
-import { isAccessTokenPayload } from "@f3nation/sso";
+import { isAccessTokenPayload, verifyAccessToken } from "@f3nation/sso";
 
 import {
   allowProductionClientAction,
   buildBetterAuthOptions,
   createAuthInstance,
+  deleteBetterAuthOAuthTokens,
   memoryAdapter,
 } from "../../src/lib/better-auth";
+import * as logging from "../../src/lib/logging";
+import { findOnboardedProfile } from "./better-auth-fixture";
 import type {
   CreateAuthInstanceOptions,
   MemoryDB,
@@ -18,7 +26,10 @@ import type {
 
 const BASE_URL = "http://localhost:3999";
 const BASE_PATH = "/api/auth2";
-const ISSUER = `${BASE_URL}${BASE_PATH}`;
+// Better Auth's endpoints live under BASE_PATH, but tokens carry the bare
+// origin as iss, matching getAuth() and what relying parties expect.
+const ENDPOINT = `${BASE_URL}${BASE_PATH}`;
+const ISSUER = BASE_URL;
 const REDIRECT_URI = "https://phase3-client.example.com/callback";
 const PUBLIC_REDIRECT_URI = "com.f3nation.phase3test:/oauth2redirect";
 
@@ -44,7 +55,11 @@ function pkcePair() {
 // databaseHooks.user.create.before allow the sign-in through at all (see
 // apps/auth/src/lib/better-auth.ts's comment on why this can't be
 // emailOTP's own disableSignUp).
-function createTestAuth(f3UserId: number | null) {
+function createTestAuth(
+  f3UserId: number | null,
+  claimOtpAttempt: CreateAuthInstanceOptions["claimOtpAttempt"] = () =>
+    Promise.resolve(true),
+) {
   const memoryDb: MemoryDB = {};
   const options = {
     baseURL: BASE_URL,
@@ -54,7 +69,9 @@ function createTestAuth(f3UserId: number | null) {
     database: memoryAdapter(memoryDb),
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: () => Promise.resolve(f3UserId),
+    claimOtpAttempt,
     isNationAdmin: () => Promise.resolve(false),
+    findF3Profile: findOnboardedProfile,
     // Permissive — unlike production, these tests need to exercise client
     // creation directly. See "denies client creation..." below for
     // coverage of production's actual (stricter) policy.
@@ -85,8 +102,10 @@ function createMultiUserTestAuth(
     sendVerificationOTP: () => Promise.resolve(),
     findF3UserId: (email: string) =>
       Promise.resolve(emailToF3UserId[email] ?? null),
+    claimOtpAttempt: () => Promise.resolve(true),
     isNationAdmin: (f3UserId: number) =>
       Promise.resolve(adminF3UserIds.has(f3UserId)),
+    findF3Profile: findOnboardedProfile,
     allowClientAction: () => Promise.resolve(true),
   };
   const authOptions = buildBetterAuthOptions(options);
@@ -137,7 +156,7 @@ async function authorizeAndExchange(
   const authHeaders = { authorization: `Bearer ${params.sessionToken}` };
   const pkce = pkcePair();
 
-  const authorizeUrl = new URL(`${ISSUER}/oauth2/authorize`);
+  const authorizeUrl = new URL(`${ENDPOINT}/oauth2/authorize`);
   authorizeUrl.searchParams.set("response_type", "code");
   authorizeUrl.searchParams.set("client_id", params.clientId);
   authorizeUrl.searchParams.set("redirect_uri", params.redirectUri);
@@ -155,7 +174,7 @@ async function authorizeAndExchange(
   const oauthQuery = authorizeLocation!.split("?")[1]!;
 
   const consent = await auth.handler(
-    new Request(`${ISSUER}/oauth2/consent`, {
+    new Request(`${ENDPOINT}/oauth2/consent`, {
       method: "POST",
       headers: { ...authHeaders, "content-type": "application/json" },
       body: JSON.stringify({ accept: true, oauth_query: oauthQuery }),
@@ -185,7 +204,7 @@ async function authorizeAndExchange(
   }
 
   const tokenResponse = await auth.handler(
-    new Request(`${ISSUER}/oauth2/token`, {
+    new Request(`${ENDPOINT}/oauth2/token`, {
       method: "POST",
       headers: tokenHeaders,
       body: tokenParams.toString(),
@@ -238,12 +257,91 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
     // the real DB, is where sub becomes the real numeric-string id again").
     expect(payload.sub).toBe("4242");
     expect(payload.email).toBe(email);
+    // The bare origin on every token: relying parties compare iss to their
+    // auth URL, and the resource indicator sets aud.
+    expect(payload.iss).toBe(ISSUER);
+    expect([payload.aud].flat()).toContain(ISSUER);
     expect(typeof payload.client_id).toBe("string");
     expect(header.alg).toBe("RS256");
 
     // id_token issuance, matching apps/auth/src/lib/oauth.ts's
     // idTokenScopeOrNull gate (only issued when openid was granted).
     expect(tokenBody.id_token).toBeTruthy();
+    expect(decodeJwt(tokenBody.id_token!).iss).toBe(ISSUER);
+  });
+
+  it("issues access tokens a relying party verifies with keys from the origin-root JWKS", async () => {
+    const auth = createTestAuth(4243);
+    const sessionToken = await signInAndGetToken(
+      auth,
+      "phase3-rp-verify@f3nation.test",
+    );
+    const client = await auth.api.createOAuthClient({
+      headers: { authorization: `Bearer ${sessionToken}` },
+      body: {
+        redirect_uris: [REDIRECT_URI],
+        grant_types: ["authorization_code"],
+        response_types: ["code"],
+        application_type: "web",
+        scope: "openid profile email",
+      },
+    });
+    const tokenBody = await authorizeAndExchange(auth, {
+      sessionToken,
+      clientId: client.client_id,
+      clientSecret: client.client_secret,
+      redirectUri: REDIRECT_URI,
+      scope: "openid profile email",
+    });
+
+    // packages/sso fetches <origin>/.well-known/jwks.json, which with the
+    // flag on serves the hand-rolled f3-auth-1 key followed by Better Auth's
+    // (app/.well-known/jwks.json). Serve that same shape here.
+    const { publicKey } = await generateKeyPair("RS256");
+    const legacyKey = {
+      ...(await exportJWK(publicKey)),
+      alg: "RS256",
+      use: "sig",
+      kid: "f3-auth-1",
+    };
+    const jwks = { keys: [legacyKey, ...(await auth.api.getJwks()).keys] };
+    const jwksUrl = `${BASE_URL}/.well-known/jwks.json`;
+    const fetchMock = vi.fn((input: string | URL | Request) =>
+      Promise.resolve(
+        String(input instanceof Request ? input.url : input).endsWith(
+          "/.well-known/jwks.json",
+        )
+          ? Response.json(jwks)
+          : new Response(null, { status: 404 }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      // The same call admin and me make (allowClientIdClaimFallback=true).
+      const result = await verifyAccessToken(
+        tokenBody.access_token,
+        BASE_URL,
+        client.client_id,
+        true,
+      );
+      expect(result).toMatchObject({ ok: true });
+      // Proves the issuer check actually runs: the same token, a different
+      // auth URL, same keys.
+      const wrongIssuer = await verifyAccessToken(
+        tokenBody.access_token,
+        "https://other-auth.example.test",
+        client.client_id,
+        true,
+      );
+      expect(wrongIssuer).toMatchObject({ ok: false });
+      expect(
+        fetchMock.mock.calls.map(([input]) =>
+          String(input instanceof Request ? input.url : input),
+        ),
+      ).toContain(jwksUrl);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("issues a public/PKCE-only client's access token with no client_secret exchanged — the case the Phase 1 spike didn't cover", async () => {
@@ -321,7 +419,9 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       database: memoryAdapter(memoryDb),
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(false),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -371,7 +471,9 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       database: memoryAdapter(memoryDb),
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(f3UserId),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(false),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -430,7 +532,9 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: (email: string) =>
         Promise.resolve(email === "admin-m@f3nation.test" ? 701 : null),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(true),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: () => Promise.resolve(true),
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -492,7 +596,9 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       database: memoryAdapter(memoryDb),
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: () => Promise.resolve(701),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(true),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: allowProductionClientAction,
     };
     const authOptions = buildBetterAuthOptions(options);
@@ -531,7 +637,9 @@ describe("Better Auth instance (#876 Phase 3) — apps/auth/src/lib/better-auth.
       sendVerificationOTP: () => Promise.resolve(),
       findF3UserId: (email: string) =>
         Promise.resolve(emailToF3UserId[email] ?? null),
+      claimOtpAttempt: () => Promise.resolve(true),
       isNationAdmin: () => Promise.resolve(true),
+      findF3Profile: findOnboardedProfile,
       allowClientAction: (
         action: Parameters<CreateAuthInstanceOptions["allowClientAction"]>[0],
       ) => currentPolicy(action),
@@ -598,5 +706,249 @@ describe("allowProductionClientAction", () => {
     for (const action of ["read", "list", "rotate"] as const) {
       await expect(allowProductionClientAction(action)).resolves.toBe(true);
     }
+  });
+});
+
+describe("deleteBetterAuthOAuthTokens", () => {
+  function fakeAuth(deleteMany: (args: { model: string }) => Promise<unknown>) {
+    return {
+      $context: Promise.resolve({ adapter: { deleteMany } }),
+    } as unknown as Parameters<typeof deleteBetterAuthOAuthTokens>[0];
+  }
+
+  it("still deletes refresh tokens when deleting access tokens fails, then throws", async () => {
+    const deleteMany = vi.fn((args: { model: string }) =>
+      args.model === "oauthAccessToken"
+        ? Promise.reject(new Error("access table down"))
+        : Promise.resolve(0),
+    );
+
+    await expect(
+      deleteBetterAuthOAuthTokens(fakeAuth(deleteMany), "42"),
+    ).rejects.toThrow("access table down");
+
+    expect(deleteMany.mock.calls.map(([args]) => args.model)).toEqual([
+      "oauthAccessToken",
+      "oauthRefreshToken",
+    ]);
+  });
+
+  it("still deletes access tokens when deleting refresh tokens fails, then throws", async () => {
+    const deleteMany = vi.fn((args: { model: string }) =>
+      args.model === "oauthRefreshToken"
+        ? Promise.reject(new Error("refresh table down"))
+        : Promise.resolve(0),
+    );
+
+    await expect(
+      deleteBetterAuthOAuthTokens(fakeAuth(deleteMany), "42"),
+    ).rejects.toThrow("refresh table down");
+    expect(deleteMany).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("shared OTP attempt budget", () => {
+  const email = "budget@f3nation.test";
+
+  // Models email_mfa_codes: one code, five wrong guesses, whichever endpoint
+  // (registration or sign-in) makes them. A match costs nothing.
+  function sharedBudget(code: () => string, maxAttempts = 5) {
+    let wrong = 0;
+    return vi.fn((_email: string, otp: string, _opts: { consume: boolean }) => {
+      if (wrong >= maxAttempts) return Promise.resolve(false);
+      if (otp === code()) return Promise.resolve(true);
+      wrong += 1;
+      return Promise.resolve(false);
+    });
+  }
+
+  it("checks the shared budget, then uses the code up once signed in", async () => {
+    let otp = "";
+    const claim = sharedBudget(() => otp);
+    const auth = createTestAuth(4242, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(signIn.token).toBeTruthy();
+    expect(claim.mock.calls).toEqual([
+      [email, otp, { consume: false }],
+      [email, otp, { consume: true }],
+    ]);
+  });
+
+  it("keeps the sign-in when the code can no longer be used up", async () => {
+    let otp = "";
+    const claim = vi.fn(
+      (_email: string, _otp: string, opts: { consume: boolean }) =>
+        Promise.resolve(!opts.consume),
+    );
+    const auth = createTestAuth(4242, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(signIn.token).toBeTruthy();
+    expect(claim).toHaveBeenLastCalledWith(email, otp, { consume: true });
+  });
+
+  it("keeps the sign-in when using the code up throws", async () => {
+    let otp = "";
+    const claim = vi.fn(
+      (_email: string, _otp: string, opts: { consume: boolean }) =>
+        opts.consume
+          ? Promise.reject(
+              // Shaped like DrizzleQueryError: the driver error is the cause.
+              new Error(`Failed query: params: ${email}`, {
+                cause: Object.assign(new Error("terminating connection"), {
+                  code: "57P01",
+                }),
+              }),
+            )
+          : Promise.resolve(true),
+    );
+    const logError = vi.spyOn(logging, "logError");
+    const auth = createTestAuth(4242, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    const signIn = await auth.api.signInEmailOTP({ body: { email, otp } });
+
+    expect(signIn.token).toBeTruthy();
+    // Drizzle's message carries the bound email, so only its name and code
+    // are logged.
+    expect(logError).toHaveBeenCalledExactlyOnceWith(
+      "auth.better_auth.otp_consume_failed",
+      { errorName: "Error", code: "57P01" },
+    );
+    logError.mockRestore();
+  });
+
+  it.each([
+    ["an error without a code", new Error("boom"), "Error"],
+    [
+      "an error with a codeless cause",
+      new Error("boom", { cause: new Error("driver") }),
+      "Error",
+    ],
+    ["a non-error", "boom", "string"],
+  ])(
+    "logs only the kind of failure when using the code up throws %s",
+    async (_label, failure, errorName) => {
+      const claim = vi.fn(
+        (_email: string, _otp: string, opts: { consume: boolean }) =>
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the non-error case is the point
+          opts.consume ? Promise.reject(failure) : Promise.resolve(true),
+      );
+      const logError = vi.spyOn(logging, "logError");
+      const auth = createTestAuth(4242, claim);
+      const otp = await auth.api.createVerificationOTP({
+        body: { email, type: "sign-in" },
+      });
+
+      await auth.api.signInEmailOTP({ body: { email, otp } });
+
+      expect(logError).toHaveBeenCalledExactlyOnceWith(
+        "auth.better_auth.otp_consume_failed",
+        { errorName, code: undefined },
+      );
+      logError.mockRestore();
+    },
+  );
+
+  it("leaves the code valid for registration when sign-in fails", async () => {
+    let otp = "";
+    const claim = sharedBudget(() => otp);
+    const auth = createTestAuth(null, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp } }),
+    ).rejects.toMatchObject({ body: { code: "NO_F3_ACCOUNT" } });
+    expect(claim).toHaveBeenCalledExactlyOnceWith(email, otp, {
+      consume: false,
+    });
+  });
+
+  it("refuses the right code once registration has used up the budget", async () => {
+    let otp = "";
+    const claim = sharedBudget(() => otp);
+    const auth = createTestAuth(4242, claim);
+    otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+    const wrong = otp === "000000" ? "111111" : "000000";
+    // Five wrong guesses at /api/register (checkEmailCode in production).
+    for (let i = 0; i < 5; i++) {
+      expect(await claim(email, wrong, { consume: false })).toBe(false);
+    }
+
+    await expect(
+      auth.api.signInEmailOTP({ body: { email, otp } }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_OTP" } });
+  });
+
+  it("gates Better Auth's check-only endpoint without using the code up", async () => {
+    const claim = vi.fn(() => Promise.resolve(false));
+    const auth = createTestAuth(4242, claim);
+    const otp = await auth.api.createVerificationOTP({
+      body: { email, type: "sign-in" },
+    });
+
+    await expect(
+      auth.api.checkVerificationOTP({ body: { email, otp, type: "sign-in" } }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_OTP" } });
+    expect(claim).toHaveBeenCalledExactlyOnceWith(email, otp, {
+      consume: false,
+    });
+  });
+
+  it.each([
+    ["/email-otp/verify-email", { email, otp: "123456" }],
+    [
+      "/email-otp/reset-password",
+      { email, otp: "123456", password: "not-used-here" },
+    ],
+    ["/email-otp/change-email", { newEmail: email, otp: "123456" }],
+  ])("gates %s on the same budget", async (path, body) => {
+    const claim = vi.fn(() => Promise.resolve(false));
+    const auth = createTestAuth(4242, claim);
+
+    const res = await auth.handler(
+      new Request(`${ENDPOINT}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: BASE_URL },
+        body: JSON.stringify(body),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: "INVALID_OTP" });
+    expect(claim).toHaveBeenCalledExactlyOnceWith(email, "123456", {
+      consume: false,
+    });
+  });
+
+  it("leaves a malformed body to the endpoint's own validation", async () => {
+    const claim = vi.fn(() => Promise.resolve(true));
+    const auth = createTestAuth(4242, claim);
+
+    const res = await auth.handler(
+      new Request(`${ENDPOINT}/sign-in/email-otp`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: BASE_URL },
+        body: JSON.stringify({ email, otp: 123456 }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(claim).not.toHaveBeenCalled();
   });
 });

@@ -118,7 +118,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
     (!regionRecordUnavailable &&
       !sourceAccessPending &&
       !sourceAccessError &&
-      sourceAccess?.results[0]?.success === true);
+      sourceAccess.results[0]?.success === true);
   const { data: currentParentResponse, isPending: currentParentPending } =
     useQuery({
       ...orpc.org.byId.queryOptions({
@@ -298,9 +298,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
   const showDeactivateButton =
     config.deactivate === "active"
       ? org?.id != null && org.isActive
-      : config.deactivate === "existing" &&
-        isEditing &&
-        org?.isActive !== false;
+      : config.deactivate === "existing" && isEditing && org.isActive !== false;
 
   const onSuccess = async () => {
     const invalidation = invalidateQueries("org");
@@ -428,7 +426,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                       return;
                     }
                     if (
-                      !parents?.some(
+                      !parents.some(
                         (parent) =>
                           parent.id === data.parentId && parent.isActive,
                       )
@@ -548,6 +546,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                         <Input
                           placeholder="Name"
                           {...field}
+                          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                           value={field.value ?? ""}
                         />
                       </FormControl>
@@ -580,7 +579,7 @@ function OrgEditForm({ orgType, id, isProd = true }: AdminOrgEditModalProps) {
                               }))}
                             searchPlaceholder={config.parentPlaceholder}
                             onSelect={(value) => {
-                              const orgId = safeParseInt(value as string);
+                              const orgId = safeParseInt(value);
                               if (orgId == null) {
                                 toast.error("Invalid orgId");
                                 return;

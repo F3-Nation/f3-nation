@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.2.12](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.11...pkg-auth@0.2.12) (2026-10-29)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.2
+    * @acme/env bumped to 0.2.0
+    * @acme/shared bumped to 0.6.0
+
+## [0.2.11](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.10...pkg-auth@0.2.11) (2026-10-23)
+
+
+### Bug Fixes
+
+* **auth,map:** stop trusting client-supplied roles on JWT update ([#1341](https://github.com/F3-Nation/f3-nation/issues/1341)) ([f27c924](https://github.com/F3-Nation/f3-nation/commit/f27c9241d062ed417cd8701198cdc0583c7c4558))
+* **auth:** generate cryptographically secure OTP codes ([#1306](https://github.com/F3-Nation/f3-nation/issues/1306)) ([e5395f0](https://github.com/F3-Nation/f3-nation/commit/e5395f02d2b369627f401a5813e79d80448bb9e7))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/db bumped to 0.10.1
+    * @acme/shared bumped to 0.5.1
+
 ## [0.2.10](https://github.com/F3-Nation/f3-nation/compare/pkg-auth@0.2.9...pkg-auth@0.2.10) (2026-10-14)
 
 

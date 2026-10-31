@@ -11,7 +11,7 @@ export const useAuth = () => {
       return { isNationAdmin: false, isEditorOrAdmin: false, isAdmin: false };
     let isEditorOrAdmin = false;
     let isAdmin = false;
-    session.roles?.forEach((role) => {
+    session.roles.forEach((role) => {
       if (["admin", "editor"].includes(role.roleName)) {
         isEditorOrAdmin = true;
       }

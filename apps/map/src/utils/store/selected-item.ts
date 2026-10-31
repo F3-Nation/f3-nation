@@ -116,14 +116,8 @@ export const setSelectedItem = (item: {
   } else if (item.showPanel) {
     // on desktop show panel if showPanel is true
     newSelectedItemStore.hideSelectedItem = true;
-    newSelectedItemStore.panelLocationId =
-      newSelectedItemStore.locationId === undefined
-        ? currentLocationId
-        : newSelectedItemStore.locationId;
-    newSelectedItemStore.panelEventId =
-      newSelectedItemStore.eventId === undefined
-        ? currentEventId
-        : newSelectedItemStore.eventId;
+    newSelectedItemStore.panelLocationId = newSelectedItemStore.locationId;
+    newSelectedItemStore.panelEventId = newSelectedItemStore.eventId;
   }
 
   selectedItemStore.setState(newSelectedItemStore);

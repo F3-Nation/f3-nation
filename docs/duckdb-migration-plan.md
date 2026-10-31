@@ -58,8 +58,8 @@ object generation returned by the SDK. A GCS **object generation** identifies
 the version of pointer content; GCS **metageneration** counts metadata updates
 and is a different value, not `releaseSequence` and not a substitute for
 content CAS. Hashes cover canonical manifest bytes, not parsed/re-serialized
-JSON. The Pax Vault manifest contains exactly its ten allowlisted dataset/file
-names (including `pv_territories` and `pv_attendance`); analytics has exactly its four named
+JSON. The Pax Vault manifest contains exactly its eleven allowlisted dataset/file
+names (including `pv_territories`, `pv_event_details`, and `pv_attendance`); analytics has exactly its four named
 datasets. Manifests contain byte sizes, object GCS generations, CRC32C values,
 row/schema fingerprints, and total size.
 
@@ -87,19 +87,26 @@ The consumer accepts only a configured bucket and its product-specific
 allowlisted immutable prefix matching `releaseId`; it rejects path traversal,
 unexpected files, unknown schema versions, missing manifest entries,
 generation/hash mismatch, duplicate datasets, and any dataset outside that
-product's exact set. Pax Vault's `pv_events` schema includes rich event fields,
-`description`, `preblast`, `preblast_rich`, `backblast`, `backblast_rich`,
-`meta`, and type/tag descriptions; `pv_pax.v3` includes `email`, `roles` (a
+product's exact set. Pax Vault publishes rich event fields in
+`pv_event_details.v1`: `event_id`, `description`, `preblast`, `preblast_rich`,
+`backblast`, `backblast_rich`, `meta`, and `refreshed_at`. Those six detail
+fields are removed from `pv_events.v2` in `pv_events.v3`; v3 retains all other
+`pv_events` columns, its own `refreshed_at`, and type/tag descriptions. The two
+datasets use the same eligibility rule but are read independently, so neither
+a shared source snapshot nor one-to-one matching event rows is guaranteed. Join
+details by `event_id`, using a `LEFT JOIN` from `pv_events` and tolerating
+missing rows on either side. `pv_pax.v3` includes `email`, `roles` (a
 list of role records), and the appended `lifetime_posts`/`lifetime_qs` fields.
 `pv_areas` and `pv_sectors` use schema v2 for revised hierarchy outputs. The
-declared v2 datasets are `pv_events.v2`, `pv_areas.v2`, and `pv_sectors.v2`;
-`pv_attendance` is `pv_attendance.v1`, and other currently declared Pax Vault
+declared v2 datasets are `pv_areas.v2` and `pv_sectors.v2`; `pv_events.v3`,
+`pv_event_details.v1`, and `pv_attendance.v1` are the current event/attendance
+schemas, and other currently declared Pax Vault
 datasets are v1. `pv_attendance.v1` remains unreleased and unconsumed, per the
 product owner; its projection can be revised while it remains unreleased and
 unconsumed. The general schema-version bump rule applies to released or
 consumed contracts, and this revision does not mean its compatibility gate has
 passed. Its normative columns, ordering, and row semantics are in the
-[Pax Vault ETL specification](../specs/pax-vault-parquet-etl.md#pv_attendance--one-row-per-eligible-actual-attendance-id).
+[Pax Vault ETL specification](specs/pax-vault-parquet-etl.md#pv_attendance--one-row-per-eligible-actual-attendance-id).
 DuckDB types/nullability are determined by the approved registry and remain a
 compatibility verification gate; do not infer nullable properties
 from these summaries. The consumer verifies the
@@ -286,7 +293,19 @@ has run. Publishing is blocked unless the candidate schema is verified as
 supported by every serving and rollback-eligible revision during overlap. If
 that cannot hold, coordinate a revision rollout first, or perform a validated
 pointer rollback before rolling the application back. For released or consumed
-contracts, additive fields require consumer tolerance; renames/removals require
-a new contract version and a coordinated rollout. `pv_attendance.v1` remains
+contracts, additive fields require consumer tolerance; an incompatible dataset
+projection change, including a rename or removal, requires a new dataset
+`schemaVersion`. Thus removal of the six detail fields requires
+`pv_events.v3` (from `pv_events.v2`), while the extracted projection is
+`pv_event_details.v1`. Consumers of `pv_events.v2` must update before `v3` is
+published. Sequence the transition consumer-first: deploy and verify consumers
+that can read the new `pv_events.v3` plus `pv_event_details.v1` shape (and
+tolerate absent joined rows); verify compatibility of every serving and
+rollback-eligible revision; only then publish a release containing v3. Keep the
+exact retained legacy rollback release available and use a validated pointer
+rollback if the new release must be withdrawn. That nine-dataset rollback
+release uses `pv_pax.v2` and `pv_events.v2`, and contains neither
+`pv_attendance` nor `pv_event_details`; rollback is permitted only when the
+serving consumer revision is compatible with that legacy set. `pv_attendance.v1` remains
 unreleased and unconsumed, per the product owner, and may be revised while it
 remains so; this does not imply its compatibility gate has passed.

@@ -17,6 +17,10 @@
 #   2. DB login staging_refresh: read-only on prod (prod-login.sql), owner-level on
 #      staging's tables (staging-login.sql); passwords in Secret Manager
 #   3. the SA may read those two secrets + OBFUSCATION_SALT and connect to Cloud SQL
+#      and may create/delete objects under dev-snapshots/ in the public f3-public-images
+#      bucket (custom role + IAM condition; nothing else about the bucket changes). That
+#      binding needs storage.buckets.setIamPolicy on the bucket; without it the script
+#      prints the command for someone who has it.
 #   4. builds + pushes the image (Cloud Build -> Artifact Registry cloud-run-builds)
 #   5. deploys the job (32Gi / 8 CPU, 3h timeout, no retries)
 #   6. lets RUNNERS execute it (also with --args, e.g. --dry-run) and read its logs:
@@ -57,7 +61,27 @@ OLD_LOG_TITLE=f3-staging-refresh-logs
 RUNNERS=()
 SLACKBOT_PROJECT=f3-slackbot-staging
 SLACKBOT_SERVICE=f3-slackbot
+# The developer snapshot lands in a public bucket shared with the apps' images. The job
+# may write only under SNAPSHOT_PREFIX; objectUser covers the create + delete that
+# overwriting the fixed object path takes (plus read and list, harmless on a public prefix).
+SNAPSHOT_BUCKET=f3-public-images
+SNAPSHOT_PREFIX=dev-snapshots/
+SNAPSHOT_ROLE=roles/storage.objectUser
+SNAPSHOT_CONDITION_TITLE=dev-snapshots-prefix
+# Changing the prefix or condition leaves the old binding in place: remove it by hand first.
+# The condition is the only thing keeping the job out of the apps' images: fail closed.
+case "$SNAPSHOT_BUCKET$SNAPSHOT_PREFIX" in
+  *[\"\\[:space:]]*)
+    echo "SNAPSHOT_BUCKET/SNAPSHOT_PREFIX must not contain quotes, backslashes or whitespace." >&2
+    exit 1 ;;
+esac
+case "$SNAPSHOT_PREFIX" in
+  */) ;;
+  *) echo "SNAPSHOT_PREFIX must end in '/', or the condition also matches sibling names." >&2; exit 1 ;;
+esac
+SNAPSHOT_CONDITION="resource.name.startsWith(\"projects/_/buckets/${SNAPSHOT_BUCKET}/objects/${SNAPSHOT_PREFIX}\")"
 
+SNAPSHOT_BIND_PENDING=0
 IMAGE_ONLY=0
 [ "${1:-}" = "--image-only" ] && IMAGE_ONLY=1
 if [ "$IMAGE_ONLY" = 0 ]; then
@@ -121,7 +145,9 @@ run_sql() { # instance port database spuds-secret sql-file password password-is-
       -X -q -t -c 'SELECT 1' >/dev/null 2>&1 \
       || { echo "staging_refresh still can't log in on $1" >&2; exit 1; }
   fi
-  kill "$PROXY_PID"; wait "$PROXY_PID" 2>/dev/null || true; PROXY_PID=""
+  kill "$PROXY_PID" 2>/dev/null || true
+  wait "$PROXY_PID" 2>/dev/null || true
+  PROXY_PID=""
 }
 
 # Sets LOGIN_PW to the login's password from its secret, or to a new one it stores there;
@@ -168,6 +194,39 @@ if [ "$IMAGE_ONLY" = 0 ]; then
   gcloud projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$SA" \
     --role roles/cloudsql.client --condition=None >/dev/null
   echo "cloudsql.client on $PROJECT"
+
+  say "3b. write access to gs://$SNAPSHOT_BUCKET/$SNAPSHOT_PREFIX only"
+  # An IAM condition on a bucket needs uniform bucket-level access. Never flipped here:
+  # it turns off object ACLs, which the apps' image uploads may rely on.
+  if ! ubla="$(gcloud storage buckets describe "gs://$SNAPSHOT_BUCKET" \
+    --format='value(uniform_bucket_level_access)')"; then
+    echo "can't read gs://$SNAPSHOT_BUCKET's settings, so the uniform bucket-level access check can't run." >&2
+    exit 1
+  fi
+  if ! printf '%s' "$ubla" | grep -qi '^true$'; then
+    echo "gs://$SNAPSHOT_BUCKET doesn't use uniform bucket-level access, which the IAM condition needs." >&2
+    echo "Enabling it disables object ACLs: check the apps that upload images first." >&2
+    exit 1
+  fi
+  SNAPSHOT_BIND=(gcloud storage buckets add-iam-policy-binding "gs://$SNAPSHOT_BUCKET"
+    --member "serviceAccount:$SA" --role "$SNAPSHOT_ROLE"
+    --condition "expression=$SNAPSHOT_CONDITION,title=$SNAPSHOT_CONDITION_TITLE")
+  if err="$("${SNAPSHOT_BIND[@]}" 2>&1 >/dev/null)"; then
+    echo "$SNAPSHOT_ROLE on gs://$SNAPSHOT_BUCKET/$SNAPSHOT_PREFIX for $SA"
+  else
+    SNAPSHOT_BIND_PENDING=1
+    echo "WARNING: couldn't bind $SNAPSHOT_ROLE on gs://$SNAPSHOT_BUCKET:" >&2
+    printf '%s\n' "$err" >&2
+    case "$err" in
+      *PERMISSION_DENIED*|*setIamPolicy*)
+        echo "That needs storage.buckets.setIamPolicy; ask someone who has it to run:" ;;
+      *)
+        echo "Not obviously a permission problem (IAM changes can take a minute to propagate); re-run this script, or run:" ;;
+    esac
+    echo
+    printf '  %q' "${SNAPSHOT_BIND[@]}"
+    echo
+  fi
 fi
 
 say "4. build + push the image (Cloud Build, from $REPO)"
@@ -266,6 +325,11 @@ PY
       --project "$PROJECT" --quiet
     echo "deleted the old view $OLD_LOG_VIEW on _Default"
   fi
+fi
+
+if [ "$SNAPSHOT_BIND_PENDING" = 1 ]; then
+  echo
+  echo "WARNING: the dev-snapshot upload will fail until the bucket binding above is applied."
 fi
 
 say "7. not done here"

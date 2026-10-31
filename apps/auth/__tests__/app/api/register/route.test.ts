@@ -137,4 +137,22 @@ describe("POST /api/register", () => {
       60 * 1000,
     );
   });
+
+  it("keys on 'unknown' when x-forwarded-for is absent or has no usable entry", async () => {
+    checkEmailCode.mockResolvedValue(false);
+    await register(valid);
+    await register(valid, { "x-forwarded-for": " , " });
+    expect(rateLimit).toHaveBeenNthCalledWith(
+      1,
+      "register:unknown",
+      5,
+      60 * 1000,
+    );
+    expect(rateLimit).toHaveBeenNthCalledWith(
+      2,
+      "register:unknown",
+      5,
+      60 * 1000,
+    );
+  });
 });

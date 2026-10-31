@@ -854,7 +854,7 @@ describe("Event Router", () => {
         statuses: ["active"],
       });
 
-      expect(result.events?.some((e) => e.id === created?.id)).toBe(true);
+      expect(result.events.some((e) => e.id === created?.id)).toBe(true);
     });
   });
 
@@ -897,8 +897,8 @@ describe("Event Router", () => {
         statuses: ["active"],
       });
 
-      expect(result.events?.length).toBeGreaterThanOrEqual(1);
-      expect(result.events?.length).toBeLessThanOrEqual(50);
+      expect(result.events.length).toBeGreaterThanOrEqual(1);
+      expect(result.events.length).toBeLessThanOrEqual(50);
     });
 
     it("should include events without a location (locationId null)", async () => {
@@ -938,7 +938,7 @@ describe("Event Router", () => {
         statuses: ["active"],
       });
 
-      const rovingEvent = result.events?.find((e) => e.id === created?.id);
+      const rovingEvent = result.events.find((e) => e.id === created?.id);
       expect(rovingEvent).toBeDefined();
       expect(rovingEvent?.locationId).toBeNull();
       expect(rovingEvent?.locationName).toBeNull();
@@ -953,7 +953,7 @@ describe("Event Router", () => {
         statuses: ["active"],
       });
 
-      expect(result.events?.length).toBeGreaterThan(0);
+      expect(result.events.length).toBeGreaterThan(0);
     });
   });
 
@@ -982,16 +982,16 @@ describe("Event Router", () => {
         pageSize: 2,
       });
 
-      expect(page1.events?.length).toBeLessThanOrEqual(2);
-      expect(page2.events?.length).toBeLessThanOrEqual(2);
+      expect(page1.events.length).toBeLessThanOrEqual(2);
+      expect(page2.events.length).toBeLessThanOrEqual(2);
 
       // Results should be different if there are more than 2 events
       if (
         page1.totalCount > 2 &&
-        (page1.events?.length ?? 0) > 0 &&
-        (page2.events?.length ?? 0) > 0
+        page1.events.length > 0 &&
+        page2.events.length > 0
       ) {
-        expect(page1.events?.[0]?.id).not.toBe(page2.events?.[0]?.id);
+        expect(page1.events[0]?.id).not.toBe(page2.events[0]?.id);
       }
     });
 
@@ -1003,7 +1003,7 @@ describe("Event Router", () => {
         pageSize: 10,
       });
 
-      expect(activeEvents.events?.every((e) => e.isActive === true)).toBe(true);
+      expect(activeEvents.events.every((e) => e.isActive === true)).toBe(true);
     });
 
     it("should search by name", async () => {
@@ -1047,7 +1047,7 @@ describe("Event Router", () => {
       });
 
       // Results should include our created event
-      const found = result.events?.some((e) => e.id === created?.id);
+      const found = result.events.some((e) => e.id === created?.id);
       expect(found).toBe(true);
     });
 
@@ -1092,7 +1092,7 @@ describe("Event Router", () => {
 
       expect(result).toHaveProperty("events");
       // Our event should be in the results
-      const found = result.events?.some((e) => e.id === created?.id);
+      const found = result.events.some((e) => e.id === created?.id);
       expect(found).toBe(true);
     });
 
@@ -1156,10 +1156,8 @@ describe("Event Router", () => {
       });
 
       // Find our events in the results
-      const foundPublic = result.events?.find((e) => e.id === publicEvent?.id);
-      const foundPrivate = result.events?.find(
-        (e) => e.id === privateEvent?.id,
-      );
+      const foundPublic = result.events.find((e) => e.id === publicEvent?.id);
+      const foundPrivate = result.events.find((e) => e.id === privateEvent?.id);
 
       // Both events should have isPrivate field
       expect(foundPublic).toBeDefined();
@@ -1228,11 +1226,11 @@ describe("Event Router", () => {
       });
 
       // Our event should be in the results
-      const found = result.events?.some((e) => e.id === created.id);
+      const found = result.events.some((e) => e.id === created.id);
       expect(found).toBe(true);
 
       // All returned events should have an eventType matching our filter
-      result.events?.forEach((event) => {
+      result.events.forEach((event) => {
         const hasMatchingType = event.eventTypes.some(
           (et) => et.eventTypeName === uniqueTypeName,
         );
@@ -1298,11 +1296,11 @@ describe("Event Router", () => {
       });
 
       // Our third_f event should be in the results
-      const found = result.events?.some((e) => e.id === thirdFEvent.id);
+      const found = result.events.some((e) => e.id === thirdFEvent.id);
       expect(found).toBe(true);
 
       // All returned events should have third_f category
-      result.events?.forEach((event) => {
+      result.events.forEach((event) => {
         const hasThirdF = event.eventTypes.some(
           (et) => et.eventCategory === "third_f",
         );

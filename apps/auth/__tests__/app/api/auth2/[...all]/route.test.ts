@@ -18,7 +18,7 @@ vi.mock("better-auth/next-js", () => ({
   toNextJsHandler: vi.fn(() => handlersMock),
 }));
 
-const { GET, POST } =
+const { GET, POST, PATCH, PUT, DELETE } =
   await import("../../../../../src/app/api/auth2/[...all]/route");
 
 function makeRequest(method: string): NextRequest {
@@ -55,5 +55,30 @@ describe("auth2 catch-all mount", () => {
     await POST(makeRequest("POST"));
 
     expect(handlersMock.POST).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["PATCH", PATCH],
+    ["PUT", PUT],
+    ["DELETE", DELETE],
+  ] as const)(
+    "dispatches %s requests to the matching Better Auth handler",
+    async (method, handler) => {
+      envMock.AUTH_USE_BETTER_AUTH = true;
+      getAuthMock.mockResolvedValue({});
+
+      await handler(makeRequest(method));
+
+      expect(handlersMock[method]).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("answers 405 for a method Better Auth doesn't handle", async () => {
+    envMock.AUTH_USE_BETTER_AUTH = true;
+    getAuthMock.mockResolvedValue({});
+
+    const res = await GET(makeRequest("OPTIONS"));
+
+    expect(res.status).toBe(405);
   });
 });

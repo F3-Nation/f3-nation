@@ -184,7 +184,15 @@ jobs:
           AUTH_URL: ${{ steps.meta.outputs.url_auth }}
           NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.PREVIEW_POSTHOG_KEY }}
         run: |
-          envsubst '${SERVICE_API} ${PR_NUMBER} ${RUNTIME_SA} ${API_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${NEXT_PUBLIC_POSTHOG_KEY}' \
+          # Throwaway proxy secret, generated fresh per deploy: preview
+          # services are public, so a committed value would let any caller
+          # choose its own rate-limit key. $GITHUB_ENV hands the same value
+          # to the map deploy step.
+          PROXY_CLIENT_IP_SECRET=$(openssl rand -hex 32)
+          echo "::add-mask::${PROXY_CLIENT_IP_SECRET}"
+          echo "PROXY_CLIENT_IP_SECRET=${PROXY_CLIENT_IP_SECRET}" >> "${GITHUB_ENV}"
+          export PROXY_CLIENT_IP_SECRET
+          envsubst '${SERVICE_API} ${PR_NUMBER} ${RUNTIME_SA} ${API_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${NEXT_PUBLIC_POSTHOG_KEY} ${PROXY_CLIENT_IP_SECRET}' \
             < .github/preview/api-service.template.yaml > /tmp/api-service.yaml
           gcloud run services replace /tmp/api-service.yaml \
             --region "${REGION}" --project "${PROJECT}" --quiet
@@ -261,7 +269,7 @@ jobs:
           export FAKE_GCS
           # The map runs a DB sidecar (like api/auth) because @acme/auth reaches
           # the database during signed-in SSR — see docs/PREVIEW_AUTH.md.
-          envsubst '${SERVICE_MAP} ${PR_NUMBER} ${RUNTIME_SA} ${MAP_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${MAPS_KEY} ${NEXT_PUBLIC_POSTHOG_KEY} ${FAKE_GCS}' \
+          envsubst '${SERVICE_MAP} ${PR_NUMBER} ${RUNTIME_SA} ${MAP_IMAGE} ${DB_IMAGE} ${API_URL} ${MAP_URL} ${AUTH_URL} ${MAPS_KEY} ${NEXT_PUBLIC_POSTHOG_KEY} ${FAKE_GCS} ${PROXY_CLIENT_IP_SECRET}' \
             < .github/preview/map-service.template.yaml > /tmp/map-service.yaml
           gcloud run services replace /tmp/map-service.yaml \
             --region "${REGION}" --project "${PROJECT}" --quiet
@@ -390,7 +398,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-blocking-artifacts-pr-${{ github.event.pull_request.number }}
           path: |
@@ -437,7 +445,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-advisory-artifacts-pr-${{ github.event.pull_request.number }}
           path: |

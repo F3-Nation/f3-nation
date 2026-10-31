@@ -15,7 +15,9 @@ export const getSortingColumns = <T,>(
     sorting
       ?.map((sorting) => {
         const direction = sorting.desc ? desc : asc;
-        const column = sortingIdToColumn[sorting.id as keyof T];
+        // sorting.id is client input, so it may name no known column.
+        const column = sortingIdToColumn[sorting.id as keyof T] as
+          PgColumn | SQL | SQL.Aliased | undefined;
         if (!column) {
           return undefined;
         }

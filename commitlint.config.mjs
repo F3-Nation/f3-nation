@@ -11,6 +11,7 @@ export default {
         "homepage",
         "map",
         "me",
+        "region-pages",
         "slackbot",
         "analytics",
 
@@ -25,6 +26,7 @@ export default {
         "health",
         "mail",
         "observability",
+        "security-headers",
         "shared",
         "sso",
         "storage",

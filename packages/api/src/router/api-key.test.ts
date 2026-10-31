@@ -94,7 +94,7 @@ describe("API Key Router", () => {
         const key = result.apiKeys.find((k) => k.id === createResult.id);
         expect(key).toBeDefined();
         expect(key?.keySignature).toBeDefined();
-        expect(key?.keySignature?.length).toBe(4);
+        expect(key?.keySignature.length).toBe(4);
       }
     });
 
@@ -630,7 +630,7 @@ describe("API Key Router", () => {
       const roles = [
         {
           orgId: tree.directBranch.region.id,
-          orgName: tree.directBranch.region.name ?? "Region",
+          orgName: tree.directBranch.region.name,
           roleName: "admin" as const,
         },
         ...extraRoles,
@@ -878,7 +878,7 @@ describe("API Key Router", () => {
         regionAdminSession(false, [
           {
             orgId: tree.unrelatedBranch.region.id,
-            orgName: tree.unrelatedBranch.region.name ?? "Region",
+            orgName: tree.unrelatedBranch.region.name,
             roleName: "editor",
           },
         ]),
@@ -931,7 +931,7 @@ describe("API Key Router", () => {
         regionAdminSession(false, [
           {
             orgId: tree.unrelatedBranch.ao.id,
-            orgName: tree.unrelatedBranch.ao.name ?? "AO",
+            orgName: tree.unrelatedBranch.ao.name,
             roleName: "editor",
           },
         ]),
@@ -952,6 +952,34 @@ describe("API Key Router", () => {
       scopedKeyIds.push(created.id);
       const ids = (await client.apiKey.list()).apiKeys.map((k) => k.id);
       expect(ids).toContain(created.id);
+    });
+
+    it("reports the first role it cannot grant, in request order, and creates nothing", async () => {
+      await mockAuthWithSession(regionAdminSession());
+      const client = createTestClient();
+      const name = `First denied ${uniqueId()}`;
+
+      const error: unknown = await client.apiKey
+        .create({
+          name,
+          roles: [
+            { orgId: tree.directBranch.ao.id, roleName: "editor" },
+            { orgId: tree.unrelatedBranch.ao.id, roleName: "editor" },
+            { orgId: tree.nation.id, roleName: "admin" },
+          ],
+        })
+        .catch((e: unknown) => e);
+
+      expect(error).toMatchObject({
+        code: "FORBIDDEN",
+        message: `You do not have permission to grant "editor" role on organization ${tree.unrelatedBranch.ao.id}`,
+      });
+
+      const rows = await db
+        .select({ id: schema.apiKeys.id })
+        .from(schema.apiKeys)
+        .where(eq(schema.apiKeys.name, name));
+      expect(rows).toEqual([]);
     });
 
     it("manages an in-scope key without ever returning its secret", async () => {

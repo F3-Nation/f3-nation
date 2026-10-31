@@ -121,7 +121,7 @@ Ask for anything missing before starting:
    exactly three things:
    - what a non-developer would call the headline change (for the Overview),
    - anything that breaks while the apps and database are out of step,
-   - anything that went straight to production (Homepage always does).
+   - anything that goes straight to production (Homepage does, once its deploy succeeds).
 
    Do not summarize every PR.
 
@@ -134,8 +134,8 @@ Ask for anything missing before starting:
    scratch/temp directory (not in the repo). Show it to the person who asked
    and **stop until they approve** or request changes.
 
-7. **File the issue** only after approval, following the repo
-   [`github`](../github/SKILL.md) skill.
+7. **File the issue** only after approval, following the repo's
+   [GitHub write rules](../../../AGENTS.md#writing-to-github).
 
    ```bash
    gh issue create --title "Release plan: <short release name> to <Environment> (#<PR>)" \
@@ -166,18 +166,24 @@ Ask for anything missing before starting:
 The template is written for Staging. For a Production release, use the
 Production column of each row while filling it in.
 
-|                             | Staging                                                                     | Production                                                                              |
-| --------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Deploy step                 | None; already deployed                                                      | Approve each paused `deploy-prod` job (environment `*-production`) on the Actions page  |
-| Migration order             | First step; the apps are already running                                    | Before or after the approvals, per the compatible order stated in the Overview          |
-| Homepage                    | Already published to production when the PR merged — say so in the Overview | Nothing to do                                                                           |
-| Database                    | Cloud SQL `f3data-nonprod`, database `f3_staging`                           | Cloud SQL `f3data`, database `f3_prod`                                                  |
-| Proxy (`{{PROXY_COMMAND}}`) | `cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5482`             | `cloud-sql-proxy f3data:us-central1:f3data --port 5481`                                 |
-| Cloud Run and log links     | As in the template                                                          | Drop `-staging` from each project ID                                                    |
-| Test plan step              | Create the Staging test plan                                                | Drop the step                                                                           |
-| Test step                   | Run the Staging test plan issue                                             | Repeat only the per-app smoke checks from the Staging test plan against production URLs |
-| Database queries            | Run against `f3_staging`                                                    | Run against `f3_prod`                                                                   |
-| Last step                   | Let it run 24–48 h, then go/no-go for Production                            | Announce done in `#monorepo`                                                            |
+When Homepage is included, confirm that the `deploy` job in its `Deploy Homepage`
+run succeeded for the release tag before reporting it as published. For a
+missing, pending, or failed deploy, replace the template's Homepage publication
+claim with that status. CI's `build` check proves only the CI build result; see the
+[deploy gate guidance](../../../docs/CI_PIPELINE.md#deploy-pipeline-per-app).
+
+|                             | Staging                                                                                | Production                                                                              |
+| --------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Deploy step                 | None; already deployed                                                                 | Approve each paused `deploy-prod` job (environment `*-production`) on the Actions page  |
+| Migration order             | First step; the apps are already running                                               | Before or after the approvals, per the compatible order stated in the Overview          |
+| Homepage                    | Goes straight to production; confirm its deploy succeeded, then say so in the Overview | Nothing to do                                                                           |
+| Database                    | Cloud SQL `f3data-nonprod`, database `f3_staging`                                      | Cloud SQL `f3data`, database `f3_prod`                                                  |
+| Proxy (`{{PROXY_COMMAND}}`) | `cloud-sql-proxy f3data:us-central1:f3data-nonprod --port 5482`                        | `cloud-sql-proxy f3data:us-central1:f3data --port 5481`                                 |
+| Cloud Run and log links     | As in the template                                                                     | Drop `-staging` from each project ID                                                    |
+| Test plan step              | Create the Staging test plan                                                           | Drop the step                                                                           |
+| Test step                   | Run the Staging test plan issue                                                        | Repeat only the per-app smoke checks from the Staging test plan against production URLs |
+| Database queries            | Run against `f3_staging`                                                               | Run against `f3_prod`                                                                   |
+| Last step                   | Let it run 24–48 h, then go/no-go for Production                                       | Announce done in `#monorepo`                                                            |
 
 ## What to leave out
 

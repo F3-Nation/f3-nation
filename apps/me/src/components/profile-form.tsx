@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@acme/ui";
 import { Input } from "@acme/ui/input";
 import { Textarea } from "@acme/ui/textarea";
 import { Label } from "@acme/ui/label";
@@ -23,9 +23,15 @@ import type { UserProfile, Region } from "@/lib/types";
 interface ProfileFormProps {
   user: UserProfile;
   regions: Region[];
+  /** Where the "Explore F3 Nation" card links; null hides the card. */
+  appsDirectoryUrl: string | null;
 }
 
-export function ProfileForm({ user, regions }: ProfileFormProps) {
+export function ProfileForm({
+  user,
+  regions,
+  appsDirectoryUrl,
+}: ProfileFormProps) {
   const {
     form,
     isFieldDirty,
@@ -36,7 +42,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 pb-12">
       {/* Header: Avatar + Ecosystem discovery */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className={cn("grid gap-6", appsDirectoryUrl && "lg:grid-cols-2")}>
         <Card>
           <CardHeader>
             <CardTitle>Profile</CardTitle>
@@ -53,26 +59,28 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
           </CardContent>
         </Card>
 
-        <Card className="flex flex-col justify-between">
-          <CardHeader>
-            <CardTitle>Explore F3 Nation</CardTitle>
-            <CardDescription>
-              F3 Me is one piece of a larger ecosystem. Find workouts near you,
-              connect with your region, and discover everything F3 Nation has
-              built.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <a
-              href="https://apps.f3nation.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden"
-            >
-              Go to apps.f3nation.com &rarr;
-            </a>
-          </CardContent>
-        </Card>
+        {appsDirectoryUrl && (
+          <Card className="flex flex-col justify-between">
+            <CardHeader>
+              <CardTitle>Explore F3 Nation</CardTitle>
+              <CardDescription>
+                F3 Me is one piece of a larger ecosystem. Find workouts near
+                you, connect with your region, and discover everything F3 Nation
+                has built.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <a
+                href={appsDirectoryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden"
+              >
+                Go to {new URL(appsDirectoryUrl).host} &rarr;
+              </a>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Two-column grid: Personal Info + Emergency Contact side by side on lg */}
@@ -284,7 +292,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RoleList roles={user.roles ?? []} />
+            <RoleList roles={user.roles} />
           </CardContent>
         </Card>
 
@@ -296,7 +304,7 @@ export function ProfileForm({ user, regions }: ProfileFormProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <PositionList positions={user.positions ?? []} />
+            <PositionList positions={user.positions} />
           </CardContent>
         </Card>
       </div>

@@ -1,6 +1,6 @@
 import gte from "lodash/gte";
 import Link from "next/link";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { isProd } from "@acme/shared/common/constants";
 import { isTruthy } from "@acme/shared/common/functions";
@@ -21,6 +21,7 @@ import {
 } from "~/utils/event-status-map";
 import { getEndDateLabel } from "~/utils/get-end-date-label";
 import { useUpcomingInstances } from "~/utils/hooks/use-upcoming-instances";
+import { reportQueryError } from "~/utils/report-query-error";
 import { useUpdateEventSearchParams } from "~/utils/hooks/use-update-event-search-params";
 import { ModalType, openModal } from "~/utils/store/modal";
 import textLink from "~/utils/text-link";
@@ -229,12 +230,26 @@ export const WorkoutDetailsContent = ({
     results?.location != null &&
     !displayedEvents.some((e) => e.id === selectedEventId);
 
-  const { data: parentEventResponse, isError: isParentEventError } = useQuery(
+  const {
+    data: parentEventResponse,
+    isError: isParentEventError,
+    error: parentEventError,
+  } = useQuery(
     orpc.event.byId.queryOptions({
       input: { id: selectedSeriesId ?? -1 },
       enabled: needsParentEventFallback,
+      // A failed fallback must degrade to the "workout unavailable" path via
+      // `isParentEventError`, not throw into global-error.tsx and replace the
+      // whole map (see the app-wide throwOnError in `~/orpc/query-client`).
+      // Skipping the throw skips global-error.tsx's capture too, so the effect
+      // below reports it.
+      throwOnError: false,
     }),
   );
+
+  useEffect(() => {
+    reportQueryError(parentEventError, "map.event_by_id.fetch_failed");
+  }, [parentEventError]);
 
   const event = useMemo<WorkoutDetailsEvent | undefined>(() => {
     const displayedEvent = displayedEvents.find(
@@ -387,7 +402,7 @@ export const WorkoutDetailsContent = ({
                 ) : null}
               </>
             ),
-            What: event?.eventTypes.map((type) => type.name).join(", "),
+            What: event.eventTypes.map((type) => type.name).join(", "),
             Where: [
               <Link
                 key="fullAddress"
@@ -423,7 +438,7 @@ export const WorkoutDetailsContent = ({
               hasAoContact && aoContact ? (
                 <ContactLinks contact={aoContact} iconSize="sm" />
               ) : null,
-            Notes: event?.description ? textLink(event.description) : null,
+            Notes: event.description ? textLink(event.description) : null,
           }
         : {},
     [
@@ -535,16 +550,16 @@ export const WorkoutDetailsContent = ({
               event={{
                 id: locEvent.id,
                 name: locEvent.name,
-                locationId: location?.id ?? 0,
+                locationId: location.id,
                 dayOfWeek: locEvent.dayOfWeek,
                 startTime: locEvent.startTime,
                 endTime: locEvent.endTime,
                 eventTypes: locEvent.eventTypes,
               }}
               location={{
-                lat: location?.lat ?? null,
-                lon: location?.lon ?? null,
-                id: location?.id ?? 0,
+                lat: location.lat,
+                lon: location.lon,
+                id: location.id,
               }}
               size={chipSize}
               hideName={displayedEvents.length === 1}

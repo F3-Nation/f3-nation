@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.3.0](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.2.3...pkg-ui@0.3.0) (2026-10-29)
+
+
+### Features
+
+* **ui,admin,map,me,auth,homepage:** add route error, not-found and loading boundaries ([#1316](https://github.com/F3-Nation/f3-nation/issues/1316)) ([9ecfb43](https://github.com/F3-Nation/f3-nation/commit/9ecfb43efbdbdb403aa3cf94dad261cb686d5996))
+
+
+### Bug Fixes
+
+* **map,eslint:** enable React Compiler lint rules and stop marker moves leaking into the query cache ([#1295](https://github.com/F3-Nation/f3-nation/issues/1295)) ([f049283](https://github.com/F3-Nation/f3-nation/commit/f049283bf9d3c83a005475fac8f55a4e75cc4050))
+* **me:** show a retrying outage screen when the API is down ([#1354](https://github.com/F3-Nation/f3-nation/issues/1354)) ([bf6343b](https://github.com/F3-Nation/f3-nation/commit/bf6343b4af94d8d82db6ba8dccb3f8c0f3fea140))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.6.0
+
+## [0.2.3](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.2.2...pkg-ui@0.2.3) (2026-10-23)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.5.1
+
 ## [0.2.2](https://github.com/F3-Nation/f3-nation/compare/pkg-ui@0.2.1...pkg-ui@0.2.2) (2026-10-14)
 
 

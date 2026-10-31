@@ -192,9 +192,9 @@ export default function AdminWorkoutsModal({
       dayOfWeek: event?.dayOfWeek ?? undefined,
       isActive: event?.isActive ?? true,
       highlight: event?.highlight ?? false,
-      regionId: event?.regions?.[0]?.regionId ?? undefined,
-      aoId: event?.aos?.[0]?.aoId ?? undefined,
-      eventTypeIds: event?.eventTypes?.map((et) => et.eventTypeId),
+      regionId: event?.regions[0]?.regionId ?? undefined,
+      aoId: event?.aos[0]?.aoId ?? undefined,
+      eventTypeIds: event?.eventTypes.map((et) => et.eventTypeId),
       meta: {
         mapSeed: !!event?.meta?.mapSeed,
       },
@@ -215,7 +215,7 @@ export default function AdminWorkoutsModal({
       },
       onError: (err) => {
         toast.error(
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+          err instanceof ORPCError && err.code === "UNAUTHORIZED"
             ? `You are not authorized to ${actionText} this event`
             : `Failed to ${fallbackActionText} event`,
         );
@@ -276,7 +276,7 @@ export default function AdminWorkoutsModal({
     });
   };
 
-  const showDeleteButton = isEditing && event?.isActive !== false;
+  const showDeleteButton = isEditing && event.isActive !== false;
 
   return (
     <Dialog open={true} onOpenChange={() => closeModal()}>
@@ -309,7 +309,12 @@ export default function AdminWorkoutsModal({
                       <FormItem>
                         <FormLabel>ID</FormLabel>
                         <FormControl>
-                          <Input placeholder="ID" disabled {...field} />
+                          <Input
+                            placeholder="ID"
+                            disabled
+                            {...field}
+                            value={field.value ?? ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -327,6 +332,7 @@ export default function AdminWorkoutsModal({
                           <Input
                             placeholder="Name"
                             {...field}
+                            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                             value={field.value ?? ""}
                           />
                         </FormControl>
@@ -340,19 +346,21 @@ export default function AdminWorkoutsModal({
                     control={form.control}
                     name="regionId"
                     render={({ field }) => (
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                       <FormItem key={`region-${String(field.value ?? "new")}`}>
                         <FormLabel>Region</FormLabel>
                         <VirtualizedCombobox
+                          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                           value={field.value?.toString()}
                           options={
-                            regions?.orgs?.map((region) => ({
+                            regions?.orgs.map((region) => ({
                               value: region.id.toString(),
                               label: region.name,
                             })) ?? []
                           }
                           searchPlaceholder="Select a region"
                           onSelect={(value) => {
-                            const orgId = safeParseInt(value as string);
+                            const orgId = safeParseInt(value);
                             if (orgId == null) {
                               toast.error("Invalid orgId");
                               return;
@@ -375,9 +383,11 @@ export default function AdminWorkoutsModal({
                         (ao) => ao.parentId === form.watch("regionId"),
                       );
                       return (
+                        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                         <FormItem key={`ao-${String(field.value ?? "new")}`}>
                           <FormLabel>AO</FormLabel>
                           <Select
+                            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                             value={field.value?.toString()}
                             onValueChange={(value) => {
                               const aoId = safeParseInt(value);
@@ -414,6 +424,7 @@ export default function AdminWorkoutsModal({
                                 );
                               }
                             }}
+                            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                             defaultValue={field.value?.toString()}
                           >
                             <SelectTrigger>
@@ -422,10 +433,7 @@ export default function AdminWorkoutsModal({
                             <SelectContent>
                               {filteredAOs
                                 ?.slice()
-                                .sort(
-                                  (a, b) =>
-                                    a.name?.localeCompare(b.name ?? "") ?? 0,
-                                )
+                                .sort((a, b) => a.name.localeCompare(b.name))
                                 .map((ao) => (
                                   <SelectItem
                                     key={`ao-${ao.id}`}
@@ -496,11 +504,8 @@ export default function AdminWorkoutsModal({
                               </SelectItem>
                               {filteredLocations
                                 ?.slice()
-                                .sort(
-                                  (a, b) =>
-                                    a.locationName?.localeCompare(
-                                      b.locationName ?? "",
-                                    ) ?? 0,
+                                .sort((a, b) =>
+                                  a.locationName.localeCompare(b.locationName),
                                 )
                                 .map((location) => (
                                   <SelectItem
@@ -569,9 +574,7 @@ export default function AdminWorkoutsModal({
                           options={
                             eventTypes?.map((type) => ({
                               value: type.id.toString(),
-                              label: type.eventCategory
-                                ? `${type.name} (${EVENT_CATEGORY_LABEL_MAP[type.eventCategory] ?? type.eventCategory})`
-                                : type.name,
+                              label: `${type.name} (${EVENT_CATEGORY_LABEL_MAP[type.eventCategory] ?? type.eventCategory})`,
                             })) ?? []
                           }
                           searchPlaceholder={
@@ -599,7 +602,6 @@ export default function AdminWorkoutsModal({
                   <ControlledTimeInput
                     control={form.control}
                     name="startTime"
-                    id={"startTime"}
                     label={"Start Time"}
                   />
                 </div>
@@ -607,7 +609,6 @@ export default function AdminWorkoutsModal({
                   <ControlledTimeInput
                     control={form.control}
                     name="endTime"
-                    id={"endTime"}
                     label={"End Time"}
                   />
                 </div>
@@ -623,6 +624,7 @@ export default function AdminWorkoutsModal({
                             placeholder="Start Date"
                             type="date"
                             {...field}
+                            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                             value={field.value ?? ""}
                           />
                         </FormControl>
@@ -757,7 +759,7 @@ export default function AdminWorkoutsModal({
                     onClick={() => {
                       closeModal();
                       openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                        id: event?.id ?? -1,
+                        id: event.id,
                         type: DeleteType.EVENT,
                       });
                     }}

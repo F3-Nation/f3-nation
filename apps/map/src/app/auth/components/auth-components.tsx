@@ -14,6 +14,8 @@ import { ControlledInput, Input } from "@acme/ui/input";
 import { Loader } from "@acme/ui/loader";
 import { toast } from "@acme/ui/toast";
 
+import { buildOtpCallbackUrl } from "~/utils/otp-callback-url";
+
 type AuthStatus = "idle" | "loading" | "verify-email" | "verify-code" | "error";
 
 const authStore = new ZustandStore({
@@ -100,7 +102,7 @@ const AuthForm = () => {
     const data = getValues();
     const normalizedEmail = normalizeEmail(data.email);
     void signIn(ProviderId.EMAIL, {
-      callbackUrl: authStore.get("callbackUrl") ?? "/",
+      callbackUrl: authStore.get("callbackUrl"),
       email: normalizedEmail,
       redirect: false,
     }).finally(() => {
@@ -236,9 +238,11 @@ const VerifyCode = () => {
     setIsLoading(true);
     try {
       const normalizedEmail = normalizeEmail(email);
-      window.location.href = `/api/auth/callback/otp?email=${encodeURIComponent(
-        normalizedEmail,
-      )}&token=${code}&callbackUrl=${encodeURIComponent(callbackUrl ?? "/")}`;
+      window.location.href = buildOtpCallbackUrl({
+        email: normalizedEmail,
+        code,
+        callbackUrl,
+      });
     } catch (error) {
       console.error(error);
     } finally {
@@ -308,16 +312,16 @@ export const AuthContent = ({
   const content = (
     <>
       {status === "loading" ? (
-        <Loading text={text ?? "Loading..."} />
+        <Loading text={text} />
       ) : status === "idle" ? (
         <AuthForm />
       ) : status === "verify-email" ? (
         <VerifyEmail />
       ) : status === "verify-code" ? (
         <VerifyCode />
-      ) : status === "error" ? (
+      ) : (
         <ErrorCard />
-      ) : null}
+      )}
     </>
   );
 

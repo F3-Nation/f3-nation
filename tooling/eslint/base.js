@@ -1,9 +1,9 @@
+import { defineConfig } from "eslint/config";
 import turboConfig from "eslint-config-turbo/flat";
 import tseslint from "typescript-eslint";
 import importPlugin from "eslint-plugin-import-x";
 
-/** @type {import("typescript-eslint").Config} */
-export default tseslint.config(
+export default defineConfig(
   {
     ignores: [
       "**/*.config.js",
@@ -46,6 +46,13 @@ export default tseslint.config(
       ],
       "import/consistent-type-specifier-style": ["error", "prefer-top-level"],
       "import/no-cycle": "error",
+      "@typescript-eslint/switch-exhaustiveness-check": [
+        "error",
+        { considerDefaultExhaustiveForUnions: true },
+      ],
+      "@typescript-eslint/no-deprecated": "error",
+      "@typescript-eslint/no-unnecessary-type-parameters": "error",
+      "@typescript-eslint/no-unnecessary-condition": "error",
       "@typescript-eslint/no-unused-expressions": [
         "error",
         { allowShortCircuit: true, allowTernary: true },

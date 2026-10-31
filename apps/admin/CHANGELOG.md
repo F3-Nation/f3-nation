@@ -1,5 +1,60 @@
 # Changelog
 
+## [2.10.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.9.1...admin@2.10.0) (2026-10-29)
+
+
+### Features
+
+* **admin,auth,me,homepage,observability:** report browser errors to PostHog ([#1313](https://github.com/F3-Nation/f3-nation/issues/1313)) ([502abd8](https://github.com/F3-Nation/f3-nation/commit/502abd8dcab6322eb849bf6879987e45d324fed0))
+* **ui,admin,map,me,auth,homepage:** add route error, not-found and loading boundaries ([#1316](https://github.com/F3-Nation/f3-nation/issues/1316)) ([9ecfb43](https://github.com/F3-Nation/f3-nation/commit/9ecfb43efbdbdb403aa3cf94dad261cb686d5996))
+
+
+### Bug Fixes
+
+* **admin,auth,map,me,api:** add baseline HTTP security headers ([#1339](https://github.com/F3-Nation/f3-nation/issues/1339)) ([2dd1548](https://github.com/F3-Nation/f3-nation/commit/2dd15485bf5c4174d913e5ed2905082a35e0ea39))
+* **admin:** keep ID inputs controlled in location, event and position dialogs ([#1369](https://github.com/F3-Nation/f3-nation/issues/1369)) ([e84826f](https://github.com/F3-Nation/f3-nation/commit/e84826fb90a2bf92f3446ea7f25be7e5abe63280)), closes [#1285](https://github.com/F3-Nation/f3-nation/issues/1285)
+* **admin:** set event instances date filter to today on the client ([#1368](https://github.com/F3-Nation/f3-nation/issues/1368)) ([1b3815f](https://github.com/F3-Nation/f3-nation/commit/1b3815f83ffaaaf9c1b9a1cc8814610c2a6a708f))
+* **api,auth,shared:** key rate limits on the Cloud Run-appended X-Forwarded-For hop ([#1340](https://github.com/F3-Nation/f3-nation/issues/1340)) ([ab85040](https://github.com/F3-Nation/f3-nation/commit/ab850404f1e78a5422173b53f0e2b35a857cb768))
+* **map,eslint:** enable React Compiler lint rules and stop marker moves leaking into the query cache ([#1295](https://github.com/F3-Nation/f3-nation/issues/1295)) ([f049283](https://github.com/F3-Nation/f3-nation/commit/f049283bf9d3c83a005475fac8f55a4e75cc4050))
+* **me,map:** handle an unavailable API with an outage screen and banner ([#1343](https://github.com/F3-Nation/f3-nation/issues/1343)) ([1f1a1e3](https://github.com/F3-Nation/f3-nation/commit/1f1a1e3324194250a53c11cb64f48ee7603d843f))
+* **me:** show a retrying outage screen when the API is down ([#1354](https://github.com/F3-Nation/f3-nation/issues/1354)) ([bf6343b](https://github.com/F3-Nation/f3-nation/commit/bf6343b4af94d8d82db6ba8dccb3f8c0f3fea140))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.16.0
+    * @acme/mail bumped to 0.1.6
+    * @acme/shared bumped to 0.6.0
+    * @acme/ui bumped to 0.3.0
+    * @acme/validators bumped to 0.5.2
+
+## [2.9.1](https://github.com/F3-Nation/f3-nation/compare/admin@2.9.0...admin@2.9.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **admin:** link time input labels to their inputs ([#1284](https://github.com/F3-Nation/f3-nation/issues/1284)) ([22f78fc](https://github.com/F3-Nation/f3-nation/commit/22f78fc0d7f55b977e1825c98685b437e362aaaa))
+* **admin:** retain organization IDs after partial saves ([#1259](https://github.com/F3-Nation/f3-nation/issues/1259)) ([cb94e6f](https://github.com/F3-Nation/f3-nation/commit/cb94e6f74bd172e1a261c114d5588aea2bec5e04))
+* **admin:** show an outage screen when the API is unavailable ([#1305](https://github.com/F3-Nation/f3-nation/issues/1305)) ([6acdd77](https://github.com/F3-Nation/f3-nation/commit/6acdd775a10f9e3260001b062f0735533f9425d5))
+* **api,admin:** list existing API-key roles accurately ([#1260](https://github.com/F3-Nation/f3-nation/issues/1260)) ([2542caa](https://github.com/F3-Nation/f3-nation/commit/2542caa44a7974ca0f5de6447b9011eb966536bd))
+* **api:** deduplicate cross-region event lists ([#1263](https://github.com/F3-Nation/f3-nation/issues/1263)) ([9d5cd91](https://github.com/F3-Nation/f3-nation/commit/9d5cd9112ec651449a568ed93bfe18c364fcf1aa))
+* **db-python:** include formatting in workspace checks ([#1300](https://github.com/F3-Nation/f3-nation/issues/1300)) ([2c54ed4](https://github.com/F3-Nation/f3-nation/commit/2c54ed453300e44720aa77e610156350717e8329))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.15.0
+    * @acme/shared bumped to 0.5.1
+    * @acme/ui bumped to 0.2.3
+    * @acme/validators bumped to 0.5.1
+    * @f3nation/sso-next bumped to 0.2.2
+  * devDependencies
+    * @f3nation/sso bumped to 0.5.0
+
 ## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/admin@2.8.0...admin@2.9.0) (2026-10-14)
 
 

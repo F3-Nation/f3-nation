@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isValidPhoneNumber } from "libphonenumber-js";
@@ -94,6 +94,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
   const [needsSignInAgain, setNeedsSignInAgain] = useState(false);
   const [showEmergency, setShowEmergency] = useState(false);
   const [regionSearch, setRegionSearch] = useState("");
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     fetch("/api/regions")
@@ -128,11 +129,12 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
     }
   }, [email, code, router]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submittingRef.current || needsSignInAgain) return;
+
     setLoading(true);
     setError("");
-    setNeedsSignInAgain(false);
 
     if (!firstName.trim() || !lastName.trim()) {
       setError("First name and last name are required.");
@@ -154,6 +156,9 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
       setLoading(false);
       return;
     }
+
+    submittingRef.current = true;
+    let accountCreated = false;
 
     try {
       // Create user via API — backend-agnostic, creates the `users` row
@@ -198,6 +203,8 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
       }
       clearDraft();
 
+      accountCreated = true;
+
       // User created — now sign in with the original MFA code. The `users`
       // row exists now, so Better Auth's databaseHooks.user.create.before
       // (apps/auth/src/lib/better-auth.ts) finds it and bridges the id.
@@ -227,6 +234,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
           redirect: false,
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- next-auth's signIn resolves undefined when it redirects
         if (result?.error) {
           setError(
             "Your account was created, but your code has expired. Please sign in again to continue.",
@@ -241,8 +249,16 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
         : "/";
       router.push(safeUrl);
     } catch {
-      setError("Something went wrong. Please try again.");
+      if (accountCreated) {
+        setError(
+          "Your account was created, but we couldn't sign you in. Please sign in again to continue.",
+        );
+        setNeedsSignInAgain(true);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }
@@ -427,7 +443,7 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || needsSignInAgain}
               className="w-full rounded-md bg-primary px-4 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {loading ? "Creating Account..." : "Create Account"}

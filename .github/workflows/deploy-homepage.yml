@@ -62,7 +62,8 @@ jobs:
           allowed-conclusions: success
 
   # ── Build static export ──
-  build:
+  # Keep deploy job names distinct from CI checks: the gate matches across workflows.
+  build-homepage:
     needs: ci-check
     runs-on: ubuntu-latest
     # Scope to github-pages so the build can read that environment's variables
@@ -82,6 +83,8 @@ jobs:
       - name: Build static export
         env:
           NEXT_PUBLIC_ORG_MAP_API_KEY: ${{ vars.NEXT_PUBLIC_ORG_MAP_API_KEY }}
+          # Inlined into the static bundle for browser error reporting (#1223).
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
         run: pnpm build --filter f3-homepage
 
       - name: Configure GitHub Pages
@@ -94,7 +97,7 @@ jobs:
 
   # ── Deploy to GitHub Pages ──
   deploy:
-    needs: build
+    needs: build-homepage
     runs-on: ubuntu-latest
     permissions:
       pages: write

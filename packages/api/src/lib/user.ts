@@ -20,7 +20,7 @@ import { UserSelectSchema } from "@acme/validators";
 import type { UserSelectType } from "@acme/validators";
 import { z } from "zod";
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import { checkHasRoleOnAnyOrg } from "../check-has-role-on-org";
 import { getSortingColumns } from "../get-sorting-columns";
 import type { Context } from "../shared";
 import { withPagination } from "../with-pagination";
@@ -298,11 +298,11 @@ export const buildUserListQuery = async ({
   includePii: boolean;
 }) => {
   const { limit, offset, usePagination } = resolvePagination({
-    pageSize: input?.pageSize,
-    pageIndex: input?.pageIndex,
+    pageSize: input.pageSize,
+    pageIndex: input.pageIndex,
     defaultPageSize: 10,
   });
-  const selectedRoles = input?.roles ?? [];
+  const selectedRoles = input.roles ?? [];
   // Role-less users have no roles row (LEFT JOIN -> NULL name), so selecting
   // "user" also matches them. OR the two branches so mixed selections match both.
   const roleFilter = (() => {
@@ -314,19 +314,19 @@ export const buildUserListQuery = async ({
   })();
 
   const where = and(
-    !input?.statuses?.length || input.statuses.length === UserStatus.length
+    !input.statuses?.length || input.statuses.length === UserStatus.length
       ? undefined
       : input.statuses.includes("active")
         ? eq(schema.users.status, "active")
         : eq(schema.users.status, "inactive"),
     roleFilter,
-    input?.searchTerm
+    input.searchTerm
       ? or(
-          ilike(schema.users.f3Name, `%${input?.searchTerm}%`),
-          ilike(schema.users.firstName, `%${input?.searchTerm}%`),
-          ilike(schema.users.lastName, `%${input?.searchTerm}%`),
+          ilike(schema.users.f3Name, `%${input.searchTerm}%`),
+          ilike(schema.users.firstName, `%${input.searchTerm}%`),
+          ilike(schema.users.lastName, `%${input.searchTerm}%`),
           includePii
-            ? ilike(schema.users.email, `%${input?.searchTerm}%`)
+            ? ilike(schema.users.email, `%${input.searchTerm}%`)
             : eq(
                 schema.users.email,
                 input.searchTerm.includes("@")
@@ -335,7 +335,7 @@ export const buildUserListQuery = async ({
               ),
         )
       : undefined,
-    input?.orgIds?.length
+    input.orgIds?.length
       ? or(
           inArray(schema.rolesXUsersXOrg.orgId, input.orgIds),
           and(
@@ -344,7 +344,7 @@ export const buildUserListQuery = async ({
           ),
         )
       : undefined,
-    input?.homeRegionIds?.length
+    input.homeRegionIds?.length
       ? inArray(schema.users.homeRegionId, input.homeRegionIds)
       : undefined,
   );
@@ -357,7 +357,7 @@ export const buildUserListQuery = async ({
 
   const sortedColumns = [
     ...getSortingColumns(
-      input?.sorting,
+      input.sorting,
       {
         id: schema.users.id,
         name: sql`btrim(concat_ws(' ', ${schema.users.firstName}, ${schema.users.lastName}), ${fullNameTrimCharacters})`,
@@ -513,22 +513,21 @@ export const buildSingleUserQuery = async (
   };
 };
 
-export const hasRoleOnAny = async (
+/**
+ * `checkHasRoleOnAnyOrg` for the caller in `ctx`: one hierarchy query per chunk
+ * of up to 10,000 unresolved orgs; a matching direct role avoids queries.
+ */
+export const hasRoleOnAny = (
   ctx: Context,
   orgIds: number[],
   roleName: "editor" | "admin",
-): Promise<boolean> => {
-  for (const orgId of new Set(orgIds)) {
-    const { success } = await checkHasRoleOnOrg({
-      orgId,
-      session: ctx.session,
-      db: ctx.db,
-      roleName,
-    });
-    if (success) return true;
-  }
-  return false;
-};
+): Promise<boolean> =>
+  checkHasRoleOnAnyOrg({
+    session: ctx.session,
+    db: ctx.db,
+    orgIds,
+    roleName,
+  });
 
 /**
  * Orgs whose editors may edit a user's profile: the home region, else any org

@@ -16,8 +16,8 @@ export const NearbyLocationUpdateButton = () => {
   const hasMovedAwayFromLocation = useMemo(() => {
     return (
       latLngToMeters(
-        center?.lat,
-        center?.lng,
+        center.lat,
+        center.lng,
         nearbyLocationCenter?.lat,
         nearbyLocationCenter?.lng,
       ) > 1000
@@ -44,7 +44,6 @@ export const NearbyLocationUpdateButton = () => {
       style={{ zIndex: Z_INDEX.OVERLAY_BUTTONS }}
       onClick={() => {
         const center = mapStore.get("center");
-        if (!center) return;
         mapStore.setState({
           nearbyLocationCenter: {
             ...center,

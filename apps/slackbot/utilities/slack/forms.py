@@ -628,6 +628,18 @@ WELCOME_MESSAGE_CONFIG_FORM = orm.BlockView(
             element=orm.ChannelsSelectElement(placeholder="Select the channel..."),
             hint="If enabled, this is the channel where welcome messages will be posted.",
         ),
+        orm.InputBlock(
+            label="Remind the battle buddy if an FNG hasn't joined Slack?",
+            action=actions.WELCOME_FNG_REMINDER_DAYS,
+            optional=False,
+            element=orm.RadioButtonsElement(
+                initial_value="3",
+                options=orm.as_selector_options(
+                    names=["Every 2 days", "Every 3 days", "Weekly", "Off"], values=["2", "3", "7", "0"]
+                ),
+            ),
+            hint="For FNGs added with /fng: DMs his battle buddy and whoever brought him, up to 3 times.",
+        ),
     ]
 )
 

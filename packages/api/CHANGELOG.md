@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.16.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.15.0...pkg-api@0.16.0) (2026-10-29)
+
+
+### Features
+
+* **api:** trust a list of auth issuers (AUTH_TRUSTED_ISSUERS) ([#1321](https://github.com/F3-Nation/f3-nation/issues/1321)) ([b88c157](https://github.com/F3-Nation/f3-nation/commit/b88c157a6b4d009e735f5e3e4407a898add1e725))
+* **region-pages:** migrate region pages into the monorepo ([#1355](https://github.com/F3-Nation/f3-nation/issues/1355)) ([4ecc49c](https://github.com/F3-Nation/f3-nation/commit/4ecc49cc1cf622d1397df4251f57128c4fe8b097))
+
+
+### Bug Fixes
+
+* **api,auth,shared:** key rate limits on the Cloud Run-appended X-Forwarded-For hop ([#1340](https://github.com/F3-Nation/f3-nation/issues/1340)) ([ab85040](https://github.com/F3-Nation/f3-nation/commit/ab850404f1e78a5422173b53f0e2b35a857cb768))
+* **api:** fixed instances not cascading from last of month series ([#1314](https://github.com/F3-Nation/f3-nation/issues/1314)) ([96cf1b4](https://github.com/F3-Nation/f3-nation/commit/96cf1b4d0a803d11309434cfddb81a7e094e5774))
+* **api:** require local channel and explicit opt-in for the dev mock session ([#1335](https://github.com/F3-Nation/f3-nation/issues/1335)) ([3342afe](https://github.com/F3-Nation/f3-nation/commit/3342afe12d7dd48bffa548f10c08f57c15d001d1))
+
+
+### Performance Improvements
+
+* **api:** batch role-on-org checks into one hierarchy query ([#1342](https://github.com/F3-Nation/f3-nation/issues/1342)) ([ccc8e90](https://github.com/F3-Nation/f3-nation/commit/ccc8e9055cc1605728c9e22d27387b555ea51092))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.12
+    * @acme/db bumped to 0.10.2
+    * @acme/env bumped to 0.2.0
+    * @acme/mail bumped to 0.1.6
+    * @acme/shared bumped to 0.6.0
+    * @acme/validators bumped to 0.5.2
+
+## [0.15.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.14.0...pkg-api@0.15.0) (2026-10-23)
+
+
+### Features
+
+* **api:** expanding region in a box trigger to AO transfers ([#1245](https://github.com/F3-Nation/f3-nation/issues/1245)) ([e09d437](https://github.com/F3-Nation/f3-nation/commit/e09d43752a711a3edef9e4fe75a8da8ed54409d2))
+
+
+### Bug Fixes
+
+* **api,admin:** list existing API-key roles accurately ([#1260](https://github.com/F3-Nation/f3-nation/issues/1260)) ([2542caa](https://github.com/F3-Nation/f3-nation/commit/2542caa44a7974ca0f5de6447b9011eb966536bd))
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+* **api:** deduplicate cross-region event lists ([#1263](https://github.com/F3-Nation/f3-nation/issues/1263)) ([9d5cd91](https://github.com/F3-Nation/f3-nation/commit/9d5cd9112ec651449a568ed93bfe18c364fcf1aa))
+* **api:** hide retired org hierarchies from anonymous reads ([#1275](https://github.com/F3-Nation/f3-nation/issues/1275)) ([ac11ec7](https://github.com/F3-Nation/f3-nation/commit/ac11ec7815a2267fa07cb1d32e6bf76f3fa17c7e))
+* **api:** validate region ID integer domain ([#1236](https://github.com/F3-Nation/f3-nation/issues/1236)) ([21c87c0](https://github.com/F3-Nation/f3-nation/commit/21c87c0451695a84e42523b79e775ec8b3396a69))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/auth bumped to 0.2.11
+    * @acme/db bumped to 0.10.1
+    * @acme/shared bumped to 0.5.1
+    * @acme/validators bumped to 0.5.1
+
 ## [0.14.0](https://github.com/F3-Nation/f3-nation/compare/pkg-api@0.13.0...pkg-api@0.14.0) (2026-10-14)
 
 

@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## [2.11.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.10.0...slackbot@2.11.0) (2026-10-29)
+
+
+### Features
+
+* **region-pages:** migrate region pages into the monorepo ([#1355](https://github.com/F3-Nation/f3-nation/issues/1355)) ([4ecc49c](https://github.com/F3-Nation/f3-nation/commit/4ecc49cc1cf622d1397df4251f57128c4fe8b097))
+* **slackbot:** tell an FNG's battle buddy when he joins Slack, remind until he does ([#1388](https://github.com/F3-Nation/f3-nation/issues/1388)) ([fcd22dd](https://github.com/F3-Nation/f3-nation/commit/fcd22ddc2f8c72fcadd805b04d8f82fbf1e639d5))
+
+
+### Bug Fixes
+
+* **deps:** pin dependencies ([#1389](https://github.com/F3-Nation/f3-nation/issues/1389)) ([f16af61](https://github.com/F3-Nation/f3-nation/commit/f16af61d0dcd0869971d659e1cd5dd198c185570))
+* **slackbot:** /fng asks who brought the FNG instead of assuming the buddy ([#1353](https://github.com/F3-Nation/f3-nation/issues/1353)) ([35f2ce1](https://github.com/F3-Nation/f3-nation/commit/35f2ce1f9d00bf16d5b71a5acf3af6e5641545a0))
+* **slackbot:** ignore HC/Un-HC clicks from the event's Q or Co-Q ([#1416](https://github.com/F3-Nation/f3-nation/issues/1416)) ([f86e31f](https://github.com/F3-Nation/f3-nation/commit/f86e31fcc40e3b0c1123d48a87071e3d30bf01d9))
+* **slackbot:** link cached Slack users that have no F3 user in get_user ([#1396](https://github.com/F3-Nation/f3-nation/issues/1396)) ([98541f6](https://github.com/F3-Nation/f3-nation/commit/98541f64b64015121cf52d999b8f175d027a7264))
+* **slackbot:** report emergency notification outcomes ([#1362](https://github.com/F3-Nation/f3-nation/issues/1362)) ([efd8401](https://github.com/F3-Nation/f3-nation/commit/efd8401879ca61c5710e3bd878a53b7a5f7d1166))
+
+## [2.10.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.9.0...slackbot@2.10.0) (2026-10-23)
+
+
+### Features
+
+* **slackbot:** add /fng to sign up a new PAX ([#1224](https://github.com/F3-Nation/f3-nation/issues/1224)) ([3ae6695](https://github.com/F3-Nation/f3-nation/commit/3ae6695bfc036e34d490c93ea3423140f4408b02))
+
+
+### Bug Fixes
+
+* **api,shared:** parse REST Boolean inputs explicitly ([#1252](https://github.com/F3-Nation/f3-nation/issues/1252)) ([5136da6](https://github.com/F3-Nation/f3-nation/commit/5136da69dc08445cea4d55abac5891f59a75c7bf))
+* **deps:** update python dependencies and CA bundles ([#1325](https://github.com/F3-Nation/f3-nation/issues/1325)) ([3cc6edf](https://github.com/F3-Nation/f3-nation/commit/3cc6edf62b97c03a232523d65b99fa052f57b9fc))
+* **slackbot:** downrange and connect optimizations ([#1370](https://github.com/F3-Nation/f3-nation/issues/1370)) ([50ae512](https://github.com/F3-Nation/f3-nation/commit/50ae512496ed9b689fb13dbc5ac74e3f2eb1ffc8))
+* **slackbot:** route shared email through configured SMTP ([#1276](https://github.com/F3-Nation/f3-nation/issues/1276)) ([014c644](https://github.com/F3-Nation/f3-nation/commit/014c644982cf3a150d4db0249124b6f6cdcefd0f))
+
+
+### Performance Improvements
+
+* **slackbot:** addressing high db spikes on calendar query ([#1270](https://github.com/F3-Nation/f3-nation/issues/1270)) ([1715159](https://github.com/F3-Nation/f3-nation/commit/1715159fe6c5cd9d9df8e869ed2929a51ef0f338))
+
 ## [2.9.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.8.0...slackbot@2.9.0) (2026-10-14)
 
 

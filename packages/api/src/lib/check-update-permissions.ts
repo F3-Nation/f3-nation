@@ -4,11 +4,12 @@ import { eq, inArray, schema } from "@acme/db";
 import { isTruthy, onlyUnique } from "@acme/shared/common/functions";
 import type { UpdateRequestOrgIdFields } from "@acme/validators/request-schemas";
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import type { RoleCheckOutcome } from "../check-has-role-on-org";
+import { checkHasRolesOnOrgs } from "../check-has-role-on-org";
 
 export type CheckUpdatePermissionsInput = UpdateRequestOrgIdFields;
 
-type RoleCheckResult = Awaited<ReturnType<typeof checkHasRoleOnOrg>>;
+type RoleCheckResult = RoleCheckOutcome;
 
 export interface UpdatePermissionsResult {
   /** True only if the caller has the editor role on every affected org. */
@@ -52,7 +53,7 @@ export const checkUpdatePermissions = async (params: {
 
   const orgsToCheck = [
     existingEvent?.orgId,
-    ...locations.map((l) => l?.orgId),
+    ...locations.map((l) => l.orgId),
     input.originalAoId,
     input.newAoId,
     input.originalRegionId,
@@ -65,16 +66,16 @@ export const checkUpdatePermissions = async (params: {
     return { success: false, results: [] };
   }
 
-  const canEditRegions = await Promise.all(
-    orgsToCheck.map((orgId) =>
-      checkHasRoleOnOrg({
-        orgId,
-        session,
-        db: ctx.db,
-        roleName: "editor",
-      }),
-    ),
-  );
+  // One batched hierarchy query for every affected org; results line up with
+  // orgsToCheck by index.
+  const canEditRegions = await checkHasRolesOnOrgs({
+    session,
+    db: ctx.db,
+    checks: orgsToCheck.map((orgId) => ({
+      orgId,
+      roleName: "editor" as const,
+    })),
+  });
 
   return {
     success: canEditRegions.every((c) => c.success),

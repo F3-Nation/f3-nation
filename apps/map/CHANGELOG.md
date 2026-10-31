@@ -1,5 +1,57 @@
 # Changelog
 
+## [7.9.0](https://github.com/F3-Nation/f3-nation/compare/map@7.8.1...map@7.9.0) (2026-10-29)
+
+
+### Features
+
+* **admin,auth,me,homepage,observability:** report browser errors to PostHog ([#1313](https://github.com/F3-Nation/f3-nation/issues/1313)) ([502abd8](https://github.com/F3-Nation/f3-nation/commit/502abd8dcab6322eb849bf6879987e45d324fed0))
+* **ui,admin,map,me,auth,homepage:** add route error, not-found and loading boundaries ([#1316](https://github.com/F3-Nation/f3-nation/issues/1316)) ([9ecfb43](https://github.com/F3-Nation/f3-nation/commit/9ecfb43efbdbdb403aa3cf94dad261cb686d5996))
+
+
+### Bug Fixes
+
+* **admin,auth,map,me,api:** add baseline HTTP security headers ([#1339](https://github.com/F3-Nation/f3-nation/issues/1339)) ([2dd1548](https://github.com/F3-Nation/f3-nation/commit/2dd15485bf5c4174d913e5ed2905082a35e0ea39))
+* **api,auth,shared:** key rate limits on the Cloud Run-appended X-Forwarded-For hop ([#1340](https://github.com/F3-Nation/f3-nation/issues/1340)) ([ab85040](https://github.com/F3-Nation/f3-nation/commit/ab850404f1e78a5422173b53f0e2b35a857cb768))
+* **map,eslint:** enable React Compiler lint rules and stop marker moves leaking into the query cache ([#1295](https://github.com/F3-Nation/f3-nation/issues/1295)) ([f049283](https://github.com/F3-Nation/f3-nation/commit/f049283bf9d3c83a005475fac8f55a4e75cc4050))
+* **map:** don't throw to the global error page when the parent-event fallback fails ([#1334](https://github.com/F3-Nation/f3-nation/issues/1334)) ([d6eb52c](https://github.com/F3-Nation/f3-nation/commit/d6eb52c99c378dbe4dbd4c5a966359563f4c5b9b))
+* **me,map:** handle an unavailable API with an outage screen and banner ([#1343](https://github.com/F3-Nation/f3-nation/issues/1343)) ([1f1a1e3](https://github.com/F3-Nation/f3-nation/commit/1f1a1e3324194250a53c11cb64f48ee7603d843f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.16.0
+    * @acme/auth bumped to 0.2.12
+    * @acme/shared bumped to 0.6.0
+    * @acme/ui bumped to 0.3.0
+    * @acme/validators bumped to 0.5.2
+
+## [7.8.1](https://github.com/F3-Nation/f3-nation/compare/map@7.8.0...map@7.8.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **api:** validate region ID integer domain ([#1236](https://github.com/F3-Nation/f3-nation/issues/1236)) ([21c87c0](https://github.com/F3-Nation/f3-nation/commit/21c87c0451695a84e42523b79e775ec8b3396a69))
+* **auth,map:** stop trusting client-supplied roles on JWT update ([#1341](https://github.com/F3-Nation/f3-nation/issues/1341)) ([f27c924](https://github.com/F3-Nation/f3-nation/commit/f27c9241d062ed417cd8701198cdc0583c7c4558))
+* **auth:** generate cryptographically secure OTP codes ([#1306](https://github.com/F3-Nation/f3-nation/issues/1306)) ([e5395f0](https://github.com/F3-Nation/f3-nation/commit/e5395f02d2b369627f401a5813e79d80448bb9e7))
+* **map:** encode the OTP code in the sign-in callback URL ([#1299](https://github.com/F3-Nation/f3-nation/issues/1299)) ([d55d004](https://github.com/F3-Nation/f3-nation/commit/d55d004cdf0107ab7a4cacbaab1ea75100cc9f73))
+* **map:** give search results unique keys ([#1329](https://github.com/F3-Nation/f3-nation/issues/1329)) ([ae16de2](https://github.com/F3-Nation/f3-nation/commit/ae16de25e5581b8efd6267f11201749f8d7c00e5))
+* **map:** guard Cloud Run channel configuration ([#1298](https://github.com/F3-Nation/f3-nation/issues/1298)) ([099b295](https://github.com/F3-Nation/f3-nation/commit/099b295aba13087dbac296891ec26c169830a521))
+* **map:** link time input labels to their inputs ([#1283](https://github.com/F3-Nation/f3-nation/issues/1283)) ([3640306](https://github.com/F3-Nation/f3-nation/commit/3640306791e757c862e59c3992ea2e0e6a5c4049))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/api bumped to 0.15.0
+    * @acme/auth bumped to 0.2.11
+    * @acme/shared bumped to 0.5.1
+    * @acme/ui bumped to 0.2.3
+    * @acme/validators bumped to 0.5.1
+
 ## [7.8.0](https://github.com/F3-Nation/f3-nation/compare/map@7.7.0...map@7.8.0) (2026-10-14)
 
 

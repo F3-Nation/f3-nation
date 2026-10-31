@@ -28,6 +28,8 @@ import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { paginationFields, resolvePagination } from "../lib/pagination";
 import { notifyMapDataChange } from "../lib/webhook-events";
+import { orgAndAncestorsAreActive } from "../org-activity";
+import { logIfOrgTreeExceedsMaxDepth } from "../org-tree";
 import { requireEditorOnRescope } from "../require-editor-on-rescope";
 import {
   adminProcedure,
@@ -158,17 +160,18 @@ export const locationRouter = {
         }
       }
 
-      // publicReadProcedure lets an anonymous caller reach this endpoint
-      // Every authenticated-caller behavior below is unchanged
-      // (including "no statuses means no filter"); an anonymous caller is
-      // additionally clamped to active-only, whatever `statuses` it passes,
-      // since inactive locations were never meant to be public.
+      // Anonymous callers see only active locations. Signed-in callers keep
+      // the requested status filter, including no filter when omitted.
       const isAnonymous = !ctx.session?.user;
       const effectiveStatuses = isAnonymous
         ? ["active" as const]
         : input?.statuses;
+      if (isAnonymous) void logIfOrgTreeExceedsMaxDepth(ctx.db);
 
       const where = and(
+        isAnonymous
+          ? orgAndAncestorsAreActive(schema.locations.orgId)
+          : undefined,
         !effectiveStatuses?.length ||
           effectiveStatuses.length === IsActiveStatus.length
           ? undefined
@@ -177,8 +180,8 @@ export const locationRouter = {
             : eq(schema.locations.isActive, false),
         input?.searchTerm
           ? or(
-              ilike(schema.locations.name, `%${input?.searchTerm}%`),
-              ilike(schema.locations.description, `%${input?.searchTerm}%`),
+              ilike(schema.locations.name, `%${input.searchTerm}%`),
+              ilike(schema.locations.description, `%${input.searchTerm}%`),
             )
           : undefined,
         input?.regionIds?.length
@@ -188,10 +191,9 @@ export const locationRouter = {
         input?.onlyMine && !isNationAdmin && editableOrgIds.length > 0
           ? inArray(schema.locations.orgId, editableOrgIds)
           : undefined,
-        // An editor can keep a location active while its workouts are all
-        // isPrivate (or inactive) — the public map hides that location, so
-        // an anonymous caller shouldn't be able to retrieve its address
-        // through this list either. Authenticated callers are unaffected.
+        // A location can stay active while all its workouts are private,
+        // inactive, or owned by retired org branches. Require an eligible
+        // workout before returning its address to anonymous callers.
         isAnonymous
           ? exists(
               ctx.db
@@ -206,6 +208,7 @@ export const locationRouter = {
                     eq(schema.events.locationId, schema.locations.id),
                     eq(schema.events.isActive, true),
                     eq(schema.events.isPrivate, false),
+                    orgAndAncestorsAreActive(schema.events.orgId),
                   ),
                 ),
             )

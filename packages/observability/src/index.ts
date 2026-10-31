@@ -151,9 +151,8 @@ export async function captureException(
     // Never propagate — but always leave a trace so a pipeline failure
     // doesn't look identical to "no errors occurred." console.error, not
     // logError: this function IS the logger's errorReporter target, so
-    // logError here would re-enter it. One of the three documented
-    // exceptions to AGENTS.md's no-console rule — see
-    // docs/OBSERVABILITY_PLAN.md §6.
+    // logError here would re-enter it. A documented exception to
+    // AGENTS.md's no-console rule — see docs/OBSERVABILITY_PLAN.md §6.
     console.error("observability.capture_exception_failed", reportErr);
   }
 }
@@ -300,6 +299,7 @@ function safeStringify(value: unknown): string {
 
 function safeJsonStringify(value: unknown): string {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- JSON.stringify returns undefined for undefined, functions and symbols
     return JSON.stringify(value) ?? safeStringify(value);
   } catch {
     return safeStringify(value);

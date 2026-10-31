@@ -1,6 +1,5 @@
 // data comes from z.record(z.unknown()) — String() casts are intentional
 /* eslint-disable @typescript-eslint/no-base-to-string */
-import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { mail, Templates } from "@acme/mail";
@@ -12,8 +11,8 @@ import { nationAdminProcedure } from "../shared";
 /**
  * Templates the sendTest/preview handlers actually implement. Narrowing the
  * input to this subset prevents unsupported templates (e.g. regionInABox) from
- * passing validation — which would make sendTest report success without sending
- * and preview throw "Unknown template".
+ * passing validation, where sendTest and preview would treat them as
+ * mapChangeRequest.
  */
 export const supportedTemplateSchema = z.enum([
   Templates.feedbackForm,
@@ -106,7 +105,7 @@ export const mailRouter = {
             subject: String(data.subject ?? "Test Subject"),
             description: String(data.description ?? "Test Description"),
           });
-        } else if (template === Templates.mapChangeRequest) {
+        } else {
           await mail.sendTemplateMessages(Templates.mapChangeRequest, {
             to,
             regionName: String(data.regionName ?? "Test Region"),
@@ -174,7 +173,7 @@ export const mailRouter = {
           subject: String(data.subject ?? "Test Subject"),
           description: String(data.description ?? "Test Description"),
         });
-      } else if (template === Templates.mapChangeRequest) {
+      } else {
         html = mail.getTemplate(Templates.mapChangeRequest, {
           regionName: String(data.regionName ?? "Test Region"),
           workoutName: String(data.workoutName ?? "Test Workout"),
@@ -188,10 +187,6 @@ export const mailRouter = {
           recipientOrg: data.recipientOrg
             ? String(data.recipientOrg)
             : undefined,
-        });
-      } else {
-        throw new ORPCError("INTERNAL_SERVER_ERROR", {
-          message: "Unknown template",
         });
       }
 

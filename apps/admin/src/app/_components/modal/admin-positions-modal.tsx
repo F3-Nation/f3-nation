@@ -164,7 +164,7 @@ export default function AdminPositionsModal({
 
   const actionText = isEditing ? "update" : "add";
   const actionTextPast = isEditing ? "updated" : "added";
-  const showDeactivateButton = isEditing && position?.isActive !== false;
+  const showDeactivateButton = isEditing && position.isActive !== false;
 
   const crupdatePosition = useMutation(
     orpc.position.crupdate.mutationOptions({
@@ -176,7 +176,7 @@ export default function AdminPositionsModal({
       },
       onError: (err) => {
         toast.error(
-          err instanceof ORPCError && err?.code === "UNAUTHORIZED"
+          err instanceof ORPCError && err.code === "UNAUTHORIZED"
             ? `You are not authorized to ${actionText} this position`
             : `Failed to ${actionText} position`,
         );
@@ -226,7 +226,12 @@ export default function AdminPositionsModal({
                   <FormItem>
                     <FormLabel>ID</FormLabel>
                     <FormControl>
-                      <Input placeholder="ID" disabled {...field} />
+                      <Input
+                        placeholder="ID"
+                        disabled
+                        {...field}
+                        value={field.value ?? ""}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -244,6 +249,7 @@ export default function AdminPositionsModal({
                       <Input
                         placeholder="Position name"
                         {...field}
+                        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- react-hook-form values are undefined until reset() fills them
                         value={field.value ?? ""}
                       />
                     </FormControl>
@@ -367,7 +373,7 @@ export default function AdminPositionsModal({
                   onClick={() => {
                     closeModal();
                     openModal(ModalType.ADMIN_DELETE_CONFIRMATION, {
-                      id: position?.id ?? -1,
+                      id: position.id,
                       type: DeleteType.POSITION,
                     });
                   }}

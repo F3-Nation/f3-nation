@@ -146,6 +146,7 @@ export class PostHogExceptionExporter implements LogRecordExporter {
       // record's attributes, so it has to be lifted across explicitly.
       // Omitted rather than sent as undefined when a foreign emitter produces
       // a resource-less record, so PostHog never shows an empty facet value.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- foreign emitters can produce resource-less records (see above)
       const serviceName = record.resource?.attributes[ATTR_SERVICE_NAME];
 
       // root_cause_*, service.name and environment are spread AFTER the
@@ -165,9 +166,8 @@ export class PostHogExceptionExporter implements LogRecordExporter {
       // to "no errors occurred." Deliberately console.error, not logError:
       // this exporter sits at the bottom of the logger's errorReporter
       // bridge, so logError here would re-enter it via
-      // packages/logger/src/index.ts's reportable(). One of the three
-      // documented exceptions to AGENTS.md's no-console rule — see
-      // docs/OBSERVABILITY_PLAN.md §6.
+      // packages/logger/src/index.ts's reportable(). A documented exception
+      // to AGENTS.md's no-console rule — see docs/OBSERVABILITY_PLAN.md §6.
       console.error("posthog.capture_exception_failed", reportErr);
     }
   }

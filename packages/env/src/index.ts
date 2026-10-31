@@ -3,12 +3,13 @@ import { z } from "zod";
 
 // Only override DATABASE_URL from --url flag if in non-production (i.e., development or test) environment
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- NODE_ENV is unset when scripts run outside Next/Vitest
 const nodeEnv = process.env.NODE_ENV || "development";
 if (nodeEnv !== "production") {
   const args = process.argv as string[] | undefined;
   const urlFlagIndex = args?.indexOf("--url") ?? -1;
   if (urlFlagIndex !== -1 && args?.[urlFlagIndex + 1]) {
-    process.env.DATABASE_URL = args?.[urlFlagIndex + 1];
+    process.env.DATABASE_URL = args[urlFlagIndex + 1];
   }
 }
 
@@ -38,6 +39,15 @@ export const env = createEnv({
     SUPER_ADMIN_API_KEY: z.string().min(1).optional(),
     NOTIFY_WEBHOOK_URLS_COMMA_SEPARATED: z.string().optional(),
     GCS_EMULATOR_HOST: z.string().optional(),
+    // Comma-separated auth server origins whose JWTs packages/api accepts.
+    // Only declared here; the format is checked by
+    // packages/api/src/trusted-issuers.ts, which throws at startup on a
+    // malformed entry. Unset and empty both mean "accept no JWT".
+    AUTH_TRUSTED_ISSUERS: z.string().optional(),
+    // Shared with the map and admin proxies, which send it with the browser's
+    // IP so the API rate-limits each visitor separately. Unset, the API
+    // ignores proxy-reported IPs and keys proxied traffic on the proxy's IP.
+    PROXY_CLIENT_IP_SECRET: z.string().min(32).optional(),
   },
   client: {
     NEXT_PUBLIC_ADMIN_URL: z.string().min(1).optional(),

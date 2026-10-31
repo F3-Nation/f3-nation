@@ -7,6 +7,8 @@
 import { createRouterClient } from "@orpc/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as ApiLogger from "./logger";
+
 // Mock the MemoryRatelimiter before importing shared.ts
 const mockLimit = vi.fn();
 const maxRequests = 10;
@@ -22,6 +24,13 @@ vi.mock("@orpc/experimental-ratelimit/memory", () => ({
 // session behavior from NextAuth's own request handling.
 vi.mock("@acme/auth", () => ({
   getSessionFromHeaders: vi.fn(() => Promise.resolve(null)),
+}));
+
+const { mockLogWarn } = vi.hoisted(() => ({ mockLogWarn: vi.fn() }));
+
+vi.mock("./logger", async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiLogger>()),
+  logWarn: mockLogWarn,
 }));
 
 // Helper to create a test client with custom headers
@@ -169,7 +178,7 @@ describe("Rate Limiting Middleware", () => {
     expect(mockLimit).toHaveBeenCalledWith("192.168.1.1");
   });
 
-  it("should extract first IP from x-forwarded-for chain", async () => {
+  it("keys on the hop Cloud Run appended, not the caller-set leftmost entry", async () => {
     mockLimit.mockResolvedValue({
       success: true,
       limit: maxRequests,
@@ -177,7 +186,8 @@ describe("Rate Limiting Middleware", () => {
       reset: Date.now() + 60000,
     });
 
-    // Simulate proxy chain: client -> proxy1 -> proxy2 -> server
+    // Caller sent "203.0.113.50, 70.41.3.18"; Cloud Run appended the real
+    // client IP. Only that last entry can't be forged.
     const mockHeaders = new Headers({
       "x-forwarded-for": "203.0.113.50, 70.41.3.18, 150.172.238.178",
     });
@@ -185,11 +195,76 @@ describe("Rate Limiting Middleware", () => {
     const client = await createTestClientWithHeaders(mockHeaders);
     await client.test();
 
-    // Should use the first IP (the actual client)
-    expect(mockLimit).toHaveBeenCalledWith("203.0.113.50");
+    expect(mockLimit).toHaveBeenCalledWith("150.172.238.178");
   });
 
-  it("should handle x-forwarded-for with spaces around IPs", async () => {
+  it("gives every spoofed x-forwarded-for from one client the same bucket", async () => {
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: maxRequests,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+
+    const client = await createTestClientWithHeaders(
+      new Headers({ "x-forwarded-for": "1.1.1.1, 198.51.100.7" }),
+    );
+    await client.test();
+    const client2 = await createTestClientWithHeaders(
+      new Headers({ "x-forwarded-for": "2.2.2.2, 3.3.3.3, 198.51.100.7" }),
+    );
+    await client2.test();
+
+    expect(mockLimit).toHaveBeenNthCalledWith(1, "198.51.100.7");
+    expect(mockLimit).toHaveBeenNthCalledWith(2, "198.51.100.7");
+  });
+
+  it("keys a proxied request on the client IP the proxy reports with a matching secret", async () => {
+    vi.stubEnv("PROXY_CLIENT_IP_SECRET", "s".repeat(32));
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: maxRequests,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+
+    // The API's trusted hop is the map proxy's egress IP (35.191.0.1).
+    const client = await createTestClientWithHeaders(
+      new Headers({
+        "x-forwarded-for": "198.51.100.7, 35.191.0.1",
+        "x-f3-client-ip": "198.51.100.7",
+        "x-f3-proxy-secret": "s".repeat(32),
+      }),
+    );
+    await client.test();
+
+    expect(mockLimit).toHaveBeenCalledWith("198.51.100.7");
+    vi.unstubAllEnvs();
+  });
+
+  it("ignores a reported client IP whose secret does not match", async () => {
+    vi.stubEnv("PROXY_CLIENT_IP_SECRET", "s".repeat(32));
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: maxRequests,
+      remaining: 9,
+      reset: Date.now() + 60000,
+    });
+
+    const client = await createTestClientWithHeaders(
+      new Headers({
+        "x-forwarded-for": "198.51.100.7",
+        "x-f3-client-ip": "6.6.6.6",
+        "x-f3-proxy-secret": "t".repeat(32),
+      }),
+    );
+    await client.test();
+
+    expect(mockLimit).toHaveBeenCalledWith("198.51.100.7");
+    vi.unstubAllEnvs();
+  });
+
+  it("should handle x-forwarded-for with spaces and empty entries", async () => {
     mockLimit.mockResolvedValue({
       success: true,
       limit: maxRequests,
@@ -198,14 +273,13 @@ describe("Rate Limiting Middleware", () => {
     });
 
     const mockHeaders = new Headers({
-      "x-forwarded-for": "  192.168.1.100  , 10.0.0.1",
+      "x-forwarded-for": "  192.168.1.100  ,  10.0.0.1  , ",
     });
 
     const client = await createTestClientWithHeaders(mockHeaders);
     await client.test();
 
-    // Should trim whitespace from the first IP
-    expect(mockLimit).toHaveBeenCalledWith("192.168.1.100");
+    expect(mockLimit).toHaveBeenCalledWith("10.0.0.1");
   });
 });
 
@@ -221,7 +295,9 @@ describe("Development mock session", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.doUnmock("@acme/db/client");
     vi.resetModules();
+    mockLogWarn.mockClear();
   });
 
   it("publicReadProcedure sees a null session for an unauthenticated dev request", async () => {
@@ -240,8 +316,7 @@ describe("Development mock session", () => {
     await expect(client.test()).resolves.toEqual({ session: null });
   });
 
-  it("protectedProcedure still succeeds with the dev mock session for an unauthenticated dev request", async () => {
-    vi.stubEnv("NODE_ENV", "development");
+  const callProtected = async (reqHeaders = new Headers()) => {
     const { protectedProcedure } = await import("./shared");
 
     const testRouter = {
@@ -250,9 +325,96 @@ describe("Development mock session", () => {
       })),
     };
     const client = createRouterClient(testRouter, {
-      context: () => ({ reqHeaders: new Headers() }),
+      context: () => ({ reqHeaders }),
     });
+    return client.test();
+  };
 
-    await expect(client.test()).resolves.toEqual({ userId: "0" });
+  const stubLocalDev = () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("NEXT_PUBLIC_CHANNEL", "local");
+    vi.stubEnv("ALLOW_DEV_MOCK_SESSION", "true");
+  };
+
+  const expectRefused = async (call: Promise<unknown>) => {
+    await expect(call).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(mockLogWarn).not.toHaveBeenCalledWith(
+      "api.auth.dev_mock_session_issued",
+    );
+  };
+
+  it("protectedProcedure issues the dev mock session for an unauthenticated local request", async () => {
+    stubLocalDev();
+
+    await expect(callProtected()).resolves.toEqual({ userId: "0" });
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      "api.auth.dev_mock_session_issued",
+    );
+  });
+
+  it("does not mask a rejected bearer token with the dev mock session", async () => {
+    stubLocalDev();
+    // A `Client` header sends the token past the JWT check to the API-key
+    // lookup; finding no row makes getSession return null, so only the
+    // bearer-token check stands between this request and the mock.
+    vi.doMock("@acme/db/client", () => ({
+      db: {
+        select: () => ({
+          from: () => ({
+            innerJoin: () => ({ where: () => Promise.resolve([]) }),
+          }),
+        }),
+      },
+    }));
+
+    await expectRefused(
+      callProtected(
+        new Headers({
+          Authorization: "Bearer not-a-real-token",
+          Client: "test",
+        }),
+      ),
+    );
+  });
+
+  it("personalUserProcedure refuses the dev mock session", async () => {
+    stubLocalDev();
+    const { personalUserProcedure } = await import("./shared");
+
+    const client = createRouterClient(
+      { test: personalUserProcedure.handler(() => ({ ok: true })) },
+      { context: () => ({ reqHeaders: new Headers() }) },
+    );
+
+    await expect(client.test()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it.each(["", "false"])(
+    "refuses the dev mock session when ALLOW_DEV_MOCK_SESSION is %j",
+    async (flag) => {
+      stubLocalDev();
+      vi.stubEnv("ALLOW_DEV_MOCK_SESSION", flag);
+
+      await expectRefused(callProtected());
+    },
+  );
+
+  it.each(["staging", "prod", "ci", "branch", "dev"])(
+    "refuses the dev mock session on channel %j even with NODE_ENV=development and the flag",
+    async (channel) => {
+      stubLocalDev();
+      vi.stubEnv("NEXT_PUBLIC_CHANNEL", channel);
+
+      await expectRefused(callProtected());
+    },
+  );
+
+  it("refuses the dev mock session outside NODE_ENV=development", async () => {
+    stubLocalDev();
+    vi.stubEnv("NODE_ENV", "production");
+
+    await expectRefused(callProtected());
   });
 });

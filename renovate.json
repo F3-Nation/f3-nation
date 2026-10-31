@@ -91,18 +91,6 @@
       "matchDatasources": ["npm"],
       "matchDepNames": ["fast-uri@<3.1.5"],
       "allowedVersions": "<4.0.0"
-    },
-    {
-      "description": "Skip zod 4.6.x: 4.6.0's JSON-Schema-converter rewrite (colinhacks/zod#6550, PR #6554) drops format/minLength/int32 bounds when @orpc/zod's ZodToJsonSchemaConverter converts apps/api's whole router in one pass, failing apps/api's openapi-spec.char.test.ts golden snapshot. Isolated single-schema conversions are unaffected — only the bulk multi-schema document path regresses. Filed upstream as colinhacks/zod#6613. `>=4.7.0` has no upper bound, so 4.7.x and any later major are proposed automatically once published; remove this rule once #6613 is fixed or a 4.6.x/4.7+ release is otherwise confirmed to fix the bulk-conversion case.",
-      "matchDatasources": ["npm"],
-      "matchPackageNames": ["zod"],
-      "allowedVersions": "<4.6.0 || >=4.7.0"
-    },
-    {
-      "description": "Hold pnpm below 12.6: pnpm 12.8+ writes catalog settings that `turbo prune --docker` (<= 2.11.7) fails to prune, so `pnpm install --frozen-lockfile` fails with ERR_PNPM_LOCKFILE_CONFIG_MISMATCH in every app's Docker build (vercel/turborepo#14372). The fix first shipped in turbo 2.11.8-canary.1; remove this rule once a stable turbo with it is adopted.",
-      "matchDatasources": ["npm"],
-      "matchDepNames": ["pnpm"],
-      "allowedVersions": "<12.6.0"
     }
   ]
 }

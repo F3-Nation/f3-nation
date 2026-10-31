@@ -31,6 +31,29 @@ Install these before starting:
 
 Make sure Docker Desktop is **running** before you continue.
 
+### Bash for deployment-helper tests
+
+Deployment helpers and their unit tests require **Bash 4 or newer**, selected by
+`bash` on `PATH`. The Bash 3.2 bundled with macOS does not support their associative
+arrays. On macOS, install [Homebrew's Bash](https://formulae.brew.sh/formula/bash)
+and put it first on `PATH` before running `pnpm`:
+
+```bash
+brew install bash
+export PATH="$(brew --prefix bash)/bin:$PATH"
+```
+
+Keep that `export` in your shell startup file (for example, `~/.zshrc` for zsh),
+and reopen your terminal or IDE terminal so it uses the updated `PATH`. On Linux
+or WSL 2, use your distribution's `bash` package and check that its version is at
+least 4. On either platform, verify the executable selected in the terminal where
+you will run tests:
+
+```bash
+command -v bash
+bash --version
+```
+
 ## Detailed Prerequites Install Instructions
 
 <details>
@@ -144,6 +167,13 @@ uv --version
 ```
 
 After installing `uv`, run `pnpm python:install` to sync the Slackbot Python dependencies.
+
+Python workspaces share Ruff settings from the root [`pyproject.toml`](../pyproject.toml).
+Each member explicitly extends that file in its own `pyproject.toml`, which also
+holds any package-specific overrides, including Analytics' existing relative-import
+ordering. Each member's `dev` dependency group pins the exact Ruff version, with
+the resolved version recorded in [`uv.lock`](../uv.lock). Renovate manages these
+pins alongside the other Python dependencies.
 
 </details>
 
@@ -339,11 +369,12 @@ The `5433` port is where the Docker Postgres container is exposed on your machin
 
 ### Auth & API keys
 
-| Variable              | Value                   | Meaning                                               |
-| --------------------- | ----------------------- | ----------------------------------------------------- |
-| `AUTH_SECRET`         | (any long string)       | Signs authentication tokens. Any value works locally. |
-| `API_KEY`             | `local-api-key`         | Identifies internal API-to-API requests.              |
-| `SUPER_ADMIN_API_KEY` | `local-super-admin-key` | Admin-level API access key.                           |
+| Variable                 | Value                   | Meaning                                                                                                                                           |
+| ------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_SECRET`            | (any long string)       | Signs authentication tokens. Any value works locally.                                                                                             |
+| `API_KEY`                | `local-api-key`         | Identifies internal API-to-API requests.                                                                                                          |
+| `SUPER_ADMIN_API_KEY`    | `local-super-admin-key` | Admin-level API access key.                                                                                                                       |
+| `PROXY_CLIENT_IP_SECRET` | _(unset)_               | Optional. Lets the API trust the browser IP the map and admin proxies report, so rate limits apply per visitor. Same value in api, map and admin. |
 
 ### Email (Mailpit)
 
@@ -408,7 +439,43 @@ pnpm db:migrate:local # apply any pending migrations
 pnpm db:studio        # open Drizzle Studio (interactive schema browser)
 pnpm db:seed:local    # re-run the local seed (safe to run multiple times)
 pnpm db:reset         # DANGER: wipe and recreate the database
+pnpm db:load:snapshot # replace the seed data with the sanitized Prod snapshot
 ```
+
+### Load the sanitized Prod snapshot
+
+The default seed is a small fake dataset. If you want real-shaped data (Prod's
+org hierarchy and events, plus event instances from 30 days back to 90 days ahead),
+load the sanitized Prod snapshot instead. Emails, phone numbers and Slack ids
+are replaced with fakes, private events are dropped, and free-text fields such
+as backblasts and user profiles are cleared. How it is produced and checked is
+in [Developer snapshot](STAGING_REFRESH.md#developer-snapshot---snapshot-only).
+
+```bash
+pnpm db:load:snapshot                     # download the published snapshot, ask, then load it
+pnpm db:load:snapshot --yes               # same, without the confirmation prompt
+pnpm db:load:snapshot --file ./snap.tar   # load a snapshot you already have
+```
+
+- **It replaces data.** The kept tables are truncated (with `CASCADE`, so
+  tables that reference them are emptied too) and restored in one
+  transaction, so the seed data in them is gone. The dev logins, API keys and
+  OAuth clients are re-created afterwards, so you can still sign in locally.
+- **Run it on an up-to-date local database.** Docker must be running (`pnpm docker:up`) and
+  migrations applied (`pnpm db:migrate:local`); the loader refuses a database
+  whose migrations are older than the snapshot's.
+- **It only runs against a disposable local database** (the one
+  `pnpm local:setup` creates) and refuses when `CI` is set.
+- **Age.** A snapshot is cut on demand, not on a schedule. The loader prints
+  when it was exported.
+- **Worktree slots.** In a `--slot N` checkout the load goes into that slot's
+  own database container.
+- **Not published?** A 404 means there is no snapshot at the published
+  location right now; ask in the project's Slack where it went, and keep the
+  seed data meanwhile.
+
+To go back to the fake data, run `pnpm db:reset`, then `pnpm db:migrate:local`
+and `pnpm db:seed:local`.
 
 ### Adding your own seed data
 

@@ -1,3 +1,5 @@
+import { randomInt } from "node:crypto";
+
 import { env } from "@acme/env";
 import { ProviderId } from "@acme/shared/common/enums";
 
@@ -12,8 +14,11 @@ const OtpProvider = {
   options: {},
   maxAge: 5 * 60,
   generateVerificationToken: async () => {
-    //Generate a random 6 digit alphanumeric code that includes uppercase letters
-    const token = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const token = Array.from(
+      { length: 6 },
+      () => characters[randomInt(0, characters.length)],
+    ).join("");
     return Promise.resolve(token);
   },
   sendVerificationRequest: sendOtpVerificationRequestServer,

@@ -19,7 +19,7 @@ const SuspendedRouteChangeTracker = () => {
 
   useEffect(() => {
     if (pathname) {
-      const url = searchParams?.toString()
+      const url = searchParams.toString()
         ? `${pathname}?${searchParams.toString()}`
         : pathname;
       trackPageView(url);

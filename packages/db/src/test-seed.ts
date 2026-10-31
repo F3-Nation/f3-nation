@@ -34,9 +34,6 @@ import { getDb } from "./utils/functions";
 
 export const testSeed = async (db?: AppDb) => {
   const _db = db ?? getDb();
-  if (!_db) {
-    throw new Error("No database provided");
-  }
   // Create test nation org
   await _db.insert(orgs).values({
     id: TEST_NATION_ORG_ID,

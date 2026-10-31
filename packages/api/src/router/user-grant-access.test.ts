@@ -21,7 +21,14 @@ import type { OrgType } from "@acme/shared/app/enums";
 import { eq, schema } from "@acme/db";
 import { db } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "vitest";
 import {
   cleanup,
   createAdminSession,
@@ -292,6 +299,100 @@ describe("User Router - Grant Access", () => {
       expect(testUser?.phone).toBe(testPhone);
 
       await cleanup.user(user.id);
+    });
+
+    it("byOrgs withholds PII unless the caller is admin on every requested org", async () => {
+      const nationOrg = await getOrCreateF3NationOrg();
+      const [adminRegion, otherRegion] = await db
+        .insert(schema.orgs)
+        .values([
+          {
+            name: `PiiByOrgsAdminRegion-${uniqueId()}`,
+            orgType: "region",
+            isActive: true,
+            parentId: nationOrg.id,
+          },
+          {
+            name: `PiiByOrgsOtherRegion-${uniqueId()}`,
+            orgType: "region",
+            isActive: true,
+            parentId: nationOrg.id,
+          },
+        ])
+        .returning();
+      if (!adminRegion || !otherRegion) {
+        throw new Error("Failed to create test regions");
+      }
+      onTestFinished(async () => {
+        await mockAuthWithSession(await createAdminSession());
+        await cleanup.org(adminRegion.id);
+        await cleanup.org(otherRegion.id);
+      });
+
+      const testPhone = "555-333-4444";
+      const [user] = await db
+        .insert(schema.users)
+        .values({
+          email: `pii-byorgs-all-${uniqueId()}@example.com`,
+          f3Name: "PiiByOrgsAllTest",
+          phone: testPhone,
+        })
+        .returning();
+      if (!user) {
+        throw new Error("Failed to create test user");
+      }
+      onTestFinished(() => cleanup.user(user.id));
+      const [editorRole] = await db
+        .select({ id: schema.roles.id })
+        .from(schema.roles)
+        .where(eq(schema.roles.name, "editor"))
+        .limit(1);
+      if (!editorRole) {
+        throw new Error("Missing editor role");
+      }
+      await db.insert(schema.rolesXUsersXOrg).values({
+        userId: user.id,
+        orgId: adminRegion.id,
+        roleId: editorRole.id,
+      });
+
+      const adminRoles = [
+        {
+          orgId: adminRegion.id,
+          orgName: adminRegion.name,
+          roleName: "admin" as const,
+        },
+      ];
+      const editorSession = createEditorSession({
+        orgId: adminRegion.id,
+        orgName: adminRegion.name,
+      });
+      await mockAuthWithSession({
+        ...editorSession,
+        user: { ...editorSession.user, roles: adminRoles },
+        roles: adminRoles,
+      });
+      const client = createTestClient();
+      const listArgs = { includePii: true, pageIndex: 0, pageSize: 100 };
+
+      // Admin on the only requested org: PII is included.
+      const own = await client.user.byOrgs({
+        ...listArgs,
+        orgIds: [adminRegion.id],
+      });
+      expect(own.includePii).toBe(true);
+      expect(own.users.find((u) => u.id === user.id)?.phone).toBe(testPhone);
+
+      // Admin on one of two requested orgs: PII is withheld for all users.
+      const mixed = await client.user.byOrgs({
+        ...listArgs,
+        orgIds: [adminRegion.id, otherRegion.id],
+      });
+      expect(mixed.includePii).toBe(false);
+      const listed = mixed.users.find((u) => u.id === user.id);
+      expect(listed).toMatchObject({ id: user.id });
+      expect(listed).not.toHaveProperty("phone");
+      expect(listed).not.toHaveProperty("email");
     });
 
     it("byEmail includes email when searching by email", async () => {
@@ -582,7 +683,7 @@ describe("User Router - Grant Access", () => {
       // Create admin session for Region A only
       const adminSessionA = createAdminSessionForOrg({
         orgId: regionA.id,
-        orgName: regionA.name ?? "Region A",
+        orgName: regionA.name,
       });
       await mockAuthWithSession(adminSessionA);
       const client = createTestClient();
@@ -625,7 +726,7 @@ describe("User Router - Grant Access", () => {
       // Create admin session for Region A only
       const adminSessionA = createAdminSessionForOrg({
         orgId: regionA.id,
-        orgName: regionA.name ?? "Region A",
+        orgName: regionA.name,
       });
       await mockAuthWithSession(adminSessionA);
       const client = createTestClient();

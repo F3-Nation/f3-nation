@@ -143,7 +143,7 @@ async function main(): Promise<void> {
             SELECT (SELECT count(*) FROM slackbot.f3versary_delivery_runs)
               + (SELECT count(*) FROM slackbot.f3versary_delivery_pages) AS n`
         : [{ n: 0 }];
-      if (Number(loadedF3versary?.n) > 0) {
+      if (Number(loadedF3versary.n) > 0) {
         throw new Error(
           "The slackbot F3versary tables aren't empty: empty them with the Slack tables during the load, or this restore already ran.",
         );
@@ -191,7 +191,12 @@ async function main(): Promise<void> {
         WHERE ${sameOrg("l")}
         RETURNING org_id`);
       const missingOrgs = await tx.unsafe<
-        { org_id: number; team_id: string; was: string; now: string | null }[]
+        {
+          org_id: number;
+          team_id: string;
+          was: string | null;
+          now: string | null;
+        }[]
       >(`
         SELECT l.org_id, s.team_id, k.name AS was, o.name AS now
         FROM refresh_keep_slack.orgs_x_slack_spaces l

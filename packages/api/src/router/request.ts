@@ -36,7 +36,10 @@ import {
 import type { UpdateRequestData } from "../lib/types";
 import type { Context } from "../shared";
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import {
+  checkHasRoleOnOrg,
+  checkHasRolesOnOrgs,
+} from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { checkUpdatePermissions } from "../lib/check-update-permissions";
@@ -413,27 +416,24 @@ export const requestRouter = {
 
       const where = and(
         input?.statuses?.length
-          ? inArray(schema.updateRequests.status, input?.statuses)
+          ? inArray(schema.updateRequests.status, input.statuses)
           : undefined,
         input?.searchTerm
           ? or(
-              ilike(
-                schema.updateRequests.submittedBy,
-                `%${input?.searchTerm}%`,
-              ),
-              ilike(schema.updateRequests.eventName, `%${input?.searchTerm}%`),
+              ilike(schema.updateRequests.submittedBy, `%${input.searchTerm}%`),
+              ilike(schema.updateRequests.eventName, `%${input.searchTerm}%`),
               ilike(
                 schema.updateRequests.eventDescription,
-                `%${input?.searchTerm}%`,
+                `%${input.searchTerm}%`,
               ),
-              ilike(schema.updateRequests.aoName, `%${input?.searchTerm}%`),
+              ilike(schema.updateRequests.aoName, `%${input.searchTerm}%`),
               ilike(
                 schema.updateRequests.locationName,
-                `%${input?.searchTerm}%`,
+                `%${input.searchTerm}%`,
               ),
               ilike(
                 schema.updateRequests.locationDescription,
-                `%${input?.searchTerm}%`,
+                `%${input.searchTerm}%`,
               ),
             )
           : undefined,
@@ -717,17 +717,15 @@ export const requestRouter = {
     })
     .handler(async ({ context: ctx, input }) => {
       // protectedProcedure guarantees an authenticated session, so every result
-      // comes from checkHasRoleOnOrg (modes: direct-permission/org-admin/no-permission).
-      const results = await Promise.all(
-        input.orgIds.map((orgId) =>
-          checkHasRoleOnOrg({
-            orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "editor" as const,
-          }),
-        ),
-      );
+      // comes from checkHasRolesOnOrgs (modes: direct-permission/org-admin/no-permission).
+      const results = await checkHasRolesOnOrgs({
+        session: ctx.session,
+        db: ctx.db,
+        checks: input.orgIds.map((orgId) => ({
+          orgId,
+          roleName: "editor" as const,
+        })),
+      });
       return { results };
     }),
   submitCreateAOAndLocationAndEventRequest: protectedProcedure
@@ -1175,20 +1173,18 @@ const notifyPendingRequest = async ({
   };
 }) => {
   // Notify admins and editors about the new request
-  if (result.status === "pending") {
-    try {
-      await notifyMapChangeRequest({
-        db: ctx.db,
-        requestId: result.updateRequest.id,
-      });
-    } catch (error) {
-      logError(
-        "api.request.notify_failed",
-        { requestId: result.updateRequest.id },
-        error,
-      );
-      // Don't fail the request if notification fails
-    }
+  try {
+    await notifyMapChangeRequest({
+      db: ctx.db,
+      requestId: result.updateRequest.id,
+    });
+  } catch (error) {
+    logError(
+      "api.request.notify_failed",
+      { requestId: result.updateRequest.id },
+      error,
+    );
+    // Don't fail the request if notification fails
   }
 };
 

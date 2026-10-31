@@ -105,7 +105,7 @@ export const moveAOLocsToNewRegion = async (
       remainingLocationEventsCount: remainingLocationEvents.length,
     });
 
-    if (!remainingLocationEvents?.length) {
+    if (!remainingLocationEvents.length) {
       // 1c. Delete the old location if it has no other events
       await ctx.db
         .update(schema.locations)

@@ -112,6 +112,9 @@ job rolled it back. Common reasons it stops:
 | `more than one staging API key is named …` / `owner isn't in prod's users` | Fix the key on staging (or the keep list in `staging-refresh.config.ts`) and run again.                                                                                                                  |
 | `another staging refresh is running`                                       | Someone else started one. Wait for it.                                                                                                                                                                   |
 | `staging already has schema refresh_keep`                                  | An earlier run's rollback didn't finish. See below.                                                                                                                                                      |
+| `the job's login doesn't own …`                                            | A migration added a table owned by a role the job's login isn't in. Re-run `setup.sh` so `staging-login.sql` grants the new owner role, then run again.                                                  |
+| `system triggers are left on …`                                            | A `DEFERRABLE` unique/exclusion constraint leaves a system trigger the job can't disable. Make it `NOT DEFERRABLE` on staging, or have `dropFksAndTruncate` drop and re-add it, then run again.          |
+| `trigger(s) not in the default enabled state`                              | Someone disabled a trigger on staging (or set it to `REPLICA` / `ALWAYS`). Set it back or drop it, then run again.                                                                                       |
 
 **`ROLLBACK FAILED`** means the load failed and putting staging back failed
 too (e.g. staging was unreachable), three times. Staging's loaded tables may
@@ -163,7 +166,17 @@ It creates:
   `resource.type="cloud_run_job" AND resource.labels.job_name="f3-staging-refresh"`,
   and `roles/logging.viewAccessor` conditioned on that bucket's `_AllLogs`
   view. It also removes what its first version made instead: a view on
-  `_Default` that showed every Cloud Run job's logs, and its bindings.
+  `_Default` that showed every Cloud Run job's logs, and its bindings;
+- write access for the service account to `dev-snapshots/` in the public
+  `f3-public-images` bucket and nowhere else in it: the custom role
+  `roles/storage.objectUser` (its create and delete cover overwriting the
+  fixed snapshot path), bound on the bucket with the condition
+  `resource.name.startsWith("projects/_/buckets/f3-public-images/objects/dev-snapshots/")`.
+  The script stops if the bucket doesn't use uniform bucket-level access (the
+  condition needs it) and never changes the bucket's settings. The binding
+  needs `storage.buckets.setIamPolicy` on the bucket; if the person running
+  setup lacks it, the script prints the one
+  `gcloud storage buckets add-iam-policy-binding` command for someone who has it.
 
 Re-run the full setup after any Production release that adds a migration:
 it rebuilds the image so it knows prod's migrations and columns, and it
@@ -236,9 +249,50 @@ login of its own. The steps match the job log's `1/6` to `6/6`:
      (`migration.tag`), the `event_instances` window, and the row count and
      column names of every table.
 
-The last line is `DEV SNAPSHOT: OK` or `DEV SNAPSHOT FAILED — nothing was
-published; staging was not touched.` As for a refresh, the logs hold
-counts, never row data.
+The run ends with `DEV SNAPSHOT: OK` or `DEV SNAPSHOT FAILED — nothing was
+published; staging was not touched.`, followed by a temp-file cleanup line.
+As for a refresh, the logs hold counts, never row data.
+
+### Publishing a snapshot
+
+The job has no schedule: a maintainer runs the command above when a fresh
+snapshot is wanted. Publishing is a hand-run sequence for whoever runs
+production operations:
+
+1. Run the full setup (not `--image-only`) if the job's service account
+   doesn't have the `dev-snapshots/` write access yet or a Production release
+   added a migration, so the image is current.
+2. Execute the job with `--args=--snapshot-only` and confirm the execution's
+   logs contain `DEV SNAPSHOT: OK`.
+3. Attach the tar's `manifest.json` and the job log's leak-scan output to the
+   tracking issue for the data-privacy reviewer's sign-off.
+
+The scoped-access check (a write outside `dev-snapshots/` is refused) was
+done once when the grant was first applied, and is recorded on the pull
+request that added it.
+
+**Publishing is public.** The job writes straight to a world-readable
+bucket, and the URL is in this public repo, so the tar is downloadable from
+the moment step 2 finishes; sign-off happens after that, and not announcing
+the link is the only thing holding it back. If the leak scan was wrong, delete
+the object right away (`gcloud storage rm`, as a bucket admin) and fix the
+cause before publishing again. If the bucket has object versioning on,
+earlier generations stay readable by generation number until they are
+deleted.
+
+The grant includes delete so a run can replace the previous snapshot. An IAM condition constrains the object name, not how the client
+writes it, so the service account could delete any object under
+`dev-snapshots/` outside the job's flow. That prefix holds nothing else and
+the snapshot is regenerated on demand, so the exposure is accepted. Never
+widen the grant beyond that prefix.
+
+Anyone who can act as the service account can publish arbitrary content
+to that URL, which developers then restore into their local databases:
+members of `STAGING_REFRESH_RUNNERS` (the IAM members passed to
+`setup.sh`, see [How to refresh staging](#how-to-refresh-staging); job overrides can set the command's
+environment and arguments), whoever can push the job's image, and anyone
+with token-creator rights on the service account. The tar carries no
+signature beyond its manifest, so keep those groups small.
 
 Outside Cloud Run the snapshot is never uploaded. Pass an absolute
 `--snapshot-out <file>` to write it locally instead:
@@ -288,8 +342,10 @@ it is, learned on the hand-run refreshes.
      definitions and source triggers. Prod also has `codex`, `regionpages`
      and `temp`; their PII is not classified here.
    - **Load data only** from `public`, `auth` and `slackbot` into staging's
-     existing tables. Its existing audit history stays there; capture triggers
-     may record the refreshed, obfuscated source rows. Its schemas belong
+     existing tables. Its existing audit history stays there; the load runs
+     with triggers disabled, so the capture triggers don't record the loaded
+     rows (one history row per loaded row took a full load past the job's 3h
+     timeout on 2026-10-20). Its schemas belong
      to several roles (`dev_generic`, `tackle`, `app_auth`) whose grants the
      other apps need; a drop-and-restore loses them. Skip any prod table
      staging doesn't have.
@@ -331,10 +387,18 @@ SET NULL` would do; the summary gives the count) and keeps the old
      ```
 
    - **Drop the foreign keys around the load** (`orgs` and `events` have
-     circular FKs, and the Cloud SQL roles can't disable triggers). Save
-     them with `pg_get_constraintdef`, truncate, `pg_restore --data-only`
-     with `PGOPTIONS='-c app.disable_ao_count_trigger=true'`, then re-add
-     them `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
+     circular FKs, and the Cloud SQL roles can't disable FK triggers). Save
+     them with `pg_get_constraintdef`, truncate, then `pg_restore` with
+     `--data-only`, `--disable-triggers` and
+     `PGOPTIONS='-c app.disable_ao_count_trigger=true'`. Disabling triggers
+     needs the job's login to own, through a role, every loaded table, and
+     with the FKs gone there must be no system triggers left. The job refuses
+     before the truncate if either isn't true, or if a trigger isn't in the
+     default enabled state (the load re-enables all of them). App writes to
+     the loaded tables block until the load commits. A `lock_timeout` can't
+     guard that: every pg_restore archive starts with `SET lock_timeout = 0`,
+     which overrides `PGOPTIONS`. Then re-add
+     the FKs `NOT VALID` and `VALIDATE CONSTRAINT` one at a time. Re-adding
      them validated in one transaction took over an hour and lost its
      connection. (A shell loop around `docker run -i` once validated 1 of 74:
      the container ate the loop's input. The job checks validated == total.)

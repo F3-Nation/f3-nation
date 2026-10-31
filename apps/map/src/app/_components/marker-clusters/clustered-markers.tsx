@@ -81,10 +81,10 @@ const DataProvidedClusteredMarkers = ({ geojson }: MarkersProps) => {
         const key = getClusterFeatureKey(feature);
         if (!featureId || !key) return null;
 
-        const clusterProperties = feature.properties as F3ClusterProperties;
-        const isCluster: boolean = clusterProperties.cluster;
+        // Supercluster returns point features alongside clusters.
+        const clusterProperties = feature.properties;
 
-        return isCluster ? (
+        return "cluster" in clusterProperties ? (
           <FeaturesClusterMarker
             key={key}
             clusterId={clusterProperties.cluster_id}

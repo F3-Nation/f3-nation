@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { verifyAccessToken } from "@f3nation/sso-next";
 
 import { routes } from "@acme/shared/app/constants";
+import { isApiUnavailableError } from "@acme/shared/common/api-availability";
 
 import { ACCESS_TOKEN_COOKIE_NAME } from "./constants";
 import type { AdminSession } from "./session";
@@ -68,36 +69,58 @@ async function getSessionFromAccessToken(
   return getCachedSessionPayload(accessToken);
 }
 
-export async function getSessionUser(): Promise<AdminSession | null> {
+export interface SessionLookup {
+  session: AdminSession | null;
+  /**
+   * The token is valid but the API could not be reached to load roles, so
+   * `session.roles` is empty for that reason rather than because the user has
+   * none. Callers that gate on roles should show an outage, not "no access".
+   */
+  apiUnavailable: boolean;
+}
+
+export async function getSessionLookup(): Promise<SessionLookup> {
   const accessToken = await getAccessToken();
-  if (!accessToken) return null;
+  if (!accessToken) return { session: null, apiUnavailable: false };
   const session = await getSessionFromAccessToken(accessToken);
-  if (!session) return null;
+  if (!session) return { session: null, apiUnavailable: false };
 
   try {
     const profile = await getMyProfile();
 
     return {
-      ...session,
-      // Drop roles the portal does not surface (e.g. password_manager) so they
-      // never appear in the user menu, no-access page, or any session consumer.
-      roles: profile.roles.flatMap((role) =>
-        isAdminRoleName(role.roleName)
-          ? [
-              {
-                roleId: role.roleId,
-                orgId: role.orgId,
-                orgName: role.orgName,
-                roleName: role.roleName,
-              },
-            ]
-          : [],
-      ),
+      apiUnavailable: false,
+      session: {
+        ...session,
+        // Drop roles the portal does not surface (e.g. password_manager) so
+        // they never appear in the user menu, no-access page, or any session
+        // consumer.
+        roles: profile.roles.flatMap((role) =>
+          isAdminRoleName(role.roleName)
+            ? [
+                {
+                  roleId: role.roleId,
+                  orgId: role.orgId,
+                  orgName: role.orgName,
+                  roleName: role.roleName,
+                },
+              ]
+            : [],
+        ),
+      },
     };
   } catch (error) {
+    if (isApiUnavailableError(error)) {
+      logWarn("admin.auth.api_unavailable", { err: error });
+      return { session, apiUnavailable: true };
+    }
     logWarn("admin.auth.roles_hydrate_failed", { err: error });
-    return session;
+    return { session, apiUnavailable: false };
   }
+}
+
+export async function getSessionUser(): Promise<AdminSession | null> {
+  return (await getSessionLookup()).session;
 }
 
 export async function requireAdminPortalAccess(

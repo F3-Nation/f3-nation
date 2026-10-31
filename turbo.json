@@ -2,26 +2,32 @@
   "$schema": "https://turborepo.org/schema.json",
   "globalDependencies": [
     "**/.env",
+    ".github/workflows/ci.yml",
     ".gitignore",
     ".nvmrc",
     ".prettierignore",
     ".python-version",
+    "apps/*/Dockerfile",
     "pyproject.toml",
     "uv.lock",
     "scripts/python-task.sh"
   ],
   "globalPassThroughEnv": [
+    "ALLOW_DEV_MOCK_SESSION",
     "F3_ADMIN_PORT",
     "F3_AUTH_PORT",
     "F3_CONTAINER_PREFIX",
     "F3_HOMEPAGE_PORT",
     "F3_MAP_PORT",
     "F3_ME_PORT",
+    "F3_REGION_PAGES_PORT",
     "INIT_CWD",
     "SNAPSHOT_CALLER_CWD"
   ],
   "globalEnv": [
     "CI",
+    "APPS_DIRECTORY_ENABLED",
+    "APPS_DIRECTORY_URL",
     "NODE_ENV",
     "LOG_LEVEL",
     "SKIP_ENV_VALIDATION",
@@ -43,6 +49,7 @@
     "CHAR_TEST_SHARED_DB",
     "CHAR_TEST_SIGNING_JWK",
     "SUPER_ADMIN_API_KEY",
+    "PROXY_CLIENT_IP_SECRET",
     "EMAIL_ADMIN_DESTINATIONS",
     "EMAIL_FROM",
     "EMAIL_SERVER",
@@ -51,6 +58,7 @@
     "AUTH_PROVIDER_URL",
     "AUTH_REDIRECT_PROXY_URL",
     "AUTH_SECRET",
+    "AUTH_TRUSTED_ISSUERS",
     "AUTH_JWT_PRIVATE_KEY",
     "AUTH_USE_BETTER_AUTH",
     "OAUTH_CLIENT_ID",
@@ -62,6 +70,8 @@
     "F3_ADMIN_URL",
     "F3_API_TIMEOUT_MS",
     "F3_CHANNEL",
+    "GA_MEASUREMENT_ID",
+    "SITE_URL",
     "F3_GOOGLE_API_KEY",
     "F3_MAP_BASE_URL",
     "PORT",
@@ -109,10 +119,19 @@
     },
     "test": {
       "dependsOn": ["^topo"],
+      "env": ["PATH"],
       "outputs": ["coverage/**"]
     },
     "test:characterization": {
       "dependsOn": ["^topo", "reset-test-db", "^reset-test-db", "test"],
+      "env": [
+        "CHAR_TEST_AUTH_ISSUER",
+        "CHAR_TEST_AUTH_PROVIDER_URL",
+        "CHAR_TEST_AUTH_CLIENT_ID",
+        "CHAR_TEST_AUTH_CLIENT_SECRET",
+        "CHAR_TEST_AUTH_USER_TOKEN",
+        "CHAR_TEST_AUTH_USER_CLIENT_ID"
+      ],
       "cache": false
     },
     "clean": {

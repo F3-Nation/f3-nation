@@ -93,6 +93,13 @@ import {
   STAGING_API_KEYS_TO_KEEP,
   STAGING_SLACKBOT,
 } from "./staging-refresh.config";
+import type { ForeignKey } from "./staging-refresh.load";
+import {
+  dropFksAndTruncate,
+  LOAD_PGOPTIONS,
+  LOAD_WITHOUT_TRIGGERS,
+  Refusal,
+} from "./staging-refresh.load";
 import {
   log,
   metadataToken,
@@ -193,9 +200,6 @@ const fixupColumns = (fixups: FkFixup[], table: string): string[] =>
 const listOrNone = (items: string[]): string =>
   items.length > 0 ? items.join(", ") : "none";
 
-/** Refused before staging was written: nothing to roll back. */
-class Refusal extends Error {}
-
 // ---------------------------------------------------------------------------
 // Catalog reads
 // ---------------------------------------------------------------------------
@@ -254,13 +258,6 @@ async function appliedMigrations(
   const rows = await sql<{ created_at: string; hash: string }[]>`
     SELECT created_at::text AS created_at, hash FROM ${sql(`drizzle.${table}`)}`;
   return rows.map((r) => ({ createdAt: Number(r.created_at), hash: r.hash }));
-}
-
-interface ForeignKey {
-  table: string; // quoted "schema"."table"
-  name: string; // quoted
-  def: string; // pg_get_constraintdef, without any trailing NOT VALID
-  validated: boolean;
 }
 
 /** Every FK on, or pointing at, a table in the load schemas. */
@@ -389,24 +386,6 @@ async function hasSchema(sql: Sql, schema: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 // Staging writes
 // ---------------------------------------------------------------------------
-
-async function dropFksAndTruncate(
-  sql: Sql,
-  fks: ForeignKey[],
-  tables: string[],
-): Promise<void> {
-  await sql.begin(async (tx) => {
-    // Fail fast rather than queue behind an app's long transaction; nothing
-    // has changed if this times out.
-    await tx`SET LOCAL lock_timeout = '60s'`;
-    for (const fk of fks) {
-      await tx.unsafe(
-        `ALTER TABLE ${fk.table} DROP CONSTRAINT IF EXISTS ${fk.name}`,
-      );
-    }
-    await tx.unsafe(`TRUNCATE TABLE ${tables.map(quoteTable).join(", ")}`);
-  });
-}
 
 /**
  * Keep the dropped FKs' definitions on staging until they are back: if the
@@ -1371,12 +1350,13 @@ async function main(): Promise<number> {
               "--no-privileges",
               "--single-transaction",
               "--exit-on-error",
+              LOAD_WITHOUT_TRIGGERS,
               "-d",
               ctx.stagingDb,
               files.loadDump,
             ],
             ctx.stagingUrl,
-            { pgoptions: "-c app.disable_ao_count_trigger=true" },
+            { pgoptions: LOAD_PGOPTIONS },
           );
           const loaded = await rowCounts(stg, load);
           const off = load.filter((t) => loaded.get(t) !== counts.get(t));
@@ -1523,6 +1503,7 @@ async function main(): Promise<number> {
     return 0;
   } catch (error) {
     const msg = errMsg(error);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set inside the step 8 callback
     if (wiped) {
       // Only reachable if something after step 9 threw unexpectedly.
       log(`\n!! FAILED after staging was loaded: ${msg}`);
@@ -1637,6 +1618,7 @@ async function rollback(
           "--no-privileges",
           "--single-transaction",
           "--exit-on-error",
+          LOAD_WITHOUT_TRIGGERS,
           "-L",
           listFile,
           "-d",
@@ -1644,7 +1626,7 @@ async function rollback(
           backup,
         ],
         ctx.stagingUrl,
-        { pgoptions: "-c app.disable_ao_count_trigger=true" },
+        { pgoptions: LOAD_PGOPTIONS },
       );
       log(`   ${load.length} tables restored from the backup`);
       const reverted = await revertFixups(sql);

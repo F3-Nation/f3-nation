@@ -232,6 +232,13 @@
       "when": 1791935688550,
       "tag": "0032_add_password_user_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792668047640,
+      "tag": "0033_fk_junction_indexes",
+      "breakpoints": true
     }
   ]
 }

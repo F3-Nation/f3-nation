@@ -5,8 +5,8 @@ Platform, security, database, analytics, and consumer owners must approve the
 actual grants and production release. No IAM commands have been executed, and
 this document does not assert that any role, binding, service account, bucket,
 schedule, or API configuration is present. See the
-[`analytics-parquet-etl` spec](../specs/analytics-parquet-etl.md),
-[`pax-vault-parquet-etl` spec](../specs/pax-vault-parquet-etl.md), and
+[`analytics-parquet-etl` spec](specs/analytics-parquet-etl.md),
+[`pax-vault-parquet-etl` spec](specs/pax-vault-parquet-etl.md), and
 [operations guide](ANALYTICS_ETL_OPERATIONS.md) for contracts and gates. Use
 [`GCP_APP_SETUP.md`](GCP_APP_SETUP.md) for shared Cloud Run and WIF setup; do
 not recreate the shared WIF pool/provider.
@@ -23,10 +23,10 @@ repository `cloud-run-builds`.
 
 The bucket has independent roots and pointers:
 
-| Product     | Exact datasets                                                                                                                         | Release prefix                              | Mutable pointer                   |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------- |
-| `pax-vault` | `pv_regions`, `pv_pax`, `pv_kotter`, `pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`, `pv_events`, `pv_attendance` | `<bucket>/pax-vault/releases/<release-id>/` | `<bucket>/pax-vault/current.json` |
-| `analytics` | `event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`                                                             | `<bucket>/analytics/releases/<release-id>/` | `<bucket>/analytics/current.json` |
+| Product     | Exact datasets                                                                                                                                             | Release prefix                              | Mutable pointer                   |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------- |
+| `pax-vault` | `pv_regions`, `pv_pax`, `pv_kotter`, `pv_upcoming`, `pv_sectors`, `pv_territories`, `pv_areas`, `pv_aos`, `pv_events`, `pv_event_details`, `pv_attendance` | `<bucket>/pax-vault/releases/<release-id>/` | `<bucket>/pax-vault/current.json` |
+| `analytics` | `event_info`, `future_event_info`, `attendance_info`, `missing_backblasts`                                                                                 | `<bucket>/analytics/releases/<release-id>/` | `<bucket>/analytics/current.json` |
 
 Pax Vault uses `pv-release.v2`; Analytics uses `analytics-release.v1`. Each
 pointer selects only its product release. Runtime `run` defaults to both
@@ -81,8 +81,9 @@ Artifact Registry repository in `us-central1`; create it only if platform
 owners approve and it is confirmed absent. Never delete/recreate the repository.
 The image is named `analytics-etl` and is built/promoted by the tagged workflow.
 
-GitHub environments are `analytics-nonprod` and `analytics-production`; WIF
-environment variables are `WIF_PROVIDER` and `WIF_SA`. Do not store
+GitHub environments are `analytics-nonprod` and `analytics-production`; each
+sets its own `WIF_SA`, and `WIF_PROVIDER` comes from the organization-level
+variable shared by every app. Do not store
 service-account keys. Follow the shared setup guide for provider/repository
 conditions. Deployment identities are not runtime or Scheduler identities. The
 Analytics tagged workflow defaults to staging only (`deploy_prod=false`).

@@ -14,6 +14,7 @@ from scripts import (
     backblast_reminders,
     calendar_images,
     f3versary_announcements,
+    fng_reminders,
     home_region_nudge,
     kotter_reports,
     monthly_reporting,
@@ -69,6 +70,12 @@ def run_all_hourly_scripts(force: bool = False, run_reporting: bool = True, repo
         update_slack_users.update_home_regions()
     except Exception as e:
         print(f"Error updating home regions for users: {e}")
+
+    print("Running FNG reminders")
+    try:
+        fng_reminders.send_fng_reminders(force=force)
+    except Exception as e:
+        print(f"Error running FNG reminders: {e}")
 
     print("Running home region nudge")
     try:

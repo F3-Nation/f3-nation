@@ -140,7 +140,6 @@ const postSlackMessageInputSchema = baseMessageInputSchema
         "The username to display as the sender of the Slack message. This is optional and can be used to override the default bot username.",
       ),
     icon_url: z
-      .string()
       .url()
       .startsWith("https://")
       .optional()
