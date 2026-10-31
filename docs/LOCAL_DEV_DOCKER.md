@@ -574,7 +574,7 @@ The `-v` flag removes the named volumes (`postgres_data`, `gcs_data`). Next time
 
 ## Troubleshooting
 
-### Slackbot dependencies were skipped because `uv` is missing
+### Python workspace dependencies were skipped because `uv` is missing
 
 Install `uv`, then sync all Python workspace dependencies:
 
