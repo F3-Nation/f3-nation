@@ -329,9 +329,10 @@ client is hostile.
 ### Tests
 
 - Registration stays non-submittable after confirmed account creation, including
-  while successful navigation leaves the form mounted. Preserve pre-creation
-  retries and post-creation sign-in recovery; test clicks and native form
-  submission for both auth backends.
+  while successful navigation leaves the form mounted. Preserve retries for
+  validation and non-401 failures before creation, rejected-code recovery, and
+  post-creation sign-in recovery; test clicks and native form submission for
+  both auth backends.
 - Deny-path tests discriminate: wrong value **and** missing value, a
   same-length wrong key, revoked **and** expired, a replayed token, and each
   branch of an allowlist.

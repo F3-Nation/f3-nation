@@ -124,8 +124,8 @@ function RegisterFormInner({ useBetterAuth }: { useBetterAuth: boolean }) {
   );
   const [initialized, setInitialized] = useState(false);
 
-  // Restore browser defaults after hydration without resetting user edits
-  // on ordinary rerenders.
+  // Apply browser phone defaults and restore matching saved answers after
+  // hydration, once per attempt so ordinary rerenders preserve user edits.
   if (hydrated && !initialized) {
     setInitialized(true);
     const detectedCountry = detectPhoneCountry(navigator.language);

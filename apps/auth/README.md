@@ -382,14 +382,17 @@ GET /.well-known/openid-configuration
 
 After registration and sign-in succeed, the form keeps submission disabled until
 navigation unmounts it, preventing another registration request while the next
-page loads. Failures before account creation is confirmed remain retryable;
-after confirmed creation, a sign-in failure or a thrown navigation call offers
-**Sign in again** instead of submitting registration again. This behavior applies
-to both auth backends.
+page loads. Validation errors and non-401 failures before confirmed creation
+remain retryable. A rejected verification code offers **Sign in again** to get a
+fresh code. After confirmed creation, a sign-in failure or a thrown navigation
+call also offers **Sign in again** instead of submitting registration again.
+This behavior applies to both auth backends.
 
 The email and verification code identify a registration attempt. Changing either
-starts a fresh form; changing other URL parameters or rerendering the same
-attempt does not release its submission guard.
+resets the form's fields and submission state, reapplies phone defaults, and
+restores any answers saved for that email
+after a rejected code. Changing other URL parameters or rerendering the same
+attempt does not release its submission lock.
 
 All pages use Tailwind CSS with HSL CSS variables (light mode, F3 Nation color scheme: cream background, white cards, F3 red primary).
 

@@ -65,6 +65,7 @@ function registrationForm() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  router.push.mockReset();
   sessionStorage.clear();
   for (const key of [...searchParams.keys()]) searchParams.delete(key);
   searchParams.set("email", email);
@@ -129,6 +130,13 @@ describe("registration", { timeout: 20_000 }, () => {
       await act(async () =>
         view.rerender(<RegisterForm useBetterAuth={useBetterAuth} />),
       );
+      expect(screen.getByLabelText(/First Name/)).toHaveProperty(
+        "value",
+        "First",
+      );
+      expect(
+        screen.getByRole("button", { name: "Create Account" }),
+      ).toHaveProperty("disabled", true);
       await act(async () => registrationForm().requestSubmit());
       expect(
         fetchMock.mock.calls.filter(([url]) => url === "/api/register"),
@@ -167,12 +175,6 @@ describe("registration", { timeout: 20_000 }, () => {
 
   it("restores only the matching draft and resets phone defaults for a new email", async () => {
     vi.spyOn(navigator, "language", "get").mockReturnValue("en-GB");
-    let view!: ReturnType<typeof render>;
-    await act(async () => {
-      view = render(<RegisterForm useBetterAuth={false} />);
-    });
-    const country = view.container.querySelector("#phoneCountry")!;
-    fireEvent.change(country, { target: { value: "CA" } });
     const nextEmail = "returning-pax@example.test";
     sessionStorage.setItem(
       "f3-register-draft",
@@ -185,6 +187,13 @@ describe("registration", { timeout: 20_000 }, () => {
         regionSearch: "Test South",
       }),
     );
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(<RegisterForm useBetterAuth={false} />);
+    });
+    expect(screen.getByLabelText(/First Name/)).toHaveProperty("value", "");
+    const country = view.container.querySelector("#phoneCountry")!;
+    fireEvent.change(country, { target: { value: "CA" } });
     searchParams.set("email", nextEmail);
     fetchMock.mockResolvedValueOnce(Response.json(regions));
     await act(async () =>
@@ -206,6 +215,12 @@ describe("registration", { timeout: 20_000 }, () => {
       "value",
       "GB",
     );
+    fireEvent.click(
+      screen.getByRole("button", { name: /Emergency Contact Info/ }),
+    );
+    expect(
+      view.container.querySelector("#emergencyPhoneCountry"),
+    ).toHaveProperty("value", "GB");
   });
 
   it("hydrates browser defaults without replacing edits on rerender", async () => {
@@ -233,7 +248,7 @@ describe("registration", { timeout: 20_000 }, () => {
     ).toBe("US");
     document.body.append(container);
     const recoverableError = vi.fn();
-    let root!: ReturnType<typeof hydrateRoot>;
+    let root: ReturnType<typeof hydrateRoot> | undefined;
     try {
       await act(async () => {
         root = hydrateRoot(container, <RegisterForm useBetterAuth={false} />, {
@@ -264,7 +279,7 @@ describe("registration", { timeout: 20_000 }, () => {
         target: { value: "CA" },
       });
       await act(async () =>
-        root.render(<RegisterForm useBetterAuth={false} />),
+        root?.render(<RegisterForm useBetterAuth={false} />),
       );
       expect(screen.getByLabelText(/First Name/)).toHaveProperty(
         "value",
@@ -276,7 +291,7 @@ describe("registration", { timeout: 20_000 }, () => {
       );
       expect(recoverableError).not.toHaveBeenCalled();
     } finally {
-      await act(async () => root.unmount());
+      await act(async () => root?.unmount());
       container.remove();
     }
   });
