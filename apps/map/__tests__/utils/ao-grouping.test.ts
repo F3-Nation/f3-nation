@@ -114,19 +114,57 @@ describe("groupMarkersByAo", () => {
     },
   );
   it.each([
-    { events: [] },
-    { events: [makeEvent({ id: 101 })] },
-    { events: [makeEvent({ id: -101, aoName: "" })] },
+    { events: [], ids: [] },
+    { events: [makeEvent({ id: 101 })], ids: [101] },
+    { events: [makeEvent({ id: -101, aoName: "" })], ids: [-101] },
   ])(
     "preserves location metadata when events have no AO metadata: $events",
-    ({ events }) => {
+    ({ events, ids }) => {
       const marker = makeMarker({
         id: 1,
         aoName: "Fallback AO",
         logo: "fallback.png",
         events,
       });
-      expect(groupMarkersByAo([marker])).toEqual([{ ...marker, aoId: "1" }]);
+      const result = groupMarkersByAo([marker]);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        aoName: "Fallback AO",
+        logo: "fallback.png",
+        aoId: "1",
+      });
+      expect(result[0]?.events.map((event) => event.id)).toEqual(ids);
+    },
+  );
+
+  it.each([
+    { aoName: "Screaming Eagle", aoLogo: null, expected: null },
+    { aoName: "Screaming Eagle", aoLogo: "", expected: null },
+    { aoName: "Affordable Thursday", aoLogo: null, expected: "thursday.png" },
+    { aoName: "Affordable Thursday", aoLogo: "", expected: "thursday.png" },
+  ])(
+    "only borrows a missing logo from the same AO: $aoName / $aoLogo",
+    ({ aoName, aoLogo, expected }) => {
+      const marker = makeMarker({
+        id: 1,
+        aoName: "Affordable Thursday",
+        logo: "thursday.png",
+        events: [
+          makeEvent({ id: -101, aoName, aoLogo, dayOfWeek: "monday" }),
+          makeEvent({
+            id: 103,
+            aoName: "Affordable Thursday",
+            aoLogo: "thursday.png",
+            dayOfWeek: "thursday",
+          }),
+        ],
+      });
+      const result = groupMarkersByAo(
+        filterData([marker], { ...initialFilterState, dayM: true }),
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0]?.logo).toBe(expected);
+      expect(result[0]?.aoName).toBe(aoName);
     },
   );
 

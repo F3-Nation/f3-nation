@@ -25,14 +25,19 @@ export const groupMarkersByAo = (
 
     if (eventsByAo.size <= 1) {
       const event = marker.events[0];
+      // Missing synthetic-event names must not replace the location's label.
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+      const aoName = event?.aoName || marker.aoName;
+      const fallbackLogo = aoName === marker.aoName ? marker.logo : null;
+      // Empty logos are missing; another AO's logo is not a valid fallback.
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+      const logo = event?.aoLogo || fallbackLogo;
       return [
         {
           ...marker,
           aoId: `${marker.id}`,
-          // Synthetic events use an empty name when their AO metadata is missing.
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-          aoName: event?.aoName || marker.aoName,
-          logo: event?.aoLogo ?? marker.logo,
+          aoName,
+          logo,
         },
       ];
     }

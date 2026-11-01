@@ -82,14 +82,16 @@ city X" to "this workout, this address, this time" in a few interactions.
   on the map; when nothing matches, the nearby list shows a "No locations
   found matching your filters" message. Each nearby-list row uses the AO name
   and logo of its remaining matching workouts, including when filtering leaves
-  only one AO at a shared location.
+  only one AO at a shared location. For a single remaining AO, a missing name
+  falls back to the location's name; a missing logo uses the location's logo
+  only when the AO names match, otherwise the default F3 image is shown.
 - **AC-13** — GIVEN the AM quick filter is active WHEN the user activates PM
   THEN AM deactivates (mutually exclusive), and Reset restores the unfiltered
   pin set.
 
-A nearby-list row after filtering to Monday (synthetic local data):
+A nearby list filtered to Monday at a shared location (sample data):
 
-![Screaming Eagle correctly labeled with its Monday schedule](../assets/map-weekday-filter.png)
+![Screaming Eagle with its Monday schedule](../assets/map-weekday-filter.png)
 
 ### Geolocation
 
