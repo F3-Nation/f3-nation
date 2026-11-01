@@ -111,8 +111,9 @@ city X" to "this workout, this address, this time" in a few interactions.
 
 - **AC-18** — Successful `event.crupdate` operations clear the handling API instance's
   public map dataset cache and request Map app revalidation after the writes
-  commit, including events with no weekday. They emit a `map.created` or
-  `map.updated` webhook containing the saved event ID.
+  commit, including events with no weekday. They attempt to emit a `map.created`
+  or `map.updated` webhook containing the saved event ID. Webhook destinations
+  are optional; delivery failures are logged, with no retries or durable delivery.
   Rejected writes do not invalidate caches or notify consumers.
 
 This does not synchronously refresh every API instance or open browser:
