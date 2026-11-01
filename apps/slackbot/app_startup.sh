@@ -8,7 +8,9 @@ APP_PID=""
 STOPPING=false
 ENV_FILE=".env"
 SOCKET_MODE_VAR="SOCKET_MODE"
-LOCAL_HTTP_PORT_VAR="LOCAL_HTTP_PORT"
+
+# shellcheck source=../../scripts/lib/local-ports.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/lib/local-ports.sh"
 
 # Preflight checks for required CLIs
 assert_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "Required command not found: $1"; exit 1; }; }
@@ -40,21 +42,6 @@ ensure_socket_mode() {
   export SOCKET_MODE
 }
 
-ensure_local_http_port() {
-  local existing=""
-  if [[ -f "${ENV_FILE}" ]] && grep -E "^${LOCAL_HTTP_PORT_VAR}=" "${ENV_FILE}" >/dev/null; then
-    existing=$(grep -E "^${LOCAL_HTTP_PORT_VAR}=" "${ENV_FILE}" | tail -1 | cut -d= -f2-)
-  fi
-  if [[ -z "${existing}" ]]; then
-    existing="3006"
-    if [[ -f "${ENV_FILE}" ]] && [[ $(tail -c1 "${ENV_FILE}") != "" ]]; then
-      echo >> "${ENV_FILE}"
-    fi
-    echo "${LOCAL_HTTP_PORT_VAR}=${existing}" >> "${ENV_FILE}"
-    echo "Initialized ${LOCAL_HTTP_PORT_VAR}=${existing} in ${ENV_FILE}"
-  fi
-}
-
 start_app() {
   echo "Starting the app with watchfiles..."
   ( watchfiles --filter python 'dotenv -f .env run -- python main.py' ) &
@@ -75,7 +62,9 @@ trap 'STOPPING=true; cleanup; exit 0' SIGINT SIGTERM
 trap cleanup EXIT
 
 ensure_socket_mode
-ensure_local_http_port
+
+# Gives a slotted checkout its own F3_SLACKBOT_PORT when started outside `pnpm dev`.
+load_local_ports
 
 if [[ "${SOCKET_MODE}" != "true" ]]; then
   echo "SOCKET_MODE must be true for local development."
