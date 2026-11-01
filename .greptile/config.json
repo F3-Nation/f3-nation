@@ -77,7 +77,7 @@
     },
     {
       "id": "slack-payloads",
-      "rule": "KP-SLACK, KP-IDENTITY and KP-PII: parse Slack payload values that can arrive as strings, handle empty or missing rich-text blocks, use a region's saved channel over the default, never create a person keyed on a placeholder when a profile lacks an email, and keep non-production runs from storing real contact data or messaging real people.",
+      "rule": "KP-SLACK, KP-IDENTITY and KP-PII: parse Slack payload values that can arrive as strings, handle empty or missing rich-text blocks, use a region's saved channel over the default, never create a person keyed on a placeholder when a profile lacks an email, and keep non-production runs from copying profile details from Slack APIs or messaging real people (a user's own profile-form submission may be stored).",
       "scope": ["apps/slackbot/**"],
       "severity": "medium"
     },

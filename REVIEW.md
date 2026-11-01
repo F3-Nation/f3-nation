@@ -127,10 +127,13 @@ pattern whenever a diff touches its area.
 - **KP-PII:** Staging obfuscation treats a row as private when it or any
   ancestor is private (a private series makes its locations private), and
   scrubs names and Slack mentions from free text and stored Slack blocks.
-  Outside production, every Slack bot path that stores contact details or
-  sends email or SMS goes through the same non-production handling as the
-  user-creation path, so staging and local runs never keep real contact data
-  or contact a real person.
+  Outside production, every Slack bot path that copies profile details from
+  Slack APIs (imports, lookups, sync) or sends email or SMS goes through the
+  same non-production handling as the user-creation path, so staging and local
+  runs never import real Slack profile data or contact a real person. What a
+  user submits through their own F3 profile form, such as emergency contacts,
+  may be stored there
+  ([AC-6](docs/specs/slackbot-nonproduction-profile-privacy.md)).
 - **KP-SLACK:** Slack payload values can arrive as strings (`"True"`) and
   rich-text blocks can be empty or missing. Parse leniently, keep a fallback
   for empty text, and use the channel a region saved over the default.
