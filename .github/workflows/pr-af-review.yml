@@ -28,7 +28,7 @@ name: PR-AF Review (trial)
 # key: minted with `limit` = PR_AF_KEY_LIMIT_USD (above the soft cap, to absorb
 # overshoot) and an expiry matching the job timeout, deleted after teardown.
 #
-# SECURITY: unlike adversarial-review.yml, this runs an agent with tool access
+# SECURITY: unlike a diff-only reviewer, this runs an agent with tool access
 # against a clone of the PR's own code. Same-repo PRs only; the label is the
 # gate. Assume prompt injection can read anything in the container:
 # - OPENROUTER_API_KEY is the per-run key, so a leak is capped and short-lived.

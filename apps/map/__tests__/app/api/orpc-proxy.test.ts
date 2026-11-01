@@ -1,7 +1,7 @@
-import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment node
 
-vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
+import { NextRequest } from "next/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchSpy = vi
   .fn<(url: URL, init: RequestInit) => Promise<Response>>()
@@ -12,6 +12,13 @@ describe("oRPC proxy route", () => {
   beforeEach(() => {
     vi.resetModules();
     fetchSpy.mockClear();
+    vi.stubEnv("F3_API_BASE_URL", "http://localhost:3001");
+    // CI exports a mock secret; each test sets the one it needs.
+    vi.stubEnv("PROXY_CLIENT_IP_SECRET", undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("forwards cookies to the upstream API for a signed-in-only path", async () => {
@@ -204,6 +211,45 @@ describe("oRPC proxy route", () => {
     expect(headers.has("content-length")).toBe(false);
     expect(headers.has("x-api-key")).toBe(false);
     expect(headers.has("authorization")).toBe(false);
+  });
+
+  it("reports the browser's trusted hop to the API with the proxy secret", async () => {
+    vi.stubEnv("PROXY_CLIENT_IP_SECRET", "s".repeat(32));
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
+      headers: {
+        "x-forwarded-for": "9.9.9.9, 198.51.100.7",
+        "x-f3-client-ip": "6.6.6.6",
+        "x-f3-proxy-secret": "guess",
+      },
+    });
+
+    await GET(request);
+
+    const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
+
+    expect(headers.get("x-f3-client-ip")).toBe("198.51.100.7");
+    expect(headers.get("x-f3-proxy-secret")).toBe("s".repeat(32));
+  });
+
+  it("strips caller-sent proxy client-IP headers when no secret is configured", async () => {
+    const { GET } = await import("../../../src/app/api/orpc/[[...rest]]/route");
+
+    const request = new NextRequest("http://localhost:3000/api/orpc/v1/ping", {
+      headers: {
+        "x-forwarded-for": "198.51.100.7",
+        "x-f3-client-ip": "6.6.6.6",
+        "x-f3-proxy-secret": "guess",
+      },
+    });
+
+    await GET(request);
+
+    const headers = fetchSpy.mock.calls[0]![1].headers as Headers;
+
+    expect(headers.has("x-f3-client-ip")).toBe(false);
+    expect(headers.has("x-f3-proxy-secret")).toBe(false);
   });
 
   it("answers 503 when the upstream API is unreachable", async () => {

@@ -35,15 +35,16 @@ pnpm local:setup
 
 ## App Ports
 
-| App      | Package name  | URL                     |
-| -------- | ------------- | ----------------------- |
-| Map      | `f3-map`      | <http://localhost:3000> |
-| API      | `f3-api`      | <http://localhost:3001> |
-| Admin    | `f3-admin`    | <http://localhost:3002> |
-| Me       | `f3-me`       | <http://localhost:3003> |
-| Auth     | `f3-auth`     | <http://localhost:3004> |
-| Homepage | `f3-homepage` | <http://localhost:3005> |
-| Slackbot | `f3-slackbot` | <http://localhost:3006> |
+| App          | Package name      | URL                     |
+| ------------ | ----------------- | ----------------------- |
+| Map          | `f3-map`          | <http://localhost:3000> |
+| API          | `f3-api`          | <http://localhost:3001> |
+| Admin        | `f3-admin`        | <http://localhost:3002> |
+| Me           | `f3-me`           | <http://localhost:3003> |
+| Auth         | `f3-auth`         | <http://localhost:3004> |
+| Homepage     | `f3-homepage`     | <http://localhost:3005> |
+| Region pages | `f3-region-pages` | <http://localhost:3006> |
+| Slackbot     | `f3-slackbot`     | <http://localhost:3007> |
 
 Ports are baked into each app's `dev` script — you don't need to set `PORT=`.
 
@@ -67,7 +68,7 @@ Run the status check script from the repo root:
 .cursor/skills/f3-dev-servers/scripts/check-status.sh
 ```
 
-It uses `nc` (netcat) for fast port checking (~1 second) — checks all seven app ports (3000–3006).
+It uses `nc` (netcat) for fast port checking (~1 second) — checks all eight app ports: 3000–3007, or the checkout's slot ports after `pnpm local:setup --slot N`.
 
 Or check any port manually:
 
