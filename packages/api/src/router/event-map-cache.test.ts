@@ -183,13 +183,13 @@ describe("event mutation map cache", () => {
     expect(await publicEvent(event.id)).toEqual(
       expect.arrayContaining([event.id, input.name]),
     );
-    expect(notifyWebhooks).toHaveBeenCalledWith({
+    expect(notifyWebhooks).toHaveBeenCalledExactlyOnceWith({
       action: "map.created",
       eventId: event.id,
     });
-    expect(globalThis.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledExactlyOnceWith(
       "https://map.example.test/api/revalidate",
-      expect.objectContaining({ method: "POST" }),
+      { method: "POST", headers: { "x-api-key": "synthetic-map-key" } },
     );
   });
 
@@ -207,13 +207,13 @@ describe("event mutation map cache", () => {
       .where(eq(schema.events.id, event.id));
     expect(saved).toMatchObject(patch);
     expect(await publicEvent(event.id)).toBeUndefined();
-    expect(notifyWebhooks).toHaveBeenCalledWith({
+    expect(notifyWebhooks).toHaveBeenCalledExactlyOnceWith({
       action: "map.updated",
       eventId: event.id,
     });
-    expect(globalThis.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledExactlyOnceWith(
       "https://map.example.test/api/revalidate",
-      expect.objectContaining({ method: "POST" }),
+      { method: "POST", headers: { "x-api-key": "synthetic-map-key" } },
     );
   });
 
@@ -286,15 +286,17 @@ describe("event mutation map cache", () => {
       name: "missing event type",
       invalidFields: { eventTypeIds: [2_147_483_647] },
       code: "NOT_FOUND",
+      message: "Event type not found",
     },
     {
       name: "invalid event tags",
       invalidFields: { eventTagIds: [2_147_483_647] },
       code: "BAD_REQUEST",
+      message: "Invalid event tags",
     },
   ])(
     "does not notify or invalidate cached data for $name",
-    async ({ invalidFields, code }) => {
+    async ({ invalidFields, code, message }) => {
       const input = await fixture();
       const event = await seedEvent(input);
       const before = await readMap();
@@ -308,7 +310,7 @@ describe("event mutation map cache", () => {
           name: "Rejected workout change",
           ...invalidFields,
         }),
-      ).rejects.toMatchObject({ code });
+      ).rejects.toMatchObject({ code, message });
       const [unchanged] = await db
         .select()
         .from(schema.events)
