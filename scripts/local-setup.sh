@@ -115,7 +115,7 @@ docker compose -f docker-compose.yml up -d
 # ── Step 3: Wait for Postgres ────────────────────────────────────────────────
 echo "  → Waiting for Postgres to be ready..."
 for i in $(seq 1 30); do
-  if docker exec "$PG_CONTAINER" pg_isready -U f3local -q 2>/dev/null; then
+  if docker exec "$PG_CONTAINER" pg_isready -U f3local -d f3nation -q 2>/dev/null; then
     echo "     Postgres is ready."
     break
   fi
