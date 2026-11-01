@@ -8,12 +8,14 @@ drifting across config comments.
 ## Running tests
 
 - All packages: `pnpm test`
-- Python task wrapper and Turbo cache regression: `bash scripts/python-task.test.sh`
-  (shell assertions plus Vitest; also run by `pnpm lint`).
 - A single app/package: `pnpm -C apps/map test` (append `--run` for a one-shot,
   non-watch run)
 - CI runs these under the `test-coverage` check (one of the five required checks
   enforced by the `main` branch ruleset — see [AGENTS.md](../AGENTS.md)).
+
+The Python task wrapper and Turbo cache regression run with
+`bash scripts/python-task.test.sh` (shell assertions plus Vitest). They run
+under CI's `lint` check through `pnpm lint`, separately from `pnpm test`.
 
 Use Vitest for unit and integration tests. Name test files `*.test.ts[x]` and
 place them next to the source or under `__tests__`. Reset databases before any
