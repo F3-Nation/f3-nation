@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        One problem per issue. Found several? File one issue each, and group related ones under an Epic.
+        One problem per issue. Found several? File one issue each and mention the related ones.
   - type: dropdown
     id: affected-app
     attributes:

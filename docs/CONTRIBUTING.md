@@ -40,10 +40,10 @@ Conventions for writing code live in each area's `AGENTS.md`; rules for reviewin
 
 ## Filing issues
 
-Each issue covers one objective and is as small as is reasonable, ideally something a single PR can close. Small, single-focus issues are easier to claim, track and review, and only those can be labeled `good first issue`.
+Each issue covers one objective and is as small as is reasonable, ideally something a single PR can close. Small, single-focus issues are easier to claim, track and review, and they're the kind that suits `good first issue`.
 
 - An issue can have a task list, but every task is a requirement for that one objective. If a task could be done, reviewed and closed on its own, it's a separate issue.
-- Found several unrelated problems (an audit, a review, a bug bash)? File one issue per problem. When they belong together, create a parent issue with the **Epic** type and add each one to it as a sub-issue, so GitHub tracks progress instead of hand-ticked boxes.
+- Found several problems (an audit, a review, a bug bash)? File one issue per problem, and mention closely related ones in each other's descriptions. Being related isn't a reason for an Epic: the **Epic** type is for a large, cohesive effort whose issues only together deliver one outcome, each added to it as a sub-issue. Setting an issue's type and adding sub-issues needs triage access or higher. Without it, file the Epic and its child issues yourself, then comment on the Epic mentioning a code owner (see [`.github/CODEOWNERS`](../.github/CODEOWNERS)) and ask them to set its type and link the children.
 - Search open and closed issues for a duplicate first, use an issue template, and lead with the plain-language impact before the root cause and fix.
 
 ## Choosing which Issues to work on

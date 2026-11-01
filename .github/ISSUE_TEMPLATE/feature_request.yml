@@ -11,7 +11,7 @@ body:
       value: |
         Thank you for taking the time to file a feature request. Please fill out this form as completely as possible.
 
-        One goal per request, as small as is reasonable. Several separate ideas? File one issue each, and group related ones under an Epic.
+        One goal per request, as small as is reasonable. Several separate ideas? File one issue each and mention the related ones.
   - type: dropdown
     id: affected-app
     attributes:
