@@ -1,9 +1,14 @@
 import os
 import subprocess
 import sys
+import threading
 import time
+from datetime import datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
+import pytz
 from f3_data_models import utils as data_model_utils
 from f3_data_models.models import Base, User
 from sqlalchemy import create_engine, text
@@ -106,7 +111,8 @@ def test_saving_reminders_keeps_a_meta_change_made_after_the_job_read_it(isolate
             {"id": user_id},
         )
 
-    fng_reminders.save_reminders_sent(user_id, {"9": 1, "7": 1})
+    with data_model_utils.session_scope() as session:
+        fng_reminders.save_reminders_sent(session, user_id, {"9": 1, "7": 1})
 
     assert _meta(isolated_postgres, user_id) == {
         "battle_buddy": 7,
@@ -123,6 +129,44 @@ def test_saving_reminders_when_meta_is_null(isolated_postgres, sql_null):
         with isolated_postgres.begin() as connection:
             connection.execute(text("UPDATE users SET meta = NULL WHERE id = :id"), {"id": user_id})
 
-    fng_reminders.save_reminders_sent(user_id, {"7": 1})
+    with data_model_utils.session_scope() as session:
+        fng_reminders.save_reminders_sent(session, user_id, {"7": 1})
 
     assert _meta(isolated_postgres, user_id) == {"fng_reminders_sent": {"7": 1}}
+
+
+def test_overlapping_runs_send_each_reminder_once(isolated_postgres, monkeypatch):
+    user_id = _insert_user(isolated_postgres, {"battle_buddy": 7})
+    with Session(isolated_postgres) as session:
+        fng = session.get(User, user_id)
+        session.expunge(fng)
+    # Both runs read him before either sends, as a forced run started during the scheduled one would.
+    # Day 3 to 5 whatever the clocks' time zones, and each is due the first reminder.
+    now = datetime.now(pytz.timezone("US/Central")) + timedelta(days=4)
+    first_sending = threading.Event()
+
+    def dm(client, team_id, fng, text, logger, contact_ids):
+        if not first_sending.is_set():
+            first_sending.set()
+            time.sleep(1)  # the second run reaches the lock while this one is still sending
+        return contact_ids
+
+    dm_mock = MagicMock(side_effect=dm)
+    monkeypatch.setattr(fng_reminders, "dm_fng_contacts", dm_mock)
+    monkeypatch.setattr(fng_reminders.DbManager, "find_first_record", MagicMock(return_value=None))
+    settings = fng_reminders.SlackSettings(team_id="T1", bot_token="xoxb")
+
+    def remind():
+        fng_reminders._remind_fng(MagicMock(), SimpleNamespace(team_id="T1"), settings, 3, fng, now)
+
+    first = threading.Thread(target=remind)
+    first.start()
+    assert first_sending.wait(10)
+    started = time.monotonic()
+    remind()
+    waited = time.monotonic() - started
+    first.join(10)
+
+    assert dm_mock.call_count == 1
+    assert waited < 0.5  # skipped him instead of waiting for the first run's lock
+    assert _meta(isolated_postgres, user_id)["fng_reminders_sent"] == {"7": 1}

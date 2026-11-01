@@ -154,7 +154,6 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
             logger.error(
                 "fng.create_user_failed error_type=%s",
                 type(exc).__name__,
-                exc_info=exc,
                 extra={"json_fields": {"event": "fng.create_user_failed", "error_type": type(exc).__name__}},
             )
             done(AlertLevel.ERROR, "I couldn't create his F3 Nation profile, so nothing was sent. Please try again.")
