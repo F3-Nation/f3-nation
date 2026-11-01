@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { LocationMarkerWithDistance } from "~/app/_components/map/filtered-map-results-provider";
+import { filterData } from "~/utils/filtered-data";
+import { initialFilterState } from "~/utils/store/filter";
 import { groupMarkersByAo } from "~/utils/group-markers-by-ao";
 
 const makeEvent = (
@@ -34,6 +36,100 @@ const makeMarker = (
 });
 
 describe("groupMarkersByAo", () => {
+  it.each([
+    {
+      filter: "dayM",
+      day: "monday",
+      id: 101,
+      name: "Screaming Eagle",
+      logo: "eagle.png",
+    },
+    {
+      filter: "dayW",
+      day: "wednesday",
+      id: 102,
+      name: "Screaming Eagle",
+      logo: "eagle.png",
+    },
+    {
+      filter: "dayTh",
+      day: "thursday",
+      id: 103,
+      name: "Affordable Thursday",
+      logo: "thursday.png",
+    },
+  ])(
+    "keeps the $day schedule paired with its AO after filtering",
+    ({ filter, day, id, name, logo }) => {
+      const marker = makeMarker({
+        id: 1,
+        aoName: "Affordable Thursday",
+        logo: "thursday.png",
+        events: [
+          makeEvent({
+            id: 101,
+            name: "Screaming Eagle",
+            aoName: "Screaming Eagle",
+            aoLogo: "eagle.png",
+            dayOfWeek: "monday",
+          }),
+          makeEvent({
+            id: 102,
+            name: "Screaming Eagle",
+            aoName: "Screaming Eagle",
+            aoLogo: "eagle.png",
+            dayOfWeek: "wednesday",
+          }),
+          makeEvent({
+            id: 103,
+            name: "Affordable Thursday",
+            aoName: "Affordable Thursday",
+            aoLogo: "thursday.png",
+            dayOfWeek: "thursday",
+          }),
+        ],
+      });
+      const result = groupMarkersByAo(
+        filterData([marker], { ...initialFilterState, [filter]: true }),
+      );
+      expect(result).toHaveLength(1);
+      expect(
+        result[0]?.events.map((event) => ({
+          id: event.id,
+          day: event.dayOfWeek,
+        })),
+      ).toEqual([{ id, day }]);
+      expect(result[0]?.aoName).toBe(name);
+      expect(result[0]?.logo).toBe(logo);
+      const reset = groupMarkersByAo(filterData([marker], initialFilterState));
+      expect(
+        reset.map((row) => ({
+          name: row.aoName,
+          ids: row.events.map((event) => event.id),
+        })),
+      ).toEqual([
+        { name: "Screaming Eagle", ids: [101, 102] },
+        { name: "Affordable Thursday", ids: [103] },
+      ]);
+    },
+  );
+  it.each([
+    { events: [] },
+    { events: [makeEvent({ id: 101 })] },
+    { events: [makeEvent({ id: -101, aoName: "" })] },
+  ])(
+    "preserves location metadata when events have no AO metadata: $events",
+    ({ events }) => {
+      const marker = makeMarker({
+        id: 1,
+        aoName: "Fallback AO",
+        logo: "fallback.png",
+        events,
+      });
+      expect(groupMarkersByAo([marker])).toEqual([{ ...marker, aoId: "1" }]);
+    },
+  );
+
   it("splits a location with multiple AOs into separate entries", () => {
     const marker = makeMarker({
       id: 1,

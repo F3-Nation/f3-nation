@@ -24,7 +24,17 @@ export const groupMarkersByAo = (
     }
 
     if (eventsByAo.size <= 1) {
-      return [{ ...marker, aoId: `${marker.id}` }];
+      const event = marker.events[0];
+      return [
+        {
+          ...marker,
+          aoId: `${marker.id}`,
+          // Synthetic events use an empty name when their AO metadata is missing.
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          aoName: event?.aoName || marker.aoName,
+          logo: event?.aoLogo ?? marker.logo,
+        },
+      ];
     }
 
     return Array.from(eventsByAo.entries()).map(([aoName, events]) => ({
