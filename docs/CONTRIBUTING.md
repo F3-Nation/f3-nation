@@ -38,13 +38,21 @@ AI tools are welcome for writing code, tests, and PR descriptions. You're respon
 
 Conventions for writing code live in each area's `AGENTS.md`; rules for reviewing it live in [`REVIEW.md`](../REVIEW.md), which every AI reviewer loads. If a review bot keeps raising the same false positive, add a "do not flag" entry to `REVIEW.md`. If reviewers keep catching the same mistake, add a one-line rule to the matching `AGENTS.md`.
 
+## Filing issues
+
+Each issue covers one objective and is as small as is reasonable, ideally something a single PR can close. Small, single-focus issues are easier to claim, track and review, and only those can be labeled `good first issue`.
+
+- An issue can have a task list, but every task is a requirement for that one objective. If a task could be done, reviewed and closed on its own, it's a separate issue.
+- Found several unrelated problems (an audit, a review, a bug bash)? File one issue per problem. When they belong together, create a parent issue with the **Epic** type and add each one to it as a sub-issue, so GitHub tracks progress instead of hand-ticked boxes.
+- Search open and closed issues for a duplicate first, use an issue template, and lead with the plain-language impact before the root cause and fix.
+
 ## Choosing which Issues to work on
 
 Short answer: work on whatever interests you. Any improvement you can make will be appreciated, even if there's not a current Issue for it.
 
 New to the project? Issues labeled [`good first issue`](https://github.com/F3-Nation/f3-nation/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) are a good place to start; [`help wanted`](https://github.com/F3-Nation/f3-nation/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) issues are ones we'd love a hand with.
 
-Some issues are checklists of small, independent items — each one is meant to be its own PR. Comment on the issue to claim an item before you start, and once your PR merges, comment again with the PR number and what you verified. Contributors can't tick boxes in someone else's issue, so a maintainer will check it off from your comment.
+Larger efforts are tracked as Epics: parent issues whose sub-issues are each their own small piece of work. Pick a sub-issue and comment on it to claim it before you start.
 
 If you're looking to drive along the roadmap with us, check out the Issues project board: https://github.com/orgs/F3-Nation/projects/4
 

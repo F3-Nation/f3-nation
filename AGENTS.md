@@ -236,6 +236,13 @@ These rules cover everything an AI assistant writes to GitHub — issues, pull r
 - **Never resolve review threads.** Resolving them is the PR author's responsibility, once they have read the replies; see [`docs/PR_REVIEW_PROCESS.md`](docs/PR_REVIEW_PROCESS.md#addressing-feedback).
 - **Reply to every review comment you act on**, in its thread, whether you changed code or decided not to, saying what you did and why.
 
+## Filing Issues
+
+These apply to every issue an agent opens, for any reason. The full rule and its rationale are in [`docs/CONTRIBUTING.md` § Filing issues](docs/CONTRIBUTING.md#filing-issues).
+
+- One objective per issue, as small as is reasonable. A task list holds only requirements for that objective, never a batch of independent findings.
+- An audit or review that finds several unrelated problems files one issue per problem. To track them together, give a parent issue the **Epic** type and add each as a sub-issue: through the REST API, `PATCH .../issues/<n>` with `type` set to `Epic`, and `POST .../issues/<n>/sub_issues` with `sub_issue_id` set to the child's numeric `id` (not its issue number).
+
 ## Pull Request Guidelines
 
 - Every pull request should:
@@ -245,8 +252,8 @@ These rules cover everything an AI assistant writes to GitHub — issues, pull r
   - Never include secrets.
 - Keep PRs small enough to review in one sitting (review bots skip very large PRs), with mechanical sweeps (lint, renames, dependency bumps) separate from behavior changes.
 - Before opening a pull request, run `pnpm ci:local` (at minimum `pnpm lint` and `pnpm format`) and commit any coverage-threshold rewrite.
-- Reply to every review thread with what changed (commit SHA) or why not; out-of-scope findings get a tracking issue linked in the reply. AI agents never resolve threads and sign what they write `_written by <model>_` (see [`.agents/skills/github/SKILL.md`](.agents/skills/github/SKILL.md)).
-- File pre-existing bugs found along the way as separate issues, not PR scope creep: search for duplicates, follow the issue templates, and lead with plain-language impact before the root cause and fix.
+- Reply to every review thread with what changed (commit SHA) or why not; out-of-scope findings get a tracking issue linked in the reply. AI agents never resolve threads and sign what they write `_written by <model>_` (see [Writing to GitHub](#writing-to-github)).
+- File pre-existing bugs found along the way as separate issues (see [Filing Issues](#filing-issues)), not PR scope creep.
 
 ## Security & Environment
 
