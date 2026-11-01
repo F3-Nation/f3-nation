@@ -87,6 +87,6 @@ if ((failures > 0)); then
   exit 1
 fi
 
-node --test "$script_dir/python-task-cache.test.mjs" || exit "$?"
+pnpm exec vitest run "$script_dir/python-task-cache.test.ts" --testTimeout 180000 || exit "$?"
 
 echo "All Python wrapper and cache regression tests passed."

@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { test } from "node:test";
+import { test } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -30,7 +30,7 @@ test("Python checks re-evaluate tool availability without changing PATH or sourc
   try {
     mkdirSync(join(repo, "scripts"), { recursive: true });
     mkdirSync(bin);
-    const lookup = (name) => {
+    const lookup = (name: string) => {
       const result = spawnSync("which", [name], { encoding: "utf8" });
       assert.equal(result.status, 0, `Required executable: ${name}`);
       return result.stdout.trim();
@@ -69,12 +69,11 @@ test("Python checks re-evaluate tool availability without changing PATH or sourc
     );
     writeFileSync(join(repo, ".gitignore"), ".turbo/\nnode_modules/\n");
     let lock = "lockfileVersion: '9.0'\nimporters:\n  .: {}\n";
-    const tasks = [];
+    const tasks: string[] = [];
     for (const dir of packageDirs) {
-      const original = JSON.parse(
-        readFileSync(join(root, dir, "package.json"), "utf8"),
-      );
-      const scripts = {};
+      const original: { name: string; scripts: Record<string, string> } =
+        JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8"));
+      const scripts: Record<string, string> = {};
       for (const [task, command] of Object.entries(original.scripts)) {
         if (!command.includes("scripts/python-task.sh")) continue;
         tasks.push(`${original.name}:${task}`);

@@ -8,6 +8,8 @@ drifting across config comments.
 ## Running tests
 
 - All packages: `pnpm test`
+- Python task wrapper and Turbo cache regression: `bash scripts/python-task.test.sh`
+  (shell assertions plus Vitest; also run by `pnpm lint`).
 - A single app/package: `pnpm -C apps/map test` (append `--run` for a one-shot,
   non-watch run)
 - CI runs these under the `test-coverage` check (one of the five required checks
