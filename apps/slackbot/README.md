@@ -80,9 +80,9 @@ Slackbot is opt-in for root dev startup because it needs the Python environment 
 
 - Slackbot health check: http://localhost:3007 (`F3_SLACKBOT_PORT`, which follows the checkout's slot like the other apps)
 
-### Uploading Files (NOT IMPLEMENTED)
+### Uploading Files
 
-Slackbot allows you to upload user avatar images and region logos. Right now the file upload functionality does not work when running the app locally. Maybe on day.
+Photo, avatar and logo uploads and calendar images are stored in the local GCS emulator when `GCS_EMULATOR_HOST` is set (the `.env.example` default; run `pnpm docker:up` first). Slack can't download images from `localhost`, so locally the bot posts a link to each image instead of embedding it. See [GCS emulator § Slackbot](../../docs/LOCAL_DEV_DOCKER.md#slackbot).
 
 ### First steps
 

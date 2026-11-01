@@ -30,12 +30,9 @@ from features.calendar.event_preblast import (
     get_preblast_channel,
     post_hc_thread_reply,
 )
-from utilities import constants
+from utilities import constants, storage
 from utilities.constants import (
-    GCP_IMAGE_URL,
-    LOCAL_DEVELOPMENT,
     MAX_CALENDAR_WEEKS,
-    S3_IMAGE_URL,
     WEEK_LABELS,
     WEEK_SCHEDULE_LABELS,
 )
@@ -359,10 +356,7 @@ def build_calendar_image_form(
             # No image generated yet - skip the (guaranteed to fail) HEAD request so we stay well
             # inside the few seconds a Slack trigger_id stays valid.
             continue
-        if LOCAL_DEVELOPMENT:
-            image_url = S3_IMAGE_URL.format(image_name=image_name)
-        else:
-            image_url = GCP_IMAGE_URL.format(bucket="f3nation-calendar-images", image_name=image_name)
+        image_url = storage.public_url(storage.CALENDAR_IMAGES, image_name)
         try:
             valid = requests.head(image_url, timeout=2).status_code == 200
         except Exception as e:
@@ -374,7 +368,7 @@ def build_calendar_image_form(
 
     if valid_weeks:
         blocks = [
-            orm.ImageBlock(
+            orm.image_or_link_block(
                 label=WEEK_SCHEDULE_LABELS[week], alt_text=WEEK_SCHEDULE_LABELS[week], image_url=image_urls[week]
             )
             for week in valid_weeks
