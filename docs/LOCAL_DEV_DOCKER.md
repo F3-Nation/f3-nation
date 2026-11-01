@@ -572,6 +572,12 @@ uv --version
 pnpm python:install
 ```
 
+Python check tasks using [`scripts/python-task.sh`](../scripts/python-task.sh)
+disable Turbo result caching. Installing `uv` on an unchanged `PATH` must not
+replay an earlier successful skip. These checks run whenever Turbo selects
+them, including in CI; unrelated tasks retain their cache settings. A local
+missing-tool skip is not a passing Python check, and missing `uv` fails in CI.
+
 ### Port already in use
 
 If you see an error like `port is already allocated`, another process is using that port.

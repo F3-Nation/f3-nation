@@ -48,6 +48,7 @@ const config: KnipConfig = {
         "scripts/check-eslint-suppressions.mjs",
         "scripts/check-review-links.mjs",
         "scripts/check-security-headers-coverage.mjs",
+        "scripts/python-task-cache.test.mjs",
       ],
     },
     "apps/api": {

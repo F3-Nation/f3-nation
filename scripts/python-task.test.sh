@@ -87,3 +87,5 @@ if ((failures > 0)); then
 fi
 
 echo "All python-task.sh regression tests passed."
+
+node --test "$script_dir/python-task-cache.test.mjs"

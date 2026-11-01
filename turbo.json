@@ -91,6 +91,17 @@
     "UV_PYTHON"
   ],
   "tasks": {
+    "f3-analytics#format": { "cache": false },
+    "f3-analytics#lint": { "cache": false },
+    "f3-analytics#test": { "cache": false },
+    "f3-analytics#typecheck": { "cache": false },
+    "f3-slackbot#format": { "cache": false },
+    "f3-slackbot#lint": { "cache": false },
+    "f3-slackbot#test": { "cache": false },
+    "f3-slackbot#typecheck": { "cache": false },
+    "f3-data-models#format": { "cache": false },
+    "f3-data-models#lint": { "cache": false },
+    "f3-data-models#test": { "cache": false },
     "topo": {
       "dependsOn": ["^topo"]
     },

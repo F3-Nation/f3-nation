@@ -6,6 +6,8 @@
 #   contributors without Python installed can still run `pnpm lint`/`pnpm test`.
 # - Never skips in CI: if `uv` is missing while `CI` is set, fails loudly
 #   instead, so the gate can never be silently switched off.
+# - Turbo tasks using this wrapper must disable result caching: installing uv
+#   on an unchanged PATH must not replay an earlier successful local skip.
 # - Strips the ESLint/Prettier cache flags (`--cache`, `--cache-location <path>`,
 #   a bare `--`) that turbo's root `lint`, `lint:fix`, and `format:fix` scripts
 #   append to every task in the graph. Python tools reject them. Only strips them from the trailing
