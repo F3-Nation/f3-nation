@@ -196,7 +196,7 @@ def handle_fng_form(body: dict, client: WebClient, logger: Logger, context: dict
 def _send_welcome_email(email: str, first_name: str | None, region: str, invite_link: str | None) -> bool:
     if not invite_link:
         return False
-    region, link = html.escape(region), html.escape(invite_link)
+    safe_region, link = html.escape(region), html.escape(invite_link)
     greeting = f", {html.escape(first_name)}" if first_name else ""
     return send_via_sendgrid(
         to_email=email,
@@ -204,7 +204,7 @@ def _send_welcome_email(email: str, first_name: str | None, region: str, invite_
         html_content=f"""
     <html>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <p>Welcome to {region}{greeting}!</p>
+        <p>Welcome to {safe_region}{greeting}!</p>
         <p>We use Slack to coordinate workouts, post backblasts and stay in touch.
         <a href="{link}">Join us here</a>, using this email address so we can link your account.</p>
         <p>See you in the gloom.</p>
