@@ -101,6 +101,145 @@
       "path": "packages/ui/AGENTS.md",
       "description": "Conventions for packages/ui/.",
       "scope": ["packages/ui/**"]
+    },
+    {
+      "path": "docs/specs/admin-generic-org-management.md",
+      "description": "Feature spec: Shared organization administration. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/shared/**",
+        "packages/validators/**"
+      ]
+    },
+    {
+      "path": "docs/specs/admin-region-parent-filters.md",
+      "description": "Feature spec: Region parents and ancestry filters. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/db/**",
+        "packages/shared/**"
+      ]
+    },
+    {
+      "path": "docs/specs/admin-territory-management.md",
+      "description": "Feature spec: Territory administration and depth-agnostic AO counts. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "apps/admin/**",
+        "packages/api/**",
+        "packages/db/**",
+        "packages/shared/**"
+      ]
+    },
+    {
+      "path": "docs/specs/analytics-parquet-etl.md",
+      "description": "Feature spec: Daily analytics Parquet materializations. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/analytics/**"]
+    },
+    {
+      "path": "docs/specs/database-audit-history.md",
+      "description": "Feature spec: Database audit-history foundation. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["packages/db/**", "packages/api/**", "apps/map/**"]
+    },
+    {
+      "path": "docs/specs/health-contract-and-status.md",
+      "description": "Feature spec: Health contract and unified status dashboard. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "packages/health/**",
+        "packages/api/**",
+        "apps/homepage/**",
+        "apps/*/src/app/**/health/**",
+        "apps/api/src/app.ts"
+      ]
+    },
+    {
+      "path": "docs/specs/map-browse-and-search.md",
+      "description": "Feature spec: Map browse, search & location detail. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/map/**", "packages/api/**"]
+    },
+    {
+      "path": "docs/specs/map-update-request-flow.md",
+      "description": "Feature spec: Map edit mode & update requests. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "apps/map/**",
+        "packages/api/**",
+        "packages/validators/**",
+        "apps/admin/**",
+        "apps/api/**",
+        "packages/db/**",
+        "packages/mail/**"
+      ]
+    },
+    {
+      "path": "docs/specs/mixed-hierarchy-seeds-map.md",
+      "description": "Feature spec: Mixed hierarchy seeds and map verification. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "packages/db/**",
+        "apps/map/**",
+        "packages/api/**",
+        "packages/shared/**"
+      ]
+    },
+    {
+      "path": "docs/specs/org-directory-map.md",
+      "description": "Feature spec: Org geographic directory map. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/homepage/**", "apps/map/**", "packages/api/**"]
+    },
+    {
+      "path": "docs/specs/org-tree-depth-agnostic-traversal.md",
+      "description": "Feature spec: Depth-agnostic organization tree traversal. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["packages/api/**", "packages/shared/**"]
+    },
+    {
+      "path": "docs/specs/pax-vault-parquet-etl.md",
+      "description": "Feature spec: Pax Vault Parquet materializations. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/analytics/**"]
+    },
+    {
+      "path": "docs/specs/region-in-a-box-notifications.md",
+      "description": "Feature spec: Region-in-a-box notifications for AO and recurring-event changes. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["packages/api/**", "apps/map/**", "apps/admin/**"]
+    },
+    {
+      "path": "docs/specs/region-pages-directory.md",
+      "description": "Feature spec: Region pages directory. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/region-pages/**", "packages/api/**", "apps/api/**"]
+    },
+    {
+      "path": "docs/specs/series-status-cascade.md",
+      "description": "Feature spec: Series status cascade. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["packages/api/**"]
+    },
+    {
+      "path": "docs/specs/slack-calendar-modal-capacity.md",
+      "description": "Feature spec: Slack calendar modal capacity and failure handling. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/slackbot/**"]
+    },
+    {
+      "path": "docs/specs/slack-f3versary-announcements.md",
+      "description": "Feature spec: F3versary Announcements. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/slackbot/**"]
+    },
+    {
+      "path": "docs/specs/slackbot-nonproduction-profile-privacy.md",
+      "description": "Feature spec: Slackbot non-production profile privacy. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/slackbot/**"]
+    },
+    {
+      "path": "docs/specs/slackbot-series-time-exceptions.md",
+      "description": "Feature spec: Slackbot series time exceptions. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": ["apps/slackbot/**"]
+    },
+    {
+      "path": "docs/specs/territory-org-type.md",
+      "description": "Feature spec: Territory organization type. Acceptance criteria and RBAC to judge changed behavior against.",
+      "scope": [
+        "apps/admin/**",
+        "packages/db/**",
+        "packages/db-python/**",
+        "packages/shared/**"
+      ]
     }
   ]
 }
