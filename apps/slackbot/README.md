@@ -68,7 +68,7 @@ only synthetic names, contact details, and emergency information:
 
 ### Start the local apps with Slackbot
 
-In the app manifest, there is a setting called socket_mode_enabled that is set to true. This tells Slack to connect to the app locally on your machine (port 3006).
+In the app manifest, there is a setting called socket_mode_enabled that is set to true. The bot connects out to Slack over a websocket, so Slack never needs to reach your machine.
 
 From the repo root:
 
@@ -78,7 +78,7 @@ pnpm dev --include-py
 
 Slackbot is opt-in for root dev startup because it needs the Python environment and Slack credentials. At the very least, you will need to also run the API app.
 
-- Slackbot local URL: http://localhost:3006
+- Slackbot health check: http://localhost:3007 (`F3_SLACKBOT_PORT`, which follows the checkout's slot like the other apps)
 
 ### Uploading Files (NOT IMPLEMENTED)
 
