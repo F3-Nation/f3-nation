@@ -12,8 +12,9 @@ failures=0
 # actually has uv installed, so they run against a stub uv on PATH. The
 # uv-missing cases below run against an empty PATH directory instead (invoked
 # via "$BASH" so the restricted PATH cannot break resolving bash itself).
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/python-task-test.XXXXXX")"
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=""
+trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/python-task-test.XXXXXX")" || exit 1
 mkdir -p "$tmp_dir/with-uv" "$tmp_dir/without-uv"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$tmp_dir/with-uv/uv"
 chmod +x "$tmp_dir/with-uv/uv"

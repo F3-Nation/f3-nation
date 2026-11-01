@@ -36,7 +36,10 @@ import {
 import type { UpdateRequestData } from "../lib/types";
 import type { Context } from "../shared";
 
-import { checkHasRoleOnOrg } from "../check-has-role-on-org";
+import {
+  checkHasRoleOnOrg,
+  checkHasRolesOnOrgs,
+} from "../check-has-role-on-org";
 import { getEditableOrgIdsForUser } from "../get-editable-org-ids";
 import { getSortingColumns } from "../get-sorting-columns";
 import { checkUpdatePermissions } from "../lib/check-update-permissions";
@@ -714,17 +717,15 @@ export const requestRouter = {
     })
     .handler(async ({ context: ctx, input }) => {
       // protectedProcedure guarantees an authenticated session, so every result
-      // comes from checkHasRoleOnOrg (modes: direct-permission/org-admin/no-permission).
-      const results = await Promise.all(
-        input.orgIds.map((orgId) =>
-          checkHasRoleOnOrg({
-            orgId,
-            session: ctx.session,
-            db: ctx.db,
-            roleName: "editor" as const,
-          }),
-        ),
-      );
+      // comes from checkHasRolesOnOrgs (modes: direct-permission/org-admin/no-permission).
+      const results = await checkHasRolesOnOrgs({
+        session: ctx.session,
+        db: ctx.db,
+        checks: input.orgIds.map((orgId) => ({
+          orgId,
+          roleName: "editor" as const,
+        })),
+      });
       return { results };
     }),
   submitCreateAOAndLocationAndEventRequest: protectedProcedure

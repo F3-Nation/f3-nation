@@ -68,7 +68,7 @@ only synthetic names, contact details, and emergency information:
 
 ### Start the local apps with Slackbot
 
-In the app manifest, there is a setting called socket_mode_enabled that is set to true. This tells Slack to connect to the app locally on your machine (port 3006).
+In the app manifest, there is a setting called socket_mode_enabled that is set to true. The bot connects out to Slack over a websocket, so Slack never needs to reach your machine.
 
 From the repo root:
 
@@ -78,7 +78,7 @@ pnpm dev --include-py
 
 Slackbot is opt-in for root dev startup because it needs the Python environment and Slack credentials. At the very least, you will need to also run the API app.
 
-- Slackbot local URL: http://localhost:3006
+- Slackbot health check: http://localhost:3007 (`F3_SLACKBOT_PORT`, which follows the checkout's slot like the other apps)
 
 ### Uploading Files (NOT IMPLEMENTED)
 
@@ -110,6 +110,34 @@ pnpm dev
 pnpm test
 pnpm lint
 ```
+
+## Testing
+
+After installing the repository's Python dependencies, run the checked test task
+from the repository root:
+
+```bash
+pnpm --filter f3-slackbot test
+```
+
+Pytest discovers tests under `tests/` and rejects unknown configuration settings
+and unregistered markers. The default suite uses mocked services and needs no
+database. The existing PostgreSQL integration tests remain opt-in through
+`SLACKBOT_POSTGRES_TESTS=1` and require their documented disposable database.
+
+The task reports statement coverage for `application/`, `infrastructure/`,
+`utilities/`, and `features/`, including modules the tests never execute. Tests,
+deployment scripts, and the app entrypoint are outside that coverage scope.
+The fixed minimum is configured in `pyproject.toml`; it does not update itself.
+Raise it deliberately when the full suite establishes a higher baseline.
+
+Coverage is printed in the terminal and saved to `coverage/coverage.json`, with
+its measurement database at `coverage/.coverage`. These generated files are
+ignored by Git and included in Turbo's existing test outputs.
+
+For a focused test run without collecting coverage, run `uv run pytest` with a
+test path from this directory. Use the `pnpm` test task above to verify the
+coverage gate used by CI.
 
 ## Codebase notes
 

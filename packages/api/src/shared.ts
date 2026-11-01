@@ -1,7 +1,7 @@
 import { MemoryRatelimiter } from "@orpc/experimental-ratelimit/memory";
 import { ORPCError, os } from "@orpc/server";
 import type { RequestHeadersPluginContext } from "@orpc/server/plugins";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 
 import type { Session } from "@acme/auth";
 import { getSessionFromHeaders } from "@acme/auth";
@@ -10,11 +10,14 @@ import type { AppDb } from "@acme/db/client";
 import { db } from "@acme/db/client";
 import { env } from "@acme/env";
 import { isNationAdminFromSession } from "@acme/shared/app/role-checks";
+import { getTrustedClientIp } from "@acme/shared/common/client-ip";
 import { isDevelopment } from "@acme/shared/common/constants";
 import { Client, Header } from "@acme/shared/common/enums";
 
 import { jwksFetchFailure } from "./jwks-failure";
 import { logError, logWarn } from "./logger";
+import { getProxiedClientIp } from "./proxied-client-ip";
+import { trustedIssuers } from "./trusted-issuers";
 
 type BaseContext = RequestHeadersPluginContext;
 
@@ -24,14 +27,18 @@ export interface Context extends BaseContext {
 }
 
 /**
- * Mock session used in development when a request reaching a tier that
- * requires a user carries no credential. It has no roles, so
- * `editorProcedure`/`adminProcedure`/`nationAdminProcedure` still reject it.
- * `publicReadProcedure` never receives it, so its anonymous branches run
- * locally exactly as in production.
+ * Mock session used in local development when a request reaching
+ * `protectedProcedure` carries no credential. It has no roles, and the
+ * editor/admin tiers never receive it, so
+ * `editorProcedure`/`adminProcedure`/`nationAdminProcedure` still reject an
+ * unauthenticated request; those need a real credential locally (an API key
+ * or a dev-mode sign-in). `publicReadProcedure` never receives it either, so
+ * its anonymous branches run locally exactly as in production.
  */
+const DEV_MOCK_SESSION_ID = 0;
+
 const getDevMockSession = (): Session => ({
-  id: 0,
+  id: DEV_MOCK_SESSION_ID,
   email: "dev@localhost",
   roles: [],
   user: {
@@ -42,6 +49,27 @@ const getDevMockSession = (): Session => ({
   },
   expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 365).toISOString(),
 });
+
+/**
+ * Whether an unauthenticated request may fall back to the dev mock session.
+ * Every condition must hold, so a single mis-set variable on a deployed
+ * service cannot turn anonymous requests into authenticated ones:
+ * - `NODE_ENV` is exactly "development". This is `isDevelopment`, fixed when
+ *   the module loads: nothing flips `NODE_ENV` at runtime, and a value fixed at
+ *   boot cannot be changed into "development" later;
+ * - `NEXT_PUBLIC_CHANNEL` is exactly "local". This is a strict `===` on the
+ *   raw `process.env` value, not `@acme/env` validation (which is skipped under
+ *   CI / `SKIP_ENV_VALIDATION`), so an unset or unknown channel fails closed.
+ *   Deployed channels, staging included, never match, even where the value is
+ *   frozen into a build;
+ * - `ALLOW_DEV_MOCK_SESSION` is exactly "true". Only apps/api's `dev` script
+ *   sets it; the Dockerfile and Cloud Run env never do. Run `pnpm dev` with
+ *   `ALLOW_DEV_MOCK_SESSION=false` to exercise unauthenticated calls locally.
+ */
+const isDevMockSessionAllowed = (): boolean =>
+  isDevelopment &&
+  process.env.NEXT_PUBLIC_CHANNEL === "local" &&
+  process.env.ALLOW_DEV_MOCK_SESSION === "true";
 
 // Rate limit configuration
 // WARNING: This is an in-memory rate limiter. In multi-instance deployments
@@ -55,15 +83,31 @@ const RATE_LIMIT_MAX_REQUESTS = isDevelopment ? 10000 : 500;
 // app-server clock skew and cross-check inconsistencies.
 const DB_NOW = sql`timezone('utc'::text, now())`;
 
-// The auth server's base URL (e.g. https://auth.f3nation.com).
-// Read from process.env to avoid t3-env client/server type mismatch.
-const authIssuer = process.env.NEXT_PUBLIC_AUTH_URL ?? null;
+// The auth servers whose access tokens are accepted: AUTH_TRUSTED_ISSUERS
+// (e.g. auth2 and auth3 during the Better Auth cutover). See
+// ./trusted-issuers. Read from process.env to avoid t3-env client/server
+// type mismatch.
+const authIssuers = trustedIssuers(process.env.AUTH_TRUSTED_ISSUERS);
+// An empty list rejects every bearer JWT, which in practice shows up only as
+// API-key 401s (e.g. a local apps/api/.env from before this variable), so
+// say so once at startup. A warning, not a throw: tests and API-key-only
+// setups run without it.
+if (authIssuers.length === 0) {
+  logWarn("api.auth.no_trusted_issuers", {
+    message:
+      "AUTH_TRUSTED_ISSUERS is empty, so no bearer JWT will be accepted. Set it to the auth server origin(s), e.g. http://localhost:3004 locally.",
+  });
+}
 
-// Cached JWKS fetcher for f3-nation-auth JWT verification.
-// jose caches the key set automatically after the first fetch.
-const authJwks = authIssuer
-  ? createRemoteJWKSet(new URL(`${authIssuer}/.well-known/jwks.json`))
-  : null;
+// Cached JWKS fetcher per trusted issuer for JWT verification, keyed by the
+// exact issuer string a token's `iss` must equal. jose caches each key set
+// automatically after its first fetch.
+const authJwksByIssuer = new Map(
+  authIssuers.map((issuer) => [
+    issuer,
+    createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`)),
+  ]),
+);
 
 const limiter = new MemoryRatelimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
@@ -71,19 +115,20 @@ const limiter = new MemoryRatelimiter({
 });
 
 /**
- * Extract client IP from request headers.
- * Handles x-forwarded-for chains by taking the first (client) IP.
+ * Extract the rate-limit key (client IP) from request headers.
+ *
+ * A request from the map or admin proxy carries the browser's IP with the
+ * shared proxy secret; that IP is used only when the secret matches. Otherwise
+ * this reads the x-forwarded-for entry our Cloud Run front end appended, never
+ * the caller-supplied leftmost one; see getTrustedClientIp for why. x-real-ip
+ * is only consulted when there is no x-forwarded-for at all (local dev — Cloud
+ * Run always sets one).
  */
-export const getClientIP = (headers: Headers | null): string => {
-  const forwarded = headers?.get("x-forwarded-for");
-  if (forwarded) {
-    // Take first IP in chain (closest to client)
-    // x-forwarded-for format: "client, proxy1, proxy2"
-    const firstIP = forwarded.split(",")[0]?.trim();
-    if (firstIP) return firstIP;
-  }
-  return headers?.get("x-real-ip") ?? "anonymous";
-};
+export const getClientIP = (headers: Headers | null): string =>
+  getProxiedClientIp(headers, env.PROXY_CLIENT_IP_SECRET) ??
+  getTrustedClientIp(headers) ??
+  headers?.get("x-real-ip") ??
+  "anonymous";
 
 const base = os.$context<BaseContext>().use(async ({ context, next }) => {
   const key = getClientIP(context.reqHeaders ?? null);
@@ -135,7 +180,9 @@ export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
     // A bearer token was supplied but failed to resolve to a session (bad
     // JWT, or an API key that doesn't match any row) — that's a rejected
     // credential, not "no credential", so the dev mock must not mask it.
-    if (isDevelopment && !hasBearerToken(context.reqHeaders)) {
+    if (!hasBearerToken(context.reqHeaders) && isDevMockSessionAllowed()) {
+      // Logged on every issuance, so an unexpected one shows up in the logs.
+      logWarn("api.auth.dev_mock_session_issued");
       return next({ context: { ...context, session: getDevMockSession() } });
     }
     throw new ORPCError("UNAUTHORIZED");
@@ -146,6 +193,13 @@ export const protectedProcedure = withSessionAndDb.use(({ context, next }) => {
 /** Personal self-service requires a user session or Auth access token. */
 export const personalUserProcedure = protectedProcedure.use(
   ({ context, next }) => {
+    // The dev mock session is not a person: `/me` handlers act on
+    // `ctx.session.id`, so never let it reach them.
+    if (context.session!.id === DEV_MOCK_SESSION_ID) {
+      throw new ORPCError("UNAUTHORIZED", {
+        message: "Sign in with your user account to access this endpoint.",
+      });
+    }
     // `apiKey` is only set on the result of `getSession` when auth fell
     // through session/JWT resolution to an API-key lookup — never for a
     // real user session or Auth access token.
@@ -361,18 +415,46 @@ const getSession = async ({ context }: { context: BaseContext }) => {
 
 /**
  * Resolve a session from an f3-nation-auth RS256 JWT access token.
- * Verifies the token signature via remote JWKS, then fetches the user's
- * roles from roles_x_users_x_org.
- * Returns null if JWKS is not configured, or the token is invalid/expired.
+ * Verifies the token signature via the remote JWKS of the trusted issuer it
+ * names, then fetches the user's roles from roles_x_users_x_org.
+ * Returns null if no issuer is configured, the token names an issuer that
+ * isn't trusted, or the token is invalid/expired.
  */
 async function getSessionFromJWT(token: string): Promise<Session | null> {
-  if (!authJwks) return null;
+  if (authJwksByIssuer.size === 0) return null;
+
+  // The unverified `iss` only picks which pre-configured key set to verify
+  // against; jwtVerify below then requires that same issuer. An issuer that
+  // isn't on the list is rejected here, before any key set is fetched, so a
+  // token can't make this service fetch keys from a URL it chose.
+  let claimedIssuer: unknown;
+  try {
+    claimedIssuer = decodeJwt(token).iss;
+  } catch {
+    // Not a JWT (e.g. an API key, which is tried here first) — expected.
+    return null;
+  }
+  // decodeJwt doesn't check claim types, so a non-string `iss` is possible.
+  const issuer = typeof claimedIssuer === "string" ? claimedIssuer : undefined;
+  const authJwks = issuer ? authJwksByIssuer.get(issuer) : undefined;
+  if (!issuer || !authJwks) {
+    // A well-formed JWT from an issuer that isn't trusted. During an issuer
+    // cutover this usually means the trusted list is misconfigured, so it is
+    // logged rather than disappearing into the API-key fallback's 401.
+    logWarn("api.auth.issuer_not_trusted", {
+      issuer: issuer?.slice(0, 200) ?? null,
+    });
+    return null;
+  }
 
   let payload;
   try {
     const result = await jwtVerify(token, authJwks, {
-      issuer: authIssuer ?? undefined,
+      issuer,
       algorithms: ["RS256"],
+      // jose only checks exp when it's present; both auth servers always set
+      // it, so a token without one is never legitimate.
+      requiredClaims: ["exp"],
     });
     payload = result.payload;
   } catch (err) {
@@ -382,7 +464,7 @@ async function getSessionFromJWT(token: string): Promise<Session | null> {
     // reported rather than disappearing into 401s.
     const reason = jwksFetchFailure(err);
     if (reason) {
-      logError("api.auth.jwks_unavailable", { reason }, err);
+      logError("api.auth.jwks_unavailable", { issuer, reason }, err);
     }
     return null;
   }

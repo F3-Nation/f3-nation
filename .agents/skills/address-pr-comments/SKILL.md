@@ -33,17 +33,13 @@ Check these before Step 1 and report everything missing in one message.
 
 Stop at the first failing check.
 
-**Check 0: Repo GitHub policy.** Read `.agents/skills/github/SKILL.md` and run its pre-flight.
-Leave out `--require-write` here: it checks the current checkout's repository, which may be a
+**Check 0: Repo GitHub policy.** Read the repo's [GitHub write rules](../../../AGENTS.md#writing-to-github) and run the read pre-flight.
+Leave out the write check here: it checks the current checkout's repository, which may be a
 read-only clone of a repository other than the one Step 5b pushes to. Check 1 runs the write check
 against the push target.
 
-```bash
-bash .agents/skills/github/scripts/gh-check.sh
-```
-
-Adopt its mandatory directives — the `_written by <model_name>_` attribution signature and its
-safety rules — for the rest of this skill.
+Follow those rules — the `_written by <model_name>_` signature, draft PRs, never resolving
+threads — for the rest of this skill.
 
 **Check 1: Which PR?** Use the PR number or URL the user gave. If none was given, use the
 current branch's PR (`gh pr view` with no argument); if that finds nothing, ask for a number.
@@ -69,16 +65,11 @@ the PR's branch name has characters this skill will not write into a command:
 gh pr view <number> --repo <BASE_REPO> --json headRefName --jq '.headRefName | test("^[A-Za-z0-9._/-]+$")'
 ```
 
-Then run the write pre-flight against the push target (`gh-check.sh` reads `gh repo view`, which
-follows `GH_REPO`):
-
-```bash
-GH_REPO=<HEAD_REPO> bash .agents/skills/github/scripts/gh-check.sh --require-write
-```
+Then run the write pre-flight against the push target, with `GH_REPO=<HEAD_REPO>`.
 
 Stop if it fails, unless the PR is cross-repository (`isCrossRepository` is true),
-`maintainerCanModify` is true, and the viewer has write access to the base repository
-(`GH_REPO=<BASE_REPO> bash .agents/skills/github/scripts/gh-check.sh --require-write` passes):
+`maintainerCanModify` is true, and the viewer has write access to the base repository (the write
+pre-flight passes with `GH_REPO=<BASE_REPO>`):
 GitHub then accepts an upstream maintainer's push to the fork branch without write access to the
 fork. For a same-repository PR, `HEAD_REPO` is `BASE_REPO`.
 
@@ -273,10 +264,14 @@ Within each bucket, group inline comments by file. Each entry:
 **Category:** Blocker | Required | Suggestion | Push back
 **Comment:** "<the reviewer's exact words>"
 **Action:** <what code change to make, or "no code change needed">
-**Reply:** "<exact text of the reply to post on GitHub>"
+**Reply:** "<exact text of the reply to post on GitHub> Fixed in <sha>."
 **Ready to resolve:** yes / no / n/a — informational only; conversation comments cannot be
 resolved, and this skill never resolves threads itself
 ```
+
+`Fixed in <sha>` is the reply's last sentence, just above the signature, and only when the
+comment gets a code change. The commit doesn't exist until the fixes are committed, so the plan keeps the
+placeholder.
 
 Approving the plan also approves running the PR's own code: dependency install scripts and the
 commit hooks run with the user's normal credentials. If the PR changes `package.json`, the
@@ -351,8 +346,11 @@ reply posted before the push makes them respond to code that isn't on GitHub yet
 ### 5c — Post replies
 
 After the push, post each planned reply in its existing thread (never as a new top-level comment
-when a thread exists). End every reply with the `github` skill's signature, `_written by
-<model_name>_`, as its own final line, naming the model or agent that wrote it.
+when a thread exists). Replace the `<sha>` in each planned reply (see the plan template in
+[Step 4](#step-4--present-the-plan-and-wait-for-approval)) with the pushed commit's SHA (`git rev-parse HEAD`),
+so the reviewer can open the fix in one click: GitHub links a bare SHA in a comment to that
+commit. End every reply with the repo's signature, `_written by <model_name>_`, as its own final
+line, naming the model or agent that wrote it.
 
 Write each reply to its own file with a quoted heredoc (`<<'BODY'`), then pass the file — reply
 text routinely contains backticks and `$`, which `-f body="..."` would let the shell mangle. Keep

@@ -168,6 +168,13 @@ uv --version
 
 After installing `uv`, run `pnpm python:install` to sync the Slackbot Python dependencies.
 
+Python workspaces share Ruff settings from the root [`pyproject.toml`](../pyproject.toml).
+Each member explicitly extends that file in its own `pyproject.toml`, which also
+holds any package-specific overrides, including Analytics' existing relative-import
+ordering. Each member's `dev` dependency group pins the exact Ruff version, with
+the resolved version recorded in [`uv.lock`](../uv.lock). Renovate manages these
+pins alongside the other Python dependencies.
+
 </details>
 
 <details>
@@ -256,15 +263,16 @@ The above command will install code if you don't have it already and then open y
 pnpm dev
 ```
 
-| App      | URL                     |
-| -------- | ----------------------- |
-| Map      | <http://localhost:3000> |
-| API      | <http://localhost:3001> |
-| Admin    | <http://localhost:3002> |
-| Me       | <http://localhost:3003> |
-| Auth     | <http://localhost:3004> |
-| Homepage | <http://localhost:3005> |
-| Slackbot | <http://localhost:3006> |
+| App          | URL                                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| Map          | <http://localhost:3000>                                                                             |
+| API          | <http://localhost:3001>                                                                             |
+| Admin        | <http://localhost:3002>                                                                             |
+| Me           | <http://localhost:3003>                                                                             |
+| Auth         | <http://localhost:3004>                                                                             |
+| Homepage     | <http://localhost:3005>                                                                             |
+| Region pages | <http://localhost:3006>                                                                             |
+| Slackbot     | <http://localhost:3007> (health check; only with `pnpm dev --include-py` or `--filter f3-slackbot`) |
 
 ---
 
@@ -303,7 +311,7 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 ## Running several checkouts at once (git worktrees)
 
-Every checkout normally uses the same ports (apps on 3000–3005, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead:
+Every checkout normally uses the same ports (apps on 3000–3007, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead:
 
 ```bash
 git worktree add ../f3-nation-review some-branch
@@ -317,7 +325,7 @@ A slot moves every port up by 100 × the slot number, and gives the checkout its
 
 | Service    | Default (slot 0) | Slot 1    | Slot N         |
 | ---------- | ---------------- | --------- | -------------- |
-| Apps       | 3000–3005        | 3100–3105 | 3000 + 100N, … |
+| Apps       | 3000–3007        | 3100–3107 | 3000 + 100N, … |
 | Postgres   | 5433             | 5533      | 5433 + 100N    |
 | Mailpit UI | 8025             | 8125      | 8025 + 100N    |
 | SMTP       | 1025             | 1125      | 1025 + 100N    |
@@ -326,10 +334,9 @@ A slot moves every port up by 100 × the slot number, and gives the checkout its
 
 The slot is saved in the root `.env` (gitignored), which `docker compose`, `pnpm docker:up`, `pnpm dev`, and later `pnpm local:setup` runs all read. `local:setup` also writes the matching URLs into the checkout's per-app `.env` files and seeds the sign-in clients for Admin and Me with the slot's ports.
 
-- `pnpm dev` picks up the slot by itself. To start a single app with `pnpm --filter <app> dev`, export the slot's ports first: `set -a; . ./.env; set +a`.
+- `pnpm dev` picks up the slot by itself, including ports added after the slot was saved. To start a single app, use `pnpm dev --filter <app>`, which loads the slot the same way.
 - To put a checkout back on the defaults, run `pnpm local:setup --slot 0`.
 - Homepage gets `NEXT_PUBLIC_API_URL` for the slot's API. Its landing-page app links and the status page's health targets still use the default ports.
-- Slackbot stays on 3006. To run it in two checkouts at once, set `LOCAL_HTTP_PORT` in the second checkout's `apps/slackbot/.env` by hand.
 - `pnpm docker:down` in a slotted checkout stops only that checkout's containers. Remove a worktree's data for good with `docker compose down -v` from inside it before deleting the worktree.
 
 ---
@@ -345,7 +352,7 @@ Each app and shared package has its own `.env` file, copied from a `.env.example
 | `apps/map/.env`      | Map app (Next.js on port 3000)                                                                                                     |
 | `apps/admin/.env`    | Admin app (Next.js on port 3002)                                                                                                   |
 | `apps/me/.env`       | Me app (Next.js on port 3003)                                                                                                      |
-| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                                                                                 |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app; health check on port 3007)                                                                   |
 | `packages/db/.env`   | Credentials for the `@acme/db` CLI scripts (migrations, resets, seeds, drizzle-kit, reset-test-db)                                 |
 | `packages/env/.env`  | Shared backend env read by the `@acme/api` package's test/script commands (`packages/api`); app services read their own app `.env` |
 
@@ -362,11 +369,12 @@ The `5433` port is where the Docker Postgres container is exposed on your machin
 
 ### Auth & API keys
 
-| Variable              | Value                   | Meaning                                               |
-| --------------------- | ----------------------- | ----------------------------------------------------- |
-| `AUTH_SECRET`         | (any long string)       | Signs authentication tokens. Any value works locally. |
-| `API_KEY`             | `local-api-key`         | Identifies internal API-to-API requests.              |
-| `SUPER_ADMIN_API_KEY` | `local-super-admin-key` | Admin-level API access key.                           |
+| Variable                 | Value                   | Meaning                                                                                                                                           |
+| ------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_SECRET`            | (any long string)       | Signs authentication tokens. Any value works locally.                                                                                             |
+| `API_KEY`                | `local-api-key`         | Identifies internal API-to-API requests.                                                                                                          |
+| `SUPER_ADMIN_API_KEY`    | `local-super-admin-key` | Admin-level API access key.                                                                                                                       |
+| `PROXY_CLIENT_IP_SECRET` | _(unset)_               | Optional. Lets the API trust the browser IP the map and admin proxies report, so rate limits apply per visitor. Same value in api, map and admin. |
 
 ### Email (Mailpit)
 

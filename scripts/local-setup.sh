@@ -15,7 +15,7 @@
 #
 # Running a second checkout (e.g. a git worktree) next to the first? Give it
 # its own ports, containers, and database with a slot number from 1 to 9:
-#   pnpm local:setup --slot 1    — apps on 3100–3105, Postgres on 5533, …
+#   pnpm local:setup --slot 1    — apps on 3100–3107, Postgres on 5533, …
 # The slot is saved in the root .env, so later runs and `pnpm dev` reuse it.
 # `--slot 0` goes back to the defaults.
 
@@ -53,7 +53,7 @@ echo "  ────────────────────────
 # ── Step 1: Copy per-directory env files ─────────────────────────────────────
 echo "  → Copying .env.example files..."
 _env_ts=$(date +%Y%m%d%H%M%S)
-for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/slackbot packages/env packages/db; do
+for dir in apps/api apps/auth apps/map apps/me apps/admin apps/homepage apps/region-pages apps/slackbot packages/env packages/db; do
   if [ -f "$dir/.env" ]; then
     mv "$dir/.env" "$dir/.env.bak.$_env_ts"
     echo "     $dir/.env backed up → $dir/.env.bak.$_env_ts"
@@ -168,7 +168,7 @@ echo "    Mailpit   → http://localhost:${F3_MAILPIT_UI_PORT:-8025}  (all outbo
 if [ -n "${F3_MAP_PORT:-}" ]; then
   echo ""
   echo "  This checkout uses its own ports (saved in the root .env):"
-  echo "    Map ${F3_MAP_PORT} · API ${F3_API_PORT} · Admin ${F3_ADMIN_PORT} · Me ${F3_ME_PORT} · Auth ${F3_AUTH_PORT} · Homepage ${F3_HOMEPAGE_PORT}"
+  echo "    Map ${F3_MAP_PORT} · API ${F3_API_PORT} · Admin ${F3_ADMIN_PORT} · Me ${F3_ME_PORT} · Auth ${F3_AUTH_PORT} · Homepage ${F3_HOMEPAGE_PORT} · Region pages ${F3_REGION_PAGES_PORT} · Slackbot ${F3_SLACKBOT_PORT}"
   echo "    pnpm dev picks them up. When starting one app on its own, export them first:"
   echo "      set -a; . ./.env; set +a"
 fi

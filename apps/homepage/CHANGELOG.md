@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.9.0](https://github.com/F3-Nation/f3-nation/compare/homepage@1.8.1...homepage@1.9.0) (2026-10-29)
+
+
+### Features
+
+* **admin,auth,me,homepage,observability:** report browser errors to PostHog ([#1313](https://github.com/F3-Nation/f3-nation/issues/1313)) ([502abd8](https://github.com/F3-Nation/f3-nation/commit/502abd8dcab6322eb849bf6879987e45d324fed0))
+* **homepage:** make /org usable on phones ([#1384](https://github.com/F3-Nation/f3-nation/issues/1384)) ([9f4f073](https://github.com/F3-Nation/f3-nation/commit/9f4f073f42c2cdc17d262449a82137c029a89de4))
+* **ui,admin,map,me,auth,homepage:** add route error, not-found and loading boundaries ([#1316](https://github.com/F3-Nation/f3-nation/issues/1316)) ([9ecfb43](https://github.com/F3-Nation/f3-nation/commit/9ecfb43efbdbdb403aa3cf94dad261cb686d5996))
+
+
+### Bug Fixes
+
+* **homepage:** show only admin and editor roles on the org chart ([#1399](https://github.com/F3-Nation/f3-nation/issues/1399)) ([8c167ef](https://github.com/F3-Nation/f3-nation/commit/8c167efa97922b65bc14abb50ab924abab09f8d2))
+* **map,eslint:** enable React Compiler lint rules and stop marker moves leaking into the query cache ([#1295](https://github.com/F3-Nation/f3-nation/issues/1295)) ([f049283](https://github.com/F3-Nation/f3-nation/commit/f049283bf9d3c83a005475fac8f55a4e75cc4050))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @acme/shared bumped to 0.6.0
+    * @acme/ui bumped to 0.3.0
+
 ## [1.8.1](https://github.com/F3-Nation/f3-nation/compare/homepage@1.8.0...homepage@1.8.1) (2026-10-23)
 
 

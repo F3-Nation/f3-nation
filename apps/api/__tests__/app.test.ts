@@ -221,4 +221,51 @@ describe("app", () => {
 
     expect(res.status).toBe(418);
   });
+  describe("security headers", () => {
+    const expected = {
+      "strict-transport-security": "max-age=31536000",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-frame-options": "DENY",
+      "content-security-policy": "frame-ancestors 'none'",
+    };
+
+    function expectSecurityHeaders(res: Response) {
+      for (const [name, value] of Object.entries(expected)) {
+        expect(res.headers.get(name)).toBe(value);
+      }
+      expect(res.headers.get("permissions-policy")).toContain("geolocation=()");
+    }
+
+    it.each([
+      ["a handler response", "http://api.test/health"],
+      ["a page", "http://api.test/docs"],
+      ["a catch-all response", "http://api.test/v1/some-endpoint"],
+      ["an immutable Response.redirect()", "http://api.test/"],
+      ["the trailing-slash 308", "http://api.test/v1/ping/"],
+    ])("is set on %s", async (_label, url) => {
+      expectSecurityHeaders(await app.fetch(new Request(url)));
+    });
+
+    // Guards the 500 path: Hono's compose catches the throw at the dispatch
+    // level and runs onError, so the security middleware's post-`next()` code
+    // still runs. See the comment above the middleware in src/app.ts.
+    it("is set on an unhandled-error 500", async () => {
+      handleRequest.mockImplementationOnce(() => {
+        throw new Error("boom");
+      });
+      const res = await app.fetch(new Request("http://api.test/v1/throws"));
+
+      expect(res.status).toBe(500);
+      expectSecurityHeaders(res);
+    });
+
+    it("keeps the handler's own headers and body", async () => {
+      const res = await app.fetch(new Request("http://api.test/health"));
+
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("content-type")).toContain("application/json");
+      expect((await res.json()) as unknown).toHaveProperty("service", "f3-api");
+    });
+  });
 });

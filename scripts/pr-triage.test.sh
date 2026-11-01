@@ -28,8 +28,9 @@ assert_eq() {
   fi
 }
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/pr-triage-test.XXXXXX")"
-trap 'rm -rf "$tmp_dir"' EXIT
+tmp_dir=""
+trap 'if [[ -n "$tmp_dir" ]]; then rm -rf "$tmp_dir"; fi' EXIT
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/pr-triage-test.XXXXXX")" || exit 1
 
 # Every PR defaults to: ready, opened long ago, all three bots finished, no skill runs,
 # no threads. Each case overrides only what it tests.
@@ -72,6 +73,7 @@ jq -n '
     (pr(6; "clean inline review by someone else"; "someone")
       | .comments.nodes += [{author: {login: "luis"}, body: "No issues found.\n<!-- pr-review-inline -->"}]),
     (pr(7; "open threads"; "someone") | .reviews.nodes = [inline_review]
+      | .assignees = {nodes: [{login: "amy"}, {login: "cy"}]}
       | .reviewThreads.nodes = [thread(false; "andy"), thread(true; "coderabbitai")]),
     (pr(8; "both skills done"; "someone") | .reviews.nodes = [inline_review, local_review]),
     (pr(9; "approved"; "someone") | .reviews.nodes = [inline_review, local_review]
@@ -193,6 +195,10 @@ assert_eq "a release-please bot with a prefixed login is skipped" "SKIP" "$(buck
 assert_eq "a person whose login mentions release-please isn't skipped" "INLINE" "$(bucket_of 33)"
 
 hostile_count=$(grep -c '</script><img' "$tmp_dir/board.html")
+assert_eq "the board records Unassigned for a PR with no assignee" "Unassigned" \
+  "$(board_json | jq -r '.prs[] | select(.number == 5) | .assignee')"
+assert_eq "the board records every assignee" "amy, cy" \
+  "$(board_json | jq -r '.prs[] | select(.number == 7) | .assignee')"
 assert_eq "a hostile title can't close the data block" "0" "$hostile_count"
 assert_eq "the hostile title survives escaped" "</script><img src=x onerror=alert(1)>" \
   "$(board_json | jq -r '.prs[] | select(.number == 13) | .title')"
@@ -203,7 +209,11 @@ assert_eq "text mode exits 0" "0" "$status"
 assert_eq "text mode lists /pr-local-test PRs first" "Run /pr-local-test" "$(sed -n 3p "$tmp_dir/text.out")"
 assert_eq "text mode shows the empty-note url on its own line" \
   "         https://github.com/acme/repo/pull/5" \
+  "$(grep -A2 '#5 ' "$tmp_dir/text.out" | tail -1)"
+assert_eq "text mode shows Unassigned when a PR has no assignee" "         Assignee: Unassigned" \
   "$(grep -A1 '#5 ' "$tmp_dir/text.out" | tail -1)"
+assert_eq "text mode lists every assignee" "         Assignee: amy, cy" \
+  "$(grep -A1 '#7 ' "$tmp_dir/text.out" | tail -1)"
 assert_eq "text mode keeps a multiline title's card on one line" \
   "  #16    first line second line (someone)" "$(grep '#16 ' "$tmp_dir/text.out")"
 assert_eq "text mode counts drafts" "3 drafts ignored; skipped (Renovate/release-please): #2 #32 " \
