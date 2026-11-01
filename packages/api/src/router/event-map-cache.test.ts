@@ -24,6 +24,17 @@ import { waitForEventRegionNotificationTasks } from "./event";
 
 // Keep cache invalidation real while replacing external HTTP delivery.
 vi.unmock("../lib/revalidate-map");
+vi.mock("@acme/env", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@acme/env")>();
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      NEXT_PUBLIC_MAP_URL: "https://map.example.test",
+      SUPER_ADMIN_API_KEY: "synthetic-map-key",
+    },
+  };
+});
 vi.mock("../lib/first-event-service", () => ({
   maybeNotifyFirstEventForRegion: vi.fn().mockResolvedValue(undefined),
   maybeNotifyRegionInABox: vi.fn().mockResolvedValue(undefined),
@@ -176,6 +187,10 @@ describe("event mutation map cache", () => {
       action: "map.created",
       eventId: event.id,
     });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://map.example.test/api/revalidate",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it.each([
@@ -196,6 +211,10 @@ describe("event mutation map cache", () => {
       action: "map.updated",
       eventId: event.id,
     });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://map.example.test/api/revalidate",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("refreshes a one-off event's public name", async () => {
@@ -214,6 +233,9 @@ describe("event mutation map cache", () => {
     const input = await fixture();
     const event = await seedEvent(input, "monday");
     expect((await publicEvent(event.id))?.[2]).toBe("monday");
+    await cachedMapData("rejected-write-probe", () =>
+      Promise.resolve("retained"),
+    );
     await expect(
       client.event.crupdate({ ...input, id: event.id }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
@@ -223,7 +245,13 @@ describe("event mutation map cache", () => {
       .where(eq(schema.events.id, event.id));
     expect(unchanged).toEqual(event);
     expect((await publicEvent(event.id))?.[2]).toBe("monday");
+    expect(
+      await cachedMapData("rejected-write-probe", () =>
+        Promise.resolve("cleared"),
+      ),
+    ).toBe("retained");
     expect(notifyWebhooks).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("still invalidates a deactivated recurring event", async () => {
@@ -253,34 +281,49 @@ describe("event mutation map cache", () => {
     });
   });
 
-  it("does not notify or invalidate cached data for a rejected write", async () => {
-    const input = await fixture();
-    const event = await seedEvent(input);
-    const before = await readMap();
-    await cachedMapData("rejected-write-probe", () =>
-      Promise.resolve("retained"),
-    );
-    await expect(
-      client.event.crupdate({
-        ...input,
-        id: event.id,
-        eventTypeIds: [2_147_483_647],
-      }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    const [unchanged] = await db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, event.id));
-    expect(unchanged).toEqual(event);
-    const after = await readMap();
-    expect(after).toEqual(before);
-    expect(
+  it.each([
+    {
+      name: "missing event type",
+      invalidFields: { eventTypeIds: [2_147_483_647] },
+      code: "NOT_FOUND",
+    },
+    {
+      name: "invalid event tags",
+      invalidFields: { eventTagIds: [2_147_483_647] },
+      code: "BAD_REQUEST",
+    },
+  ])(
+    "does not notify or invalidate cached data for $name",
+    async ({ invalidFields, code }) => {
+      const input = await fixture();
+      const event = await seedEvent(input);
+      const before = await readMap();
       await cachedMapData("rejected-write-probe", () =>
-        Promise.resolve("cleared"),
-      ),
-    ).toBe("retained");
-    expect(notifyWebhooks).not.toHaveBeenCalled();
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect((await publicEvent(event.id))?.[1]).toBe(input.name);
-  });
+        Promise.resolve("retained"),
+      );
+      await expect(
+        client.event.crupdate({
+          ...input,
+          id: event.id,
+          name: "Rejected workout change",
+          ...invalidFields,
+        }),
+      ).rejects.toMatchObject({ code });
+      const [unchanged] = await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id));
+      expect(unchanged).toEqual(event);
+      const after = await readMap();
+      expect(after).toEqual(before);
+      expect(
+        await cachedMapData("rejected-write-probe", () =>
+          Promise.resolve("cleared"),
+        ),
+      ).toBe("retained");
+      expect(notifyWebhooks).not.toHaveBeenCalled();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect((await publicEvent(event.id))?.[1]).toBe(input.name);
+    },
+  );
 });
