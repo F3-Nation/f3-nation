@@ -35,7 +35,16 @@ test("Python checks re-evaluate tool availability without changing PATH or sourc
       assert.equal(result.status, 0, `Required executable: ${name}`);
       return result.stdout.trim();
     };
-    for (const name of ["bash", "sh", "pnpm"])
+    // pnpm shell launchers need these utilities even on the restricted PATH.
+    for (const name of [
+      "bash",
+      "sh",
+      "pnpm",
+      "readlink",
+      "dirname",
+      "sed",
+      "uname",
+    ])
       symlinkSync(lookup(name), join(bin, name));
     symlinkSync(process.execPath, join(bin, "node"));
     copyFileSync(join(root, "turbo.json"), join(repo, "turbo.json"));

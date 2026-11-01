@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Regression tests for scripts/python-task.sh: turbo cache-flag stripping, the
-# local skip-when-uv-is-missing branch, and the never-skip-in-CI branch.
+# local skip-when-uv-is-missing branch, the never-skip-in-CI branch, and
+# Turbo cache behavior when tool availability changes.
 # Run directly: bash scripts/python-task.test.sh
 set -uo pipefail
 
@@ -86,6 +87,6 @@ if ((failures > 0)); then
   exit 1
 fi
 
-echo "All python-task.sh regression tests passed."
+node --test "$script_dir/python-task-cache.test.mjs" || exit "$?"
 
-node --test "$script_dir/python-task-cache.test.mjs"
+echo "All Python wrapper and cache regression tests passed."

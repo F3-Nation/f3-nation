@@ -572,11 +572,10 @@ uv --version
 pnpm python:install
 ```
 
-Python check tasks using [`scripts/python-task.sh`](../scripts/python-task.sh)
-disable Turbo result caching. Installing `uv` on an unchanged `PATH` must not
-replay an earlier successful skip. These checks run whenever Turbo selects
-them, including in CI; unrelated tasks retain their cache settings. A local
-missing-tool skip is not a passing Python check, and missing `uv` fails in CI.
+A `Skipping …` message means the Python check did not run. After installing
+`uv`, rerun the check: Python tasks using the shared wrapper do not reuse Turbo
+results. This also means Python type checks run during each commit hook when
+`uv` is installed. See [CI caching](CI_PIPELINE.md) for the cache policy.
 
 ### Port already in use
 
