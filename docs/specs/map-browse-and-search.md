@@ -89,10 +89,6 @@ city X" to "this workout, this address, this time" in a few interactions.
   THEN AM deactivates (mutually exclusive), and Reset restores the unfiltered
   pin set.
 
-A nearby list filtered to Monday at a shared location (sample data):
-
-![Screaming Eagle with its Monday schedule](../assets/map-weekday-filter.png)
-
 ### Geolocation
 
 - **AC-14** — GIVEN the user grants location permission WHEN they press the
