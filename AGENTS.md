@@ -177,9 +177,15 @@ follow
 - A test must fail if the line it guards is deleted: assert values and persisted state (not `200` or `toBeDefined()`), assert the specific error code (`rejects.toMatchObject({ code })`), and cover both sides of every guard, including a cross-org authorization case. Details and isolation rules: [`docs/testing.md` § Writing tests that can fail](docs/testing.md#writing-tests-that-can-fail).
 - **Coverage thresholds ratchet upward.** `vitest.config.ts` being rewritten by a
   test run is expected — commit it. Never set `thresholds.autoUpdate` to `false`
-  or delete the key, and never lower a threshold to make a suite pass; add tests
-  instead. Enforced in `pnpm lint` and `pre-commit`. How coverage is measured and
-  why: [`docs/testing.md`](docs/testing.md).
+  or delete the key, and never lower a threshold to make a suite pass. Enforced
+  in `pnpm lint` and `pre-commit`. How coverage is measured and why:
+  [`docs/testing.md`](docs/testing.md).
+- **Tests exist to pin behavior, not to hit a number.** Never write a test only
+  to raise coverage. If a threshold fails, test the untested behavior that
+  matters. If none is missing (e.g. you deleted well-covered code), say so in
+  the PR and let a human decide. An app may use a buffered ratchet (see
+  `docs/testing.md` § Buffered ratchet) so that small drops like this don't
+  fail.
 
 ### Driving auth-bounded flows in local dev
 
