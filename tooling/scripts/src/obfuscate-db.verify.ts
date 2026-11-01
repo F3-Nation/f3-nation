@@ -136,6 +136,11 @@ const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
 // The obfuscator's default --email-sink; every rewritten address is a +tag on it.
 const SINK_PREFIX = "dev.staging-email-sink+";
 const SINK_SUFFIX = "@f3nation.com";
+const SYNTHETIC_LOCATION_DESCRIPTION =
+  "Synthetic Runner meets here before sunrise.";
+const SYNTHETIC_REQUEST_LOCATION_DESCRIPTION =
+  "Synthetic Gardener shares directions to this field.";
+const SYNTHETIC_REQUEST_TOKEN = "00000000-0000-4000-8000-000000001061";
 
 function isSinkAddress(email: string): boolean {
   const lower = email.toLowerCase();
@@ -296,6 +301,9 @@ function check(name: string, pass: boolean, detail: string) {
 
 interface PlantedIds {
   userId: number;
+  expansionId: number;
+  achievementId: number;
+  requestId: string;
   privateLocationId: number;
   mixedLocationId: number;
   unusedLocationId: number;
@@ -344,6 +352,24 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
     RETURNING id`;
   if (!user) throw new Error("Failed to insert synthetic user");
 
+  const [expansion] = await sql<{ id: number }[]>`
+    INSERT INTO expansions (area, pinned_lat, pinned_lon, user_lat, user_lon,
+      interested_in_organizing)
+    VALUES ('Synthetic Expansion Field', 35.61234, -80.93456, 35.67891,
+      -80.96234, true)
+    RETURNING id`;
+  if (!expansion) throw new Error("Failed to insert synthetic expansion");
+  await sql`
+    INSERT INTO expansions_x_users (expansion_id, user_id, notes)
+    VALUES (${expansion.id}, ${user.id},
+      'Call Synthetic Organizer at 704-555-0199')`;
+
+  const [achievement] = await sql<{ id: number }[]>`
+    INSERT INTO achievements (name, description)
+    VALUES ('Synthetic Contact Achievement', 'Award contact: jane@example.com')
+    RETURNING id`;
+  if (!achievement) throw new Error("Failed to insert synthetic achievement");
+
   // This address no longer exists in the source row. Rewriting current users
   // cannot remove it from OLD/NEW snapshots already held by the audit trigger.
   await sql`
@@ -376,14 +402,25 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
     VALUES (gen_random_uuid()::text, 'jane@example.com', 'deadbeef',
       now() + interval '10 minutes')`;
 
-  await sql`
+  const [request] = await sql<{ id: string }[]>`
     INSERT INTO update_requests (region_id, event_name, request_type,
       submitted_by, event_contact_email, location_contact_email,
-      event_description, meta)
+      event_description, meta, location_description, ao_website, event_meta,
+      token)
     VALUES (${region.id}, 'Test Workout', 'create_event',
       'jane@example.com', 'siteq@hotmail.com', 'ao-contact@yahoo.com',
       'Questions? Ping siteq@hotmail.com',
-      '{"contact": "jane@example.com", "note": "text 704-555-1234"}')`;
+      '{"contact": "jane@example.com", "note": "text 704-555-1234"}',
+      ${SYNTHETIC_REQUEST_LOCATION_DESCRIPTION},
+      'Contact jane@example.com for the AO website',
+      ${sql.json({
+        contact: "jane@example.com",
+        nested: { note: "Email jane@example.com" },
+        count: 2,
+        active: true,
+      })}, ${SYNTHETIC_REQUEST_TOKEN})
+    RETURNING id`;
+  if (!request) throw new Error("Failed to insert synthetic request");
 
   await sql`
     INSERT INTO event_instances (org_id, is_active, highlight, start_date,
@@ -524,6 +561,10 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
   };
   const privateLocationId = await location("Synthetic Backyard");
   const mixedLocationId = await location("Synthetic Park");
+  await sql`
+    UPDATE locations SET email = 'location-contact@example.com',
+      description = ${SYNTHETIC_LOCATION_DESCRIPTION}
+    WHERE id = ${mixedLocationId}`;
   const unusedLocationId = await location("Synthetic Unused Field");
   const event = async (
     name: string,
@@ -713,6 +754,9 @@ async function plantSyntheticPii(sql: postgres.Sql): Promise<PlantedIds> {
   );
   return {
     userId: user.id,
+    expansionId: expansion.id,
+    achievementId: achievement.id,
+    requestId: request.id,
     privateLocationId,
     mixedLocationId,
     unusedLocationId,
@@ -2015,16 +2059,136 @@ async function main(): Promise<void> {
 
     // Deterministic cross-table consistency: jane@example.com must map to the
     // same fake in users.email and update_requests.submitted_by.
+    const expectedUserEmail = `${SINK_PREFIX}${userId}${SINK_SUFFIX}`;
     const [fakeUser] = await sql<{ email: string }[]>`
       SELECT email FROM users WHERE id = ${userId}`;
-    const [request] = await sql<{ submitted_by: string }[]>`
-      SELECT submitted_by FROM update_requests
-      WHERE event_name = 'Test Workout' LIMIT 1`;
+    const [request] = await sql<
+      {
+        submitted_by: string;
+        location_description: string | null;
+        ao_website: string | null;
+        event_meta_matches: boolean | null;
+        token_changed: boolean;
+        token_unique: boolean;
+      }[]
+    >`
+      SELECT r.submitted_by, r.location_description, r.ao_website,
+        r.event_meta = ${sql.json({
+          contact: expectedUserEmail,
+          nested: { note: `Email ${expectedUserEmail}` },
+          count: 2,
+          active: true,
+        })}::jsonb AS event_meta_matches,
+        r.token <> ${SYNTHETIC_REQUEST_TOKEN}::uuid AS token_changed,
+        NOT EXISTS (
+          SELECT 1 FROM update_requests AS other
+          WHERE other.id <> r.id AND other.token = r.token
+        ) AS token_unique
+      FROM update_requests AS r WHERE r.id = ${planted.requestId}`;
     check(
       "deterministic cross-table email mapping",
       fakeUser?.email === request?.submitted_by &&
-        fakeUser?.email === `${SINK_PREFIX}${userId}${SINK_SUFFIX}`,
+        fakeUser?.email === expectedUserEmail,
       `users.email=${fakeUser?.email} vs update_requests.submitted_by=${request?.submitted_by}`,
+    );
+
+    const [expansion] = await sql<
+      {
+        user_lat: number;
+        user_lon: number;
+        pinned_lat: number;
+        pinned_lon: number;
+      }[]
+    >`
+      SELECT user_lat, user_lon, pinned_lat, pinned_lon FROM expansions
+      WHERE id = ${planted.expansionId}`;
+    check(
+      "expansion user latitude rounded to one decimal",
+      !!expansion && expansion.user_lat === 35.7,
+      `row ${expansion ? "present" : "missing"}; latitude ${expansion?.user_lat ?? "missing"}`,
+    );
+    check(
+      "expansion user longitude rounded to one decimal",
+      !!expansion && expansion.user_lon === -81,
+      `row ${expansion ? "present" : "missing"}; longitude ${expansion?.user_lon ?? "missing"}`,
+    );
+    check(
+      "expansion pinned coordinates preserved",
+      !!expansion &&
+        expansion.pinned_lat === 35.61234 &&
+        expansion.pinned_lon === -80.93456,
+      `row ${expansion ? "present" : "missing"}; pinned coordinates ${expansion?.pinned_lat ?? "missing"}, ${expansion?.pinned_lon ?? "missing"}`,
+    );
+
+    const [membership] = await sql<{ notes: string | null }[]>`
+      SELECT notes FROM expansions_x_users
+      WHERE expansion_id = ${planted.expansionId} AND user_id = ${userId}`;
+    check(
+      "expansion membership notes cleared to NULL",
+      !!membership && membership.notes === null,
+      `row ${membership ? "present" : "missing"}; notes ${membership?.notes === null ? "NULL" : "not NULL"}`,
+    );
+
+    const [achievement] = await sql<{ description: string | null }[]>`
+      SELECT description FROM achievements
+      WHERE id = ${planted.achievementId}`;
+    check(
+      "achievement description email scrubbed with prose preserved",
+      !!achievement &&
+        achievement.description === `Award contact: ${expectedUserEmail}`,
+      `row ${achievement ? "present" : "missing"}; description ${achievement?.description ?? "missing"}`,
+    );
+
+    const [location] = await sql<
+      { email: string | null; description: string | null }[]
+    >`
+      SELECT email, description FROM locations
+      WHERE id = ${planted.mixedLocationId}`;
+    check(
+      "retained location email rewritten to its row sink",
+      !!location &&
+        location.email ===
+          `${SINK_PREFIX}location-${planted.mixedLocationId}${SINK_SUFFIX}`,
+      `row ${location ? "present" : "missing"}; email ${location?.email ?? "missing"}`,
+    );
+    check(
+      "retained location description replaced with lorem ipsum",
+      !!location &&
+        !!location.description &&
+        location.description.trim().length > 0 &&
+        location.description !== SYNTHETIC_LOCATION_DESCRIPTION &&
+        isLoremText(location.description),
+      `row ${location ? "present" : "missing"}; description ${location?.description ?? "missing"}`,
+    );
+
+    check(
+      "request location description replaced with lorem ipsum",
+      !!request &&
+        !!request.location_description &&
+        request.location_description.trim().length > 0 &&
+        request.location_description !==
+          SYNTHETIC_REQUEST_LOCATION_DESCRIPTION &&
+        isLoremText(request.location_description),
+      `row ${request ? "present" : "missing"}; location description ${request?.location_description ?? "missing"}`,
+    );
+    check(
+      "request AO website email scrubbed with prose preserved",
+      !!request &&
+        request.ao_website ===
+          `Contact ${expectedUserEmail} for the AO website`,
+      `row ${request ? "present" : "missing"}; AO website ${request?.ao_website ?? "missing"}`,
+    );
+    check(
+      "request event metadata scrubbed with structure preserved",
+      !!request && request.event_meta_matches === true,
+      `row ${request ? "present" : "missing"}; metadata ${request?.event_meta_matches === true ? "matches" : "does not match"}`,
+    );
+    check(
+      "request capability token changed and unique",
+      !!request &&
+        request.token_changed === true &&
+        request.token_unique === true,
+      `row ${request ? "present" : "missing"}; token ${request?.token_changed === true ? "changed" : "unchanged"}; unique ${request?.token_unique === true ? "yes" : "no"}`,
     );
 
     const [instance] = await sql<{ backblast: string | null }[]>`
