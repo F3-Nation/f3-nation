@@ -295,6 +295,70 @@ function migrationUrl(target: RemoteEnvironment): string {
   return url;
 }
 
+/**
+ * What the connected login lacks to run every migration: migrations alter
+ * tables, types and functions, create objects in the schemas and sometimes
+ * create schemas, so the login must own every such object (directly or
+ * through role membership; extension members aside, e.g. citext's) and may
+ * create in them. Shared with migrate-check.ts, which runs CI's migrations
+ * as a login set up the same way.
+ */
+export async function migrationLoginGaps(
+  sql: postgres.Sql,
+): Promise<LoginGaps> {
+  const [gaps] = await sql<LoginGaps[]>`
+    WITH schemas AS (
+      SELECT oid, nspname FROM pg_namespace
+      WHERE nspname IN ('public', 'auth', 'slackbot', 'drizzle')
+    ), objects AS (
+      SELECT c.relowner AS owner, 'pg_class'::regclass AS cls, c.oid
+      FROM pg_class c JOIN schemas s ON s.oid = c.relnamespace
+      WHERE c.relkind IN ('r', 'p', 'v', 'm', 'S')
+      UNION ALL
+      SELECT t.typowner, 'pg_type'::regclass, t.oid
+      FROM pg_type t JOIN schemas s ON s.oid = t.typnamespace
+      WHERE t.typtype IN ('e', 'd', 'c', 'r', 'm') AND t.typrelid = 0
+      UNION ALL
+      SELECT p.proowner, 'pg_proc'::regclass, p.oid
+      FROM pg_proc p JOIN schemas s ON s.oid = p.pronamespace
+    )
+    SELECT count(*)::int AS n,
+      string_agg(DISTINCT pg_get_userbyid(o.owner), ', ') AS owners,
+      concat_ws(', ',
+        (SELECT string_agg(nspname, ', ') FROM schemas
+          WHERE NOT (has_schema_privilege(current_user, oid, 'CREATE')
+            AND has_schema_privilege(current_user, oid, 'USAGE'))),
+        CASE WHEN NOT has_database_privilege(current_database(), 'CREATE')
+          THEN 'the database (new schemas)' END) AS missing
+    FROM objects o
+    WHERE NOT pg_has_role(current_user, o.owner, 'USAGE')
+      AND NOT EXISTS (SELECT 1 FROM pg_depend d
+        WHERE d.classid = o.cls AND d.objid = o.oid AND d.deptype = 'e')`;
+  return gaps ?? { n: 0, owners: null, missing: null };
+}
+
+export interface LoginGaps {
+  /** Objects the login neither owns nor is a member of the owner of. */
+  n: number;
+  owners: string | null;
+  /** Schemas (or the database) the login can't create objects in. */
+  missing: string | null;
+}
+
+/** Why the login can't run every migration, or null when it can. */
+export function describeLoginGaps(
+  user: string,
+  gaps: LoginGaps,
+): string | null {
+  if (gaps.n === 0 && !gaps.missing) return null;
+  return (
+    `The migration login (${user}) can't run every migration: ` +
+    (gaps.n > 0
+      ? `it doesn't own ${gaps.n} table(s), type(s) or function(s) (owned by ${gaps.owners})`
+      : `it can't create objects in ${gaps.missing}`)
+  );
+}
+
 function readJournal(): JournalEntry[] {
   const journal = JSON.parse(
     readFileSync(path.join(MIGRATIONS_DIR, "meta/_journal.json"), "utf8"),
@@ -421,46 +485,13 @@ export async function migrateRemote(target: RemoteEnvironment): Promise<void> {
         `${database} has no drizzle.${migrationsTable}: this isn't the database it should be. Stop and ask in #monorepo.`,
       );
     }
-    // Migrations alter tables, types and functions, create objects in the
-    // schemas and sometimes create schemas: the login must own every such
-    // object (extension members aside, e.g. citext's) and may create in them.
-    const [owner] = await ro<
-      { n: number; owners: string | null; missing: string | null }[]
-    >`
-      WITH schemas AS (
-        SELECT oid, nspname FROM pg_namespace
-        WHERE nspname IN ('public', 'auth', 'slackbot', 'drizzle')
-      ), objects AS (
-        SELECT c.relowner AS owner, 'pg_class'::regclass AS cls, c.oid
-        FROM pg_class c JOIN schemas s ON s.oid = c.relnamespace
-        WHERE c.relkind IN ('r', 'p', 'v', 'm', 'S')
-        UNION ALL
-        SELECT t.typowner, 'pg_type'::regclass, t.oid
-        FROM pg_type t JOIN schemas s ON s.oid = t.typnamespace
-        WHERE t.typtype IN ('e', 'd', 'c', 'r', 'm') AND t.typrelid = 0
-        UNION ALL
-        SELECT p.proowner, 'pg_proc'::regclass, p.oid
-        FROM pg_proc p JOIN schemas s ON s.oid = p.pronamespace
-      )
-      SELECT count(*)::int AS n,
-        string_agg(DISTINCT pg_get_userbyid(o.owner), ', ') AS owners,
-        concat_ws(', ',
-          (SELECT string_agg(nspname, ', ') FROM schemas
-            WHERE NOT (has_schema_privilege(current_user, oid, 'CREATE')
-              AND has_schema_privilege(current_user, oid, 'USAGE'))),
-          CASE WHEN NOT has_database_privilege(current_database(), 'CREATE')
-            THEN 'the database (new schemas)' END) AS missing
-      FROM objects o
-      WHERE NOT pg_has_role(current_user, o.owner, 'USAGE')
-        AND NOT EXISTS (SELECT 1 FROM pg_depend d
-          WHERE d.classid = o.cls AND d.objid = o.oid AND d.deptype = 'e')`;
-    if ((owner?.n ?? 0) > 0 || owner?.missing) {
+    const loginRefusal = describeLoginGaps(
+      current.user,
+      await migrationLoginGaps(ro),
+    );
+    if (loginRefusal) {
       throw new Refusal(
-        `The migration login (${current.user}) can't run every migration: ` +
-          ((owner?.n ?? 0) > 0
-            ? `it doesn't own ${owner?.n} table(s), type(s) or function(s) (owned by ${owner?.owners})`
-            : `it can't create objects in ${owner?.missing}`) +
-          `. The migration secret must use a login that owns the schema. Ask an admin.`,
+        `${loginRefusal}. The migration secret must use a login that owns the schema. Ask an admin.`,
       );
     }
     const rows = (

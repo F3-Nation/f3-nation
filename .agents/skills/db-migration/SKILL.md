@@ -75,8 +75,9 @@ Reject and regenerate if any of these fail:
       around them.
 - [ ] Enum recreation or column type change: run the dependency query from
       § Views created outside the migrations against staging and prod
-      (read-only; ask a human without access). Re-issue every function that
-      references the type.
+      (read-only; ask a human without access). CI's `migrate-check` covers
+      only the views in `packages/db/prod-views.sql`. Re-issue every function
+      that references the type.
 
 ## 5. Move what depends on the schema
 

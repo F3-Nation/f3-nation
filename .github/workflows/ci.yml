@@ -76,6 +76,50 @@ jobs:
           PG_BIN_DIR: /usr/lib/postgresql/18/bin
           OBFUSCATE_VERIFY_POSTGRES_IMAGE: ghcr.io/f3-nation/f3-nation-ci-postgres@sha256:55d810d8c285ca9aa56d4b8594f31e2b09b300ed64c9b072980216d33fb6f449
 
+  # test-coverage migrates as the postgres superuser on a database with no
+  # views, so a migration that needs privileges the real migration login lacks,
+  # or that changes a column or type a staging/prod-only view depends on,
+  # passes there and fails on deploy. This applies the base commit's migrations
+  # as a non-superuser schema owner, adds the views staging and prod have
+  # (packages/db/prod-views.sql), then applies this commit's new migrations in
+  # one transaction as a member of that owner, the way db:migrate:prod does.
+  migrate-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    services:
+      # The same GHCR mirror as test-coverage (credentials on the service, for
+      # the same reason).
+      postgres:
+        image: ghcr.io/f3-nation/f3-nation-ci-postgres@sha256:55d810d8c285ca9aa56d4b8594f31e2b09b300ed64c9b072980216d33fb6f449
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      # Depth 2: the base is HEAD^1, the PR's base branch tip on a pull
+      # request's merge commit and the previous main commit on a push.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: ./.github/actions/setup
+      - name: Apply migrations as production's migration login would
+        run: pnpm -F @acme/db migrate:check
+        env:
+          MIGRATE_CHECK_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
+          MIGRATE_CHECK_BASE: HEAD^1
+
   format-check:
     runs-on: ubuntu-latest
     steps:
