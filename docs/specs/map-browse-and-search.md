@@ -107,6 +107,19 @@ city X" to "this workout, this address, this time" in a few interactions.
   THEN it stays hidden while retrying continues, and the next outage shows it
   again.
 
+### Event edits and cached map data
+
+- **AC-18** — Successful `event.crupdate` operations clear the handling API instance's
+  public map dataset cache and request Map app revalidation after the writes
+  commit, including events with no weekday. They emit the existing
+  `map.created` or `map.updated` webhook payload with the saved event ID.
+  Rejected writes do not invalidate caches or notify consumers.
+
+This does not synchronously refresh every API instance or open browser:
+other instances retain their cache-expiration behavior, and browser query
+refreshes remain independent. Recurring-to-one-off conversion remains a
+rejected operation.
+
 ## 5. Roles & authorization (RBAC)
 
 Browsing is anonymous by design, and (as of #378) that includes the API
