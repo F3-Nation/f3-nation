@@ -142,8 +142,9 @@ describe("groupMarkersByAo", () => {
     { aoName: "Screaming Eagle", aoLogo: "", expected: null },
     { aoName: "Affordable Thursday", aoLogo: null, expected: "thursday.png" },
     { aoName: "Affordable Thursday", aoLogo: "", expected: "thursday.png" },
+    { aoName: "Affordable Thursday", aoLogo: "new.png", expected: "new.png" },
   ])(
-    "only borrows a missing logo from the same AO: $aoName / $aoLogo",
+    "uses the event logo with a same-AO fallback: $aoName / $aoLogo",
     ({ aoName, aoLogo, expected }) => {
       const marker = makeMarker({
         id: 1,

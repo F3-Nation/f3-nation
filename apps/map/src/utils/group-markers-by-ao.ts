@@ -25,7 +25,7 @@ export const groupMarkersByAo = (
 
     if (eventsByAo.size <= 1) {
       const event = marker.events[0];
-      // Missing synthetic-event names must not replace the location's label.
+      // Missing synthetic-event names must not replace the pin's AO label.
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       const aoName = event?.aoName || marker.aoName;
       const fallbackLogo = aoName === marker.aoName ? marker.logo : null;
