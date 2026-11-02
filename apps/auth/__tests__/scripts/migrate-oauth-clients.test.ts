@@ -60,6 +60,20 @@ describe("buildClientRow", () => {
     ]);
   });
 
+  it.each([
+    ["openid admin", /unsupported scope\(s\) admin/],
+    ["openid openid_required", /unsupported scope\(s\) openid_required/],
+    ["profile email", /has no openid/],
+  ])("refuses legacy scopes %s", (scopes, message) => {
+    expect(() => buildClientRow(legacy({ scopes }), NOW)).toThrow(message);
+  });
+
+  it("drops repeated scopes", () => {
+    expect(
+      buildClientRow(legacy({ scopes: "openid openid profile" }), NOW).scopes,
+    ).toEqual(["openid", "profile", "offline_access"]);
+  });
+
   it.each(["not json", '{"a":1}', "[1,2]"])(
     "refuses malformed redirect_uris %s",
     (redirectUris) => {

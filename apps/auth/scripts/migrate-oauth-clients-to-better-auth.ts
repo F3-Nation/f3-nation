@@ -72,7 +72,10 @@ import postgres from "postgres";
 import * as _schema from "@acme/db/schema/schema";
 
 import { logError, logInfo, logWarn } from "../src/lib/logging";
-import { F3_NATION_CLIENT_REFERENCE_ID } from "../src/lib/oauth-client-reference";
+import {
+  F3_NATION_CLIENT_REFERENCE_ID,
+  SUPPORTED_OAUTH_SCOPES,
+} from "../src/lib/oauth-client-reference";
 
 const {
   oauthClients,
@@ -127,7 +130,23 @@ export function buildClientRow(client: OAuthClientRow, now: Date) {
     trimmedScopes && trimmedScopes.length > 0
       ? trimmedScopes
       : "openid profile email";
-  const scopes = scopeString.split(/\s+/);
+  const scopes = [...new Set(scopeString.split(/\s+/))];
+  // Only what auth3 serves (SUPPORTED_OAUTH_SCOPES). Refuse instead of
+  // silently dropping, the same way a bad redirect_uris row is handled: an
+  // unknown scope here means the legacy row needs a human look.
+  const unsupported = scopes.filter(
+    (scope) => !(SUPPORTED_OAUTH_SCOPES as readonly string[]).includes(scope),
+  );
+  if (unsupported.length > 0) {
+    throw new Error(
+      `oauth_clients.scopes for "${client.id}" has unsupported scope(s) ${unsupported.join(", ")} (auth3 supports ${SUPPORTED_OAUTH_SCOPES.join(", ")}) — fix that row before migrating.`,
+    );
+  }
+  if (!scopes.includes("openid")) {
+    throw new Error(
+      `oauth_clients.scopes for "${client.id}" has no openid, and auth3 only serves OpenID Connect requests — fix that row before migrating.`,
+    );
+  }
   // See the file comment: no refresh token without it.
   if (!scopes.includes("offline_access")) scopes.push("offline_access");
 

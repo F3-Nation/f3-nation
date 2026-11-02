@@ -308,6 +308,49 @@ describe("oauth-client router", () => {
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
 
+    it.each([
+      ["an unsupported scope", ["openid", "admin"]],
+      ["the reserved openid_required marker", ["openid", "openid_required"]],
+      ["no openid", ["profile", "email"]],
+      ["an empty list", []],
+      ["a repeated scope", ["openid", "openid"]],
+    ])("rejects scopes with %s", async (_label, scopes) => {
+      const clientId = `oauth-client-test-${uniqueId()}`;
+      createdClientIds.push(clientId);
+      await insertTestClient({ clientId });
+
+      await mockAuthWithSession(createNationAdminSession());
+      const client = createTestClient();
+
+      await expect(
+        client.oauthClient.update({
+          clientId,
+          scopes: scopes as ("openid" | "profile")[],
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+
+    it("accepts every supported scope", async () => {
+      const clientId = `oauth-client-test-${uniqueId()}`;
+      createdClientIds.push(clientId);
+      await insertTestClient({ clientId });
+
+      await mockAuthWithSession(createNationAdminSession());
+      const client = createTestClient();
+
+      const result = await client.oauthClient.update({
+        clientId,
+        scopes: ["openid", "profile", "email", "offline_access"],
+      });
+
+      expect(result.client.scopes).toEqual([
+        "openid",
+        "profile",
+        "email",
+        "offline_access",
+      ]);
+    });
+
     it("accepts a loopback http redirect URI for local development", async () => {
       const clientId = `oauth-client-test-${uniqueId()}`;
       createdClientIds.push(clientId);
