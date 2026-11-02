@@ -605,6 +605,8 @@ def parse_rich_block(
     # parse_users: bool = True,
     # parse_channels: bool = True,
     # region_record: Region = None,
+    *,
+    escape_text: bool = False,
 ) -> str:
     """Extracts the plain text representation from a rich text block.
 
@@ -614,6 +616,9 @@ def parse_rich_block(
         block (Dict[str, Any]): Block to parse
         parse_users (bool, optional): If True, user mentions will be parsed to their name. Defaults to True.
         parse_channels (bool, optional): If True, channel mentions will be parsed to its name. Defaults to True.
+        escape_text (bool, optional): If True, literal text is escaped with ``escape_mrkdwn``, so a typed
+            ``<!channel>`` stays literal when the result is sent as mrkdwn; user and channel elements
+            still become working mentions. Defaults to False.
 
     Returns:
         str: Extracted plain text
@@ -624,7 +629,7 @@ def parse_rich_block(
         if element["type"] == "rich_text_quote":
             msg += '"'
         if text["type"] == "text":
-            msg += text["text"]
+            msg += escape_mrkdwn(text["text"]) if escape_text else text["text"]
         if text["type"] == "emoji":
             msg += f":{text['name']}:"
         if text["type"] == "link":
@@ -898,16 +903,20 @@ def upload_files_to_storage(
 
             low_res_content = None
             if thumb_size is not None:
-                r_low_res = requests.get(
-                    file[f"thumb_{thumb_size}"],
-                    headers={"Authorization": f"Bearer {client.token}"},
-                    params={"width": constants.LOW_REZ_IMAGE_SIZE, "height": constants.LOW_REZ_IMAGE_SIZE},
-                )
                 # The thumbnail is optional: a failed download still stores the full-size file.
-                if r_low_res.ok:
-                    low_res_content = r_low_res.content
+                try:
+                    r_low_res = requests.get(
+                        file[f"thumb_{thumb_size}"],
+                        headers={"Authorization": f"Bearer {client.token}"},
+                        params={"width": constants.LOW_REZ_IMAGE_SIZE, "height": constants.LOW_REZ_IMAGE_SIZE},
+                    )
+                except requests.RequestException as e:
+                    logger.error(f"Error downloading thumbnail for file {file['id']}: {e}")
                 else:
-                    logger.error(f"Error downloading thumbnail for file {file['id']}: HTTP {r_low_res.status_code}")
+                    if r_low_res.ok:
+                        low_res_content = r_low_res.content
+                    else:
+                        logger.error(f"Error downloading thumbnail for file {file['id']}: HTTP {r_low_res.status_code}")
 
             change_to_png = enforce_png and file["filetype"] != "png"
             if enforce_square or max_height or change_to_png:

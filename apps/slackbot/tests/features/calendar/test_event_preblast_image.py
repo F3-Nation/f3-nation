@@ -233,6 +233,30 @@ def test_storage_helper_returns_low_res_url_only_when_thumbnail_download_succeed
     assert ("/mnt/event_instance_images/42_F_NEW_preblast_low_res.png" in written_paths) is thumb_ok
 
 
+def test_storage_helper_stores_full_size_file_when_thumbnail_request_raises():
+    logger = MagicMock()
+    with (
+        patch.object(
+            helper_functions.requests,
+            "get",
+            side_effect=[_http_response(True), helper_functions.requests.ConnectionError("reset")],
+        ),
+        patch("builtins.open", mock_open()),
+        patch.object(constants, "FILE_BUCKET_PREFIX", "f3nation"),
+    ):
+        file_list, _, _, low_res = helper_functions.upload_files_to_storage(
+            files=[SLACK_FILE],
+            client=MagicMock(token="xoxb"),
+            logger=logger,
+            bucket_name="event_instance_images",
+            file_name="42_F_NEW_preblast",
+        )
+
+    assert file_list == ["https://storage.googleapis.com/f3nation/event_instance_images/42_F_NEW_preblast.png"]
+    assert low_res == []
+    assert "Error downloading thumbnail" in logger.error.call_args.args[0]
+
+
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
@@ -349,20 +373,32 @@ def test_failed_upload_on_already_posted_preblast_passes_warning_to_send_preblas
 
 
 @pytest.mark.usefixtures("wired_services")
-def test_failed_upload_warning_is_kept_when_coqs_also_fail(wait_view):
+@pytest.mark.parametrize("coq_failure", ["unresolved", "assign"])
+def test_failed_upload_warning_survives_truncation_when_coqs_also_fail(coq_failure):
+    """Runs the real update_submission_wait_view, which cuts text at 200 characters."""
+    coqs = [f"U_COQ_{n:03d}" for n in range(4)]
     body = _submission_body(files=[SLACK_FILE])
     body["view"]["state"]["values"][actions.EVENT_PREBLAST_COQS] = {
-        actions.EVENT_PREBLAST_COQS: {"type": "multi_users_select", "selected_users": ["U_BAD"]},
+        actions.EVENT_PREBLAST_COQS: {"type": "multi_users_select", "selected_users": coqs},
     }
+    client = MagicMock()
+    coq_patch = (
+        patch.object(event_preblast, "get_user", side_effect=RuntimeError("unknown user"))
+        if coq_failure == "unresolved"
+        else patch.object(event_preblast, "_build_attendance_service", side_effect=RuntimeError("api down"))
+    )
     with (
         patch.object(event_preblast, "upload_files_to_storage", return_value=([], [], [], [])),
-        patch.object(event_preblast, "get_user", side_effect=RuntimeError("unknown user")),
+        patch.object(event_preblast, "get_user", return_value=MagicMock(user_id=7)),
+        coq_patch,
     ):
-        event_preblast.handle_event_preblast_edit(body, MagicMock(), MagicMock(), {}, MagicMock())
+        event_preblast.handle_event_preblast_edit(body, client, MagicMock(), {}, MagicMock())
 
-    kwargs = wait_view.call_args.kwargs
-    assert kwargs["title"] == "Co-Qs not saved"
-    assert event_preblast.PREBLAST_IMAGE_UPLOAD_FAILED_TEXT in kwargs["text"]
+    view = client.views_update.call_args.kwargs["view"].to_dict()
+    shown = view["blocks"][0]["text"]["text"]
+    assert view["title"]["text"] == "Co-Qs not saved"
+    assert shown.endswith("...")
+    assert shown.startswith("The photo was not saved. Preblast details were saved")
 
 
 def test_send_now_posts_the_photo_uploaded_in_the_same_submission(api_client, wired_services):
@@ -573,7 +609,24 @@ def test_rejected_post_retries_without_photo(error):
     assert _image_blocks(first.kwargs["blocks"])
     assert _image_blocks(second.kwargs["blocks"]) == []
     assert second.kwargs["blocks"][-1]["type"] == "actions"
-    assert wait_view.call_args.kwargs["title"] == "Complete!"
+    kwargs = wait_view.call_args.kwargs
+    assert kwargs["title"] == "Photo not shown"
+    assert kwargs["level"] == constants.AlertLevel.ERROR
+    assert kwargs["text"].endswith(f"\n{event_preblast.PREBLAST_IMAGE_NOT_SHOWN_TEXT}")
+
+
+def test_photo_not_shown_note_is_added_to_upload_warning():
+    client = MagicMock()
+    client.chat_postMessage.side_effect = [_slack_error("invalid_blocks"), {"ts": "1761800000.000100"}]
+
+    _, wait_view, bot_log = _send(EXISTING_META, PostMode.POST_NEW, warning="photo failed", client=client)
+
+    kwargs = wait_view.call_args.kwargs
+    assert kwargs["title"] == "Photo not saved"
+    assert kwargs["text"].endswith(f"\nphoto failed\n{event_preblast.PREBLAST_IMAGE_NOT_SHOWN_TEXT}")
+    assert bot_log.call_args.kwargs["text"].endswith(
+        f"\n:warning: photo failed\n:warning: {event_preblast.PREBLAST_IMAGE_NOT_SHOWN_TEXT}"
+    )
 
 
 def test_rejected_post_falls_back_to_plain_text_when_retry_without_photo_is_rejected():
@@ -584,24 +637,58 @@ def test_rejected_post_falls_back_to_plain_text_when_retry_without_photo_is_reje
         {"ts": "1761800000.000100"},
     ]
 
-    _send(EXISTING_META, PostMode.POST_NEW, client=client)
+    _, wait_view, _ = _send(EXISTING_META, PostMode.POST_NEW, client=client)
 
     last = client.chat_postMessage.call_args_list[-1]
     assert "blocks" not in last.kwargs
     assert last.kwargs["text"] == f"{EVENT_SUMMARY}\n\n{PREBLAST_BODY}"
     assert last.kwargs["channel"] == "C_AO"
+    assert wait_view.call_args.kwargs["title"] == "Photo not shown"
 
 
 def test_rejected_post_without_photo_falls_back_straight_to_plain_text():
     client = MagicMock()
     client.chat_postMessage.side_effect = [_slack_error("msg_too_long"), {"ts": "1761800000.000100"}]
 
-    _send({}, PostMode.POST_NEW, client=client)
+    _, wait_view, _ = _send({}, PostMode.POST_NEW, client=client)
 
     assert client.chat_postMessage.call_count == 2
     second = client.chat_postMessage.call_args_list[1]
     assert "blocks" not in second.kwargs
     assert second.kwargs["text"] == f"{EVENT_SUMMARY}\n\n{PREBLAST_BODY}"
+    assert wait_view.call_args.kwargs["title"] == "Complete!"
+
+
+def test_plain_text_fallback_escapes_typed_mentions_but_keeps_real_ones():
+    blocks = [
+        {
+            "type": "rich_text",
+            "elements": [
+                {
+                    "type": "rich_text_section",
+                    "elements": [
+                        {"type": "text", "text": "Typed <!channel> & <@U_FAKE>, real "},
+                        {"type": "user", "user_id": "U_REAL"},
+                        {"type": "text", "text": " in "},
+                        {"type": "channel", "channel_id": "C_REAL"},
+                    ],
+                }
+            ],
+        }
+    ]
+
+    assert event_preblast._preblast_plain_text(blocks) == (
+        "Typed &lt;!channel&gt; &amp; &lt;@U_FAKE&gt;, real <@U_REAL> in <#C_REAL>"
+    )
+
+
+def test_parse_rich_block_leaves_text_unescaped_by_default():
+    block = {
+        "type": "rich_text",
+        "elements": [{"type": "rich_text_section", "elements": [{"type": "text", "text": "<!here>"}]}],
+    }
+
+    assert helper_functions.parse_rich_block(block) == "<!here>"
 
 
 def test_plain_text_fallback_is_capped_at_slack_text_limit():
@@ -634,7 +721,19 @@ def test_rejected_update_retries_without_photo_keeping_ts():
     second = client.chat_update.call_args_list[1]
     assert _image_blocks(second.kwargs["blocks"]) == []
     assert second.kwargs["ts"] == "1761800000.000100"
-    assert wait_view.call_args.kwargs["title"] == "Complete!"
+    assert wait_view.call_args.kwargs["title"] == "Photo not shown"
+
+
+def test_rejected_update_plain_text_fallback_clears_old_blocks():
+    client = MagicMock()
+    client.chat_update.side_effect = [_slack_error("invalid_blocks"), _slack_error("invalid_blocks"), {"ok": True}]
+
+    _send(EXISTING_META, PostMode.UPDATE_EXISTING, preblast_ts=1761800000.0001, client=client)
+
+    last = client.chat_update.call_args_list[-1]
+    assert last.kwargs["blocks"] == []
+    assert last.kwargs["text"] == f"{EVENT_SUMMARY}\n\n{PREBLAST_BODY}"
+    assert last.kwargs["ts"] == "1761800000.000100"
 
 
 def test_other_slack_errors_are_not_retried():

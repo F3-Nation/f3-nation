@@ -640,7 +640,9 @@ def handle_event_preblast_edit(
     # multiselect field is present, its value is authoritative; an empty value
     # intentionally clears all Co-Qs while preserving the existing Q.
     if actions.EVENT_PREBLAST_COQS in form_data:
-        photo_note = f" {PREBLAST_IMAGE_UPLOAD_FAILED_TEXT}" if image_upload_failed else ""
+        # Leads the message: update_submission_wait_view cuts text at 200 characters,
+        # and the Co-Q mentions that follow can run past that.
+        photo_note = "The photo was not saved. " if image_upload_failed else ""
         coq_slack_ids = form_data.get(actions.EVENT_PREBLAST_COQS) or []
         coq_user_ids: list[int | str] = []
         unresolved_coq_slack_ids: list[str] = []
@@ -658,9 +660,9 @@ def handle_event_preblast_edit(
                 client=client,
                 title="Co-Qs not saved",
                 text=(
-                    "Preblast details were saved, but Co-Qs were not updated because "
+                    f"{photo_note}Preblast details were saved, but Co-Qs were not updated because "
                     f"these Slack users could not be resolved: {failed_coqs}. "
-                    f"Please reopen the form and try again.{photo_note}"
+                    "Please reopen the form and try again."
                 ),
                 level=constants.AlertLevel.ERROR,
                 logger=logger,
@@ -690,8 +692,8 @@ def handle_event_preblast_edit(
                 client=client,
                 title="Co-Qs not saved",
                 text=(
-                    "Preblast details were saved, but Co-Qs were not updated. "
-                    f"{coq_failure_detail} Please reopen the form and try again.{photo_note}"
+                    f"{photo_note}Preblast details were saved, but Co-Qs were not updated. "
+                    f"{coq_failure_detail} Please reopen the form and try again."
                 ),
                 level=constants.AlertLevel.ERROR,
                 logger=logger,
@@ -755,6 +757,7 @@ def handle_event_preblast_edit(
 
 
 PREBLAST_IMAGE_UPLOAD_FAILED_TEXT = "The photo could not be uploaded; reopen the preblast and try adding it again."
+PREBLAST_IMAGE_NOT_SHOWN_TEXT = "Slack couldn't display the photo, so the preblast message doesn't include it."
 
 
 def _upload_preblast_image(
@@ -830,43 +833,53 @@ def _preblast_plain_text(blocks: list[dict[str, Any]]) -> str:
     """Return the readable text of a preblast's blocks, capped at Slack's recommended text length.
 
     Collects each section's mrkdwn (the event summary) and each rich text block (the
-    preblast body); images and buttons carry no text and are skipped.
+    preblast body); images and buttons carry no text and are skipped. The body's literal
+    text is escaped, so a typed ``<!channel>`` or ``<@U…>`` doesn't become a mention.
     """
     parts = []
     for block in blocks:
         if block.get("type") == "section":
             parts.append(safe_get(block, "text", "text") or "")
         elif block.get("type") == "rich_text":
-            parts.append(parse_rich_block(block))
+            parts.append(parse_rich_block(block, escape_text=True))
     text = "\n\n".join(p.strip() for p in parts if p and p.strip())
     if len(text) > SLACK_TEXT_FALLBACK_MAX_CHARS:
         text = text[: SLACK_TEXT_FALLBACK_MAX_CHARS - 1] + "…"
     return text
 
 
-def _send_preblast_blocks(api_call, blocks: list[dict[str, Any]], logger: Logger, **kwargs):
+def _send_preblast_blocks(api_call, blocks: list[dict[str, Any]], logger: Logger, **kwargs) -> tuple[Any, bool]:
     """Post or update a preblast message, degrading when Slack rejects its blocks.
 
     On a block rejection this retries once without the photo, which keeps the message's
     content and buttons when Slack can't fetch the image, then sends the preblast as plain
     ``text`` (see ``_preblast_plain_text``), keeping the caller's ``text`` only when the
-    blocks hold none. Any other error is re-raised.
+    blocks hold none. An update (``ts`` in ``kwargs``) sends that plain text with an empty
+    ``blocks`` list, because ``chat.update`` keeps the message's previous blocks when
+    ``blocks`` is left out. Any other error is re-raised.
+
+    Returns the Slack response and whether the message went out without the photo its
+    blocks held.
     """
     try:
-        return api_call(blocks=blocks, **kwargs)
+        return api_call(blocks=blocks, **kwargs), False
     except SlackApiError as exc:
         if exc.response.get("error") not in SLACK_BLOCK_REJECTION_ERRORS:
             raise
         logger.warning(f"Slack rejected preblast blocks: {exc.response.get('error')}")
     without_image = [b for b in blocks if b.get("alt_text") != "Preblast Image"]
-    if len(without_image) < len(blocks):
+    had_photo = len(without_image) < len(blocks)
+    if had_photo:
         try:
-            return api_call(blocks=without_image, **kwargs)
+            return api_call(blocks=without_image, **kwargs), True
         except SlackApiError as exc:
             if exc.response.get("error") not in SLACK_BLOCK_REJECTION_ERRORS:
                 raise
             logger.warning(f"Slack rejected preblast blocks without the photo: {exc.response.get('error')}")
-    return api_call(**{**kwargs, "text": _preblast_plain_text(blocks) or kwargs.get("text")})
+    text_kwargs = {**kwargs, "text": _preblast_plain_text(blocks) or kwargs.get("text")}
+    if "ts" in kwargs:
+        text_kwargs["blocks"] = []
+    return api_call(**text_kwargs), had_photo
 
 
 def _format_attendance_user(attendance: AttendanceData, attendance_slack_dict: dict[int, str]) -> str:
@@ -896,10 +909,13 @@ def send_preblast(
     Uses ``PreblastService.decide_post_mode()`` and ``persist_posted_preblast()``
     to handle all post-mode scenarios. A ``warning`` (a failed photo upload earlier in
     the submission) is appended to the submitter's result and the bot log, and shows the
-    result at error level, titled "Photo not saved" when the post itself succeeded.
+    result at error level, titled "Photo not saved" when the post itself succeeded. A
+    message Slack only accepted without its photo adds a note the same way, titled
+    "Photo not shown" when there is no ``warning``.
     """
     logger = logger or logging.getLogger(__name__)
     outcome = "success"  # used for logging and user feedback
+    photo_omitted = False  # Slack accepted the message only without its photo
     slack_user_id = safe_get(body, "user", "id") or safe_get(body, "user_id")
     preblast_info = build_preblast_info(body, client, logger, context, region_record, event_instance_id)
     q_attendance = next(
@@ -970,7 +986,7 @@ def send_preblast(
         action_text = "posted" if mode == PostMode.POST_NEW else "posted in new channel"
         res = None
         try:
-            res = _send_preblast_blocks(
+            res, photo_omitted = _send_preblast_blocks(
                 client.chat_postMessage,
                 blocks,
                 logger,
@@ -1004,7 +1020,7 @@ def send_preblast(
     elif mode == PostMode.UPDATE_EXISTING:
         posted_channel = decision.posted_channel_id or desired_channel
         try:
-            _send_preblast_blocks(
+            _, photo_omitted = _send_preblast_blocks(
                 client.chat_update,
                 blocks,
                 logger,
@@ -1021,16 +1037,19 @@ def send_preblast(
             action_text = "update failed"
             outcome = "error"
 
+    photo_not_shown = outcome == "success" and photo_omitted
+    notes = [note for note in (warning, PREBLAST_IMAGE_NOT_SHOWN_TEXT if photo_not_shown else None) if note]
+
     log_msg = f":mega: Preblast {action_text} for *{event.name}* on *{event.start_date}* by <@{slack_user_id or 'app'}>"
     user_msg = f"Preblast {action_text}"
-    if outcome == "success" and not warning:
+    if outcome == "success" and not notes:
         user_msg += " successfully!"
     if desired_channel and event.preblast_ts:
         log_msg += f" <slack://channel?team={region_record.team_id}&id={desired_channel}&ts={event.preblast_ts}|Link>\n"
         user_msg += f" <slack://channel?team={region_record.team_id}&id={desired_channel}&ts={event.preblast_ts}| Link>"
-    if warning:
-        log_msg = f"{log_msg.rstrip()}\n:warning: {warning}"
-        user_msg += f"\n{warning}"
+    for note in notes:
+        log_msg = f"{log_msg.rstrip()}\n:warning: {note}"
+        user_msg += f"\n{note}"
     post_bot_log(
         client=client,
         region_record=region_record,
@@ -1042,6 +1061,8 @@ def send_preblast(
         title = "Error"
     elif warning:
         title = "Photo not saved"
+    elif photo_not_shown:
+        title = "Photo not shown"
     else:
         title = "Complete!"
     submission_view_id = safe_get(body, "submission_view_id") or safe_get(body, "view", "id")
