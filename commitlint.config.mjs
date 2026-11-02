@@ -38,7 +38,6 @@ export default {
         "playwright",
         "prettier",
         "tsconfig",
-        "ci-factory",
         "scripts",
         "github",
         "tailwind",
