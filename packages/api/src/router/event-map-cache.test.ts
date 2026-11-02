@@ -244,7 +244,6 @@ describe("event mutation map cache", () => {
       .from(schema.events)
       .where(eq(schema.events.id, event.id));
     expect(unchanged).toEqual(event);
-    expect((await publicEvent(event.id))?.[2]).toBe("monday");
     expect(
       await cachedMapData("rejected-write-probe", () =>
         Promise.resolve("cleared"),
@@ -252,6 +251,8 @@ describe("event mutation map cache", () => {
     ).toBe("retained");
     expect(notifyWebhooks).not.toHaveBeenCalled();
     expect(globalThis.fetch).not.toHaveBeenCalled();
+    clearMapDataCache();
+    expect((await publicEvent(event.id))?.[2]).toBe("monday");
   });
 
   it("still invalidates a deactivated recurring event", async () => {
@@ -316,8 +317,6 @@ describe("event mutation map cache", () => {
         .from(schema.events)
         .where(eq(schema.events.id, event.id));
       expect(unchanged).toEqual(event);
-      const after = await readMap();
-      expect(after).toEqual(before);
       expect(
         await cachedMapData("rejected-write-probe", () =>
           Promise.resolve("cleared"),
@@ -325,6 +324,9 @@ describe("event mutation map cache", () => {
       ).toBe("retained");
       expect(notifyWebhooks).not.toHaveBeenCalled();
       expect(globalThis.fetch).not.toHaveBeenCalled();
+      clearMapDataCache();
+      const after = await readMap();
+      expect(after).toEqual(before);
       expect((await publicEvent(event.id))?.[1]).toBe(input.name);
     },
   );
