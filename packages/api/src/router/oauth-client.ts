@@ -49,7 +49,7 @@ import { nationAdminProcedure } from "../shared";
  * a meaningless scope, including the reserved `openid_required` marker
  * apps/auth uses internally to force invalid_scope.
  */
-export const SUPPORTED_OAUTH_SCOPES = [
+const SUPPORTED_OAUTH_SCOPES = [
   "openid",
   "profile",
   "email",
