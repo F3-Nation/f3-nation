@@ -3,7 +3,6 @@ import os
 import smtplib
 import ssl
 from email.message import EmailMessage
-from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import unquote, urlsplit
 
@@ -140,8 +139,8 @@ def send(
         email_user (str): email user address
         email_password (str): email password
         email_to (str): email recipient address
-        attachments (List[Dict[str, Any]]): list of attachments, each attachment is a dict with keys "filepath" and
-            "meta", where meta includes filename, maintype, and subtype
+        attachments (List[Dict[str, Any]]): list of attachments, each attachment is a dict with keys "content"
+            (the file's bytes) and "meta", where meta includes filename, maintype, and subtype
     """
     msg = EmailMessage()
     msg.set_content(body)
@@ -151,8 +150,7 @@ def send(
     msg["To"] = email_to
 
     for file in attachments:
-        with Path(file["filepath"]).open("rb") as f:
-            msg.add_attachment(f.read(), **file["meta"])
+        msg.add_attachment(file["content"], **file["meta"])
 
     if email_server and email_server_port and email_user and email_password and email_to:
         server = smtplib.SMTP(email_server, email_server_port)
