@@ -80,7 +80,11 @@ city X" to "this workout, this address, this time" in a few interactions.
 - **AC-12** — GIVEN pins are visible WHEN the user activates a day filter
   (e.g. "Today") THEN only locations with at least one matching event remain
   on the map; when nothing matches, the nearby list shows a "No locations
-  found matching your filters" message.
+  found matching your filters" message. When filtering leaves only one AO at a
+  shared location, its nearby-list row uses the remaining workouts' AO name
+  and logo. A missing name falls back to the AO name assigned to the pin; a
+  missing logo uses the pin's logo only when the AO names match. Otherwise,
+  or when neither has a logo, the default F3 image is shown.
 - **AC-13** — GIVEN the AM quick filter is active WHEN the user activates PM
   THEN AM deactivates (mutually exclusive), and Reset restores the unfiltered
   pin set.
