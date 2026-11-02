@@ -15,7 +15,8 @@ WARNING: uv is not installed, so Python workspace dependencies were not synced.
 Install uv:
   curl -LsSf https://astral.sh/uv/install.sh | sh
 
-Then run:
+Close and reopen your terminal, return to the repository root, then run:
+  uv --version
   pnpm python:install
 
 See docs/LOCAL_DEV_DOCKER.md#uv-python-package-manager-for-slackbot
