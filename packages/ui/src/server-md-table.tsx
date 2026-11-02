@@ -11,7 +11,7 @@ import type {
   TableOptions,
   Updater,
 } from "@tanstack/react-table";
-import React, { useImperativeHandle, useMemo, useRef, useState } from "react";
+import React, { useImperativeHandle, useMemo, useState } from "react";
 import { flexRender, useTable } from "@tanstack/react-table";
 import { ChevronDownIcon, Loader2, RefreshCcw } from "lucide-react";
 
@@ -226,22 +226,27 @@ export const MDTable = <T extends { id: string | number }>(
       setTableStoreValue(tableName, key, value);
     };
 
-  // Data state management: if data is undefined, we show a loading state
-  const cachedData = useRef(data);
-  if (data !== undefined) {
-    cachedData.current = data;
+  // Data state management: if data is undefined, we show a loading state.
+  // The last defined data/count are kept in state (not refs, which must not be
+  // read during render) and synced during render, so a reload keeps showing
+  // the previous rows instead of flashing the skeleton.
+  const [lastData, setLastData] = useState(data);
+  if (data !== undefined && data !== lastData) {
+    setLastData(data);
   }
-  const isReloading = data === undefined && cachedData.current !== undefined;
-  const isInitialLoading = cachedData.current === undefined; // If the data is undefined, we show a loading state (skeleton)
+  const cachedData = data ?? lastData;
+  const isReloading = data === undefined && cachedData !== undefined;
+  const isInitialLoading = cachedData === undefined; // If the data is undefined, we show a loading state (skeleton)
 
-  const cachedCount = useRef<number | undefined>(undefined);
-  if (totalCountParam !== undefined) {
-    cachedCount.current = totalCountParam;
+  const [lastCount, setLastCount] = useState(totalCountParam);
+  if (totalCountParam !== undefined && totalCountParam !== lastCount) {
+    setLastCount(totalCountParam);
   }
+  const cachedCount = totalCountParam ?? lastCount;
 
   const table = useTable({
     features: mdTableFeatures,
-    data: cachedData.current ?? [],
+    data: cachedData ?? [],
     columns,
     ...(serverSidePagination
       ? { manualPagination: true, manualSorting: true }
@@ -250,8 +255,8 @@ export const MDTable = <T extends { id: string | number }>(
     onColumnVisibilityChange: setValue("columnVisibility"),
     onPaginationChange: setValue("pagination"),
     onSortingChange: setValue("sorting"),
-    ...(cachedCount.current !== undefined && {
-      rowCount: cachedCount.current,
+    ...(cachedCount !== undefined && {
+      rowCount: cachedCount,
     }),
     onRowSelectionChange: setValue("rowSelection"),
     getRowId: (row) => row.id.toString(),
