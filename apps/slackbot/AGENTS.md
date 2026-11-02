@@ -15,8 +15,6 @@ These also apply to `apps/analytics` and `packages/db-python`.
   configuration, including the 120-column limit, which is real; each
   package's `pyproject.toml` extends it (`extend = "../../pyproject.toml"`)
   and adds only local overrides.
-- Tasks run through `scripts/python-task.sh`: it skips when `uv` is missing
-  locally and fails in CI.
 - Dependencies are managed with uv; a dependency, `requires-python` or
   version change in a `pyproject.toml` also changes `uv.lock`.
 - A Python bump updates every pin together and never downgrades:
@@ -29,6 +27,62 @@ These also apply to `apps/analytics` and `packages/db-python`.
   with a savepoint); a caught DB error leaves the transaction aborted.
 - Never log emails, names, phone numbers or credentials.
 - Use `is not None` when `0` or `""` is a meaningful value.
+
+## How Python is checked
+
+Python checks participate in the same pnpm/Turborepo pipeline as JavaScript and
+TypeScript. Searching only workflow files for `pytest` or `ruff` misses the
+package scripts that Turbo executes:
+
+- CI's shared [setup action](../../.github/actions/setup/action.yml) installs
+  `uv`; its `pnpm install` runs the root `postinstall` script through
+  [`postinstall-uv-sync.sh`](../../scripts/postinstall-uv-sync.sh). That runs
+  `uv sync --all-packages`, provisioning the pinned Python interpreter and
+  dependencies for the members in the root [Python workspace](../../pyproject.toml).
+- Each Python member's `package.json` registers its checks as Turbo tasks.
+  Route Python checks through [`python-task.sh`](../../scripts/python-task.sh)
+  to preserve local skips, CI failures, and shared argument handling.
+  Ruff handles `format` and `lint`, pytest handles `test`, and packages with a
+  `typecheck` script run mypy. The root pnpm commands reach these scripts
+  through [Turbo's task configuration](../../turbo.json).
+- CI selects affected workspaces on pull requests and can reuse cached task
+  results; it does not execute every Python check afresh on every PR. See
+  [CI scope and caching](../../docs/CI_PIPELINE.md).
+
+From the repository root, inspect the task plan without executing the checks:
+
+```bash
+pnpm exec turbo run format lint test typecheck --dry=json
+```
+
+Use `pnpm exec turbo run <task> --dry=json` for one task. Inspect each entry's
+`package` and `command` to see which Python checks it schedules; a dry run shows
+planned commands, not proof that tests passed. Package scripts are the source of
+truth for which checks a member provides.
+
+The shared [`python-task.sh`](../../scripts/python-task.sh) wrapper prints
+`Skipping <task> for <label>: uv is not installed` and exits successfully
+locally when `uv` is absent. That message means the Python check did not run,
+not that it passed. Contributors who do not touch Python may leave `uv`
+uninstalled. When the wrapper executes with `CI` set to a nonempty value,
+missing `uv` is an error instead of a skip.
+
+Python contributors should install `uv` and run `pnpm python:install` from the
+root. To verify a package after installing `uv`, bypass Turbo's cache so a
+previous local skip is not replayed; for example:
+
+```bash
+pnpm exec turbo run format lint test typecheck --filter=f3-slackbot --cache=local:,remote:
+```
+
+Use the target member's `package.json` name for other packages. Installation
+instructions are in [local development](../../docs/LOCAL_DEV_DOCKER.md#uv-python-package-manager-for-slackbot).
+
+GitHub also runs CodeQL's `Analyze (python)` security analysis through **default
+setup**, configured in repository settings rather than a checked-in workflow.
+Look for the CodeQL run in Actions; maintainers can inspect its configuration
+in the repository’s code scanning settings. Keep this description in
+sync when changing that external configuration.
 
 ## Slack platform rules
 
