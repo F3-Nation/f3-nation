@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { act } from "react";
+import type { Root } from "react-dom/client";
+import { hydrateRoot } from "react-dom/client";
 import { cleanup, render } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import {
@@ -154,6 +157,54 @@ describe("server text decoding", () => {
     ).toBe("<p>It’s 5—6 ❤ &amp;bogus;</p>");
   });
 
+  it("cuts text longer than 10,000 characters to 10,000 ending in an ellipsis", () => {
+    expect(renderToString(<Text html={`<b>${"a".repeat(10_001)}</b>`} />)).toBe(
+      `<p>${"a".repeat(9_999)}…</p>`,
+    );
+  });
+
+  it("keeps text of exactly 10,000 characters whole", () => {
+    expect(renderToString(<Text html={"a".repeat(10_000)} />)).toBe(
+      `<p>${"a".repeat(10_000)}</p>`,
+    );
+  });
+
+  it("doesn't leave half of an emoji at the cut", () => {
+    expect(renderToString(<Text html={`${"a".repeat(9_998)}💪💪`} />)).toBe(
+      `<p>${"a".repeat(9_998)}…</p>`,
+    );
+  });
+
+  it("keeps a whole emoji that ends at the cut, and the emoji before it", () => {
+    expect(renderToString(<Text html={`💪${"a".repeat(9_995)}💪💪`} />)).toBe(
+      `<p>💪${"a".repeat(9_995)}💪…</p>`,
+    );
+  });
+
+  it("hydrates cut text without errors, then shows the full text", async () => {
+    // Escaped characters before the cut, an emoji straddling it.
+    const html = `${"&lt;".repeat(5_000)}${"a".repeat(4_998)}💪 and more`;
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(<Text html={html} />);
+    expect(container.textContent).toBe(
+      `${"<".repeat(5_000)}${"a".repeat(4_998)}…`,
+    );
+
+    const errors: unknown[] = [];
+    let root: Root | undefined;
+    await act(async () => {
+      root = hydrateRoot(container, <Text html={html} />, {
+        onRecoverableError: (error) => errors.push(error),
+      });
+    });
+
+    expect(errors).toEqual([]);
+    expect(container.textContent).toBe(
+      `${"<".repeat(5_000)}${"a".repeat(4_998)}💪 and more`,
+    );
+    act(() => root?.unmount());
+  });
+
   it.each([
     ["an end tag with whitespace", "<script>alert(1)</script >Hi"],
     ["an end tag with attributes", '<SCRIPT>alert(1)</script x="y">Hi'],
@@ -212,7 +263,8 @@ describe("server text decoding", () => {
     [
       "spliced blocks",
       `${"<scr".repeat(1e5)}<script></script>${"ipt></script>".repeat(1e5)}Hi`,
-      `${"ipt&gt;".repeat(1e5)}Hi`,
+      // Capped at 10,000 characters: 2,499 × "ipt>", then "ipt" and the ellipsis.
+      `${"ipt&gt;".repeat(2_499)}ipt…`,
     ],
     ["unclosed blocks", `Hi${"<script>".repeat(1e5)}`, "Hi"],
     ["unclosed tags", `Hi${"<style ".repeat(1e5)}`, "Hi"],

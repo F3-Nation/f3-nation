@@ -217,9 +217,28 @@ const readHtml = (value: string): { text: string; hrefs: string[] } => {
 
 const stripHtml = (value: string): string => readHtml(value).text;
 
-/** Plain-text rendering of `html`; what the server (no DOMParser) shows. */
-const htmlToPlainText = (html: string | null | undefined): string =>
-  html ? stripHtml(html) : "";
+/**
+ * Longest plain text the server and the hydration pass render. A very long
+ * text node can reach the browser split into several nodes, and hydration then
+ * fails because React matches the string against only the first one. This cap
+ * keeps the text far below 65,536 characters, and below 64 KiB of HTML even
+ * if React escapes every character to a six-byte entity such as `&quot;`.
+ */
+const MAX_PLAIN_TEXT_LENGTH = 10_000;
+
+/**
+ * Plain-text rendering of `html`; what the server (no DOMParser) shows. Text
+ * longer than `MAX_PLAIN_TEXT_LENGTH` is cut and ends with `…`, which counts
+ * toward the limit.
+ */
+const htmlToPlainText = (html: string | null | undefined): string => {
+  const text = html ? stripHtml(html) : "";
+  if (text.length <= MAX_PLAIN_TEXT_LENGTH) return text;
+  // Drop a high surrogate left alone by the cut, so no broken character shows.
+  return `${text
+    .slice(0, MAX_PLAIN_TEXT_LENGTH - 1)
+    .replace(/[\uD800-\uDBFF]$/, "")}…`;
+};
 
 const sanitizeChildNodes = (
   nodes: NodeListOf<ChildNode> | ChildNode[],
