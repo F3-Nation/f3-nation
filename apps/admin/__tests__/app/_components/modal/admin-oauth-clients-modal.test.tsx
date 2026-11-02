@@ -273,7 +273,7 @@ describe("AdminOauthClientsModal", () => {
     expect(closeModalMock).toHaveBeenCalled();
   });
 
-  it("preserves scopes beyond the four this form exposes when submitting an edit", async () => {
+  it("leaves unsupported stored scopes untouched when offline_access is unchanged", async () => {
     useQueryMock.mockReturnValue({
       data: {
         clients: [
@@ -298,13 +298,12 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: ["openid", "profile", "email", "custom:read"],
       });
     });
     expect(closeModalMock).toHaveBeenCalled();
   });
 
-  it("does not add profile/email scopes for a client narrower than those defaults", async () => {
+  it("does not resend scopes for a narrow client when offline_access is unchanged", async () => {
     useQueryMock.mockReturnValue({
       data: {
         clients: [
@@ -329,13 +328,12 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: ["openid"],
       });
     });
     expect(closeModalMock).toHaveBeenCalled();
   });
 
-  it("does not silently grant openid to a client that was never issued it", async () => {
+  it("lets a client without openid be renamed without touching its scopes", async () => {
     useQueryMock.mockReturnValue({
       data: {
         clients: [
@@ -360,10 +358,42 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: ["custom:read"],
       });
     });
     expect(closeModalMock).toHaveBeenCalled();
+  });
+
+  it("sends the stored scopes plus offline_access when the checkbox is turned on", async () => {
+    useQueryMock.mockReturnValue({
+      data: {
+        clients: [
+          {
+            clientId: "paxvault-client",
+            name: "Paxvault",
+            redirectUris: ["https://paxvault.example.com/callback"],
+            scopes: ["openid"],
+            isPublic: false,
+          },
+        ],
+      },
+    });
+    updateMutateAsync.mockResolvedValue({});
+
+    render(<AdminOauthClientsModal data={{ clientId: "paxvault-client" }} />);
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /offline_access scope/i }),
+    );
+    fireEvent.click(screen.getByText("Save changes"));
+
+    await waitFor(() => {
+      expect(updateMutateAsync).toHaveBeenCalledWith({
+        clientId: "paxvault-client",
+        name: "Paxvault",
+        redirectUris: ["https://paxvault.example.com/callback"],
+        scopes: ["openid", "offline_access"],
+      });
+    });
   });
 
   it("closes without submitting when Close is clicked in the edit form", () => {
@@ -473,7 +503,6 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: [],
       });
     });
   });
@@ -593,9 +622,15 @@ describe("AdminOauthClientsModal", () => {
         clientId: "paxvault-client",
         name: "Paxvault",
         redirectUris: ["https://paxvault.example.com/callback"],
-        scopes: ["openid", "offline_access"],
+        // The checkbox now matches the stored scopes, so nothing to send:
+        // the other admin's offline_access grant stays as they left it.
       });
     });
+    expect(
+      screen
+        .getByRole("checkbox", { name: /offline_access scope/i })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   it("shows a failure toast and leaves the modal open when the update mutation rejects", async () => {

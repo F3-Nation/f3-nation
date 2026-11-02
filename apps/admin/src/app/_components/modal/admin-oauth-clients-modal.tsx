@@ -29,6 +29,7 @@ import { Textarea } from "@acme/ui/textarea";
 import { toast } from "@acme/ui/toast";
 
 import { invalidateQueries, orpc, useMutation, useQuery } from "~/orpc/react";
+import type { RouterInputs } from "~/orpc/types";
 import type { DataType, ModalType } from "~/utils/store/modal";
 import { closeModal } from "~/utils/store/modal";
 
@@ -46,6 +47,10 @@ const OauthClientFormSchema = z.object({
 // actual gate: it rejects dangerous schemes, fragments, and non-loopback
 // http, while still allowing a custom scheme for native/mobile clients
 // (RFC 8252 §7.1).
+type ClientScopes = NonNullable<
+  RouterInputs["oauthClient"]["update"]["scopes"]
+>;
+
 function parseRedirectUris(value: string): string[] {
   return value
     .split("\n")
@@ -174,28 +179,36 @@ export default function AdminOauthClientsModal({
                 className="space-y-4"
                 onSubmit={form.handleSubmit(
                   async (values) => {
-                    // Preserve the client's actual scopes rather than
-                    // assuming a fixed baseline — a client registered with a
-                    // narrower set (e.g. apps/auth/scripts/add-client.ts's
-                    // free-text prompt, or carried over by
-                    // migrate-oauth-clients-to-better-auth.ts) shouldn't
-                    // silently gain "profile"/"email", and a pure-OAuth2
-                    // client that was never granted "openid" shouldn't
-                    // silently become ID-token-capable, either — both from
-                    // an edit to unrelated fields. This form has no control
-                    // that requests "openid", so it never adds it.
-                    const base = (existing?.scopes ?? []).filter(
+                    // Only touch scopes when the offline_access checkbox
+                    // actually changed. Otherwise an edit to the name or
+                    // redirect URIs would resend the stored scopes, and the
+                    // server now rejects any outside openid, profile, email
+                    // and offline_access (or a set without openid), so a
+                    // legacy client couldn't even be renamed. When it did
+                    // change, keep the client's other scopes as they are
+                    // rather than assuming a baseline: a client registered
+                    // with a narrower set shouldn't silently gain "profile"
+                    // or "email". No validation here; as with redirect URIs,
+                    // the server's schema is the gate, and its error lands
+                    // in the failure toast.
+                    const currentScopes = existing?.scopes ?? [];
+                    const offlineChanged =
+                      values.offlineAccess !==
+                      currentScopes.includes("offline_access");
+                    const base = currentScopes.filter(
                       (scope) => scope !== "offline_access",
                     );
-                    const scopes = values.offlineAccess
-                      ? [...base, "offline_access"]
-                      : base;
+                    const scopes = offlineChanged
+                      ? ((values.offlineAccess
+                          ? [...base, "offline_access"]
+                          : base) as ClientScopes)
+                      : undefined;
                     try {
                       await updateClient.mutateAsync({
                         clientId,
                         name: values.name,
                         redirectUris: parseRedirectUris(values.redirectUris),
-                        scopes,
+                        ...(scopes ? { scopes } : {}),
                       });
                     } catch {
                       // onError above already shows the failure toast;
