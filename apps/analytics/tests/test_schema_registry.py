@@ -34,7 +34,7 @@ def _rewrite_file(connection, artifacts: MaterializationArtifacts, query: str, s
     path = artifacts.sorted_parquet_files[0]
     replacement = path.with_suffix(".replacement.parquet")
     connection.execute(
-        f"COPY ({query}) TO ? (FORMAT PARQUET)", [str(replacement), *(str(path) for _ in range(source_count))]
+        f"COPY ({query}) TO ? (FORMAT PARQUET)", [*(str(path) for _ in range(source_count)), str(replacement)]
     )
     replacement.replace(path)
 
@@ -282,7 +282,7 @@ def test_unlisted_parquet_files_are_rejected(tmp_path: Path):
     extra_file = artifacts.root / "unexpected.parquet"
     connection.execute(
         "COPY (SELECT * FROM read_parquet(?)) TO ? (FORMAT PARQUET)",
-        [str(extra_file), str(artifacts.sorted_parquet_files[0])],
+        [str(artifacts.sorted_parquet_files[0]), str(extra_file)],
     )
     with pytest.raises(SchemaValidationError, match="file set"):
         validate_artifacts(connection, artifacts, MATERIALIZATIONS_BY_NAME["pv_events"])

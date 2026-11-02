@@ -196,7 +196,7 @@ def test_attendance_without_tags_or_types_has_typed_empty_arrays_and_region_hier
     assert no_region[7:9] == (None, None)
     assert no_region[9:12] == ([], [], [])
     output = tmp_path / "pv_attendance.parquet"
-    db.execute("COPY (" + SQL + ") TO ? (FORMAT PARQUET)", [str(output), "2026-01-03T00:00:00Z", "2026-01-03"])
+    db.execute("COPY (" + SQL + ") TO ? (FORMAT PARQUET)", ["2026-01-03T00:00:00Z", "2026-01-03", str(output)])
     columns = db.execute("DESCRIBE SELECT * FROM read_parquet(?)", [str(output)]).fetchall()
     assert [(column[0], column[1], column[2] == "YES") for column in columns] == [
         (column.name, column.duckdb_type, column.nullable) for column in SCHEMAS_BY_NAME["pv_attendance"].columns
