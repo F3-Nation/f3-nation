@@ -1,4 +1,13 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { MDPGDrizzleAdapter } from "@acme/auth/lib/md-pg-drizzzle-adapter";
 import { eq, inArray, schema } from "@acme/db";
@@ -7,14 +16,11 @@ import { createDbClient } from "@acme/db/testing";
 // Use the API suite's migrated PostgreSQL database to exercise atomic claims.
 const { db, close } = createDbClient();
 const adapter = MDPGDrizzleAdapter(db);
-const identifiers = [
-  "token-test@example.test",
-  "other-token-test@example.test",
-];
-const identifier = identifiers[0]!;
+let identifiers: [string, string];
+let identifier: string;
 const token = "synthetic-verification-token";
-const expires = new Date("2099-01-01T00:00:00.000Z");
-const input = { identifier, token };
+let expires: Date;
+let input: { identifier: string; token: string };
 
 const clearTokens = () =>
   db
@@ -23,11 +29,20 @@ const clearTokens = () =>
 const seed = (overrides: Partial<typeof input & { expires: Date }> = {}) =>
   adapter.createVerificationToken!({ ...input, expires, ...overrides });
 
-beforeEach(async () => {
+beforeEach(() => {
+  const prefix = randomUUID();
+  identifiers = [
+    `token-${prefix}@example.test`,
+    `other-${prefix}@example.test`,
+  ];
+  identifier = identifiers[0];
+  input = { identifier, token };
+  expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+});
+afterEach(async () => {
   await clearTokens();
 });
 afterAll(async () => {
-  await clearTokens();
   await close();
 });
 
@@ -74,7 +89,7 @@ describe("verification token consumption", () => {
     expect(
       await adapter.useVerificationToken!({
         ...input,
-        identifier: identifiers[1]!,
+        identifier: identifiers[1],
       }),
     ).toBeNull();
     expect(await adapter.useVerificationToken!(input)).toMatchObject(input);
@@ -83,11 +98,11 @@ describe("verification token consumption", () => {
   it("normalizes the identifier and preserves other tokens", async () => {
     await seed();
     await seed({ token: "another-synthetic-token" });
-    await seed({ identifier: identifiers[1]! });
+    await seed({ identifier: identifiers[1] });
     expect(
       await adapter.useVerificationToken!({
         ...input,
-        identifier: "  TOKEN-TEST@EXAMPLE.TEST  ",
+        identifier: `  ${identifier.toUpperCase()}  `,
       }),
     ).toMatchObject(input);
     expect(
@@ -99,13 +114,13 @@ describe("verification token consumption", () => {
     expect(
       await adapter.useVerificationToken!({
         ...input,
-        identifier: identifiers[1]!,
+        identifier: identifiers[1],
       }),
     ).not.toBeNull();
   });
 
   it("returns an expired token's date for Auth.js to reject, then consumes it", async () => {
-    const expired = new Date("2000-01-01T00:00:00.000Z");
+    const expired = new Date(Date.now() - 24 * 60 * 60 * 1000);
     await seed({ expires: expired });
     const result = await adapter.useVerificationToken!(input);
     expect(result?.expires).toBeInstanceOf(Date);
