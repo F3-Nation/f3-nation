@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## [2.12.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.11.0...slackbot@2.12.0) (2026-11-02)
+
+
+### Features
+
+* **slackbot:** store files in the local GCS emulator in local dev ([#1425](https://github.com/F3-Nation/f3-nation/issues/1425)) ([d128b0f](https://github.com/F3-Nation/f3-nation/commit/d128b0ffb1873b279229c5e3ca20d07319379a6e))
+
+
+### Bug Fixes
+
+* **slackbot,repo:** move local health port off region-pages' 3006 ([#1426](https://github.com/F3-Nation/f3-nation/issues/1426)) ([45c16c3](https://github.com/F3-Nation/f3-nation/commit/45c16c3501a0feff4b21713bbc5c0d35c5906486))
+* **slackbot:** preserve punctuation in welcome email subjects ([#1438](https://github.com/F3-Nation/f3-nation/issues/1438)) ([56c9f2b](https://github.com/F3-Nation/f3-nation/commit/56c9f2b0ac47ce182f01cd5a604db1e6c4f72e06))
+
 ## [2.11.0](https://github.com/F3-Nation/f3-nation/compare/slackbot@2.10.0...slackbot@2.11.0) (2026-10-29)
 
 
