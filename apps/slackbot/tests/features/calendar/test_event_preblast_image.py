@@ -245,6 +245,13 @@ def test_image_block_renders_low_rez_storage_url():
     assert block == {"type": "image", "image_url": LOW_REZ_URL, "alt_text": "Preblast Image"}
 
 
+def test_image_block_links_emulator_url_slack_cannot_fetch(monkeypatch):
+    monkeypatch.setenv("GCS_EMULATOR_HOST", "localhost:9023")
+    emulator_url = "http://localhost:9023/f3nation/event_instance_images/42_F_NEW_preblast_low_res.png"
+    block = event_preblast._preblast_image_block({constants.PREBLAST_IMAGE_LOW_REZ_URL: emulator_url})
+    assert block == {"type": "section", "text": {"type": "mrkdwn", "text": f"<{emulator_url}|Preblast Image>"}}
+
+
 def test_image_block_prefers_storage_url_over_legacy_slack_file():
     block = event_preblast._preblast_image_block(
         {constants.PREBLAST_IMAGE_LOW_REZ_URL: LOW_REZ_URL, constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY: "F_LEGACY"}

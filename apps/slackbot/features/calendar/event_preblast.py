@@ -39,7 +39,7 @@ from infrastructure.api_client import (
     get_api_event_instance_repository,
     get_api_event_type_repository,
 )
-from utilities import constants
+from utilities import constants, storage
 from utilities.bot_logger import post_bot_log
 from utilities.builders import add_loading_form, update_submission_wait_view
 from utilities.database.orm import SlackSettings
@@ -798,10 +798,16 @@ def _upload_preblast_image(
 
 
 def _preblast_image_block(meta: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Return the image block for a preblast's stored photo, or None if it has none."""
+    """Return the block for a preblast's stored photo, or None if it has none.
+
+    A photo Slack's servers can't download (a local emulator URL) is linked instead
+    of embedded, since Slack rejects the whole message over an unfetchable image.
+    """
     meta = meta or {}
     image_url = meta.get(constants.PREBLAST_IMAGE_LOW_REZ_URL) or meta.get(constants.PREBLAST_IMAGE_URL)
     if image_url:
+        if not storage.is_publicly_reachable(image_url):
+            return {"type": "section", "text": {"type": "mrkdwn", "text": f"<{image_url}|Preblast Image>"}}
         return {"type": "image", "image_url": image_url, "alt_text": "Preblast Image"}
     legacy_file_id = meta.get(constants.PREBLAST_IMAGE_SLACK_FILE_ID_LEGACY)
     if legacy_file_id:
