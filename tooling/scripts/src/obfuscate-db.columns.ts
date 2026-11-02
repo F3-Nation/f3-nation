@@ -35,13 +35,16 @@ export const COLUMN_SNAPSHOT_PATH = fileURLToPath(
 // migration 0028 and was caught this way). Excluded: drizzle's migration
 // bookkeeping and the refresh_keep* holding schemas that staging-api-keys.ts
 // / staging-slack.ts create on staging (the verify harness plays staging too,
-// so they exist there during the run).
+// so they exist there during the run). `codex` is excluded because the staging
+// refresh never copies it: it holds submitter PII (user_submissions name and
+// email) that is not classified, so STAGING_REFRESH.md keeps it out of staging.
 export const COVERAGE_EXCLUDED_SCHEMAS = [
   "pg_catalog",
   "information_schema",
   "drizzle",
   "refresh_keep",
   "refresh_keep_slack",
+  "codex",
 ];
 
 function splitSnapshot(text: string): { header: string[]; entries: string[] } {
