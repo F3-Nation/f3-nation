@@ -19,7 +19,7 @@ Your app servers (Map, API, Auth) still run natively on your machine with `pnpm 
 
 ## Prerequisites
 
-Install these before starting:
+Install these before starting; `uv` is required only for Python work:
 
 | Tool                       | Install                                                                                                   | Check            |
 | -------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
@@ -589,10 +589,17 @@ The `-v` flag removes the named volumes (`postgres_data`, `gcs_data`). Next time
 
 ### Python workspace dependencies were skipped because `uv` is missing
 
-Install `uv`, then sync all Python workspace dependencies:
+Install `uv`:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Close and reopen your terminal so the installer's shell-profile changes take
+effect, then return to the repository root. Verify `uv` is on `PATH` and sync all
+Python workspace dependencies:
+
+```bash
 uv --version
 pnpm python:install
 ```
