@@ -12,7 +12,7 @@ Four Docker containers replace the cloud services you'd otherwise need access to
 | ---------------- | ------------------------------------------------ | ----------------------- |
 | **Postgres**     | The app's database, pre-loaded with seed data    | `localhost:5433`        |
 | **Adminer**      | A web UI to browse and query the database        | <http://localhost:8080> |
-| **GCS Emulator** | Emulates Google Cloud Storage for logo uploads   | <http://localhost:9023> |
+| **GCS Emulator** | Emulates Google Cloud Storage for image uploads  | <http://localhost:9023> |
 | **Mailpit**      | Catches all outbound emails so you can read them | <http://localhost:8025> |
 
 Your app servers (Map, API, Auth) still run natively on your machine with `pnpm dev`. Docker only manages the stateful infrastructure.
@@ -219,7 +219,7 @@ This script does everything automatically:
   `apps/api`, `apps/auth`, `apps/homepage`, `apps/map`, `apps/me`, `apps/admin`, `apps/slackbot`, and `packages/env`
 - Starts the four Docker containers
 - Waits for Postgres to be ready
-- Creates the `f3-public-images` bucket in the GCS emulator
+- Creates the GCS emulator buckets (`f3-public-images`, `f3-public-images-staging`, `f3nation-calendar-images`)
 - Runs all database migrations
 - Seeds the database with sample F3 org data
 
@@ -263,15 +263,16 @@ The above command will install code if you don't have it already and then open y
 pnpm dev
 ```
 
-| App      | URL                     |
-| -------- | ----------------------- |
-| Map      | <http://localhost:3000> |
-| API      | <http://localhost:3001> |
-| Admin    | <http://localhost:3002> |
-| Me       | <http://localhost:3003> |
-| Auth     | <http://localhost:3004> |
-| Homepage | <http://localhost:3005> |
-| Slackbot | <http://localhost:3006> |
+| App          | URL                                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| Map          | <http://localhost:3000>                                                                             |
+| API          | <http://localhost:3001>                                                                             |
+| Admin        | <http://localhost:3002>                                                                             |
+| Me           | <http://localhost:3003>                                                                             |
+| Auth         | <http://localhost:3004>                                                                             |
+| Homepage     | <http://localhost:3005>                                                                             |
+| Region pages | <http://localhost:3006>                                                                             |
+| Slackbot     | <http://localhost:3007> (health check; only with `pnpm dev --include-py` or `--filter f3-slackbot`) |
 
 ---
 
@@ -310,7 +311,7 @@ The Docker containers save their data in named volumes (`postgres_data`, `gcs_da
 
 ## Running several checkouts at once (git worktrees)
 
-Every checkout normally uses the same ports (apps on 3000–3005, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead:
+Every checkout normally uses the same ports (apps on 3000–3007, Postgres on 5433, …) and the same containers, so a second checkout, such as a `git worktree` for reviewing a PR, would collide with the first. Give the second checkout a **slot** from 1 to 9 instead:
 
 ```bash
 git worktree add ../f3-nation-review some-branch
@@ -324,7 +325,7 @@ A slot moves every port up by 100 × the slot number, and gives the checkout its
 
 | Service    | Default (slot 0) | Slot 1    | Slot N         |
 | ---------- | ---------------- | --------- | -------------- |
-| Apps       | 3000–3005        | 3100–3105 | 3000 + 100N, … |
+| Apps       | 3000–3007        | 3100–3107 | 3000 + 100N, … |
 | Postgres   | 5433             | 5533      | 5433 + 100N    |
 | Mailpit UI | 8025             | 8125      | 8025 + 100N    |
 | SMTP       | 1025             | 1125      | 1025 + 100N    |
@@ -333,10 +334,9 @@ A slot moves every port up by 100 × the slot number, and gives the checkout its
 
 The slot is saved in the root `.env` (gitignored), which `docker compose`, `pnpm docker:up`, `pnpm dev`, and later `pnpm local:setup` runs all read. `local:setup` also writes the matching URLs into the checkout's per-app `.env` files and seeds the sign-in clients for Admin and Me with the slot's ports.
 
-- `pnpm dev` picks up the slot by itself. To start a single app with `pnpm --filter <app> dev`, export the slot's ports first: `set -a; . ./.env; set +a`.
+- `pnpm dev` picks up the slot by itself, including ports added after the slot was saved. To start a single app, use `pnpm dev --filter <app>`, which loads the slot the same way.
 - To put a checkout back on the defaults, run `pnpm local:setup --slot 0`.
 - Homepage gets `NEXT_PUBLIC_API_URL` for the slot's API. Its landing-page app links and the status page's health targets still use the default ports.
-- Slackbot stays on 3006. To run it in two checkouts at once, set `LOCAL_HTTP_PORT` in the second checkout's `apps/slackbot/.env` by hand.
 - `pnpm docker:down` in a slotted checkout stops only that checkout's containers. Remove a worktree's data for good with `docker compose down -v` from inside it before deleting the worktree.
 
 ---
@@ -352,7 +352,7 @@ Each app and shared package has its own `.env` file, copied from a `.env.example
 | `apps/map/.env`      | Map app (Next.js on port 3000)                                                                                                     |
 | `apps/admin/.env`    | Admin app (Next.js on port 3002)                                                                                                   |
 | `apps/me/.env`       | Me app (Next.js on port 3003)                                                                                                      |
-| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app on port 3006)                                                                                 |
+| `apps/slackbot/.env` | Slackbot app (Python Socket Mode app; health check on port 3007)                                                                   |
 | `packages/db/.env`   | Credentials for the `@acme/db` CLI scripts (migrations, resets, seeds, drizzle-kit, reset-test-db)                                 |
 | `packages/env/.env`  | Shared backend env read by the `@acme/api` package's test/script commands (`packages/api`); app services read their own app `.env` |
 
@@ -518,6 +518,17 @@ curl http://localhost:9023/storage/v1/b/f3-public-images-staging/o | jq '.items[
 
 Individual files are directly accessible at `http://localhost:9023/f3-public-images-staging/<filename>`.
 
+### Slackbot
+
+On Cloud Run the slackbot writes files under `/mnt`, where GCS buckets are mounted. When `GCS_EMULATOR_HOST` is set in `apps/slackbot/.env`, it stores them through the emulator's API instead:
+
+| Files                                     | Emulator location                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| Backblast photos, user avatars, org logos | `FILE_BUCKET_PREFIX` bucket (`f3-public-images-staging`), by folder |
+| Generated calendar images                 | `f3nation-calendar-images` bucket                                   |
+
+Slack's servers download message images themselves and can't reach `localhost`, so a block with an emulator image URL would be rejected. Locally, the slackbot posts a link to each emulator image instead of embedding it; open the link in your browser to see the stored file. Deployed, URLs point at `storage.googleapis.com` and images embed as usual.
+
 ### Resetting uploaded files
 
 To delete all uploaded logos:
@@ -532,10 +543,12 @@ Or, to keep other data but clear just the GCS volume:
 ```bash
 docker volume rm f3-local_gcs_data
 pnpm docker:up
-# then re-create the bucket:
-curl -X POST http://localhost:9023/storage/v1/b \
-  -H "Content-Type: application/json" \
-  -d '{"name": "f3-public-images-staging"}'
+# then re-create the buckets the local apps write to:
+for bucket in f3-public-images-staging f3nation-calendar-images; do
+  curl -X POST http://localhost:9023/storage/v1/b \
+    -H "Content-Type: application/json" \
+    -d "{\"name\": \"$bucket\"}"
+done
 ```
 
 ---
@@ -634,14 +647,16 @@ docker compose -f docker-compose.yml down -v
 pnpm local:setup
 ```
 
-### GCS bucket not found (404 on logo upload)
+### GCS bucket not found (404 on upload)
 
-The bucket needs to be created after the emulator starts. Run:
+The buckets need to be created after the emulator starts. Run:
 
 ```bash
-curl -X POST http://localhost:9023/storage/v1/b \
-  -H "Content-Type: application/json" \
-  -d '{"name": "f3-public-images-staging"}'
+for bucket in f3-public-images-staging f3nation-calendar-images; do
+  curl -X POST http://localhost:9023/storage/v1/b \
+    -H "Content-Type: application/json" \
+    -d "{\"name\": \"$bucket\"}"
+done
 ```
 
 ### Migrations failing

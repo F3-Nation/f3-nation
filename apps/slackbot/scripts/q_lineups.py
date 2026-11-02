@@ -23,6 +23,7 @@ from slack_sdk.models.metadata import Metadata
 from sqlalchemy import or_
 
 from scripts.preblast_reminders import PreblastItem, PreblastList
+from utilities import storage
 from utilities.database.orm import SlackSettings
 from utilities.helper_functions import (
     current_date_cst,
@@ -158,11 +159,11 @@ def build_lineup_blocks(org_events: List[PreblastItem], org: Org) -> List[dict]:
         if event.q_name:
             q_label = f"@{event.q_name}"  # f"<@{event.slack_user_id}>" if event.slack_user_id else
             label = f"*{event.event.start_date.strftime('%A, %m/%d')}*\n{event.event_type.name} {event.event.start_time}\n{q_label}"  # noqa
-            image_url = (
-                event.slack_avatar_url
-                or event.q_avatar_url
-                or "https://www.publicdomainpictures.net/pictures/40000/t2/question-mark.jpg"
-            )
+            placeholder_url = "https://www.publicdomainpictures.net/pictures/40000/t2/question-mark.jpg"
+            image_url = event.slack_avatar_url or event.q_avatar_url or placeholder_url
+            # Slack rejects the whole message if it can't download an image (local emulator avatars).
+            if not storage.is_publicly_reachable(image_url):
+                image_url = placeholder_url
             accessory = ImageBlock(
                 image_url=image_url,
                 alt_text="Q Lineup",
