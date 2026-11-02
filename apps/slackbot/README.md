@@ -106,7 +106,7 @@ in [`scripts/calendar_images.py`](scripts/calendar_images.py).
 
 When no events remain in the display window, the post omits the Special Events
 header and section. Slack rejects sections with empty text; a rejected calendar
-post rolls back that region's calendar refresh.
+post prevents saving that region's updated calendar settings.
 
 ## Step debugging
 
