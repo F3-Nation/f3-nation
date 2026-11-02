@@ -95,6 +95,19 @@ Once the app is running, you will want to take some admin actions to make it use
    1. Going to `/f3-nation-settings` -> `Backblast & Preblast Settings` and setting for your whole space
    2. Setting them individually by AO by going to `/f3-nation-settings` -> `Calendar Management` -> `Manage AOs` -> `Edit` and setting the channel for each
 
+### Calendar special-event window
+
+`/f3-nation-settings` → **Calendar Management** → **General Calendar Settings** →
+**Special Days Out** controls the upcoming highlighted events included in calendar
+posts. A positive value includes events through that many days ahead, an empty
+value applies no date cutoff, and `0` hides special events. Posts include the
+earliest upcoming highlighted events, capped by `create_special_events_blocks`
+in [`scripts/calendar_images.py`](scripts/calendar_images.py).
+
+When no events remain in the display window, the post omits the Special Events
+header and section. Slack rejects sections with empty text; a rejected calendar
+post rolls back that region's calendar refresh.
+
 ## Step debugging
 
 1. Set `ENABLE_DEBUGGING=true` in `apps/slackbot/.env`.
@@ -265,7 +278,3 @@ the current service or job does not retrofit older revisions/templates. These
 are operator-run commands for manual changes/rollback, not an automated
 cleanup. The app does not automatically delete synthetic users or clean up
 historical profile data.
-
-## Calendar special-event window
-
-**Calendar Settings → General Calendar Settings → Special Days Out** controls the upcoming highlighted events included in calendar posts. A positive value includes events through that many days ahead, an empty value applies no date cutoff, and `0` hides special events. Posts show at most ten upcoming highlighted events. When no events remain in the display window, the calendar post omits the Special Events header and section so an empty Slack block cannot prevent the regular calendar from refreshing.

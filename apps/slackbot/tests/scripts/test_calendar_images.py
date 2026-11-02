@@ -553,6 +553,7 @@ def test_cleanup_revalidates_when_refresh_publishes_between_commit_and_relock(
         (14, [30], []),
         (14, [15, 14, 1], [1, 14]),
         (None, [30], [30]),
+        (None, list(range(11, -1, -1)), list(range(10))),
         ("missing", [30], [30]),
         (0, [0, 1], []),
     ],
