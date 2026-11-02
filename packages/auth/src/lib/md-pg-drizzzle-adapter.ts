@@ -265,7 +265,7 @@ export function MDPGDrizzleAdapter(
         // Auth.js distinguishes invalid/used tokens from adapter failures.
         return token ? { ...token, expires: new Date(token.expires) } : null;
       } catch {
-        // Drizzle errors can contain token parameters; keep them out of auth logs.
+        // Query errors can contain email/token parameters; keep them out of auth logs.
         throw new Error("Unable to consume verification token.");
       }
     },

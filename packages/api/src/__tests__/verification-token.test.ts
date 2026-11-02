@@ -37,6 +37,7 @@ describe("verification token consumption", () => {
     const first = await adapter.useVerificationToken!(input);
     expect(first).toMatchObject(input);
     expect(first?.expires).toBeInstanceOf(Date);
+    expect(first!.expires.valueOf()).toBeGreaterThan(Date.now());
     expect(await adapter.useVerificationToken!(input)).toBeNull();
     expect(
       await db
@@ -113,15 +114,30 @@ describe("verification token consumption", () => {
   });
 
   it("rejects database failures without exposing query parameters", async () => {
+    await seed();
     const failure = vi.spyOn(db, "delete").mockImplementationOnce(() => {
-      throw new Error("query includes sensitive-token-value");
+      throw new Error(`query includes sensitive-token-value for ${identifier}`);
     });
     try {
-      await expect(adapter.useVerificationToken!(input)).rejects.toThrow(
-        "Unable to consume verification token.",
+      const result = await Promise.resolve(
+        adapter.useVerificationToken!(input),
+      ).catch((error: unknown) => error);
+      expect(result).toBeInstanceOf(Error);
+      const error = result as Error;
+      expect(error.message).toBe("Unable to consume verification token.");
+      expect(error.cause).toBeUndefined();
+      expect(`${String(error)} ${error.stack}`).not.toContain(
+        "sensitive-token-value",
       );
+      expect(`${String(error)} ${error.stack}`).not.toContain(identifier);
     } finally {
       failure.mockRestore();
     }
+    expect(
+      await db
+        .select()
+        .from(schema.authVerificationTokens)
+        .where(eq(schema.authVerificationTokens.identifier, identifier)),
+    ).toHaveLength(1);
   });
 });
