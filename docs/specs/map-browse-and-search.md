@@ -111,6 +111,20 @@ city X" to "this workout, this address, this time" in a few interactions.
   THEN it stays hidden while retrying continues, and the next outage shows it
   again.
 
+### Event edits and cached map data
+
+- **AC-18** — GIVEN someone creates, updates or deletes an event, including a
+  one-off event with no weekday, WHEN the change is saved THEN the API instance
+  that handled it clears its cached public map data and asks the Map app to
+  revalidate, and it attempts a `map.created`, `map.updated` or `map.deleted`
+  webhook carrying the event ID. Webhook destinations are optional; delivery
+  failures are logged, with no retries or durable delivery. A rejected write
+  clears no cache and notifies no one.
+
+This does not synchronously refresh every API instance or open browser:
+other instances serve cached data until it expires, and browsers refetch on
+their own query schedule.
+
 ## 5. Roles & authorization (RBAC)
 
 Browsing is anonymous by design, and (as of #378) that includes the API

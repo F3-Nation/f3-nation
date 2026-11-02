@@ -31,6 +31,10 @@ SESSION_FACTORY_CACHE: dict[str, sessionmaker] = {}
 SUPPORTED_BACKENDS = {"postgresql", "bigquery"}
 READ_ONLY_BACKENDS = {"bigquery"}
 
+# Name the DBAPI explicitly: a bare "postgresql" URL resolves to SQLAlchemy's
+# default PostgreSQL driver, which is psycopg (v3) and is not installed here.
+POSTGRESQL_DRIVERNAME = "postgresql+psycopg2"
+
 
 def _normalize_backend(backend: str | None) -> str:
     selected_backend = "postgresql" if backend is None else backend.lower()
@@ -92,7 +96,7 @@ def _create_postgresql_engine(echo: bool) -> Engine:
 
     if os.environ.get("USE_GCP_AUTH_PROXY", "false").lower() == "false":
         db_url = sqlalchemy.engine.URL.create(
-            drivername="postgresql",
+            drivername=POSTGRESQL_DRIVERNAME,
             username=user,
             password=passwd,
             host=host,
@@ -104,7 +108,7 @@ def _create_postgresql_engine(echo: bool) -> Engine:
     # Connect via Cloud Run's built-in Cloud SQL Unix socket
     unix_sock_dir = f"/cloudsql/{host}"
     db_url = sqlalchemy.engine.URL.create(
-        drivername="postgresql",
+        drivername=POSTGRESQL_DRIVERNAME,
         username=user,
         password=passwd,
         database=database,
