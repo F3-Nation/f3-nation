@@ -114,11 +114,11 @@ def rows_as_dicts(connection, query, parameters=None):
 def test_events_contract_and_materialization(tmp_path: Path):
     c = source()
     out = tmp_path / "events.parquet"
-    c.execute("COPY (" + SQL + ") TO ? (FORMAT PARQUET)", [str(out), "2026-01-03T00:00:00Z", "2026-01-03"])
+    c.execute("COPY (" + SQL + ") TO ? (FORMAT PARQUET)", ["2026-01-03T00:00:00Z", "2026-01-03", str(out)])
     details_out = tmp_path / "event-details.parquet"
     c.execute(
         "COPY (" + DETAILS_SQL + ") TO ? (FORMAT PARQUET)",
-        [str(details_out), "2026-01-03T00:00:00Z", "2026-01-03"],
+        ["2026-01-03T00:00:00Z", "2026-01-03", str(details_out)],
     )
     columns = [
         column["column_name"] for column in rows_as_dicts(c, "DESCRIBE SELECT * FROM read_parquet(?)", [str(out)])

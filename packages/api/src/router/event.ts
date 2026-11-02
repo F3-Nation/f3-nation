@@ -1464,12 +1464,10 @@ export const eventRouter = {
           pendingRegionNotificationTasks.delete(notificationTask),
         );
       }
-      if (result.dayOfWeek) {
-        notifyMapDataChange({
-          type: input.id ? "event.updated" : "event.created",
-          eventId: result.id,
-        });
-      }
+      notifyMapDataChange({
+        type: input.id ? "event.updated" : "event.created",
+        eventId: result.id,
+      });
 
       return { event: result };
     }),
