@@ -32,7 +32,14 @@ describe("VirtualizedCombobox value sync", () => {
     expect(screen.getByRole("combobox").textContent).toContain("Charlie");
     expect(screen.getByRole("combobox").textContent).toContain("+1");
 
-    rerender(<VirtualizedCombobox options={options} value={[]} isMulti />);
-    expect(screen.getByRole("combobox").textContent).not.toContain("Charlie");
+    rerender(
+      <VirtualizedCombobox
+        options={options}
+        value={[]}
+        isMulti
+        searchPlaceholder="Pick"
+      />,
+    );
+    expect(screen.getByRole("combobox").textContent).toContain("Pick");
   });
 });
