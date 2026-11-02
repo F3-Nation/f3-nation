@@ -7,7 +7,7 @@ import type { UserListItem } from "@/lib/types";
 
 const DEBOUNCE_MS = 300;
 const MIN_SEARCH_LENGTH = 2;
-
+const NO_RESULTS: UserListItem[] = [];
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -141,5 +141,12 @@ export function useUserSearch({
     return () => controller.abort();
   }, [value, selectedUser]);
 
-  return { results, loading, selectedUser, setSelectedUser };
+  // Mask stale state while the search is inactive, so a response that lands
+  // after the dropdown closes but before the request is aborted is never shown.
+  return {
+    results: searchActive ? results : NO_RESULTS,
+    loading: searchActive && loading,
+    selectedUser,
+    setSelectedUser,
+  };
 }
