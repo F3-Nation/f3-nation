@@ -249,26 +249,24 @@ export function MDPGDrizzleAdapter(
     async useVerificationToken(data) {
       try {
         logDebug("auth.adapter.use_verification_token");
-
-        // Normalize email to lowercase for case-insensitive matching
-        // Fixes intermittent OTP failures when users type email with different casing
         const normalizedIdentifier = normalizeEmail(data.identifier);
 
+        // Claim atomically so concurrent callbacks cannot reuse a sign-in token.
         const [token] = await client
-          .select()
-          .from(verificationTokens)
+          .delete(verificationTokens)
           .where(
             and(
               eq(verificationTokens.identifier, normalizedIdentifier),
               eq(verificationTokens.token, data.token),
             ),
-          );
+          )
+          .returning();
 
-        if (!token) throw new Error("No verification token found.");
-
-        return { ...token, expires: new Date(token.expires) };
+        // Auth.js distinguishes invalid/used tokens from adapter failures.
+        return token ? { ...token, expires: new Date(token.expires) } : null;
       } catch {
-        throw new Error("No verification token found.");
+        // Query errors can contain email/token parameters; keep them out of auth logs.
+        throw new Error("Unable to consume verification token.");
       }
     },
     async deleteUser(id) {

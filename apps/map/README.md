@@ -101,6 +101,12 @@ pnpm lint --filter f3-map
 - User authentication
 - Responsive design
 
+## Email sign-in
+
+Emailed sign-in codes and links are single-use, including simultaneous attempts.
+Incorrect, expired, or already-used tokens lead to the "Unable to sign in"
+verification-error page. Database failures lead to the "Server error" page.
+
 ## Contributing Map Changes
 
 Signed-in users can contribute changes to the map directly. Supported change
