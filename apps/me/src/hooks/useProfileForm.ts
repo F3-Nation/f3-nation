@@ -1,4 +1,11 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 
 import { toast } from "@acme/ui/toast";
 
@@ -204,17 +211,24 @@ export function useProfileForm({
     }
   }, [form, initialForm]);
 
-  // Sync form state when the user record changes (e.g. after navigation to a different user)
-  useEffect(() => {
+  // Resync only when the user id changes, so later edits to the same user's
+  // record don't overwrite in-progress form edits. Adjusted during render
+  // (not in an effect) to avoid a render showing the previous user's data.
+  const [prevUserId, setPrevUserId] = useState(user.id);
+  if (user.id !== prevUserId) {
     const fresh = buildInitialFormState(user);
+    setPrevUserId(user.id);
     setForm(fresh);
     setInitialForm(fresh);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on user.id only; f3Name/avatarUrl updates won't re-trigger (accepted trade-off)
-  }, [user.id]);
+  }
 
-  // Keep a stable ref to handleSave for the context registration
+  // Keep a stable ref to handleSave for the context registration.
+  // Refs must not be written during render, so update it in a layout effect,
+  // which runs before the browser can deliver a click to the save button.
   const saveRef = useRef(handleSave);
-  saveRef.current = handleSave;
+  useLayoutEffect(() => {
+    saveRef.current = handleSave;
+  }, [handleSave]);
 
   // Register save state with the navbar; unregister on unmount to clear stale state
   const { register, unregister } = useSaveRegister();
