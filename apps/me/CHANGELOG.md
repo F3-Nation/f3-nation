@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/F3-Nation/f3-nation/compare/me@2.4.0...me@2.4.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **slackbot:** preserve punctuation in welcome email subjects ([#1438](https://github.com/F3-Nation/f3-nation/issues/1438)) ([56c9f2b](https://github.com/F3-Nation/f3-nation/commit/56c9f2b0ac47ce182f01cd5a604db1e6c4f72e06))
+
 ## [2.4.0](https://github.com/F3-Nation/f3-nation/compare/me@2.3.1...me@2.4.0) (2026-10-29)
 
 
