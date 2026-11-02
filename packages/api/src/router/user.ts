@@ -1,5 +1,4 @@
 import { and, eq, schema } from "@acme/db";
-import type { AppDb } from "@acme/db/client";
 import { ERRORS } from "@acme/shared/app/errors";
 import { isValidEmail } from "@acme/shared/app/functions";
 import { GrantableUserRole } from "@acme/shared/app/enums";
@@ -35,6 +34,7 @@ import {
   userListUserOutputSchema,
 } from "../lib/user";
 import { adminProcedure, editorProcedure } from "../shared";
+import { withAuditContext } from "../lib/with-audit-context";
 
 const PII_FIELDS = new Set([
   "email",
@@ -586,8 +586,7 @@ export const userRouter = {
 
       let user: typeof schema.users.$inferSelect;
       try {
-        user = await ctx.db.transaction(async (tx) => {
-          const transactionDb = tx as unknown as AppDb;
+        user = await withAuditContext(ctx, async ({ db: transactionDb }) => {
           let user: typeof schema.users.$inferSelect;
 
           if (input.id && !canEditProfile) {
@@ -725,6 +724,13 @@ export const userRouter = {
       description:
         "Permanently delete a user and all their role assignments. Requires F3 Nation admin role and cannot be undone.",
     })
+    .output(
+      z.object({
+        userId: z
+          .number()
+          .describe("The unique identifier of the deleted user"),
+      }),
+    )
     .handler(async ({ context: ctx, input }) => {
       const [f3nationOrg] = await ctx.db
         .select()
@@ -757,7 +763,7 @@ export const userRouter = {
       }
 
       try {
-        await ctx.db.transaction(async (tx) => {
+        await withAuditContext(ctx, async ({ db: tx }) => {
           await tx
             .delete(schema.rolesXUsersXOrg)
             .where(eq(schema.rolesXUsersXOrg.userId, input.id));
@@ -787,5 +793,6 @@ export const userRouter = {
           message: "Unable to delete user",
         });
       }
+      return { userId: input.id };
     }),
 };

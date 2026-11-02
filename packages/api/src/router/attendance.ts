@@ -9,6 +9,7 @@ import {
   assertEditorOnEventOrg,
   assertSelfOrEditorOnEventOrg,
 } from "../lib/attendance-auth";
+import { withAuditContext } from "../lib/with-audit-context";
 import { protectedProcedure } from "../shared";
 
 /**
@@ -138,6 +139,12 @@ export const attendanceRouter = {
         attendanceTypeIds: z.array(z.coerce.number()),
       }),
     )
+    .output(
+      z.object({
+        success: z.boolean().describe("Whether the operation succeeded"),
+        attendanceId: z.number().describe("ID of the attendance record"),
+      }),
+    )
     .route({
       method: "POST",
       path: "/",
@@ -154,61 +161,63 @@ export const attendanceRouter = {
         message: "You are not authorized to create planned attendance",
       });
 
-      // Check if user already has attendance for this event
-      const existingAttendance = await ctx.db
-        .select({ id: schema.attendance.id })
-        .from(schema.attendance)
-        .where(
-          and(
-            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
-            eq(schema.attendance.userId, input.userId),
-            eq(schema.attendance.isPlanned, true),
-          ),
-        );
-
-      let attendanceId: number;
-
-      if (existingAttendance.length > 0) {
-        // Update existing attendance - clear old types and add new ones
-        attendanceId = existingAttendance[0]!.id;
-
-        // Delete existing attendance type links
-        await ctx.db
-          .delete(schema.attendanceXAttendanceTypes)
+      return withAuditContext(ctx, async (auditCtx) => {
+        // Check if user already has attendance for this event
+        const existingAttendance = await auditCtx.db
+          .select({ id: schema.attendance.id })
+          .from(schema.attendance)
           .where(
-            eq(schema.attendanceXAttendanceTypes.attendanceId, attendanceId),
+            and(
+              eq(schema.attendance.eventInstanceId, input.eventInstanceId),
+              eq(schema.attendance.userId, input.userId),
+              eq(schema.attendance.isPlanned, true),
+            ),
           );
-      } else {
-        // Create new attendance record
-        const [newAttendance] = await ctx.db
-          .insert(schema.attendance)
-          .values({
-            eventInstanceId: input.eventInstanceId,
-            userId: input.userId,
-            isPlanned: true,
-          })
-          .returning({ id: schema.attendance.id });
 
-        if (!newAttendance) {
-          throw new ORPCError("INTERNAL_SERVER_ERROR", {
-            message: "Failed to create attendance record",
-          });
+        let attendanceId: number;
+
+        if (existingAttendance.length > 0) {
+          // Update existing attendance - clear old types and add new ones
+          attendanceId = existingAttendance[0]!.id;
+
+          // Delete existing attendance type links
+          await auditCtx.db
+            .delete(schema.attendanceXAttendanceTypes)
+            .where(
+              eq(schema.attendanceXAttendanceTypes.attendanceId, attendanceId),
+            );
+        } else {
+          // Create new attendance record
+          const [newAttendance] = await auditCtx.db
+            .insert(schema.attendance)
+            .values({
+              eventInstanceId: input.eventInstanceId,
+              userId: input.userId,
+              isPlanned: true,
+            })
+            .returning({ id: schema.attendance.id });
+
+          if (!newAttendance) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Failed to create attendance record",
+            });
+          }
+
+          attendanceId = newAttendance.id;
         }
 
-        attendanceId = newAttendance.id;
-      }
+        // Create attendance type links
+        if (input.attendanceTypeIds.length > 0) {
+          await auditCtx.db.insert(schema.attendanceXAttendanceTypes).values(
+            input.attendanceTypeIds.map((typeId) => ({
+              attendanceId,
+              attendanceTypeId: typeId,
+            })),
+          );
+        }
 
-      // Create attendance type links
-      if (input.attendanceTypeIds.length > 0) {
-        await ctx.db.insert(schema.attendanceXAttendanceTypes).values(
-          input.attendanceTypeIds.map((typeId) => ({
-            attendanceId,
-            attendanceTypeId: typeId,
-          })),
-        );
-      }
-
-      return { success: true, attendanceId };
+        return { success: true, attendanceId };
+      });
     }),
 
   /**
@@ -221,6 +230,12 @@ export const attendanceRouter = {
         eventInstanceId: z.coerce.number(),
         userId: z.coerce.number(),
         attendanceTypeIds: z.array(z.coerce.number()),
+      }),
+    )
+    .output(
+      z.object({
+        success: z.boolean().describe("Whether the operation succeeded"),
+        attendanceId: z.number().describe("ID of the attendance record"),
       }),
     )
     .route({
@@ -238,61 +253,63 @@ export const attendanceRouter = {
         message: "You are not authorized to create actual attendance",
       });
 
-      // Check if user already has actual attendance for this event
-      const existingAttendance = await ctx.db
-        .select({ id: schema.attendance.id })
-        .from(schema.attendance)
-        .where(
-          and(
-            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
-            eq(schema.attendance.userId, input.userId),
-            eq(schema.attendance.isPlanned, false),
-          ),
-        );
-
-      let attendanceId: number;
-
-      if (existingAttendance.length > 0) {
-        // Update existing attendance - clear old types and add new ones
-        attendanceId = existingAttendance[0]!.id;
-
-        // Delete existing attendance type links
-        await ctx.db
-          .delete(schema.attendanceXAttendanceTypes)
+      return withAuditContext(ctx, async (auditCtx) => {
+        // Check if user already has actual attendance for this event
+        const existingAttendance = await auditCtx.db
+          .select({ id: schema.attendance.id })
+          .from(schema.attendance)
           .where(
-            eq(schema.attendanceXAttendanceTypes.attendanceId, attendanceId),
+            and(
+              eq(schema.attendance.eventInstanceId, input.eventInstanceId),
+              eq(schema.attendance.userId, input.userId),
+              eq(schema.attendance.isPlanned, false),
+            ),
           );
-      } else {
-        // Create new attendance record with isPlanned=false
-        const [newAttendance] = await ctx.db
-          .insert(schema.attendance)
-          .values({
-            eventInstanceId: input.eventInstanceId,
-            userId: input.userId,
-            isPlanned: false,
-          })
-          .returning({ id: schema.attendance.id });
 
-        if (!newAttendance) {
-          throw new ORPCError("INTERNAL_SERVER_ERROR", {
-            message: "Failed to create attendance record",
-          });
+        let attendanceId: number;
+
+        if (existingAttendance.length > 0) {
+          // Update existing attendance - clear old types and add new ones
+          attendanceId = existingAttendance[0]!.id;
+
+          // Delete existing attendance type links
+          await auditCtx.db
+            .delete(schema.attendanceXAttendanceTypes)
+            .where(
+              eq(schema.attendanceXAttendanceTypes.attendanceId, attendanceId),
+            );
+        } else {
+          // Create new attendance record with isPlanned=false
+          const [newAttendance] = await auditCtx.db
+            .insert(schema.attendance)
+            .values({
+              eventInstanceId: input.eventInstanceId,
+              userId: input.userId,
+              isPlanned: false,
+            })
+            .returning({ id: schema.attendance.id });
+
+          if (!newAttendance) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Failed to create attendance record",
+            });
+          }
+
+          attendanceId = newAttendance.id;
         }
 
-        attendanceId = newAttendance.id;
-      }
+        // Create attendance type links
+        if (input.attendanceTypeIds.length > 0) {
+          await auditCtx.db.insert(schema.attendanceXAttendanceTypes).values(
+            input.attendanceTypeIds.map((typeId) => ({
+              attendanceId,
+              attendanceTypeId: typeId,
+            })),
+          );
+        }
 
-      // Create attendance type links
-      if (input.attendanceTypeIds.length > 0) {
-        await ctx.db.insert(schema.attendanceXAttendanceTypes).values(
-          input.attendanceTypeIds.map((typeId) => ({
-            attendanceId,
-            attendanceTypeId: typeId,
-          })),
-        );
-      }
-
-      return { success: true, attendanceId };
+        return { success: true, attendanceId };
+      });
     }),
 
   /**
@@ -303,6 +320,14 @@ export const attendanceRouter = {
     .input(
       z.object({
         eventInstanceId: z.coerce.number(),
+      }),
+    )
+    .output(
+      z.object({
+        success: z.boolean().describe("Whether the operation succeeded"),
+        deletedCount: z
+          .number()
+          .describe("Number of attendance records deleted"),
       }),
     )
     .route({
@@ -320,43 +345,45 @@ export const attendanceRouter = {
         message: "You are not authorized to delete actual attendance",
       });
 
-      // Get all actual attendance IDs for this event
-      const actualAttendance = await ctx.db
-        .select({ id: schema.attendance.id })
-        .from(schema.attendance)
-        .where(
-          and(
-            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
-            eq(schema.attendance.isPlanned, false),
-          ),
-        );
+      return withAuditContext(ctx, async (auditCtx) => {
+        // Get all actual attendance IDs for this event
+        const actualAttendance = await auditCtx.db
+          .select({ id: schema.attendance.id })
+          .from(schema.attendance)
+          .where(
+            and(
+              eq(schema.attendance.eventInstanceId, input.eventInstanceId),
+              eq(schema.attendance.isPlanned, false),
+            ),
+          );
 
-      if (actualAttendance.length === 0) {
-        return { success: true, deletedCount: 0 };
-      }
+        if (actualAttendance.length === 0) {
+          return { success: true, deletedCount: 0 };
+        }
 
-      const attendanceIds = actualAttendance.map((a) => a.id);
+        const attendanceIds = actualAttendance.map((a) => a.id);
 
-      // Delete attendance type links first
-      await ctx.db
-        .delete(schema.attendanceXAttendanceTypes)
-        .where(
-          inArray(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            attendanceIds,
-          ),
-        );
+        // Delete attendance type links first
+        await auditCtx.db
+          .delete(schema.attendanceXAttendanceTypes)
+          .where(
+            inArray(
+              schema.attendanceXAttendanceTypes.attendanceId,
+              attendanceIds,
+            ),
+          );
 
-      // Delete attendance records
-      const deleted = await ctx.db
-        .delete(schema.attendance)
-        .where(inArray(schema.attendance.id, attendanceIds))
-        .returning({ id: schema.attendance.id });
+        // Delete attendance records
+        const deleted = await auditCtx.db
+          .delete(schema.attendance)
+          .where(inArray(schema.attendance.id, attendanceIds))
+          .returning({ id: schema.attendance.id });
 
-      return {
-        success: true,
-        deletedCount: deleted.length,
-      };
+        return {
+          success: true,
+          deletedCount: deleted.length,
+        };
+      });
     }),
 
   /**
@@ -367,6 +394,14 @@ export const attendanceRouter = {
       z.object({
         eventInstanceId: z.coerce.number(),
         userId: z.coerce.number(),
+      }),
+    )
+    .output(
+      z.object({
+        success: z.boolean().describe("Whether the operation succeeded"),
+        deletedCount: z
+          .number()
+          .describe("Number of attendance records deleted"),
       }),
     )
     .route({
@@ -384,22 +419,24 @@ export const attendanceRouter = {
         message: "You are not authorized to remove planned attendance",
       });
 
-      // Find and delete the attendance record
-      const deleted = await ctx.db
-        .delete(schema.attendance)
-        .where(
-          and(
-            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
-            eq(schema.attendance.userId, input.userId),
-            eq(schema.attendance.isPlanned, true),
-          ),
-        )
-        .returning({ id: schema.attendance.id });
+      return withAuditContext(ctx, async (auditCtx) => {
+        // Find and delete the attendance record
+        const deleted = await auditCtx.db
+          .delete(schema.attendance)
+          .where(
+            and(
+              eq(schema.attendance.eventInstanceId, input.eventInstanceId),
+              eq(schema.attendance.userId, input.userId),
+              eq(schema.attendance.isPlanned, true),
+            ),
+          )
+          .returning({ id: schema.attendance.id });
 
-      return {
-        success: true,
-        deletedCount: deleted.length,
-      };
+        return {
+          success: true,
+          deletedCount: deleted.length,
+        };
+      });
     }),
 
   /**
@@ -411,6 +448,11 @@ export const attendanceRouter = {
       z.object({
         attendanceId: z.coerce.number(),
         attendanceTypeIds: z.array(z.coerce.number()),
+      }),
+    )
+    .output(
+      z.object({
+        success: z.boolean().describe("Whether the operation succeeded"),
       }),
     )
     .route({
@@ -444,27 +486,29 @@ export const attendanceRouter = {
         message: "You are not authorized to update attendance types",
       });
 
-      // Delete existing type links
-      await ctx.db
-        .delete(schema.attendanceXAttendanceTypes)
-        .where(
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            input.attendanceId,
-          ),
-        );
+      return withAuditContext(ctx, async (auditCtx) => {
+        // Delete existing type links
+        await auditCtx.db
+          .delete(schema.attendanceXAttendanceTypes)
+          .where(
+            eq(
+              schema.attendanceXAttendanceTypes.attendanceId,
+              input.attendanceId,
+            ),
+          );
 
-      // Create new type links
-      if (input.attendanceTypeIds.length > 0) {
-        await ctx.db.insert(schema.attendanceXAttendanceTypes).values(
-          input.attendanceTypeIds.map((typeId) => ({
-            attendanceId: input.attendanceId,
-            attendanceTypeId: typeId,
-          })),
-        );
-      }
+        // Create new type links
+        if (input.attendanceTypeIds.length > 0) {
+          await auditCtx.db.insert(schema.attendanceXAttendanceTypes).values(
+            input.attendanceTypeIds.map((typeId) => ({
+              attendanceId: input.attendanceId,
+              attendanceTypeId: typeId,
+            })),
+          );
+        }
 
-      return { success: true };
+        return { success: true };
+      });
     }),
 
   /**
@@ -476,6 +520,12 @@ export const attendanceRouter = {
       z.object({
         eventInstanceId: z.coerce.number(),
         userId: z.coerce.number(),
+      }),
+    )
+    .output(
+      z.object({
+        success: z.boolean().describe("Whether the operation succeeded"),
+        attendanceId: z.number().describe("ID of the attendance record"),
       }),
     )
     .route({
@@ -493,60 +543,27 @@ export const attendanceRouter = {
         message: "You are not authorized to take Q for this event",
       });
 
-      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
+      return withAuditContext(ctx, async (auditCtx) => {
+        const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(auditCtx.db);
 
-      // Check if there's already a Q for this event
-      const existingQ = await ctx.db
-        .select({ id: schema.attendance.id, userId: schema.attendance.userId })
-        .from(schema.attendance)
-        .innerJoin(
-          schema.attendanceXAttendanceTypes,
-          eq(
-            schema.attendanceXAttendanceTypes.attendanceId,
-            schema.attendance.id,
-          ),
-        )
-        .where(
-          and(
-            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
-            eq(schema.attendance.isPlanned, true),
+        // Check if there's already a Q for this event
+        const existingQ = await auditCtx.db
+          .select({
+            id: schema.attendance.id,
+            userId: schema.attendance.userId,
+          })
+          .from(schema.attendance)
+          .innerJoin(
+            schema.attendanceXAttendanceTypes,
             eq(
-              schema.attendanceXAttendanceTypes.attendanceTypeId,
-              ATTENDANCE_TYPE_IDS.Q,
+              schema.attendanceXAttendanceTypes.attendanceId,
+              schema.attendance.id,
             ),
-          ),
-        );
-
-      if (existingQ.length > 0 && existingQ[0]?.userId !== input.userId) {
-        throw new ORPCError("CONFLICT", {
-          message: "Event already has a Q assigned",
-        });
-      }
-
-      // Check if user already has attendance
-      const existingAttendance = await ctx.db
-        .select({ id: schema.attendance.id })
-        .from(schema.attendance)
-        .where(
-          and(
-            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
-            eq(schema.attendance.userId, input.userId),
-            eq(schema.attendance.isPlanned, true),
-          ),
-        );
-
-      let attendanceId: number;
-
-      if (existingAttendance.length > 0) {
-        attendanceId = existingAttendance[0]!.id;
-
-        // Add Q type to existing attendance (keep other types)
-        const existingType = await ctx.db
-          .select({ id: schema.attendanceXAttendanceTypes.attendanceTypeId })
-          .from(schema.attendanceXAttendanceTypes)
+          )
           .where(
             and(
-              eq(schema.attendanceXAttendanceTypes.attendanceId, attendanceId),
+              eq(schema.attendance.eventInstanceId, input.eventInstanceId),
+              eq(schema.attendance.isPlanned, true),
               eq(
                 schema.attendanceXAttendanceTypes.attendanceTypeId,
                 ATTENDANCE_TYPE_IDS.Q,
@@ -554,39 +571,80 @@ export const attendanceRouter = {
             ),
           );
 
-        if (existingType.length === 0) {
-          await ctx.db.insert(schema.attendanceXAttendanceTypes).values({
-            attendanceId,
-            attendanceTypeId: ATTENDANCE_TYPE_IDS.Q,
-          });
-        }
-      } else {
-        // Create new attendance with Q type
-        const [newAttendance] = await ctx.db
-          .insert(schema.attendance)
-          .values({
-            eventInstanceId: input.eventInstanceId,
-            userId: input.userId,
-            isPlanned: true,
-          })
-          .returning({ id: schema.attendance.id });
-
-        if (!newAttendance) {
-          throw new ORPCError("INTERNAL_SERVER_ERROR", {
-            message: "Failed to create attendance record",
+        if (existingQ.length > 0 && existingQ[0]?.userId !== input.userId) {
+          throw new ORPCError("CONFLICT", {
+            message: "Event already has a Q assigned",
           });
         }
 
-        attendanceId = newAttendance.id;
+        // Check if user already has attendance
+        const existingAttendance = await auditCtx.db
+          .select({ id: schema.attendance.id })
+          .from(schema.attendance)
+          .where(
+            and(
+              eq(schema.attendance.eventInstanceId, input.eventInstanceId),
+              eq(schema.attendance.userId, input.userId),
+              eq(schema.attendance.isPlanned, true),
+            ),
+          );
 
-        // Add Q and PAX types
-        await ctx.db.insert(schema.attendanceXAttendanceTypes).values([
-          { attendanceId, attendanceTypeId: ATTENDANCE_TYPE_IDS.Q },
-          { attendanceId, attendanceTypeId: ATTENDANCE_TYPE_IDS.PAX },
-        ]);
-      }
+        let attendanceId: number;
 
-      return { success: true, attendanceId };
+        if (existingAttendance.length > 0) {
+          attendanceId = existingAttendance[0]!.id;
+
+          // Add Q type to existing attendance (keep other types)
+          const existingType = await auditCtx.db
+            .select({ id: schema.attendanceXAttendanceTypes.attendanceTypeId })
+            .from(schema.attendanceXAttendanceTypes)
+            .where(
+              and(
+                eq(
+                  schema.attendanceXAttendanceTypes.attendanceId,
+                  attendanceId,
+                ),
+                eq(
+                  schema.attendanceXAttendanceTypes.attendanceTypeId,
+                  ATTENDANCE_TYPE_IDS.Q,
+                ),
+              ),
+            );
+
+          if (existingType.length === 0) {
+            await auditCtx.db.insert(schema.attendanceXAttendanceTypes).values({
+              attendanceId,
+              attendanceTypeId: ATTENDANCE_TYPE_IDS.Q,
+            });
+          }
+        } else {
+          // Create new attendance with Q type
+          const [newAttendance] = await auditCtx.db
+            .insert(schema.attendance)
+            .values({
+              eventInstanceId: input.eventInstanceId,
+              userId: input.userId,
+              isPlanned: true,
+            })
+            .returning({ id: schema.attendance.id });
+
+          if (!newAttendance) {
+            throw new ORPCError("INTERNAL_SERVER_ERROR", {
+              message: "Failed to create attendance record",
+            });
+          }
+
+          attendanceId = newAttendance.id;
+
+          // Add Q and PAX types
+          await auditCtx.db.insert(schema.attendanceXAttendanceTypes).values([
+            { attendanceId, attendanceTypeId: ATTENDANCE_TYPE_IDS.Q },
+            { attendanceId, attendanceTypeId: ATTENDANCE_TYPE_IDS.PAX },
+          ]);
+        }
+
+        return { success: true, attendanceId };
+      });
     }),
 
   /**
@@ -598,6 +656,11 @@ export const attendanceRouter = {
       z.object({
         eventInstanceId: z.coerce.number(),
         userId: z.coerce.number(),
+      }),
+    )
+    .output(
+      z.object({
+        success: z.boolean().describe("Whether the operation succeeded"),
       }),
     )
     .route({
@@ -615,40 +678,42 @@ export const attendanceRouter = {
         message: "You are not authorized to remove Q status",
       });
 
-      const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(ctx.db);
+      return withAuditContext(ctx, async (auditCtx) => {
+        const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(auditCtx.db);
 
-      // Find the attendance record
-      const [attendance] = await ctx.db
-        .select({ id: schema.attendance.id })
-        .from(schema.attendance)
-        .where(
-          and(
-            eq(schema.attendance.eventInstanceId, input.eventInstanceId),
-            eq(schema.attendance.userId, input.userId),
-            eq(schema.attendance.isPlanned, true),
-          ),
-        );
+        // Find the attendance record
+        const [attendance] = await auditCtx.db
+          .select({ id: schema.attendance.id })
+          .from(schema.attendance)
+          .where(
+            and(
+              eq(schema.attendance.eventInstanceId, input.eventInstanceId),
+              eq(schema.attendance.userId, input.userId),
+              eq(schema.attendance.isPlanned, true),
+            ),
+          );
 
-      if (!attendance) {
-        throw new ORPCError("NOT_FOUND", {
-          message: "Attendance record not found",
-        });
-      }
+        if (!attendance) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Attendance record not found",
+          });
+        }
 
-      // Remove Q and Co-Q types
-      await ctx.db
-        .delete(schema.attendanceXAttendanceTypes)
-        .where(
-          and(
-            eq(schema.attendanceXAttendanceTypes.attendanceId, attendance.id),
-            inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
-              ATTENDANCE_TYPE_IDS.Q,
-              ATTENDANCE_TYPE_IDS.COQ,
-            ]),
-          ),
-        );
+        // Remove Q and Co-Q types
+        await auditCtx.db
+          .delete(schema.attendanceXAttendanceTypes)
+          .where(
+            and(
+              eq(schema.attendanceXAttendanceTypes.attendanceId, attendance.id),
+              inArray(schema.attendanceXAttendanceTypes.attendanceTypeId, [
+                ATTENDANCE_TYPE_IDS.Q,
+                ATTENDANCE_TYPE_IDS.COQ,
+              ]),
+            ),
+          );
 
-      return { success: true };
+        return { success: true };
+      });
     }),
 
   /**
@@ -662,6 +727,11 @@ export const attendanceRouter = {
         eventInstanceId: z.coerce.number(),
         qUserId: z.coerce.number().optional(),
         coQUserIds: z.array(z.coerce.number()).optional().default([]),
+      }),
+    )
+    .output(
+      z.object({
+        success: z.boolean().describe("Whether the operation succeeded"),
       }),
     )
     .route({
@@ -681,7 +751,7 @@ export const attendanceRouter = {
         message: "You are not authorized to assign Q and Co-Qs",
       });
 
-      return ctx.db.transaction(async (tx) => {
+      return withAuditContext(ctx, async ({ db: tx }) => {
         const ATTENDANCE_TYPE_IDS = await getAttendanceTypeIds(tx);
 
         // Get all existing planned attendance for this event
