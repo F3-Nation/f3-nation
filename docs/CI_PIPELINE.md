@@ -83,7 +83,7 @@ warning.
 
 Remote caching is enabled only for the five required CI checks during this
 rollout. Preview and deploy workflows continue to build without this adapter so
-their behavior is unchanged. A matching successful `test` task may be replayed
+their behavior is unchanged. A matching successful cache-enabled `test` task may be replayed
 instead of re-executed; that is standard Turbo cache behavior, so post-rollout
 validation should confirm useful hit rates and continue treating flaky tests as
 test defects rather than relying on reruns. It should also inspect Actions cache
@@ -108,12 +108,17 @@ blocklist of its own:
   hashing and affected selection. `.nvmrc` is included because every affected
   job takes its Node version from it. The CI workflow is included because
   Slackbot's Docker contract tests read it; workflow edits must select those
-  tests and invalidate their cached results.
+  tests.
   The app Dockerfiles cover the same tests' cross-app file-existence checks.
-  These conservative inputs invalidate every task's cache when they change.
+  These conservative inputs invalidate cache-enabled tasks when they change.
   Deleted app Dockerfiles additionally force full-workspace test selection:
   Turbo's package-level affected plan can otherwise omit the cross-app tests
   even though their cache key changes.
+
+Python tasks routed through [`scripts/python-task.sh`](../scripts/python-task.sh)
+disable Turbo result caching in [`turbo.json`](../turbo.json). A successful local
+missing-tool skip must not hide checks after `uv` becomes available. These tasks
+execute whenever selected, including in CI, while unrelated tasks retain caching.
 
 This deliberately changes the PR guarantee: a green PR proves the workspaces
 selected by Turbo's declared dependency graph, not every workspace in the

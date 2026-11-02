@@ -60,7 +60,8 @@
     "lefthook": "catalog:",
     "prettier": "catalog:",
     "turbo": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "config": {
     "commitizen": {
