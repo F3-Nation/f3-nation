@@ -7,8 +7,9 @@ from typing import Any, Dict, List
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web import WebClient
 
+from utilities import storage
 from utilities.constants import ENABLE_DEBUGGING
-from utilities.helper_functions import safe_get
+from utilities.helper_functions import escape_mrkdwn, safe_get
 from utilities.slack import actions
 
 
@@ -803,6 +804,13 @@ class ImageBlock(BaseBlock):
         if self.label:
             j["title"] = self.make_label_field()
         return j
+
+
+def image_or_link_block(image_url: str, alt_text: str, label: str = None) -> BaseBlock:
+    """An image block, or a link to the image when Slack's servers can't download it (local emulator URLs)."""
+    if storage.is_publicly_reachable(image_url):
+        return ImageBlock(image_url=image_url, alt_text=alt_text, label=label)
+    return SectionBlock(label=f"<{image_url}|{escape_mrkdwn(label or alt_text)}>")
 
 
 @dataclass
