@@ -20,7 +20,7 @@ Future routes (e.g. `/status`) can be added without touching the rest of the eco
 | Styling   | TailwindCSS (`@acme/tailwind-config/web`)           |
 | Hosting   | GitHub Pages (via GitHub Actions)                   |
 | Domain    | `apps.f3nation.com` (CNAME → `f3-nation.github.io`) |
-| Node      | 24.x                                                |
+| Node      | 26.x                                                |
 
 ## Project Structure
 
