@@ -3,9 +3,10 @@
 # consistent fixture repo (including underscore anchors and narrowed or widened
 # Greptile scopes), and fails when a REVIEW.md link (plain, titled or in-page)
 # points at a missing file or heading, when an anchor follows a directory link,
-# when a nested AGENTS.md isn't listed in .greptile/files.json or is scoped
-# outside its directory, when the Greptile config lists a file that no
-# longer exists, or when a bot config names a rule id REVIEW.md doesn't define.
+# when a nested AGENTS.md or a docs/specs file isn't listed in
+# .greptile/files.json, when an AGENTS.md is scoped outside its directory, when
+# the Greptile config lists a file that no longer exists, when a bot config
+# names a rule id REVIEW.md doesn't define, or when it leaves out a CC-* check.
 # Run directly: bash scripts/check-review-links.test.sh
 set -uo pipefail
 
@@ -128,6 +129,20 @@ printf '{ "rules": [{ "rule": "KP-RENAMED: check it." }] }\n' >"$rule_ids/.grept
 expect "bot config names an undefined rule id" fail "$rule_ids" ".greptile/config.json: KP-RENAMED is not defined in REVIEW.md"
 printf '{ "rules": [{ "rule": "KP-ACTIVE-2: check it." }] }\n' >"$rule_ids/.greptile/config.json"
 expect "rule id with a numeric segment must match in full" fail "$rule_ids" "KP-ACTIVE-2 is not defined in REVIEW.md"
+printf '{ "rules": [{ "rule": "KP-ACTIVE: check it." }] }\n' >"$rule_ids/.greptile/config.json"
+expect "bot config leaves out a critical check" fail "$rule_ids" ".greptile/config.json: critical check CC-AUTHZ is not applied"
+printf '{ "rules": [{ "rule": "CC-AUTHZ: check it." }] }\n' >"$rule_ids/.greptile/config.json"
+expect "both configs apply every critical check" pass "$rule_ids"
+
+specs="$tmp_dir/specs"
+make_fixture "$specs"
+mkdir -p "$specs/docs/specs"
+printf '# Specs\n' >"$specs/docs/specs/README.md"
+printf '# Feature\n' >"$specs/docs/specs/feature.md"
+git -C "$specs" add -A
+expect "spec missing from Greptile config" fail "$specs" "docs/specs/feature.md is not listed"
+sed 's#{ "path": "REVIEW.md" },#{ "path": "REVIEW.md" }, { "path": "docs/specs/feature.md", "scope": ["packages/api/**"] },#' "$specs/.greptile/files.json" >"$specs/files.tmp" && mv "$specs/files.tmp" "$specs/.greptile/files.json"
+expect "listed spec passes and README.md is skipped" pass "$specs"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "${failures} check-review-links test(s) failed"

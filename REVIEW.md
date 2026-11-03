@@ -55,7 +55,8 @@ says it's covered. Each links to the rule it checks.
 Defects of these kinds have reached `main` or nearly did, and a one-pass diff
 review tends to miss them because the cause sits in another file, in library
 behavior, or in an environment the diff doesn't show. Check the matching
-pattern whenever a diff touches its area.
+pattern whenever a diff touches its area. Each entry names a class of bug, not
+one incident; remove an entry when the code it describes no longer exists.
 
 - **KP-QUERY-THROW:** The apps' query clients send query errors to the error
   boundary by default. A query whose component renders its own fallback must
@@ -98,16 +99,15 @@ pattern whenever a diff touches its area.
 - **KP-TOKENS:** Token issuer, audience and JWKS URLs match what every verifier
   (`packages/sso`, the API's session resolution) expects. A refresh grant
   reuses the scopes originally granted, not the client's full scope list. A
-  proxy attaches a server-side API key only to routes that require a signed-in
-  caller. A fix that stops a path from forging or inflating a credential also
+  proxy (an app's `src/app/api/` route handler or `src/proxy.ts`) attaches a
+  server-side API key only to routes that require a signed-in caller. A fix that stops a path from forging or inflating a credential also
   deals with the credentials that path already issued (a key rotation, a
   version marker or forced revalidation); otherwise they stay valid until they
   expire.
 - **KP-FAIL-SOFT:** A helper that every request passes through, and that
   gains a network or database call, falls back to its previous behavior and
-  logs when that call fails. A best-effort step (a thumbnail, a notification,
-  a side call) that gains a status check or a raise must not discard the main
-  result.
+  logs when that call fails. A best-effort step that gains a status check or a
+  raise must not discard the main result.
 - **KP-BATCH:** A scheduled or batch job that loops over regions, workspaces
   or users handles each item in its own `try`, logs a failure with the item's
   id, continues with the rest, and exits non-zero if any item failed. One bad
@@ -119,24 +119,19 @@ pattern whenever a diff touches its area.
 - **KP-ASYNC-THROW:** An async function called without `await` (`void fn()`)
   catches throws that happen before its first `await` too. Otherwise a
   synchronous throw becomes an unhandled rejection.
-- **KP-SHELL:** Scripts quote every path that comes from PR content, never
-  follow a symlink from PR content when copying files, tolerate a process that
-  already exited (`kill "$pid" || true` under `set -e`), exit non-zero on
-  failure, and don't let an inherited `DATABASE_URL` or `DATABASE_*` point a
-  local sandbox at a remote database.
+- **KP-SHELL:** Scripts quote every path that comes from PR content, tolerate
+  a process that already exited (`kill "$pid" || true` under `set -e`), and
+  exit non-zero on failure.
 - **KP-PII:** Staging obfuscation treats a row as private when it or any
   ancestor is private (a private series makes its locations private), and
   scrubs names and Slack mentions from free text and stored Slack blocks.
-  Outside production, every Slack bot path that copies profile details from
-  Slack APIs (imports, lookups, sync) or sends email or SMS goes through the
-  same non-production handling as the user-creation path, so staging and local
-  runs never import real Slack profile data or contact a real person. What a
-  user submits through their own F3 profile form, such as emergency contacts,
-  may be stored there
+  Outside production, Slack bot paths that import, look up or sync profile
+  details from Slack APIs never store them; a user's own profile-form edits
+  are allowed
   ([AC-6](docs/specs/slackbot-nonproduction-profile-privacy.md)).
 - **KP-SLACK:** Slack payload values can arrive as strings (`"True"`) and
-  rich-text blocks can be empty or missing. Parse leniently, keep a fallback
-  for empty text, and use the channel a region saved over the default.
+  rich-text blocks can be empty or missing. Parse leniently and keep a
+  fallback for empty text.
 - **KP-UNRELATED-REVERT:** A diff that removes or rewrites lines outside the
   PR's purpose may be a stale branch undoing a fix already on `main`, often
   with the tests that guarded it. Check whether those lines were added to

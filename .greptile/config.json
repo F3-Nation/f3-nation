@@ -3,7 +3,11 @@
   "effort": "plus",
   "strictness": 2,
   "commentTypes": ["logic", "syntax"],
-  "excludeAuthors": ["f3-nation-release-please[bot]"],
+  "excludeAuthors": [
+    "f3-nation-release-please[bot]",
+    "renovate[bot]",
+    "dependabot[bot]"
+  ],
   "disabledLabels": ["skip-ai-review"],
   "ignorePatterns": "**/CHANGELOG.md\n**/drizzle/meta/*_snapshot.json\npnpm-lock.yaml\nuv.lock",
   "fixWithAI": true,
@@ -29,8 +33,12 @@
         "packages/auth/**",
         "packages/sso/**",
         "packages/sso-next/**",
+        "apps/api/**",
         "apps/*/src/proxy.ts",
-        "packages/api/src/shared.ts"
+        "apps/*/src/app/api/**",
+        "packages/api/src/shared.ts",
+        "packages/api/src/trusted-issuers.ts",
+        "packages/api/src/jwks-failure.ts"
       ],
       "severity": "high"
     },
@@ -42,27 +50,19 @@
     },
     {
       "id": "query-errors",
-      "rule": "KP-QUERY-THROW and KP-ABORT: a query whose component renders its own error or empty state must opt out of the query client's throwOnError default; a cancelled request (AbortError) is never shown or reported as an outage; a timeout also cancels the body read.",
+      "rule": "KP-QUERY-THROW and KP-ABORT: in an app with a React Query client (src/orpc/query-client.ts), a query whose component renders its own error or empty state must opt out of the client's throwOnError default; a cancelled request (AbortError) is never shown or reported as an outage; a timeout also cancels the body read.",
       "scope": [
-        "apps/admin/**",
-        "apps/map/**",
-        "apps/me/**",
-        "apps/homepage/**",
-        "apps/region-pages/**",
-        "packages/shared/**"
+        "apps/**/*.ts",
+        "apps/**/*.tsx",
+        "packages/shared/**",
+        "packages/ui/**"
       ],
       "severity": "medium"
     },
     {
       "id": "ssr-time",
       "rule": "KP-SSR-TIME: a component that renders on both the server and the browser never computes the current date or time during render, including in useState initializers; the server runs in UTC and the browser in local time. A timestamp computed once on the server and passed unchanged to the client is fine.",
-      "scope": [
-        "apps/admin/**",
-        "apps/map/**",
-        "apps/me/**",
-        "apps/homepage/**",
-        "apps/region-pages/**"
-      ],
+      "scope": ["**/*.tsx"],
       "severity": "medium"
     },
     {
@@ -72,18 +72,18 @@
     },
     {
       "id": "env-vars",
-      "rule": "KP-ENV: a new environment variable is read the same way as its siblings in that file (through the app's env schema where one exists), listed in every .env*.example for that app and in the Cloud Run env helpers. A required one fails at startup with a log line when missing; an optional one turns its feature off or uses a stated default. Local-dev switches set by a package script are exempt. A guard against mixing staging and production covers every variable that names the environment, including NEXT_PUBLIC_* twins.",
+      "rule": "KP-ENV: a new environment variable is read the same way as its siblings in that file (through the app's env schema where one exists), listed in every .env*.example for that app, in the Cloud Run env helpers, in the ci.yml mock env and in turbo.json (globalEnv for build-affecting vars, the task's env for test-only ones). A required one fails at startup with a log line when missing; an optional one turns its feature off or uses a stated default. Local-dev switches set by a package script are exempt. A guard against mixing staging and production covers every variable that names the environment, including NEXT_PUBLIC_* twins.",
       "severity": "medium"
     },
     {
       "id": "slack-payloads",
-      "rule": "KP-SLACK, KP-IDENTITY and KP-PII: parse Slack payload values that can arrive as strings, handle empty or missing rich-text blocks, use a region's saved channel over the default, never create a person keyed on a placeholder when a profile lacks an email, and keep non-production runs from copying profile details from Slack APIs or messaging real people (a user's own profile-form submission may be stored).",
+      "rule": "KP-SLACK, KP-IDENTITY and KP-PII: parse Slack payload values that can arrive as strings, handle empty or missing rich-text blocks, never create a person keyed on a placeholder when a profile lacks an email, and keep non-production runs from storing profile details fetched from Slack APIs (a user's own profile-form edits are allowed).",
       "scope": ["apps/slackbot/**"],
       "severity": "medium"
     },
     {
       "id": "scripts",
-      "rule": "KP-SHELL and KP-PII: quote PR-derived paths, never follow symlinks from PR content, tolerate already-exited processes under set -e, exit non-zero on failure, keep inherited DATABASE_* variables out of local sandboxes, and treat a row as private when any ancestor is private.",
+      "rule": "KP-SHELL and KP-PII: quote PR-derived paths, tolerate already-exited processes under set -e, exit non-zero on failure, and treat a row as private when any ancestor is private.",
       "scope": ["scripts/**", "tooling/scripts/**", "**/*.sh"],
       "severity": "medium"
     },
@@ -138,6 +138,17 @@
         "docs/**"
       ],
       "severity": "medium"
+    },
+    {
+      "id": "secrets",
+      "rule": "CC-SECRETS: secrets, tokens and PII never reach logs, error messages, fixtures, browser storage or a NEXT_PUBLIC_* value.",
+      "severity": "high"
+    },
+    {
+      "id": "workflows",
+      "rule": "CC-WORKFLOW: a privileged workflow never runs PR-head code or interpolates untrusted input into run:; third-party actions are pinned to a full SHA.",
+      "scope": [".github/**"],
+      "severity": "high"
     },
     {
       "id": "unrelated-revert",

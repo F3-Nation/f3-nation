@@ -6,10 +6,12 @@
 // - .greptile/files.json lists REVIEW.md and every nested AGENTS.md, and
 //   nothing that no longer exists. Each AGENTS.md is scoped to its own
 //   directory (`<dir>/**`, plus any other paths its rules govern) or to paths
-//   under it.
+//   under it. Every docs/specs/*.md other than README.md is listed too, so a
+//   new spec reaches Greptile as context.
 // - every CC-* and KP-* rule id named in .coderabbit.yaml or
 //   .greptile/config.json is defined in REVIEW.md (`**CC-...` / `**KP-...`),
-//   so renaming or deleting a rule can't leave a bot pointing at nothing.
+//   so renaming or deleting a rule can't leave a bot pointing at nothing, and
+//   each config names every CC-* check, so no critical check goes unapplied.
 // Run from the repo root, or pass a root directory as the first argument.
 
 import { execFileSync } from "node:child_process";
@@ -94,6 +96,16 @@ function scopeIsValid(scope, dir) {
   );
 }
 
+function trackedSpecs() {
+  const out = execFileSync("git", ["ls-files", "docs/specs/*.md"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  return out
+    .split("\n")
+    .filter((path) => path && path !== "docs/specs/README.md");
+}
+
 function checkGreptile() {
   const configPath = join(root, ".greptile/files.json");
   if (!existsSync(configPath)) {
@@ -121,6 +133,11 @@ function checkGreptile() {
       );
     }
   }
+  for (const spec of trackedSpecs()) {
+    if (!byPath.has(spec)) {
+      errors.push(`.greptile/files.json: ${spec} is not listed`);
+    }
+  }
 }
 
 function checkRuleIds() {
@@ -143,6 +160,11 @@ function checkRuleIds() {
         errors.push(`${config}: ${id} is not defined in REVIEW.md`);
       }
     }
+    for (const id of defined) {
+      if (id.startsWith("CC-") && !named.has(id)) {
+        errors.push(`${config}: critical check ${id} is not applied`);
+      }
+    }
   }
 }
 
@@ -153,7 +175,7 @@ checkRuleIds();
 if (errors.length > 0) {
   for (const error of errors) console.error(error);
   console.error(
-    "Fix the links, update .greptile/files.json (one entry per nested AGENTS.md, scoped to its directory), or rename the rule ids in the bot configs to match REVIEW.md.",
+    "Fix the links, update .greptile/files.json (one entry per nested AGENTS.md, scoped to its directory, and per docs/specs file), or make the rule ids in the bot configs match REVIEW.md.",
   );
   process.exit(1);
 }

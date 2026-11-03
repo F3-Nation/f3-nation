@@ -37,9 +37,12 @@ their ids the same way. CodeRabbit's `**/*` path instruction, its "Tests would
 catch a revert" check and Greptile's `instructions` restate the "How to
 review" list. When
 a rule changes in `REVIEW.md`, `git grep` its id and update the copies;
-`pnpm lint` fails if a bot config names an id `REVIEW.md` doesn't define.
-The `docs/specs/` files are Greptile context, scoped to the code each spec
-covers.
+`pnpm lint` fails if a bot config names an id `REVIEW.md` doesn't define,
+if either config leaves out a `CC-*` check, or if a `docs/specs/` file isn't
+listed in `.greptile/files.json`. Rule scopes use globs by kind of code
+(`**/*.tsx`, `apps/**`) rather than lists of app names, so a new app is
+covered. The `docs/specs/` files are Greptile context, scoped to the code each
+spec covers.
 
 **Rule of thumb:** put durable guidance in `AGENTS.md` (or, for deep topics, in
 `docs/` and link it). Keep the tool-specific pointer files thin so they never
