@@ -103,9 +103,11 @@ pnpm lint --filter f3-map
 
 ## Email sign-in
 
-Emailed sign-in codes and links are single-use, including simultaneous attempts.
-Incorrect, expired, or already-used tokens lead to the "Unable to sign in"
-verification-error page. Database failures lead to the "Server error" page.
+Emailed sign-in codes and links are single-use, including simultaneous attempts:
+the shared auth adapter deletes the token in the same statement that reads it.
+An incorrect, expired, or already-used token shows the auth error page's
+`Verification` message. A database failure shows its `Configuration`
+(server error) message, because Auth.js treats adapter errors as server faults.
 
 ## Contributing Map Changes
 

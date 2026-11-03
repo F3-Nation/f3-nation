@@ -16,7 +16,6 @@ import React, {
   useEffectEvent,
   useImperativeHandle,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { flexRender, useTable } from "@tanstack/react-table";
@@ -121,18 +120,23 @@ export const MDTable = <T extends RowData>(params: MDTableProps<T>) => {
     setSorting: setSortingParam,
     emptyMessage,
   } = params;
-  // Data state management: if data is undefined, we show a loading state
-  const cachedData = useRef(data);
-  if (data !== undefined) {
-    cachedData.current = data;
+  // Data state management: if data is undefined, we show a loading state.
+  // The last defined data/count are kept in state (not refs, which must not be
+  // read during render) and synced during render, so a reload keeps showing
+  // the previous rows instead of flashing the skeleton.
+  const [lastData, setLastData] = useState(data);
+  if (data !== undefined && data !== lastData) {
+    setLastData(data);
   }
-  const isReloading = data === undefined && cachedData.current !== undefined;
-  const isInitialLoading = cachedData.current === undefined; // If the data is undefined, we show a loading state (skeleton)
+  const cachedData = data ?? lastData;
+  const isReloading = data === undefined && cachedData !== undefined;
+  const isInitialLoading = cachedData === undefined; // If the data is undefined, we show a loading state (skeleton)
 
-  const cachedCount = useRef<number | undefined>(undefined);
-  if (totalCountParam !== undefined) {
-    cachedCount.current = totalCountParam;
+  const [lastCount, setLastCount] = useState(totalCountParam);
+  if (totalCountParam !== undefined && totalCountParam !== lastCount) {
+    setLastCount(totalCountParam);
   }
+  const cachedCount = totalCountParam ?? lastCount;
 
   // We can't have an undefined pagination state, (or app breaks) so we default to 0 pageIndex and 10 pageSize
   const { pagination: _pagination, setPagination: _setPagination } =
@@ -173,15 +177,15 @@ export const MDTable = <T extends RowData>(params: MDTableProps<T>) => {
 
   const table = useTable({
     features: mdTableFeatures,
-    data: cachedData.current ?? [],
+    data: cachedData ?? [],
     columns,
     manualPagination: !!setPaginationParam,
     manualSorting: !!setSortingParam,
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
-    ...(cachedCount.current !== undefined && {
-      rowCount: cachedCount.current,
+    ...(cachedCount !== undefined && {
+      rowCount: cachedCount,
     }),
     state: {
       // pagination cannot be undefined
