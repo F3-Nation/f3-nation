@@ -203,9 +203,6 @@ catalogs:
     '@opentelemetry/api':
       specifier: ^1.10.0
       version: 1.10.0
-    '@opentelemetry/api-logs':
-      specifier: ^0.223.0
-      version: 0.223.0
     '@opentelemetry/core':
       specifier: ^3.0.0
       version: 3.0.0
@@ -2011,9 +2008,6 @@ importers:
       '@opentelemetry/api':
         specifier: 'catalog:'
         version: 1.10.0
-      '@opentelemetry/api-logs':
-        specifier: 'catalog:'
-        version: 0.223.0
       '@opentelemetry/core':
         specifier: 'catalog:'
         version: 3.0.0(@opentelemetry/api@1.10.0)
@@ -4069,10 +4063,6 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
-
-  '@opentelemetry/api-logs@0.223.0':
-    resolution: {integrity: sha512-Oepm6etVPFCn0VWB1t833iOTgz1eYBDUPxcrOR/XvwzD1+Ag9VzSPSrrKAFNJ/haatj+8CXbG47pZXvdNQKDJw==}
-    engines: {node: '>=8.0.0'}
 
   '@opentelemetry/api@1.10.0':
     resolution: {integrity: sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ==}
@@ -10129,10 +10119,6 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
-
-  '@opentelemetry/api-logs@0.223.0':
-    dependencies:
-      '@opentelemetry/api': 1.10.0
 
   '@opentelemetry/api@1.10.0': {}
 
