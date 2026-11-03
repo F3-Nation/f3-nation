@@ -121,8 +121,8 @@ Use the API's real migrated, isolated test database and synthetic users:
    attributed transactions and check the persisted actor on every result.
 5. Exercise pending submission, human approval/rejection and API-key
    approval without trusting the request's submitter as the decision maker.
-6. Verify that queries open no attribution transaction and write nothing, and
-   check the attendance responses described in
+6. Verify that a query, including a read-only endpoint transported as POST, runs
+   without an attribution transaction, and check the attendance responses described in
    [Roles & authorization](#5-roles--authorization-rbac). Event, organization and
    location deletes mark their source rows inactive; successful user deletion
    returns the deleted user's ID, and an absent user with an ID in the supported
