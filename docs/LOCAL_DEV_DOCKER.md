@@ -171,14 +171,12 @@ uv --version
 After installing `uv`, run `pnpm python:install` from the repository root to sync
 all Python workspace dependencies.
 
-`uv` is optional for contributors who do not touch Python. Without it, Python
-checks reached by `pnpm lint`, `pnpm test`, `pnpm format`, and `pnpm typecheck`
-print a skip message locally; those commands still check the other workspaces.
-A skipped Python check is not a passing check. Python contributors need `uv` to
-run those checks, and CI treats missing `uv` as an error when the wrapper runs.
-See [How Python is checked](../apps/slackbot/AGENTS.md#how-python-is-checked) for
-the task wiring, CI selection and caching, and a cache-bypassing verification
-command to use after installing `uv`.
+`uv` is optional for contributors who do not touch Python: without it, the
+Python checks reached by the root pnpm commands print a skip message locally
+and the other workspaces are still checked. A skipped check did not run. See
+[How Python is checked](../apps/slackbot/AGENTS.md#how-python-is-checked) for
+CI behavior, task wiring and caching, and a verification command to use after
+installing `uv`.
 
 Python workspaces share Ruff settings from the root [`pyproject.toml`](../pyproject.toml).
 Each member explicitly extends that file in its own `pyproject.toml`, which also

@@ -68,11 +68,11 @@ uninstalled. When the wrapper executes with `CI` set to a nonempty value,
 missing `uv` is an error instead of a skip.
 
 Python contributors should install `uv` and run `pnpm python:install` from the
-root. To verify a package after installing `uv`, bypass Turbo's cache so a
-previous local skip is not replayed; for example:
+root. To verify a package after installing `uv`, force Turbo to re-run the
+checks and overwrite any cached local skip; for example:
 
 ```bash
-pnpm exec turbo run format lint test typecheck --filter=f3-slackbot --cache=local:,remote:
+pnpm exec turbo run format lint test typecheck --filter=f3-slackbot --force
 ```
 
 Use the target member's `package.json` name for other packages. Installation
