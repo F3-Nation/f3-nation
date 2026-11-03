@@ -22,7 +22,7 @@ import { test } from "vitest";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const turbo = join(dirname(require.resolve("turbo/package.json")), "bin/turbo");
-const packageDirs = ["apps", "packages"].flatMap((group) =>
+const packageDirs = ["apps", "packages", "tooling"].flatMap((group) =>
   readdirSync(join(root, group), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => `${group}/${entry.name}`)
@@ -86,7 +86,7 @@ test("Python checks re-evaluate tool availability without changing PATH or sourc
     );
     writeFileSync(
       join(repo, "pnpm-workspace.yaml"),
-      "packages:\n  - apps/*\n  - packages/*\n",
+      "packages:\n  - apps/*\n  - packages/*\n  - tooling/*\n",
     );
     writeFileSync(join(repo, ".gitignore"), ".turbo/\nnode_modules/\n");
     let lock = "lockfileVersion: '9.0'\nimporters:\n  .: {}\n";
@@ -138,7 +138,7 @@ test("Python checks re-evaluate tool availability without changing PATH or sourc
       COREPACK_ENABLE_NETWORK: "0",
     };
     const taskNames = [
-      ...new Set(tasks.map((task) => task.slice(task.lastIndexOf(":") + 1))),
+      ...new Set(tasks.map((task) => task.slice(task.indexOf(":") + 1))),
     ];
     const plan = spawnSync(
       process.execPath,
