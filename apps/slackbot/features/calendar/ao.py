@@ -3,7 +3,7 @@ import json
 from logging import Logger
 
 import requests
-from slack_sdk.models.blocks import ImageBlock, InputBlock, SectionBlock
+from slack_sdk.models.blocks import InputBlock, SectionBlock
 from slack_sdk.models.blocks.basic_components import ConfirmObject, PlainTextObject
 from slack_sdk.models.blocks.block_elements import (
     ChannelSelectElement,
@@ -31,7 +31,7 @@ from utilities.helper_functions import (
     upload_files_to_storage,
 )
 from utilities.slack import actions
-from utilities.slack.sdk_orm import SdkBlockView, as_selector_options
+from utilities.slack.sdk_orm import SdkBlockView, as_selector_options, image_or_link_block
 
 # ---------------------------------------------------------------------------
 # Composition root
@@ -251,7 +251,7 @@ def build_ao_add_form(
         if edit_ao.logo_url:
             try:
                 if requests.head(edit_ao.logo_url).status_code == 200:
-                    form.blocks.insert(5, ImageBlock(image_url=edit_ao.logo_url, alt_text="AO Logo"))
+                    form.blocks.insert(5, image_or_link_block(image_url=edit_ao.logo_url, alt_text="AO Logo"))
             except requests.RequestException as e:
                 logger.error(f"Error fetching AO logo: {e}")
         title_text = "Edit AO"

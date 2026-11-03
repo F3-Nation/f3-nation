@@ -3,12 +3,13 @@ import logging
 from typing import Any, Dict, List
 
 from slack_sdk.models.blocks import Block, ImageBlock, InputBlock, SectionBlock
-from slack_sdk.models.blocks.basic_components import Option
+from slack_sdk.models.blocks.basic_components import MarkdownTextObject, Option
 from slack_sdk.models.views import View
 
 # slack_sdk.models.composition_objects.Option
+from utilities import storage
 from utilities.constants import ENABLE_DEBUGGING
-from utilities.helper_functions import safe_get
+from utilities.helper_functions import escape_mrkdwn, safe_get
 from utilities.slack import actions
 
 
@@ -22,6 +23,13 @@ def as_selector_options(names: List[str], values: List[str] = None, descriptions
     if not options:
         options.append(Option(text="No options available", value="none"))
     return options
+
+
+def image_or_link_block(image_url: str, alt_text: str) -> Block:
+    """An image block, or a link to the image when Slack's servers can't download it (local emulator URLs)."""
+    if storage.is_publicly_reachable(image_url):
+        return ImageBlock(image_url=image_url, alt_text=alt_text)
+    return SectionBlock(text=MarkdownTextObject(text=f"<{image_url}|{escape_mrkdwn(alt_text)}>"))
 
 
 class SdkBlockView:

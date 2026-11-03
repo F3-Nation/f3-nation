@@ -126,7 +126,7 @@ def test_pax_materialization_contract(tmp_path: Path):
     db.execute("INSERT INTO pg.public.event_tags_x_event_instances VALUES (1, 8)")
     db.execute("INSERT INTO pg.public.event_tags VALUES (8, 'Morning')")
     output = tmp_path / "pv_pax.parquet"
-    db.execute(f"COPY ({SQL}) TO ? (FORMAT PARQUET)", [str(output), "2026-01-01T00:00:00Z", "2026-01-01"])
+    db.execute(f"COPY ({SQL}) TO ? (FORMAT PARQUET)", ["2026-01-01T00:00:00Z", "2026-01-01", str(output)])
     rows = db.execute("SELECT * FROM read_parquet(?) ORDER BY user_id", [str(output)]).fetchall()
     assert len(rows) == 7
     assert rows[0][1:9] == (1, "Raven", 10, "North", "ada.png", "ada@example.test", "active", "2025-01-01")

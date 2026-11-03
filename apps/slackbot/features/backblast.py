@@ -733,7 +733,7 @@ def build_backblast_form(
     if safe_get(backblast_metadata, actions.BACKBLAST_FILE, 0):
         backblast_form.blocks.insert(
             1,
-            slack_orm.ImageBlock(
+            slack_orm.image_or_link_block(
                 image_url=backblast_metadata[actions.BACKBLAST_FILE][0],
                 alt_text="Existing Boyband",
             ),
@@ -1027,7 +1027,7 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
     blocks = [msg_block.as_form_field(), moleskin]
     for url in low_rez_file_list or []:
         blocks.append(
-            slack_orm.ImageBlock(
+            slack_orm.image_or_link_block(
                 alt_text=title,
                 image_url=url,
             ).as_form_field()
@@ -1306,7 +1306,7 @@ COUNT: {count}
 
             for url in low_rez_file_list or []:
                 cross_blocks.append(
-                    slack_orm.ImageBlock(
+                    slack_orm.image_or_link_block(
                         alt_text=title,
                         image_url=url,
                     ).as_form_field()
