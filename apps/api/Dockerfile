@@ -1,5 +1,8 @@
 # ---------- Stage 1: Prune monorepo ----------
 ARG TURBO_VERSION=2
+# Node 25+ images no longer bundle Corepack; install it so pnpm comes from
+# the root packageManager pin (version and hash).
+ARG COREPACK_VERSION=0.36.0
 FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS builder
 ARG TURBO_VERSION
 
@@ -10,7 +13,8 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN apk add --no-cache libc6-compat && apk update
 WORKDIR /app
 
-RUN corepack enable
+ARG COREPACK_VERSION
+RUN npm install -g corepack@${COREPACK_VERSION} && corepack enable
 RUN npm install -g turbo@${TURBO_VERSION}
 
 COPY . .
@@ -25,7 +29,8 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
-RUN corepack enable
+ARG COREPACK_VERSION
+RUN npm install -g corepack@${COREPACK_VERSION} && corepack enable
 
 # Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .

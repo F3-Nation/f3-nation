@@ -6,6 +6,9 @@
 # and deployed by tooling/scripts/staging-refresh/setup.sh:
 #   docker build -f tooling/scripts/Dockerfile.staging-refresh .
 ARG TURBO_VERSION=2
+# Node 25+ images no longer bundle Corepack; install it so pnpm comes from
+# the root packageManager pin (version and hash).
+ARG COREPACK_VERSION=0.36.0
 
 # glibc-based on purpose: the runner is Debian (postgres:18), and pnpm
 # installs platform-specific binaries (esbuild, under tsx).
@@ -17,7 +20,9 @@ ARG TURBO_VERSION
 ENV TURBO_TELEMETRY_DISABLED=1
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 WORKDIR /app
-RUN corepack enable && npm install -g turbo@${TURBO_VERSION}
+ARG COREPACK_VERSION
+RUN npm install -g corepack@${COREPACK_VERSION} turbo@${TURBO_VERSION} \
+  && corepack enable
 COPY . .
 RUN turbo prune @acme/scripts --docker
 
@@ -27,7 +32,8 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 WORKDIR /app
-RUN corepack enable
+ARG COREPACK_VERSION
+RUN npm install -g corepack@${COREPACK_VERSION} && corepack enable
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 RUN pnpm install --frozen-lockfile --ignore-scripts
@@ -38,6 +44,10 @@ COPY --from=builder /app/packages/db/drizzle/meta/_journal.json ./packages/db/dr
 
 # ---------- Stage 3: runner ----------
 FROM postgres:18@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 AS runner
+# The node binary links libatomic (Node 25+), which the postgres image lacks.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libatomic1 \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=installer --chown=postgres:postgres /app /app
 COPY tooling/scripts/staging-refresh/entrypoint.sh /usr/local/bin/staging-refresh
