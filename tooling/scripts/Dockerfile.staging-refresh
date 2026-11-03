@@ -1,7 +1,7 @@
 # Image for the f3-staging-refresh Cloud Run job (F3-65, docs/STAGING_REFRESH.md).
 #
 # Postgres 18 (the server for the throwaway obfuscation copy, plus the
-# pg_dump/pg_restore 18 clients the refresh needs) with Node 26 and the
+# pg_dump/pg_restore 18 clients the refresh needs) with Node and the
 # @acme/scripts package run from source through tsx. Built from the repo root
 # and deployed by tooling/scripts/staging-refresh/setup.sh:
 #   docker build -f tooling/scripts/Dockerfile.staging-refresh .

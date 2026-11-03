@@ -25,7 +25,7 @@ F3 Nation users need a way to manage their own profile information without requi
 | API Backend   | F3 Nation API (api.f3nation.com)         |
 | Image Storage | Google Cloud Storage                     |
 | Hosting       | GCP Cloud Run (via GitHub Actions)       |
-| Node          | 26.x                                     |
+| Node          | Version in [`.nvmrc`](../../.nvmrc)      |
 
 ## Auth Architecture
 
@@ -82,7 +82,7 @@ apps/me/
 
 ### Prerequisites
 
-- Node.js 26.x (`nvm use` if you have nvm)
+- Node.js at the version in [`.nvmrc`](../../.nvmrc) (`nvm use` if you have nvm)
 - pnpm (managed by the monorepo root)
 - OAuth clients registered in the F3 auth provider (see [OAuth Client Registration](#oauth-client-registration) below)
 - Admin F3 API key with edit permissions

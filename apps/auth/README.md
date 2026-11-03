@@ -33,7 +33,7 @@ Central authentication and authorization server for the F3 Nation ecosystem. Iss
 ## Quick Start
 
 ```bash
-# From monorepo root -- ensure Node 26 (`nvm use`) and pnpm
+# From monorepo root -- `nvm use` picks the Node version in .nvmrc
 
 # 1. Install dependencies
 pnpm install
@@ -749,7 +749,7 @@ gcloud projects add-iam-policy-binding f3data \
 
 The Dockerfile uses a 3-stage build:
 
-1. **Builder**: `node:26-alpine` + corepack/pnpm + turbo prune for minimal workspace
+1. **Builder**: `node` alpine image (same version as `.nvmrc`) + corepack/pnpm + turbo prune for minimal workspace
 2. **Installer**: `pnpm install --frozen-lockfile` + `turbo build`
 3. **Runner**: Standalone Next.js output, non-root user (`auth`, UID 1001), port 8080 (Cloud Run default)
 
