@@ -60,6 +60,26 @@ def test_local_smtp_sends_unicode_html_using_configured_sender(transport, caplog
     assert "café" not in caplog.text
 
 
+def test_send_attaches_file_content(transport):
+    sendmail.send(
+        "Synthetic subject",
+        "Synthetic body",
+        "smtp.test",
+        587,
+        "sender@f3local.dev",
+        "synthetic-password",
+        "recipient@f3local.dev",
+        attachments=[{"content": b"full", "meta": {"filename": "F1.jpg", "maintype": "image", "subtype": "jpeg"}}],
+    )
+
+    transport.smtp.assert_called_once_with("smtp.test", 587)
+    message = transport.client.send_message.call_args.args[0]
+    [attachment] = list(message.iter_attachments())
+    assert attachment.get_content() == b"full"
+    assert attachment.get_filename() == "F1.jpg"
+    assert attachment.get_content_type() == "image/jpeg"
+
+
 @pytest.mark.parametrize("keyword", [False, True], ids=["positional", "keyword"])
 def test_explicit_sender_takes_precedence_over_email_from(transport, keyword):
     sender = "F3 Support <support@f3local.dev>"

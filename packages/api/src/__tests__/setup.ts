@@ -24,8 +24,8 @@ vi.mock("next-auth", () => ({
 }));
 
 // Mock the Map app revalidation helper so mutation tests never make a real
-// outbound HTTP request (and never log api.map_revalidate.* noise). The
-// revalidation is fire-and-forget and not asserted by any test.
+// outbound HTTP request (and never log api.map_revalidate.* noise). A suite
+// that asserts revalidation unmocks this module and stubs `fetch` itself.
 vi.mock("../lib/revalidate-map", () => ({
   triggerMapAppRevalidation: vi.fn().mockResolvedValue(undefined),
 }));

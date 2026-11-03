@@ -102,10 +102,10 @@ The monorepo leverages Turbo's caching system:
    git clone https://github.com/F3-Nation/f3-nation.git && cd f3-nation
    ```
 
-2. **Enable Corepack** (ships with Node.js 16+, manages package manager versions):
+2. **Install and enable Corepack** (Node.js 25+ no longer bundles it; it installs the pnpm version pinned in `packageManager`):
 
    ```bash
-   corepack enable
+   npm install -g corepack && corepack enable
    ```
 
 3. **Install dependencies**:
@@ -136,9 +136,9 @@ The monorepo leverages Turbo's caching system:
 
 ### Current Applications
 
-| Application          | Directory     | Port | Description                                                                                        |
-| -------------------- | ------------- | ---- | -------------------------------------------------------------------------------------------------- |
-| **F3 Nation Map**    | `apps/map/`   | 3000 | Interactive map application for F3 Nation locations and events - [README](apps/map/README.md)      |
+| Application       | Directory   | Port | Description                                                                                   |
+| ----------------- | ----------- | ---- | --------------------------------------------------------------------------------------------- |
+| **F3 Nation Map** | `apps/map/` | 3000 | Interactive map application for F3 Nation locations and events - [README](apps/map/README.md) |
 
 ### Future Applications (Planned)
 

@@ -1,6 +1,9 @@
 # ---------- Stage 1: Prune monorepo ----------
 ARG TURBO_VERSION=2
-FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS builder
+# Node 25+ images no longer bundle Corepack; install it so pnpm comes from
+# the root packageManager pin (version and hash).
+ARG COREPACK_VERSION=0.36.0
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS builder
 ARG TURBO_VERSION
 
 ENV TURBO_TELEMETRY_DISABLED=1
@@ -10,14 +13,15 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN apk add --no-cache libc6-compat && apk update
 WORKDIR /app
 
-RUN corepack enable
+ARG COREPACK_VERSION
+RUN npm install -g corepack@${COREPACK_VERSION} && corepack enable
 RUN npm install -g turbo@${TURBO_VERSION}
 
 COPY . .
 RUN turbo prune f3-map --docker
 
 # ---------- Stage 2: Install + build ----------
-FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS installer
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS installer
 ARG TURBO_VERSION
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -28,7 +32,8 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app
 
-RUN corepack enable
+ARG COREPACK_VERSION
+RUN npm install -g corepack@${COREPACK_VERSION} && corepack enable
 
 # Install dependencies from pruned lockfile
 COPY --from=builder /app/out/json/ .
@@ -81,7 +86,7 @@ RUN pnpm turbo build --filter=f3-map
 RUN test -n "$(find apps/map/.next/standalone -name 'libvips-cpp*')"
 
 # ---------- Stage 3: Production runner ----------
-FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS runner
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS runner
 
 RUN apk add --no-cache libc6-compat openssl && apk update
 WORKDIR /app

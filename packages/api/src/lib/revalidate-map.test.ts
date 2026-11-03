@@ -7,8 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// `src/__tests__/setup.ts` mocks this module for every API suite; this is the
-// one place that needs the real implementation.
+// Exercise real cache invalidation and revalidation while stubbing outbound HTTP.
 vi.unmock("./revalidate-map");
 
 const { env } = vi.hoisted(() => {
