@@ -78,12 +78,15 @@ TURBO_FORCE=true pnpm test --filter=f3-slackbot
 TURBO_FORCE=true pnpm typecheck --filter=f3-slackbot
 ```
 
-Turbo's cache keys include command arguments and environment inputs, so a
-direct `pnpm exec turbo` run does not necessarily replace a root script's
-cached skip. Prefix other commands that replay a skip, including fix commands,
-with `TURBO_FORCE=true` too; it forces Turbo without passing a flag to the
-underlying formatter or linter. Use the target member's `package.json` name
-for other packages. Installation instructions are in
+Use the target member's `package.json` name in these checks for other packages.
+Turbo's cache keys include arguments passed to the underlying tasks and
+environment inputs, so a direct `pnpm exec turbo` run does not necessarily
+replace a root script's cached skip.
+
+Fix commands (`pnpm lint:fix` and `pnpm format:fix`) run repo-wide; do not add
+`--filter` to them. Prefix them with `TURBO_FORCE=true` if they replay a skip.
+This forces Turbo without passing a flag to the underlying formatter or linter.
+Installation instructions are in
 [local development](../../docs/LOCAL_DEV_DOCKER.md#uv-python-package-manager-for-slackbot).
 
 GitHub also runs CodeQL's `Analyze (python)` security analysis through **default
